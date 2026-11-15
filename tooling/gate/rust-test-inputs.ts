@@ -6,9 +6,11 @@ import {runAsCommand} from '../differential/command-entry/main.ts';
 import {basename,isAbsolute,relative,resolve,sep} from 'node:path';
 import {durableRecord,durableRecordStream} from './durable-record.ts';
 import {emptyPathDescriptorArgument} from './rust-input-abi.ts';
-import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
+import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,imageReaderRecipeValid,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
 import type {CapturedPathResolution} from './rust-input-provenance.ts';
 import {canonicalCapturedPath,validProcfsTaskAnchor,validProcfsTaskComponent} from './captured-path.ts';
+import {childLoaderFact,execEnvironment,type ChildLoaderObservation} from './rust-loader.ts';
+import type {ImageReaderEnd} from './file-input-observer.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
@@ -180,12 +182,12 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
   if(value.null)return;
   return byteFactText(value,purpose);
 }
-export type InputIndexStart={kind:'index-start';version:5|6|7|8;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
-export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'|'argvSource'>&{argvRaw:string;argvSource?:ArgvSource};
+export type InputIndexStart={kind:'index-start';version:5|6|7|8|9;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
+export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'|'argvSource'>&{argvRaw:string;argvSource?:ArgvSource;imageLoader?:ChildLoaderObservation};
 export type InputIndexObservation={kind:'observation'}&RuntimeObservation;
 export type InputIndexCounts={images:number;attempts:number;observations:number;probes:number;terminalFacts:number;inherited:number;execRequests:number};
 export type InputIndexEnd={kind:'index-complete';terminal:ObservationEnd;counts:InputIndexCounts;raw:CaptureArtifact&{path:string}};
-export type InputIndexRow=InputIndexStart|InputIndexExecution|InputIndexExecRequest|InputIndexObservation|InheritedDescriptor|{kind:'terminal-fact';fact:InputAttempt}|InputIndexEnd;
+export type InputIndexRow=InputIndexStart|InputIndexExecution|InputIndexExecRequest|InputIndexObservation|InheritedDescriptor|ImageReaderEnd|{kind:'terminal-fact';fact:InputAttempt}|InputIndexEnd;
 const emptyCounts=():InputIndexCounts=>({images:0,attempts:0,observations:0,probes:0,terminalFacts:0,inherited:0,execRequests:0});
 
 export type InputTraceDerivation={raw:string;cwd:string;root:string;target?:RustTarget;doctestCalls?:readonly DoctestCall[];observer?:FileObserverReceipt};
@@ -197,8 +199,10 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
   if(observer&&observer.abi!==options.observer?.abi)fail('observer ABI receipt mismatch');
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
   let root:number|undefined,observerBound=false;
-  await emit({kind:'index-start',version:8,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
+  await emit({kind:'index-start',version:9,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
   const capture=await readFileObservation(options.raw,async row=>{
+    if(row.kind==='start'&&(row.imageReaderRecipe??null)!==(observer?.imageReader?.sha256??null))fail('raw image-reader recipe differs from observer receipt');
+    if(row.kind==='image-reader-end'){await emit(row);return;}
     if(row.kind==='root-start'){root=row.root;phases.start(row.root);return;}
     if(row.kind==='inherited'){counts.inherited++;await emit(row);return;}
     if(row.kind!=='attempt')return;
@@ -213,7 +217,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
       counts.images++;
       const {args,...context}=image;
       void args;
-      await emit({kind:'execution',...context,argvRaw:row.argvRead?row.argv.hex:''});
+      await emit({kind:'execution',...context,argvRaw:row.argvRead?row.argv.hex:'',...(row.imageLoader?{imageLoader:row.imageLoader}:{})});
     }
     const request=phases.request(row,image);if(request){counts.execRequests++;await emit(request);}
     const subjects:InputSubject[]=[],probes:InputIndexProbe[]=[];
@@ -364,6 +368,7 @@ function readProbe(value:unknown):InputIndexProbe{
 function receiptValid(value:unknown):value is FileObserverReceipt{
   const row=indexObject(value);
   return row.version===1&&absolute(row.observedPath)&&absolute(row.artifactPath)&&digestValid(row.sha256)&&digestValid(row.sourceSha256)
+    &&(row.imageReader===undefined||imageReaderRecipeValid(row.imageReader))
     &&['linux-x86_64-v1','linux-aarch64-v1'].includes(String(row.abi));
 }
 /** Visits bounded attempts and returns only after the raw-artifact receipt,
@@ -372,7 +377,7 @@ function receiptValid(value:unknown):value is FileObserverReceipt{
  * No partial visit is accepted.
  * A legacy normalized index must be rederived from its retained raw capture. */
 export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=>void|Promise<void>):Promise<{header:InputIndexStart;complete:InputIndexEnd}>{
-  const counts=emptyCounts();let header:InputIndexStart|undefined,complete:InputIndexEnd|undefined,firstImage:{pid:number;path:string}|undefined;
+  const counts=emptyCounts();let header:InputIndexStart|undefined,complete:InputIndexEnd|undefined,firstImage:{pid:number;path:string}|undefined,readerEnded=false;
   // Keep only each task's current attribution, never its historical argv rows.
   const tasks=new Map<string,{id:number;cwd:string;path:string;argvSource?:ArgvSource;phase:TracePhase['phase'];source?:string}>();
   const requests=new Map<string,InputIndexExecRequest>(),requestIds=new Set<string>();
@@ -381,7 +386,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
     if(complete)fail('data after input index completion');
     if(!header){
       if(row.kind!=='index-start')fail('missing input index header');
-      if(row.version!==5&&row.version!==6&&row.version!==7&&row.version!==8)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
+      if(row.version!==5&&row.version!==6&&row.version!==7&&row.version!==8&&row.version!==9)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
       const target=row.target;
       if(row.mechanism!=='seccomp-user-notification'||row.outcomes!=='unknown'||target!==null&&(!target||typeof target!=='object'))fail('malformed input index header');
       if(row.observer!==null&&!receiptValid(row.observer))fail('malformed observer receipt');
@@ -396,6 +401,13 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
         ||!absolute(row.cwd)||!hex(row.argvRaw)||!phaseValid(indexObject(row.phase))
         ||!['first-observation','actual-image','actual-argv','actual-cwd'].includes(String(row.reason)))fail('malformed input index execution');
       firstImage??={pid:row.pid,path:row.path};counts.images++;
+      if(row.imageLoader!==undefined){
+        const loader=indexObject(row.imageLoader),fact=loader.capture;
+        if(!header.observer?.imageReader||typeof loader.namespaceStable!=='boolean'||!childLoaderFact(fact)||fact.pid!==row.pid||fact.birth!==row.birth||fact.path!==row.path||fact.cwd!==row.cwd)
+          fail('image loader receipt differs from its observed image');
+        if(fact.state==='captured'&&(!row.argvSource||indexObject(row.argvSource).kind!=='request'||indexObject(row.argvSource).attempt!==fact.request||row.reason!=='actual-image'))
+          fail('image loader receipt has no bound exec request');
+      }
       const phase=indexObject(row.phase);
       const identity=key(row.pid,row.birth),previous=tasks.get(identity);
       if(header.version>=6){
@@ -410,6 +422,13 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
               ||!readable(request.entry.target)||byteFactText(request.entry.target,'requested executable')!==row.path)
               fail('exec arguments have no matching request and actual image transition');
             if(argv.state!==(readable(request.entry.argv)?'observed':'missing'))fail('exec argument state differs from its request');
+            if(row.imageLoader){
+              const fact=(row.imageLoader as ChildLoaderObservation).capture;
+              if(fact.state==='captured'){
+                const env=execEnvironment(request.entry.environment,byteFactText);
+                if(fact.loader.libraryPath!==(env.LD_LIBRARY_PATH??null))fail('image loader environment differs from its stopped exec request');
+              }
+            }
           }
         }else if(argv.kind==='missing'){
           if(typeof argv.reason!=='string'||!argv.reason)fail('missing exec arguments need their reason');
@@ -417,11 +436,14 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       }
       if(previous?.path!==row.path)requests.delete(identity);
       tasks.set(identity,{id:row.id,cwd:row.cwd,path:row.path,...(row.argvSource?{argvSource:row.argvSource as ArgvSource}:{}),phase:phase.phase as TracePhase['phase'],...(typeof phase.source==='string'?{source:phase.source}:{})});
+    }else if(row.kind==='image-reader-end'){
+      if(readObservationRow(row).kind!=='image-reader-end'||!header.observer?.imageReader||readerEnded)fail('unbound image reader completion');readerEnded=true;
     }else if(row.kind==='exec-request'){
       const entry=indexObject(row.entry);
       if(typeof row.attempt!=='string'||!/^\d{1,20}$/.test(row.attempt)||requestIds.has(row.attempt)||!integer(row.image)||!integer(row.pid)
         ||typeof row.birth!=='string'||!/^\d+$/.test(row.birth)||!absolute(row.cwd)||typeof row.canceled!=='boolean'||!['execve','execveat'].includes(String(row.syscall))
         ||entry.source!=='syscall-entry'||!byteFact(entry.argv)||!byteFact(entry.target))fail('malformed exec request');
+      if(entry.environment!==undefined&&!byteFact(entry.environment))fail('malformed stopped exec environment');
       const context=tasks.get(key(row.pid,row.birth));
       if(!context||context.id!==row.image||context.cwd!==row.cwd)fail('exec request differs from its actual source image');
       requestIds.add(row.attempt);requests.delete(key(row.pid,row.birth));
@@ -447,6 +469,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       const fact=readObservationRow(row.fact);
       if(fact.kind!=='attempt'||!canceledLifetime(fact))fail('terminal fact contains a filesystem candidate');counts.terminalFacts++;counts.attempts++;
     }else if(row.kind==='index-complete'){
+      if(!!header.observer?.imageReader!==readerEnded)fail('missing image-reader completion');
       const terminal=readObservationRow(row.terminal),reported=indexObject(row.counts),raw=indexObject(row.raw);
       if(terminal.kind!=='complete'||!terminal.complete||!terminal.drainComplete||terminal.errors||terminal.attempts!==counts.attempts||counts.images>counts.attempts)fail('incomplete native input index');
       if(!absolute(raw.path)||!digestValid(raw.sha256)||!integer(raw.bytes)||raw.bytes<1)fail('missing raw capture artifact binding');

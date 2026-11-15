@@ -44,6 +44,7 @@ import {cargoConfiguration} from './cargo.ts';
 import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
 import {durableRecord} from './durable-record.ts';
 import {prepareRustTestExecution} from './rust-test-execution.ts';
+import {prepareObserverImageReader,observerImageSession} from './file-input-observer-session.ts';
 import {createHash} from 'node:crypto';
 
 /** @param {unknown} error */
@@ -55,9 +56,12 @@ registerCommandCloser('Cargo configuration through Rust test replay',{close:()=>
 const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
 /** @type {ReturnType<typeof prepareFileObserver>|undefined} */
 let fileObserver;
+/** @type {ReturnType<typeof prepareObserverImageReader>|undefined} */
+let imageReader;
 try{
   if(traceDirectory&&!isAbsolute(traceDirectory))throw Error('trace destination must be absolute');
   if(traceDirectory){mkdirSync(traceDirectory,{recursive:true});fileObserver=prepareFileObserver(join(traceDirectory,'observer'),process.env);
+    imageReader=prepareObserverImageReader();fileObserver.receipt.imageReader=imageReader.recipe;
     durableRecord(join(traceDirectory,'observer-receipt.json'),fileObserver.receipt);}
 }catch(error){if(isCommandExit(error))throw error;throw traceFailure(error);}
 try {
@@ -111,7 +115,9 @@ const started = Date.now();
 const artifactFile=traceDirectory?join(traceDirectory,'artifacts.json'):undefined;
 const ownerArgs=[...(artifactFile?['--artifacts',artifactFile]:[]),"workspace"];
 const cargoTrace=traceDirectory?join(traceDirectory,'cargo.raw.gz'):undefined;
-const first = spawnSync(fileObserver?.executable??process.execPath, cargoTrace?fileObserverArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):[TEST_OWNER,...ownerArgs], {
+const cargoImageSession=cargoTrace&&imageReader&&fileObserver?observerImageSession(imageReader,fileObserver.receipt,join(traceDirectory,'cargo.image-reader.log'),process.env):undefined;
+const cargoStdio=/** @type {import('node:child_process').StdioOptions} */(cargoImageSession?['ignore','pipe','pipe',cargoImageSession.input,cargoImageSession.output]:['ignore','pipe','pipe']);
+const first = spawnSync(fileObserver?.executable??process.execPath, cargoTrace?(cargoImageSession?cargoImageSession.arguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):fileObserverArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs])):[TEST_OWNER,...ownerArgs], {
   cwd: ROOT,
   env: {
     ...process.env,
@@ -119,10 +125,14 @@ const first = spawnSync(fileObserver?.executable??process.execPath, cargoTrace?f
   },
   encoding: "utf8",
   maxBuffer: 1 << 28,
+  stdio:cargoStdio,
 });
+/** @type {unknown} */
+let cargoImageFailure;
+try{await cargoImageSession?.finish();}catch(error){cargoImageFailure=error;}
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 /** @type {ToolingInstrumentError|undefined} */
-let cargoTraceFailure;
+let cargoTraceFailure=cargoImageFailure?traceFailure(cargoImageFailure):undefined;
 if(cargoTrace){
   try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.index.jsonl.gz'),cwd:ROOT,root:ROOT,observer:fileObserver?.receipt,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
   catch(error){if(isCommandExit(error))throw error;cargoTraceFailure=traceFailure(error);}
@@ -196,7 +206,9 @@ const runOne = (key) =>
       results.set(key,{status:2,signal:null,out:'NOT MEASURED: '+failure.message+'\n'+leftovers.join('\n'),seconds:0});
       done();return;
     }
-    const child = spawn(fileObserver?.executable??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: replayEnvironment, stdio: ["ignore", "pipe", "pipe"] });
+    const imageSession=trace&&imageReader&&fileObserver?observerImageSession(imageReader,fileObserver.receipt,trace.replace(/\.raw\.gz$/,'.image-reader.log'),replayEnvironment):undefined;
+    const child = spawn(fileObserver?.executable??r.argv[0], trace?(imageSession?imageSession.arguments(trace,r.argv[0],r.argv.slice(1)):fileObserverArguments(trace,r.argv[0],r.argv.slice(1))):r.argv.slice(1), { cwd: r.cwd, env: replayEnvironment, stdio: ["ignore", "pipe", "pipe",...(imageSession?[imageSession.input,imageSession.output]:[])] });
+    if(!child.stdout||!child.stderr)throw traceFailure('replay output pipes unavailable');
     let out = "";
     child.stdout.on("data", (c) => (out += c));
     child.stderr.on("data", (c) => (out += c));
@@ -204,6 +216,7 @@ const runOne = (key) =>
     child.on("close", async (status, signal) => {
       if(trace){
         try{
+          await imageSession?.finish();
           const complete=await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:r.cwd,root:ROOT,target,observer:fileObserver?.receipt});
           if(!execution)throw Error('missing pre-spawn replay receipt');
           const path=trace.replace(/\.raw\.gz$/,'.execution.json');

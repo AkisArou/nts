@@ -9,6 +9,7 @@ import {pipeline} from 'node:stream/promises';
 import {createHash} from 'node:crypto';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {validProcfsTaskAnchor,type CapturedKernelFilesystem,type ProcfsTaskAnchor} from './captured-path.ts';
+import {childLoaderFact,type ChildLoaderObservation,type LoaderCacheStatistics} from './rust-loader.ts';
 
 export type ByteFact={hex:string;error:number;truncated:boolean;null:boolean};
 export type PathResolutionFact={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:ByteFact;finalLink:boolean;finalComponent?:boolean;
@@ -16,29 +17,38 @@ export type PathResolutionFact={state:'unavailable';error:number}|{state:'resolv
     filesystem?:CapturedKernelFilesystem;taskAnchor?:ProcfsTaskAnchor}[]};
 export type PathFact={arg:number;dirfdArg:number;value:ByteFact;resolution?:PathResolutionFact};
 export type DescriptorFact={arg:number;fd:number;target:ByteFact};
-export type ExecEntry={source:'syscall-entry';argv:ByteFact;target:ByteFact};
+export type ExecEntry={source:'syscall-entry';argv:ByteFact;target:ByteFact;environment?:ByteFact};
 export type InputAttempt={kind:'attempt';id:string;tid:number;tgid:number;ppid:number;birth:string;parentBirth:string;
   syscall:string;operation:string;outcome:'unknown';canceled:boolean;factsComplete:boolean;args:string[];
-  cwd:ByteFact;image:ByteFact;argvRead:boolean;argv:ByteFact;exec?:ExecEntry;paths:PathFact[];dirfds:DescriptorFact[]};
-export type ObservationStart={kind:'start';version:2|3|4|5;mechanism:'seccomp-user-notification';noNewPrivileges:true};
+  cwd:ByteFact;image:ByteFact;argvRead:boolean;argv:ByteFact;exec?:ExecEntry;imageLoader?:ChildLoaderObservation;paths:PathFact[];dirfds:DescriptorFact[]};
+export type ObservationStart={kind:'start';version:2|3|4|5|6;mechanism:'seccomp-user-notification';noNewPrivileges:true;imageReaderRecipe?:string|null};
+export type ImageReaderEnd={kind:'image-reader-end';value:{version:1;kind:'complete';statistics:LoaderCacheStatistics}};
 export type ObservationEnd={kind:'complete';complete:boolean;root:number;entered:boolean;execErrno:number;exit:number;signal:number;attempts:number;errors:number;drainComplete:boolean;observerSignal:number;resolutionWalks?:number;resolutionStats?:number};
 export type InheritedDescriptor={kind:'inherited';fd:number;flags:number;target:ByteFact};
 export type RootExit={kind:'root-exit';root:number;exit:number;signal:number};
 export type RootStart={kind:'root-start';root:number};
 export type ObservationError={kind:'error';message:string;errno:number};
 export type SignalObservation={kind:'signal';signal:number;rootAlive:boolean};
-export type ObservationRow=ObservationStart|ObservationEnd|InputAttempt|InheritedDescriptor|RootExit|RootStart|ObservationError|SignalObservation;
+export type ObservationRow=ObservationStart|ObservationEnd|InputAttempt|InheritedDescriptor|RootExit|RootStart|ObservationError|SignalObservation|ImageReaderEnd;
 export function canceledLifetime(row:InputAttempt):boolean{
   return row.canceled&&row.operation==='lifetime'&&(row.syscall==='exit'||row.syscall==='exit_group')&&row.paths.length===0&&row.dirfds.length===0;
 }
 
-export type FileObserverReceipt={version:1;observedPath:string;artifactPath:string;sha256:string;sourceSha256:string;abi:'linux-x86_64-v1'|'linux-aarch64-v1'};
+export type FileObserverReceipt={version:1;observedPath:string;artifactPath:string;sha256:string;sourceSha256:string;abi:'linux-x86_64-v1'|'linux-aarch64-v1';imageReader?:{sha256:string;files:{path:string;sha256:string}[]}};
 const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
+export function imageReaderRecipeValid(value:unknown):value is NonNullable<FileObserverReceipt['imageReader']>{
+  if(!value||typeof value!=='object')return false;
+  const row=value as NonNullable<FileObserverReceipt['imageReader']>;
+  return typeof row.sha256==='string'&&Array.isArray(row.files)&&row.files.length>0&&row.files.length<=4096
+    &&row.files.every(item=>item&&typeof item.path==='string'&&isAbsolute(item.path)&&/^[0-9a-f]{64}$/.test(item.sha256))
+    &&createHash('sha256').update(JSON.stringify(row.files)).digest('hex')===row.sha256;
+}
 /** A retained binary supplies the ABI; the decoder's own architecture does not.
  * Its source digest is evidence to bind against the accepted build receipt. */
 export function retainedFileObserverReceipt(value:Omit<FileObserverReceipt,'version'|'abi'>):FileObserverReceipt{
   if(!isAbsolute(value.observedPath)||!isAbsolute(value.artifactPath)||!/^([0-9a-f]{64})$/.test(value.sha256)||!/^([0-9a-f]{64})$/.test(value.sourceSha256))
     throw Error('file input observer: invalid observer receipt');
+  if(value.imageReader!==undefined&&!imageReaderRecipeValid(value.imageReader))throw Error('file input observer: invalid image-reader recipe');
   const bytes=readFileSync(value.artifactPath);
   if(digest(bytes)!==value.sha256)throw Error('file input observer: retained observer digest changed');
   if(bytes.length<20||!bytes.subarray(0,4).equals(Buffer.from([127,69,76,70]))||bytes[4]!==2||bytes[5]!==1)
@@ -100,7 +110,12 @@ function pathResolution(value:unknown,task:{tid:number;tgid:number}):boolean{
 }
 export function readObservationRow(value:unknown):ObservationRow{
   const row=object(value);let valid=false;
-  if(row.kind==='start')valid=(row.version===2||row.version===3||row.version===4||row.version===5)&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true;
+  if(row.kind==='start')valid=typeof row.version==='number'&&[2,3,4,5,6].includes(row.version)&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true
+    &&(row.imageReaderRecipe===undefined||row.imageReaderRecipe===null||typeof row.imageReaderRecipe==='string'&&/^[0-9a-f]{64}$/.test(row.imageReaderRecipe));
+  else if(row.kind==='image-reader-end'){
+    const end=object(row.value),stats=object(end.statistics);valid=end.version===1&&end.kind==='complete'
+      &&['elfHits','elfMisses','loaderHits','loaderMisses'].every(key=>natural(stats[key]));
+  }
   else if(row.kind==='complete')valid=typeof row.complete==='boolean'&&typeof row.entered==='boolean'&&typeof row.drainComplete==='boolean'
     &&['root','execErrno','attempts','errors','observerSignal'].every(key=>natural(row[key]))&&row.root!==0
     &&['resolutionWalks','resolutionStats'].every(key=>row[key]===undefined||natural(row[key]))
@@ -115,7 +130,9 @@ export function readObservationRow(value:unknown):ObservationRow{
     &&typeof row.syscall==='string'&&typeof row.operation==='string'&&row.outcome==='unknown'&&typeof row.canceled==='boolean'&&typeof row.factsComplete==='boolean'
     &&Array.isArray(row.args)&&row.args.length===6&&row.args.every(arg=>typeof arg==='string'&&/^[0-9a-f]{1,16}$/.test(arg))
     &&byteFact(row.cwd)&&byteFact(row.image)&&typeof row.argvRead==='boolean'&&byteFact(row.argv)
-    &&(row.exec===undefined||(['execve','execveat'].includes(String(row.syscall))&&object(row.exec).source==='syscall-entry'&&byteFact(object(row.exec).argv)&&byteFact(object(row.exec).target)))
+    &&(row.exec===undefined||(['execve','execveat'].includes(String(row.syscall))&&object(row.exec).source==='syscall-entry'&&byteFact(object(row.exec).argv)&&byteFact(object(row.exec).target)
+      &&(object(row.exec).environment===undefined||byteFact(object(row.exec).environment))))
+    &&(row.imageLoader===undefined||typeof object(row.imageLoader).namespaceStable==='boolean'&&childLoaderFact(object(row.imageLoader).capture))
     &&Array.isArray(row.paths)&&row.paths.every(value=>{const path=object(value);return integer(path.arg)&&integer(path.dirfdArg)&&byteFact(path.value)&&(path.resolution===undefined||pathResolution(path.resolution,{tid:Number(row.tid),tgid:Number(row.tgid)}));})
     &&Array.isArray(row.dirfds)&&row.dirfds.every(value=>{const fd=object(value);return integer(fd.arg)&&integer(fd.fd)&&byteFact(fd.target);});
   if(!valid)throw Error('file input observer: malformed '+String(row.kind)+' record');
@@ -128,10 +145,12 @@ export function readObservationRow(value:unknown):ObservationRow{
 export type CaptureArtifact={sha256:string;bytes:number};
 export async function readFileObservation(file:string,visit:(row:ObservationRow)=>void|Promise<void>):Promise<{terminal:ObservationEnd;artifact:CaptureArtifact}>{
   let start=false,version:ObservationStart['version']|undefined,end:ObservationEnd|undefined,attempts=0,root:number|undefined,exited:RootExit|undefined;
+  let readerRecipe:string|null|undefined,readerEnded=false;
   const consume=async(value:unknown)=>{
     const row=readObservationRow(value);
     if(end)throw Error('file input observer: data follows completion');
-    if(!start){if(row.kind!=='start')throw Error('file input observer: missing header');start=true;version=row.version;}
+    if(!start){if(row.kind!=='start')throw Error('file input observer: missing header');start=true;version=row.version;readerRecipe=row.imageReaderRecipe;
+      if(version>=6&&readerRecipe===undefined)throw Error('file input observer: missing image-reader capability fact');}
     else if(row.kind==='start')throw Error('file input observer: duplicate header');
     if(row.kind==='root-start'){
       if(root!==undefined)throw Error('file input observer: duplicate root start');root=row.root;
@@ -140,14 +159,21 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
       if(exited||row.root!==root)throw Error('file input observer: inconsistent root exit');exited=row;
     }
     if(row.kind==='attempt'){
+      if(readerEnded)throw Error('file input observer: attempt follows image-reader drain');
+      if(row.imageLoader&&!readerRecipe)throw Error('file input observer: image receipt has no capture helper');
       attempts++;
       if(version!>=3&&['execve','execveat'].includes(row.syscall)&&!row.exec)throw Error('file input observer: missing exec request arguments');
+      if(version!>=6&&row.exec&&!row.exec.environment)throw Error('file input observer: missing stopped exec environment');
       if(version!>=4&&row.paths.some(path=>!path.resolution))throw Error('file input observer: missing capture-time resolution fact');
       if(version!>=5&&row.paths.some(path=>path.resolution?.state!=='unavailable'&&typeof path.resolution?.finalComponent!=='boolean'))
         throw Error('file input observer: missing final-component fact');
       if(!row.factsComplete&&!canceledLifetime(row))throw Error('file input observer: unreadable or truncated attempt facts');
     }
+    if(row.kind==='image-reader-end'){
+      if(!readerRecipe||readerEnded)throw Error('file input observer: unbound or repeated image-reader drain');readerEnded=true;
+    }
     if(row.kind==='complete'){
+      if(!!readerRecipe!==readerEnded)throw Error('file input observer: missing image-reader drain');
       if(!exited||row.root!==root||row.exit!==exited.exit||row.signal!==exited.signal)
         throw Error('file input observer: inconsistent terminal root status');
       end=row;

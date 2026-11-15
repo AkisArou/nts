@@ -96,7 +96,7 @@ export type RuntimeTargetInputs={target:RustRuntimeTarget;snapshot:InputSnapshot
  * Product status and setup work remain separate from runtime coverage. */
 export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string};memoizeClaims?:boolean;provenanceBoundary?:CapturedBoundaryFactory}){
   const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>(),installed=new Map<string,ReturnType<typeof runtimeInstalledInputClassifier>>();
-  const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=execution?rustTestExecutionClassifier(execution):undefined,images=new Map<number,InputIndexExecution>();
+  const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=rustTestExecutionClassifier(execution,capture.root),images=new Map<number,InputIndexExecution>();
   const buildReference=options.build??(execution?.cargo.path?{...execution.cargo,path:execution.cargo.path}:undefined);
   const build=buildReference?readRustBuildProvenance(buildReference):{artifacts:[],outputDirectories:[]};
   if(execution?.provenance&&execution.provenance.sourceRoot!==capture.root)throw Error('Rust input validation: capture provenance has a different source root');

@@ -141,7 +141,7 @@ test('attempt groups retain kernel path order, two-path positions and actual cha
   await publishInputTrace({raw,output,cwd:'/source/ignored',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
   const rows:InputIndexObservation[]=[];
   const result=await readInputTraceIndex(output,row=>{if(row.kind==='observation')rows.push(row);});
-  assert.equal(result.header.version,8);assert.equal(result.header.observer,null,'absence of capture ABI evidence remains explicit');
+  assert.equal(result.header.version,9);assert.equal(result.header.observer,null,'absence of capture ABI evidence remains explicit');
   assert.deepEqual(rows.map(row=>row.attempt.id),['41','42']);
   assert.deepEqual(rows[0]!.subjects,[
     {kind:'path',arg:1,dirfdArg:0,name:'link/../value',raw:bytes('link/../value').hex,anchor:{kind:'dirfd',fd:3,path:'/source/first',raw:bytes('/source/first').hex}},
@@ -250,7 +250,7 @@ test('descriptor-backed null paths are retained and non-filesystem dirfds never 
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'&&row.raw===Buffer.from('socket:[123]').toString('hex')));
   const rows:unknown[]=[];await readCompressedRecords(output,row=>{rows.push(row);});
   const changed=(name:string,values:unknown[])=>{const path=join(root,name+'.gz');writeFileSync(path,gzipSync(values.map(row=>JSON.stringify(row)).join('\n')+'\n'));return path;};
-  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:9},...rows.slice(1)]),()=>{}),/unsupported input index version 9/);
+  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:10},...rows.slice(1)]),()=>{}),/unsupported input index version 10/);
   await assert.rejects(readInputTraceIndex(changed('before-empty-path',[{...(rows[0] as object),version:4},...rows.slice(1)]),()=>{}),/rederive legacy normalized indices/);
   await assert.rejects(readInputTraceIndex(changed('legacy',[{...(rows[0] as object),version:3},...rows.slice(1)]),()=>{}),/rederive legacy normalized indices/);
   const footer=rows.at(-1) as {counts:{observations:number}};

@@ -12,6 +12,7 @@ import {runtimeSubjectValidator} from './rust-input-validation.ts';
 import type {InputIndexExecution,InputSubject,RuntimeObservation} from './rust-test-inputs.ts';
 import type {FileObserverReceipt} from './file-input-observer.ts';
 import type {InputSnapshot} from './module-closure.ts';
+import {rustLoaderCapture} from './rust-loader.ts';
 
 const observer:FileObserverReceipt={version:1,observedPath:'/observer',artifactPath:'/observer',sha256:'a'.repeat(64),sourceSha256:'b'.repeat(64),abi:'linux-x86_64-v1'};
 function fixture(t:Parameters<typeof testScratch>[0]){
@@ -22,7 +23,7 @@ function fixture(t:Parameters<typeof testScratch>[0]){
   execFileSync('clang',[join(root,'main.c'),'-o',path],{env,stdio:['ignore','pipe','pipe']});
   durableRecord(artifacts,{version:1,status:0,buildFinished:true,artifacts:[{reason:'compiler-artifact',filenames:[path],package_id:'owned-control',executable:path,profile:{test:true},
     target:{name:'control',kind:['test'],src_path:source}}]});
-  const cwd=root,argv=[path,'--supplied-call'],environment={...env,LD_LIBRARY_PATH:join(root,'loader')};
+  const cwd=root,argv=[path,'--supplied-call'],environment={...env,LD_LIBRARY_PATH:testScratch(t,'rust-loader-search')};
   const prepared=prepareRustTestExecution({artifacts,root,cwd,argv,env:environment});
   const receipt=prepared.finish({path:join(root,'raw.gz'),sha256:'c'.repeat(64),bytes:123},42),file=join(root,'execution.json');
   durableRecord(file,receipt);
@@ -73,9 +74,9 @@ test('exact emitted artifacts and same-binary derived loader paths are classifie
   assert.equal(classify(join(f.root,'other',library)),undefined,'only a derived search directory qualifies');
   assert.equal(classify(join(directory.path,library),'open',{...context,pid:43}),undefined,'another task gets no loader context');
   assert.equal(classify(join(directory.path,library),'open',{...context,path:'/different/binary'}),undefined,'another binary gets no loader context');
-  const positive=join(f.root,'loader',library);writeFileSync(positive,'ordinary unexpected file');
+  const positive=join(f.env.LD_LIBRARY_PATH,library);writeFileSync(positive,'ordinary unexpected file');
   assert.equal(classify(positive),undefined,'a present file is not a loader absence');
-  symlinkSync(join(f.root,'loader'),join(f.root,'alias'));
+  symlinkSync(f.env.LD_LIBRARY_PATH,join(f.root,'alias'));
   assert.equal(classify(join(f.root,'alias',library)),undefined,'an alias is not a derived directory');
   const later=rustTestExecutionClassifier(f.receipt),exec=request(f.path,'execute');
   later.classify(exec,context,assess(f.root,exec));
@@ -94,6 +95,18 @@ test('loader directory derivation excludes supported but unsearched capabilities
   assert.ok(search.directories.every(row=>!row.path.includes('owned-disabled')));
   assert.throws(()=>loaderSearch({...loader,libraryPath:'$ORIGIN/unknown'},f.cwd),/token expansion/);
   assert.throws(()=>loaderSearch({...loader,elf:loader.elf+'\n (RUNPATH) [unmodeled]\n'},f.cwd),/RPATH\/RUNPATH/);
+});
+
+test('ELF and loader report caches key exact bytes, environment and hwcaps without sharing mutable answers',t=>{
+  const f=fixture(t),cache=rustLoaderCapture(f.env),first=cache.capture(f.path,f.cwd,f.env,'platform-a');
+  const expected=first.loader.help;first.loader.help='caller mutation';
+  assert.equal(cache.capture(f.path,f.cwd,f.env,'platform-a').loader.help,expected);
+  cache.capture(f.path,f.cwd,{...f.env,LD_LIBRARY_PATH:join(f.root,'other')},'platform-a');
+  cache.capture(f.path,f.cwd,f.env,'platform-b');
+  assert.deepEqual(cache.statistics(),{elfHits:3,elfMisses:1,loaderHits:1,loaderMisses:3});
+  writeFileSync(f.path,Buffer.concat([readFileSync(f.path),Buffer.from('different bytes')]));
+  cache.capture(f.path,f.cwd,f.env,'platform-a');
+  assert.equal(cache.statistics().elfMisses,2);assert.equal(cache.statistics().loaderHits,2);
 });
 
 test('capture binds creator-owned scratch identities and leaves historical receipt reuse independent of cleanup',t=>{

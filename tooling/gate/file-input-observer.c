@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/auxv.h>
 #include <sys/ioctl.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -158,6 +159,10 @@ static int observation_fd;
 static char *pending_path;
 static unsigned long errors, attempts;
 static bool output_failed;
+static FILE *image_reader;
+static const char *image_reader_recipe;
+enum { IMAGE_REPLY_BYTES = 512 * 1024 };
+static char image_reply[IMAGE_REPLY_BYTES];
 
 static ssize_t compressed_write(void *cookie, const char *bytes, size_t size) {
   if (size > INT32_MAX) {
@@ -418,7 +423,8 @@ typedef struct {
   unsigned long tgid;
   unsigned count, path_bytes;
   char path[PATH_BYTES];
-  struct stat mount, root, task_pid_namespace, observer_pid_namespace, proc_root;
+  struct stat mount, root, task_pid_namespace, observer_pid_namespace,
+      proc_root;
   ResolutionComponent components[RESOLUTION_COMPONENTS];
 } PathResolution;
 static PathResolution resolution_rows[2];
@@ -427,9 +433,9 @@ static bool same_identity(const struct stat *left, const struct stat *right) {
   return left->st_dev == right->st_dev && left->st_ino == right->st_ino;
 }
 static bool proc_anchor_identity(const struct stat *task_pid,
-                                const struct stat *observer_pid,
-                                const struct stat *walked_root,
-                                const struct stat *observer_root) {
+                                 const struct stat *observer_pid,
+                                 const struct stat *walked_root,
+                                 const struct stat *observer_root) {
   return same_identity(task_pid, observer_pid) &&
          same_identity(walked_root, observer_root);
 }
@@ -529,8 +535,9 @@ static void resolution_parent(char *path) {
   else if (slash)
     *slash = 0;
 }
-static void resolve_attempt_path(pid_t tid, unsigned long tgid, const Bytes *path,
-                                 const Bytes *anchor, PathResolution *value) {
+static void resolve_attempt_path(pid_t tid, unsigned long tgid,
+                                 const Bytes *path, const Bytes *anchor,
+                                 PathResolution *value) {
   value->error = EINVAL;
   value->state = "unavailable";
   value->count = value->path_bytes = 0;
@@ -631,8 +638,8 @@ static void resolve_attempt_path(pid_t tid, unsigned long tgid, const Bytes *pat
         component->filesystem = "procfs";
         value->task_anchored = true;
         int written = !strcmp(part, "self")
-                          ? snprintf(value->path, sizeof(value->path),
-                                     "%s/%lu", parent, tgid)
+                          ? snprintf(value->path, sizeof(value->path), "%s/%lu",
+                                     parent, tgid)
                           : snprintf(value->path, sizeof(value->path),
                                      "%s/%lu/task/%d", parent, tgid, tid);
         if (written < 0 || written >= PATH_BYTES) {
@@ -715,7 +722,8 @@ static void resolution_json(const PathResolution *value) {
   }
   fprintf(
       output,
-      "{\"state\":\"%s\",\"finalLink\":%s,\"finalComponent\":%s,\"namespace\":{\"dev\":\"%llu\","
+      "{\"state\":\"%s\",\"finalLink\":%s,\"finalComponent\":%s,\"namespace\":{"
+      "\"dev\":\"%llu\","
       "\"ino\":\"%llu\",\"rootDev\":\"%llu\",\"rootIno\":\"%llu\"},\"path\":",
       value->state, value->final_link ? "true" : "false",
       value->final_component ? "true" : "false",
@@ -736,18 +744,19 @@ static void resolution_json(const PathResolution *value) {
     if (part->filesystem)
       fprintf(output, ",\"filesystem\":\"%s\"", part->filesystem);
     if (part->task_anchor)
-      fprintf(output,
-              ",\"taskAnchor\":{\"kind\":\"procfs-task\",\"tid\":%d,\"tgid\":%lu,"
-              "\"taskPidNamespace\":{\"dev\":\"%llu\",\"ino\":\"%llu\"},"
-              "\"observerPidNamespace\":{\"dev\":\"%llu\",\"ino\":\"%llu\"},"
-              "\"procRoot\":{\"dev\":\"%llu\",\"ino\":\"%llu\"}}",
-              value->tid, value->tgid,
-              (unsigned long long)value->task_pid_namespace.st_dev,
-              (unsigned long long)value->task_pid_namespace.st_ino,
-              (unsigned long long)value->observer_pid_namespace.st_dev,
-              (unsigned long long)value->observer_pid_namespace.st_ino,
-              (unsigned long long)value->proc_root.st_dev,
-              (unsigned long long)value->proc_root.st_ino);
+      fprintf(
+          output,
+          ",\"taskAnchor\":{\"kind\":\"procfs-task\",\"tid\":%d,\"tgid\":%lu,"
+          "\"taskPidNamespace\":{\"dev\":\"%llu\",\"ino\":\"%llu\"},"
+          "\"observerPidNamespace\":{\"dev\":\"%llu\",\"ino\":\"%llu\"},"
+          "\"procRoot\":{\"dev\":\"%llu\",\"ino\":\"%llu\"}}",
+          value->tid, value->tgid,
+          (unsigned long long)value->task_pid_namespace.st_dev,
+          (unsigned long long)value->task_pid_namespace.st_ino,
+          (unsigned long long)value->observer_pid_namespace.st_dev,
+          (unsigned long long)value->observer_pid_namespace.st_ino,
+          (unsigned long long)value->proc_root.st_dev,
+          (unsigned long long)value->proc_root.st_ino);
     if (*part->link) {
       fputs(",\"link\":", output);
       resolution_text(part->link);
@@ -871,6 +880,126 @@ static Bytes descriptor_target(pid_t tid, uint64_t raw,
   }
   return value;
 }
+typedef struct TaskImage {
+  unsigned long pid;
+  unsigned long long birth;
+  char path[PATH_BYTES];
+  struct TaskImage *next;
+} TaskImage;
+static TaskImage *task_images[4096];
+static bool image_changed(unsigned long pid, unsigned long long birth,
+                          const Bytes *image) {
+  unsigned bucket = pid % 4096;
+  TaskImage *row = task_images[bucket];
+  while (row && row->pid != pid)
+    row = row->next;
+  if (!row) {
+    row = calloc(1, sizeof(*row));
+    if (!row)
+      fatal("image identity allocation");
+    row->pid = pid;
+    row->next = task_images[bucket];
+    task_images[bucket] = row;
+  }
+  bool changed = row->birth != birth || strlen(row->path) != image->size ||
+                 memcmp(row->path, image->data, image->size);
+  row->birth = birth;
+  memcpy(row->path, image->data, image->size);
+  row->path[image->size] = 0;
+  return changed;
+}
+static const char *image_reader_reply(void) {
+  struct sigaction ignore = {.sa_handler = SIG_IGN}, previous;
+  sigemptyset(&ignore.sa_mask);
+  if (sigaction(SIGPIPE, &ignore, &previous))
+    return NULL;
+  int flushed = fflush(image_reader), saved = errno;
+  sigaction(SIGPIPE, &previous, NULL);
+  errno = saved;
+  if (flushed)
+    return NULL;
+  uint64_t start = now_ns();
+  size_t size = 0;
+  while (size + 1 < sizeof(image_reply)) {
+    int timeout = phase_timeout_ms(true, now_ns() - start);
+    if (!timeout) {
+      errno = ETIMEDOUT;
+      return NULL;
+    }
+    struct pollfd response = {.fd = 4, .events = POLLIN};
+    if (poll(&response, 1, timeout) <= 0)
+      return NULL;
+    ssize_t n = read(4, image_reply + size, sizeof(image_reply) - size - 1);
+    if (n <= 0) {
+      errno = EPIPE;
+      return NULL;
+    }
+    char *end = memchr(image_reply + size, '\n', (size_t)n);
+    size += (size_t)n;
+    if (end) {
+      if (end != image_reply + size - 1) {
+        errno = EPROTO;
+        return NULL;
+      }
+      *end = 0;
+      return image_reply;
+    }
+  }
+  errno = EOVERFLOW;
+  return NULL;
+}
+static bool image_platform(pid_t tid, unsigned long long *hwcap,
+                           unsigned long long *hwcap2) {
+  char path[96];
+  unsigned char data[16384], platform[PATH_BYTES];
+  snprintf(path, sizeof(path), "/proc/%d/auxv", tid);
+  Bytes auxv = read_file(path, data, sizeof(data));
+  if (!good(&auxv) || auxv.size % 16)
+    return false;
+  uint64_t pointer = 0, secure = UINT64_MAX;
+  bool ended = false;
+  *hwcap = *hwcap2 = 0;
+  for (size_t offset = 0; offset < auxv.size; offset += 16) {
+    uint64_t entry[2];
+    memcpy(entry, auxv.data + offset, sizeof(entry));
+    if (entry[0] == AT_NULL) {
+      ended = true;
+      break;
+    }
+    if (entry[0] == AT_HWCAP)
+      *hwcap = entry[1];
+    if (entry[0] == AT_HWCAP2)
+      *hwcap2 = entry[1];
+    if (entry[0] == AT_PLATFORM)
+      pointer = entry[1];
+    if (entry[0] == AT_SECURE)
+      secure = entry[1];
+  }
+  Bytes task_platform = remote_path(tid, pointer, platform);
+  const char *own_platform = (const char *)getauxval(AT_PLATFORM);
+  unsigned char own_data[16384];
+  Bytes own = read_file("/proc/self/auxv", own_data, sizeof(own_data));
+  uint64_t own_hwcap = 0, own_hwcap2 = 0;
+  bool own_ended = false;
+  if (!good(&own) || own.size % 16)
+    return false;
+  for (size_t offset = 0; offset < own.size; offset += 16) {
+    uint64_t entry[2];
+    memcpy(entry, own.data + offset, sizeof(entry));
+    if (entry[0] == AT_NULL) {
+      own_ended = true;
+      break;
+    }
+    if (entry[0] == AT_HWCAP)
+      own_hwcap = entry[1];
+    if (entry[0] == AT_HWCAP2)
+      own_hwcap2 = entry[1];
+  }
+  return ended && secure == 0 && good(&task_platform) && !task_platform.null &&
+         own_platform && task_platform.size == strlen(own_platform) &&
+         !memcmp(task_platform.data, own_platform, task_platform.size) &&
+         own_ended && *hwcap == own_hwcap && *hwcap2 == own_hwcap2;
+}
 static void attempt_json(int listener, const struct seccomp_notif *request) {
   const Call *call = NULL;
   if (request->data.arch == OBSERVER_ARCH)
@@ -919,6 +1048,68 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
     record_error("validate notification", errno);
     complete = false;
   }
+  bool is_exec =
+      !strcmp(call->name, "execve") || !strcmp(call->name, "execveat");
+  unsigned char environment_data[ARGV_BYTES];
+  Bytes requested_argv = {0}, target = {0}, environment = {0};
+  if (is_exec) {
+    unsigned argument = !strcmp(call->name, "execve") ? 1 : 2;
+    requested_argv =
+        remote_argv(request->pid, request->data.args[argument], argv_data);
+    target = exec_target(request, call, &paths[0], target_data);
+    environment = remote_argv(request->pid, request->data.args[argument + 1],
+                              environment_data);
+  }
+  const char *loader_fact = NULL;
+  bool namespace_stable = false;
+  if (image_reader && complete && image.size < PATH_BYTES) {
+    bool changed = image_changed(tgid, birth, &image);
+    if (changed || is_exec) {
+      struct stat mount, root, after_mount, after_root;
+      bool namespace = resolution_namespace(request->pid, &mount, &root);
+      unsigned long long hwcap = 0, hwcap2 = 0;
+      bool platform = image_platform(request->pid, &hwcap, &hwcap2);
+      FILE *saved_output = output;
+      output = image_reader;
+      fprintf(output,
+              "{\"changed\":%s,\"namespace\":%s,\"platform\":\"%llx:%llx\","
+              "\"platformMatches\":%s,\"environment\":",
+              changed ? "true" : "false", namespace ? "true" : "false", hwcap,
+              hwcap2, platform ? "true" : "false");
+      bytes_json(&environment);
+      fprintf(output,
+              " ,\"row\":{\"kind\":\"attempt\",\"id\":\"%llu\",\"tid\":%d,"
+              "\"tgid\":%lu,\"ppid\":%lu,\"birth\":\"%llu\",\"parentBirth\":\"%"
+              "llu\",\"syscall\":\"%s\",\"operation\":\"%s\",\"outcome\":"
+              "\"unknown\",\"canceled\":%s,\"factsComplete\":true,\"args\":["
+              "\"0\",\"0\",\"0\",\"0\",\"0\",\"0\"],\"cwd\":",
+              (unsigned long long)request->id, request->pid, tgid, ppid, birth,
+              parent_birth, call->name, call->operation,
+              canceled ? "true" : "false");
+      bytes_json(&cwd);
+      fputs(",\"image\":", output);
+      bytes_json(&image);
+      fputs(",\"argvRead\":false,\"argv\":", output);
+      bytes_json(&argv);
+      if (is_exec) {
+        fputs(",\"exec\":{\"source\":\"syscall-entry\",\"argv\":", output);
+        bytes_json(&requested_argv);
+        fputs(",\"target\":", output);
+        bytes_json(&target);
+        fputc('}', output);
+      }
+      fputs(",\"paths\":[],\"dirfds\":[]}}\n", output);
+      output = saved_output;
+      loader_fact = image_reader_reply();
+      if (!loader_fact)
+        record_error("image reader protocol", errno ? errno : EIO);
+      namespace_stable =
+          namespace &&
+          resolution_namespace(request->pid, &after_mount, &after_root) &&
+          same_identity(&mount, &after_mount) &&
+          same_identity(&root, &after_root);
+    }
+  }
   fprintf(output,
           "{\"kind\":\"attempt\",\"id\":\"%llu\",\"tid\":%d,\"tgid\":%lu,"
           "\"ppid\":%lu,\"birth\":\"%llu\",\"parentBirth\":\"%llu\","
@@ -936,17 +1127,18 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
   bytes_json(&image);
   fprintf(output, ",\"argvRead\":%s,\"argv\":", argv_read ? "true" : "false");
   bytes_json(&argv);
-  if (!strcmp(call->name, "execve") || !strcmp(call->name, "execveat")) {
-    unsigned argument = !strcmp(call->name, "execve") ? 1 : 2;
-    Bytes requested_argv =
-        remote_argv(request->pid, request->data.args[argument], argv_data);
-    Bytes target = exec_target(request, call, &paths[0], target_data);
+  if (is_exec) {
     fputs(",\"exec\":{\"source\":\"syscall-entry\",\"argv\":", output);
     bytes_json(&requested_argv);
     fputs(",\"target\":", output);
     bytes_json(&target);
+    fputs(",\"environment\":", output);
+    bytes_json(&environment);
     fputc('}', output);
   }
+  if (loader_fact && strcmp(loader_fact, "null"))
+    fprintf(output, ",\"imageLoader\":{\"namespaceStable\":%s,\"capture\":%s}",
+            namespace_stable ? "true" : "false", loader_fact);
   fputs(",\"paths\":[", output);
   for (unsigned i = 0; i < call->count; i++) {
     if (i)
@@ -959,7 +1151,8 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
                 (int)request->data.args[call->dirfds[i]] == AT_FDCWD
             ? &cwd
             : &descriptors[i];
-    resolve_attempt_path(request->pid, tgid, &paths[i], anchor, &resolution_rows[i]);
+    resolve_attempt_path(request->pid, tgid, &paths[i], anchor,
+                         &resolution_rows[i]);
     fputs(",\"resolution\":", output);
     resolution_json(&resolution_rows[i]);
     fputc('}', output);
@@ -1101,7 +1294,19 @@ int main(int argc, char **argv) {
     printf("%llu\n", birth);
     return 0;
   }
-  if (argc < 4 || strcmp(argv[2], "--")) {
+  int command_index = 3;
+  if (argc >= 6 && !strcmp(argv[2], "--image-reader") &&
+      !strcmp(argv[4], "--")) {
+    if (strlen(argv[3]) != 64 || strspn(argv[3], "0123456789abcdef") != 64 ||
+        fcntl(3, F_SETFD, FD_CLOEXEC) || fcntl(4, F_SETFD, FD_CLOEXEC))
+      return 2;
+    image_reader_recipe = argv[3];
+    image_reader = fdopen(3, "w");
+    if (!image_reader)
+      return 2;
+    command_index = 5;
+  }
+  if (argc <= command_index || strcmp(argv[command_index - 1], "--")) {
     fputs("usage: file-input-observer <record> -- <command> [args...]\n",
           stderr);
     return 2;
@@ -1123,9 +1328,14 @@ int main(int argc, char **argv) {
   static char buffer[65536];
   if (setvbuf(output, buffer, _IOFBF, sizeof(buffer)))
     fatal("observation buffer");
-  fputs("{\"kind\":\"start\",\"version\":5,\"mechanism\":\"seccomp-user-"
-        "notification\",\"noNewPrivileges\":true}\n",
+  fputs("{\"kind\":\"start\",\"version\":6,\"mechanism\":\"seccomp-user-"
+        "notification\",\"noNewPrivileges\":true,\"imageReaderRecipe\":",
         output);
+  if (image_reader_recipe)
+    fprintf(output, "\"%s\"", image_reader_recipe);
+  else
+    fputs("null", output);
+  fputs("}\n", output);
   inherited_descriptors();
   sigset_t blocked, original, waiting;
   sigemptyset(&blocked);
@@ -1172,7 +1382,7 @@ int main(int argc, char **argv) {
       child_error(exec_error[1], 3);
     close(listener);
     close(pair[1]);
-    execvp(argv[3], argv + 3);
+    execvp(argv[command_index], argv + command_index);
     child_error(exec_error[1], 4);
   }
   fprintf(output, "{\"kind\":\"root-start\",\"root\":%d}\n", root);
@@ -1339,6 +1549,23 @@ int main(int argc, char **argv) {
   close(listener);
   free(request);
   free(response);
+  if (image_reader) {
+    fputs("{\"kind\":\"close\"}\n", image_reader);
+    const char *end = image_reader_reply();
+    if (!end)
+      record_error("image reader drain", errno ? errno : EIO);
+    else
+      fprintf(output, "{\"kind\":\"image-reader-end\",\"value\":%s}\n", end);
+    fclose(image_reader);
+    image_reader = NULL;
+    close(4);
+  }
+  for (unsigned i = 0; i < 4096; i++)
+    while (task_images[i]) {
+      TaskImage *next = task_images[i]->next;
+      free(task_images[i]);
+      task_images[i] = next;
+    }
   check_output();
   bool complete = drained && !errors && !output_failed;
   fprintf(output,

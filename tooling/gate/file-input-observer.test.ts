@@ -12,6 +12,8 @@ import {authenticateRustInputTrace} from './rust-input-authentication.ts';
 import {runtimeSubjectValidator,validateRustInputCapture} from './rust-input-validation.ts';
 import {runtimeInputRequirement} from './rust-input-operations.ts';
 import {runtimeProvenanceClassifier} from './rust-input-provenance.ts';
+import {prepareObserverImageReader,observerImageSession} from './file-input-observer-session.ts';
+import {rustTestExecutionClassifier} from './rust-test-execution.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
@@ -200,6 +202,43 @@ test('native procfs anchor identity rejects a different PID namespace or proc ro
     'assert(!proc_anchor_identity(&pid,&pid,&changed,&root));changed=root;changed.st_dev++;assert(!proc_anchor_identity(&pid,&pid,&changed,&root));return 0;}\n');
   const built=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
   assert.equal(built.status,0,built.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
+});
+
+test('child loader receipts bind exec environments and reuse content-keyed ELF and loader facts',async t=>{
+  const root=newTestScratch('child-loader-capture');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),observer=prepareFileObserver(root,env),prepared=prepareObserverImageReader(),program=join(root,'subject'),input=join(root,'subject.c');
+  const first=join(root,'lib-a'),second=join(root,'lib-b');mkdirSync(first);mkdirSync(second);
+  const repository=join(root,'source');mkdirSync(repository);
+  writeFileSync(input,`#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+int main(int argc,char **argv){(void)argc;for(int i=0;i<3;i++){pid_t p=fork();if(p<0)return 1;if(!p){if(setenv("LD_LIBRARY_PATH",argv[i==1?2:1],1))_exit(2);execl(argv[3],argv[3],"child",(char *)0);_exit(3);}int status;if(waitpid(p,&status,0)!=p||!WIFEXITED(status)||WEXITSTATUS(status))return 4;}return 0;}\n`);
+  const built=spawnTest('cc',['-O1',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
+  const raw=join(root,'raw.gz'),index=join(root,'index.gz'),target=realpathSync('/usr/bin/printf');
+  const session=observerImageSession(prepared,observer.receipt,join(root,'reader.log'),env);
+  let ran;
+  try{ran=spawnTest(observer.executable,session.arguments(raw,program,[first,second,target]),{env,encoding:'utf8',stdio:['ignore','pipe','pipe',session.input,session.output]});}
+  finally{await session.finish();}
+  assert.equal(ran.status,0,ran.stderr);assert.equal(ran.stdout,'childchildchild');
+  await publishInputTrace({raw,output:index,cwd:root,root:repository,observer:session.receipt,target:{package:'fixture',name:'loaders',kind:['test'],source:'fixture.rs'}});
+  const images=new Map<number,InputIndexExecution>(),rows:InputIndexObservation[]=[];let statistics:unknown;
+  await readInputTraceIndex(index,row=>{if(row.kind==='execution')images.set(row.id,row);if(row.kind==='observation')rows.push(row);if(row.kind==='image-reader-end')statistics=row.value.statistics;});
+  const captured=[...images.values()].filter(image=>image.path===target&&image.imageLoader?.capture.state==='captured');assert.equal(captured.length,3);
+  assert.deepEqual(captured.map(image=>image.imageLoader?.capture.state==='captured'?image.imageLoader.capture.loader.libraryPath:null),[first,second,first]);
+  const counts=statistics as {elfHits:number;loaderHits:number;loaderMisses:number};assert.ok(counts.elfHits>=2);assert.ok(counts.loaderHits>=1);assert.ok(counts.loaderMisses>=2);
+  const classifier=rustTestExecutionClassifier(undefined,repository),sourceClassifier=rustTestExecutionClassifier(undefined,root),validator=runtimeSubjectValidator(repository,{files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},{capturedIdentities:true});
+  let probes=0,sourceProbes=0;
+  for(const row of rows){const image=images.get(row.image)!;classifier.observe(row,image);sourceClassifier.observe(row,image);for(const part of row.subjects){
+    if(image.path!==target||part.kind!=='path'||!part.name.startsWith(first+'/'))continue;
+    const assessment=validator.assess(row,part,session.receipt);
+    if(classifier.classify(row,image,assessment)?.kind==='loader-probe'){probes++;assert.equal(sourceClassifier.classify(row,image,assessment),undefined);sourceProbes++;}
+  }}
+  assert.ok(probes>0,'child library probes use their own finite loader receipt');
+  assert.equal(sourceProbes,probes,'a source directory on the loader path remains an absence obligation');
+  const records=gunzipSync(readFileSync(index)).toString().trim().split('\n').map(line=>JSON.parse(line) as {kind:string;imageLoader?:{capture:{state:string;request?:string}}});
+  const forged=records.find(row=>row.kind==='execution'&&row.imageLoader?.capture.state==='captured');assert.ok(forged?.imageLoader);forged.imageLoader.capture.request='0';
+  const bad=join(root,'forged.gz');writeFileSync(bad,gzipSync(records.map(row=>JSON.stringify(row)).join('\n')+'\n'));
+  await assert.rejects(readInputTraceIndex(bad,()=>{}),/no bound exec request/);
 });
 
 test('exec requests retain syscall argv and cwd without inventing successful or readable invocations',async t=>{
