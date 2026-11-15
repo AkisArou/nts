@@ -18,6 +18,14 @@ import {waitFor} from '../gate/test-wait.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {prepareChildObserver,observedSpawnSync,type ChildUsage} from '../gate/child-rusage.ts';
 import {fileInput} from '../gate/reader-inputs/main.ts';
+import {projectConfig} from '../gate/reader-inputs/main.ts';
+import {moduleGraph} from '../gate/module-closure.ts';
+import {runtimeRepositoryClaims} from '../gate/rust-input-claims.ts';
+import {pathToFileURL} from 'node:url';
+import {withPackageManager} from '../inputs/package-manager.ts';
+import {dependencyCache,installDependencies} from '../inputs/dependency-inputs.ts';
+import {OracleWorker,closeOracleExecution,oracleExecution} from './oracle-emit.ts';
+import {toolchain,boundedCompiler,execute} from './oracle-emit-fixture.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
 before(setupOracleTestEnvironment);
@@ -120,6 +128,61 @@ test('committing an unrelated file preserves an existing dependency image',async
   f.write('docs/outside.md','committed outside-only change\n');f.git('add','--','docs/outside.md');f.git('commit','--quiet','-m','Change only outside install inputs');
   assert.equal(await captureDependencies(cap),ready);
   assert.deepEqual(readFileSync(join(dirname(ready),'semantic.json')),before);
+});
+test('workspace execution stays live while the image binds metadata and declared bin targets',async t=>{
+  const f=installFixture(t),cache=dependencyCache(f.parent);
+  t.after(()=>rmSync(cache,{recursive:true,force:true}));
+  const packageManifest={name:'owned-one',version:'1.0.0',type:'module',exports:'./value.ts',bin:{'owned-command':'./command.js'}};
+  const rootManifest=JSON.parse(readFileSync(join(f.root,'package.json'),'utf8'));
+  f.write('package.json',JSON.stringify({...rootManifest,dependencies:{'owned-one':'workspace:*'}}));
+  f.write('packages/one/package.json',JSON.stringify(packageManifest));
+  f.write('packages/one/value.ts','export const value=19;\n');
+  f.write('packages/one/unread.ts','export const unread=73;\n');
+  f.write('packages/one/command.js','#!/usr/bin/env node\nconsole.log(1);\n');
+  chmodSync(join(f.root,'packages/one/command.js'),0o755);
+  f.write('tsconfig.json',JSON.stringify({compilerOptions:{module:'NodeNext',moduleResolution:'NodeNext',target:'ESNext',types:[],allowImportingTsExtensions:true,rewriteRelativeImportExtensions:true},include:['src']}));
+  f.write('packages/one/tsconfig.json',JSON.stringify({extends:'../../tsconfig.json',files:['value.ts'],include:[]}));
+  f.write('src/main.ts',"import {value} from 'owned-one';declare const console:{log(value:number):void};console.log(value);\n");
+  await withPackageManager(f.root,{workers:1},manager=>manager.run(['install','--offline','--lockfile-only','--ignore-scripts']));
+  f.git('add','.');f.git('commit','-qm','Own a live workspace consumer and a named command');
+  await installDependencies(f.parent,f.root);
+  const initial=f.cap('workspace-live'),ready=await captureDependencies(initial),imageBytes=readFileSync(ready),image=JSON.parse(imageBytes.toString('utf8'));
+  assert.ok(!image.inputSet.paths.includes('packages/one'));
+  assert.ok(image.inputSet.paths.includes('packages/one/command.js'));
+  assert.equal(existsSync(join(dirname(ready),'tree/packages/one/value.ts')),false);
+  const semantic=JSON.parse(readFileSync(join(dirname(ready),'semantic.json'),'utf8'));
+  assert.ok(!semantic.packages.some((row:{path:string})=>row.path.startsWith('packages/one/')));
+  const sealed=await dependencyOwner.sealDependencyCapability(initial,canonicalFixture(initial)),environment=canonicalFixture(sealed);
+  const keys=['NTS_ORACLE_DEPENDENCIES','NTS_GATE_ENV_CONTEXT'] as const,previous=keys.map(key=>process.env[key]);
+  try{
+    for(const key of keys)process.env[key]=environment[key];
+    for(const value of [19,23]){
+      if(value===23){f.write('packages/one/value.ts','export const value=23;\n');f.git('add','packages/one/value.ts');f.git('commit','-qm','Change live consumed workspace code');}
+      assert.equal(await captureDependencies(initial),ready);assert.deepEqual(readFileSync(ready),imageBytes,'consumed code never re-prepares the image');
+      const worker=new OracleWorker(join(f.parent,'worker-'+value),toolchain);
+      let execution:ReturnType<typeof oracleExecution>|undefined;
+      try{
+        const [prepared]=await worker.prepareBatch([{entry:join(f.root,'src/main.ts'),directory:join(f.parent,'output-'+value)}],boundedCompiler);assert.ok(prepared);
+        execution=oracleExecution(prepared);const result=execute(f.root,execution);
+        assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,value+'\n');
+        const manifest=JSON.parse(readFileSync(prepared.manifest,'utf8'));
+        assert.ok(manifest.inputs[join(f.root,'packages/one/value.ts')]);assert.equal(manifest.inputs[join(f.root,'packages/one/unread.ts')],undefined);
+      }finally{if(execution)closeOracleExecution(execution);worker.close();}
+    }
+  }finally{keys.forEach((key,index)=>{if(previous[index]===undefined)delete process.env[key];else process.env[key]=previous[index];});}
+  const graph=moduleGraph({sourceRoot:f.root});
+  try{
+    const snapshot=graph.describe([projectConfig(pathToFileURL(join(f.root,'tsconfig.json')))]),claims=runtimeRepositoryClaims(f.root,snapshot);
+    assert.equal(claims.match({kind:'content',following:'follow'},{state:'resolved',path:join(f.root,'packages/one/value.ts')}).kind,'claimed');
+    assert.notEqual(claims.match({kind:'content',following:'follow'},{state:'resolved',path:join(f.root,'packages/one/unread.ts')}).kind,'claimed');
+  }finally{graph.close();}
+  f.write('packages/one/unread.ts','export const unread=97;\n');f.git('add','packages/one/unread.ts');f.git('commit','-qm','Change code no consumer reads');
+  assert.equal(await captureDependencies(initial),ready);assert.deepEqual(readFileSync(ready),imageBytes);
+  f.write('packages/one/command.js','#!/usr/bin/env node\nconsole.log(2);\n');f.git('add','packages/one/command.js');f.git('commit','-qm','Change the installed command target');
+  await assert.rejects(captureDependencies(initial),/install inputs changed/);
+  const next=await captureDependencies(f.cap('workspace-bin-changed')),after=JSON.parse(readFileSync(next,'utf8'));
+  assert.notEqual(after.inputSet.identity.key,image.inputSet.identity.key);
+  assert.notDeepEqual(readFileSync(join(dirname(next),'tree/packages/one/command.js')),readFileSync(join(dirname(ready),'tree/packages/one/command.js')));
 });
 test('the shared inventory leaf is sealed by the dependency producer identity and invalidates an old image',async t=>{
   const f=installFixture(t),original=f.cap('inventory-before'),ready=await captureDependencies(original);

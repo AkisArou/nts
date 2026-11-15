@@ -31,6 +31,9 @@ export function dependencyPackageInventory(entries:DependencyEntry[]):Dependency
   const bookkeeping=(path:string)=>path.split(sep).some((part,i,parts)=>parts[i-1]==='node_modules'&&part==='.bin')||
     /(?:^|\/)node_modules\/(?:\.modules\.yaml|\.pnpm-workspace-state-v1\.json)$/.test(path)||
     /(?:^|\/)node_modules\/\.pnpm\/lock\.yaml$/.test(path);
-  const workspaces=entries.filter(entry=>entry.kind==='link').map(entry=>resolve('/',dirname(entry.path),entry.target).slice(1)).filter(path=>!path.split(sep).includes('node_modules'));
-  return entries.filter(entry=>!bookkeeping(entry.path)&&(entry.path.split(sep).includes('node_modules')||workspaces.some(root=>entry.path===root||entry.path.startsWith(root+sep))));
+  // Workspace aliases are layout facts, retained in the full installation
+  // inventory. Their implementations belong to each consumer's live closure,
+  // never to the installed third-party package image.
+  return entries.filter(entry=>!bookkeeping(entry.path)&&entry.path.split(sep).includes('node_modules')&&
+    !(entry.kind==='link'&&!resolve('/',dirname(entry.path),entry.target).split(sep).includes('node_modules')));
 }

@@ -3326,3 +3326,8 @@ and resource proofs belong to one tooling producer fixture executing from its
 own staged Git source. The Git-fence populations and their ignore/attribute
 controls are declared at those execution owners, rather than making every
 Rust test depend on all tooling source through an incidental cold install.
+Installation inputs are metadata and named command targets, rather than whole
+importer directories. The image retains verified workspace alias layout while
+oracle snapshots project selected implementations from the live consumer
+closure. Unread workspace code does not invalidate installation or gain a runtime
+grant; command-target bytes remain inputs because pnpm reads their shebangs.

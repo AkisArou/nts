@@ -79,20 +79,20 @@ function checked(capability:DependencyCapability){
 
 function cleanInputs(input:ReturnType<typeof installationStatusInputs>,paths:readonly string[]){
   const source=fileURLToPath(input.url);
-  const candidates=new Set(installationStatusCandidates(git(source,'ls-files','-z','--cached').split('\0').filter(Boolean)));
+  const candidates=new Set(installationStatusCandidates(git(source,'ls-files','-z','--cached').split('\0').filter(Boolean),path=>readFileSync(join(source,path),'utf8')));
   for(const path of paths)if(!candidates.has(path))throw Error('oracle dependency status input was not in its selection population: '+path);
-  if(git(source,'status','--porcelain','--untracked-files=all','--',...paths))throw Error('oracle dependency install input is dirty');
+  if(git(source,'status','--porcelain','--untracked-files=all','--',...paths.map(path=>':(literal)'+path)))throw Error('oracle dependency install input is dirty');
 }
 function selectionRows(capability:DependencyCapability,revision:string):string[]{
-  return git(capability.source,'ls-tree','-rz','--full-tree',revision).split('\0').filter(row=>{
-    const path=row.slice(row.indexOf('\t')+1);
-    return installationSelectionPath(path);
-  });
+  const rows=git(capability.source,'ls-tree','-rz','--full-tree',revision).split('\0').filter(Boolean);
+  const names=rows.map(row=>row.slice(row.indexOf('\t')+1)),metadata=names.filter(installationSelectionPath);
+  const selected=new Set(installationStatusCandidates(metadata,path=>git(capability.source,'show',revision+':'+path)));
+  return rows.filter(row=>selected.has(row.slice(row.indexOf('\t')+1)));
 }
 function inputRows(capability:DependencyCapability,paths:string[],metadata=selectionRows(capability,capability.sourceRevision)){
   if(JSON.stringify(metadata)!==JSON.stringify(selectionRows(capability,'HEAD')))throw Error('oracle dependency committed install inputs changed: package metadata set');
   cleanInputs({...INSTALLATION_STATUS_INPUTS,url:pathToFileURL(capability.source)},paths);
-  const rows=(revision:string)=>git(capability.source,'ls-tree','-rz','--full-tree',revision,'--',...paths).split('\0').filter(Boolean);
+  const rows=(revision:string)=>git(capability.source,'ls-tree','-rz','--full-tree',revision,'--',...paths.map(path=>':(literal)'+path)).split('\0').filter(Boolean);
   const treeRows=rows(capability.sourceRevision);
   if(JSON.stringify(treeRows)!==JSON.stringify(rows('HEAD')))throw Error('oracle dependency committed install inputs changed');
   return treeRows;
@@ -108,7 +108,7 @@ async function installInputs(capability:DependencyCapability,counts:{pnpmSelecti
   mkdirSync(capability.directory,{recursive:true});
   const selection=mkdtempSync(join(capability.directory,'selection-')),tree=join(selection,'tree'),archive=join(selection,'source.tar');mkdirSync(tree);
   try{
-    git(capability.source,'archive','--format=tar','--output='+archive,capability.sourceRevision,'--',...selectionPaths);
+    git(capability.source,'archive','--format=tar','--output='+archive,capability.sourceRevision,'--',...selectionPaths.map(path=>':(literal)'+path));
     execFileSync('tar',['-xf',archive,'-C',tree]);rmSync(archive);
     const selected=await withPackageManager(tree,{workers:1},manager=>identity(tree,{pin:manager.pin,run:args=>{counts.pnpmSelectionCommands++;return manager.run(args);}}));
     const paths=installationStatusPaths(selected);
@@ -253,7 +253,7 @@ async function build(capability:DependencyCapability,inputSha256:string){
   const present=new Set<string>();
   for(const row of inputSet.treeRows)for(let path=row.slice(row.indexOf('\t')+1);path!=='.';path=dirname(path))present.add(path);
   const paths=inputSet.paths.filter(path=>present.has(path));
-  git(capability.source,'archive','--format=tar','--output='+archive,capability.sourceRevision,'--',...paths);
+  git(capability.source,'archive','--format=tar','--output='+archive,capability.sourceRevision,'--',...paths.map(path=>':(literal)'+path));
   execFileSync('tar',['-xf',archive,'-C',tree]);rmSync(archive);
   // The existing offline installer enumerates tracked module paths. A fresh
   // archive has none yet; all workspace importers still come from pnpm itself.

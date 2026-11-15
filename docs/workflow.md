@@ -674,6 +674,12 @@ belong to the tooling producer fixture, which executes from its own staged
 Git source. Staging and production fences never become Rust-test reads of the
 real repository. Git-fence descriptors consume their owner's indexed candidate
 population and its ignore/attribute controls, without executable placement.
+The dependency image archives installation metadata and named workspace command
+targets, together with the installed third-party packages. Importer directories
+are not installation inputs. Workspace aliases retain their verified installed
+layout but resolve to the selected live consumer closure in each oracle snapshot;
+unread workspace implementations receive no runtime grant. A command-target edit
+changes the installation identity because pnpm reads its shebang when linking.
 
 The profile is `nts-dev`: no debug info, incremental compilation, overflow
 checks and debug assertions. The owner validates the manifest, refuses
@@ -1912,5 +1918,7 @@ the first node task.
 - **Oracle consumers never produce dependency images.** The canonical parent
   prepares and seals them before tests. Missing preparation refuses with the
   owned command; cold/hit and resource proofs execute only in the tooling
-  group's staged producer fixture
+  group's staged producer fixture. Installed third-party packages are sealed;
+  workspace implementations come from each consumer's live captured closure,
+  while metadata and named command targets own the installation identity
   ([log](records/notebooks/decisions-log.md#oracle-consumers-require-prepared-images-11-15)).

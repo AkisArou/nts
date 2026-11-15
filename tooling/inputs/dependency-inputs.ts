@@ -16,7 +16,7 @@ import {withPackageManager,type PackageManager} from "./package-manager.ts";
 import {fileURLToPath} from 'node:url';
 import {moduleGraph} from '../gate/module-closure.ts';
 import {dependencySourceCandidates,sourceState,assertSourceState} from './dependency-source-state.ts';
-import {DEPENDENCY_ROOT_INPUTS} from './dependency-input-names.ts';
+import {DEPENDENCY_ROOT_INPUTS,installationBinPaths} from './dependency-input-names.ts';
 export {DEPENDENCY_ROOT_INPUTS} from './dependency-input-names.ts';
 import {executableModuleSource} from '../gate/reader-inputs/main.ts';
 import {installationCatalog,installationCatalogBytes,dependencyHash,type DependencyCatalogTrust} from './dependency-catalog.ts';
@@ -77,8 +77,14 @@ export async function identity(tree:string,manager:PackageManager):Promise<Ident
     if(path===".."||path.startsWith(".."+sep)||resolve(tree,path)===dirname(tree))throw failure("pnpm reported a workspace outside its tree");
     return path||".";
   })])].sort();
-  const files=[...new Set([...DEPENDENCY_ROOT_INPUTS,...importers.flatMap(path=>[join(path,"package.json"),join(path,".npmrc")])])].sort();
-  const inputs=files.map(path=>({path,sha256:existsSync(join(tree,path))?digest(readFileSync(join(tree,path))):"absent"}));
+  const bins=importers.flatMap(path=>{const manifest=join(path,'package.json');return installationBinPaths(manifest,readFileSync(join(tree,manifest),'utf8'));});
+  const files=[...new Set([...DEPENDENCY_ROOT_INPUTS,...importers.flatMap(path=>[join(path,"package.json"),join(path,".npmrc")]),...bins])].sort();
+  const inputs=files.map(path=>{
+    const file=join(tree,path);let present;
+    try{present=lstatSync(file);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+    if(present&&!present.isFile())throw failure('installation input is not a regular file: '+path);
+    return {path,sha256:present?digest(readFileSync(file)):'absent'};
+  });
   const value={version:2 as const,pnpm:version,manager:"sha512."+manager.pin.sha512,node:process.versions.node,platform:process.platform,arch:process.arch,inputs,importers};
   return {...value,key:digest(JSON.stringify(value))};
 }

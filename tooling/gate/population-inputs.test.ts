@@ -23,7 +23,7 @@ test('Git fence descriptors follow their indexed owners and retain control-file 
   const git=(...args:string[])=>{const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
   put('tooling/first.ts','export const value=1;');put('tests/programs/not-tooling.ts','corpus');
   put('.gitattributes','*.ts text\n');put('package.json','{"private":true}');
-  put('packages/one/package.json','{"name":"one"}');put('packages/one/value.txt','workspace bytes');
+  put('packages/one/package.json','{"name":"one","bin":"./command.js"}');put('packages/one/command.js','#!/usr/bin/env node\n');put('packages/one/value.txt','workspace bytes');
   put('packages/one/.gitignore','ignored\n');git('init','-q');git('add','.');
   const describe=(kind:'producer'|'installation')=>{
     const graph=moduleGraph({sourceRoot:root});
@@ -36,13 +36,14 @@ test('Git fence descriptors follow their indexed owners and retain control-file 
   assert.ok(producer.optionalFiles.some(row=>row.path==='tooling/.gitignore'&&!row.present));
   assert.ok(!producer.placingFiles.includes('tooling/first.ts'),'a Git content read never places that module for execution');
   const installed=describe('installation');
-  for(const path of ['packages/one/package.json','packages/one/value.txt','packages/one/.gitignore'])assert.ok(installed.runtimeFiles!.includes(path),path);
-  assert.ok(installed.directories.some(row=>row.directory==='packages/one'&&row.kind==='inspection'));
+  for(const path of ['packages/one/package.json','packages/one/command.js','packages/one/.gitignore'])assert.ok(installed.runtimeFiles!.includes(path),path);
+  assert.ok(!installed.files.includes('packages/one/value.txt'),'workspace code is a consumer input, not an installation input');
+  assert.ok(!installed.directories.some(row=>row.directory==='packages/one'&&row.kind==='inspection'));
   put('tooling/next.ts','export const value=2;');put('packages/two/package.json','{"name":"two"}');git('add','.');
   assert.ok(describe('producer').runtimeFiles!.includes('tooling/next.ts'));
   assert.ok(describe('installation').runtimeFiles!.includes('packages/two/package.json'));
   const names=['package.json','packages/one/package.json','packages/two/package.json'];
-  assert.ok(names.filter(installationSelectionPath).every(path=>installationStatusCandidates(names).includes(path)));
+  assert.ok(names.filter(installationSelectionPath).every(path=>installationStatusCandidates(names,path=>readFileSync(join(root,path),'utf8')).includes(path)));
   const literal=gitStatusInputPopulation(['space/glob[1]*?.ts'],['space/glob[1]*?.ts','space/glob1ZZ.ts']);
   assert.deepEqual(literal.files,['space/glob[1]*?.ts']);assert.ok(literal.controls.includes('space/.gitattributes'));
 });

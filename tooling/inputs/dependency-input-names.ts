@@ -2,14 +2,28 @@
 import {posix} from 'node:path';
 export const DEPENDENCY_ROOT_INPUTS=['package.json','pnpm-lock.yaml','pnpm-workspace.yaml','.npmrc','.pnpmfile.cjs','pnpmfile.cjs'] as const;
 export const installationSelectionPath=(path:string)=>(DEPENDENCY_ROOT_INPUTS as readonly string[]).includes(path)||path.endsWith('/package.json')||path.endsWith('/.npmrc');
-/** The immutable selection tree contains exactly these metadata files. Any
- * importer pnpm can select must have one of these staged package manifests. */
-export function installationStatusCandidates(tracked:readonly string[]):string[]{
+/** Package code is a consumer input. Only declared command targets affect the
+ * installed shims (pnpm's getBinsFromPackageManifest also reads their shebang). */
+export function installationBinPaths(manifestPath:string,text:string):string[]{
+  const manifest=JSON.parse(text) as {bin?:unknown;directories?:{bin?:unknown}},root=posix.dirname(manifestPath);
+  if(!manifest.bin&&manifest.directories?.bin)throw Error('dependency inputs require named bin targets instead of directories.bin: '+manifestPath);
+  const values=typeof manifest.bin==='string'?[manifest.bin]:manifest.bin&&typeof manifest.bin==='object'&&!Array.isArray(manifest.bin)?Object.values(manifest.bin):[];
+  return [...new Set(values.map(value=>{
+    if(typeof value!=='string'||!value||posix.isAbsolute(value))throw Error('invalid installation bin target: '+manifestPath);
+    const path=posix.normalize(posix.join(root,value)),part=posix.relative(root,path);
+    if(part==='..'||part.startsWith('../')||part==='.'||path.split('/').includes('node_modules'))throw Error('installation bin target escapes its package: '+manifestPath+' -> '+value);
+    return path;
+  }))].sort();
+}
+/** A parser-free superset of selection metadata and its declared command
+ * targets. Importer directories themselves never become status pathspecs. */
+export function installationStatusCandidates(tracked:readonly string[],readManifest:(path:string)=>string):string[]{
   const metadata=tracked.filter(installationSelectionPath);
-  return [...new Set([...DEPENDENCY_ROOT_INPUTS,...metadata,...metadata.filter(path=>path.endsWith('/package.json')).map(path=>posix.dirname(path))])].sort();
+  const bins=metadata.filter(path=>path==='package.json'||path.endsWith('/package.json')).flatMap(path=>installationBinPaths(path,readManifest(path)));
+  return [...new Set([...DEPENDENCY_ROOT_INPUTS,...metadata,...bins])].sort();
 }
 export function installationStatusPaths(identity:{inputs:readonly {path:string}[];importers:readonly string[]},selectionPaths:readonly string[]=[]):string[]{
-  return [...new Set([...identity.inputs.map(row=>row.path),...identity.importers.filter(path=>path!=='.'),...selectionPaths])].sort();
+  return [...new Set([...identity.inputs.map(row=>row.path),...selectionPaths])].sort();
 }
 /** Git consults ancestor controls even for a literal pathspec. A directory
  * pathspec additionally reaches its tracked descendants and their controls.

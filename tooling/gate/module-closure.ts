@@ -187,7 +187,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         if(kind==='dependency-source-inputs'){
           statusPopulation(dependencySourceCandidates(root));
         }else if(kind==='installation-status-inputs'){
-          statusPopulation(installationStatusCandidates(sourceFiles()));
+          statusPopulation(installationStatusCandidates(sourceFiles(),path=>readFileSync(resolve(root,path),'utf8')));
         }else if(kind==='cargo-inputs'){
           for(const name of cargoInputNames(sourceFiles().map(path=>({path}))))visit(context,resolve(root,name),false,false,false);
         }else{

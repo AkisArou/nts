@@ -561,7 +561,7 @@ export function removeOracleSnapshot(dir:string):void{
   rmSync(dir,{recursive:true,force:true});
 }
 const removeSnapshot=removeOracleSnapshot;
-type DependencyHandle={record:string;sha256:string;image:{source:string;sourceRevision:string;lockfileSha256:string;treeSha256:string;entries:({path:string;kind:string;sha256?:string;target?:string})[]}};
+type DependencyHandle={record:string;sha256:string;image:{source:string;sourceRevision:string;lockfileSha256:string;treeSha256:string;inputSet:{identity:{importers:string[]}};entries:({path:string;kind:string;sha256?:string;target?:string})[]}};
 const dependencyImages=new Map<string,DependencyHandle>();
 const UNPREPARED_ORACLE_IMAGE='oracle dependency image is unprepared; run node tooling/gate/inner.ts --no-agree or the gate route';
 function dependencies():DependencyHandle{
@@ -1287,11 +1287,33 @@ export class OracleWorker{
               for(const name of this.filesystem.runtimeEntries(source))copy(join(source,name));
               return;
             }
+            const selected=job.groups.flatMap(group=>job.files.get(group)??[]),image=dependency.image;
+            const importers=new Set(image.inputSet.identity.importers.map(path=>resolve(cap.source,path)));
+            const workspaceLinks=new Map<string,{target:string;text:string}>(),children=new Map<string,Set<string>>();
+            for(const item of image.entries){
+              const path=resolve(cap.source,item.path),parent=dirname(path),names=children.get(parent)??new Set<string>();names.add(basename(path));children.set(parent,names);
+              if(item.kind==='link'&&typeof item.target==='string'){
+                const target=resolve(parent,item.target);
+                if(importers.has(target))workspaceLinks.set(path,{target,text:item.target});
+              }
+            }
             const project=(origin:string,output:string,target:string)=>{
-              const emitted=job.groups.flatMap(group=>job.files.get(group)??[]).some(file=>inside(file,origin));
-              if(emitted&&this.filesystem.directoryExists(origin)){
+              const workspace=workspaceLinks.get(origin);
+              if(workspace){
+                // The image owns only the alias layout. A selected workspace
+                // implementation and its scope are already in the live Program
+                // closure copied below; an unread package gains no runtime grant.
+                if(!selected.some(file=>inside(file,workspace.target))){unobserved.add(origin);return;}
+                if(this.filesystem.readlink(origin)!==workspace.text||this.filesystem.realpath(origin)!==workspace.target)throw Error('oracle workspace dependency alias changed: '+origin);
+                const captured=destination(workspace.target),text=relative(dirname(output),captured);
+                mkdirSync(dirname(output),{recursive:true});symlinkSync(text,output);
+                links.push({output:relative(job.directory,output),target:'@runtime/'+relative(job.directory,captured),text,present:true});return;
+              }
+              const emitted=selected.some(file=>inside(file,origin)),projectsWorkspace=[...workspaceLinks.keys()].some(path=>inside(path,origin));
+              if((emitted||projectsWorkspace)&&this.filesystem.directoryExists(origin)){
                 mkdirSync(output,{recursive:true});
-                for(const name of this.filesystem.runtimeEntries(origin))project(join(origin,name),join(output,name),join(target,name));
+                const names=emitted?this.filesystem.runtimeEntries(origin):[...(children.get(origin)??[])].sort();
+                for(const name of names)project(join(origin,name),join(output,name),join(target,name));
               }else{mkdirSync(dirname(output),{recursive:true});symlinkSync(target,output);links.push({output:relative(job.directory,output),target:'@dependencies/'+relative(join(dirname(dependency!.record),'tree'),target)});}
             };
             project(source,destination(source),target);completeNamespaces.add(source);return;
