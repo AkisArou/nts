@@ -13,8 +13,9 @@ test('load readiness proves work and close drains every owned thread',async()=>{
 test('a load startup failure drains workers which already started',async()=>{
   const made:Worker[]=[];
   await assert.rejects(startCpuLoad(2,request=>{
-    const worker=new Worker(request.index===1?new URL('./cpu-load-worker.ts',import.meta.url):'throw Error("deliberate load startup failure")',
-      request.index===1?{workerData:request}:{eval:true});
+    const worker=request.index===1
+      ?new Worker(new URL('./cpu-load-worker.ts',import.meta.url),{workerData:request})
+      :new Worker(new URL('./cpu-load-failed-worker-fixture.ts',import.meta.url),{workerData:{...request,stage:'startup'}});
     made.push(worker);return worker;
   }),/deliberate load startup failure/);
   assert.ok(made.every(worker=>worker.threadId===-1));
@@ -23,7 +24,7 @@ test('a load startup failure drains workers which already started',async()=>{
 test('a ready worker failure remains a named observation failure through drain',async()=>{
   let worker:Worker|undefined;
   const load=await startCpuLoad(1,request=>{
-    worker=new Worker('const {parentPort,workerData}=require("node:worker_threads");parentPort.once("message",()=>{throw Error("deliberate live load failure")});parentPort.postMessage({ready:workerData.index});',{eval:true,workerData:request});
+    worker=new Worker(new URL('./cpu-load-failed-worker-fixture.ts',import.meta.url),{workerData:{...request,stage:'live'}});
     return worker;
   });
   worker!.postMessage('fail');await assert.rejects(load.failed,/deliberate live load failure/);
