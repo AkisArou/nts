@@ -19,7 +19,6 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     const facts=borrowed instanceof SourceFacts?borrowed:borrowed?new SourceFacts(file,text,borrowed):generated?generatedSources.get(text):new SourceFacts(file,text,lease!.sourceFile);
     const {calls}=facts,publishers=facts.ofKind(ast.SyntaxKind.FunctionDeclaration);
     const code=(node:Node)=>facts.code(node);
-    const unwrap=(node:Node)=>facts.unwrap(node);
     const name=(node:Node)=>facts.name(node);
     const resolved=(node:Node)=>facts.resolve(node);
     const returned=(node:Node):Node|undefined=>{

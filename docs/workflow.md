@@ -682,7 +682,7 @@ owner as the gate. A valid inherited seal is consumed directly. Commands that
 read ambient environment values re-enter once with the complete sealed
 environment; callbacks can instead receive it explicitly. The command lifetime
 drains children and newly acquired resolution services before releasing its
-admission and temporary. Internal workers remain consume-only and validate
+admission, temporary and complete entry run on every terminal outcome. Internal workers remain consume-only and validate
 their sealed-parent handoff. The host audit inventories command entries and
 shell Node invocations and refuses consumer reach without one of those owners.
 Report decoding and identity readers import pure leaves, independently of

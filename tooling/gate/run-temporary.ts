@@ -115,12 +115,19 @@ export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
   return {removed,protected:protectedPaths,retained_bytes:total,...bounds()};
 }
 
+/** A command which has drained may discard its temporary on any verdict. */
+export function discardRunTemporary(owned:RunTemporary,home:string):void {
+  assertRunTemporary(owned,home);
+  removable(owned.path);rmSync(owned.path,{recursive:true});
+  rmSync(join(registry(home),key(owned)),{force:true});
+}
+
 /** Remove a green run's temporary folder, or close a red one's and prune the closed failures with `prune`. */
 export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean,prune:PruneOptions={}) {
   try {
+    if (green) {discardRunTemporary(owned,home);return {path:owned.path,state:"removed after green"};}
     assertRunTemporary(owned,home);
     const directory=registry(home),file=join(directory,key(owned));
-    if (green) {removable(owned.path);rmSync(owned.path,{recursive:true});rmSync(file,{force:true});return {path:owned.path,state:"removed after green"};}
     if (owned.enclosing) {
       assertRunTemporary(owned.enclosing,home);
       if (!contains(owned.enclosing,owned)) throw new Error(`run temporary is outside its enclosing run: ${owned.path}`);

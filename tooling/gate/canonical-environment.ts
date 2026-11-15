@@ -1,13 +1,13 @@
 // One environment contract for landing, pinned and full gates. A launcher is
 // not allowed to choose verdict policy; standalone experiments are explicit.
 import { createHash } from "node:crypto";
-import { existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync } from "node:fs";
+import { existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync } from "node:fs";
 import { spawn,spawnSync } from "node:child_process";
 import { userInfo } from "node:os";
 import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
-import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary} from "./run-temporary.ts";
+import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,discardRunTemporary,removable} from "./run-temporary.ts";
 import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
@@ -265,20 +265,29 @@ export async function withPreparedOracle(
     const key='oracle-entry-'+relative(source,fileURLToPath(options.entry)).replace(/\.[^.]+$/,'').replace(/[^a-z0-9]+/g,'-');
     const admission=await reserveJob(options.admission??{key,what:'standalone oracle entry '+options.entry},{signal:abort.signal});
     let planned:GateEnvironment|undefined,session:NodeResolutionSession|undefined,sessionClosed:Promise<void>|undefined,childClosed:Promise<void>|undefined;
-    registerCommandCloser('standalone oracle entry '+options.entry,{cancel:()=>abort.abort(),close:async({code})=>{
+    let run:{path:string;dev:number;ino:number;uid:number}|undefined;
+    registerCommandCloser('standalone oracle entry '+options.entry,{cancel:()=>abort.abort(),close:async()=>{
       await setupClosed;
       try{
         try{await childClosed;}
         finally{if(session){await closeNodeResolutionSession(session);await sessionClosed;}}
       }finally{
         try{admission.release();await admission.closed;}
-        finally{if(planned)finishRunTemporary(planned.temporary,planned.env.HOME!,code===0,{host:hostObservations(planned.env)});}
+        finally{
+          if(run){
+            const same=()=>{const actual=lstatSync(run!.path);if(!actual.isDirectory()||actual.isSymbolicLink()||actual.dev!==run!.dev||actual.ino!==run!.ino||actual.uid!==run!.uid)throw new ToolingInstrumentError('tooling-cleanup','oracle entry run directory changed: '+run!.path);};
+            same();if(planned)discardRunTemporary(planned.temporary,planned.env.HOME!);same();
+            removable(run.path);rmSync(run.path,{recursive:true});
+          }
+        }
       }
     }});
     unbindWaiting();
     const home=base.HOME||userInfo().homedir,parent=join(home,'.cache/nts/oracle-entries');
     mkdirSync(parent,{recursive:true});
-    planned=gateEnvironment(base,{run:mkdtempSync(join(parent,'entry-')),standalone:!base[ENVIRONMENT_CONTEXT],oracleRoot:source});
+    const path=mkdtempSync(join(parent,'entry-')),identity=lstatSync(path);
+    run={path,dev:identity.dev,ino:identity.ino,uid:identity.uid};
+    planned=gateEnvironment(base,{run:path,standalone:!base[ENVIRONMENT_CONTEXT],oracleRoot:source});
     planned=await sealOracleRun(planned,abort.signal,(acquired,closed)=>{session=acquired;sessionClosed=closed;});
     abort.signal.throwIfAborted();assertSealedOracleRun(planned.env);
     if(!options.ambient){finishSetup();return main(planned.env);}

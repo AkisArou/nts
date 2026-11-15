@@ -96,7 +96,8 @@ function recordsRun(t:{after(fn:()=>void):void}){
     {cwd:root,env,encoding:"utf8",maxBuffer:64*2**20},"record-pending outcomes")};
 }
 
-test('the real full-check recordPending candidate route enters a sealed recorder child',t=>{
+test('the real full-check recordPending candidate route seals and removes finished and failed entry runs',t=>{
+  for(const status of [0,9]){
   const {root,planned,scratch,pin}=recordsRun(t),run=join(scratch,'full-check-run'),observed=join(scratch,'sealed-recorder.json');
   mkdirSync(run);
   assert.equal(JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!).seal,undefined,'the records unit starts with an unsealed capability');
@@ -109,14 +110,17 @@ test('the real full-check recordPending candidate route enters a sealed recorder
       assertSealedOracleRun(process.env);
       const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
       writeFileSync(${JSON.stringify(observed)},JSON.stringify({sealed:Boolean(capability.seal),canonical:context.report.canonical,tmp:process.env.TMPDIR,registered:context.temporary.path,argv:process.argv.slice(2)})+'\\n');
+      process.exitCode=${status};
       return;
   `));
   git(root,'add','tooling/records/record-pending.ts');git(root,'commit','-qm','observe only the sealed recorder handoff');
   const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env});
-  assert.equal(result.status,0,readFileSync(join(run,RECORDER_LOG),'utf8'));
+  assert.equal(result.status,status,readFileSync(join(run,RECORDER_LOG),'utf8'));
   const value=JSON.parse(readFileSync(observed,'utf8'));
   assert.equal(value.sealed,true);assert.equal(value.canonical,true);
   assert.equal(value.tmp,value.registered);assert.deepEqual(value.argv,['--after',part,run]);
+  assert.deepEqual(readdirSync(join(planned.env.HOME!,'.cache/nts/oracle-entries')),[],'the whole entry run, including failed runs, is removed after child/session/admission drain');
+  }
 });
 
 test("the records run records a pending outcome, its oracle captured inside the outcome check's registered temporary",t=>{
