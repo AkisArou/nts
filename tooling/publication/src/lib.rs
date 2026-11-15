@@ -131,7 +131,7 @@ impl ParentClaim {
                 Some(_) => {
                     owners = changed
                         .wait(owners)
-                        .map_err(|_| io::Error::other("publication lock registry poisoned"))?
+                        .map_err(|_| io::Error::other("publication lock registry poisoned"))?;
                 }
                 None => break,
             }
@@ -167,7 +167,7 @@ impl Drop for ParentClaim {
 /// Lock the parent directory of a target (which need not exist). One permanent
 /// lock file per parent bounds metadata as versioned targets come and go.
 /// Directory publication is rare; unrelated targets in that parent serialize.
-/// This owner is synchronous: ThreadId distinguishes same-thread nesting,
+/// This owner is synchronous: `ThreadId` distinguishes same-thread nesting,
 /// which refuses by name, from another writer thread, which waits on a Condvar.
 pub fn lock(target: &Path) -> Result<Lock> {
     let open = || -> io::Result<Lock> {
@@ -202,7 +202,7 @@ impl Staged {
     fn new(target: &Path) -> Result<Self> {
         Self::acquire(target, || {
             SERIAL
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |serial| {
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |serial| {
                     serial.checked_add(1)
                 })
                 .map_err(|_| io::Error::other("publication serial exhausted"))
@@ -311,6 +311,7 @@ enum PreparedDirectory {
     Fresh,
     Replace,
 }
+#[derive(Clone, Copy)]
 enum Payload {
     File,
     Directory,
