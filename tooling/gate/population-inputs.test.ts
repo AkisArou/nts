@@ -22,7 +22,6 @@ test('oracle workspace staging consumes verified installer pins without unrelate
   };
   const shared=dirname(git(source,'rev-parse','--path-format=absolute','--git-common-dir').trim());
   const catalog=readDependencyCatalog(installationCatalogTrust(shared,source),source);assert.equal(catalog.state,'current');
-  if(catalog.state!=='current')throw Error(catalog.reason);
   const pins=new Set(catalog.catalog.identity.inputs.filter(row=>row.sha256!=='absent').map(row=>row.path));
   const outside=git(source,'ls-files','-z','--',':(glob)**/package.json').split('\0').find(path=>path&&!pins.has(path));assert.ok(outside);
   oracleWorkspaceFixture(t,tree,source);
