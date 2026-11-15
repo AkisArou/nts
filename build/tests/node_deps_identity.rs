@@ -211,7 +211,7 @@ fn assert_root_parity(first: &Artifacts, second: &Artifacts, compiler: &str) -> 
         deterministic_members(&bytes).len(),
         objects(first_dir).len()
     );
-    for root in [source(&first), source(&second)] {
+    for root in [source(first), source(second)] {
         assert!(
             !contains(&bytes, root.as_os_str().as_encoded_bytes()),
             "physical source root in archive"
@@ -237,7 +237,7 @@ fn assert_root_parity(first: &Artifacts, second: &Artifacts, compiler: &str) -> 
     assert!(inputs.iter().any(|row| row["path"]["kind"] == "external"));
     assert!(!contains(
         &read(first_dir.join("complete.json")),
-        source(&first).as_os_str().as_encoded_bytes()
+        source(first).as_os_str().as_encoded_bytes()
     ));
     bytes
 }
