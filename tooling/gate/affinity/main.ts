@@ -2,6 +2,8 @@
 import {spawnSync} from 'node:child_process';
 import {runAsCommand} from '../../differential/command-entry/main.ts';
 import {cpuList,defaultCpus,gateCpus,gateScope,inheritedCpus,scopeArgs,verifyCeiling} from '../affinity.ts';
+// pinned.sh changes its own mask before starting any build, so every child
+// inherits the reservation, including a hand-started full run.
 runAsCommand(import.meta.url,()=>{
   const argument = (index: number): string => {
     const value = process.argv[index];

@@ -192,6 +192,7 @@ test("pinned.sh restricts its own entry before invoking git or a build", { skip:
 test('the affinity command retains CPU selection, scope reporting and ceiling exit codes', {skip:process.platform!=='linux'},t=>{
   const entry=new URL('./affinity/main.ts',import.meta.url).pathname,pid=process.pid,cpus=gateCpus(inheritedCpus(pid));
   const run=(args:string[])=>spawnSync(process.execPath,[entry,...args],{env:fixtureEnvironment(t),encoding:'utf8'});
+  const missing=run(['--default-cpus']);assert.equal(missing.status,1,missing.stderr);assert.equal(missing.stdout,'');assert.match(missing.stderr,/Error: affinity: missing argument 1[\s\S]*at /);
   const selected=run(['--gate-cpus',String(pid)]);assert.equal(selected.status,0,selected.stderr);assert.equal(selected.stdout,cpus+'\n');
   const preferred=run(['--default-cpus',cpus,String(pid)]);assert.equal(preferred.status,0,preferred.stderr);assert.equal(preferred.stdout,defaultCpus(cpus,inheritedCpus(pid))+'\n');
   const scope=run(['--scope-mechanism',cpus,String(pid)]);assert.equal(scope.status,0,scope.stderr);assert.match(scope.stdout,/^(scope|inherited-cpuset|best-effort):.+\n$/);
