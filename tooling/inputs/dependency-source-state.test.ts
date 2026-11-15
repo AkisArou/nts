@@ -59,6 +59,6 @@ test('imported JSON is data while executable code outside tooling refuses the so
   }
   const members=dependencyRecipeModules(root);
   assert.ok(!members.includes('data.json'));assert.ok(members.includes('outside.ts'));
-  const snapshot=sourceState(root(root));
+  const snapshot=sourceState(root,dependencySourceCandidates(root));
   assert.throws(()=>assertSourceState(root,snapshot,members,'producer'),/not captured before installation: outside\.ts.*git add <path>/);
 });
