@@ -3054,3 +3054,7 @@ an edit followed by an identical restoration between observations is not detecte
 The same guard asks rustup to parse its directory overrides under the declared
 Rustup home, refusing applicable ancestor overrides, incoming toolchain variables
 and command-line toolchain shorthand. Both complete caches remain shared.
+Current-source calls use the owner at each invocation. Current parents retain
+the same before/after guard around historical endpoint queries and pinned-run
+lifetimes, checking the tree and supplied scratch roots without rewriting old
+code. A newly checked-out tree is verified before historical code executes.

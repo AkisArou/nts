@@ -3,7 +3,7 @@ import {copyModuleClosure} from './module-closure-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -158,6 +158,28 @@ if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\
   git("add",".");git("commit","-qm","legacy candidate");
   const got=selectRange(repo,`${base}..HEAD`);
   assert.deepEqual(got.checks.steps,["tests","tooling"]);
+});
+
+test('the current endpoint parent refuses historical Cargo configuration before entry and after drain',t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-historical-cargo-')),tree=join(root,'parent/tree'),bin=join(root,'bin'),home=join(root,'cargo-home');
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  for(const path of [join(tree,'tooling/gate'),bin,home])mkdirSync(path,{recursive:true});
+  const marker=join(root,'cargo-started'),config=join(root,'parent/.cargo/config.toml'),policy=join(tree,'tooling/gate/owed.mjs');
+  writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'completed');\n`,{mode:0o755});
+  const code=`import {spawnSync} from 'node:child_process';\nimport {writeFileSync} from 'node:fs';
+export const crates=()=>{const ran=spawnSync('cargo',['metadata']);if(ran.status!==0)throw Error('historical metadata failed');return [];};
+export const selfTest=()=>null;export const allSteps=()=>['tooling'];
+export const owed=()=>{CONFIG;return [{name:'legacy',paths:[],steps:['tooling'],arms:[]}];};
+export const gateSteps=rules=>rules.flatMap(rule=>rule.steps);\n`;
+  writeFileSync(join(tree,'Cargo.toml'),'[workspace]\n');writeFileSync(policy,code.replace('CONFIG',''));
+  const env=fixtureEnvironment(t,{CARGO_HOME:home,PATH:bin+':'+process.env.PATH}),endpoint=fileURLToPath(new URL('./owed-range.ts',import.meta.url));
+  const invoke=()=>spawnSync(process.execPath,[endpoint,'--endpoint',tree,'a'.repeat(40)],{cwd:tree,env,input:'[]',encoding:'utf8'});
+  const clean=invoke();assert.equal(clean.status,0,clean.stdout+clean.stderr);assert.equal(readFileSync(marker,'utf8'),'completed');rmSync(marker);
+  mkdirSync(dirname(config));writeFileSync(config,'[env]\nENDPOINT_POISON="present"\n');
+  const before=invoke();assert.equal(before.status,75,before.stdout+before.stderr);assert.ok(before.stderr.includes(config),before.stderr);
+  assert.equal(existsSync(marker),false,'the current parent refuses before historical metadata starts');rmSync(config);
+  writeFileSync(policy,code.replace('CONFIG',`writeFileSync(${JSON.stringify(config)},'')`));
+  const after=invoke();assert.equal(readFileSync(marker,'utf8'),'completed');assert.equal(after.status,75,after.stdout+after.stderr);assert.ok(after.stderr.includes(config),after.stderr);
 });
 
 test("range registries are private, borrow pinned objects, and disappear after success or failure",t=>{

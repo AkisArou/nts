@@ -20,6 +20,7 @@ import { validContract, type VerdictContract } from "../gate/verdict-contract.ts
 import { LANDING_HOME } from "../landing/queue.ts";
 import { treeOf } from "../landing/git.ts";
 import { measureWithLanding } from "./landing-verdict.ts";
+import {withCargoConfigurationSync} from '../gate/cargo.ts';
 
 /**
  * A step's result as the full check reads it: a skip the policy accepts is a
@@ -138,6 +139,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
     };
     let out: number | undefined;
     try {
+      return withCargoConfigurationSync([layout.tree,join(run,'tmp')],selected.env,guard=>{
       out = openSync(join(run, 'full-check.log'), 'a');
       // Setup's normalization is a short-lived child, never the controller.
       // The measured tree does not exist until pinned.sh has linked its inputs.
@@ -146,6 +148,9 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
         stdio: ['ignore', out, out, 'ignore', 'ignore', 'ignore', 'ignore', 'ignore', lock.fd],
       });
       if (prepared.status !== 0 || prepared.error || prepared.signal) return prepared;
+      // Checkout may introduce configuration. Refuse it before importing or
+      // executing any historical code, then retain the guard through drain.
+      guard.verify();
       if (probeContract) {
         const helper = join(layout.tree, "tooling/gate/verdict-contract.ts");
         if (!existsSync(helper)) throw Error("candidate has no portable landing verdict contract");
@@ -179,6 +184,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
         tree: layout.tree, run, owned: { ...owned, NTS_TOOLING_SLICE: slice }, standalone: true,
         command: ['sh', pinned, '--environment-ready', commit],
       }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(ceiling), run, slice] });
+      });
     } finally { if (out !== undefined) closeSync(out); lock.close(); }
   };
   const measure = (commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord): Measurement => {
@@ -210,12 +216,15 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       const ready = launch(commit, setup, []);
       if (ready.status !== 0) throw new Error(`pinned.sh could not set ${commit.slice(0, 12)} up (exit ${ready.status}); see ${setup}`);
       const selected=nodeToolchain(nodePin(layout.tree),options.env??process.env,options.nodeInstallations);
+      const result=withCargoConfigurationSync([layout.tree,join(setup,'tmp')],selected.env,()=>{
       const list = spawnSync("sh", ["tooling/gate/all.sh", "--list"], { cwd: layout.tree, env:selected.env, encoding: "utf8" });
       if (list.status !== 0) throw new Error(`all.sh --list at ${commit.slice(0, 12)}: ${list.stderr.trim()}`);
       const wide = spawnSync(selected.node, ["--input-type=module", "-e", 'const { WIDE } = await import("./tooling/gate/owed.mjs"); process.stdout.write(JSON.stringify([...WIDE]))'], { cwd: layout.tree, env:selected.env, encoding: "utf8" });
       if (wide.status !== 0) throw new Error(`owed.mjs's WIDE at ${commit.slice(0, 12)}: ${wide.stderr.trim()}`);
-      rmSync(setup, { recursive: true, force: true });
       return { all: list.stdout.split("\n").filter(Boolean), wide: JSON.parse(wide.stdout) as string[] };
+      });
+      rmSync(setup, { recursive: true, force: true });
+      return result;
     },
     run(commit, steps, label, lastGreen, reuse) {
       if (!reuse?.reuseLanding) return measure(commit, steps, label, lastGreen);

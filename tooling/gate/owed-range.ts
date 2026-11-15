@@ -12,6 +12,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
 import {linkTree} from "../inputs/linker.ts";
+import {withCargoConfiguration} from './cargo.ts';
+import {ToolingInstrumentError} from './step-result.ts';
 
 type Arm = { kind: string; asks: string; run: string; if?: string };
 type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
@@ -27,7 +29,7 @@ export class SelectionInfrastructureError extends Error {
 export function selectionInfrastructure(error:unknown):boolean {
   // Endpoint rules import this module from their own committed tree. Their
   // error class has a different module identity, so retain the explicit brand.
-  return error instanceof SelectionInfrastructureError
+  return error instanceof SelectionInfrastructureError || error instanceof ToolingInstrumentError
     || error instanceof Error && "code" in error && error.code === INFRASTRUCTURE_CODE
     || error instanceof AggregateError&&error.errors.some(selectionInfrastructure);
 }
@@ -220,6 +222,7 @@ export function selectRange(repo: string, range: string): RangeSelection {
 }
 
 async function endpoint(tree: string, revision: string, changes:PathChange[]): Promise<RuleView> {
+  return withCargoConfiguration([tree,...(process.env.NTS_TEST_SCRATCH_ROOT?[process.env.NTS_TEST_SCRATCH_ROOT]:[])],process.env,async()=>{
   const loaded=new Map<string,string>();let complete=true;
   const hooks=registerHooks({load(url,context,next){
     const result=next(url,context);
@@ -272,6 +275,7 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
   const identity=complete?createHash("sha256").update(JSON.stringify([...loaded].sort(([a],[b])=>a<b?-1:a>b?1:0))).digest("hex"):null;
   return {...full,selector:{identity,existing}};
   }finally{hooks.deregister();}
+  });
 }
 
 runAsCommand(import.meta.url,async()=>{

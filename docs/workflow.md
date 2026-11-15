@@ -631,7 +631,7 @@ conflicting arguments or environment, fixes one checker per test process,
 and keeps `--no-fail-fast`. Cargo's actual compiler-artifact reports must name
 files below the selected profile and test artifacts must have no debug info.
 A successful command without artifact evidence is an instrument failure.
-Every Cargo invocation goes through `tooling/gate/cargo.ts`. Both `config` and
+Current-source Cargo invocations go through `tooling/gate/cargo.ts`. Both `config` and
 `config.toml` must be absent from Cargo's working-directory ancestor chain and
 its declared `CARGO_HOME`, before launch and after the child drains. A present
 configuration or an unreadable observation is a named tooling-setup refusal.
@@ -645,6 +645,10 @@ unreadable rustup output also refuses. Cargo-produced replay environment is
 retained; the toolchain-override check uses the incoming caller environment.
 The Rust test replay retains this guard through completion, including each
 binary's supplied scratch root; Rust Cargo children must use a checked root.
+Historical code is checked by its current parent: endpoint queries and pinned
+run lifetimes use the same owner over their tree and supplied scratch roots,
+before entry and after drain. A pinned checkout is checked again before any
+historical code runs. The parent never rewrites historical code.
 The shared source audit rejects direct Cargo test calls in other tooling,
 including shell calls; isolated cache-pruning controls are classified separately
 because they manufacture obsolete artifacts intentionally.
@@ -1675,5 +1679,7 @@ the first node task.
 - **Cargo configuration is empty and checked.** The shared Cargo home keeps
   its complete cache protocol. Cargo's two configuration spellings must be
   absent throughout every checked cwd chain before launch and after drain;
-  an outside file refuses the run by name rather than changing the build
+  an outside file refuses the run by name rather than changing the build.
+  More generally, current parents retain this same guard around historical
+  endpoint and pinned-run lifetimes without changing the historical source
   ([log](records/notebooks/decisions-log.md#cargo-configuration-is-checked-11-15)).

@@ -173,6 +173,34 @@ test('the real pinned wrapper preserves the tree lock across candidate environme
   }finally{busy.close();}
 });
 
+test('the current pinned parent refuses historical configuration and releases its tree lock',t=>{
+  const repo=scratchRepo(t,'full-check-historical-cargo'),paths=layout(repo.dir),installations=join(repo.dir,'installed');
+  candidateEnvironmentFixture(repo.root);nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
+  const marker=join(repo.dir,'historical-completed'),config=join(paths.home,'.cargo/config.toml');
+  const script=`#!/bin/sh
+if [ -n "$NTS_GATE_SETUP_ONLY" ];then
+  mkdir -p "$NTS_GATE_TREE"
+  git archive "$1" | tar -x -C "$NTS_GATE_TREE"
+  exit 0
+fi
+[ "$1" = --environment-ready ] && shift
+exec node "$NTS_GATE_TREE/subject.ts" "$1"
+`;
+  const subject=generatedJavaScript(`import {mkdirSync,writeFileSync} from 'node:fs';import {dirname} from 'node:path';
+import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
+durableRecord(process.env.NTS_GATE_RUN_DIR+'/summary.json',{identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'PASS'}]});
+mkdirSync(dirname(${JSON.stringify(config)}),{recursive:true});writeFileSync(${JSON.stringify(config)},'');writeFileSync(${JSON.stringify(marker)},'drained');\n`);
+  repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private historical environment']);
+  const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject},'historical command');
+  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  mkdirSync(join(paths.home,'.cargo'),{recursive:true});writeFileSync(config,'');
+  const before=gate.run(commit,['tooling'],'before');assert.equal(before.verdict,'held');assert.ok(before.reasons.tooling?.includes(config),JSON.stringify(before.reasons));
+  assert.equal(existsSync(marker),false);rmSync(config);
+  const after=gate.run(commit,['tooling'],'after');assert.equal(readFileSync(marker,'utf8'),'drained');assert.equal(after.verdict,'held');
+  assert.ok(after.reasons.tooling?.includes(config),JSON.stringify(after.reasons));
+  const lock=GateResource.tryAcquire(paths.tree+'.lock');assert.ok(lock,'a post-drain refusal releases the pinned tree lock');lock.close();
+});
+
 test("each step's verdict, as the full check reads it", t => {
   const run = summary(t, { verdict: "red", identities: { commit: COMMIT.slice(0, 12) }, environment: { canonical: true }, steps });
   const read = readSummary(run, COMMIT, [...steps.map(s => s.name), "missing"]);
