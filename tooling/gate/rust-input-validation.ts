@@ -7,7 +7,7 @@ import type {InputSnapshot} from './module-closure.ts';
 import type {FileObserverReceipt} from './file-input-observer.ts';
 import type {InputIndexExecution,InputSubject,RuntimeObservation} from './rust-test-inputs.ts';
 import {runtimeInputRequirement,type InputRequirement} from './rust-input-operations.ts';
-import {runtimeRepositoryClaims,type RuntimeClaimAnswer} from './rust-input-claims.ts';
+import {compileRuntimeRepositoryClaims,type RuntimeClaimAnswer} from './rust-input-claims.ts';
 import {authenticateRustInputTrace,type RustInputCapture} from './rust-input-authentication.ts';
 import {durableRecordStream} from './durable-record.ts';
 import {MAX_OBSERVATION_ROW_BYTES} from './file-input-observer.ts';
@@ -44,9 +44,9 @@ export function runtimeAssessmentScope(root:string,assessment:RuntimeSubjectAsse
  * Resolve raw component order first, then check every recorded component's
  * own required role. Outside components remain explicit gaps for a separately
  * bound external protocol; an outside spelling cannot bypass source claims. */
-export function runtimeSubjectValidator(root:string,snapshot:InputSnapshot,options:{capturedIdentities?:boolean}={}){
-  const claims=runtimeRepositoryClaims(root,snapshot),anchor=runtimeSourceAnchor(root);
-  return {assess(row:RuntimeObservation,subject:InputSubject,observer:FileObserverReceipt|null):RuntimeSubjectAssessment{
+export function runtimeSubjectValidator(root:string,snapshot:InputSnapshot,options:{capturedIdentities?:boolean;memoizeClaims?:boolean}={}){
+  const claims=compileRuntimeRepositoryClaims(root,snapshot,{memoize:options.memoizeClaims??true}),anchor=runtimeSourceAnchor(root);
+  return {matchingStatistics:claims.statistics,assess(row:RuntimeObservation,subject:InputSubject,observer:FileObserverReceipt|null):RuntimeSubjectAssessment{
     const requirement=runtimeInputRequirement(row,subject,observer),components:RuntimeSubjectAssessment['components']=[];
     const captured=options.capturedIdentities||subject.kind==='path'&&subject.resolution!==undefined;
     const identityBasis:RuntimeSubjectAssessment['identityBasis']=captured?(subject.kind==='descriptor'?'capture-descriptor':'capture-components'):'current-source';
@@ -93,7 +93,7 @@ export type RuntimeTargetInputs={target:RustRuntimeTarget;snapshot:InputSnapshot
  * Atomic publication waits for native/derived equality and terminal drain.
  * There is no second index read whose changed rows could inherit authority.
  * Product status and setup work remain separate from runtime coverage. */
-export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string}}){
+export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string};memoizeClaims?:boolean}){
   const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>(),installed=new Map<string,ReturnType<typeof runtimeInstalledInputClassifier>>();
   const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=execution?rustTestExecutionClassifier(execution):undefined,images=new Map<number,InputIndexExecution>();
   const buildReference=options.build??(execution?.cargo.path?{...execution.cargo,path:execution.cargo.path}:undefined);
@@ -142,7 +142,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
           await emit({kind:'project-host-observation',source,observation:fact.observation,environment:fact.environment,scope:'host-environment'});
         for(const fact of inputs.snapshot.observations)if(fact.dependency)
           await emit({kind:'project-installed-observation',source,observation:fact.observation,dependency:fact.dependency,scope:'installed-dependency'});
-        validator=runtimeSubjectValidator(capture.root,inputs.snapshot,{capturedIdentities:execution?.version===2||build.buildNamespace!==undefined});validators.set(source,validator);
+        validator=runtimeSubjectValidator(capture.root,inputs.snapshot,{capturedIdentities:execution?.version===2||build.buildNamespace!==undefined,memoizeClaims:options.memoizeClaims??true});validators.set(source,validator);
         installed.set(source,runtimeInstalledInputClassifier(capture.root,inputs.snapshot));
       }
       counts.runtimeAttempts++;counts.probes+=row.probes.length;
@@ -193,5 +193,6 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
     await flush();
   },{gzip:true});
   if(!receipt)throw Error('Rust input validation: authentication did not complete');
-  return {counts,unresolvedByKind,coverage:counts.gaps||counts.probes?'incomplete' as const:'complete' as const,repositoryCoverage:repositoryCoverage(),indexRowsSha256:receipt.indexRowsSha256};
+  return {counts,unresolvedByKind,coverage:counts.gaps||counts.probes?'incomplete' as const:'complete' as const,repositoryCoverage:repositoryCoverage(),indexRowsSha256:receipt.indexRowsSha256,
+    matching:[...validators].map(([source,validator])=>({source,...validator.matchingStatistics()}))};
 }

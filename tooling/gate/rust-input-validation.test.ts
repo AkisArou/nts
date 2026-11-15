@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {existsSync,mkdirSync,readFileSync,readlinkSync,symlinkSync,unlinkSync,writeFileSync,rmSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,readlinkSync,symlinkSync,unlinkSync,writeFileSync,rmSync,renameSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
@@ -20,6 +20,17 @@ const snapshot=(files:string[]):InputSnapshot=>({files,ownedFiles:files,moduleFi
 const request=(cwd:string):RuntimeObservation=>({phase:'test-runtime',source:'crate/src/lib.rs',attempt:{id:'1',tid:1,tgid:1,ppid:0,birth:'1',parentBirth:'0'},
   cwd,args:['ffffffffffffff9c','0','0','0','0','0'],operation:'open',syscall:'openat',outcome:'unknown',image:1,canceled:false,subjects:[],probes:[]});
 const subject=(root:string,name:string):InputSubject=>({kind:'path',arg:1,dirfdArg:0,name,raw:Buffer.from(name).toString('hex'),anchor:{kind:'cwd',path:root}});
+
+test('a cached pure answer still crosses the live source-anchor fence on every assessment',t=>{
+  const root=testScratch(t,'indexed-source-anchor'),old=root+'-original';writeFileSync(join(root,'file'),'declared');
+  const validator=runtimeSubjectValidator(root,snapshot(['file']),{capturedIdentities:true});
+  const file:InputSubject={kind:'descriptor',arg:0,fd:3,target:join(root,'file'),raw:Buffer.from(join(root,'file')).toString('hex')};
+  const row={...request(root),operation:'descriptor',syscall:'fstat',args:['3','0','0','0','0','0']};
+  assert.equal(validator.assess(row,file,basis).state,'claimed');assert.equal(validator.assess(row,file,basis).state,'claimed');
+  assert.ok(validator.matchingStatistics().matchHits>0);
+  renameSync(root,old);t.after(()=>rmSync(old,{recursive:true,force:true}));mkdirSync(root);writeFileSync(join(root,'file'),'replacement');
+  assert.throws(()=>validator.assess(row,file,basis),/source anchor changed/);
+});
 
 test('a declared endpoint reached through an undeclared source alias remains uncovered',t=>{
   const root=testScratch(t,'runtime-validator');mkdirSync(join(root,'data'));writeFileSync(join(root,'data/target'),'target');

@@ -11,13 +11,22 @@ export type RuntimeInputClaim={role:'bytes'|'ancestor'|'optional-file'|'director
   reader:string;path:string;via?:string;context?:ReaderContext;observation?:string;anchor?:{root:string;dev:string;ino:string}};
 export type RuntimeClaimAnswer={kind:'claimed';claims:RuntimeInputClaim[]}|{kind:'uncovered';reason:string};
 const production=(context:ReaderContext)=>context.entry==='<entry>';
+function freeze<T>(value:T,seen=new WeakSet<object>()):T{
+  if(value&&typeof value==='object'&&!seen.has(value)){
+    seen.add(value);for(const child of Object.values(value))freeze(child,seen);Object.freeze(value);
+  }
+  return value;
+}
 
 /** Exact bytes are taken from files, including data inputs, rather than from
  * placingFiles. Inspection owns bytes without execution placement. A directory
  * declaration never grants arbitrary untracked child content or mutations.
  * Private data grants cannot become production claims by prefix overlap. */
-export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
+export function compileRuntimeRepositoryClaims(root:string,snapshot:InputSnapshot,options:{memoize?:boolean}={}){
   if(!isAbsolute(root)||resolve(root)!==root)throw Error('Rust input claims need a canonical absolute source root');
+  // One index owns one detached graph generation. No caller mutation or
+  // filesystem observation can alter a previously compiled pure answer.
+  snapshot=structuredClone(snapshot);
   const owned=new Set(snapshot.ownedFiles);
   const bytes=new Map<string,RuntimeInputClaim[]>(),directories=new Map<string,RuntimeInputClaim[]>(),ancestors=new Map<string,RuntimeInputClaim[]>();
   const optional=new Map<string,RuntimeInputClaim[]>(),memberships=new Map<string,RuntimeInputClaim[]>();
@@ -80,7 +89,7 @@ export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
     rows.push({claim:{role:'observation',reader:row.reader,path,context:row.context,observation:row.observation.kind},
       kind:row.observation.kind,value:row.observation.value});observations.set(path,rows);
   }
-  const match=(requirement:InputRequirement,identity:InputIdentity):RuntimeClaimAnswer=>{
+  const matchUncached=(requirement:InputRequirement,identity:InputIdentity):RuntimeClaimAnswer=>{
     const uncovered=(reason:string):RuntimeClaimAnswer=>({kind:'uncovered',reason});
     if(requirement.kind==='unknown')return uncovered(requirement.reason);
     if(requirement.kind==='literal')return uncovered('literal text is not a filesystem dependency');
@@ -124,12 +133,20 @@ export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
     }
     if(!claims.length)return uncovered('no canonical '+requirement.kind+' claim for '+path);
     const unique=new Map(claims.map(row=>[JSON.stringify(row),row]));
-    return {kind:'claimed',claims:structuredClone([...unique.values()])};
+    return {kind:'claimed',claims:[...unique.values()]};
   };
-  return {match,matchComponent(observation:HostObservation):RuntimeClaimAnswer{
+  const matches=new Map<string,RuntimeClaimAnswer>(),components=new Map<string,RuntimeClaimAnswer>();
+  const counts={matchHits:0,matchMisses:0,componentHits:0,componentMisses:0};
+  const match=(requirement:InputRequirement,identity:InputIdentity):RuntimeClaimAnswer=>{
+    const key=JSON.stringify([requirement,identity]),cached=options.memoize===false?undefined:matches.get(key);
+    if(cached){counts.matchHits++;return cached;}
+    counts.matchMisses++;const answer=freeze(matchUncached(requirement,identity));
+    if(options.memoize!==false)matches.set(key,answer);return answer;
+  };
+  const componentUncached=(observation:HostObservation):RuntimeClaimAnswer=>{
     const path=name(observation.path),facts=path===undefined?[]:observations.get(path)??[];
     if(path!==undefined&&observation.kind==='runtimeKind'&&observation.value===null){
-      const claims=missingMember(path);if(claims.length)return {kind:'claimed',claims:structuredClone(claims)};
+      const claims=missingMember(path);if(claims.length)return {kind:'claimed',claims};
     }
     const conservativePath=path!==undefined&&conservative.some(row=>row.path===''||path===row.path||path.startsWith(row.path+'/'));
     if(conservativePath){
@@ -146,5 +163,19 @@ export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
     const claims=answer.claims.filter(claim=>claim.role!=='observation'||facts.some(row=>row.kind===observation.kind
       &&row.claim.reader===claim.reader&&sameOracleObservation(row.value as HostObservation['value'],observation.value)));
     return claims.length?{kind:'claimed',claims}:{kind:'uncovered',reason:'current component differs from its canonical fact: '+observation.path};
-  }};
+  };
+  return Object.freeze({match,matchComponent(observation:HostObservation):RuntimeClaimAnswer{
+    const key=JSON.stringify(observation),cached=options.memoize===false?undefined:components.get(key);
+    if(cached){counts.componentHits++;return cached;}
+    counts.componentMisses++;const answer=freeze(componentUncached(observation));
+    if(options.memoize!==false)components.set(key,answer);return answer;
+  },statistics:()=>({...counts,matchEntries:matches.size,componentEntries:components.size})});
+}
+
+/** Mutable public answers remain detached; streaming validation consumes the
+ * frozen compiled answers directly without cloning them for each attempt. */
+export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
+  const compiled=compileRuntimeRepositoryClaims(root,snapshot);
+  return {match:(requirement:InputRequirement,identity:InputIdentity)=>structuredClone(compiled.match(requirement,identity)),
+    matchComponent:(observation:HostObservation)=>structuredClone(compiled.matchComponent(observation))};
 }

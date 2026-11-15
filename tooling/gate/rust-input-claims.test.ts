@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {test} from 'node:test';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {moduleGraph,type InputSnapshot,type ModuleDeclarations,type ReaderObservation} from './module-closure.ts';
-import {runtimeRepositoryClaims} from './rust-input-claims.ts';
+import {runtimeRepositoryClaims,compileRuntimeRepositoryClaims} from './rust-input-claims.ts';
 import {membershipIndex} from './reader-metadata.ts';
 import {testScratch} from './test-scratch.ts';
 
@@ -17,6 +17,35 @@ const metadata={kind:'metadata' as const,query:'path' as const,following:'follow
 function observed(path:string,kind:ReaderObservation['observation']['kind'],value:ReaderObservation['observation']['value']):ReaderObservation{
   return {reader:'entry.ts',context,protocol:'project',observation:{path,kind,value},causes:[]};
 }
+
+test('the pure claim index keys complete requests and owns deeply frozen detached graph answers',()=>{
+  const snapshot=empty();snapshot.files=['data/bytes'];snapshot.observations=[observed('/source/link','readlink','first')];
+  const indexed=compileRuntimeRepositoryClaims('/source',snapshot),plain=compileRuntimeRepositoryClaims('/source',snapshot,{memoize:false});
+  const file=identity('/source/data/bytes'),first=indexed.match(content,file);
+  assert.equal(first.kind,'claimed');if(first.kind!=='claimed')throw Error('expected content claim');
+  assert.equal(indexed.match({...content},{...file}),first,'identical complete keys reuse one internal answer');
+  assert.ok(Object.isFrozen(first)&&Object.isFrozen(first.claims)&&Object.isFrozen(first.claims[0]));
+  assert.throws(()=>first.claims.push(first.claims[0]!),TypeError);
+  assert.throws(()=>{first.claims[0]!.path='mutated';},TypeError);
+  const link={kind:'readlink' as const,path:'/source/link',value:'first'};
+  const observedFirst=indexed.matchComponent(link);assert.equal(observedFirst.kind,'claimed');
+  if(observedFirst.kind!=='claimed')throw Error('expected link claim');
+  assert.ok(Object.isFrozen(observedFirst.claims[0]!.context!.dataNamespaces));
+  assert.equal(indexed.matchComponent({...link}),observedFirst);
+  assert.equal(indexed.matchComponent({...link,value:'second'}).kind,'uncovered','observation values are in the key');
+  snapshot.observations[0]!.context.dataNamespaces.changed='caller mutation';snapshot.files.push('not-in-generation');
+  assert.equal(indexed.match(content,identity('/source/not-in-generation')).kind,'uncovered');
+  assert.equal(observedFirst.claims[0]!.context!.dataNamespaces.changed,undefined);
+  const requests=[
+    [content,file],
+    [{kind:'metadata' as const,query:'stat' as const,following:'no-follow' as const},file],
+    [{kind:'readlink' as const,following:'no-follow' as const},file],
+    [content,{state:'missing' as const,path:'/source/data/bytes/tail',component:'/source/data/bytes',kind:null}],
+  ] as const;
+  for(const [request,target]of requests)assert.deepEqual(indexed.match(request,target),plain.match(request,target));
+  assert.ok(indexed.statistics().matchHits>0&&indexed.statistics().componentHits>0);
+  assert.equal(plain.statistics().matchHits,0);assert.equal(plain.statistics().componentHits,0);
+});
 
 test('canonical file and optional byte roles retain exact content without granting placement or extra children',t=>{
   const root=testScratch(t,'runtime-claims');writeFileSync(join(root,'entry.ts'),'export {};');
