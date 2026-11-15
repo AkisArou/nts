@@ -47,7 +47,10 @@ function fixture(t: { after(fn: () => void): void },runner=false) {
   copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/differential/oracle-toolchain.json", "tooling/inputs/linker.ts",...(runner?["tooling/gate/run.mjs"]:[])], root);
   // These controls exercise the real sealed worktree setup, without a build
   // or dependence on delegated cpusets (affinity has its own kernel tests).
-  writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
+  const affinity=join(root,'tooling/gate/affinity.ts');
+  writeFileSync(join(root,'tooling/gate/affinity-impl.ts'),readFileSync(affinity));
+  // Imports keep the production exports; this fixture's setup-only CLI is inert.
+  writeFileSync(affinity,"export * from './affinity-impl.ts';\n");
   writeFileSync(join(root, "tooling/inputs/link.sh"), 'mkdir -p "$NTS_GATE_TREE/results"\nprintf CANDIDATE > "$NTS_GATE_TREE/results/setup-marker"\n');
   git("init", "-q", "-b", "main"); git("add", "."); git("commit", "-qm", "main");
   git("checkout", "-qb", "candidate");
