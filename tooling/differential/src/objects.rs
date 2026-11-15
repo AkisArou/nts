@@ -226,15 +226,18 @@ fn prune(cache: &Utf8Path) {
     let Ok(entries) = std::fs::read_dir(cache) else {
         return;
     };
-    let entries: Vec<_> = entries.filter_map(Result::ok).collect();
+    let entries: Vec<_> = entries
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            !nts_publication::private_name(&entry.file_name())
+                && entry.file_type().is_ok_and(|kind| kind.is_file())
+        })
+        .collect();
     if entries.len() <= KEEP {
         return;
     }
     let now = std::time::SystemTime::now();
     for entry in entries {
-        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
-            continue;
-        }
         let stale = entry
             .metadata()
             .and_then(|data| data.modified())
@@ -247,8 +250,38 @@ fn prune(cache: &Utf8Path) {
 
 #[cfg(test)]
 mod tests {
-    use super::{key, quoted_includes};
+    use super::{KEEP, key, prune, quoted_includes};
     use camino::Utf8PathBuf;
+
+    #[test]
+    fn private_claims_do_not_count_as_committed_objects_or_trigger_pruning() {
+        let root = crate::scratch::StdScratchDir::in_std_target("nts-object-prune-claims");
+        let old = root.join("old.o");
+        std::fs::write(&old, "whole object").expect("old object");
+        std::fs::File::options()
+            .write(true)
+            .open(&old)
+            .expect("object descriptor")
+            .set_modified(std::time::SystemTime::UNIX_EPOCH)
+            .expect("old object time");
+        for serial in 0..=KEEP {
+            let claim = root.join(format!(".nts-publication-fixture-{serial}"));
+            std::fs::create_dir(&claim).expect("foreign claim sentinel");
+            std::fs::write(claim.join("unfinished"), "foreign").expect("foreign payload");
+        }
+        let cache = Utf8PathBuf::from_path_buf(root.to_path_buf()).expect("UTF-8 cache");
+        prune(&cache);
+        assert_eq!(
+            std::fs::read_to_string(old).expect("small cache retained"),
+            "whole object"
+        );
+        assert_eq!(
+            std::fs::read_dir(root.as_path())
+                .expect("cache entries")
+                .count(),
+            KEEP + 2
+        );
+    }
 
     #[test]
     fn includes_are_read_as_the_preprocessor_reads_them() {

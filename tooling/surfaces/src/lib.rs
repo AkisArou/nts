@@ -657,10 +657,26 @@ mod tests {
             second.packages[0].1.exists(),
             "the old generator's packages, which may be in use, were removed"
         );
-        let identities = std::fs::read_dir(root.join("store")).unwrap().count();
+        let entries: Vec<_> = std::fs::read_dir(root.join("store"))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        let identities = entries
+            .iter()
+            .filter(|entry| entry.file_type().unwrap().is_dir())
+            .count();
         assert_eq!(
             identities, 1,
             "a generator version made an identity of its own"
+        );
+        let metadata: Vec<_> = entries
+            .iter()
+            .filter(|entry| !entry.file_type().unwrap().is_dir())
+            .collect();
+        assert_eq!(metadata.len(), 1, "one parent lock is retained");
+        assert!(
+            metadata[0].file_type().unwrap().is_file()
+                && nts_publication::private_name(&metadata[0].file_name())
         );
         assert!(third.files().iter().all(|file| file.is_file()), "{third:?}");
         let project = root.join("project");
