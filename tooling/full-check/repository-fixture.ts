@@ -19,6 +19,7 @@ import { verdictOf, type Gate, type Measurement, type StepResult } from "./measu
 import type { LandingAnswer } from "./queue.ts";
 import type { Applier, Recorder } from "./records.ts";
 import { layout, type Layout } from "./state.ts";
+import { OWN_BEST_REGRESSION } from '../bench/own-best-marker.ts';
 
 export type Repository = {
   root: string;
@@ -136,8 +137,8 @@ export function renderStandIn(tree: string): void {
   const runs = existsSync(join(tree, RUNS)) ? readdirSync(join(tree, RUNS)).filter(name => name.endsWith(".json")).sort() : [];
   const newest = runs.length ? JSON.parse(readFileSync(join(tree, RUNS, runs.at(-1)!), "utf8")) as { slower?: string[] } : {};
   mkdirSync(dirname(join(tree, FULL_MD)), { recursive: true });
-  writeFileSync(join(tree, FULL_MD), ["# Benchmark results", "", `${runs.length} run(s)`, "", "| Case | nts C | nts C own best |", "|---|---|---|",
-    "|fast|1 ns|1 ns|", ...(newest.slower ?? []).map(name => `|${name}|2 ns|1 ns **SLOWER THAN BEST**|`), ""].join("\n"));
+  writeFileSync(join(tree, FULL_MD), ["# Benchmark results", "", `${runs.length} run(s)`, "", "| Case | nts C | nts C own best ratios |", "|---|---|---|",
+    "|fast|1 ns|not established|", ...(newest.slower ?? []).map(name => `|${name}|2 ns|${OWN_BEST_REGRESSION}|`), ""].join("\n"));
 }
 
 /**
