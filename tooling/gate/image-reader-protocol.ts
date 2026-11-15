@@ -1,6 +1,7 @@
 // One finite framing contract for the private observer/helper channel. FIFO
 // reads and writes need not preserve message boundaries or complete at once.
 export const IMAGE_READER_FRAME_BYTES=1<<20;
+export const IMAGE_READER_COMPILER_DEFINITION='-DIMAGE_READER_FRAME_BYTES='+IMAGE_READER_FRAME_BYTES;
 export function imageReaderFrame(value:unknown):Buffer{
   const text=JSON.stringify(value);if(text===undefined)throw Error('image reader protocol: frame is not JSON');
   const body=Buffer.from(text);

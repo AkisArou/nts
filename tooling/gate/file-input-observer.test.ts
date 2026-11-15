@@ -17,6 +17,7 @@ import {rustTestExecutionClassifier} from './rust-test-execution.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
+import {IMAGE_READER_COMPILER_DEFINITION} from './image-reader-protocol.ts';
 
 const source=fileURLToPath(new URL('./file-input-observer.c',import.meta.url));
 const subject=String.raw`
@@ -200,7 +201,7 @@ test('native procfs anchor identity rejects a different PID namespace or proc ro
     'assert(proc_anchor_identity(&pid,&pid,&root,&root));changed.st_ino++;assert(!proc_anchor_identity(&changed,&pid,&root,&root));'+
     'changed=pid;changed.st_dev++;assert(!proc_anchor_identity(&changed,&pid,&root,&root));changed=root;changed.st_ino++;'+
     'assert(!proc_anchor_identity(&pid,&pid,&changed,&root));changed=root;changed.st_dev++;assert(!proc_anchor_identity(&pid,&pid,&changed,&root));return 0;}\n');
-  const built=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
+  const built=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
   assert.equal(built.status,0,built.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
 });
 
@@ -422,7 +423,7 @@ test('the native observer retains actual images, attempted inputs and original p
   const original=readFileSync(source,'utf8'),paused=original.replace('int listener = install_filter();',
     'if(write(3,"ready",5)!=5){_exit(111);}\n    char release;\n    if(read(4,&release,1)!=1){_exit(112);}\n    int listener = install_filter();');
   assert.notEqual(paused,original);writeFileSync(startupSource,paused);
-  const startupBuild=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',startupSource,'-lz','-o',startupBinary],{env,encoding:'utf8'});
+  const startupBuild=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O1','-std=c11','-Wall','-Wextra','-Werror',startupSource,'-lz','-o',startupBinary],{env,encoding:'utf8'});
   assert.equal(startupBuild.status,0,startupBuild.stderr);
   const startupRecord=join(root,'startup.jsonl'),starting=spawn(startupBinary,fileObserverArguments(startupRecord,program,['streams']),{env,stdio:['ignore','pipe','pipe','pipe','pipe']});
   let startupReady='',startupClosed=false;starting.stdout!.resume();starting.stderr!.resume();
@@ -440,7 +441,7 @@ test('the native observer retains actual images, attempted inputs and original p
   const failedClose=original.replace('if (gzclose((gzFile)cookie) == Z_OK)',
     'if (gzclose((gzFile)cookie) == Z_OK && 0)');
   assert.notEqual(failedClose,original);writeFileSync(failedCloseSource,failedClose);
-  const closeBuild=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',failedCloseSource,'-lz','-o',failedCloseBinary],{env,encoding:'utf8'});
+  const closeBuild=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O1','-std=c11','-Wall','-Wextra','-Werror',failedCloseSource,'-lz','-o',failedCloseBinary],{env,encoding:'utf8'});
   assert.equal(closeBuild.status,0,closeBuild.stderr);
   const failedRecord=join(root,'failed-close.gz');
   const closeResult=spawnTest(failedCloseBinary,fileObserverArguments(failedRecord,'sh',['-c','exit 0']),{env,encoding:'utf8'});
@@ -462,7 +463,7 @@ test('the native observer retains actual images, attempted inputs and original p
     let staged=original.replace('attempt_json(listener, request);',barrier);assert.notEqual(staged,original);
     if(before){const current=staged;staged=staged.replace('if (!complete && !canceled_lifetime)','if (!complete)');assert.notEqual(staged,current);}
     writeFileSync(queuedSource,staged);
-    const built=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',...(before?['-Wno-unused-variable']:[]),queuedSource,'-lz','-o',queuedBinary],{env,encoding:'utf8'});
+    const built=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O1','-std=c11','-Wall','-Wextra','-Werror',...(before?['-Wno-unused-variable']:[]),queuedSource,'-lz','-o',queuedBinary],{env,encoding:'utf8'});
     assert.equal(built.status,0,built.stderr);
     const record=join(root,'queued-'+before+'.gz');
     const channels:StdioOptions=['ignore','pipe','pipe','pipe','pipe','pipe'];
@@ -522,7 +523,7 @@ int main(int argc,char **argv){
   for(unsigned i=0;i<sizeof(facts)/sizeof(facts[0]);i++){if(i)fputc(',',output);bytes_json(facts[i]);}
   puts("]");return 0;
 }\n`);
-  const built=spawnTest('cc',['-O2','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',program],{env,encoding:'utf8'});
+  const built=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O2','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',program],{env,encoding:'utf8'});
   assert.equal(built.status,0,built.stderr);
   const result=spawnTest(program,[root],{env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
   const fact=(value:string|Buffer,error=0,truncated=false,nullValue=false)=>({hex:Buffer.from(value).toString('hex'),error,truncated,null:nullValue});
@@ -534,7 +535,7 @@ test('the native wedged-phase decision uses supplied elapsed observations',t=>{
   const root=newTestScratch('file-observer-bound');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const input=join(root,'bound.c'),binary=join(root,'bound');
   writeFileSync(input,'#define main observer_main\n#include '+JSON.stringify(source)+'\n#undef main\n#include <assert.h>\nint main(void){assert(phase_timeout_ms(false,UINT64_MAX)==-1);assert(phase_timeout_ms(true,0)==300000);assert(phase_timeout_ms(true,WEDGED_NS-1)==1);assert(phase_timeout_ms(true,WEDGED_NS)==0);assert(phase_timeout_ms(true,UINT64_MAX)==0);return 0;}\n');
-  const env=fixtureEnvironment(t),compiled=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
+  const env=fixtureEnvironment(t),compiled=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
   assert.equal(compiled.status,0,compiled.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
 });
 
