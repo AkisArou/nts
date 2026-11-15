@@ -204,7 +204,7 @@ test('native procfs anchor identity rejects a different PID namespace or proc ro
   assert.equal(built.status,0,built.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
 });
 
-test('child loader receipts bind exec environments and reuse content-keyed ELF and loader facts',async t=>{
+test('child loader receipts frame concurrent large exec vectors and reuse content-keyed ELF and loader facts',async t=>{
   const root=newTestScratch('child-loader-capture');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const env=fixtureEnvironment(t),observer=prepareFileObserver(root,env),prepared=prepareObserverImageReader(),program=join(root,'subject'),input=join(root,'subject.c');
   const first=join(root,'lib-a'),second=join(root,'lib-b');mkdirSync(first);mkdirSync(second);
@@ -213,8 +213,9 @@ test('child loader receipts bind exec environments and reuse content-keyed ELF a
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-int main(int argc,char **argv){(void)argc;char large[8193];memset(large,'x',sizeof(large)-1);large[sizeof(large)-1]=0;if(setenv("NTS_LONG_CAPTURE_CONTROL",large,1))return 5;
-for(int i=0;i<3;i++){pid_t p=fork();if(p<0)return 1;if(!p){if(setenv("LD_LIBRARY_PATH",argv[i==1?2:1],1))_exit(2);execl(argv[3],argv[3],"child",(char *)0);_exit(3);}int status;if(waitpid(p,&status,0)!=p||!WIFEXITED(status)||WEXITSTATUS(status))return 4;}return 0;}\n`);
+int main(int argc,char **argv){(void)argc;char large[49153];memset(large,'x',sizeof(large)-1);large[sizeof(large)-1]=0;if(setenv("NTS_LONG_CAPTURE_CONTROL",large,1))return 5;pid_t children[3];
+for(int i=0;i<3;i++){pid_t p=fork();if(p<0)return 1;if(!p){if(setenv("LD_LIBRARY_PATH",argv[i==1?2:1],1))_exit(2);execl(argv[3],argv[3],"child%.0s",large,(char *)0);_exit(3);}children[i]=p;}
+for(int i=0;i<3;i++){int status;if(waitpid(children[i],&status,0)!=children[i]||!WIFEXITED(status)||WEXITSTATUS(status))return 4;}return 0;}\n`);
   const built=spawnTest('cc',['-O1',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
   const raw=join(root,'raw.gz'),index=join(root,'index.gz'),target=realpathSync('/usr/bin/printf');
   const session=observerImageSession(prepared,observer.receipt,join(root,'reader.log'),env);
@@ -223,11 +224,17 @@ for(int i=0;i<3;i++){pid_t p=fork();if(p<0)return 1;if(!p){if(setenv("LD_LIBRARY
   finally{await session.finish();}
   assert.equal(ran.status,0,ran.stderr);assert.equal(ran.stdout,'childchildchild');
   await publishInputTrace({raw,output:index,cwd:root,root:repository,observer:session.receipt,target:{package:'fixture',name:'loaders',kind:['test'],source:'fixture.rs'}});
-  const images=new Map<number,InputIndexExecution>(),rows:InputIndexObservation[]=[];let statistics:unknown;
-  await readInputTraceIndex(index,row=>{if(row.kind==='execution')images.set(row.id,row);if(row.kind==='observation')rows.push(row);if(row.kind==='image-reader-end')statistics=row.value.statistics;});
+  const images=new Map<number,InputIndexExecution>(),rows:InputIndexObservation[]=[],requests:InputIndexExecRequest[]=[];let statistics:unknown;
+  await readInputTraceIndex(index,row=>{if(row.kind==='execution')images.set(row.id,row);if(row.kind==='observation')rows.push(row);if(row.kind==='exec-request')requests.push(row);if(row.kind==='image-reader-end')statistics=row.value.statistics;});
   const captured=[...images.values()].filter(image=>image.path===target&&image.imageLoader?.capture.state==='captured');
   assert.equal(captured.length,3,JSON.stringify([...images.values()].filter(image=>image.path===target).map(image=>image.imageLoader)));
-  assert.deepEqual(captured.map(image=>image.imageLoader?.capture.state==='captured'?image.imageLoader.capture.loader.libraryPath:null),[first,second,first]);
+  assert.deepEqual(captured.map(image=>image.imageLoader?.capture.state==='captured'?image.imageLoader.capture.loader.libraryPath:null).sort(),[first,first,second].sort());
+  for(const image of captured){
+    const bound=image.argvSource;assert.equal(bound?.kind,'request');if(bound?.kind!=='request')throw Error('missing request binding');
+    const request=requests.find(row=>row.attempt===bound.attempt);assert.ok(request?.entry.environment);
+    assert.ok(byteFactText(request.entry.argv,'large captured argv').length>48*1024);
+    assert.ok(byteFactText(request.entry.environment,'large captured environment').length>48*1024);
+  }
   const counts=statistics as {elfHits:number;loaderHits:number;loaderMisses:number};assert.ok(counts.elfHits>=2);assert.ok(counts.loaderHits>=1);assert.ok(counts.loaderMisses>=2);
   const classifier=rustTestExecutionClassifier(undefined,repository),sourceClassifier=rustTestExecutionClassifier(undefined,root),validator=runtimeSubjectValidator(repository,{files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},{capturedIdentities:true});
   let probes=0,sourceProbes=0;

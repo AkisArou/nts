@@ -159,10 +159,12 @@ static int observation_fd;
 static char *pending_path;
 static unsigned long errors, attempts;
 static bool output_failed;
-static FILE *image_reader;
+static bool image_reader;
 static const char *image_reader_recipe;
-enum { IMAGE_REPLY_BYTES = 512 * 1024 };
-static char image_reply[IMAGE_REPLY_BYTES];
+#ifndef IMAGE_READER_FRAME_BYTES
+#error "prepareFileObserver supplies the image reader frame bound"
+#endif
+static char image_reply[IMAGE_READER_FRAME_BYTES + 1];
 
 static ssize_t compressed_write(void *cookie, const char *bytes, size_t size) {
   if (size > INT32_MAX) {
@@ -911,45 +913,74 @@ static bool image_changed(unsigned long pid, unsigned long long birth,
   row->path[image->size] = 0;
   return changed;
 }
-static const char *image_reader_reply(void) {
-  struct sigaction ignore = {.sa_handler = SIG_IGN}, previous;
-  sigemptyset(&ignore.sa_mask);
-  if (sigaction(SIGPIPE, &ignore, &previous))
-    return NULL;
-  int flushed = fflush(image_reader), saved = errno;
-  sigaction(SIGPIPE, &previous, NULL);
-  errno = saved;
-  if (flushed)
-    return NULL;
-  uint64_t start = now_ns();
-  size_t size = 0;
-  while (size + 1 < sizeof(image_reply)) {
+/* The notification loop is the channel's sole writer. A frame may exceed
+ * PIPE_BUF, and nonblocking I/O may transfer only part of it. */
+static bool image_pipe_io(int fd, unsigned char *data, size_t size,
+                          bool writing, uint64_t start) {
+  size_t at = 0;
+  while (at < size) {
     int timeout = phase_timeout_ms(true, now_ns() - start);
     if (!timeout) {
       errno = ETIMEDOUT;
-      return NULL;
+      return false;
     }
-    struct pollfd response = {.fd = 4, .events = POLLIN};
-    if (poll(&response, 1, timeout) <= 0)
-      return NULL;
-    ssize_t n = read(4, image_reply + size, sizeof(image_reply) - size - 1);
+    struct pollfd channel = {.fd = fd, .events = writing ? POLLOUT : POLLIN};
+    int ready = poll(&channel, 1, timeout);
+    if (ready < 0 && errno == EINTR)
+      continue;
+    if (ready <= 0) {
+      if (!ready)
+        errno = ETIMEDOUT;
+      return false;
+    }
+    ssize_t n = writing ? write(fd, data + at, size - at)
+                        : read(fd, data + at, size - at);
+    if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
+      continue;
     if (n <= 0) {
-      errno = EPIPE;
-      return NULL;
-    }
-    char *end = memchr(image_reply + size, '\n', (size_t)n);
-    size += (size_t)n;
-    if (end) {
-      if (end != image_reply + size - 1) {
+      if (!n)
         errno = EPROTO;
-        return NULL;
-      }
-      *end = 0;
-      return image_reply;
+      return false;
     }
+    at += (size_t)n;
   }
-  errno = EOVERFLOW;
-  return NULL;
+  return true;
+}
+static bool image_reader_send(const char *body, size_t size) {
+  if (!size || size > IMAGE_READER_FRAME_BYTES) {
+    errno = EMSGSIZE;
+    return false;
+  }
+  struct sigaction ignore = {.sa_handler = SIG_IGN}, previous;
+  sigemptyset(&ignore.sa_mask);
+  if (sigaction(SIGPIPE, &ignore, &previous))
+    return false;
+  unsigned char header[4] = {(unsigned char)(size >> 24),
+                             (unsigned char)(size >> 16),
+                             (unsigned char)(size >> 8), (unsigned char)size};
+  uint64_t start = now_ns();
+  bool sent = image_pipe_io(3, header, sizeof(header), true, start) &&
+              image_pipe_io(3, (unsigned char *)body, size, true, start);
+  int saved = errno;
+  sigaction(SIGPIPE, &previous, NULL);
+  errno = saved;
+  return sent;
+}
+static const char *image_reader_reply(void) {
+  unsigned char header[4];
+  uint64_t start = now_ns();
+  if (!image_pipe_io(4, header, sizeof(header), false, start))
+    return NULL;
+  size_t size = (size_t)header[0] << 24 | (size_t)header[1] << 16 |
+                (size_t)header[2] << 8 | header[3];
+  if (!size || size > IMAGE_READER_FRAME_BYTES) {
+    errno = EMSGSIZE;
+    return NULL;
+  }
+  if (!image_pipe_io(4, (unsigned char *)image_reply, size, false, start))
+    return NULL;
+  image_reply[size] = 0;
+  return image_reply;
 }
 static bool image_platform(pid_t tid, unsigned long long *hwcap,
                            unsigned long long *hwcap2) {
@@ -1073,7 +1104,11 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
       unsigned long long hwcap = 0, hwcap2 = 0;
       bool platform = image_platform(request->pid, &hwcap, &hwcap2);
       FILE *saved_output = output;
-      output = image_reader;
+      char *message = NULL;
+      size_t message_size = 0;
+      output = open_memstream(&message, &message_size);
+      if (!output)
+        fatal("image reader frame allocation");
       fprintf(output,
               "{\"changed\":%s,\"namespace\":%s,\"platform\":\"%llx:%llx\","
               "\"platformMatches\":%s,\"environment\":",
@@ -1101,9 +1136,14 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
         bytes_json(&target);
         fputc('}', output);
       }
-      fputs(",\"paths\":[],\"dirfds\":[]}}\n", output);
+      fputs(",\"paths\":[],\"dirfds\":[]}}", output);
+      bool serialized = !ferror(output);
+      if (fclose(output))
+        serialized = false;
       output = saved_output;
-      loader_fact = image_reader_reply();
+      if (serialized && image_reader_send(message, message_size))
+        loader_fact = image_reader_reply();
+      free(message);
       if (!loader_fact)
         record_error("image reader protocol", errno ? errno : EIO);
       namespace_stable =
@@ -1304,9 +1344,7 @@ int main(int argc, char **argv) {
         fcntl(3, F_SETFD, FD_CLOEXEC) || fcntl(4, F_SETFD, FD_CLOEXEC))
       return 2;
     image_reader_recipe = argv[3];
-    image_reader = fdopen(3, "w");
-    if (!image_reader)
-      return 2;
+    image_reader = true;
     command_index = 5;
   }
   if (argc <= command_index || strcmp(argv[command_index - 1], "--")) {
@@ -1553,14 +1591,16 @@ int main(int argc, char **argv) {
   free(request);
   free(response);
   if (image_reader) {
-    fputs("{\"kind\":\"close\"}\n", image_reader);
-    const char *end = image_reader_reply();
+    const char *close_message = "{\"kind\":\"close\"}";
+    const char *end = image_reader_send(close_message, strlen(close_message))
+                          ? image_reader_reply()
+                          : NULL;
     if (!end)
       record_error("image reader drain", errno ? errno : EIO);
     else
       fprintf(output, "{\"kind\":\"image-reader-end\",\"value\":%s}\n", end);
-    fclose(image_reader);
-    image_reader = NULL;
+    close(3);
+    image_reader = false;
     close(4);
   }
   for (unsigned i = 0; i < 4096; i++)

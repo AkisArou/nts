@@ -1,7 +1,7 @@
 // One persistent capture helper serves one native observer. Only a proven
 // request/image transition can borrow its stopped exec environment. This
 // helper runs outside the observed tree and returns finite raw evidence.
-import {createInterface} from 'node:readline';
+import {imageReaderFrame,readImageReaderFrames} from './image-reader-protocol.ts';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {byteFactText,readObservationRow,type InputAttempt,type ByteFact} from './file-input-observer.ts';
 import {RustInputPhases} from './rust-test-inputs.ts';
@@ -40,14 +40,14 @@ export function childLoaderReader(toolEnvironment:NodeJS.ProcessEnv){
 }
 
 runAsCommand(import.meta.url,async()=>{
-  const reader=childLoaderReader(process.env),lines=createInterface({input:process.stdin,crlfDelay:Infinity});
-  for await(const line of lines){
-    if(line.length>1024*1024)throw Error('child loader request exceeds its bound');
-    const value=JSON.parse(line) as Event|{kind:'close'};
+  const reader=childLoaderReader(process.env);
+  const reply=(value:unknown)=>new Promise<void>((done,reject)=>{process.stdout.write(imageReaderFrame(value),error=>error?reject(error):done());});
+  for await(const frame of readImageReaderFrames(process.stdin)){
+    const value=frame as Event|{kind:'close'};
     if('kind'in value&&value.kind==='close'){
-      process.stdout.write(JSON.stringify({version:1,kind:'complete',statistics:reader.statistics()})+'\n');lines.close();process.stdin.destroy();return 0;
+      await reply({version:1,kind:'complete',statistics:reader.statistics()});process.stdin.destroy();return 0;
     }
-    process.stdout.write(JSON.stringify(reader.observe(value as Event))+'\n');
+    await reply(reader.observe(value as Event));
   }
   // EOF without the observer's final handshake cannot claim completion.
   throw Error('child loader capture closed without drain handshake');

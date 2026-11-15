@@ -3,7 +3,7 @@
 // subject execs never inherit them, and completion waits for both processes.
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {closeSync,openSync,readFileSync,mkdirSync,rmSync,writeSync,constants} from 'node:fs';
+import {closeSync,openSync,readFileSync,mkdirSync,rmSync,constants} from 'node:fs';
 import {dirname,resolve,join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {moduleGraph} from './module-closure.ts';
@@ -40,12 +40,16 @@ export function observerImageSession(prepared:ReturnType<typeof prepareObserverI
     const directory=log+'.pipes';mkdirSync(directory,{mode:0o700});cleanups.push(()=>rmSync(directory,{recursive:true}));
     const toReader=join(directory,'requests'),fromReader=join(directory,'responses');
     infrastructureProbe({purpose:'create private native image-reader protocol',command:'mkfifo',args:['-m','600',toReader,fromReader],env});
-    // Numeric descriptors have one protocol consumer. A Node Readable would
-    // compete with the native descriptor and could pre-buffer its reply.
-    const input=openSync(toReader,constants.O_RDWR);cleanups.push(()=>closeSync(input));
-    const output=openSync(fromReader,constants.O_RDWR);cleanups.push(()=>closeSync(output));
+    // Separate open-file descriptions keep Node's stdin/stdout flag changes
+    // away from the native writer/reader. Each direction has one consumer.
+    let readerInputOpen=true,readerOutputOpen=true,inputOpen=true;
+    const readerInput=openSync(toReader,constants.O_RDONLY|constants.O_NONBLOCK);cleanups.push(()=>{if(readerInputOpen)closeSync(readerInput);});
+    const input=openSync(toReader,constants.O_WRONLY|constants.O_NONBLOCK);cleanups.push(()=>{if(inputOpen)closeSync(input);});
+    const output=openSync(fromReader,constants.O_RDONLY|constants.O_NONBLOCK);cleanups.push(()=>closeSync(output));
+    const readerOutput=openSync(fromReader,constants.O_WRONLY|constants.O_NONBLOCK);cleanups.push(()=>{if(readerOutputOpen)closeSync(readerOutput);});
     const descriptor=openSync(log,'wx');cleanups.push(()=>closeSync(descriptor));
-    const child=spawn(process.execPath,[...(options.execArgv??[]),fileURLToPath(ENTRY)],{env,stdio:[input,output,descriptor]});
+    const child=spawn(process.execPath,[...(options.execArgv??[]),fileURLToPath(ENTRY)],{env,stdio:[readerInput,readerOutput,descriptor]});
+    closeSync(readerInput);readerInputOpen=false;closeSync(readerOutput);readerOutputOpen=false;
     const ended=new Promise<{status:number|null;signal:NodeJS.Signals|null}>((done,reject)=>{
       child.once('error',reject);child.once('close',(status,signal)=>done({status,signal}));
     });
@@ -53,7 +57,9 @@ export function observerImageSession(prepared:ReturnType<typeof prepareObserverI
     let closed:Promise<void>|undefined;
     const finish=()=>closed??=(async()=>{
       let primary:unknown;
-      try{writeSync(input,'{"kind":"close"}\n');const result=await ended;
+      // The caller has awaited observer exit. Its one writer owns the close
+      // handshake; closing our descriptor now exposes EOF on an incomplete run.
+      try{closeSync(input);inputOpen=false;const result=await ended;
         if(result.status!==0||result.signal)throw Error('image reader did not drain: '+JSON.stringify(result));prepared.verify();
       }catch(error){primary=error;}
       cleanup(primary);
