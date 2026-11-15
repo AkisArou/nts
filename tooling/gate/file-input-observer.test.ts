@@ -153,7 +153,7 @@ int main(int argc,char **argv) {
   assert.equal(opens.length,2);
   assert.equal(opens[0]!.kind==='path'&&opens[0]!.resolution?.state==='resolved'&&opens[0]!.resolution.path,first);
   assert.equal(opens[1]!.kind==='path'&&opens[1]!.resolution?.state==='resolved'&&opens[1]!.resolution.path,second);
-  for(const value of opens){assert.ok(value.kind==='path'&&value.resolution?.state!=='unavailable');
+  for(const value of opens){
     assert.ok(value.kind==='path'&&value.resolution&&value.resolution.state!=='unavailable'&&value.resolution.components.some(part=>part.path===alias&&part.kind==='symlink'));}
   const find=(name:string)=>rows.flatMap(row=>row.subjects).find(value=>value.kind==='path'&&value.name===name);
   const absent=find(missing),file=find(blocked);assert.equal(absent?.kind==='path'&&absent.resolution?.state,'missing');assert.equal(file?.kind==='path'&&file.resolution?.state,'not-directory');

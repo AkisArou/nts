@@ -253,8 +253,8 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
       if(path.resolution){
         const fact=path.resolution;
         if(fact.state==='unavailable')resolution={...fact};
-        else try{resolution={...fact,path:byteFactText(fact.path,'captured path identity'),components:fact.components.map(part=>({...part,
-          path:byteFactText(part.path,'captured component identity'),...(part.link?{link:byteFactText(part.link,'captured alias target')}:{})}))};}
+        else try{resolution={...fact,path:byteFactText(fact.path,'captured path identity'),components:fact.components.map(part=>{
+          const {link,...rest}=part;return {...rest,path:byteFactText(part.path,'captured component identity'),...(link?{link:byteFactText(link,'captured alias target')}:{})};})};}
         catch{resolution={state:'unavailable',error:84};} // EILSEQ: raw bytes remain retained.
       }
       subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor,...(resolution?{resolution}:{})});
