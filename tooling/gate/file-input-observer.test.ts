@@ -531,6 +531,16 @@ int main(int argc,char **argv){
     fact(Buffer.alloc(65536,0x7f)),fact('path'),fact('',0,false,true)]);
 });
 
+test('the native image response reader refuses short headers and bodies with EPROTO',t=>{
+  const root=newTestScratch('file-observer-frame-eof');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const input=join(root,'frame.c'),binary=join(root,'frame'),env=fixtureEnvironment(t);
+  writeFileSync(input,'#define main observer_main\n#include '+JSON.stringify(source)+'\n#undef main\n#include <assert.h>\n'+
+    'static void frame(const unsigned char *bytes,size_t size,bool valid){int channel[2];assert(pipe(channel)==0);assert(write(channel[1],bytes,size)==(ssize_t)size);assert(close(channel[1])==0);if(channel[0]!=4){assert(dup2(channel[0],4)==4);assert(close(channel[0])==0);}errno=0;const char *reply=image_reader_reply();if(valid){assert(reply&&strcmp(reply,"null")==0);}else{assert(!reply&&errno==EPROTO);}assert(close(4)==0);}\n'+
+    'int main(void){const unsigned char header[]={0,0,0},body[]={0,0,0,3,123,125},complete[]={0,0,0,4,110,117,108,108};frame(header,sizeof(header),false);frame(body,sizeof(body),false);frame(complete,sizeof(complete),true);return 0;}\n');
+  const built=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
+  assert.equal(built.status,0,built.stderr);const ran=spawnTest(binary,[],{env,encoding:'utf8'});assert.equal(ran.status,0,ran.stderr);
+});
+
 test('the native wedged-phase decision uses supplied elapsed observations',t=>{
   const root=newTestScratch('file-observer-bound');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const input=join(root,'bound.c'),binary=join(root,'bound');
