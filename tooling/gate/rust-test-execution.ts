@@ -106,7 +106,7 @@ export function rustTestExecutionClassifier(execution?:RustTestExecution,sourceR
       &&['execute','content','metadata'].includes(requirement.kind))
       return {kind:'emitted-executable',path,sha256:execution.executable.sha256};
     const context=contexts.get(image.id);
-    if(!context||context.pid!==row.attempt.tgid||context.birth!==row.attempt.birth||context.path!==image.path||context.ended
+    if(!context||context.pid!==row.attempt.tgid||context.pid!==image.pid||context.birth!==row.attempt.birth||context.birth!==image.birth||context.path!==image.path||context.ended
       ||!['content','metadata'].includes(requirement.kind)
       ||assessment.components.some(row=>row.observation.kind==='readlink'||row.observation.kind==='runtimeKind'&&row.observation.value==='symlink'))return;
     if(source?.(assessment.identity.path))return;
