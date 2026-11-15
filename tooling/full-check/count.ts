@@ -541,16 +541,14 @@ export function scratchRecordCitations(text:string,cache:string):string[]{
 /** One Git grep over immutable main blobs; working edits cannot manufacture
  * retention. Unknown Git state keeps issue folders through the decision API. */
 export function readScratchRecordCitations(repo:string,cache:string,revision:string):string[]|Unavailable{
-  const result=spawnSync('git',gitArguments(['grep','--no-color','--no-textconv','-I','-h','-E',
-    'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch',revision,'--',RECORD_DIRECTORY]),
-    {cwd:repo,encoding:'utf8',maxBuffer:1<<26,env:{...process.env,GIT_OPTIONAL_LOCKS:'0'}});
-  if(result.error||result.status!==0&&result.status!==1)return {error:(result.error?.message??result.stderr.trim())||'git grep exit '+result.status};
-  return scratchRecordCitations(result.stdout,cache);
+  const result=read('git',gitArguments(['grep','--no-color','--no-textconv','-I','-h','-E',
+    'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch',revision,'--',RECORD_DIRECTORY]),repo,[0,1]);
+  return result.ok?scratchRecordCitations(result.out,cache):{error:result.error};
 }
 
-function read(command: string, args: string[], cwd: string): { ok: true; out: string } | { ok: false; error: string } {
+function read(command: string, args: string[], cwd: string,acceptedExitCodes:readonly number[]=[0]): { ok: true; out: string } | { ok: false; error: string } {
   const r = spawnSync(command, args, { cwd, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
-  if (r.error || r.status !== 0) return { ok: false, error: (r.error?.message ?? r.stderr.trim()) || `exit ${r.status}` };
+  if (r.error || r.status===null || !acceptedExitCodes.includes(r.status)) return { ok: false, error: (r.error?.message ?? r.stderr.trim()) || `exit ${r.status}` };
   return { ok: true, out: r.stdout };
 }
 
