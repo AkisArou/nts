@@ -15,18 +15,25 @@ export function installationStatusPaths(identity:{inputs:readonly {path:string}[
  * pathspec additionally reaches its tracked descendants and their controls.
  * Optional names retain the negative when a control does not exist yet. */
 export function gitStatusInputPopulation(paths:readonly string[],tracked:readonly string[]):{files:string[];controls:string[];directories:string[]}{
-  const directories=paths.filter(path=>tracked.some(file=>file.startsWith(path+'/')));
-  const files=new Set(paths.filter(path=>!directories.includes(path))),controls=new Set<string>();
-  for(const file of tracked)if(paths.some(path=>file.startsWith(path+'/')))files.add(file);
+  const selected=new Set(paths),directories=new Set<string>(),files=new Set(paths),controls=new Set<string>();
+  for(const file of tracked){
+    let parent=posix.dirname(file),included=false;
+    while(parent!=='.'){
+      if(selected.has(parent)){directories.add(parent);included=true;}
+      parent=posix.dirname(parent);
+    }
+    if(included)files.add(file);
+  }
+  for(const directory of directories)files.delete(directory);
+  const visited=new Set<string>();
   for(const file of files){
     let parent=posix.dirname(file);
-    for(;;){
+    while(!visited.has(parent)){
+      visited.add(parent);
       for(const name of ['.gitignore','.gitattributes'])controls.add(parent==='.'?name:parent+'/'+name);
       if(parent==='.')break;parent=posix.dirname(parent);
     }
   }
-  // A selected directory can itself contain a control before any other file.
-  for(const file of tracked)if(/(?:^|\/)\.(?:gitignore|gitattributes)$/.test(file)
-    &&paths.some(path=>file.startsWith(path+'/')))controls.add(file);
+  // Descendant control files are already among the tracked population above.
   return {files:[...files].sort(),controls:[...controls].sort(),directories:[...directories].sort()};
 }

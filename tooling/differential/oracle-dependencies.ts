@@ -7,7 +7,7 @@ import {dependencySealIdentity,dependencySealReady,ownsDependencyRun,capturedPac
 import {execFileSync} from 'node:child_process';
 import {appendFileSync,chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {setTimeout as pause} from 'node:timers/promises';
 import {DEPENDENCY_ROOT_INPUTS,identity,installDependencies,type Identity} from '../inputs/dependency-inputs.ts';
 import {GateResource} from '../gate/gate-resource.ts';
@@ -77,8 +77,8 @@ function checked(capability:DependencyCapability){
   if(hash(readFileSync(join(capability.source,'pnpm-lock.yaml')))!==capability.lockfileSha256)throw Error('oracle dependency lockfile changed: '+capability.source);
 }
 
-function cleanInputs(source:string,paths:readonly string[]){
-  void INSTALLATION_STATUS_INPUTS;
+function cleanInputs(input:ReturnType<typeof installationStatusInputs>,paths:readonly string[]){
+  const source=fileURLToPath(input.url);
   const candidates=new Set(installationStatusCandidates(git(source,'ls-files','-z','--cached').split('\0').filter(Boolean)));
   for(const path of paths)if(!candidates.has(path))throw Error('oracle dependency status input was not in its selection population: '+path);
   if(git(source,'status','--porcelain','--untracked-files=all','--',...paths))throw Error('oracle dependency install input is dirty');
@@ -91,7 +91,7 @@ function selectionRows(capability:DependencyCapability,revision:string):string[]
 }
 function inputRows(capability:DependencyCapability,paths:string[],metadata=selectionRows(capability,capability.sourceRevision)){
   if(JSON.stringify(metadata)!==JSON.stringify(selectionRows(capability,'HEAD')))throw Error('oracle dependency committed install inputs changed: package metadata set');
-  cleanInputs(capability.source,paths);
+  cleanInputs({...INSTALLATION_STATUS_INPUTS,url:pathToFileURL(capability.source)},paths);
   const rows=(revision:string)=>git(capability.source,'ls-tree','-rz','--full-tree',revision,'--',...paths).split('\0').filter(Boolean);
   const treeRows=rows(capability.sourceRevision);
   if(JSON.stringify(treeRows)!==JSON.stringify(rows('HEAD')))throw Error('oracle dependency committed install inputs changed');
@@ -104,7 +104,7 @@ async function installInputs(capability:DependencyCapability,counts:{pnpmSelecti
   const metadata=selectionRows(capability,capability.sourceRevision);
   if(metadata.some(row=>!/^100(?:644|755) blob /.test(row)))throw Error('oracle dependency selection input is not a tracked regular file');
   const selectionPaths=metadata.map(row=>row.slice(row.indexOf('\t')+1));
-  cleanInputs(capability.source,[...DEPENDENCY_ROOT_INPUTS,...selectionPaths]);
+  cleanInputs({...INSTALLATION_STATUS_INPUTS,url:pathToFileURL(capability.source)},[...DEPENDENCY_ROOT_INPUTS,...selectionPaths]);
   mkdirSync(capability.directory,{recursive:true});
   const selection=mkdtempSync(join(capability.directory,'selection-')),tree=join(selection,'tree'),archive=join(selection,'source.tar');mkdirSync(tree);
   try{

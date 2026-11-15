@@ -29,7 +29,9 @@ if(mode==='--consume'){
   const ready=dependencySealReady(cap);assert.ok(ready);
   console.log(JSON.stringify({consumed:true,ready}));
 }else if(mode==='--owned-producer'){
-  const own=process.argv[3];assert.ok(own);const run=join(own,'run'),home=join(own,'home');mkdirSync(home);
+  const own=process.argv[3];assert.ok(own);
+  assert.equal(source,resolve(own,'tree'),'producer fixture source must be its acquired staged tree');
+  const run=join(own,'run'),home=join(own,'home');mkdirSync(home);
   const memory=ownMemory(join(own,'memory')),low=ownMemory(join(own,'pressure'),{availableKiB:0,totalKiB:2**20}).NTS_HOST_OBSERVATIONS;
   const base={...hostEnvironment(process.env),HOME:home};
   const accounting=gateEnvironment(base,{run:join(own,'accounting'),standalone:true,oracleRoot:source,owned:{...memory}});

@@ -8,6 +8,7 @@ import {gitArguments} from '../gate/git-arguments/main.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';
 import {toolingModuleName} from '../gate/tooling-module-name.ts';
 import {dependencySourceInputs} from '../gate/reader-inputs/main.ts';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 export const SOURCE_STATE_INPUTS=dependencySourceInputs(new URL('../../',import.meta.url));
 const failure=(message:string)=>new ToolingInstrumentError('tooling-setup','dependency inputs: '+message);
 function gitBytes(repo:string,...args:string[]):string{
@@ -15,8 +16,10 @@ function gitBytes(repo:string,...args:string[]):string{
 }
 /** An index-only query needs neither the parser nor worktree-wide stats. */
 export function dependencySourceCandidates(repo:string):string[]{
-  void SOURCE_STATE_INPUTS;
-  return gitBytes(repo,'ls-files','-z','--cached').split('\0').filter(toolingModuleName);
+  return dependencySourceInputPopulation({...SOURCE_STATE_INPUTS,url:pathToFileURL(repo)});
+}
+function dependencySourceInputPopulation(input:ReturnType<typeof dependencySourceInputs>):string[]{
+  return gitBytes(fileURLToPath(input.url),'ls-files','-z','--cached').split('\0').filter(toolingModuleName);
 }
 export type SourceState={paths:ReadonlySet<string>;index:Map<string,string>;status:Map<string,string>;dirty:Map<string,string>};
 function workingBlob(repo:string,path:string,blob:string):string{

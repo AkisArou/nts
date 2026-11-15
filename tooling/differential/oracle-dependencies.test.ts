@@ -15,12 +15,26 @@ import {dependencyCapability,captureDependencies,dependencyPackageInventory,depe
 import {ownMemory,useOwnMemory} from '../gate/test-memory.ts';
 import {DiskCapacity} from '../gate/disk-capacity.ts';
 import {waitFor} from '../gate/test-wait.ts';
+import {testScratch} from '../gate/test-scratch.ts';
+import {prepareChildObserver,observedSpawnSync,type ChildUsage} from '../gate/child-rusage.ts';
+import {fileInput} from '../gate/reader-inputs/main.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
 before(setupOracleTestEnvironment);
-test('owned producer fixture retains cold/hit accounting and prepares before a zero-memory consumer',()=>{
-  const result=spawnSync(process.execPath,[fileURLToPath(new URL('./oracle-reservation-fixture.ts',import.meta.url))],
-    {env:testEnvironment(),encoding:'utf8',maxBuffer:16*2**20});
+test('producer fixture direct entry refuses a real source before any gate write',t=>{
+  const own=testScratch(t,'producer-direct-entry-refusal'),gate=fileInput(new URL('../gate/all.sh',import.meta.url)),before=readFileSync(gate);
+  const result=spawnSync(process.execPath,[fileURLToPath(new URL('./oracle-reservation-fixture.ts',import.meta.url)),'--owned-producer',own],
+    {env:testEnvironment(),encoding:'utf8'});
+  assert.notEqual(result.status,0);assert.match(result.stderr,/producer fixture source must be its acquired staged tree/);
+  assert.deepEqual(readFileSync(gate),before);assert.equal(existsSync(join(own,'home')),false);
+});
+test('owned producer fixture retains cold/hit accounting and prepares before a zero-memory consumer',t=>{
+  const own=testScratch(t,'producer-fixture-accounting'),env=testEnvironment(),prepared=prepareChildObserver(own,env);assert.ok(prepared.observer,prepared.error);
+  let usage:ChildUsage|undefined;
+  const result=observedSpawnSync(process.execPath,[fileURLToPath(new URL('./oracle-reservation-fixture.ts',import.meta.url))],
+    {env,encoding:'utf8',maxBuffer:16*2**20},prepared.observer,value=>{usage=value;});
+  t.diagnostic(JSON.stringify({kind:'producer-fixture-cost',basis:'wait4 of the complete fixture and waited descendants',usage}));
+  assert.ok(usage,'the real fixture retains waited wall and CPU');
   assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.signal,null);
   const rows=result.stdout.trim().split('\n').map(line=>JSON.parse(line) as {counts?:number[];modes?:string[];step?:string;zeroMemoryConsumed?:boolean;producerSource:string});
   assert.ok(rows.some(row=>JSON.stringify(row.counts)==='[1,2,2]'&&JSON.stringify(row.modes)==='["cold","hit"]'));
