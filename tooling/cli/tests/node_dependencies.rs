@@ -97,6 +97,14 @@ fn loop_control(driver: &Path, addons: &[PathBuf]) -> std::process::Output {
             packet.display()
         ),
     };
+    eprintln!(
+        "node-loop-supervision {}",
+        serde_json::json!({
+            "status": output.status.code(),
+            "signal": output.status.signal(),
+            "instrument": instrument,
+        })
+    );
     assert!(
         instrument.is_none() && !loop_instrument_failure(output.status),
         "INSTRUMENT: Node loop control did not complete under the shared CPU/activity supervisor, or was killed: {}\n{}\n{}\n{}",
