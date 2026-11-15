@@ -6,7 +6,9 @@ import {join} from "node:path";
 import {spawnTest} from "../gate/test-wait.ts";
 import {nodeEnvironment,OWNER_MARK,sweepLeftovers} from "./node-environment.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
-import {ENVIRONMENT_CONTEXT,gateEnvironment,ownedCacheEnvironment} from "../gate/canonical-environment.ts";
+import {gateEnvironment} from '../gate/canonical-environment.ts';
+import {ownedCacheEnvironment} from '../gate/host-environment.ts';
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {removable} from "../gate/run-temporary.ts";
 
 test("node children keep canonical behavior under contaminated launchers",()=>{

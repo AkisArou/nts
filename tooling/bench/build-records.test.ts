@@ -8,7 +8,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { publishPin } from "../conformance/pin.ts";
-import { FIXED_AMBIENT, gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
+import {gateEnvironment} from '../gate/canonical-environment.ts';
+import {FIXED_AMBIENT} from '../gate/host-environment.ts';
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import { testScratch } from "../gate/test-scratch.ts";
 import { ownMemory, withoutHanded } from "../gate/test-memory.ts";
 

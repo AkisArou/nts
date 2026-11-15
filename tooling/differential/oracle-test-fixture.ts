@@ -5,7 +5,8 @@ import {ownMemoryEnv} from '../gate/test-memory.ts';
 import {testEnvironment} from '../gate/test-environment.ts';
 
 import {after} from 'node:test';
-import {ENVIRONMENT_CONTEXT,gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
+import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
+import {ENVIRONMENT_CONTEXT} from './oracle-seal/main.ts';
 import {oracleToolchainLocation,requireSealedOracleRun} from '../gate/host-environment.ts';
 import type {GateEnvironment} from '../gate/environment-types.ts';
 import {finishRunTemporary, removable} from '../gate/run-temporary.ts';

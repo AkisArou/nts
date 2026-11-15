@@ -1,6 +1,7 @@
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
-import {gateEnvironment, launcherPolicyNames, ENVIRONMENT_CONTEXT} from "../gate/canonical-environment.ts";
+import {gateEnvironment,launcherPolicyNames} from '../gate/canonical-environment.ts';
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
 import {spawnTest} from "../gate/test-wait.ts";
 import {copyModuleClosure, moduleClosure} from "../gate/module-closure-fixture.ts";

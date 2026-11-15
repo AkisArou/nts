@@ -5,7 +5,8 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // oracle-emit-fixture.ts.
 import type {CheckerImportRelation} from './oracle-filesystem.ts';
 import * as oracleOwner from './oracle-emit.ts';
-import {gateEnvironment,hostEnvironment,sealOracleRun} from "../gate/canonical-environment.ts";
+import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
+import {hostEnvironment} from '../gate/host-environment.ts';
 import {ownMemory} from "../gate/test-memory.ts";
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {ownerEmissionCalls} from '../gate/owner-emission-calls.ts';

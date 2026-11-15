@@ -5,7 +5,7 @@ import {existsSync,readdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs'
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
-import {hostEnvironment,FIXED_AMBIENT} from './canonical-environment.ts';
+import {hostEnvironment,FIXED_AMBIENT} from './host-environment.ts';
 import {bypassesScratchOwner,newTestScratch,TestScratch} from './test-scratch.ts';
 
 function fixture(body:(parent:string)=>void){

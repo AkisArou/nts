@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {chmodSync,readdirSync,cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {spawnSync,type SpawnSyncOptionsWithStringEncoding,type SpawnSyncReturns} from 'node:child_process';
 import {OracleWorker,REPOSITORY,prepareOracle,oracleExecution as newOracleExecution,oracleLoaderReady,oracleRuntimeFile,removeOracleSnapshot,finishOracleSnapshot} from '../differential/oracle-emit.ts';
-import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {tmpdir} from 'node:os';
 import {dirname,join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';

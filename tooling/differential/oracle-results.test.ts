@@ -1,5 +1,5 @@
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
-import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {chmodSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync,symlinkSync,unlinkSync} from 'node:fs';

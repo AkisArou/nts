@@ -8,7 +8,8 @@ import {copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, 
 import {join, dirname} from "node:path";
 
 import {fileURLToPath} from "node:url";
-import {gateEnvironment, hostEnvironment} from "../canonical-environment.ts";
+import {gateEnvironment} from '../canonical-environment.ts';
+import {hostEnvironment} from '../host-environment.ts';
 import {captureRunTemporary, finishRunTemporary, pruneRunTemporaries, removable} from "../run-temporary.ts";
 import {instrumentPolicy} from "../step-result.ts";
 import {spawnTest, waitFor} from "../test-wait.ts";

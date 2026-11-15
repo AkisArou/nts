@@ -28,7 +28,7 @@ import {BENCH_UNIT, recordsUnitName} from "./unit.ts";
 import {GateResource} from "../gate/gate-resource.ts";
 import {Git} from "./git.ts";
 import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSessionClosed} from './run-environment-fixture.ts';
-import {hostEnvironment} from '../gate/canonical-environment.ts';
+import {hostEnvironment} from '../gate/host-environment.ts';
 import {nodeInstallation} from '../gate/toolchain-fixture.ts';
 import {removable as makeRemovable} from '../gate/run-temporary.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';

@@ -18,7 +18,7 @@ import {oracle, selectTypescript, materialiseTypeScriptOracleProject} from "./su
 import {newTestScratch} from "../gate/test-scratch.ts";
 import {workspace} from "./project.ts";
 import {OracleWorker, removeOracleSnapshot} from "../differential/oracle-emit.ts";
-import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {createTypeScriptOracleResults, openTypeScriptOracleResults, typeScriptOracleHandoff, oracleResultHash} from "./typescript-oracle-results.ts";
 import type { TypeScriptOracleCapture } from './typescript-oracle-capture.ts';
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { gateCapabilities, gateEnvironmentError, GATE_ENVIRONMENT, missingEnvironment, systemdEnvironment } from "./environment.ts";
-import { FIXED_AMBIENT, hostEnvironment } from "./canonical-environment.ts";
+import {FIXED_AMBIENT,hostEnvironment} from './host-environment.ts';
 import {moduleGraph} from './module-closure.ts';
 
 const roots: string[] = [];

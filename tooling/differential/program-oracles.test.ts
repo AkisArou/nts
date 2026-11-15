@@ -11,7 +11,9 @@ import {PROGRAM_EMIT_PROJECTS,programOracleDirectory,programOracleSources,hasOra
 import {openProgramOracleResults,programOracleHandoff} from './oracle-results.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {readRecords,fixtureOf} from './oracle-records.ts';
-import {gateEnvironment,hostEnvironment,oracleToolchainLocation,sealOracleRun,type GateEnvironment} from '../gate/canonical-environment.ts';
+import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
+import {hostEnvironment,oracleToolchainLocation} from '../gate/host-environment.ts';
+import type {GateEnvironment} from '../gate/environment-types.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
 import {ownMemory} from '../gate/test-memory.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';

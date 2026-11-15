@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { HOST_INFRASTRUCTURE, hostEnvironment, programHost } from "../canonical-environment.ts";
+import {hostEnvironment,programHost} from '../host-environment.ts';
+import {HOST_INFRASTRUCTURE} from '../host-infrastructure.ts';
 import { systemdEnvironment } from "../environment.ts";
 
 test("bus capabilities are passed by name while verdict host identity excludes their values", () => {

@@ -18,7 +18,7 @@ import { admission, FULL_MD, measureJob, publishAt, publishRecord, resultsCommit
 import { Git } from "./git.ts";
 import { checkoutIn, publishEveryRun, repository, stubBench } from "./repository-fixture.ts";
 import { candidateEnvironmentFixture } from "./run-environment-fixture.ts";
-import { hostEnvironment } from "../gate/canonical-environment.ts";
+import {hostEnvironment} from '../gate/host-environment.ts';
 import { readLedger } from "../gate/memory-ledger.ts";
 import { gateEnvironment } from "../gate/canonical-environment.ts";
 import { ownMemory } from "../gate/test-memory.ts";

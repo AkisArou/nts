@@ -4,7 +4,7 @@ import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {userInfo} from 'node:os';
 import {delimiter,dirname,join} from 'node:path';
-import {ENVIRONMENT_CONTEXT} from './canonical-environment.ts';
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {FIXED_AMBIENT,HOST_CAPABILITIES,ownTemporary} from './host-environment.ts';
 import type {GateEnvironmentContext} from './environment-types.ts';
 import {ownMemory} from './test-host-observations.ts';

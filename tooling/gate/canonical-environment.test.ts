@@ -15,11 +15,10 @@ import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.t
 import {spawnTest, waitFor} from "./test-wait.ts";
 import {spawn} from "node:child_process";
 import {instrumentPolicy} from "./step-result.ts";
-import * as canonicalEnvironment from "./canonical-environment.ts";
-import {
-  assertLandingEnvironment, ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT,
-  FIXED_AMBIENT, gateEnvironment, oracleStepEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,oracleToolchainLocation,ownTemporary,childTemporary,
-} from "./canonical-environment.ts";
+import * as hostEnvironmentAuthority from "./host-environment.ts";
+import {assertLandingEnvironment,ENVIRONMENT_EXPERIMENT,gateEnvironment,oracleStepEnvironment,nodeHeapOomReason,reportEnvironment} from './canonical-environment.ts';
+import {FIXED_AMBIENT,measuredCompileEnvironment,oracleToolchainLocation,ownTemporary,childTemporary} from './host-environment.ts';
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {newTestScratch} from "./test-scratch.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 import {ownMemory} from "./test-memory.ts";
@@ -29,7 +28,7 @@ import {readLedger,reserve} from "./memory-ledger.ts";
 
 type CacheAuthority={nodeCompileCacheRoot?:(env?:NodeJS.ProcessEnv)=>string;ownedCacheEnvironment?:(launcher:NodeJS.ProcessEnv,options:{temporary:string})=>{TMPDIR:string;NODE_COMPILE_CACHE:string}};
 function cacheAuthority(){
-  const authority=canonicalEnvironment as typeof canonicalEnvironment&CacheAuthority;
+  const authority=hostEnvironmentAuthority as typeof hostEnvironmentAuthority&CacheAuthority;
   assert.equal(typeof authority.ownedCacheEnvironment,"function","owned Node cache storage requires its shared authority");
   assert.ok(authority.ownedCacheEnvironment);
   return {environment:authority.ownedCacheEnvironment,root:authority.nodeCompileCacheRoot?.({})};
@@ -629,4 +628,10 @@ test("a runner waiting in the memory ledger stops when its output has no reader,
   assert.equal(summary.steps[0].verdict,'NOT RUN');
   assert.equal(existsSync(join(root,'step-launched')),false);
   assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]},'its request withdrawn');
+});
+
+test('preparation exports cannot become compatibility owners for host utilities',async()=>{
+  const preparation=await import('./canonical-environment.ts');
+  for(const name of Object.keys(hostEnvironmentAuthority))
+    assert.equal(Object.hasOwn(preparation,name),false,name+' has only its host utility owner');
 });

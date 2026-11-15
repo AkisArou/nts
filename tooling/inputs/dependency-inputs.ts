@@ -67,7 +67,6 @@ async function locked<T>(path:string,operation:()=>Promise<T>):Promise<T> {
   try{return await operation();}finally{lock.close();}
 }
 import type {Identity} from './dependency-identity.ts';
-export type {Identity} from './dependency-identity.ts';
 export async function identity(tree:string,manager:PackageManager):Promise<Identity> {
   const version=(await manager.run(["--version"])).trim();
   const manifest=JSON.parse(readFileSync(join(tree,"package.json"),"utf8"));

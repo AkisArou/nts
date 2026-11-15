@@ -8,7 +8,8 @@ import {join, dirname} from "node:path";
 
 import {test} from "node:test";
 import {fileURLToPath} from "node:url";
-import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
+import {gateEnvironment} from './canonical-environment.ts';
+import {hostEnvironment} from './host-environment.ts';
 import {STEPS, stepTableProblem} from "./step-table.mjs";
 import {moduleClosure} from "./module-closure-fixture.ts";
 import {removable} from "./run-temporary.ts";

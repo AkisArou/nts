@@ -15,7 +15,8 @@ import {CaseBudgetError} from './step-result.ts';
 import {closeMemoryRun} from '../census/worker-memory.ts';
 import {ORACLE_HEAP_FLAGS} from '../differential/oracle-execution.ts';
 import {ORACLE_EXECUTION_POLICY} from '../differential/oracle-execution-policy.ts';
-import {gateEnvironment,hostEnvironment} from './canonical-environment.ts';
+import {gateEnvironment} from './canonical-environment.ts';
+import {hostEnvironment} from './host-environment.ts';
 import {ownMemory} from './test-memory.ts';
 import {spawnTest} from './test-wait.ts';
 import {toolingSlice,toolingSliceArgs} from './tooling-slice.ts';
@@ -314,7 +315,7 @@ test("inside an unsealed canonical run, the fixture planner's build gets a tempo
   mkdirSync(bin,{recursive:true});mkdirSync(home,{recursive:true});
   // A cargo that makes the check a child that captures oracle dependencies makes, logs it, and fails the build.
   writeFileSync(check,`import {appendFileSync} from "node:fs";
-import {ownedCacheEnvironment} from ${JSON.stringify(new URL("./canonical-environment.ts",import.meta.url).href)};
+import {ownedCacheEnvironment} from ${JSON.stringify(new URL("./host-environment.ts",import.meta.url).href)};
 try{ownedCacheEnvironment(process.env,{temporary:process.env.TMPDIR});appendFileSync(${JSON.stringify(log)},"held\\n");}
 catch(error){appendFileSync(${JSON.stringify(log)},"refused: "+error.message+"\\n");}
 process.exit(1);

@@ -1,7 +1,8 @@
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // Ambient behavior belongs to the gate's environment contract. Only the
 // harness's explicit inputs and child protocol cross this boundary as well.
-import {ENVIRONMENT_CONTEXT,gateEnvironment} from '../gate/canonical-environment.ts';
+import {gateEnvironment} from '../gate/canonical-environment.ts';
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {hostEnvironment,FIXED_AMBIENT} from '../gate/host-environment.ts';
 import {existsSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {dirname,join,resolve} from "node:path";

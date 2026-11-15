@@ -27,7 +27,7 @@ function fixture(t: TestContext) {
 
 const actor = `
 import assert from 'node:assert/strict';
-import {ownedCacheEnvironment,nodeCompileCacheRoot} from ${JSON.stringify(new URL("./canonical-environment.ts", import.meta.url).href)};
+import {ownedCacheEnvironment,nodeCompileCacheRoot} from ${JSON.stringify(new URL("./host-environment.ts", import.meta.url).href)};
 import {captureRunTemporary,assertRunTemporary} from ${JSON.stringify(new URL("./run-temporary.ts", import.meta.url).href)};
 import {withPackageManager} from ${JSON.stringify(new URL("../inputs/package-manager.ts", import.meta.url).href)};
 import {pruneNodeCompileCache} from ${JSON.stringify(new URL("../full-check/node-cache-retention.ts", import.meta.url).href)};

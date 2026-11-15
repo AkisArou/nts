@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
-import { hostEnvironment } from "../gate/canonical-environment.ts";
+import {hostEnvironment} from '../gate/host-environment.ts';
 import { nodeInstallation } from "../gate/toolchain-fixture.ts";
 import { scratchRepo } from "../landing/scratch-repo.ts";
 import { recordLandingFixture } from "../landing/verdict-fixture.ts";

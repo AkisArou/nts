@@ -184,7 +184,7 @@ test("JSON-capable test doubles cannot return agreement prose or contradictory f
 
 test("inside an unsealed canonical run, every check's own temporary is registered in its context, so a child's owned cache check holds",t=>{
   const f=fixture(t),log=join(f.directory,"context.log"),check=join(f.directory,"context-check.mjs");
-  writeFileSync(check,`import {ownedCacheEnvironment} from ${JSON.stringify(new URL("./canonical-environment.ts",import.meta.url).href)};\ntry{ownedCacheEnvironment(process.env,{temporary:process.env.TMPDIR});}catch(error){console.error(error.message);process.exit(1);}\n`);
+  writeFileSync(check,`import {ownedCacheEnvironment} from ${JSON.stringify(new URL("./host-environment.ts",import.meta.url).href)};\ntry{ownedCacheEnvironment(process.env,{temporary:process.env.TMPDIR});}catch(error){console.error(error.message);process.exit(1);}\n`);
   // The context the full check's records unit runs in: canonical, its oracle dependencies unsealed.
   const planned=gateEnvironment(f.env,{run:join(f.env.HOME!,".cache/gate-run"),owned:{NTS_AGREE_JOBS:"1",...ownMemory(join(f.directory,"context-memory"))}});
   const result=spawnTest(process.execPath,[join(f.root,"tooling/differential/agree.mjs"),f.before,f.after,"--only=new-fixture,existing",`--base=${f.base}`],

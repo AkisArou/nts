@@ -1,5 +1,5 @@
 import {testEnvironment} from "./test-environment.ts";
-import { FIXED_AMBIENT } from "./canonical-environment.ts";
+import {FIXED_AMBIENT} from './host-environment.ts';
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS } from "./compile-counter.ts";

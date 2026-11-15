@@ -4,7 +4,7 @@ import {userInfo} from "node:os";
 import {testScratch} from "../gate/test-scratch.ts";
 import {dirname, join, relative} from "node:path";
 import {test} from "node:test";
-import {nodeCompileCacheRoot} from "../gate/canonical-environment.ts";
+import {nodeCompileCacheRoot} from '../gate/host-environment.ts';
 import {acquire} from "../landing/lock.ts";
 import * as retention from "./node-cache-retention.ts";
 

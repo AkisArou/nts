@@ -8,7 +8,8 @@ import {copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFil
 import {join, dirname} from "node:path";
 
 import {fileURLToPath, pathToFileURL} from "node:url";
-import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
+import {gateEnvironment} from './canonical-environment.ts';
+import {hostEnvironment} from './host-environment.ts';
 import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {spawn, spawnSync} from "node:child_process";

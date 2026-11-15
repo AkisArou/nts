@@ -20,7 +20,7 @@ import {execFileSync} from "node:child_process";
 import {chmodSync,copyFileSync,mkdirSync,readFileSync,symlinkSync,writeFileSync} from "node:fs";
 import {join,dirname} from "node:path";
 import {fileURLToPath} from "node:url";
-import {ENVIRONMENT_CONTEXT} from "../gate/canonical-environment.ts";
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {moduleClosure} from "../gate/module-closure-fixture.ts";
 import {PROFILE,removeRun,type RunOptions} from "./run.ts";

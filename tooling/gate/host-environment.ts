@@ -8,9 +8,7 @@ import {FIXTURE_ENVIRONMENT,cacheLocation} from './cache-environment.ts';
 import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
 import {ToolingInstrumentError} from './step-result.ts';
 import type {Context} from './environment-types.ts';
-export {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {HOST_INFRASTRUCTURE} from "./host-infrastructure.ts";
-export {HOST_INFRASTRUCTURE} from "./host-infrastructure.ts";
 export const HOST_CAPABILITIES = [
   "PATH", "HOME", ...HOST_INFRASTRUCTURE, "CARGO_HOME", "RUSTUP_HOME",
   "JAVA_HOME", "JDK_HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_AVD_HOME", "DEBUGINFOD_URLS",

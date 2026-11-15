@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { hostEnvironment } from "../gate/canonical-environment.ts";
+import {hostEnvironment} from '../gate/host-environment.ts';
 import { appliedIn, DELTA_FILE } from "../records/delta.ts";
 import { applyAt, applyRecords, recordAt, recordsMessage } from "./records.ts";
 import { checkoutIn, repository } from "./repository-fixture.ts";

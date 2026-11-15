@@ -10,7 +10,7 @@ import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { copyModuleClosure } from "../gate/module-closure-fixture.ts";
 import { oracleWorkspaceFixture } from "../differential/oracle-workspace-fixture.ts";
-import { hostEnvironment } from "../gate/canonical-environment.ts";
+import {hostEnvironment} from '../gate/host-environment.ts';
 import { newToolingSlice, stopToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
 import { ownMemory } from "../gate/test-memory.ts";
@@ -78,7 +78,8 @@ writeFileSync(${JSON.stringify(observation)},JSON.stringify({phase:process.argv.
   write("unit.mjs", `import {spawn} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {gateEnvironment,hostEnvironment,sealOracleRun} from './tooling/gate/canonical-environment.ts';
+import {gateEnvironment,sealOracleRun} from './tooling/gate/canonical-environment.ts';
+import {hostEnvironment} from './tooling/gate/host-environment.ts';
 import {finishRunTemporary} from './tooling/gate/run-temporary.ts';
 const [mode]=process.argv.slice(2),root=${JSON.stringify(root)},memory=${JSON.stringify(memory)};
 const run=join(root,'home/.cache/outer'),out=${JSON.stringify(out)};

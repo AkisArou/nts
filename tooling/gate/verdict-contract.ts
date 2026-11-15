@@ -11,7 +11,7 @@ import { arch, platform } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {gateEnvironment} from './canonical-environment.ts';
-import {HOST_INFRASTRUCTURE} from './host-environment.ts';
+import {HOST_INFRASTRUCTURE} from './host-infrastructure.ts';
 import type {EnvironmentReport} from './environment-types.ts';
 import { PLATFORMS_UNRUN_OK, STANDING_GATE_POLICY } from "./verdict-policy.ts";
 

@@ -4,7 +4,8 @@ import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // them, and a measurement waits for them to be quiet.
 //
 //   node --test tooling/gate/measurement-cpus.test.ts
-import {gateEnvironment,hostEnvironment,launcherPolicyNames} from "./canonical-environment.ts";
+import {gateEnvironment,launcherPolicyNames} from './canonical-environment.ts';
+import {hostEnvironment} from './host-environment.ts';
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

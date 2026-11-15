@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
-import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {prepareOracle,removeOracleSnapshot} from './oracle-emit.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 

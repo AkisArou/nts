@@ -13,9 +13,7 @@ import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differ
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
 import {HOST_CAPABILITIES,FIXED_AMBIENT,UNSET_AMBIENT,ownedCacheEnvironment,hostEnvironment,declaredOracleToolchain} from './host-environment.ts';
-export {HOST_INFRASTRUCTURE,HOST_CAPABILITIES,FIXED_AMBIENT,UNSET_AMBIENT,nodeCompileCacheRoot,ownedCacheEnvironment,ownTemporary,childTemporary,hostEnvironment,oracleToolchainLocation,declaredOracleToolchain,programHost,measuredCompileEnvironment,requireSealedOracleRun} from './host-environment.ts';
 import type {Context,EnvironmentReport,GateEnvironment} from './environment-types.ts';
-export type {EnvironmentReport,GateEnvironment,GateEnvironmentContext} from './environment-types.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-environment.ts';
 import {toolchainDirectories} from './toolchain.ts';
 
@@ -69,7 +67,6 @@ const EXPERIMENTS = new Set([
   ...HOST_OBSERVATION_ENVIRONMENT,
 ]);
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
-export {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
 export function launcherPolicyNames(env: NodeJS.ProcessEnv): string[] {
   return Object.keys(env).filter(name => env[name] !== undefined && !HOST.has(name) && !PARENT.has(name) && !CODE_OWNED.has(name) && (

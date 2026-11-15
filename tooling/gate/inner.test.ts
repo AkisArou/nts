@@ -20,7 +20,8 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync,
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { copyModuleClosure } from "./module-closure-fixture.ts";
-import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
+import {gateEnvironment} from './canonical-environment.ts';
+import {hostEnvironment} from './host-environment.ts';
 import { ownMemory } from "./test-memory.ts";
 import { newTestScratch } from "./test-scratch.ts";
 import { removable } from "./run-temporary.ts";

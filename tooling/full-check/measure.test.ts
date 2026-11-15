@@ -21,7 +21,7 @@ import {layout} from "./state.ts";
 import {scratchRepo} from "../landing/scratch-repo.ts";
 import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSessionClosed} from './run-environment-fixture.ts';
-import {hostEnvironment} from '../gate/canonical-environment.ts';
+import {hostEnvironment} from '../gate/host-environment.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 import {ownMemory} from '../gate/test-memory.ts';

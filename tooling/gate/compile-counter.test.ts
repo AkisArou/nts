@@ -1,5 +1,5 @@
 import {fixtureEnvironment} from "./test-environment.ts";
-import {FIXED_AMBIENT} from "./canonical-environment.ts";
+import {FIXED_AMBIENT} from './host-environment.ts';
 import assert from "node:assert/strict";
 import {chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";

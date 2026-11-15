@@ -6,7 +6,7 @@ import {dirname,join} from 'node:path';
 import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {activeCommand} from '../gate/active-command.ts';
-import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {verifyToolchain} from './oracle-emit.ts';
 
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';

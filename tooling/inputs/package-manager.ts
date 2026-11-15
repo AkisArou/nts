@@ -7,7 +7,7 @@ import {availableParallelism,userInfo} from "node:os";
 import {dirname,isAbsolute,join,relative,resolve,sep} from "node:path";
 import {setTimeout as pause} from "node:timers/promises";
 import {activeCommand} from "../gate/active-command.ts";
-import {ENVIRONMENT_CONTEXT} from '../gate/canonical-environment.ts';
+import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {hostEnvironment,FIXED_AMBIENT,ownedCacheEnvironment} from '../gate/host-environment.ts';
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {GateResource} from "../gate/gate-resource.ts";
