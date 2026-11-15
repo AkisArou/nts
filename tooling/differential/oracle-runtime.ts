@@ -13,6 +13,7 @@ const EXECUTION_INPUTS=[
   new URL('./oracle-execution-policy.ts',import.meta.url),
   new URL('./oracle-batch.ts',import.meta.url),
   new URL('./command-entry/main.ts',import.meta.url),
+  new URL('./command-entry/instrument.ts',import.meta.url),
   new URL('./oracle-seal/main.ts',import.meta.url),
   new URL('./runtime-paths/main.ts',import.meta.url),
 ] as const;

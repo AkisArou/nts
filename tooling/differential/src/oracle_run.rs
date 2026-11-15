@@ -72,6 +72,10 @@ pub(super) const EXECUTION_FILES: &[(&str, &[u8])] = &[
         include_bytes!("../command-entry/main.ts"),
     ),
     (
+        "command-entry/instrument.ts",
+        include_bytes!("../command-entry/instrument.ts"),
+    ),
+    (
         "oracle-seal/main.ts",
         include_bytes!("../oracle-seal/main.ts"),
     ),
