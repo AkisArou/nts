@@ -49,6 +49,19 @@ mod tests {
                 .is_err()
         );
     }
+    #[test]
+    fn source_mapping_root_refuses_unsafe_directive_and_option_characters() {
+        let own = crate::scratch::StdScratchDir::in_std_target("native-probe-root-grammar");
+        for name in ["line\nbreak", "control\u{0001}byte", "prefix=map"] {
+            let path = own.join(name);
+            std::fs::create_dir(&path).expect("private root spelling");
+            let error = SourcePaths::new(&path)
+                .err()
+                .expect("root grammar refusal")
+                .to_string();
+            assert!(error.contains("source root cannot contain"), "{error}");
+        }
+    }
 }
 
 pub(super) struct SourcePaths {
@@ -58,8 +71,21 @@ pub(super) struct SourcePaths {
 
 impl SourcePaths {
     pub(super) fn new(root: &Path) -> Result<Self> {
+        let root = root.canonicalize()?;
+        let spelling = root
+            .to_str()
+            .context("bundled dependency source root is not UTF-8")?;
+        // JSON's quote/backslash escapes are C string escapes too. Control
+        // characters would instead introduce JSON-only universal escapes in
+        // #line. '=' cannot be represented in a prefix-map's old-path field.
+        if spelling.chars().any(char::is_control) || spelling.contains('=') {
+            bail!(
+                "bundled dependency source root cannot contain control characters or '=': {}",
+                root.display()
+            );
+        }
         Ok(Self {
-            root: root.canonicalize()?,
+            root,
             virtual_root: PathBuf::from(format!("/nts/node-deps/{SOURCE_BUNDLE}")),
         })
     }
