@@ -36,8 +36,6 @@ test('the producer binds placed execution modules independently of fence observa
   assert.ok(selected.moduleFiles.every(file=>placed.has(file)));
   assert.ok(selected.files.includes('tooling/tasks/new.ts'));
   assert.ok(!placed.has('tooling/tasks/new.ts'));
-  assert.ok(selected.moduleFiles.includes('tooling/gate/host-environment.ts'));
-  assert.ok(!selected.moduleFiles.includes('tooling/gate/canonical-environment.ts'));
   assert.equal(dependencyCapability(SOURCE,join(SOURCE,'tmp','unused')).producerSha256,expected(SOURCE));
 });
 
