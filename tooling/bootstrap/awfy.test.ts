@@ -29,6 +29,7 @@ test('fresh acquisition selects the pin rather than the upstream default and nev
   const shared=join(own,'shared'),destination=first.acquire(shared,env);
   first.verify(destination,env);assert.equal(readFileSync(join(destination,'docs/README.md'),'utf8'),'first\n');
   assert.equal(first.acquire(shared,env),destination);
+  assert.equal(corpus({...AWFY,pinSource:pathToFileURL(f.pinFile),upstream:join(own,'unreachable')}).acquire(shared,env),destination,'a verified pin never fetches again');
   writeFileSync(f.pinFile,second+'\n');const next=f.owner();
   assert.throws(()=>next.verify(destination,env),error=>error instanceof Error&&error.message.includes(destination)&&error.message.includes(f.pin)&&error.message.includes(second));
   const newer=next.acquire(shared,env);assert.notEqual(newer,destination);first.verify(destination,env);next.verify(newer,env);
@@ -55,5 +56,15 @@ test('the production linker keeps two candidate pins and the legacy checkout ind
 test('a repository without an acquired pin retains explicit corpus absence',t=>{
   const own=testScratch(t,'awfy-absence'),env=fixtureEnvironment(t),f=repository(own,env);
   assert.equal(f.owner().resolve(f.root,env),null);
+});
+test('a real link acquisition failure names its cause and retry without publishing a slot',t=>{
+  const own=testScratch(t,'awfy-fetch-failure'),env=fixtureEnvironment(t),f=repository(own,env),tree=join(own,'tree'),shared=join(own,'shared'),upstream=join(own,'missing-upstream');
+  mkdirSync(tree);copyModuleClosure(LINKER_INPUTS.map(url=>fileURLToPath(url)),tree);
+  const entry=join(tree,'tooling/bootstrap/awfy.ts'),source=readFileSync(entry,'utf8');assert.ok(source.includes(AWFY.upstream));
+  writeFileSync(entry,source.replace(AWFY.upstream,upstream));writeFileSync(join(tree,'tooling/bootstrap/awfy.pin'),f.pin+'\n');
+  const packet=join(own,'instrument.json'),result=spawnSync('sh',[join(tree,'tooling/inputs/link.sh'),'work',shared,tree],{cwd:tree,env:{...env,NTS_GATE_STEP:'awfy-acquisition',NTS_GATE_STEP_ATTEMPT:'failure',NTS_GATE_STEP_RESULT:packet},encoding:'utf8'});
+  assert.notEqual(result.status,0);assert.ok(result.stderr.includes(upstream),result.stderr);assert.match(result.stderr,/retry tree setup/);
+  assert.equal(JSON.parse(readFileSync(packet,'utf8')).kind,'tooling-setup');
+  assert.equal(existsSync(join(tree,'third_party/are-we-fast-yet')),false);assert.equal(existsSync(f.owner().checkout(shared)),false);
 });
 test('the AWFY data pin is one full revision',()=>assert.match(corpus(AWFY).pin,/^[a-f0-9]{40}$/));

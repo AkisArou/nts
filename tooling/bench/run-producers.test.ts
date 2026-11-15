@@ -73,7 +73,8 @@ test('missing AWFY input gives both references one unavailable reason and preser
   const present={...original,measured:original.measured.map(row=>({...row,results:[measurement,null,measurement,measurement,null,measurement],absences:{...row.absences,cpp:null,java:null}}))};
   const withOptionalField=fromNts(meta(),present);
   const withoutOptionalField=fromNts(meta(),{...present,measured:present.measured.map(({absences,...row})=>({...row,absences:{outcomes:absences.outcomes,cpp:null}}))});
-  assert.deepEqual(withOptionalField.rows[0]?.cells,withoutOptionalField.rows[0]?.cells);
+  assert.ok(withOptionalField.rows[0]);assert.ok(withoutOptionalField.rows[0]);
+  assert.deepEqual(withOptionalField.rows[0].cells,withoutOptionalField.rows[0].cells);
 });
 
 test('native build details survive both successful rows and failed builds',()=>{

@@ -12,7 +12,8 @@ export function corpus(definition:Corpus){
   if(!/^[a-f0-9]{40}$/.test(pin))throw failure(`invalid ${slot} corpus pin at ${definition.pinSource.href}`);
   const git=(cwd:string,args:string[],env:NodeJS.ProcessEnv):string=>{
     try{return execFileSync('git',gitArguments(args),{cwd,env,encoding:'utf8',maxBuffer:16*2**20,stdio:['ignore','pipe','pipe']}).trim();}
-    catch(error){throw failure(`${slot} corpus Git operation at ${cwd}: ${String(error)}`);}
+    catch(error){throw failure(`${slot} corpus Git operation at ${cwd}: ${String(error)}`+
+      (args[0]==='fetch'?`; check access to ${upstream} and retry tree setup for pin ${pin}`:''));}
   };
   const checkout=(shared:string)=>join(shared,'third_party',slot+'.d',pin);
   const verify=(destination:string,env:NodeJS.ProcessEnv):void=>{
