@@ -32,6 +32,12 @@ const subject=String.raw`
 #include <sys/wait.h>
 #include <unistd.h>
 static void *thread_exit(void *unused){(void)unused;syscall(SYS_exit,0);return NULL;}
+/* A main-local pointer can remain a conservative shutdown root. Retire this
+ * frame and clear its volatile slot before LeakSanitizer scans the caller. */
+__attribute__((noinline)) static int sanitizer_allocation(int release){
+  void *volatile p=malloc(91);if(!p)return 109;memset(p,1,91);
+  if(release)free(p);p=NULL;return 0;
+}
 int main(int argc,char **argv){
   if(argc<2)return 90;
   if(!strcmp(argv[1],"exec-args")){
@@ -108,8 +114,7 @@ int main(int argc,char **argv){
     int fd=open(argv[2],O_RDONLY);if(fd<0)_exit(108);close(fd);_exit(0);
   }
   if(!strcmp(argv[1],"leak")){
-    volatile void *p=malloc(91);if(!p)return 109;memset((void *)p,1,91);
-    if(argc>2)free((void *)p);return 0;
+    return sanitizer_allocation(argc>2);
   }
   if(!strcmp(argv[1],"cancel-exit")){
     pthread_t worker;if(pthread_create(&worker,NULL,thread_exit,NULL))return 116;
