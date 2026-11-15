@@ -98,7 +98,7 @@ import {WIDE} from "../gate/owed.mjs";
 import {mergeTest262Record,parseTest262Row} from "../census/test262-record.ts";
 import {ARMS,COMPILE_ARMS,calibrationEntries,tableLines,withCalibrationEntries,withTableLines,type CompileArm} from "../gate/compile-counter.ts";
 import {appliedLine,DELTA_FILE,MalformedDelta,parseDelta,serializeDelta,type ApplyCounts,type Delta,type DeltaRow} from "./delta.ts";
-import {inventory,listedIn,pendingLine} from "./pending.ts";
+import {listedIn,pendingLine} from "./pending.ts";
 import {RUST_SELECTOR_CASE,rustSelectorSourceKey} from '../gate/rust-selector-write.ts';
 import {RUST_SELECTOR_RECORD,parseRustSelectorRecord,MAX_RUST_SELECTOR_RECORD_BYTES} from '../gate/rust-selector-record.ts';
 

@@ -106,10 +106,10 @@ test('the real full-check recordPending candidate route seals and removes finish
   // actual record writing. Stage first, then mutate and commit this private tree.
   const entry=join(root,'tooling/records/record-pending.ts'),boundary='await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});';
   const source=readFileSync(entry,'utf8');assert.equal(source.split(boundary).length,2);
-  writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\n"+source.replace(boundary,boundary+`
+  writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\nimport {durableRecord} from '../gate/durable-record.ts';\n"+source.replace(boundary,boundary+`
       assertSealedOracleRun(process.env);
       const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
-      writeFileSync(${JSON.stringify(observed)},JSON.stringify({sealed:Boolean(capability.seal),canonical:context.report.canonical,tmp:process.env.TMPDIR,registered:context.temporary.path,argv:process.argv.slice(2)})+'\\n');
+      durableRecord(${JSON.stringify(observed)},{sealed:Boolean(capability.seal),canonical:context.report.canonical,tmp:process.env.TMPDIR,registered:context.temporary.path,argv:process.argv.slice(2)});
       process.exitCode=${status};
       return;
   `));

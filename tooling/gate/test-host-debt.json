@@ -54,7 +54,7 @@
     "environment": 1,
     "clock": 2
   },
-  "tooling/census/suites/typescript.ts": {
+  "tooling/census/suites/typescript-oracle.ts": {
     "environment": 1
   },
   "tooling/census/typescript-oracles.ts": {
