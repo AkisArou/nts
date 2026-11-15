@@ -210,9 +210,11 @@ test('child loader receipts bind exec environments and reuse content-keyed ELF a
   const first=join(root,'lib-a'),second=join(root,'lib-b');mkdirSync(first);mkdirSync(second);
   const repository=join(root,'source');mkdirSync(repository);
   writeFileSync(input,`#include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-int main(int argc,char **argv){(void)argc;for(int i=0;i<3;i++){pid_t p=fork();if(p<0)return 1;if(!p){if(setenv("LD_LIBRARY_PATH",argv[i==1?2:1],1))_exit(2);execl(argv[3],argv[3],"child",(char *)0);_exit(3);}int status;if(waitpid(p,&status,0)!=p||!WIFEXITED(status)||WEXITSTATUS(status))return 4;}return 0;}\n`);
+int main(int argc,char **argv){(void)argc;char large[8193];memset(large,'x',sizeof(large)-1);large[sizeof(large)-1]=0;if(setenv("NTS_LONG_CAPTURE_CONTROL",large,1))return 5;
+for(int i=0;i<3;i++){pid_t p=fork();if(p<0)return 1;if(!p){if(setenv("LD_LIBRARY_PATH",argv[i==1?2:1],1))_exit(2);execl(argv[3],argv[3],"child",(char *)0);_exit(3);}int status;if(waitpid(p,&status,0)!=p||!WIFEXITED(status)||WEXITSTATUS(status))return 4;}return 0;}\n`);
   const built=spawnTest('cc',['-O1',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
   const raw=join(root,'raw.gz'),index=join(root,'index.gz'),target=realpathSync('/usr/bin/printf');
   const session=observerImageSession(prepared,observer.receipt,join(root,'reader.log'),env);

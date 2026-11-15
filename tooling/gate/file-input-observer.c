@@ -276,17 +276,17 @@ static Bytes read_file(const char *path, unsigned char *data, size_t limit) {
   close(fd);
   return b;
 }
-static Bytes remote_path(pid_t tid, uint64_t address,
-                         unsigned char data[PATH_BYTES]) {
+static Bytes remote_string(pid_t tid, uint64_t address, unsigned char *data,
+                           size_t limit) {
   Bytes b = {.data = data};
   if (!address) {
     b.null = true;
     return b;
   }
-  while (b.size < PATH_BYTES) {
+  while (b.size < limit) {
     size_t chunk = 256;
-    if (chunk > PATH_BYTES - b.size)
-      chunk = PATH_BYTES - b.size;
+    if (chunk > limit - b.size)
+      chunk = limit - b.size;
     struct iovec local = {.iov_base = b.data + b.size, .iov_len = chunk};
     struct iovec remote = {.iov_base = (void *)(uintptr_t)(address + b.size),
                            .iov_len = chunk};
@@ -308,9 +308,13 @@ static Bytes remote_path(pid_t tid, uint64_t address,
     }
     b.size += (size_t)n;
   }
-  if (b.size == PATH_BYTES)
+  if (b.size == limit)
     b.truncated = true;
   return b;
+}
+static Bytes remote_path(pid_t tid, uint64_t address,
+                         unsigned char data[PATH_BYTES]) {
+  return remote_string(tid, address, data, PATH_BYTES);
 }
 static bool good(const Bytes *b) { return !b->error && !b->truncated; }
 /* Read the stopped exec request, never a later /proc cmdline. Missing vectors
@@ -342,8 +346,8 @@ static Bytes remote_argv(pid_t tid, uint64_t address,
     }
     if (!pointer)
       return result;
-    unsigned char argument[PATH_BYTES];
-    Bytes value = remote_path(tid, pointer, argument);
+    Bytes value = remote_string(tid, pointer, data + result.size,
+                                ARGV_BYTES - result.size);
     if (!good(&value) || value.null) {
       result.error = value.error;
       result.truncated = value.truncated;
@@ -354,7 +358,6 @@ static Bytes remote_argv(pid_t tid, uint64_t address,
       result.truncated = true;
       return result;
     }
-    memcpy(data + result.size, value.data, value.size);
     result.size += value.size;
     data[result.size++] = 0;
   }
