@@ -1,4 +1,3 @@
-import {cargoOutput} from './cargo.ts';
 import {ToolingInstrumentError} from './step-result.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {cargoRustRuntimeTargets} from "./rust-runtime-declarations.ts";

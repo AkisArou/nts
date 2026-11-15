@@ -1,6 +1,8 @@
 // One Node-only Cargo inventory feeds crate reach and portable test identities.
 import {dirname,relative,resolve,sep} from 'node:path';
-import {infrastructureProbe} from './infrastructure-probe.ts';
+import type {execFileSync} from 'node:child_process';
+import {cargoOutput,withCargoConfigurationSync} from './cargo.ts';
+import {ToolingInstrumentError} from './step-result.ts';
 import {cargoRustRuntimeTargets,cargoRustTargetInventory,type RustInputTarget} from './rust-runtime-declarations.ts';
 import {selectorTrackedFiles} from './rust-selector-inputs.ts';
 import {selectorFile,selectorHash} from './rust-selector-material.ts';
@@ -10,7 +12,7 @@ import {cargoInputNames} from './cargo-input-population.ts';
 type CargoPackage={id:string;name:string;manifest_path:string;targets:unknown[];dependencies:{name:string;kind?:string|null;path?:string;rename?:string|null;target?:string|null}[]};
 type CargoNode={id:string;deps:{name:string;pkg:string;dep_kinds:{kind:'dev'|'build'|null;target:string|null}[]}[]};
 type CargoMetadata={version:number;workspace_members:string[];packages:CargoPackage[];resolve:{nodes:CargoNode[]}};
-type Execute=(command:string,args:string[],options:{cwd:string;encoding:'utf8';stdio:['ignore','pipe','pipe'];maxBuffer:number})=>string|Buffer;
+type Execute=(command:string,args:string[],options:{cwd:string;encoding:'utf8';stdio:['ignore','pipe','pipe'];maxBuffer:number;env?:NodeJS.ProcessEnv})=>string|Buffer;
 type CargoInputs=ReturnType<typeof selectorFile>[];
 const inventories=new Map<string,{metadata:CargoMetadata;inputs:CargoInputs}>();
 export function cargoInputPaths(root:string):string[]{return cargoInputNames(selectorTrackedFiles(root));}
@@ -20,13 +22,16 @@ function inputKeys(root:string):CargoInputs{
 function unchanged(root:string,before:CargoInputs,after:CargoInputs):void{
   if(selectorHash(before)!==selectorHash(after))throw Error('Cargo inventory inputs changed since acquisition: '+root+'; fresh selector process required');
 }
-export function cargoMetadata(root:string,execute?:Execute):CargoMetadata{
+export function cargoMetadata(root:string,execute?:Execute,env:NodeJS.ProcessEnv=process.env):CargoMetadata{
   root=resolve(root);const before=execute?undefined:inventories.get(root),inputs=execute?[]:inputKeys(root);
-  if(before){unchanged(root,before.inputs,inputs);return structuredClone(before.metadata);}
+  if(before)return withCargoConfigurationSync([root,...(env.NTS_TEST_SCRATCH_ROOT?[env.NTS_TEST_SCRATCH_ROOT]:[])],env,()=>{
+    unchanged(root,before.inputs,inputs);return structuredClone(before.metadata);
+  });
   const args=['metadata','--format-version','1','--offline'];
   try{
-  const body=execute?execute('cargo',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1<<28}):
-    infrastructureProbe({purpose:'selector Cargo inventory',command:'cargo',args,cwd:root,maxBuffer:1<<28}).stdout;
+  // The supplied-effects seam has the one encoding used here; the invocation
+  // owner retains Node's full execFileSync overloads for its other callers.
+  const body=cargoOutput(args,{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1<<28},execute as typeof execFileSync|undefined);
   const value=JSON.parse(String(body)) as CargoMetadata;
   if(!value||!Array.isArray(value.packages)||value.packages.some(row=>!row||typeof row.name!=='string'||typeof row.manifest_path!=='string'||!Array.isArray(row.targets)||!Array.isArray(row.dependencies)
     ||row.dependencies.some(dependency=>!dependency||typeof dependency.name!=='string'||dependency.path!==undefined&&typeof dependency.path!=='string'||dependency.kind!==undefined&&dependency.kind!==null&&typeof dependency.kind!=='string')))
@@ -55,6 +60,7 @@ export function cargoMetadata(root:string,execute?:Execute):CargoMetadata{
   for(const id of packageIds)if(!nodes.has(id))throw Error('Cargo input inventory omitted a resolved package: '+id);
   if(!execute){unchanged(root,inputs,inputKeys(root));inventories.set(root,{metadata:structuredClone(value),inputs});}return value;
   }catch(error){
+    if(error instanceof ToolingInstrumentError)throw error;
     const stderr=error&&typeof error==='object'&&'stderr' in error?String(error.stderr).trim():'';
     throw Error('cargo '+args.join(' ')+' in '+root+' failed: '+String(error)+(stderr?'\nstderr: '+stderr:''),{cause:error});
   }
