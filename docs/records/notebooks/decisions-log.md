@@ -3155,3 +3155,12 @@ Deterministic archive metadata and member order preserve full-byte identity.
 Shipped assertions name the virtual source path. Old native cache generations
 remain untouched; eviction is a separate deletion policy requiring the user's
 decision.
+
+## Gate memory adjustment retains pending demand (11-16)
+
+A running step's pending want remains part of the reservation target until
+sampling feeds it into the step's grant. Shrink must retain that same demand
+that growth requests. Otherwise a granted growth can be immediately given back
+and requested again. Growth completion schedules one re-evaluation on the next
+event-loop turn, allowing sampling and child completion to interleave. This
+changes no capacity, bound or verdict policy. See #800.

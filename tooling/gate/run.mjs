@@ -1116,11 +1116,13 @@ async function reserveMemory() {
 function adjustMemory() {
   if (stopping || summaryWritten || !reservation) return;
   const u = used(), yielding = outranked();
-  // Keep the next step's known need until its growth ticket is published.
+  const wanted = [...running.values()].reduce((sum, r) => sum + (r.draining ? 0 : r.want), 0);
+  // Keep pending step wants until sampling feeds them into grants, and the
+  // next step's known need until its growth ticket is published.
   // Releasing first lets a later neighbour decide inside the handoff gap,
   // before the ledger can give this admitted run's growth its existing place.
   const back = yielding ? reserved() - Math.max(1, u.bytes)
-    : Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK;
+    : Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + Math.max(2 * BLOCK, wanted))) / BLOCK) * BLOCK;
   if (back > 0) {
     memoryRecord.shrinks++;
     reservation.shrink(back).catch(error => process.stderr.write(`run.mjs: the memory ledger kept the ${gib(back)} the run gave back: ${error.message}\n`));
@@ -1132,7 +1134,6 @@ function adjustMemory() {
   if (need > capacity - reserved()) need = 0;
   // What running steps want beyond their grants: as much as the machine
   // could give.
-  const wanted = [...running.values()].reduce((sum, r) => sum + (r.draining ? 0 : r.want), 0);
   if (wanted) need = Math.max(need, Math.min(u.bytes + withholdBytes + wanted - reserved(), capacity - reserved()));
   const bytes = Math.min(Math.ceil(need / BLOCK) * BLOCK, capacity - reserved());
   // A growth that waits stays queued while the run yields: the request that
@@ -1157,7 +1158,9 @@ function adjustMemory() {
   }).finally(() => {
     memoryRecord.waited_s += (Date.now() - asked) / 1000;
     growth = null;
-    schedule();
+    // A grant can settle immediately. Let sampling, feeding and child exits
+    // run before the next adjustment instead of chaining fulfilled promises.
+    setImmediate(schedule);
   });
 }
 

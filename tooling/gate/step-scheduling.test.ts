@@ -294,7 +294,7 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
       }
       if(handoffBarrier){
         const entry='function adjustMemory() {',shrink='reservation.shrink(back).catch',growth='  let need = Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());';
-        const protectedBack='Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK';
+        const protectedBack='Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + Math.max(2 * BLOCK, wanted))) / BLOCK) * BLOCK';
         assert.ok(source.includes(entry)&&source.includes(shrink)&&source.includes(growth)&&source.includes(protectedBack),'handoff control follows the real retention and growth');
         // The before arm mutates this private closure copy, never the tree's
         // runner. Commit the fix before running the retained negative control.

@@ -1137,6 +1137,12 @@ the first node task.
 
 ## Decisions
 
+- **Gate memory adjustment retains pending demand.** Shrink and growth use
+  the same demand from current grants, withheld memory and running steps'
+  pending wants. A completed growth re-enters scheduling on the next event-loop
+  turn, so sampling, feeding, time bounds and child completion keep running
+  ([log](records/notebooks/decisions-log.md#gate-memory-adjustment-retains-pending-demand-11-16)).
+
 - **Rust publication belongs to one owner.** `nts-publication` stages files,
   links and immutable directories in an exclusively acquired sibling claim
   named by process ID and a process-wide serial. Collisions are retried without
