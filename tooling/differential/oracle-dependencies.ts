@@ -172,7 +172,7 @@ export async function sealDependencyCapability(capability:DependencyCapability,e
         // binding changes after ordinary input validation.
         const ledger=join(unsealed.admission.kind==='gate'?unsealed.admission.temporary.parent:unsealed.directory,'oracle-dependency-calls.jsonl');
         mkdirSync(dirname(ledger),{recursive:true});
-        const result={...unsealed,directory:parent.directory,seal:{...parent.seal}};delete result.parentImage;
+        const result={...unsealed,directory:parent.directory,seal:{...parent.seal,source:unsealed.source,sourceRevision:unsealed.sourceRevision}};delete result.parentImage;
         appendFileSync(ledger,JSON.stringify({version:1,step:result.ownerStep,nodeVersion:process.versions.node,directory:dirname(ready),mode:'hit',rebound:true,source:result.source,wallMs:performance.now()-began,pnpmSelectionCommands:0})+'\n');
         // Parent sealing already validated and protected the complete tree.
         // Do not chmod its records again: even an unchanged mode changes ctime
@@ -189,7 +189,7 @@ export async function sealDependencyCapability(capability:DependencyCapability,e
   if(JSON.stringify(actual)!==JSON.stringify(image.entries)||hash(JSON.stringify(actual))!==image.treeSha256||
      JSON.stringify(dependencyPackageInventory(actual))!==JSON.stringify(semantic.packages)||JSON.stringify(packageMetadata)!==JSON.stringify(semantic.packageMetadata))throw new ToolingInstrumentError('tooling-setup','oracle dependency image changed before sealing: '+ready);
   chmodSync(join(directory,'semantic.json'),0o444);chmodSync(ready,0o444);
-  const seal:DependencyRunSeal={version:1,nodeVersion:process.versions.node,record:ready,readySha256:hash(readFileSync(ready)),semanticSha256:hash(semanticBytes),identity:dependencySealIdentity(ready)};
+  const seal:DependencyRunSeal={version:2,source:capability.source,sourceRevision:capability.sourceRevision,nodeVersion:process.versions.node,record:ready,readySha256:hash(readFileSync(ready)),semanticSha256:hash(semanticBytes),identity:dependencySealIdentity(ready)};
   const result={...capability,seal};delete result.parentImage;
   return result;
 }

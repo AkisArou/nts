@@ -683,7 +683,9 @@ For another source, preparation treats the parent's image as a candidate inside
 the owned handoff. Matching producer, lockfile and validated installation inputs
 reuse that existing immutable image under a handoff bound to the new source;
 otherwise preparation builds an image as usual. Reuse neither rewrites the
-parent's records nor changes its image or resolution-helper lifetime. Commands that
+parent's records nor changes its image or resolution-helper lifetime. Seal
+version 2 binds source and revision as well as image identity; both TypeScript
+and Rust readers refuse an older shape by name. Commands that
 read ambient environment values re-enter once with the complete sealed
 environment; callbacks can instead receive it explicitly. The command lifetime
 drains children and newly acquired resolution services before releasing its
@@ -1984,6 +1986,7 @@ the first node task.
   A different source can reuse the parent's image only after producer,
   lockfile and complete installation-input validation; its own canonical
   handoff supplies the source binding. Mismatching inputs prepare normally.
+  Versioned seals bind that source and revision in both runtime consumers.
   No cross-run store or fixture-only rebinding API participates.
   Internal commands accept only a sealed-parent handoff. The source audit
   inventories entries and shell Node programs; report-only imports stay in

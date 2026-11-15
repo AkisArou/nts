@@ -6,7 +6,7 @@ import {dirname,isAbsolute,join} from 'node:path';
 export const ENVIRONMENT_CONTEXT='NTS_GATE_ENV_CONTEXT';
 /** A canonical parent pins this read-only record after complete validation. */
 export type DependencySealIdentity={dev:string;ino:string;uid:string;mode:string;nlink:string;size:string;mtimeNs:string;ctimeNs:string};
-export type DependencyRunSeal={version:1;nodeVersion:string;record:string;readySha256:string;semanticSha256:string;identity:DependencySealIdentity};
+export type DependencyRunSeal={version:2;source:string;sourceRevision:string;nodeVersion:string;record:string;readySha256:string;semanticSha256:string;identity:DependencySealIdentity};
 export const DEPENDENCY_SEAL_FIELDS=['dev','ino','uid','mode','nlink','size','mtimeNs','ctimeNs'] as const;
 export function dependencySealIdentity(file:string):DependencySealIdentity{
   const info=lstatSync(file,{bigint:true});
@@ -29,11 +29,14 @@ export function ownsDependencyRun(cap:{seal?:DependencyRunSeal},env:NodeJS.Proce
 }
 /** Image validation is shared by a run seal and its owned preparation candidate.
  * This checks immutable image identity; canonical ownership is its caller's fence. */
-export function dependencyImageReady(cap:{version:number;directory:string;seal?:DependencyRunSeal},nodeVersion=process.versions.node):string{
+export function dependencyImageReady(cap:{version:number;source:string;sourceRevision:string;directory:string;seal?:DependencyRunSeal},nodeVersion=process.versions.node):string{
   const seal=cap.seal,record=join(cap.directory,'node-'+nodeVersion,'ready.json');
   if(!seal)throw dependencySealError(record);
+  if(seal.version!==2){const error=dependencySealError(record);error.message='unsupported oracle dependency seal version '+String(seal.version)+'; expected 2: '+record;throw error;}
   const identity=seal.identity;
-  if(cap.version!==1||seal.version!==1||seal.record!==record||seal.nodeVersion!==nodeVersion||!isAbsolute(cap.directory)||
+  if(cap.version!==1||typeof seal.source!=='string'||!isAbsolute(seal.source)||seal.source!==cap.source||
+     typeof seal.sourceRevision!=='string'||!/^[0-9a-f]{40}$/.test(seal.sourceRevision)||seal.sourceRevision!==cap.sourceRevision||
+     seal.record!==record||seal.nodeVersion!==nodeVersion||!isAbsolute(cap.directory)||
      !/^26\.\d+\.\d+$/.test(nodeVersion)||!identity||Object.keys(identity).sort().join(',')!==[...DEPENDENCY_SEAL_FIELDS].sort().join(',')||
      DEPENDENCY_SEAL_FIELDS.some(key=>typeof identity[key]!=='string'||!/^\d+$/.test(identity[key]))||
      !/^[0-9a-f]{64}$/.test(seal.readySha256)||!/^[0-9a-f]{64}$/.test(seal.semanticSha256))throw dependencySealError(record);
@@ -42,7 +45,7 @@ export function dependencyImageReady(cap:{version:number;directory:string;seal?:
   return record;
 }
 /** One lstat and compare; no source, package, Git or helper-process work. */
-export function dependencySealReady(cap:{version:number;directory:string;ownerStep?:string|null;admission?:{kind:string;temporary?:{parent:string}};seal?:DependencyRunSeal},env:NodeJS.ProcessEnv=process.env,nodeVersion=process.versions.node):string|null{
+export function dependencySealReady(cap:{version:number;source:string;sourceRevision:string;directory:string;ownerStep?:string|null;admission?:{kind:string;temporary?:{parent:string}};seal?:DependencyRunSeal},env:NodeJS.ProcessEnv=process.env,nodeVersion=process.versions.node):string|null{
   if(!ownsDependencyRun(cap,env))return null;
   const began=performance.now(),record=dependencyImageReady(cap,nodeVersion);
   // Telemetry never changes product authority and never fsyncs a hit.

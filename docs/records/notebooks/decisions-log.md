@@ -3377,7 +3377,10 @@ through the ordinary preparer's producer, lockfile and installation-input
 validation before reusing the parent's immutable image with its own canonical
 source binding. Mismatches prepare normally. This adds neither a cross-run
 store nor a fixture rebinding API, and leaves the live parent's record identity
-and helper lifetime untouched. Children, newly started resolution services
+and helper lifetime untouched. Seal version 2 explicitly binds source and
+revision; the shared TypeScript predicate and native consumer refuse old seals
+and mismatching source packets, including packets whose canonical fields were
+all updated together. Children, newly started resolution services
 and admission drain in ownership order. Internal workers require their parent
 seal. The entry audit and shared shell observer cover imports, command entries,
 prefixed Node commands and inline programs. Report/identity readers use pure

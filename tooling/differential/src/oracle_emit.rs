@@ -470,6 +470,12 @@ fn sealed_dependency_ready(
     {
         return Err(changed());
     }
+    if seal["version"] != 2 {
+        bail!(
+            "unsupported oracle dependency seal version {}; expected 2: {record}",
+            seal["version"]
+        );
+    }
     let directory = Utf8Path::new(capability["directory"].as_str().ok_or_else(changed)?);
     let node = seal["nodeVersion"].as_str().ok_or_else(changed)?;
     let major = node.split('.').next();
@@ -485,7 +491,17 @@ fn sealed_dependency_ready(
         })
     };
     if capability["version"] != 1
-        || seal["version"] != 1
+        || seal["source"] != capability["source"]
+        || seal["sourceRevision"] != capability["sourceRevision"]
+        || !seal["source"]
+            .as_str()
+            .is_some_and(|source| Utf8Path::new(source).is_absolute())
+        || !seal["sourceRevision"].as_str().is_some_and(|revision| {
+            revision.len() == 40
+                && revision
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
         || !directory.is_absolute()
         || !matches!(major, Some("24" | "26"))
         || record != expected.as_str()
@@ -1522,7 +1538,7 @@ mod tests {
             .zip(values)
             .map(|(key, value)| ((*key).into(), value.into()))
             .collect();
-        let cap = serde_json::json!({"version":1,"directory":scratch.path,"seal":{"version":1,"nodeVersion":"26.13.0","record":ready,"readySha256":"a".repeat(64),"semanticSha256":"b".repeat(64),"identity":identity}});
+        let cap = serde_json::json!({"version":1,"source":scratch.path,"sourceRevision":"c".repeat(40),"directory":scratch.path,"seal":{"version":2,"source":scratch.path,"sourceRevision":"c".repeat(40),"nodeVersion":"26.13.0","record":ready,"readySha256":"a".repeat(64),"semanticSha256":"b".repeat(64),"identity":identity}});
         let context = |raw: &str| {
             serde_json::json!({"report":{"version":1,"host":{"NTS_ORACLE_DEPENDENCIES":raw}},"owned":{"NTS_ORACLE_DEPENDENCIES":raw}}).to_string()
         };
@@ -1541,6 +1557,27 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("oracle dependency seal changed")
+        );
+        for (field, value) in [
+            ("source", serde_json::json!(scratch.path.join("third-tree"))),
+            ("sourceRevision", serde_json::json!("d".repeat(40))),
+        ] {
+            let mut changed = cap.clone();
+            changed[field] = value;
+            let raw = changed.to_string();
+            assert!(
+                sealed_dependency_ready(&changed, &raw, Some(&context(&raw))).is_err(),
+                "{field}"
+            );
+        }
+        let mut legacy = cap.clone();
+        legacy["seal"]["version"] = serde_json::json!(1);
+        let legacy_raw = legacy.to_string();
+        assert!(
+            sealed_dependency_ready(&legacy, &legacy_raw, Some(&context(&legacy_raw)))
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported oracle dependency seal version 1; expected 2")
         );
         for key in SEAL_FIELDS {
             for value in [

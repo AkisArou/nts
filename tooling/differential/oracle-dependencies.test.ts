@@ -2,7 +2,7 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import * as dependencyOwner from './oracle-dependencies.ts';
-import {dependencySealIdentity} from './oracle-seal/main.ts';
+import {assertSealedOracleRun,dependencySealIdentity,dependencySealReady} from './oracle-seal/main.ts';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -339,6 +339,16 @@ test('ordinary preparation reuses its parent image only for identical source inp
       const forged={...candidate,parentImage:{...parent,seal:{...parent.seal,semanticSha256:'0'.repeat(64)}}};
       await assert.rejects(dependencyOwner.sealDependencyCapability(forged,canonicalFixture(forged)),/parent oracle image seal changed/);
       const handed=canonicalFixture(prepared);
+      assert.equal(prepared.seal.version,2);assert.equal(prepared.seal.source,source);assert.equal(prepared.seal.sourceRevision,prepared.sourceRevision);
+      assert.doesNotThrow(()=>assertSealedOracleRun(handed));
+      const third={...prepared,source:join(f.parent,'third-tree')};
+      const thirdEnvironment=canonicalFixture(third);
+      assert.throws(()=>assertSealedOracleRun(thirdEnvironment),/oracle dependency seal changed/,'even a fully updated owned packet cannot change the seal source');
+      await assert.rejects(dependencyOwner.sealDependencyCapability(third,thirdEnvironment),/oracle dependency seal changed/);
+      const changedRevision={...prepared,sourceRevision:'f'.repeat(40)};
+      assert.throws(()=>dependencySealReady(changedRevision,canonicalFixture(changedRevision)),/oracle dependency seal changed/);
+      const old={...prepared,seal:{...prepared.seal,version:1}};
+      assert.throws(()=>assertSealedOracleRun(canonicalFixture(old)),/unsupported oracle dependency seal version 1; expected 2/);
       assert.equal(await dependencyOwner.captureDependencies(prepared,undefined,handed),parent.seal.record);
     }
   }
