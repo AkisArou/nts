@@ -129,7 +129,7 @@ const first = spawnSync(fileObserver?.executable??process.execPath, cargoTrace?(
 });
 /** @type {unknown} */
 let cargoImageFailure;
-try{await cargoImageSession?.finish();}catch(error){cargoImageFailure=error;}
+try{await cargoImageSession?.finish();}catch(error){if(isCommandExit(error))throw error;cargoImageFailure=error;}
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 /** @type {ToolingInstrumentError|undefined} */
 let cargoTraceFailure=cargoImageFailure?traceFailure(cargoImageFailure):undefined;
