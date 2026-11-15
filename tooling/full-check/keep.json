@@ -10,6 +10,7 @@
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "790": { "kind": "kept", "why": "#790 private config-build controls and raw proof referenced by its Markdown record" },
     "789": { "kind": "kept", "why": "#789 authenticated census timelines, attribution and raw proof cited by its Markdown record" },
     "786": { "kind": "kept", "why": "#786 record-size policy controls and raw proof referenced by its Markdown evidence record" },
     "unit-names": { "kind": "kept", "why": "#686 task creation receipt and parent-slice probe retained with the compact unit-name investigation" },
@@ -89,6 +90,7 @@
   "nts-compile-calibration": { "kind": "scratch", "writer": "tooling/gate/compile-counter-calibrate.ts" },
   "nts-compile-counters": { "kind": "scratch", "writer": "tooling/gate/compile-time.mjs" },
   "nts-compiled-axis": { "kind": "scratch", "writer": "tooling/conformance/compiled-axis-floor.mjs" },
+  "nts-config-audit": { "kind": "scratch", "writer": "tooling/config/workspace-project.ts" },
   "nts-conformance": { "kind": "scratch", "writer": "tooling/conformance/node-environment.ts" },
   "nts-emitted-diff": { "kind": "scratch", "writer": "tooling/conformance/emitted-diff.ts" },
   "nts-erased-calls": { "kind": "scratch", "writer": "tooling/census/erased-calls.ts" },

@@ -19,6 +19,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { register } from "node:module";
+import { withWorkspaceProject } from "./workspace-project.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
@@ -403,13 +404,15 @@ if (process.env.NTS_AUDIT_NO_TSC || !existsSync(tsc)) {
   note("the fixture's program was not built", [process.env.NTS_AUDIT_NO_TSC ? "NTS_AUDIT_NO_TSC is set" : "no tsc"]);
 } else {
   let out = "";
-  try {
-    execFileSync(tsc, ["-b", relative(join(repo,"tests/workspace"),fileURLToPath(workspaceProject.url)), "--force"], {
-      cwd: join(repo, "tests/workspace"), encoding: "utf8", stdio: "pipe",
-    });
-  } catch (e) {
-    out = (e.stdout ?? "") + (e.stderr ?? "");
-  }
+  await withWorkspaceProject(workspaceProject,repo,({project})=>{
+    try {
+      execFileSync(tsc, ["-b", relative(dirname(project),project), "--force"], {
+        cwd: dirname(project), encoding: "utf8", stdio: "pipe",
+      });
+    } catch (e) {
+      out = (e.stdout ?? "") + (e.stderr ?? "");
+    }
+  });
   const errors = out.split("\n").filter((l) => /error TS/.test(l));
   // `c:digest`, `java:com.example.notifications` and their kin are the binding
   // modules the compiler generates from `native: [...]`. They cannot resolve
