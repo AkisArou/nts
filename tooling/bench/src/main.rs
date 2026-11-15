@@ -2425,6 +2425,7 @@ fn prepare_snapshot(
 /// without LTO clang inlines one into the other; the nts workload is necessarily
 /// in a separate unit and could not be. That gap would show up as a codegen
 /// defect that does not exist.
+#[derive(Clone, Copy)]
 struct NativeBuild<'a> {
     cpp: &'a [Utf8PathBuf],
     c: &'a [Utf8PathBuf],
