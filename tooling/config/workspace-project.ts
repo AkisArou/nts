@@ -5,12 +5,15 @@ import {homedir} from 'node:os';
 import {isAbsolute,join,relative,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
-import type {ProjectConfig} from '../gate/reader-inputs/main.ts';
+import type {ModuleMembers,ProjectConfig} from '../gate/reader-inputs/main.ts';
 
 type WorkspaceProject={root:string;project:string};
 
 /** Keep the private tree alive through the consumer, including an async one. */
-export async function withWorkspaceProject<T>(project:ProjectConfig,sourceRoot:string,operation:(workspace:WorkspaceProject)=>T|Promise<T>):Promise<T>{
+export async function withWorkspaceProject<T>(project:ProjectConfig,namespace:ModuleMembers,sourceRoot:string,operation:(workspace:WorkspaceProject)=>T|Promise<T>):Promise<T>{
+  const request=relative(fileURLToPath(namespace.url),fileURLToPath(project.url));
+  if(namespace.data!==true||!request||request==='..'||request.startsWith('../')||isAbsolute(request))
+    throw new Error('config project requires its declared workspace data namespace');
   const cache=join(homedir(),'.cache'),requested=process.env.TMPDIR?resolve(process.env.TMPDIR):undefined;
   const within=requested===undefined?undefined:relative(cache,requested);
   const parent=requested&&within&&!isAbsolute(within)&&within!=='..'&&!within.startsWith('../')
@@ -20,7 +23,10 @@ export async function withWorkspaceProject<T>(project:ProjectConfig,sourceRoot:s
   let result:T|undefined,failed=false,primary:unknown;
   try{
     const source=realpathSync(sourceRoot);
-    copyModuleClosure([project],root,{sourceRoot:source});
+    // The compiler will observe its new private namespace. Copy the audit's
+    // declared current tracked bytes, including working edits, rather than
+    // replaying source-Program directory answers into a different filesystem.
+    copyModuleClosure([namespace],root,{sourceRoot:source});
     result=await operation({root,project:join(root,relative(source,fileURLToPath(project.url)))});
   }catch(error){failed=true;primary=error;}
   try{rmSync(temporary,{recursive:true,force:true});}

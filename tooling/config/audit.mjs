@@ -25,6 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
 const pkgIndex = fileURLToPath(new URL("./src/index.ts",import.meta.url));
 const workspaceProject=projectConfig(new URL("../../tests/workspace/tsconfig.solution.json",import.meta.url));
+const workspaceMembers=moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts',{data:true});
 
 // Resolve `@nts/config` the way tsconfig.configs.json's `paths` does, so the
 // configs are evaluated against the same package tsc checks them against.
@@ -63,7 +64,7 @@ const walk = (dir, member, out = []) => {
 const configPaths = [moduleMembers(new URL("../../tests/programs/",import.meta.url),'nts.config.ts',{data:true}),
   moduleMembers(new URL("../../tests/interop/",import.meta.url),'nts.config.ts',{data:true}),
   moduleMembers(new URL("../../tests/gjs/",import.meta.url),'nts.config.ts',{data:true}),
-  moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts',{data:true})]
+  workspaceMembers]
   .flatMap((input) => walk(fileURLToPath(input.url),input.member))
   .sort();
 
@@ -404,7 +405,7 @@ if (process.env.NTS_AUDIT_NO_TSC || !existsSync(tsc)) {
   note("the fixture's program was not built", [process.env.NTS_AUDIT_NO_TSC ? "NTS_AUDIT_NO_TSC is set" : "no tsc"]);
 } else {
   let out = "";
-  await withWorkspaceProject(workspaceProject,repo,({project})=>{
+  await withWorkspaceProject(workspaceProject,workspaceMembers,repo,({project})=>{
     try {
       execFileSync(tsc, ["-b", relative(dirname(project),project), "--force"], {
         cwd: dirname(project), encoding: "utf8", stdio: "pipe",
