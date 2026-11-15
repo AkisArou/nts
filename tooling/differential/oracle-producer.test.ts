@@ -7,33 +7,37 @@ import {existsSync,mkdirSync,readFileSync,renameSync,writeFileSync} from 'node:f
 import {basename,dirname,join,normalize,relative} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test,type TestContext} from 'node:test';
-import {copyModuleClosure,moduleClosure} from '../gate/module-closure-fixture.ts';
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {dependencyCapability} from './oracle-dependencies.ts';
 import {createRequire} from 'node:module';
 import {runInNewContext} from 'node:vm';
 import {SourceFacts} from '../gate/source-facts.ts';
+import {moduleGraph} from '../gate/module-closure.ts';
 
 const ENTRY='tooling/differential/oracle-dependencies.ts';
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
-const expected=(source:string)=>hash(JSON.stringify(moduleClosure([ENTRY],{sourceRoot:source}).map(file=>[file,hash(readFileSync(join(source,file)))])));
+const recipe=(source:string)=>{const graph=moduleGraph({sourceRoot:source});try{return graph.describe([ENTRY]);}finally{graph.close();}};
+const expected=(source:string)=>hash(JSON.stringify(recipe(source).placingFiles.map(file=>[file,hash(readFileSync(join(source,file)))])));
 
 function fixture(t:TestContext){
   const scratch=testScratch(t,'oracle-producer'),root=join(scratch,'source');
-  copyModuleClosure([ENTRY],root);
+  const files=copyModuleClosure([ENTRY],root);
   writeFileSync(join(root,'pnpm-lock.yaml'),'private lockfile\n');
   execFileSync('git',gitArguments(['init','--quiet']),{env:fixtureEnvironment(t),cwd:root});
   execFileSync('git',gitArguments(['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','--allow-empty','-m','Private producer root']),{env:fixtureEnvironment(t),cwd:root});
-  return {root,cap:()=>dependencyCapability(root,join(scratch,'tmp','dependencies'))};
+  return {root,files,cap:()=>dependencyCapability(root,join(scratch,'tmp','dependencies'))};
 }
 
-test('the derived producer retains every previous producer module',()=>{
-  // Names from the former 17-path declaration; folders remain source-owned.
-  const previous=['oracle-dependencies.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','dependency-inputs.ts','package-manager.ts','gate-resource.ts','durable-record.ts','active-command.ts','step-result.ts','canonical-environment.ts','run-temporary.ts','worker-memory.ts','admission.ts','case-costs.ts','tooling-slice.ts'];
-  const files=moduleClosure([ENTRY],{sourceRoot:SOURCE}),names=files.map(file=>basename(file));
-  assert.deepEqual(previous.filter(name=>!names.includes(name)),[]);
+test('the producer binds placed execution modules independently of fence observations',()=>{
+  const selected=recipe(SOURCE),placed=new Set(selected.placingFiles);
+  assert.ok(selected.moduleFiles.every(file=>placed.has(file)));
+  assert.ok(selected.files.includes('tooling/tasks/new.ts'));
+  assert.ok(!placed.has('tooling/tasks/new.ts'));
+  assert.ok(selected.moduleFiles.includes('tooling/gate/host-environment.ts'));
+  assert.ok(!selected.moduleFiles.includes('tooling/gate/canonical-environment.ts'));
   assert.equal(dependencyCapability(SOURCE,join(SOURCE,'tmp','unused')).producerSha256,expected(SOURCE));
 });
 
@@ -47,7 +51,7 @@ test('dependency provisioning loads before installing the parser packages',t=>{
 test('the source tree chooses a relocated producer and authenticates its current bytes',t=>{
   const f=fixture(t),before=f.cap();
   assert.equal(before.producerSha256,expected(f.root),'unchanged layout control');
-  const files=moduleClosure([ENTRY],{sourceRoot:f.root});
+  const files=f.files;
   const old=files.find(file=>basename(file)==='durable-record.ts')!;
   const moved='tooling/relocated/durable-record.ts';mkdirSync(dirname(join(f.root,moved)),{recursive:true});
   renameSync(join(f.root,old),join(f.root,moved));

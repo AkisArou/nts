@@ -463,8 +463,8 @@ function startupRunner(t:{after(fn:()=>void):void},availableKiB:number,oracle?:"
   const looked=join(run,'schedule-looked');
   copyModuleClosure(['tooling/gate/run.mjs'],root);
   if(oracle==='priority'){
-    const target=join(root,'tooling/gate/run.mjs'),original=join(source,'run.mjs');
-      const text=readFileSync(original,'utf8'),callback='outrankedLook = null; schedule();';
+    const target=join(root,'tooling/gate/run.mjs');
+      const text=readFileSync(target,'utf8'),callback='outrankedLook = null; schedule();';
       assert.ok(text.includes(callback));
       // Observe the real priority timer reaching schedule, while capture waits.
       writeFileSync(target,text.replace(callback,callback+` writeFileSync(${JSON.stringify(looked)}, "looked");`));
