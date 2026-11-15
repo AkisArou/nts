@@ -293,7 +293,14 @@ bounds wall time, including waits. A full-check measurement has an independent
 wall ceiling of three times its last canonical green run, with a fifteen-minute
 floor. Without that run, its longest measured step supplies the baseline.
 The controller owns the ceiling, including for historical runners, and stops
-the measurement's whole slice when it expires. The named hold overrides a
+the measurement's whole slice when it expires. Tooling and measurement slices
+are created explicitly before their first member, with `BindsTo` and `After`
+naming the creating process's user-manager scope or service. The same transient
+creator owns gate roots and step slices. An empty start and a live nested child
+retain their owner; ending that owner unit stops its whole hierarchy even after
+SIGKILL. Explicit cleanup remains the normal path. An unbindable shell gets a
+named setup refusal with the exact `systemd-run --user --scope` rerun command;
+no slice is created unbound. The named hold overrides a
 summary written before the ceiling. A step past its bound is stopped and held
 for a person. A single case past its own bound, a compile past ten CPU minutes
 or a compiled call past its allowance, is a `timeout`: a loud defect,
@@ -1051,6 +1058,11 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- Tooling and measurement slices use the shared transient creator and bind to
+  their actual user-manager owner unit. They retain an empty start until members
+  arrive, and stop with that owner even when no process cleanup runs. Setup
+  refuses with a scope rerun command when no bindable owner exists.
 
 - The config audit builds in a temporary copy of its declared tracked workspace
   and external inputs, retaining working edits while excluding ignored outputs.

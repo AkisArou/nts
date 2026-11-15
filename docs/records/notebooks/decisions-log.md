@@ -2981,3 +2981,16 @@ there instead of silently escaping step selection. Diagnostic capture is held
 inside the copy's lifetime, and cleanup preserves a primary error alongside any
 release failure. Full-Program discovery remains an independent selection owner;
 the explicit byte declarations also provide the inputs needed for staging.
+
+## Tooling slices are bound before their first member (11-15)
+
+2026-11-15: #782's actual systemd probe found that an empty transient slice with
+StopWhenUnneeded immediately stops and loses that policy before its first member
+can arrive. The shared transient creator instead binds the slice with BindsTo
+and After to the creating process's real user-manager scope or service, keeping
+StopWhenUnneeded false. Tooling, measurements, gate roots and step boundaries
+share this owner. Normal cleanup stays explicit; an owner unit's death stops
+the complete nested hierarchy without relying on a process closer. A shell
+outside a bindable user-manager unit receives the exact scope rerun command.
+The historical empty-slice population was cleared by the power-cut reboot; no
+foreign or populated slice is reclaimed by this change.
