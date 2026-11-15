@@ -378,8 +378,12 @@ they cannot poison the reusable baseline for unchanged artifacts.
   as reported by retained ownership or the actual benchmark unit. An unreadable
   unit observation refuses by name. Changes coalesce onto the newest verified;
   skipped opportunities consume no start.
-  The nightly run, at 03:00 by default, can cross the gap and repeat an
-  unchanged commit before new benchmarks start. It waits for idleness for
+  The nightly run, at 03:00 by default, can cross the gap before new benchmarks
+  start. A green or red wide run of the current verified commit that ends at
+  or after the latest nightly slot answers that night, including a run that
+  started before the slot. Held or interrupted work and missing completion
+  evidence do not answer it. The start time still owns the four-hour gap;
+  verified advancement retains its existing eligibility. The nightly run waits for idleness for
   at most two hours after the nightly slot, then enters normal full-check
   admission even while higher-priority work waits. Ledger priorities still
   put landings and agents first. That deadline never overrides the benchmark
@@ -1268,6 +1272,11 @@ the first node task.
   name only captured accepted-main blob reads through the shared Git owner.
   Working-tree readers of those paths keep their independent obligations
   ([log](records/notebooks/decisions-log.md#accepted-revision-data-is-not-candidate-data-11-15)).
+- **Wide completion answers its night:** a completed green or red run of the
+  current verified answers every nightly slot through its actual end, while
+  its start retains the minimum-gap origin. Held and interrupted work never
+  answer a night
+  ([log](records/notebooks/decisions-log.md#completed-wide-runs-answer-the-night-11-15)).
 - **Negative candidates and membership retain their own roles:** optional
   immutable bytes and immediate names/types share the canonical reader graph
   and fixture context without granting placement. Structural changes remain

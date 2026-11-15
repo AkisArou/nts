@@ -287,8 +287,9 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
     if(part==="wide")beforeWideMeasurement(fx,state);
     return fx.gate.run(commit, steps, part, state[part].last_green, { reuseLanding: part === "core" });
   }, at);
+  const end=part==='wide'?fx.now().toISOString():undefined;
   const failed = steps.filter(step => m.steps[step] === "FAIL");
-  const record: RunRecord = { commit, run: m.run, verdict: m.verdict, at, failed };
+  const record: RunRecord = { commit, run: m.run, verdict: m.verdict, at, failed, ...(end?{ended_at:end}:{}) };
   if (m.verdict === "held") {
     record.reason = steps.filter(step => m.steps[step] === "HELD").map(step => `${step}: ${m.reasons[step]}`).join("; ");
     held(fx, state, part, record);

@@ -918,6 +918,42 @@ test("the wide steps follow verified when idle, without waiting for a clock slot
   assert.equal(await cycle(later), "core", "the slot is answered; the core takes main");
 });
 
+test('a wide run crossing the nightly slot records its end and starts benchmarks without repeating',async t=>{
+  const repo=repository(t),gate=fakeGate(repo),units=stubUnits();
+  const start=new Date(2026,10,6,2,48),end=new Date(2026,10,6,3,29);
+  let now=start;
+  const fx=harness(repo,gate,{units,idle:true});fx.now=()=>now;
+  const run=gate.run;
+  gate.run=(...args)=>{const result=run(...args);if(args[2]==='wide')now=end;return result;};
+  const commit=repo.commit({'a.txt':'verified\n'},'verified');
+  assert.equal(await cycle(fx),'core');
+  assert.equal(await cycle(fx),'wide');
+  const last=readState(repo.layout.state).wide.last_run!;
+  assert.deepEqual({commit:last.commit,at:last.at,ended_at:last.ended_at,verdict:last.verdict},
+    {commit,at:start.toISOString(),ended_at:end.toISOString(),verdict:'green'});
+  assert.equal(await cycle(fx),'benchmarks');
+  assert.equal(gate.measured.filter(row=>row.label==='wide').length,1);
+  assert.equal(units.specs.at(-1)!.name,BENCH_UNIT);
+});
+
+test('a held wide run crossing the slot records its end but leaves the nightly attempt owed',async t=>{
+  const repo=repository(t),gate=fakeGate(repo),units=stubUnits();
+  const start=new Date(2026,10,6,2,48),end=new Date(2026,10,6,3,29);
+  let now=start;
+  const fx=harness(repo,gate,{units,idle:true});fx.now=()=>now;
+  const run=gate.run;
+  gate.run=(...args)=>{const result=run(...args);if(args[2]==='wide')now=end;return result;};
+  repo.commit({'HELD/integrity':'held\n'},'held wide');
+  assert.equal(await cycle(fx),'core');
+  assert.equal(await cycle(fx),'wide');
+  const last=readState(repo.layout.state).wide.last_run!;
+  assert.deepEqual({at:last.at,ended_at:last.ended_at,verdict:last.verdict},
+    {at:start.toISOString(),ended_at:end.toISOString(),verdict:'held'});
+  assert.equal(await cycle(fx),'wide','held work cannot let benchmarks skip the nightly attempt');
+  assert.equal(gate.measured.filter(row=>row.label==='wide').length,2);
+  assert.equal(units.specs.length,0);
+});
+
 const BEFORE = new Date(2026, 10, 6, 23, 0), NIGHT = new Date(2026, 10, 7, 3, 30), NEXT_NIGHT = new Date(2026, 10, 8, 3, 30);
 
 test("wide follows the latest verified at the gap boundary, without delaying core inside the gap", async t => {
@@ -1297,7 +1333,7 @@ test("an attempt from before the benchmarks ran in a unit, which a stopped contr
   await cycle(at(BEFORE));
   const state = readState(repo.layout.state);
   state.nightly = NIGHT.toISOString();
-  state.wide.last_run = { commit: first, run: "/previous-wide", at: NIGHT.toISOString(), verdict: "green", failed: [] };
+  state.wide.last_run = { commit: first, run: "/previous-wide", at: NIGHT.toISOString(), ended_at:NIGHT.toISOString(), verdict: "green", failed: [] };
   state.benchmarks_due = { since: NIGHT.toISOString(), until: NEXT_NIGHT.toISOString(), measuring: { commit: first, at: NIGHT.toISOString(), run: join(repo.layout.runs, "bench-old") }, interrupted: 1 } as never;
   writeFileSync(repo.layout.state, JSON.stringify(state));
   const after = at(new Date(2026, 10, 7, 4, 0));

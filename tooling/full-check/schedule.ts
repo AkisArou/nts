@@ -1,6 +1,6 @@
 // Wide runs follow verified during idle time, at most once per minimum gap.
-// The nightly run can cross that gap and repeat an unchanged commit before
-// benchmarks. All dates and observations come from the caller.
+// A completed run of the same verified ending after the nightly slot answers
+// that night. All dates and observations come from the caller.
 import type { Priority } from "../gate/memory-ledger.ts";
 
 export type Schedule = { nightly: string };
@@ -32,13 +32,20 @@ export function wideMemoryWaiter(waiting: readonly { priority: Priority; live: b
 
 /** Eligibility does not consume a start: only the actual run changes last. */
 export function wideDecision(options: {
-  schedule: Schedule; last?: { commit: string; at: string }; verified: string | null;
+  schedule: Schedule; last?: { commit: string; at: string; ended_at?:string; verdict?:'green'|'red'|'held' }; verified: string | null;
   since: string; now: Date; busy: string | null; hardBusy?:string|null;
 }): WideDecision {
   const { schedule, last, verified, now, busy } = options;
   if (!verified) return { due: null, waiting: "nothing is verified yet" };
   const start = last ? new Date(last.at) : undefined;
-  const nightly = dueNightly(schedule, start ?? new Date(options.since), now);
+  const end=last?.ended_at?new Date(last.ended_at):undefined;
+  const completed=end&&Number.isFinite(end.getTime())&&end.getTime()<=now.getTime()&&start&&end.getTime()>=start.getTime()
+    &&(last?.verdict==='green'||last?.verdict==='red');
+  // Only this verified's completed run can answer by its end. Otherwise a
+  // moved verified retains its existing start/gap eligibility. Missing end
+  // evidence and held/interrupted work cannot answer a night on the same tip.
+  const answer=last?.commit===verified?(completed?end:undefined):start??new Date(options.since);
+  const nightly = dueNightly(schedule, answer, now);
   const due = nightly ? "nightly" : verified !== last?.commit ? "advanced" : null;
   if(options.hardBusy)return {due,waiting:options.hardBusy};
   if(due===null)return {due,waiting:null};

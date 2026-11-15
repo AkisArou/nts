@@ -3026,3 +3026,13 @@ other uses, including conversion to a working-tree path. The selector and copier
 create no candidate obligations for this kind; independent working-tree data
 readers remain authoritative for the same paths. Count and service keep their
 existing module boundaries.
+
+## Completed wide runs answer the night (11-15)
+
+Using a wide run's start to answer the nightly slot repeated a green run on the
+same verified when it straddled the slot. Wide records now retain the actual
+measurement end independently of the start. A green or red completion on that
+verified at or after the latest slot answers the night; held, interrupted or
+unknown completion does not. Start-based gap and moved-verified eligibility stay
+with the existing scheduler. Benchmark eligibility remains independent, so it
+can proceed after the completed wide run without another identical attempt.

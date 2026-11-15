@@ -5,12 +5,12 @@ import { dueNightly, lastNightly, nextNightly, parseTimes, wideDecision, wideMem
 
 const schedule: Schedule = { nightly: "03:00" };
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute);
-const decision = (last: { commit: string; at: string } | undefined, now: Date, verified = "new", busy: string | null = null) =>
+const decision = (last: Parameters<typeof wideDecision>[0]['last'], now: Date, verified = "new", busy: string | null = null) =>
   wideDecision({ schedule, last, now, verified, busy, since: last?.at ?? now.toISOString() });
 
 test("changed verified starts at the four-hour boundary without a clock slot", () => {
   assert.equal(WIDE_MIN_GAP_MS, 4 * 3_600_000);
-  const last = { commit: "old", at: at(6, 9, 17).toISOString() };
+  const last = { commit: "old", at: at(6, 9, 17).toISOString(),ended_at:at(6,9,40).toISOString(),verdict:'green' as const };
   assert.match(decision(last, at(6, 13, 16)).waiting!, /minimum wide gap/);
   assert.deepEqual(decision(last, at(6, 13, 17)), { due: "advanced", waiting: null });
   assert.deepEqual(decision(last, at(6, 14), "old"), { due: null, waiting: null });
@@ -33,7 +33,7 @@ test("nightly crosses the gap and repeats an unchanged commit, still waiting for
   const last = { commit: "same", at: at(6, 2, 59).toISOString() };
   assert.deepEqual(decision(last, at(6, 3), "same"), { due: "nightly", waiting: null });
   assert.deepEqual(decision(last, at(6, 3), "same", "landing queued"), { due: "nightly", waiting: "landing queued" });
-  const restarted = { commit: "same", at: at(6, 3).toISOString() };
+  const restarted = { commit: "same", at: at(6, 3).toISOString(),ended_at:at(6,3,20).toISOString(),verdict:'green' as const };
   assert.deepEqual(decision(restarted, at(6, 4), "same"), { due: null, waiting: null });
   assert.deepEqual(decision(restarted, at(7, 3), "same"), { due: "nightly", waiting: null });
   assert.deepEqual(decision(undefined, at(6, 12)), { due: "advanced", waiting: null });
@@ -55,10 +55,36 @@ test("an initial wide deferral keeps its scheduling origin across restart and re
   assert.deepEqual(wideDecision({ schedule, since, now: at(6, 5), verified: "new", busy }), { due: "nightly", waiting: null });
 });
 
-test("missed nights coalesce into one attempt and an actual start answers it on restart", () => {
+test("missed nights coalesce into one attempt and completion answers it on restart", () => {
   const last = { commit: "same", at: at(3, 3).toISOString() }, now = at(6, 12);
   assert.deepEqual(decision(last, now, "same"), { due: "nightly", waiting: null });
-  assert.deepEqual(decision({ commit: "same", at: now.toISOString() }, now, "same"), { due: null, waiting: null });
+  assert.deepEqual(decision({ commit: "same", at: now.toISOString(),ended_at:now.toISOString(),verdict:'green' }, now, "same"), { due: null, waiting: null });
+});
+
+test('a same-verified green or red run straddling the nightly slot answers the night by its end',()=>{
+  const now=at(6,3,29),start=at(6,2,48).toISOString();
+  for(const verdict of ['green','red'] as const){
+    const last={commit:'same',at:start,ended_at:now.toISOString(),verdict};
+    assert.deepEqual(decision(last,now,'same'),{due:null,waiting:null},verdict);
+    assert.deepEqual(decision({...last,ended_at:at(6,3).toISOString()},now,'same'),{due:null,waiting:null},'exact slot');
+    assert.deepEqual(dueNightly(schedule,at(5,3),now),at(6,3),'benchmark eligibility remains independent');
+    assert.equal(last.at,start,'completion does not replace the gap origin');
+  }
+});
+
+test('held, interrupted and missing or invalid completion facts leave the nightly run due',()=>{
+  const now=at(6,3,29),last={commit:'same',at:at(6,3,5).toISOString(),ended_at:now.toISOString(),verdict:'green' as const};
+  for(const incomplete of [
+    {...last,verdict:'held' as const},{...last,verdict:undefined},{...last,ended_at:undefined},
+    {...last,ended_at:'invalid'},{...last,ended_at:at(6,3,4).toISOString()},{...last,ended_at:at(6,3,30).toISOString()},
+  ])assert.deepEqual(decision(incomplete,now,'same'),{due:'nightly',waiting:null});
+});
+
+test('a moved verified retains the start-based minimum gap and nightly eligibility',()=>{
+  const now=at(6,3,29),last={commit:'old',at:at(6,3,5).toISOString(),ended_at:now.toISOString(),verdict:'green' as const};
+  assert.match(decision(last,at(6,7,4),'new').waiting!,/minimum wide gap/);
+  assert.deepEqual(decision(last,at(6,7,5),'new'),{due:'advanced',waiting:null});
+  assert.deepEqual(decision({...last,at:at(6,2,48).toISOString()},now,'new'),{due:'nightly',waiting:null},'the existing nightly path still runs moved verified');
 });
 
 test("the benchmarks answer the nightly slot once, independently of daytime wide runs", () => {

@@ -25,6 +25,9 @@ export type RunRecord = {
   run: string;
   verdict: "green" | "red" | "held";
   at: string;
+  /** A wide measurement's actual end; absent for legacy or interrupted work.
+   * at remains its start and owns the minimum gap. */
+  ended_at?: string;
   failed: string[];
   reason?: string;
   /** What the culprit search made of a red run, and when; "held" is searched again. */
