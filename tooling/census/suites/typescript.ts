@@ -15,9 +15,21 @@ import { join, relative } from "node:path";
 
 import { bodyOf, featuresOf, flagsOf, harnessFor, harnessHashOf } from "../project.ts";
 import {REPOSITORY,oracleIdentity} from "../../differential/oracle-services.ts";
+import {fileInput} from '../../gate/reader-inputs/main.ts';
 
 const ORACLE_FILE = "oracle.ts";
 const sourceHash = (file: URL) => createHash("sha256").update(readFileSync(file)).digest("hex");
+const identityInputs={
+  oracle:fileInput(new URL('./typescript-oracle.ts',import.meta.url)),
+  preparation:fileInput(new URL('../attempt262-worker.ts',import.meta.url)),
+  workspace:fileInput(new URL('../project.ts',import.meta.url)),
+  fixtureOptions:fileInput(new URL('../../../tsconfig.fixtures.json',import.meta.url)),
+};
+const referenceInputs=[
+  ['../typescript-oracles.ts',fileInput(new URL('../typescript-oracles.ts',import.meta.url))],
+  ['../typescript-oracle-results.ts',fileInput(new URL('../typescript-oracle-results.ts',import.meta.url))],
+  ['../typescript-oracle-capture.ts',fileInput(new URL('../typescript-oracle-capture.ts',import.meta.url))],
+] as const;
 
 /** A raw checkpoint measures this source oracle, not only the nts binary. */
 export function typescriptOracleIdentity() {
@@ -28,11 +40,11 @@ export function typescriptOracleIdentity() {
       producer: "pinned transpileModule",
       harness: harnessHashOf("ts"),
       suiteSha256: sourceHash(new URL(import.meta.url)),
-      oracleSha256: sourceHash(new URL("./typescript-oracle.ts",import.meta.url)),
-      preparationSha256: sourceHash(new URL("../attempt262-worker.ts",import.meta.url)),
-      referenceSources: ['../typescript-oracles.ts','../typescript-oracle-results.ts','../typescript-oracle-capture.ts'].map(file=>[file,sourceHash(new URL(file,import.meta.url))]),
-      workspaceSha256: sourceHash(new URL("../project.ts", import.meta.url)),
-      fixtureOptionsSha256: sourceHash(new URL("../../../tsconfig.fixtures.json", import.meta.url)),
+      oracleSha256: sourceHash(identityInputs.oracle.url),
+      preparationSha256: sourceHash(identityInputs.preparation.url),
+      referenceSources: referenceInputs.map(([path,input])=>[path,sourceHash(input.url)]),
+      workspaceSha256: sourceHash(identityInputs.workspace.url),
+      fixtureOptionsSha256: sourceHash(identityInputs.fixtureOptions.url),
     },
   };
 }
