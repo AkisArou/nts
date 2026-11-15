@@ -19,7 +19,7 @@ test('Cargo metadata inputs follow the existing tracked population as a crate is
   const git=(...args:string[])=>{const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
   put('Cargo.toml','[workspace]\nmembers=["first"]\n');put('first/Cargo.toml','[package]\nname="first"\nversion="0.1.0"\n');
   put('unrelated.txt','not Cargo metadata');git('init','-q');git('add','.');
-  const entry=cargoInputs(pathToFileURL(root));
+  const entry=cargoInputs(pathToFileURL(root+'/'));
   const describe=()=>{const graph=moduleGraph({sourceRoot:root});try{return graph.describe([entry]);}finally{graph.close();}};
   const before=describe();assert.ok(before.runtimeFiles!.includes('first/Cargo.toml'));assert.ok(!before.files.includes('unrelated.txt'));
   put('second/Cargo.toml','[package]\nname="second"\nversion="0.1.0"\n');put('Cargo.toml','[workspace]\nmembers=["first","second"]\n');git('add','.');
@@ -31,7 +31,8 @@ test('Cargo metadata inputs follow the existing tracked population as a crate is
 test('verified installation pins acquire a new workspace manifest without a declaration edit',async t=>{
   const parent=testScratch(t,'installation-population'),shared=join(parent,'shared'),root=join(parent,'source');
   mkdirSync(shared);mkdirSync(root);
-  t.after(()=>rmSync(dependencyCache(shared),{recursive:true,force:true}));
+  const cache=dependencyCache(shared);
+  t.after(()=>rmSync(cache,{recursive:true,force:true}));
   const put=(path:string,value:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),value);};
   const git=(...args:string[])=>{const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
   put('package.json',JSON.stringify({name:'owned-pins',private:true,packageManager:'pnpm@10.15.0'}));
@@ -43,7 +44,7 @@ test('verified installation pins acquire a new workspace manifest without a decl
     git('add','.');await installDependencies(shared,root);
     const trust=installationCatalogTrust(shared,root);assert.ok(trust);return trust;
   };
-  const entry=installationInputs(pathToFileURL(root));
+  const entry=installationInputs(pathToFileURL(root+'/'));
   const describe=(trust:ReturnType<typeof installationCatalogTrust>)=>{
     const graph=moduleGraph({sourceRoot:root,dependencyCatalog:trust});try{return graph.describe([entry]);}finally{graph.close();}
   };

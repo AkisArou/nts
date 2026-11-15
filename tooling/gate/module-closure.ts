@@ -163,7 +163,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       // Accepted main blobs have no candidate filesystem or staging role.
       if(kind==='accepted-revision')return;
       if(kind==='installation-inputs'||kind==='cargo-inputs'){
-        if(path!==root)throw Error(kind+' must name the canonical source root: '+reader);
+        if(path!==root&&path!==root+sep)throw Error(kind+' must name the canonical source root: '+reader);
         if(kind==='cargo-inputs'){
           for(const name of cargoInputNames(sourceFiles().map(path=>({path}))))visit(context,resolve(root,name),false,false,false);
         }else{
