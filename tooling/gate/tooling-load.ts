@@ -45,8 +45,8 @@ type Request={version:1;pin:string;directory:string;group:string;slice:string;wo
 type RustResult={status:number|null;signal:NodeJS.Signals|null;log:string;summary:string;completedFailures:number};
 type WorkerReport={version:1;pin:string;status:number;complete:boolean;node?:ToolingResult&{slice:string};rust?:RustResult;collectorGroup?:string;progress?:number[];error?:string};
 
-async function worker(requestPath:string):Promise<number>{
-  const request=json<Request>(requestPath),env=process.env,host=hostObservations(env);
+async function worker(requestPath:string,env:NodeJS.ProcessEnv):Promise<number>{
+  const request=json<Request>(requestPath),host=hostObservations(env);
   assertSealedOracleRun(env);
   if(request.version!==1||!isAbsolute(request.directory)||!request.group.startsWith('/')
     ||!host.ownCgroup().startsWith(request.group+'/')||!inside(join(ROOT,'target/nts-dev'),request.binary.path))fail('worker is outside its prepared experiment');
@@ -187,7 +187,7 @@ async function round(directory:string):Promise<number>{
 
 runAsCommand(import.meta.url,async()=>{
   const args=process.argv.slice(2);
-  if(args.length===2&&args[0]==='--worker')return worker(args[1]!);
+  if(args.length===2&&args[0]==='--worker')return worker(args[1]!,process.env);
   if(args.length!==2||args[0]!=='--out')fail('usage: node tooling/gate/tooling-load.ts --out <fresh kept-scratch directory>');
   return round(resolve(args[1]!));
 });
