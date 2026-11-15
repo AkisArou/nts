@@ -6,10 +6,13 @@
 //! durability. A host refusing rename-over-existing is reported without a
 //! remove-and-retry fallback, including on Windows.
 
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Condvar, Mutex, OnceLock};
+use std::thread::ThreadId;
 
 const PRIVATE: &str = ".nts-publication-";
 static SERIAL: AtomicU64 = AtomicU64::new(0);
@@ -89,16 +92,89 @@ pub fn private_name(name: &std::ffi::OsStr) -> bool {
 #[derive(Debug)]
 #[must_use = "hold the lock through validation, publication and pruning"]
 pub struct Lock {
+    // Fields drop in declaration order: release the OS lock before waking a
+    // competing thread through the process registry.
     _file: File,
+    _claim: ParentClaim,
+}
+
+type ParentLocks = (Mutex<HashMap<PathBuf, ThreadId>>, Condvar);
+fn parent_locks() -> &'static ParentLocks {
+    static HELD: OnceLock<ParentLocks> = OnceLock::new();
+    HELD.get_or_init(|| (Mutex::new(HashMap::new()), Condvar::new()))
+}
+
+#[derive(Debug)]
+struct ParentClaim {
+    parent: PathBuf,
+    thread: ThreadId,
+    // This synchronous capability must remain on its acquiring thread, so a
+    // moved lock cannot turn same-thread nesting into an unrecognized wait.
+    _thread_bound: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+
+impl ParentClaim {
+    fn acquire(parent: PathBuf) -> io::Result<Self> {
+        let (held, changed) = parent_locks();
+        let thread = std::thread::current().id();
+        let mut owners = held
+            .lock()
+            .map_err(|_| io::Error::other("publication lock registry poisoned"))?;
+        loop {
+            match owners.get(&parent) {
+                Some(owner) if *owner == thread => {
+                    return Err(io::Error::other(format!(
+                        "publication lock for {} is already held by this process (same thread)",
+                        parent.display()
+                    )));
+                }
+                Some(_) => {
+                    owners = changed
+                        .wait(owners)
+                        .map_err(|_| io::Error::other("publication lock registry poisoned"))?
+                }
+                None => break,
+            }
+        }
+        owners.insert(parent.clone(), thread);
+        Ok(Self {
+            parent,
+            thread,
+            _thread_bound: std::marker::PhantomData,
+        })
+    }
+}
+
+impl Drop for ParentClaim {
+    fn drop(&mut self) {
+        let (held, changed) = parent_locks();
+        let mut owners = held.lock().unwrap_or_else(|error| {
+            eprintln!("publication lock registry poisoned during release: {error}");
+            error.into_inner()
+        });
+        if owners.get(&self.parent) == Some(&self.thread) {
+            owners.remove(&self.parent);
+            changed.notify_all();
+        } else {
+            eprintln!(
+                "publication lock registry lost the owner of {}",
+                self.parent.display()
+            );
+        }
+    }
 }
 
 /// Lock the parent directory of a target (which need not exist). One permanent
 /// lock file per parent bounds metadata as versioned targets come and go.
 /// Directory publication is rare; unrelated targets in that parent serialize.
+/// This owner is synchronous: ThreadId distinguishes same-thread nesting,
+/// which refuses by name, from another writer thread, which waits on a Condvar.
 pub fn lock(target: &Path) -> Result<Lock> {
-    let open = || -> io::Result<File> {
+    let open = || -> io::Result<Lock> {
         let directory = parent(target)?;
         fs::create_dir_all(directory)?;
+        let directory = fs::canonicalize(directory)?;
+        let claim = ParentClaim::acquire(directory.clone())?;
         let file = File::options()
             .read(true)
             .write(true)
@@ -106,11 +182,12 @@ pub fn lock(target: &Path) -> Result<Lock> {
             .truncate(false)
             .open(directory.join(format!("{PRIVATE}lock")))?;
         file.lock()?;
-        Ok(file)
+        Ok(Lock {
+            _file: file,
+            _claim: claim,
+        })
     };
-    open()
-        .map(|file| Lock { _file: file })
-        .map_err(|error| failure("locking", target, error))
+    open().map_err(|error| failure("locking", target, error))
 }
 
 #[derive(Debug)]

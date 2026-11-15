@@ -1145,7 +1145,10 @@ the first node task.
   error without removing the target as a fallback, including on Windows.
   Directory replacement and legacy directory-to-link conversion use a portable
   parent-directory lock, quarantine and restore. One retained lock file per
-  parent bounds lock metadata as target versions change. A failed restore retains and names the
+  parent bounds lock metadata as target versions change. The synchronous owner
+  refuses same-thread re-entry for a canonical parent; competing threads wait
+  on its process registry, and the OS lock coordinates other processes.
+  A failed restore retains and names the
   recovery path. Surface staging, publication and pruning share an identity
   lock; pruning skips private namespaces and recognizes committed entries.
   Cleanup touches only the acquired claim and retains errors beside the primary

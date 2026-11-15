@@ -3138,3 +3138,7 @@ visibility here makes no fsync durability claim.
 One permanent lock file per parent bounds lock metadata; versioned targets do
 not leave one persistent lock per old key. Directory publications in that
 parent serialize, which is appropriate for these uncommon operations.
+The synchronous owner tracks canonical parents by ThreadId in one process
+registry. Same-thread re-entry refuses by name; other threads wait on its
+Condvar, with the OS lock still coordinating processes. The thread-bound Lock
+releases the OS lock before removing and notifying its registry claim.

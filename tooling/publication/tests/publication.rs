@@ -21,6 +21,52 @@ fn changing_target_names_keeps_only_one_parent_lock_file() {
 }
 
 #[test]
+fn nested_surface_flow_uses_different_parents_and_same_parent_reentry_refuses() {
+    let root = scratch::StdScratchDir::in_std_target("publication-nested-locks");
+    let identity = root.join("identity");
+    let target = identity.join("version/fingerprint");
+    let outer = nts_publication::lock(&identity).expect("surface identity lock");
+    let inner = nts_publication::lock(&target).expect("different-parent commit lock");
+    let refused = nts_publication::lock(&root.join("another-identity"))
+        .expect_err("same thread must refuse instead of blocking");
+    assert!(
+        refused
+            .to_string()
+            .contains("is already held by this process")
+    );
+    drop(inner);
+    directory(
+        &target,
+        |path| {
+            fs::create_dir(path)?;
+            fs::write(path.join("complete"), "whole")
+        },
+        |path| Ok(path.join("complete").is_file()),
+    )
+    .expect("actual nested directory publication");
+    drop(outer);
+    drop(
+        nts_publication::lock(&root.join("another-identity"))
+            .expect("released parent can be reacquired"),
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_parent_alias_cannot_hide_same_thread_reentry() {
+    let root = scratch::StdScratchDir::in_std_target("publication-lock-alias");
+    let held = nts_publication::lock(&root.join("one")).expect("parent lock");
+    std::os::unix::fs::symlink(&root, root.join("alias")).expect("parent alias");
+    assert!(
+        nts_publication::lock(&root.join("alias/two"))
+            .expect_err("canonical parent reentry")
+            .to_string()
+            .contains("is already held by this process")
+    );
+    drop(held);
+}
+
+#[test]
 fn two_writers_publish_whole_files_and_leave_foreign_staging_alone() {
     let root = scratch::StdScratchDir::in_std_target("publication-files");
     let target = root.join("target");

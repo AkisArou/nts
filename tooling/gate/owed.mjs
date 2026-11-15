@@ -1031,7 +1031,7 @@ export const RULES = [
   },
   {
     name: "shared atomic publication",
-    when: (p) => /^tooling\/publication\//.test(p),
+    when: (/** @type {string} */ p) => /^tooling\/publication\//.test(p),
     steps: ["build", "tests", "config", "examples"],
     arms: [],
   },
