@@ -1,4 +1,4 @@
-import {dataDirectory,moduleMembers,moduleMemberDirectory,projectConfig} from "../gate/reader-inputs/main.ts";
+import {dataDirectory,fileInput,moduleMembers,moduleMemberDirectory,projectConfig} from "../gate/reader-inputs/main.ts";
 /**
  * Audit `nts.config.ts` against the type package: coverage, drift, duplication.
  *
@@ -26,6 +26,9 @@ const repo = resolve(here, "../..");
 const pkgIndex = fileURLToPath(new URL("./src/index.ts",import.meta.url));
 const workspaceProject=projectConfig(new URL("../../tests/workspace/tsconfig.solution.json",import.meta.url));
 const workspaceMembers=moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts',{data:true});
+const workspaceInputs=[workspaceMembers,
+  {kind:'file',url:fileInput(new URL('../../runtime/native/libc.d.ts',import.meta.url))},
+  {kind:'file',url:fileInput(new URL('../../runtime/native/scalars.d.ts',import.meta.url))}];
 
 // Resolve `@nts/config` the way tsconfig.configs.json's `paths` does, so the
 // configs are evaluated against the same package tsc checks them against.
@@ -405,7 +408,7 @@ if (process.env.NTS_AUDIT_NO_TSC || !existsSync(tsc)) {
   note("the fixture's program was not built", [process.env.NTS_AUDIT_NO_TSC ? "NTS_AUDIT_NO_TSC is set" : "no tsc"]);
 } else {
   let out = "";
-  await withWorkspaceProject(workspaceProject,workspaceMembers,repo,({project})=>{
+  await withWorkspaceProject(workspaceProject,workspaceInputs,repo,({project})=>{
     try {
       execFileSync(tsc, ["-b", relative(dirname(project),project), "--force"], {
         cwd: dirname(project), encoding: "utf8", stdio: "pipe",

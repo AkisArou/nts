@@ -48,7 +48,8 @@ export type ProjectInput={readonly kind:'project';readonly url:URL};
 export type ProjectConfig={readonly kind:'project-config';readonly url:URL};
 export type FixtureInput={readonly kind:'fixture';readonly url:URL;readonly dataNamespaces:DataNamespaces};
 export type ModuleMembers={readonly kind:'members';readonly url:URL;readonly member:string;readonly data?:true};
-export type InputEntry=string|ProjectInput|ProjectConfig|FixtureInput|ModuleMembers;
+export type FileEntry={readonly kind:'file';readonly url:FileInput};
+export type InputEntry=string|ProjectInput|ProjectConfig|FixtureInput|ModuleMembers|FileEntry;
 /** A compiled entry carries its owning-project request through runtime staging
  * as well as the parsed reader declaration. It never guesses a config path. */
 export function projectInput(url:URL):ProjectInput{return {kind:'project',url};}
