@@ -3058,3 +3058,15 @@ Current-source calls use the owner at each invocation. Current parents retain
 the same before/after guard around historical endpoint queries and pinned-run
 lifetimes, checking the tree and supplied scratch roots without rewriting old
 code. A newly checked-out tree is verified before historical code executes.
+
+## Own-best benchmarks compare ratios (11-15)
+
+Each backend's ratio to each available comparator is compared with its best
+compatible prior ratio, using the same machine, workload/input and harness
+contract. A regression exceeds max(1.05, the product of the current backend,
+current comparator, prior backend and prior comparator spreads). The common
+model retains the comparator, all four factors, their product and prior-run
+provenance for Markdown and the benchmark JSON summary. Missing or unverified
+pairs are unestablished; absolute times remain information. The benchmark
+summary contract takes version 2 while conformance retains version 1. Immutable
+run records and the standing within-run bar keep their existing contracts.

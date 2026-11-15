@@ -1649,8 +1649,13 @@ the first node task.
   record under `results/benchmarks/runs/`, never edited afterwards, with
   every cell (time, spread, checksum, status), the bar's verdict per
   comparator, and the run's metadata. `results/benchmarks/full.md` is
-  rendered from the newest complete run, with nts's best result per row
-  beside it, so a row slower than nts's own best shows as a regression.
+  rendered from the newest complete run. Each backend/comparator's within-run
+  ratio is compared with its best compatible prior ratio, using the same
+  machine, workload/input and harness contract. A change beyond max(1.05, the
+  product of the four current/prior cell spreads) is a regression. The report
+  shows the comparator, all four factors, their product and the prior run;
+  absolute times are information only. Missing or unverified pairs remain
+  unestablished. The benchmark JSON summary uses this same model, in version 2.
 - **The full check's later additions** (10-28): native instruction counts
   gated per benchmark row against the noise band; a sanitized,
   reference-counted differential run over the corpus; the compile-time guard
@@ -1683,3 +1688,10 @@ the first node task.
   More generally, current parents retain this same guard around historical
   endpoint and pinned-run lifetimes without changing the historical source
   ([log](records/notebooks/decisions-log.md#cargo-configuration-is-checked-11-15)).
+
+- **Own-best benchmark verdicts compare ratios.** Each backend/comparator
+  retains a compatible prior within-run ratio. The four current/prior cell
+  spreads compound into its allowance, with a 1.05 floor. Markdown and the
+  versioned benchmark JSON summary expose the same comparator, factors and
+  provenance; absolute times do not decide a regression
+  ([log](records/notebooks/decisions-log.md#own-best-benchmarks-compare-ratios-11-15)).

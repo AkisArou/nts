@@ -74,43 +74,22 @@ function publish(root: string): string {
 }
 const benchmarkTree = (t: { after(fn: () => void): void }) => publish(testScratch(t, "summary-benchmarks"));
 
-/**
- * The fixture's page, as main's renderer drew it before full.md and the
- * summary shared one model (a64d4a137). It changes only with a deliberate
- * change to the page, which re-renders full.md in the same commit.
- */
-const GOLDEN = [
-  "# Benchmark results",
-  "",
-  "Newest complete run: [2026-11-02-aaaaaaaaaaaa-newest](runs/2026-11-02-aaaaaaaaaaaa-newest.json). Compiler aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; source aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa. Harness bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; contract opaque-bit-input-v1. Verdict policy v1, [The bar](../../docs/README.md#the-bar).",
-  "",
-  "- **nts C**: node: 1 SHORT, 1 WON, 1 UNAVAILABLE; Bun JIT: 1 SHORT, 1 WON, 1 UNAVAILABLE; Bun AOT: 1 TIE, 1 WON, 1 UNAVAILABLE; ScriptC: 1 TIE, 1 WON, 1 UNAVAILABLE.",
-  "- **nts LLVM**: node: 2 WON, 1 LOSS; Bun JIT: 2 WON, 1 LOSS; Bun AOT: 2 WON, 1 TIE; ScriptC: 1 WON, 1 LOSS, 1 NOT_COMPARABLE.",
-  "- **nts JVM**: node: 2 SHORT, 1 LOSS; Bun JIT: 1 SHORT, 2 LOSS; Bun AOT: 1 TIE, 2 LOSS; ScriptC: 1 TIE, 1 LOSS, 1 NOT_COMPARABLE.",
-  "",
-  "Conditions: {\"cpu\":4,\"sibling\":5,\"load\":[0.5,0.75,1]}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.",
-  "",
-  "Own-best values are per backend, using compatible machine, workload/input and harness contracts. Unknown historical identities and invalid cells are excluded. A slower-than-best flag is a cross-run observation with provenance, beside the current value. Historical runs with unknown completion times sort by the date recorded in their filename.",
-  "",
-  "| Case | nts C | nts LLVM | nts JVM | C++ | Java | node | Bun JIT | Bun AOT | ScriptC | nts C/node | nts C/Bun JIT | nts C/Bun AOT | nts C/ScriptC | nts LLVM/node | nts LLVM/Bun JIT | nts LLVM/Bun AOT | nts LLVM/ScriptC | LLVM versus C | nts C own best | nts LLVM own best | nts JVM own best |",
-  "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
-  "|fast|80.0 ns|120.0 ns|300.0 ns|70.0 ns|250.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|0.800× WON|0.800× WON|0.800× WON|0.800× WON|1.200× LOSS|1.200× LOSS|1.200× TIE|1.200× LOSS|1.500× **LLVM TRAILS C**|40.0 ns; cccccccccccccccccccccccccccccccccccccccc; [2026-11-01-cccccccccccc-earlier](runs/2026-11-01-cccccccccccc-earlier.json) **SLOWER THAN BEST**|120.0 ns; aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; [2026-11-02-aaaaaaaaaaaa-newest](runs/2026-11-02-aaaaaaaaaaaa-newest.json)|100.0 ns; cccccccccccccccccccccccccccccccccccccccc; [2026-11-01-cccccccccccc-earlier](runs/2026-11-01-cccccccccccc-earlier.json) **SLOWER THAN BEST**|",
-  "|gaps|REFUSED|50.0 ns|90.0 ns|45.0 ns|NOT_PROVIDED|100.0 ns|70.0 ns|60.0 ns|NOT_PROVIDED|UNAVAILABLE|UNAVAILABLE|UNAVAILABLE|UNAVAILABLE|0.500× WON|0.714× WON|0.833× WON|NOT_COMPARABLE|unavailable|30.0 ns; cccccccccccccccccccccccccccccccccccccccc; [2026-11-01-cccccccccccc-earlier](runs/2026-11-01-cccccccccccc-earlier.json)|47.0 ns; cccccccccccccccccccccccccccccccccccccccc; [2026-11-01-cccccccccccc-earlier](runs/2026-11-01-cccccccccccc-earlier.json) **SLOWER THAN BEST**|88.0 ns; cccccccccccccccccccccccccccccccccccccccc; [2026-11-01-cccccccccccc-earlier](runs/2026-11-01-cccccccccccc-earlier.json)|",
-  "|legacy|100.0 ns (legacy unverified)|50.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|1.000× SHORT|1.000× SHORT|1.000× TIE|1.000× TIE|0.500× WON|0.500× WON|0.500× WON|0.500× WON|0.500× **C TRAILS LLVM**|not established|not established|not established|",
-  "",
-  "- gaps, nts C: REFUSED: NTS1001 a shape \\| with a pipe and a second line",
-  "- gaps, Java: NOT_PROVIDED: no Java reference",
-  "- gaps, ScriptC: NOT_PROVIDED: ScriptC refused it",
-  "",
-].join("\n");
-
-test("full.md renders as it did before it shared its model with the summary", () => {
-  assert.equal(renderFull(runs()), GOLDEN);
+/** Standing timings and bar verdicts retain their exact rendering. */
+const STANDING_ROWS = [
+  "|fast|80.0 ns|120.0 ns|300.0 ns|70.0 ns|250.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|0.800× WON|0.800× WON|0.800× WON|0.800× WON|1.200× LOSS|1.200× LOSS|1.200× TIE|1.200× LOSS|1.500× **LLVM TRAILS C**|",
+  "|gaps|REFUSED|50.0 ns|90.0 ns|45.0 ns|NOT_PROVIDED|100.0 ns|70.0 ns|60.0 ns|NOT_PROVIDED|UNAVAILABLE|UNAVAILABLE|UNAVAILABLE|UNAVAILABLE|0.500× WON|0.714× WON|0.833× WON|NOT_COMPARABLE|unavailable|",
+  "|legacy|100.0 ns (legacy unverified)|50.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|100.0 ns|1.000× SHORT|1.000× SHORT|1.000× TIE|1.000× TIE|0.500× WON|0.500× WON|0.500× WON|0.500× WON|0.500× **C TRAILS LLVM**|"
+];
+test("full.md retains standing values and shows ratio history with its allowance", () => {
+  const page=renderFull(runs()),rows=page.split('\n').filter(line=>/^\|(?:fast|gaps|legacy)\|/.test(line));
+  assert.deepEqual(rows.map(line=>line.split('|').slice(0,-4).join('|')+'|'),STANDING_ROWS);
+  assert.match(page,/node: 0\.800000×; best 0\.400000×; change 2\.00000×; allowance 1\.05000×/);
+  assert.match(page,/noise 1\.00000 · 1\.00000 · 1\.00000 · 1\.00000 = 1\.00000×/);
 });
 
 test("the benchmark summary is the newest complete run, from the model full.md renders", t => {
   const root = benchmarkTree(t), summary = benchmarkSummary(root);
-  assert.deepEqual([summary.version, summary.kind, summary.read], [1, "benchmarks", { root, commit: null }]);
+  assert.deepEqual([summary.version, summary.kind, summary.read], [2, "benchmarks", { root, commit: null }]);
   assert.ok(Number.isFinite(Date.parse(summary.at)) && summary.at === new Date(summary.at).toISOString(), summary.at);
   const newest = "2026-11-02-aaaaaaaaaaaa-newest";
   assert.deepEqual(summary.run, {
@@ -132,10 +111,14 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.deepEqual(fast.backends.llvm.versus["Bun AOT"], { kind: "TIE", ratio: 1.2, tolerance: 1.2 });
   assert.deepEqual(fast.backends.c.references, { "C++": 80 / 70, Java: 80 / 250 });
   assert.deepEqual(fast.backends.jvm.references, { "C++": 300 / 70, Java: 300 / 250 });
-  // C's best is the earlier run's, and today's time is past it; LLVM's best is today's.
-  assert.deepEqual(fast.backends.c.ownBest, { nanoseconds: 40, spread: 1, compiler: older, run: "2026-11-01-cccccccccccc-earlier" });
+  // Each comparator has a prior ratio; a faster current LLVM ratio does not replace that provenance.
+  assert.deepEqual(fast.backends.c.ownBest.node, {
+    currentRatio:0.8,best:{backend:'nts C',comparator:'node',ratio:0.4,backendNanoseconds:40,comparatorNanoseconds:100,
+      backendSpread:1,comparatorSpread:1,compiler:older,run:'2026-11-01-cccccccccccc-earlier'},
+    relativeRatio:2,spreads:{currentBackend:1,currentComparator:1,priorBackend:1,priorComparator:1},spreadProduct:1,tolerance:1.05,slowerThanBest:true,
+  });
   assert.equal(fast.backends.c.slowerThanBest, true);
-  assert.deepEqual([fast.backends.llvm.ownBest?.run, fast.backends.llvm.slowerThanBest], [newest, false]);
+  assert.deepEqual([fast.backends.llvm.ownBest.node?.best.run, fast.backends.llvm.slowerThanBest], ["2026-11-01-cccccccccccc-earlier", false]);
   assert.deepEqual(fast.llvmVersusC, { ratio: 1.5, tolerance: 1, trailing: "llvm" });
 
   // A refused backend is UNAVAILABLE, a comparator without a time NOT_COMPARABLE, both without a ratio.
@@ -144,15 +127,17 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.deepEqual(gaps.backends.llvm.versus.ScriptC, { kind: "NOT_COMPARABLE", ratio: null, tolerance: null });
   assert.deepEqual(gaps.backends.llvm.references, { "C++": 50 / 45, Java: null });
   assert.deepEqual(gaps.backends.c.references, { "C++": null, Java: null });
-  assert.deepEqual([gaps.backends.c.ownBest?.nanoseconds, gaps.backends.c.slowerThanBest], [30, false]);
-  // Slower than its best past max(1.05, either spread) is flagged, and within it is not.
-  assert.deepEqual([gaps.backends.llvm.ownBest?.nanoseconds, gaps.backends.llvm.slowerThanBest], [47, true]);
-  assert.deepEqual([gaps.backends.jvm.ownBest?.nanoseconds, gaps.backends.jvm.slowerThanBest], [88, false]);
+  assert.deepEqual([gaps.backends.c.ownBest.node, gaps.backends.c.slowerThanBest], [null, false]);
+  // Node and Bun ratios remain independent; a node ratio inside its allowance cannot clear a Bun regression.
+  assert.deepEqual([gaps.backends.llvm.ownBest.node?.best.ratio, gaps.backends.llvm.slowerThanBest], [0.47, true]);
+  assert.equal(gaps.backends.jvm.ownBest.node?.slowerThanBest,false);
+  assert.equal(gaps.backends.jvm.ownBest['Bun JIT']?.slowerThanBest,true);
+  assert.equal(gaps.backends.jvm.slowerThanBest,true);
   assert.equal(gaps.llvmVersusC, null);
 
   // A legacy time is unverified and has no own best; here C trails LLVM.
   assert.equal(old.cells["nts C"].verified, false);
-  assert.deepEqual(Object.values(old.backends).map(one => one.ownBest), [null, null, null]);
+  assert.ok(Object.values(old.backends).every(one=>Object.values(one.ownBest).every(comparison=>comparison===null)));
   assert.deepEqual(old.llvmVersusC, { ratio: 0.5, tolerance: 1, trailing: "c" });
 
   const model = results(runs())!;
@@ -180,8 +165,8 @@ test("the page and the summary say the same thing: every count, verdict and rati
       : `${versusC.ratio.toFixed(3)}×${versusC.trailing === null ? "" : flag[versusC.trailing]}`, one.name);
     for (const [index, backend] of (["c", "llvm", "jvm"] as const).entries()) {
       const best = one.backends[backend], shown = cells[COLUMNS.length + verdicts.length + 1 + index]!;
-      assert.equal(shown === "not established", best.ownBest === null, `${one.name} ${backend}`);
-      assert.equal(shown.endsWith(" **SLOWER THAN BEST**"), best.slowerThanBest, `${one.name} ${backend}`);
+      assert.equal(shown === "not established", Object.values(best.ownBest).every(value=>value===null), `${one.name} ${backend}`);
+      assert.equal(shown.includes(" **SLOWER THAN BEST**"), best.slowerThanBest, `${one.name} ${backend}`);
     }
   }
 });
@@ -197,7 +182,7 @@ test("numbers are numbers: no time, ratio or count is text", t => {
     const all = leaves(summary);
     const texts = all.filter(([, value]) => typeof value === "string" && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$|\d\s*(?:ns|µs|ms)\b|×/.test(value));
     assert.deepEqual(texts, [], `${summary.kind}: numbers rendered as text`);
-    assert.equal(summary.version, 1);
+    assert.equal(summary.version, summary.kind==='benchmarks'?2:1);
     const measures = all.filter(([at]) => /\.(nanoseconds|spread|ratio|tolerance|references\.(C\+\+|Java))$/.test(at));
     const counts = all.filter(([at]) => /\.counts\.[^.]+\.[^.]+\.[^.]+$|\.outcomes\.[^.]+$|\.(cases|pending)$/.test(at));
     assert.ok(measures.length + counts.length > 20, `${summary.kind}: the walk found its numbers`);

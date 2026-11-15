@@ -446,63 +446,95 @@ export function checkRecords(root: string, inputs = benchmarkRecordInputs(root))
   );
   return { runs: runs.length, complete: runs.filter((r) => r.complete).length };
 }
+function newestFirst(a: RunRecord, b: RunRecord): number {
+  return Date.parse(b.finishedAt ?? b.id.slice(0, 10)) -
+    Date.parse(a.finishedAt ?? a.id.slice(0, 10)) || b.id.localeCompare(a.id);
+}
 export function newestComplete(runs: RunRecord[]): RunRecord | null {
   return (
     runs
       .filter((r) => r.complete)
-      .sort(
-        (a, b) =>
-          Date.parse(b.finishedAt ?? b.id.slice(0, 10)) -
-            Date.parse(a.finishedAt ?? a.id.slice(0, 10)) || b.id.localeCompare(a.id),
-      )[0] ?? null
+      .sort(newestFirst)[0] ?? null
   );
 }
 export type OwnBest = {
-  backend: string;
-  nanoseconds: number;
-  spread: number;
+  backend: Backend;
+  comparator: Comparator;
+  ratio: number;
+  backendNanoseconds: number;
+  comparatorNanoseconds: number;
+  backendSpread: number;
+  comparatorSpread: number;
   compiler: string;
   run: string;
 };
+type PriorRow = { run: RunRecord; row: Row };
+function priorRows(run: RunRecord, row: Row, runs: RunRecord[]): PriorRow[] {
+  if (!row.eligibleForBest || !row.workloadIdentity || !run.harness.contract || !run.machine.identity) return [];
+  return runs.flatMap((prior) => {
+    if (prior.id === run.id || newestFirst(prior, run) <= 0 ||
+        prior.machine.identity !== run.machine.identity || prior.harness.contract !== run.harness.contract) return [];
+    const candidate = prior.rows.find((r) =>
+      r.name === row.name && r.workloadIdentity === row.workloadIdentity && r.eligibleForBest);
+    return candidate && prior.compiler.commit ? [{ run: prior, row: candidate }] : [];
+  });
+}
+const verifiedTiming = (cell: Cell | undefined): cell is Cell & { nanoseconds: number; spread: number } =>
+  cell?.status === "OK" && cell.verified && cell.nanoseconds !== null && cell.spread !== null;
+function bestRatio(backend: Backend, comparator: Comparator, rows: PriorRow[]): OwnBest | null {
+  const found: OwnBest[] = [];
+  for (const { run, row } of rows) {
+    const mine = row.cells[backend], other = row.cells[comparator];
+    if (!verifiedTiming(mine) || !verifiedTiming(other)) continue;
+    const value = mine.nanoseconds / other.nanoseconds;
+    check(Number.isFinite(value), "own-best ratio is not finite");
+    found.push({
+      backend, comparator, ratio: value,
+      backendNanoseconds: mine.nanoseconds, comparatorNanoseconds: other.nanoseconds,
+      backendSpread: mine.spread, comparatorSpread: other.spread,
+      compiler: run.compiler.commit!, run: run.id,
+    });
+  }
+  found.sort((a, b) => a.ratio - b.ratio || a.run.localeCompare(b.run));
+  return found[0] ?? null;
+}
 export function ownBest(
   run: RunRecord,
   row: Row,
   backend: Backend,
+  comparator: Comparator,
   runs: RunRecord[],
 ): OwnBest | null {
-  if (!row.workloadIdentity || !run.harness.contract || !run.machine.identity) return null;
-  const found: OwnBest[] = [];
-  for (const prior of runs) {
-    if (
-      prior.machine.identity !== run.machine.identity ||
-      prior.harness.contract !== run.harness.contract
-    )
-      continue;
-    const candidate = prior.rows.find(
-      (r) =>
-        r.name === row.name && r.workloadIdentity === row.workloadIdentity && r.eligibleForBest,
-    );
-    if (!candidate || !prior.compiler.commit) continue;
-    const c = candidate.cells[backend];
-    if (c?.status === "OK" && c.verified)
-      found.push({
-        backend,
-        nanoseconds: c.nanoseconds!,
-        spread: c.spread!,
-        compiler: prior.compiler.commit,
-        run: prior.id,
-      });
-  }
-  found.sort((a, b) => a.nanoseconds - b.nanoseconds || a.run.localeCompare(b.run));
-  return found[0] ?? null;
+  return bestRatio(backend, comparator, priorRows(run, row, runs));
 }
-/** One backend on one row: its verdicts, its ratios to the references, and its own best. */
+export type OwnBestComparison = {
+  currentRatio: number;
+  best: OwnBest;
+  relativeRatio: number;
+  spreads: { currentBackend: number; currentComparator: number; priorBackend: number; priorComparator: number };
+  spreadProduct: number;
+  tolerance: number;
+  slowerThanBest: boolean;
+};
+function compareBest(mine: Cell, other: Cell, best: OwnBest | null): OwnBestComparison | null {
+  if (!best || !verifiedTiming(mine) || !verifiedTiming(other)) return null;
+  const currentRatio = mine.nanoseconds / other.nanoseconds, relativeRatio = currentRatio / best.ratio;
+  const spreads = {
+    currentBackend: mine.spread, currentComparator: other.spread,
+    priorBackend: best.backendSpread, priorComparator: best.comparatorSpread,
+  };
+  const spreadProduct = Object.values(spreads).reduce((product, value) => product * value, 1);
+  const tolerance = Math.max(1.05, spreadProduct);
+  check(Number.isFinite(relativeRatio) && Number.isFinite(spreadProduct), "own-best ratio comparison is not finite");
+  return { currentRatio, best, relativeRatio, spreads, spreadProduct, tolerance, slowerThanBest: relativeRatio > tolerance };
+}
+/** One backend on one row, with independent prior ratio history for each comparator. */
 export type BackendResult = {
   versus: Record<Comparator, Verdict>;
   /** This backend's time over the reference's, or null unless both ran. */
   references: Record<Reference, number | null>;
-  ownBest: OwnBest | null;
-  /** Slower than its own best by more than max(1.05, either spread). */
+  ownBest: Record<Comparator, OwnBestComparison | null>;
+  /** Any comparable ratio is slower than its prior best beyond the compounded allowance. */
   slowerThanBest: boolean;
 };
 export type RowResult = {
@@ -547,10 +579,13 @@ export function results(runs: RunRecord[]): Results | null {
   const rows = [...run.rows]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((row) => {
+      const history = priorRows(run, row, runs);
       const backends = Object.fromEntries(
         BACKENDS.map((backend) => {
-          const current = row.cells[backend],
-            best = ownBest(run, row, backend, runs);
+          const current = row.cells[backend];
+          const best = Object.fromEntries(COMPARATORS.map((comparator) => [
+            comparator, compareBest(current, row.cells[comparator], bestRatio(backend, comparator, history)),
+          ])) as BackendResult["ownBest"];
           return [
             backend,
             {
@@ -559,11 +594,7 @@ export function results(runs: RunRecord[]): Results | null {
                 REFERENCES.map((r) => [r, ratio(current, row.cells[r])]),
               ),
               ownBest: best,
-              slowerThanBest:
-                best !== null &&
-                current.status === "OK" &&
-                current.nanoseconds! >
-                  best.nanoseconds * Math.max(1.05, current.spread ?? 1, best.spread),
+              slowerThanBest: Object.values(best).some((comparison) => comparison?.slowerThanBest),
             },
           ];
         }),
@@ -628,7 +659,7 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
   if (!model) return "# Benchmark results\n\nNo complete run has been retained.\n";
   const { run } = model;
   const counts = globalCounts(model);
-  const header = `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json). Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best values are per backend, using compatible machine, workload/input and harness contracts. Unknown historical identities and invalid cells are excluded. A slower-than-best flag is a cross-run observation with provenance, beside the current value. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
+  const header = `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json). Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best comparisons use each backend/comparator's best prior within-run ratio on the same machine, workload/input and harness contract. Only verified OK pairs are comparable. The change is current ratio / prior ratio; its allowance is max(1.05, the product of the four cell spreads). Noise factors below are current backend, current comparator, prior backend, prior comparator, in that order. Absolute times are information only. Missing comparisons are not established. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
   const tableFor = (rows: RowResult[]): string => {
   const native = ["nts C", "nts LLVM"] as const;
   const columns = [
@@ -636,7 +667,7 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
     ...COLUMNS,
     ...native.flatMap((b) => COMPARATORS.map((c) => b + "/" + c)),
     "LLVM versus C",
-    ...BACKENDS.map((b) => b + " own best"),
+    ...BACKENDS.map((b) => b + " own best ratios"),
   ];
   const table = ["| " + columns.join(" | ") + " |", "|" + columns.map(() => "---").join("|") + "|"];
   for (const { row, backends, llvmVersusC } of rows) {
@@ -653,12 +684,13 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
       }),
     );
     const own = BACKENDS.map((b) => {
-      const { ownBest: best, slowerThanBest } = backends[b];
-      if (!best) return "not established";
-      return (
-        `${time(best.nanoseconds)}; ${best.compiler}; [${best.run}](runs/${best.run}.json)` +
-        (slowerThanBest ? " **SLOWER THAN BEST**" : "")
-      );
+      const comparisons=COMPARATORS.flatMap(comparator=>{
+        const comparison=backends[b].ownBest[comparator];if(!comparison)return [];
+        const {best,currentRatio,relativeRatio,spreads,spreadProduct,tolerance,slowerThanBest}=comparison;
+        const quotient=(value:number)=>value.toPrecision(6)+'×';
+        return [`${comparator}: ${quotient(currentRatio)}; best ${quotient(best.ratio)}; change ${quotient(relativeRatio)}; allowance ${quotient(tolerance)}; noise ${Object.values(spreads).map(value=>value.toPrecision(6)).join(' · ')} = ${quotient(spreadProduct)}; ${best.compiler}; [${best.run}](runs/${best.run}.json)`+(slowerThanBest?' **SLOWER THAN BEST**':'')];
+      });
+      return comparisons.length?comparisons.join('<br>'):'not established';
     });
     table.push(
       "|" +

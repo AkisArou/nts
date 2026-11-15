@@ -151,7 +151,7 @@ test("newest complete does not borrow missing cells from a later partial run", (
 });
 
 test("own best excludes invalid, unverified, different workload and different harness records", () => {
-  const current = fixture("current"),
+  const current = fixture("current", "2026-10-29T13:00:00.000Z"),
     good = fixture("good");
   good.rows[0].cells["nts LLVM"] = ok(40);
   const bad = fixture("invalid");
@@ -174,7 +174,7 @@ test("own best excludes invalid, unverified, different workload and different ha
   const legacy = fixture("legacy");
   legacy.rows[0].cells["nts C"] = { ...ok(1), verified: false, checksum: null, spread: null };
   legacy.rows[0].eligibleForBest = false;
-  const best = ownBest(current, current.rows[0], "nts LLVM", [
+  const best = ownBest(current, current.rows[0], "nts LLVM", "node", [
     good,
     bad,
     foreign,
@@ -182,10 +182,11 @@ test("own best excludes invalid, unverified, different workload and different ha
     legacy,
     current,
   ]);
-  assert.equal(best?.nanoseconds, 40);
+  assert.equal(best?.backendNanoseconds, 40);
+  assert.equal(best?.ratio, 0.4);
   assert.equal(best?.backend, "nts LLVM");
   assert.equal(best?.run, good.id);
-  assert.equal(ownBest(current, current.rows[1], "nts C", [good, current])?.nanoseconds, 80);
+  assert.equal(ownBest(current, current.rows[1], "nts C", "node", [good, current])?.backendNanoseconds, 80);
 });
 
 test("slower-than-best flag stays beside current timing and all best provenance", () => {
@@ -195,7 +196,7 @@ test("slower-than-best flag stays beside current timing and all best provenance"
   const rendered = renderFull([old, current]);
   assert.match(rendered, /SLOWER THAN BEST/);
   assert.match(rendered, /80\.0 ns/);
-  assert.match(rendered, /40\.0 ns/);
+  assert.match(rendered, /node: 0\.800000×; best 0\.400000×; change 2\.00000×/);
   assert.ok(rendered.includes(old.id));
   assert.ok(rendered.includes(pin));
   assert.match(rendered, /Verdict policy v1/);
@@ -294,6 +295,51 @@ test("two concurrent producers serialize publication and render the newest compl
   }
 });
 
+test('uniform load changes no own-best ratio, while an nts-only slowdown names its row and comparator',()=>{
+  const old=fixture('ratio-old'),current=fixture('ratio-current','2026-10-29T13:00:00.000Z');
+  for(const row of current.rows)for(const cell of Object.values(row.cells))if(cell.nanoseconds!==null)cell.nanoseconds*=3;
+  const uniform=results([old,sealRun(current)])!;
+  assert.ok(uniform.rows.every(row=>Object.values(row.backends).every(backend=>!backend.slowerThanBest)));
+  assert.ok(!renderFull([old,sealRun(current)]).includes('**SLOWER THAN BEST**'));
+  current.rows[0].cells['nts C'].nanoseconds!*=1.5;
+  const changed=results([old,sealRun(current)])!,comparison=changed.rows[0].backends['nts C'].ownBest.node!;
+  assert.equal(comparison.relativeRatio,1.5);assert.equal(comparison.slowerThanBest,true);assert.equal(comparison.best.comparator,'node');
+  assert.equal(changed.rows[0].backends['nts LLVM'].slowerThanBest,false);assert.equal(changed.rows[1].backends['nts C'].slowerThanBest,false);
+  assert.match(renderFull([old,sealRun(current)]),/node: .*\*\*SLOWER THAN BEST\*\*/);
+});
+
+test('ratio uncertainty compounds all four named spreads from the two runs',()=>{
+  const old=fixture('spread-old'),current=fixture('spread-current','2026-10-29T13:00:00.000Z');
+  old.rows[0].cells['nts C'].spread=1.03;current.rows[0].cells['nts C'].spread=1.01;
+  for(const comparator of COMPARATORS){old.rows[0].cells[comparator].spread=1.04;current.rows[0].cells[comparator].spread=1.02;}
+  current.rows[0].cells['nts C'].nanoseconds=80*1.08;
+  const bounded=results([old,sealRun(current)])!.rows[0].backends['nts C'].ownBest.node!;
+  assert.deepEqual(bounded.spreads,{currentBackend:1.01,currentComparator:1.02,priorBackend:1.03,priorComparator:1.04});
+  assert.equal(bounded.spreadProduct,1.01*1.02*1.03*1.04);assert.equal(bounded.tolerance,bounded.spreadProduct);assert.equal(bounded.slowerThanBest,false);
+  current.rows[0].cells['nts C'].nanoseconds=80*1.12;
+  assert.equal(results([old,sealRun(current)])!.rows[0].backends['nts C'].ownBest.node?.slowerThanBest,true);
+  assert.ok(renderFull([old,sealRun(current)]).includes('noise 1.01000 · 1.02000 · 1.03000 · 1.04000'));
+});
+
+test('missing or unverified comparator timings never fall back to absolute time',()=>{
+  const old=fixture('missing-old'),current=fixture('missing-current','2026-10-29T13:00:00.000Z');
+  current.rows[0].cells['nts C'].nanoseconds=8000;
+  for(const comparator of COMPARATORS)current.rows[0].cells[comparator]={status:'NOT_PROVIDED',nanoseconds:null,spread:null,checksum:null,verified:false,reason:'private missing comparator',details:null};
+  const result=results([old,sealRun(current)])!.rows[0].backends['nts C'];
+  assert.ok(Object.values(result.ownBest).every(value=>value===null));assert.equal(result.slowerThanBest,false);
+  current.rows[0].cells.node=ok(100);old.rows[0].cells.node={...ok(100),verified:false,checksum:null,spread:null};
+  assert.equal(ownBest(current,current.rows[0],'nts C','node',[old]),null);
+});
+
+test('each comparator keeps its own prior best and current or future runs cannot supply history',()=>{
+  const old=fixture('prior'),other=fixture('prior-other','2026-10-29T12:30:00.000Z'),current=fixture('present','2026-10-29T13:00:00.000Z');
+  old.rows[0].cells.node=ok(200);other.rows[0].cells['Bun JIT']=ok(400);
+  const future=fixture('future','2026-10-29T14:00:00.000Z');future.rows[0].cells['nts C']=ok(1);future.complete=false;
+  const found=results([old,other,current,future])!.rows[0].backends['nts C'].ownBest;
+  assert.equal(found.node?.best.run,old.id);assert.equal(found['Bun JIT']?.best.run,other.id);
+  assert.equal(ownBest(current,current.rows[0],'nts C','node',[current,future]),null);
+});
+
 test("native verdicts and own-best never borrow the other backend's faster observation", () => {
   const old = fixture("old-native"),
     current = fixture("new-native", "2026-10-29T13:00:00.000Z");
@@ -304,7 +350,7 @@ test("native verdicts and own-best never borrow the other backend's faster obser
   const sealed = sealRun(current);
   assert.equal(sealed.rows[0].verdicts["nts C"].node.kind, "WON");
   assert.equal(sealed.rows[0].verdicts["nts LLVM"].node.kind, "LOSS");
-  assert.equal(ownBest(sealed, sealed.rows[0], "nts LLVM", [old, sealed])?.nanoseconds, 110);
+  assert.equal(ownBest(sealed, sealed.rows[0], "nts LLVM", "node", [old, sealed])?.backendNanoseconds, 110);
   const output = renderFull([old, sealed]);
   assert.match(output, /LLVM TRAILS C/);
   assert.match(output, /\*\*nts C\*\*/);

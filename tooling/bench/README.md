@@ -5,11 +5,15 @@ comparator sittings. It validates the inventory and every cell, derives policy v
 from [The bar](../../docs/README.md#the-bar), and creates one immutable JSON file
 under `results/benchmarks/runs/`. Each native backend faces every comparator
 independently. The rendered `full.md` uses the newest complete run; partial runs
-remain records of their own. A row's own-best is per backend and requires matching
-machine, exact source/input inventory and timing contract, with its compiler and
-run record shown. Invalid and unverified cells never supply an own-best.
+remain records of their own. Each backend/comparator pair compares its within-run
+ratio with its best prior ratio on the same machine, source/input inventory and
+timing contract. A regression exceeds max(1.05, the product of the current and
+prior backend and comparator spreads). The report retains all four factors,
+their product, the comparator, compiler and run. Invalid, unverified or missing
+pairs remain unestablished. Absolute times are information only.
 `node tooling/records/summary.ts benchmarks` prints the same model as JSON, with
-each backend's ratios to the C++ and Java references beside it; its contract is
+each backend's ratios to the C++ and Java references beside it; the benchmark
+summary contract is version 2 and its definition is
 that file's header.
 
 The standing engine columns are node, Bun JIT, Bun AOT and ScriptC. `comparators.json`

@@ -12,12 +12,12 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // parsers their writers and checks use, and measures nothing. A record that
 // does not parse is an error, never a partial summary.
 //
-// # The contract, version 1
+// # The contracts: benchmarks version 2, conformance version 1
 //
 // Every summary is an object with, as the landing and full checks' status
 // (`--json`) has,
 //
-//   version   1; a change a reader has to know about takes the next number
+//   version   the kind's contract version; a reader-visible change takes its next number
 //   kind      "benchmarks" or "conformance"
 //   at        when it was read, as an ISO time
 //   read      { root, commit }: the tree it read, and that tree's HEAD (null
@@ -52,7 +52,12 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //               backends: { <backend>: {
 //                 versus: { <comparator>: { kind, ratio, tolerance } },
 //                 references: { "C++": <ratio>, "Java": <ratio> },
-//                 ownBest: { nanoseconds, spread, compiler, run } | null,
+//                 ownBest: { <comparator>: { currentRatio,
+//                   best: { backend, comparator, ratio, backendNanoseconds,
+//                     comparatorNanoseconds, backendSpread, comparatorSpread, compiler, run },
+//                   relativeRatio, spreads: { currentBackend, currentComparator,
+//                     priorBackend, priorComparator }, spreadProduct, tolerance,
+//                   slowerThanBest } | null },
 //                 slowerThanBest } },
 //               llvmVersusC: { ratio, tolerance, trailing } | null }
 //
@@ -67,10 +72,13 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // and ScriptC, a tie within `tolerance`; it is UNAVAILABLE when the backend has
 // no time and NOT_COMPARABLE when the comparator has none, both with a null
 // ratio. A reference ratio is the backend's time over C++'s or Java's, null
-// unless both ran. ownBest is the backend's best verified time for the case in
-// any run on this machine, workload and harness contract, with the compiler and
-// run that made it; slowerThanBest says the current time is past it by more
-// than max(1.05, either spread). llvmVersusC is LLVM's time over C's beside the
+// unless both ran. Each ownBest entry compares a verified backend/comparator
+// ratio to its best compatible prior ratio on this machine, workload and
+// harness contract. relativeRatio is currentRatio / best.ratio. Its tolerance
+// is max(1.05, spreadProduct), the product of the four named cell spreads.
+// Missing comparisons are null. The backend's slowerThanBest is true when any
+// comparator exceeds that allowance. Absolute times remain information only.
+// llvmVersusC is LLVM's time over C's beside the
 // larger of their spreads, and `trailing` the backend slower beyond it (c,
 // llvm, or null for neither); null unless both ran.
 //
@@ -146,9 +154,9 @@ import { CENSUS_OUTCOMES, censusReportPath, parseCensusReport, type CensusReport
 import { layout, readState } from "../full-check/state.ts";
 import { findPending, TEST262_SLICES } from "./record-pending.ts";
 
-export const VERSION = 1;
 export const KINDS = ["benchmarks", "conformance"] as const;
 export type Kind = typeof KINDS[number];
+export const VERSIONS = { benchmarks: 2, conformance: 1 } as const satisfies Record<Kind, number>;
 
 /** Each backend by the name `--backend` and results/ give it, and its column in a benchmark run. */
 const COLUMN = { c: "nts C", llvm: "nts LLVM", jvm: "nts JVM" } as const satisfies Record<string, BackendColumn>;
@@ -160,11 +168,11 @@ assert.deepEqual(Object.values(COLUMN), [...BACKEND_COLUMNS], "the summary names
 const backendOf = (column: BackendColumn): Backend => BACKENDS.find(backend => COLUMN[backend] === column)!;
 
 /** The envelope every summary shares. */
-function envelope(kind: Kind, root: string) {
+function envelope<K extends Kind>(kind: K, root: string) {
   const asked = spawnSync("git", gitArguments(["rev-parse", "--show-toplevel", "HEAD"]), { cwd: root, encoding: "utf8" });
   const [top, head] = asked.status === 0 ? asked.stdout.trim().split("\n") : [];
   const commit = top && head && realpathSync(top) === realpathSync(root) ? head : null;
-  return { version: VERSION, kind, at: new Date().toISOString(), read: { root: resolve(root), commit } };
+  return { version: VERSIONS[kind], kind, at: new Date().toISOString(), read: { root: resolve(root), commit } };
 }
 
 /** The newest complete run, as full.md shows it. */
@@ -200,7 +208,7 @@ export function benchmarkSummary(root: string) {
         return [backend, {
           versus,
           references,
-          ownBest: ownBest && { nanoseconds: ownBest.nanoseconds, spread: ownBest.spread, compiler: ownBest.compiler, run: ownBest.run },
+          ownBest,
           slowerThanBest,
         }];
       })),

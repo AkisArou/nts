@@ -23,7 +23,7 @@ import { readLedger } from "../gate/memory-ledger.ts";
 import { gateEnvironment } from "../gate/canonical-environment.ts";
 import { ownMemory } from "../gate/test-memory.ts";
 import { toolingSliceArgs } from "../gate/tooling-slice.ts";
-import { COLUMNS, COMPARATORS, POLICY } from "../bench/run-record.ts";
+import { COLUMNS, COMPARATORS, POLICY, renderFull, sealRun, type Cell } from "../bench/run-record.ts";
 import { removable } from "../gate/run-temporary.ts";
 import {runSession,type SessionBudgetObservation} from './bench-session.ts';
 
@@ -64,11 +64,27 @@ test("the results-only commit on its base is the run's; anything else is named",
   assert.deepEqual(resultsCommit(repo.git, other), { none: "the results commit also changes stray.txt" });
 });
 
-test("rows full.md marks slower than their own best are read by case", () => {
-  const page = ["# Benchmark results", "| Case | nts C | nts C own best |", "|---|---|---|",
-    "|awfy-list|9.68 µs|9.00 µs; abc; [run](runs/x.json) **SLOWER THAN BEST**|", "|arrays|1.39 µs|1.39 µs|",
+test("rows full.md marks slower than their own ratio best are read by case", () => {
+  const page = ["# Benchmark results", "| Case | nts C | nts C own best ratios |", "|---|---|---|",
+    "|awfy-list|9.68 µs|node: 0.968×; best 0.900×; abc; [run](runs/x.json) **SLOWER THAN BEST**|", "|arrays|1.39 µs|not established|",
     "Prose that mentions **SLOWER THAN BEST** is not a row."].join("\n");
   assert.deepEqual(slowerRows(page), ["awfy-list"]);
+});
+
+test('the nightly reader consumes the real ratio model without absolute-time load alarms',()=>{
+  const pin='a'.repeat(40),digest='b'.repeat(64);
+  const make=(day:number,scale:number,ntsScale=1)=>sealRun({
+    schemaVersion:1,id:`2026-11-0${day}-${pin}-ratio`,startedAt:`2026-11-0${day}T12:00:00Z`,finishedAt:`2026-11-0${day}T12:00:00Z`,complete:true,
+    inventory:['ratio-case'],columns:[...COLUMNS],sourceCommit:pin,compiler:{commit:pin,sha256:digest},
+    harness:{identity:digest,contract:'ratio-control',files:[{path:'loop.ts',sha256:digest}]},machine:{identity:'private-ratio-machine',conditions:{}},
+    comparators:Object.fromEntries(COMPARATORS.map(name=>[name,{version:'1',commit:pin,sha256:digest,command:[name]}])),verdictPolicy:POLICY,provenance:null,
+    rows:[{name:'ratio-case',workloadIdentity:digest,eligibleForBest:true,conditions:null,verdicts:{},cells:Object.fromEntries(COLUMNS.map(name=>[name,{
+      status:'OK',nanoseconds:(name==='nts C'?80*ntsScale:100)*scale,spread:1,checksum:'4000000000000000',verified:true,reason:null,details:null,
+    } satisfies Cell]))}],
+  });
+  const old=make(1,1),uniform=make(2,3),changed=make(2,3,1.5);
+  assert.deepEqual(slowerRows(renderFull([old,uniform])),[]);
+  const page=renderFull([old,changed]);assert.deepEqual(slowerRows(page),['ratio-case']);assert.match(page,/node: .*\*\*SLOWER THAN BEST\*\*/);
 });
 
 test("the session delegates joint admission to the tree's with-lock.sh with its key and history, without --wait; exit75 did not start", t => {

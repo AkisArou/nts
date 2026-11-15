@@ -109,7 +109,7 @@ export function resultsCommit(tree: Git, base: string): { commit: string } | { n
   return stray.length ? { none: `the results commit also changes ${stray.join(", ")}` } : { commit: head };
 }
 
-/** The rows full.md marks slower than their own best, by case. */
+/** Cases whose rendered backend/comparator ratio exceeds its prior best allowance. */
 export function slowerRows(fullMd: string): string[] {
   return fullMd.split("\n").filter(line => line.startsWith("|") && line.includes("**SLOWER THAN BEST**"))
     .map(line => line.split("|")[1]!.trim()).filter(Boolean);
