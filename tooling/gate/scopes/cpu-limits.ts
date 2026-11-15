@@ -29,7 +29,8 @@ export function cpuControls(group:string,supplied?:CpuControlEffects){
       const counters:Record<string,number>={};
       for(const line of text.trim().split('\n')){
         const row=/^(\S+)\s+(\d+)$/.exec(line),value=row?Number(row[2]):NaN;
-        if(!row||!Number.isSafeInteger(value)||Object.hasOwn(counters,row[1]!))fail('malformed cpu.stat');
+        if(!row)return fail('malformed cpu.stat');
+        if(!Number.isSafeInteger(value)||Object.hasOwn(counters,row[1]!))fail('malformed cpu.stat');
         counters[row[1]!]=value;
       }
       for(const key of ['usage_usec','user_usec','system_usec','nr_periods','nr_throttled','throttled_usec'])

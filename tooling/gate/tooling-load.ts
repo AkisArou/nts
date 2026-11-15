@@ -32,6 +32,7 @@ const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const SELF=fileURLToPath(import.meta.url),RUST_RUNNER=fileURLToPath(new URL('./rust-test-runner.ts',import.meta.url));
 const QUOTA=800;
 const fail=(why:string):never=>{throw new ToolingInstrumentError('tooling-setup','tooling load experiment: '+why);};
+const instrument=(error:unknown)=>error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error),{cause:error});
 const hash=(path:string)=>createHash('sha256').update(readFileSync(path)).digest('hex');
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('../');};
 const probe=(purpose:string,command:string,args:readonly string[],env:NodeJS.ProcessEnv)=>infrastructureProbe({purpose,command,args,cwd:ROOT,env}).stdout.trim();
@@ -71,7 +72,7 @@ async function worker(requestPath:string):Promise<number>{
     }finally{closeSync(output);}
     publish();
     const rustLog=join(request.directory,'rust-cli.log'),fd=openSync(rustLog,'wx');
-    const rustEnv={...env,NTS_CHECKERS:'1'};
+    const rustEnv:NodeJS.ProcessEnv={...env,NTS_CHECKERS:'1'};
     delete rustEnv.NTS_GATE_STEP_RESULT;delete rustEnv.NTS_GATE_STEP_ATTEMPT;
     try{
       const child=spawn(process.execPath,[RUST_RUNNER,request.binary.path,'--nocapture'],{cwd:ROOT,env:rustEnv,stdio:['ignore',fd,fd]});
@@ -84,9 +85,9 @@ async function worker(requestPath:string):Promise<number>{
     }finally{closeSync(fd);}
     if(hash(request.binary.path)!==request.binary.sha256)fail('Rust CLI artifact changed during execution');
     report.status=report.node.completedFailures||report.rust.completedFailures?1:report.node.status===0&&report.rust.status===0&&report.rust.signal===null?0:2;
-  }catch(error){report.error=String(error);report.status=report.node?.completedFailures?1:2;publishToolingFailure(error,env);}
+  }catch(error){report.error=String(error);report.status=report.node?.completedFailures?1:2;publishToolingFailure(instrument(error),env);}
   finally{
-    try{await load.close();}catch(error){report.error=[report.error,String(error)].filter(Boolean).join('; ');report.status=report.status===1?1:2;publishToolingFailure(error,env);}
+    try{await load.close();}catch(error){report.error=[report.error,String(error)].filter(Boolean).join('; ');report.status=report.status===1?1:2;publishToolingFailure(instrument(error),env);}
     report.progress=load.progress();report.complete=true;publish();
   }
   return report.status;
@@ -108,7 +109,7 @@ async function round(directory:string):Promise<number>{
   const cancel=()=>{if(acquired)stopToolingSlice(slice);};
   const unregister=registerCommandCloser('tooling load experiment',{cancel,close:async()=>{cancel();if(childClosed)await childClosed;}});
   try{
-    const sealed=await sealOracleRun(planned),env={...sealed.env,NTS_BIN:join(ROOT,'target/nts-dev/nts')};
+    const sealed=await sealOracleRun(planned),env:NodeJS.ProcessEnv={...sealed.env,NTS_BIN:join(ROOT,'target/nts-dev/nts')};
     const host=hostObservations(env),selection=discoverToolingTests(ROOT),files=[...selection.files,...selection.exclusions.map(row=>row.path)].sort();
     const workers=defaultSlots(host.machineWidth());
     const release=new DiskCapacity({env}).beginBuild({root:ROOT,target:join(ROOT,'target'),outputs:['nts-dev']});
@@ -176,7 +177,7 @@ async function round(directory:string):Promise<number>{
     try{unregister();}catch(error){errors.push(error);}
     try{job.release();}catch(error){errors.push(error);}
     try{await job.closed;}catch(error){errors.push(error);}
-    try{await finishRunTemporary(planned.temporary,planned.env.HOME,good&&primary===undefined&&errors.length===0);}catch(error){errors.push(error);}
+    try{await finishRunTemporary(planned.temporary,planned.env.HOME!,good&&primary===undefined&&errors.length===0);}catch(error){errors.push(error);}
     if(errors.length)primary=new ToolingInstrumentError('tooling-cleanup','tooling load experiment drain failed: '+[...(primary===undefined?[]:[primary]),...errors].map(String).join('; '),{cause:new AggregateError([...(primary===undefined?[]:[primary]),...errors])});
   }
   durableRecord(join(directory,'terminal.json'),{...outcome,version:1,pin,status:primary===undefined?status:2,cleanupComplete:primary===undefined,error:primary===undefined?null:String(primary)});
