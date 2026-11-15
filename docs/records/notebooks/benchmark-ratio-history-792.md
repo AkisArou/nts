@@ -19,26 +19,32 @@ Groups repeat some cases, so occurrence and distinct-case counts differ. Of toni
 
 The remaining historical ratio alerts below retain each flagged backend. The change is the smallest current/best ratio across its established comparators, the lower bound among those comparisons. The comparator and best compiler pin in that same minimum comparison are shown as a starting point for investigation; the other comparators can have independent best pins. This does not establish a regression between the two latest compiler pins. Full ratios, allowances, all four factors and every prior run/pin remain in the raw TSV.
 
-| Case | Backend | Smallest change | Comparator at minimum | Best compiler at minimum |
-| --- | --- | --- | --- | --- |
-| awfy-bounce | nts C | 1.17730× | Bun AOT | 6a981d6c7bfdc3267220585ee938b8c126a2630b |
-| awfy-permute | nts C | 1.15861× | ScriptC | 6a981d6c7bfdc3267220585ee938b8c126a2630b |
-| bytes | nts C<br>nts LLVM<br>nts JVM | 1.16925×<br>1.13350×<br>1.12321× | node<br>node<br>node | cad7d13dfbe64a89b7ee1befa8a71e82b7a21076<br>cad7d13dfbe64a89b7ee1befa8a71e82b7a21076<br>cad7d13dfbe64a89b7ee1befa8a71e82b7a21076 |
-| clbg-k-nucleotide | nts C<br>nts LLVM | 1.17408×<br>1.18701× | ScriptC<br>ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd<br>653fb5235a070f442c49f9c518e4ad667edd55bd |
-| erasure-stored-unknown | nts C | 1.06864× | Bun AOT | 6a981d6c7bfdc3267220585ee938b8c126a2630b |
-| erasure-unknown | nts JVM | 1.10035× | node | 653fb5235a070f442c49f9c518e4ad667edd55bd |
-| face-fields | nts LLVM | 1.07006× | Bun JIT | 99915c45f18719dde781822e742e1fb0df6d39a3 |
-| immutable-update | nts LLVM | 1.07097× | ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd |
-| json-stringify-doc | nts C | 1.91919× | ScriptC | cad7d13dfbe64a89b7ee1befa8a71e82b7a21076 |
-| logical-assignment | nts LLVM<br>nts JVM | 1.09221×<br>1.10689× | node<br>Bun AOT | 900e5e6cf8610d9ca6c1b05a201a6054af10fd51<br>e4f8d9a9bb70558b8bd7a681d7a66cc2751a3fa5 |
-| map-and-set | nts LLVM | 1.11003× | ScriptC | cad7d13dfbe64a89b7ee1befa8a71e82b7a21076 |
-| map-word-counts | nts C<br>nts LLVM<br>nts JVM | 1.20188×<br>1.15306×<br>1.12064× | ScriptC<br>ScriptC<br>ScriptC | 99915c45f18719dde781822e742e1fb0df6d39a3<br>99915c45f18719dde781822e742e1fb0df6d39a3<br>99915c45f18719dde781822e742e1fb0df6d39a3 |
-| node-utf8 | nts C<br>nts LLVM | 1.06488×<br>1.16540× | ScriptC<br>ScriptC | e4f8d9a9bb70558b8bd7a681d7a66cc2751a3fa5<br>99915c45f18719dde781822e742e1fb0df6d39a3 |
-| optional-chain | nts JVM | 1.05637× | ScriptC | 900e5e6cf8610d9ca6c1b05a201a6054af10fd51 |
-| parse-int-decimal | nts LLVM | 1.33888× | node | 99915c45f18719dde781822e742e1fb0df6d39a3 |
-| parse-int-runtime | nts C | 1.44423× | node | 6a981d6c7bfdc3267220585ee938b8c126a2630b |
-| str-template | nts C | 1.05331× | ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd |
-| tree-teardown | nts JVM | 1.23277× | ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd |
+| Case | Backend | Smallest change | Comparator at minimum | Best compiler at minimum | Compiler/runtime/build changes from best to measured |
+| --- | --- | --- | --- | --- | --- |
+| awfy-bounce | nts C | 1.17730× | Bun AOT | 6a981d6c7bfdc3267220585ee938b8c126a2630b | 228 files changed, 2907 insertions(+), 2241 deletions(-) |
+| awfy-permute | nts C | 1.15861× | ScriptC | 6a981d6c7bfdc3267220585ee938b8c126a2630b | 228 files changed, 2907 insertions(+), 2241 deletions(-) |
+| bytes | nts C<br>nts LLVM<br>nts JVM | 1.16925×<br>1.13350×<br>1.12321× | node<br>node<br>node | cad7d13dfbe64a89b7ee1befa8a71e82b7a21076<br>cad7d13dfbe64a89b7ee1befa8a71e82b7a21076<br>cad7d13dfbe64a89b7ee1befa8a71e82b7a21076 | 802 files changed, 160007 insertions(+), 104419 deletions(-)<br>802 files changed, 160007 insertions(+), 104419 deletions(-)<br>802 files changed, 160007 insertions(+), 104419 deletions(-) |
+| clbg-k-nucleotide | nts C<br>nts LLVM | 1.17408×<br>1.18701× | ScriptC<br>ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd<br>653fb5235a070f442c49f9c518e4ad667edd55bd | 8 files changed, 922 insertions(+), 1174 deletions(-)<br>8 files changed, 922 insertions(+), 1174 deletions(-) |
+| erasure-stored-unknown | nts C | 1.06864× | Bun AOT | 6a981d6c7bfdc3267220585ee938b8c126a2630b | 228 files changed, 2907 insertions(+), 2241 deletions(-) |
+| erasure-unknown | nts JVM | 1.10035× | node | 653fb5235a070f442c49f9c518e4ad667edd55bd | 8 files changed, 922 insertions(+), 1174 deletions(-) |
+| face-fields | nts LLVM | 1.07006× | Bun JIT | 99915c45f18719dde781822e742e1fb0df6d39a3 | 330 files changed, 89300 insertions(+), 86891 deletions(-) |
+| immutable-update | nts LLVM | 1.07097× | ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd | 8 files changed, 922 insertions(+), 1174 deletions(-) |
+| json-stringify-doc | nts C | 1.91919× | ScriptC | cad7d13dfbe64a89b7ee1befa8a71e82b7a21076 | 802 files changed, 160007 insertions(+), 104419 deletions(-) |
+| logical-assignment | nts LLVM<br>nts JVM | 1.09221×<br>1.10689× | node<br>Bun AOT | 900e5e6cf8610d9ca6c1b05a201a6054af10fd51<br>e4f8d9a9bb70558b8bd7a681d7a66cc2751a3fa5 | 763 files changed, 151004 insertions(+), 103073 deletions(-)<br>none |
+| map-and-set | nts LLVM | 1.11003× | ScriptC | cad7d13dfbe64a89b7ee1befa8a71e82b7a21076 | 802 files changed, 160007 insertions(+), 104419 deletions(-) |
+| map-word-counts | nts C<br>nts LLVM<br>nts JVM | 1.20188×<br>1.15306×<br>1.12064× | ScriptC<br>ScriptC<br>ScriptC | 99915c45f18719dde781822e742e1fb0df6d39a3<br>99915c45f18719dde781822e742e1fb0df6d39a3<br>99915c45f18719dde781822e742e1fb0df6d39a3 | 330 files changed, 89300 insertions(+), 86891 deletions(-)<br>330 files changed, 89300 insertions(+), 86891 deletions(-)<br>330 files changed, 89300 insertions(+), 86891 deletions(-) |
+| node-utf8 | nts C<br>nts LLVM | 1.06488×<br>1.16540× | ScriptC<br>ScriptC | e4f8d9a9bb70558b8bd7a681d7a66cc2751a3fa5<br>99915c45f18719dde781822e742e1fb0df6d39a3 | none<br>330 files changed, 89300 insertions(+), 86891 deletions(-) |
+| optional-chain | nts JVM | 1.05637× | ScriptC | 900e5e6cf8610d9ca6c1b05a201a6054af10fd51 | 763 files changed, 151004 insertions(+), 103073 deletions(-) |
+| parse-int-decimal | nts LLVM | 1.33888× | node | 99915c45f18719dde781822e742e1fb0df6d39a3 | 330 files changed, 89300 insertions(+), 86891 deletions(-) |
+| parse-int-runtime | nts C | 1.44423× | node | 6a981d6c7bfdc3267220585ee938b8c126a2630b | 228 files changed, 2907 insertions(+), 2241 deletions(-) |
+| str-template | nts C | 1.05331× | ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd | 8 files changed, 922 insertions(+), 1174 deletions(-) |
+| tree-teardown | nts JVM | 1.23277× | ScriptC | 653fb5235a070f442c49f9c518e4ad667edd55bd | 8 files changed, 922 insertions(+), 1174 deletions(-) |
+
+The change column uses `git diff --shortstat <best> 312ea438435f938ccd0d63fb6e218d495afa47a1 -- compiler runtime build`; an empty diff is shown as "none". A changed file count is not evidence that code generation changed: small differences can be tests, generated-member tooling or unrelated runtime code. Thus ratio alarms can be differential engine load noise even when every comparator votes. Small scoped differences (at most 20 files) are:
+
+- 653fb5235a070f442c49f9c518e4ad667edd55bd: `compiler/codegen/jvm/generate-members.ts`, `compiler/codegen/jvm/member-grammar.ts`, `compiler/codegen/jvm/member-scanner.test.ts`, `compiler/codegen/jvm/tests/generated_member_names.rs`, `compiler/core/src/hir/lower.rs`, `compiler/core/src/hir/lower/tests.rs`, `runtime/jvm/web-platform/android/src/main/java/org/nts/web/NetworkPrimitives.java`, `runtime/jvm/web-platform/android/src/test/java/org/nts/web/NetworkPrimitivesTest.java`.
+
+Full scoped file lists remain in /home/akisarou/.cache/nts-scratch/792/compiler-diffs-v1.json, SHA-256 5077cba9c44757f496469da4161843471ec4b44175198331fec8f44ec2704d62.
 
 | Validation | Result |
 | --- | --- |
