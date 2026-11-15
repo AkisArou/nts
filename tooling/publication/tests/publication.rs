@@ -75,7 +75,7 @@ fn two_writers_publish_whole_files_and_leave_foreign_staging_alone() {
     fs::write(foreign.join("sentinel"), "kept").expect("publication control");
     let ready = Arc::new(Barrier::new(2));
     std::thread::scope(|scope| {
-        for byte in [b'a', b'b'] {
+        for byte in *b"ab" {
             let target = &target;
             let ready = Arc::clone(&ready);
             scope.spawn(move || {
@@ -85,7 +85,7 @@ fn two_writers_publish_whole_files_and_leave_foreign_staging_alone() {
                     ready.wait();
                     Ok(())
                 })
-                .expect("publication control")
+                .expect("publication control");
             });
         }
     });
@@ -121,7 +121,7 @@ fn two_directory_writers_complete_and_the_second_reuses_a_whole_target() {
                             Ok(())
                         },
                         |path| {
-                            Ok(fs::read(path.join("body")).ok().is_some_and(|body| {
+                            Ok(fs::read(path.join("body")).is_ok_and(|body| {
                                 fs::read(path.join("complete")).ok() == Some(body)
                             }))
                         },
@@ -234,7 +234,7 @@ fn concurrent_links_replace_a_legacy_directory_under_the_same_owner() {
                     ready.wait();
                     Ok(())
                 })
-                .expect("link published")
+                .expect("link published");
             });
         }
     });
