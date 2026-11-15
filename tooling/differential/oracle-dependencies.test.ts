@@ -37,7 +37,7 @@ test('producer fixture direct entry refuses a real source before any gate write'
   assert.deepEqual(readFileSync(gate),before);assert.equal(existsSync(join(own,'home')),false);
 });
 test('owned producer fixture retains cold/hit accounting and prepares before a zero-memory consumer',t=>{
-  const own=testScratch(t,'producer-fixture-accounting'),env=testEnvironment(),prepared=prepareChildObserver(own,env);assert.ok(prepared.observer,prepared.error);
+  const own=testScratch(t,'producer-fixture-accounting'),env=testEnvironment(),prepared=prepareChildObserver(own,env);assert.ok(prepared.observer,prepared.error??'the fixture observer compiled');
   let usage:ChildUsage|undefined;
   const result=observedSpawnSync(process.execPath,[fileURLToPath(new URL('./oracle-reservation-fixture.ts',import.meta.url))],
     {env,encoding:'utf8',maxBuffer:16*2**20},prepared.observer,value=>{usage=value;});
