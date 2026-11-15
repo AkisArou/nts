@@ -153,7 +153,8 @@ test('a failed result transform closes its private captured SDK owner',t=>{
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
-import {OracleWorker,oracleRecipeIdentity} from ${JSON.stringify(new URL('./oracle-emit.ts',import.meta.url).href)};
+import {OracleWorker} from ${JSON.stringify(new URL('./oracle-emit.ts',import.meta.url).href)};
+import {oracleRecipeIdentity} from ${JSON.stringify(new URL('./oracle-runtime.ts',import.meta.url).href)};
 import {createProgramOracleResults} from ${JSON.stringify(new URL('./oracle-result-publisher.ts',import.meta.url).href)};
 let closed=0;const close=OracleWorker.prototype.close;
 OracleWorker.prototype.close=function(){closed++;return close.call(this);};

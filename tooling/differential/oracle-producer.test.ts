@@ -31,7 +31,8 @@ function fixture(t:TestContext){
 test('the producer binds placed execution modules independently of fence observations',()=>{
   const selected=recipe(SOURCE),placed=new Set(selected.placingFiles);
   assert.ok(selected.moduleFiles.every(file=>placed.has(file)));
-  assert.ok(selected.files.includes('tooling/tasks/new.ts'));
+  assert.ok(selected.runtimeFiles.includes('tooling/tasks/new.ts'));
+  assert.ok(!selected.files.includes('tooling/tasks/new.ts'));
   assert.ok(!placed.has('tooling/tasks/new.ts'));
   assert.equal(dependencyCapability(SOURCE,join(SOURCE,'tmp','unused')).producerSha256,expected(SOURCE));
 });
