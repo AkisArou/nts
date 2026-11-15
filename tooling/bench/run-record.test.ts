@@ -304,7 +304,7 @@ test('uniform load changes no own-best ratio, while an nts-only slowdown names i
   assert.ok(!renderFull([old,sealRun(current)]).includes('**SLOWER THAN BEST**'));
   current.rows[0].cells['nts C'].nanoseconds!*=1.5;
   const changed=results([old,sealRun(current)])!,comparison=changed.rows[0].backends['nts C'].ownBest.node!;
-  assert.equal(comparison.relativeRatio,1.5);assert.equal(comparison.slowerThanBest,true);assert.equal(comparison.best.comparator,'node');
+  assert.ok(Math.abs(comparison.relativeRatio-1.5)<1e-12);assert.equal(comparison.slowerThanBest,true);assert.equal(comparison.best.comparator,'node');
   assert.equal(changed.rows[0].backends['nts LLVM'].slowerThanBest,false);assert.equal(changed.rows[1].backends['nts C'].slowerThanBest,false);
   assert.match(renderFull([old,sealRun(current)]),/node: .*\*\*SLOWER THAN BEST\*\*/);
 });
