@@ -55,7 +55,7 @@ impl Libraries {
         let source = Utf8PathBuf::from(format!("{binary}.cpp"));
         std::fs::write(&source, "int main() { return 0; }\n")?;
         let output = builds
-            .output(
+            .link_output(
                 "C++",
                 "reference library probe",
                 std::process::Command::new("clang++")
@@ -66,6 +66,7 @@ impl Libraries {
                     .arg(binary),
             )
             .context("probing C++ reference libraries with clang++")?;
+
         std::fs::write(format!("{binary}.stdout"), &output.stdout)?;
         std::fs::write(format!("{binary}.stderr"), &output.stderr)?;
         if output.status.success() {
