@@ -32,8 +32,12 @@ export function cargoMetadata(root:string,execute?:Execute,env:NodeJS.ProcessEnv
   try{
   // The supplied-effects seam has the one encoding used here; the invocation
   // owner retains Node's full execFileSync overloads for its other callers.
-  const bounded:Execute=(command,args,options)=>probe({purpose:'selector Cargo inventory',command,args,
-    cwd:options.cwd,env:options.env,stdio:options.stdio,maxBuffer:options.maxBuffer}).stdout;
+  const bounded:Execute=(command,args,options)=>{
+    const result=probe({purpose:'selector Cargo inventory',command,args,cwd:options.cwd,env:options.env,
+      stdio:options.stdio,maxBuffer:options.maxBuffer,exits:'classify'});
+    if(result.status!==0)throw Object.assign(new Error('Cargo metadata exited '+result.status),{stderr:result.stderr});
+    return result.stdout;
+  };
   const body=cargoOutput(args,{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1<<28},(execute??bounded) as typeof execFileSync);
   const value=JSON.parse(String(body)) as CargoMetadata;
   if(!value||!Array.isArray(value.packages)||value.packages.some(row=>!row||typeof row.name!=='string'||typeof row.manifest_path!=='string'||!Array.isArray(row.targets)||!Array.isArray(row.dependencies)
