@@ -847,6 +847,32 @@
         "imports": [],
         "assets": []
       }
+    },
+    {
+      "target": {
+        "source": "tooling/publication/src/lib.rs",
+        "name": "nts_publication",
+        "kind": [
+          "lib"
+        ]
+      },
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "target": {
+        "source": "tooling/publication/tests/integration.rs",
+        "name": "integration",
+        "kind": [
+          "test"
+        ]
+      },
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
     }
   ],
   "readers": [
