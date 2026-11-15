@@ -129,7 +129,7 @@ export function gateEnvironment(
     for (const name of launcherPolicyNames(launcher)) {
       if (INFRASTRUCTURE.has(name)) { if (!(name in owned)) owned[name] = launcher[name]!; continue; }
       if (name === ENVIRONMENT_EXPERIMENT) continue;
-      if (!EXPERIMENTS.has(name) && !/^CARGO_(?:PROFILE|TARGET)_/.test(name)) throw new Error(`unknown standalone policy override: ${name}`);
+      if (!EXPERIMENTS.has(name) && !/^CARGO_(?:PROFILE|TARGET)_/.test(name) && options.owned?.[name]!==launcher[name]) throw new Error(`unknown standalone policy override: ${name}`);
       overrides.push({ name, value: launcher[name]! });
       if (!(name in owned)) owned[name] = launcher[name]!;
     }
@@ -244,12 +244,26 @@ export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal,
  * that sealed child; the preparing parent transfers its child's exit status. */
 export async function withPreparedOracle(
   main:(env:NodeJS.ProcessEnv)=>void|number|Promise<void|number>,
-  options:{entry:string;ambient?:boolean;admission?:JobRequest},
+  options:{entry:string;ambient?:boolean;admission?:JobRequest;owned?:NodeJS.ProcessEnv},
 ):Promise<void|number>{
   const entry=process.argv[1];
   if(!entry||pathToFileURL(resolve(entry)).href!==options.entry)throw new ToolingInstrumentError('tooling-setup','oracle preparation must run at its command entry: '+options.entry);
   const source=realpathSync(resolve(dirname(fileURLToPath(import.meta.url)),'../..'));
-  const base=process.env,raw=base.NTS_ORACLE_DEPENDENCIES;
+  const launcher=process.env,values=strings(options.owned??{});
+  const context:Context|undefined=launcher[ENVIRONMENT_CONTEXT]?JSON.parse(launcher[ENVIRONMENT_CONTEXT]):undefined;
+  if(context){
+    if(context.report?.version!==1||!context.owned)throw new ToolingInstrumentError('tooling-setup','invalid oracle entry environment handoff');
+    const uncarried=launcherPolicyNames(launcher).filter(name=>name!==ENVIRONMENT_CONTEXT&&name!==ENVIRONMENT_EXPERIMENT&&
+      !(CONSUMED as readonly string[]).includes(name)&&!(name in values)&&launcher[name]!==context.owned[name]);
+    if(uncarried.length)throw new ToolingInstrumentError('tooling-setup','oracle entry command options were not carried by their owner: '+uncarried.join(', '));
+  }
+  const base={...launcher,...values};
+  if(context){
+    const host={...context.report.host};
+    for(const [name,value]of Object.entries(values))if(HOST.has(name))host[name]=value;
+    base[ENVIRONMENT_CONTEXT]=JSON.stringify({...context,owned:{...context.owned,...values},report:{...context.report,host}});
+  }
+  const raw=base.NTS_ORACLE_DEPENDENCIES;
   let inherited:{source?:string;seal?:unknown}|undefined;
   if(raw)try{inherited=JSON.parse(raw);}catch(error){if(isCommandExit(error))throw error;throw new ToolingInstrumentError('tooling-setup','invalid oracle dependency command handoff');}
   if(inherited?.seal){
@@ -296,7 +310,7 @@ export async function withPreparedOracle(
     mkdirSync(parent,{recursive:true});
     const path=mkdtempSync(join(parent,'entry-')),identity=lstatSync(path);
     run={path,dev:identity.dev,ino:identity.ino,uid:identity.uid};
-    planned=gateEnvironment(base,{run:path,standalone:!base[ENVIRONMENT_CONTEXT],oracleRoot:source});
+    planned=gateEnvironment(base,{run:path,standalone:!base[ENVIRONMENT_CONTEXT],oracleRoot:source,owned:values});
     planned=await sealOracleRun(planned,abort.signal,(acquired,closed)=>{session=acquired;sessionClosed=closed;});
     abort.signal.throwIfAborted();assertSealedOracleRun(planned.env);
     if(!options.ambient){finishSetup();return main(planned.env);}

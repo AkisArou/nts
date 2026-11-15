@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import {findPending,BACKENDS,typescriptRecord,TEST262_SLICES,TEST262_RECORDS,benchmarkRecord,outcomesRecord} from './record-population.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
@@ -928,7 +929,7 @@ runAsCommand(import.meta.url,async()=>{
         + `${badAfter ? `; --after needs core or wide and an existing run folder` : ""}${badDelta ? "; --delta needs a file" : ""}`);
       process.exitCode = 2;
     } else {
-      await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+      await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BIN:'text'})});
       const kinds = (named.length ? named as Kind[] : KINDS).filter(kind => !after || partOf(kind) === after.part);
       const accepted = after ? acceptedIn(root, after.run!) : { byKind: new Map<Kind, Pending[]>(), pendingByKind: new Map<Kind, Pending[]>(), unowned: [] };
       for (const record of accepted.unowned) console.log(`an accepted change names ${record}, which no kind records; skipped`);

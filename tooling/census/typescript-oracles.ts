@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {dataDirectory} from '../gate/reader-inputs/main.ts';
@@ -76,7 +77,7 @@ export async function produceTypeScriptOracles({sample=0,jobs=Math.min(8,availab
 }
 
 runAsCommand(import.meta.url,async()=>{
-  await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+  await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_CENSUS_MEMORY_CAP_KB:'nonnegative'})});
   const value=(name:string,fallback:number)=>{const at=process.argv.indexOf(name);return at<0?fallback:Number(process.argv[at+1]);};
   try{await produceTypeScriptOracles({sample:value('--sample',0),jobs:value('--jobs',Math.min(8,availableParallelism()))});}
   catch(error){const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error instanceof Error?error.stack:error));publishToolingFailure(failure);process.stderr.write(failure.message+'\n');process.exitCode=2;}

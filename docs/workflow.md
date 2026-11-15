@@ -696,6 +696,10 @@ Report decoding and identity readers import pure leaves, independently of
 execution and command entries. Modes that compute or compare an oracle-dependent
 identity prepare before doing so, including checkpoint resume and report modes.
 Usage, error and listing modes that compare no oracle identity do not prepare.
+Each standalone entry validates and names its command options as source-owned
+values. In an inherited canonical handoff, an option outside that entry's list
+must equal its inherited owned value or refuse by name before admission; it
+cannot silently become a default during preparation or same-source reuse.
 The dependency image archives installation metadata and named workspace command
 targets, together with the installed third-party packages. Importer directories
 are not installation inputs. Workspace aliases retain their verified installed

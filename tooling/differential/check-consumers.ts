@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import {CaseBudgetError} from '../gate/step-result.ts';
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // Batch owners count completed comparisons before publishing incomplete work.
@@ -175,7 +176,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   if (!selected || extra.length || (recordPending && only)) {
     process.exitCode = reportCheckFailure(new Error("usage: check-consumers.ts programs|rc|compiled-web [fixture] | benchmarks [--record-pending | fixture]"));
   } else {
-    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BACKEND:'backend',NTS_BIN:'text',NTS_PROGRAM_ORACLE:'text'})});
     process.exitCode = await runBatch(selected, only, recordPending);
   }
 }

@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import {CARGO_OWNER} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {childTemporary,oracleToolchainLocation} from '../gate/host-environment.ts';
@@ -587,7 +588,7 @@ async function main() {
   if (named || ["plan", "plan-rc", "record"].includes(mode!)) {
     await reserveJob({ key: "record-oracles", what: `record-oracles ${named ? `${arguments_.length} fixture(s)` : mode}` },
       { report: line => console.error(line) });
-    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{CARGO_BUILD_JOBS:'integer',NTS_BENCH_CPUS:'measurement-cpu',NTS_CPU_EVENTS:'text',NTS_ORACLE_PLAN_BIN:'text'})});
   }
   if (named) await recordNamed(arguments_);
   else if (["plan", "plan-rc"].includes(mode!) && first && second && third) await planAll(resolve(first), resolve(second), resolve(third), mode === "plan-rc", fourth?.replace(/^--only=/, ""));

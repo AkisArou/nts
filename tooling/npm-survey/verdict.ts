@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // Hand every recovered package to the real compiler and record what it says.
 //
@@ -12,7 +13,7 @@ import {Outcome as CheckOutcome} from "../differential/check-report.ts";
 
 const HERE = new URL("./", import.meta.url).pathname;
 const REPO = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
-await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BIN:'text'})});
 const NTS = process.env["NTS_BIN"] ?? REPO + "/target/release/nts";
 
 type Outcome = "no-entry" | "typecheck-failed" | "refused" | "no-refusal";

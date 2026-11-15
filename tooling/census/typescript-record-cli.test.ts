@@ -96,8 +96,8 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
       { cwd: consumerRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: ownMemoryEnv(memory, { ...fixtureEnvironment(t,unsealed?{NTS_ORACLE_DEPENDENCIES:undefined}:{}), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
-          NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile }) });
+        env: ownMemoryEnv(memory, fixtureEnvironment(t,{ ...(unsealed?{NTS_ORACLE_DEPENDENCIES:undefined}:{}), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
+          NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile })) });
   }
   for (const [before, after, word, status] of [
     [pass, wrong, "REGRESSED", 1], [refused, wrong, "REGRESSED", 1], [invalid, abort, "CHANGED", 1],

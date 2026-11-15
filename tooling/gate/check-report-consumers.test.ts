@@ -167,6 +167,7 @@ test("agrees-with-c.sh compares structured compiled answers and rejects answer m
   for (const mutation of ["wrong-jvm", "legacy-text", "contradiction", ""]) {
     const result = run(mutation);
     assert.notEqual(result.status, 0, `${mutation}: ${result.stdout}${result.stderr}`);
+    if(mutation==='wrong-jvm')assert.match(result.stderr,/the two backends disagree with each other/,'the listed backend option reaches the child and changes its answer');
   }
 });
 

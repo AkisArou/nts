@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../../gate/oracle-entry-options.ts';
 import {isCommandExit,runAsCommand} from '../command-entry/main.ts';
 import assert from 'node:assert/strict';
 import {withPreparedOracle} from '../../gate/canonical-environment.ts';
@@ -11,7 +12,7 @@ runAsCommand(import.meta.url,async()=>{
     assert.ok(command==='project'||command==='consume','unknown check command');
     if(command==='project')assert.ok(requested==='compiled-answers'||requested==='backend-refusals','unknown check projection');
     else assert.ok(requested==='program'||requested==='benchmark'||requested==='refusal','unknown check consumer');
-    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BACKEND:'backend',NTS_CHECKERS:'positive',NTS_RC:'toggle',NTS_POISON:'toggle'})});
     if(command==='project'){
       const projection=requested as 'compiled-answers'|'backend-refusals';
       const {record}=await runCheck(binary,project);

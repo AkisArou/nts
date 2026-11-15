@@ -3389,6 +3389,10 @@ Identity-verifying resume and report modes use that preparation boundary too:
 their recipe identity must equal the sealed writer's. Only modes that compute
 or compare no oracle identity skip preparation; recipe derivation remains owned
 by preparation, without a second graph or identity reader in the child runtime.
+Canonical re-entry also preserves the entry's explicitly validated command
+options. An inherited option that differs from its owner and is not declared
+by the entry refuses before admission, including the already sealed fast path.
+This prevents backend comparisons from silently comparing two default-C arms.
 
 
 ## Project execution roles and failed oracle acquisition (11-15)

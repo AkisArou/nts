@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {oracleToolchainLocation,ownTemporary} from '../gate/host-environment.ts';
 // Defects that neither `tests/programs/` nor `blockers/` can hold, each pinned to what
@@ -215,7 +216,7 @@ if (recordingPending) {
   }
 }
 await serialRun(TOOLS);
-await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{CC:'text',NTS_BIN:'text',NTS_CENSUS_MEMORY_CAP_KB:'nonnegative',NTS_CENSUS_OBJECT_CACHE:'text',NTS_PROGRAM_ORACLE:'text'})});
 const FINGERPRINT = createHash("sha256").update(readFileSync(NTS)).digest("hex").slice(0, 16);
 mkdirSync(SCRATCH, { recursive: true });
 ownTemporary(SCRATCH);

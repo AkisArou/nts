@@ -1,3 +1,4 @@
+import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {CARGO_OWNER} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
@@ -327,7 +328,7 @@ const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OB
 // Bind both its verified toolchain and the single-case roots/options contract.
 // Resume and report compare this identity too, so they need the same prepared
 // recipe as the run that wrote the checkpoint, even when no cases remain.
-if(TYPESCRIPT)await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+if(TYPESCRIPT)await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{CC:'text',NTS_BIN:'text',NTS_CHECKERS:'positive',NTS_CENSUS_MEMORY_CAP_KB:'nonnegative',NTS_TEST262_PROTOCOL:'text',NTS_CENSUS_DIR:'text'})});
 const SOURCE_ORACLE = TYPESCRIPT ? typescriptOracleIdentity() : undefined;
 
 // --- the population --------------------------------------------------------
@@ -551,7 +552,7 @@ async function runAll(all) {
   // reservation is outranked the run gives way case by case
   // (`tooling/census/worker-pool.ts`).
   if (paths.length > 0) {
-    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{CC:'text',NTS_BIN:'text',NTS_CHECKERS:'positive',NTS_CENSUS_MEMORY_CAP_KB:'nonnegative',NTS_TEST262_PROTOCOL:'text',NTS_CENSUS_DIR:'text'})});
     const workers = Math.min(jobs, paths.length);
     const report = (message: string) => process.stderr.write(`  ${message}\n`);
     report(`census start: ${under}; ${paths.length} case(s); ${workers} worker(s)`);

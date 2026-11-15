@@ -104,7 +104,7 @@ test('the real full-check recordPending candidate route seals and removes finish
   // Keep the real production CLI through its owned preparation boundary. Its
   // private record body observes the handoff; the adjacent outcome case proves
   // actual record writing. Stage first, then mutate and commit this private tree.
-  const entry=join(root,'tooling/records/record-pending.ts'),boundary='await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});';
+  const entry=join(root,'tooling/records/record-pending.ts'),boundary="await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BIN:'text'})});";
   const source=readFileSync(entry,'utf8');assert.equal(source.split(boundary).length,2);
   writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\nimport {durableRecord} from '../gate/durable-record.ts';\n"+source.replace(boundary,boundary+`
       assertSealedOracleRun(process.env);
@@ -152,6 +152,10 @@ test('a gate-owned foreign oracle entry takes a real cold fallback inside its en
   const {root,scratch,pin}=recordsRun(t),observed=join(scratch,'cold-gate-recorder.json');
   const parent=gateEnvironment(testEnvironment(),{run:join(scratch,'parent-gate'),oracleAdmissionContext:'gate',owned:{...ownMemory(join(scratch,'gate-memory')),NTS_BIN:pin}});
   const parentCapability=JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!);
+  const uncarried=spawnTest(process.execPath,[join(root,'tooling/gate/oracle-entry.ts'),join(scratch,'not-launched.ts')],{cwd:root,env:{...parent.env,NTS_AGREE_JOBS:'2'},encoding:'utf8'},'uncarried oracle entry option');
+  assert.notEqual(uncarried.status,0,uncarried.stdout+uncarried.stderr);
+  assert.match(uncarried.stderr,/oracle entry command options were not carried by their owner: NTS_AGREE_JOBS/);
+  assert.equal(existsSync(observed),false,'an unlisted option refuses before dispatch');
   assert.ok(parentCapability.seal,'the real gate parent supplies its already prepared image');
   assert.equal(parentCapability.admission.kind,'gate');
   const enclosing=parentCapability.admission.temporary.path,parentReady=readFileSync(parentCapability.seal.record);
