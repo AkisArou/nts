@@ -13,57 +13,6 @@ pub(super) enum InputPath {
     External(PathBuf),
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{InputPath, SourcePaths};
-    use std::path::Path;
-
-    #[test]
-    fn only_internal_components_rebase_and_observation_escapes_refuse() {
-        let own = crate::scratch::StdScratchDir::in_std_target("native-observation-paths");
-        let paths = SourcePaths::new(&own).expect("source identity");
-        assert_eq!(
-            paths
-                .input(&own.join("deps/../header.h"))
-                .expect("internal spelling"),
-            InputPath::Bundle("header.h".into())
-        );
-        let external = own.join("../external/header.h");
-        assert_eq!(
-            paths.input(&external).expect("external spelling"),
-            InputPath::External(external.clone())
-        );
-        assert_eq!(
-            paths.identity(&external).expect("external identity"),
-            external.to_string_lossy()
-        );
-        for path in ["", "../header.h", "/outside.h", "nested/../../header.h"] {
-            assert!(
-                paths.resolve(&InputPath::Bundle(path.into())).is_err(),
-                "{path}"
-            );
-        }
-        assert!(
-            paths
-                .resolve(&InputPath::External(Path::new("relative.h").into()))
-                .is_err()
-        );
-    }
-    #[test]
-    fn source_mapping_root_refuses_unsafe_directive_and_option_characters() {
-        let own = crate::scratch::StdScratchDir::in_std_target("native-probe-root-grammar");
-        for name in ["line\nbreak", "control\u{0001}byte", "prefix=map"] {
-            let path = own.join(name);
-            std::fs::create_dir(&path).expect("private root spelling");
-            let error = SourcePaths::new(&path)
-                .err()
-                .expect("root grammar refusal")
-                .to_string();
-            assert!(error.contains("source root cannot contain"), "{error}");
-        }
-    }
-}
-
 pub(super) struct SourcePaths {
     root: PathBuf,
     virtual_root: PathBuf,
@@ -177,5 +126,56 @@ impl SourcePaths {
             result.push('/');
         }
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InputPath, SourcePaths};
+    use std::path::Path;
+
+    #[test]
+    fn only_internal_components_rebase_and_observation_escapes_refuse() {
+        let own = crate::scratch::StdScratchDir::in_std_target("native-observation-paths");
+        let paths = SourcePaths::new(&own).expect("source identity");
+        assert_eq!(
+            paths
+                .input(&own.join("deps/../header.h"))
+                .expect("internal spelling"),
+            InputPath::Bundle("header.h".into())
+        );
+        let external = own.join("../external/header.h");
+        assert_eq!(
+            paths.input(&external).expect("external spelling"),
+            InputPath::External(external.clone())
+        );
+        assert_eq!(
+            paths.identity(&external).expect("external identity"),
+            external.to_string_lossy()
+        );
+        for path in ["", "../header.h", "/outside.h", "nested/../../header.h"] {
+            assert!(
+                paths.resolve(&InputPath::Bundle(path.into())).is_err(),
+                "{path}"
+            );
+        }
+        assert!(
+            paths
+                .resolve(&InputPath::External(Path::new("relative.h").into()))
+                .is_err()
+        );
+    }
+    #[test]
+    fn source_mapping_root_refuses_unsafe_directive_and_option_characters() {
+        let own = crate::scratch::StdScratchDir::in_std_target("native-probe-root-grammar");
+        for name in ["line\nbreak", "control\u{0001}byte", "prefix=map"] {
+            let path = own.join(name);
+            std::fs::create_dir(&path).expect("private root spelling");
+            let error = SourcePaths::new(&path)
+                .err()
+                .expect("root grammar refusal")
+                .to_string();
+            assert!(error.contains("source root cannot contain"), "{error}");
+        }
     }
 }
