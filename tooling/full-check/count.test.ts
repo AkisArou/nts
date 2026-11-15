@@ -445,7 +445,11 @@ test('record retention reads immutable main blobs, independently of working edit
   assert.deepEqual(readScratchRecordCitations(s.root,cache,main),['nts-scratch/42']);
   s.git(['switch','-qc','candidate']);s.commit({'docs/records/receipt.md':'candidate nts-scratch/44/raw.json\n'},'candidate record');
   assert.deepEqual(readScratchRecordCitations(s.root,cache,s.git(['rev-parse','main']).trim()),['nts-scratch/42']);
-  const missing=readScratchRecordCitations(s.root,cache,'f'.repeat(40));assert.ok(!Array.isArray(missing)&&missing.error.includes('unable to resolve revision'));
+  const missing=readScratchRecordCitations(s.root,cache,'f'.repeat(40));assert.ok(!Array.isArray(missing)&&missing.error.length>0);
+  const f=issueFixture(t);f.folder('nts-scratch/45');
+  const result=count({...f.value,recordCitations:missing},ISSUE_KEEP);
+  assert.deepEqual(result.red,[]);assert.deepEqual(result.removable,[]);
+  assert.ok(result.notes.some(line=>line.includes('nts-scratch/45')&&line.includes(missing.error)),result.notes.join('\n'));
 });
 
 test('the live keeper rows name their current writers without per-issue scratch entries',()=>{
