@@ -257,6 +257,9 @@ test('authenticated execution diagnostics distinguish bindings, continued images
   assert.deepEqual(result.executions,{requests:4,bound:1,unbound:3,canceled:1,unboundContinuedSameImage:2,unboundWithoutObservedContinuation:1,
     argv:{present:4,missing:0,truncated:0,unreadable:1,null:0,maxBytes:8},
     environment:{present:3,missing:1,truncated:1,unreadable:0,null:1,maxBytes:4}});
+  assert.deepEqual(result.executionFacts.requests.map(row=>row.attempt),['1','3','5','7']);
+  assert.deepEqual(result.executionFacts.requests.find(row=>row.attempt==='5')?.entry.argv,{...bytes(''),error:14});
+  assert.deepEqual(result.executionFacts.images.find(row=>row.path==='/second')?.argvSource,{kind:'request',attempt:'1',state:'observed'});
 });
 
 test('one normalized report preserves every claim and component while repeated syscalls reference it once',async t=>{
