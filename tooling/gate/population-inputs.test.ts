@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {existsSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync,rmSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test} from 'node:test';
@@ -235,12 +235,13 @@ test('data reproduction cannot revive an inspection-only immutable owner inside 
   assert.ok(inspected.files.includes(path));assert.ok(inspected.runtimeFiles!.includes(path));assert.ok(inspected.stagingFiles.includes(path));
   assert.ok(!inspected.ownedFiles.includes(path),'only the data population reproduces this inspection fact');
   assert.ok(inspected.optionalFiles.some(row=>row.path===path&&row.inspectionOnly),'source validation retains the full inspection fact');
-  const destination=testScratch(t,'inspection-private-copy');
+  const destination=testScratch(t,'inspection-private-copy');mkdirSync(join(destination,'packages'));
   copyModuleClosure(['tooling/reader.ts'],destination,{sourceRoot:root,dataNamespaces:{packages:'owned empty package population'}});
   assert.equal(existsSync(join(destination,path)),false,'private data substitution keeps the population empty');
+  assert.deepEqual(readdirSync(join(destination,'packages')),[]);
   for(const entries of [['tooling/reader.ts','tooling/immutable.ts'],['tooling/immutable.ts','tooling/reader.ts']]){
     assert.ok(describe(entries).ownedFiles.includes(path),'an actual immutable visit promotes ownership in either order');
-    const promoted=testScratch(t,'inspection-immutable-copy');copyModuleClosure(entries,promoted,{sourceRoot:root,dataNamespaces:{packages:'owned empty package population'}});
+    const promoted=testScratch(t,'inspection-immutable-copy');mkdirSync(join(promoted,'packages'));copyModuleClosure(entries,promoted,{sourceRoot:root,dataNamespaces:{packages:'owned empty package population'}});
     assert.equal(readFileSync(join(promoted,path),'utf8'),'{"name":"private-metadata-control"}');
   }
 });
