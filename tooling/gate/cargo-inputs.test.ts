@@ -9,6 +9,9 @@ import {spawnTest} from './test-wait.ts';
 import {gitArguments} from './git-arguments/main.ts';
 import {buildRustSelectorMaterial} from './rust-selector-build.ts';
 import {ToolingInstrumentError} from './step-result.ts';
+import {infrastructureProbes,INFRASTRUCTURE_PROBE_BOUND_MS} from './infrastructure-probe.ts';
+import {readStepInstrument} from './step-result.ts';
+import type {SpawnSyncOptionsWithStringEncoding} from 'node:child_process';
 
 test('Cargo inventory detaches callers and refuses new file keys bound to old target rows',t=>{
   const root=testScratch(t,'cargo-input-generation'),env=fixtureEnvironment(t);mkdirSync(join(root,'src'));
@@ -35,4 +38,24 @@ test('the Cargo inventory keeps the shared configuration guard on fresh and reus
   unlinkSync(config);assert.equal(cargoMetadata(root,undefined,env).packages.length,1);
   const failure=new ToolingInstrumentError('tooling-setup','supplied inventory instrument');
   assert.throws(()=>cargoMetadata(root,()=>{throw failure;},env),error=>error===failure,'typed setup cause is never reclassified as ordinary metadata failure');
+});
+
+test('Cargo metadata passes the infrastructure owner bound through its guarded default adapter',t=>{
+  const root=testScratch(t,'cargo-input-probe-bound'),env=fixtureEnvironment(t,{NTS_GATE_STEP:'cargo-inventory-control',
+    NTS_GATE_STEP_ATTEMPT:'private',NTS_GATE_STEP_RESULT:join(root,'instrument.json')});
+  mkdirSync(join(root,'src'));writeFileSync(join(root,'Cargo.toml'),'[package]\nname="cargo-inventory-bound"\nversion="0.0.0"\nedition="2021"\n');
+  writeFileSync(join(root,'src/lib.rs'),'');
+  for(const args of [['init','-q'],['add','.']])assert.equal(spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'}).status,0);
+  const seen:{command:string;args:readonly string[];options:SpawnSyncOptionsWithStringEncoding}[]=[];
+  const probe=infrastructureProbes((command,args,options)=>{
+    seen.push({command,args,options});
+    return {pid:0,output:[],stdout:'',stderr:'',status:null,signal:null,error:Object.assign(new Error('supplied metadata timeout'),{code:'ETIMEDOUT'})};
+  });
+  assert.throws(()=>cargoMetadata(root,undefined,env,probe),error=>error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'
+    &&error.message.includes('selector Cargo inventory')&&error.message.includes('wedged-probe bound'));
+  assert.equal(seen.length,1);assert.equal(seen[0]!.command,'cargo');assert.deepEqual(seen[0]!.args,['metadata','--format-version','1','--offline']);
+  assert.equal(seen[0]!.options.timeout,INFRASTRUCTURE_PROBE_BOUND_MS);assert.equal(seen[0]!.options.killSignal,'SIGKILL');
+  assert.equal(seen[0]!.options.cwd,root);assert.equal(seen[0]!.options.env?.CARGO_HOME,env.CARGO_HOME);assert.equal(seen[0]!.options.env?.RUSTUP_HOME,env.RUSTUP_HOME);
+  const receipt=readStepInstrument(env.NTS_GATE_STEP_RESULT!,'cargo-inventory-control','private');assert.ok(receipt);assert.equal(receipt.verdict,'INSTRUMENT');
+  assert.equal(receipt.kind,'tooling-setup');assert.match(receipt.reason,/wedged-probe bound/);
 });
