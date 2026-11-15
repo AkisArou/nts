@@ -591,7 +591,8 @@ test('the TypeScript and test262 data pins owe their suite readers',()=>{
   for(const family of ['typescript','test262'])for(const added of [false,true]){
     const path='tooling/bootstrap/'+family+'.pin',rules=owed([{path,added}]);
     assert.ok(!rules.some(rule=>rule.full),path+' is declared data');
-    superset(gateSteps(rules),family==='typescript'?['corpus','typescript-c','typescript-llvm','typescript-jvm']:['test262','test262-cases','test262-builtins-cases','test262-rest-cases'],path);
+    superset(gateSteps(rules),['tests',...(family==='typescript'?['corpus','typescript-c','typescript-llvm','typescript-jvm']:['test262','test262-cases','test262-builtins-cases','test262-rest-cases'])],path);
+    assert.ok(covering(policy.embedded(),path).has('tooling/suite'),'Rust include_str owns '+path+' through nts-suite');
     assert.ok([...covering(stepInputs(),path)].includes('tooling'),'the real linker controls consume '+path);
   }
 });
