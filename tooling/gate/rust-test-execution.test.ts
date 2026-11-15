@@ -81,6 +81,10 @@ test('exact emitted artifacts and same-binary derived loader paths are classifie
   later.classify(exec,context,assess(f.root,exec));
   const probe=request(join(directory.path,library));
   assert.equal(later.classify(probe,context,assess(f.root,probe)),undefined,'a later exec cannot inherit the original loader environment');
+  const discharged=rustTestExecutionClassifier(f.receipt);
+  assert.equal(discharged.classify(probe,context,assess(f.root,probe))?.kind,'loader-probe');
+  discharged.observe(exec,context); // Provenance may discharge this subject before claim assessment.
+  assert.equal(discharged.classify(probe,context,assess(f.root,probe)),undefined,'discharged attempts still advance execution lifetime');
 });
 
 test('loader directory derivation excludes supported but unsearched capabilities and refuses unmodeled paths',t=>{

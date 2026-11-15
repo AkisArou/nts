@@ -145,6 +145,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
         validator=runtimeSubjectValidator(capture.root,inputs.snapshot,{capturedIdentities:execution?.version===2||build.buildNamespace!==undefined});validators.set(source,validator);
       }
       counts.runtimeAttempts++;counts.probes+=row.probes.length;
+      const image=images.get(row.image);if(image)classifier?.observe(row,image);
       for(const subject of row.subjects){
         counts.subjects++;
         const known=provenance.classify(subject,runtimeInputRequirement(row,subject,capture.observer));
@@ -157,7 +158,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
           continue;
         }
         const assessment=validator.assess(row,subject,capture.observer);
-        const image=images.get(row.image),classification=image?classifier?.classify(row,image,assessment):undefined;
+        const classification=image?classifier?.classify(row,image,assessment):undefined;
         if(classification?.kind==='emitted-executable')counts.emittedExecutables++;
         else if(classification?.kind==='loader-probe')counts.loaderProbes++;
         else if(assessment.state==='claimed')counts.claimed++;else if(assessment.state==='literal')counts.literals++;else counts.gaps++;

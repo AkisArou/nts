@@ -143,15 +143,19 @@ export function rustTestExecutionClassifier(execution:RustTestExecution){
   validatedExecution(execution);
   const search=loaderSearch(execution.loader,execution.cwd),directories=new Map(search.directories.map(row=>[row.path,row.origin]));
   let birth:string|undefined,entryImage:number|undefined,loaderEnded=false;
-  return {classify(row:RuntimeObservation,image:InputIndexExecution,assessment:RuntimeSubjectAssessment):RuntimeExecutionClass|undefined{
+  const observe=(row:RuntimeObservation,image:InputIndexExecution)=>{
     if(row.attempt.tgid!==execution.pid||image.pid!==execution.pid)return;
     if(image.path===execution.executable.path){birth??=image.birth;entryImage??=image.id;}
     if(birth!==undefined&&row.attempt.birth!==birth)return;
+    if(image.path===execution.executable.path&&row.operation==='execute')loaderEnded=true;
+  };
+  return {observe,classify(row:RuntimeObservation,image:InputIndexExecution,assessment:RuntimeSubjectAssessment):RuntimeExecutionClass|undefined{
+    observe(row,image);
+    if(row.attempt.tgid!==execution.pid||image.pid!==execution.pid||birth!==undefined&&row.attempt.birth!==birth)return;
     const path=assessment.spelling,requirement=assessment.requirement;
     if(!path||!assessment.identity)return;
     const directoryPath=requirement.kind==='metadata'&&requirement.query==='stat'&&path.endsWith('/')&&!path.endsWith('//')?path.slice(0,-1):path;
     if(resolve(directoryPath)!==directoryPath)return;
-    if(image.path===execution.executable.path&&row.operation==='execute')loaderEnded=true;
     if(path===execution.executable.path&&assessment.identity.state==='resolved'&&assessment.identity.path===path
       &&['execute','content','metadata'].includes(requirement.kind))
       return {kind:'emitted-executable',path,sha256:execution.executable.sha256};
