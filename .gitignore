@@ -56,6 +56,7 @@ node_modules
 # Existing checkouts are verified without moving them; each tree's linker
 # checks the shared checkout against that tree's own pin before linking it.
 /third_party/are-we-fast-yet
+/third_party/are-we-fast-yet.d
 
 # Node.js, cloned sparsely for the Node compatibility profile. Not vendored,
 # for the same reason as the others: it is somebody else's repository, and what

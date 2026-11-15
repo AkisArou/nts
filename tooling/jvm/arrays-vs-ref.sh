@@ -44,10 +44,12 @@ nts_jvm_flags=$(cat "$nts_jvm_flags_file")
 nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 nts=${NTS_BIN:-$root/target-jvm/release/nts}
-awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
-# The selected reference source must match the one committed corpus pin.
-if [ -d "$awfy" ]; then
+# Resolve this tree's pin-addressed input; an explicit source is verified too.
+if [ -n "${NTS_AWFY:-}" ]; then
+  awfy=$NTS_AWFY
   node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+else
+  awfy=$(node "$root/tooling/bootstrap/awfy.ts" --java-source "$root") || exit $?
 fi
 work=${NTS_WORK:-$HOME/.cache/nts-arrays}/$$
 mkdir -p "$work/stub"

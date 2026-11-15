@@ -105,10 +105,12 @@ JAVA
 # sibling was corrected, this one was not, and eight rows came back `javac` --
 # which is the same shape as fixing one of two drivers in one heredoc, earlier
 # the same night. A fix belongs to the family, not to the file it was found in.
-awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
-# The selected reference source must match the one committed corpus pin.
-if [ -d "$awfy" ]; then
+# Resolve this tree's pin-addressed input; an explicit source is verified too.
+if [ -n "${NTS_AWFY:-}" ]; then
+  awfy=$NTS_AWFY
   node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+else
+  awfy=$(node "$root/tooling/bootstrap/awfy.ts" --java-source "$root") || exit $?
 fi
 
 # **The fourth cell.** `bytes-on-device.sh` gives ours on HotSpot and ours on

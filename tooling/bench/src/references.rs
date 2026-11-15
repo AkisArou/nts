@@ -1,6 +1,6 @@
 //! A reference declares who wrote its implementation, without changing it.
 use anyhow::{Context, Result, ensure};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -9,15 +9,11 @@ const AWFY_PIN: &str = include_str!("../../bootstrap/awfy.pin");
 
 /// The same data pin used by bootstrap and the candidate's linker. This runs
 /// once in build setup, outside measured cells and per-row build stages.
-pub(super) fn verify_awfy(root: &Utf8Path) -> Result<()> {
-    let corpus = root.join("third_party/are-we-fast-yet");
-    if !corpus.exists() {
-        return Ok(());
-    }
+pub(super) fn awfy_source(root: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
     let output = std::process::Command::new("node")
         .arg(root.join("tooling/bootstrap/awfy.ts"))
-        .arg("--verify")
-        .arg(corpus.as_str())
+        .arg("--resolve")
+        .arg(root.as_str())
         .args(["--expected-pin", AWFY_PIN.trim()])
         .output()
         .context("verifying the Are We Fast Yet corpus")?;
@@ -27,7 +23,21 @@ pub(super) fn verify_awfy(root: &Utf8Path) -> Result<()> {
         )
         .into());
     }
-    Ok(())
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    ensure!(
+        value["version"] == 1 && value["pin"] == AWFY_PIN.trim(),
+        "invalid AWFY selection receipt"
+    );
+    if value["path"].is_null() {
+        return Ok(None);
+    }
+    let path = Utf8PathBuf::from(
+        value["path"]
+            .as_str()
+            .context("missing AWFY selected path")?,
+    );
+    ensure!(path.is_absolute(), "AWFY selection must be absolute");
+    Ok(Some(path))
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
@@ -36,6 +46,9 @@ enum Origin {
     ThirdParty { upstream: Vec<String> },
 }
 impl Origin {
+    fn awfy(&self) -> bool {
+        matches!(self, Self::ThirdParty { upstream } if upstream.iter().any(|url| url.starts_with("https://github.com/smarr/are-we-fast-yet/")))
+    }
     fn validate(&self) -> Result<()> {
         if let Self::ThirdParty { upstream } = self {
             ensure!(
@@ -144,6 +157,20 @@ fn read(case: &Utf8Path) -> Result<Option<Document>> {
 
 pub(super) fn validate(case: &Utf8Path) -> Result<()> {
     read(case).map(|_| ())
+}
+
+pub(super) fn corpus_absence(
+    case: &Utf8Path,
+    reference: &str,
+    available: bool,
+) -> Result<Option<String>> {
+    if available {
+        return Ok(None);
+    }
+    let needed = read(case)?
+        .and_then(|document| document.references.get(reference).map(Origin::awfy))
+        .unwrap_or(false);
+    Ok(needed.then(|| format!("Are We Fast Yet corpus {} is unavailable; run node tooling/bootstrap/awfy.ts --acquire", AWFY_PIN.trim())))
 }
 
 /// Generated drivers retain the authored policy. Only an actual reference

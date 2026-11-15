@@ -679,6 +679,7 @@ struct Row {
     case: String,
     cpp: Option<f64>,
     cpp_absence: Option<String>,
+    java_absence: Option<String>,
     outcomes: std::collections::BTreeMap<execution::Column, execution::Outcome>,
     nts: Option<f64>,
     node: f64,
@@ -945,6 +946,7 @@ fn variants(
     // single blank -- or a single `refused` -- would flatten into one.
     let mut jvm_absence: Option<JvmAbsence> = None;
     let mut cpp_absence = None;
+    let mut java_absence = None;
     let mut outcomes = std::collections::BTreeMap::new();
     let driver = native_driver(case, out, name, emission.initializes, workload)?;
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
@@ -984,6 +986,20 @@ fn variants(
         // The ratio renders `--`, which is what every other absent column does.
         let source = case.join(variant.source);
         if !source.exists() {
+            results.push(None);
+            continue;
+        }
+        if matches!(
+            variant.generated,
+            Generated::None | Generated::JavaReference
+        ) && let Some(reason) =
+            references::corpus_absence(case, variant.source, builds.awfy().is_some())?
+        {
+            if matches!(variant.generated, Generated::None) {
+                cpp_absence = Some(reason);
+            } else {
+                java_absence = Some(reason);
+            }
             results.push(None);
             continue;
         }
@@ -1061,6 +1077,7 @@ fn variants(
         Absences {
             jvm: jvm_absence,
             cpp: cpp_absence,
+            java: java_absence,
             outcomes,
         },
     ))
@@ -1111,6 +1128,8 @@ struct Absences {
     jvm: Option<JvmAbsence>,
     #[serde(default)]
     cpp: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    java: Option<String>,
 }
 
 /// The engines, the checksum agreement, and the printed row.
@@ -1542,6 +1561,7 @@ fn assemble(measured: &Measurements, filtered: bool, mode: MeasurementMode) -> R
         case: shown.to_owned(),
         cpp: optional(2),
         cpp_absence: absences.cpp.clone(),
+        java_absence: absences.java.clone(),
         outcomes: absences.outcomes.clone(),
         nts: required(0)?,
         node: node.ns_per_op,
@@ -1553,6 +1573,9 @@ fn assemble(measured: &Measurements, filtered: bool, mode: MeasurementMode) -> R
 
     if let Some(reason) = &row.cpp_absence {
         println!("note: {shown:<16} {reason}");
+    }
+    if let Some(reason) = &row.java_absence {
+        println!("note: {shown:<16} Java: {reason}");
     }
     for (column, outcome) in &row.outcomes {
         println!("note: {shown:<16} {} {outcome}", column.key());
@@ -2061,7 +2084,7 @@ fn handwritten_java(
     // rather than per-case because a classpath entry that nothing imports costs
     // nothing, and the alternative is a list of which cases are allowed to see
     // it -- which is the table this replaced.
-    let awfy = awfy_classes(root, out, builds)?;
+    let awfy = awfy_classes(out, builds)?;
     let mut classpath = dir.to_string();
     if let Some(ref classes) = awfy {
         classpath = format!("{classes}:{classpath}");
@@ -2104,12 +2127,11 @@ fn handwritten_java(
 /// `Ok(None)` where the suite is not cloned, which is the same bargain the C++
 /// column keeps: the reference is absent and the cell renders `--`, rather than
 /// the run failing.
-fn awfy_classes(
-    root: &Utf8Path,
-    out: &Utf8Path,
-    builds: &mut build::Recorder<'_>,
-) -> Result<Option<Utf8PathBuf>> {
-    let sources = root.join("third_party/are-we-fast-yet/benchmarks/Java/src");
+fn awfy_classes(out: &Utf8Path, builds: &mut build::Recorder<'_>) -> Result<Option<Utf8PathBuf>> {
+    let Some(corpus) = builds.awfy() else {
+        return Ok(None);
+    };
+    let sources = corpus.join("benchmarks/Java/src");
     if !sources.exists() {
         return Ok(None);
     }
@@ -2481,10 +2503,12 @@ fn compile(
     // Are We Fast Yet's own C++ port, where it has been cloned. As a *system*
     // include: it is somebody else's source, so its warnings are not ours to
     // fix and `-Werror` should not stop on them.
-    let awfy = root.join("third_party/are-we-fast-yet/benchmarks/C++/src");
-    if awfy.is_dir() {
-        includes.push("-isystem".to_owned());
-        includes.push(awfy.to_string());
+    if let Some(corpus) = builds.awfy() {
+        let awfy = corpus.join("benchmarks/C++/src");
+        if awfy.is_dir() {
+            includes.push("-isystem".to_owned());
+            includes.push(awfy.to_string());
+        }
     }
 
     let mut objects = Vec::new();
@@ -3054,6 +3078,7 @@ mod tests {
                 outcomes: std::collections::BTreeMap::new(),
                 jvm: None,
                 cpp: None,
+                java: None,
             },
             lowers: true,
             node: Some(counted(1_000_000.0)),
@@ -3180,6 +3205,7 @@ mod tests {
             case: case.to_owned(),
             cpp: None,
             cpp_absence: None,
+            java_absence: None,
             outcomes: std::collections::BTreeMap::new(),
             nts: Some(1.0),
             node: 1.0,
@@ -3234,6 +3260,7 @@ mod tests {
             absences: super::Absences {
                 jvm: Some(super::JvmAbsence::RuntimeAbort),
                 cpp: None,
+                java: None,
                 outcomes: [Column::C, Column::F64, Column::Llvm, Column::Jvm]
                     .into_iter()
                     .map(|column| (column, abort.clone()))
@@ -3292,6 +3319,7 @@ mod tests {
                 outcomes: std::collections::BTreeMap::new(),
                 jvm: Some(super::JvmAbsence::NotRun),
                 cpp: None,
+                java: None,
             },
             lowers: true,
             node: Some(measured(30.0)),
@@ -3332,6 +3360,7 @@ mod tests {
                 outcomes: std::collections::BTreeMap::new(),
                 jvm: None,
                 cpp: Some(absent.to_owned()),
+                java: None,
             },
             lowers: true,
             node: Some(measured(1.0)),

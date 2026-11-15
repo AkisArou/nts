@@ -251,8 +251,8 @@ export function fromNts(
         else
           cells[column] = absent(
             "NOT_PROVIDED",
-            reason(column === "C++" ? absences.cpp : null, "Reference was unavailable"),
-            column === "C++" ? absences.cpp : null,
+            reason(column === "C++" ? absences.cpp : column === "Java" ? absences.java : null, "Reference was unavailable"),
+            column === "C++" ? absences.cpp : column === "Java" ? absences.java : null,
           );
       }
       if (m.node !== null) cells.node = measured(m.node);

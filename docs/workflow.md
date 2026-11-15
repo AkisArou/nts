@@ -1138,10 +1138,16 @@ the first node task.
 ## Decisions
 
 - **AWFY reference inputs have one corpus pin.** Bootstrap, linking and reference
-  readers consume `tooling/bootstrap/awfy.pin`. Acquisition checks out that exact
-  revision; an existing shared checkout is verified without moving it, and a
-  mismatch or dirty checkout refuses by name. Rust embeds the data pin and asks
-  the same verifier during build setup. AWFY provenance URLs must name the pin.
+  readers consume `tooling/bootstrap/awfy.pin`. The shared corpus owner takes a
+  pin source, upstream URL, sparse set and slot. Acquisition publishes a fresh
+  checkout at `third_party/are-we-fast-yet.d/<pin>`; an existing checkout is
+  verified without moving it. Each tree links its own selected pin, while the
+  legacy directory and older trees remain untouched. A pin bump needs no manual
+  checkout procedure: the candidate acquires its missing pin before linking.
+  Rust embeds the data pin and resolves its selected directory once during build
+  setup. AWFY provenance URLs must name the pin. A missing acquired corpus gives
+  both AWFY reference cells the same named unavailable reason and acquire command,
+  before either reference compiler starts. Present corpus cells are unchanged.
   A pin edit reaches its benchmark readers through their data declarations
   ([log](records/notebooks/decisions-log.md#awfy-reference-corpus-is-pinned-11-15)).
 

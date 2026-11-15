@@ -10,12 +10,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[derive(Debug)]
 pub(super) struct Session {
     root: Utf8PathBuf,
+    awfy: Option<Utf8PathBuf>,
     directory: crate::scratch::ScratchDir,
     next: AtomicU64,
 }
 impl Session {
     pub(super) fn new(root: &Utf8Path) -> Result<Self> {
-        crate::references::verify_awfy(root)?;
+        let awfy = crate::references::awfy_source(root)?;
         let directory = crate::scratch::ScratchDir::path_in_target("bench-build-usage");
         std::fs::create_dir(&directory)?;
         let output = Command::new("node")
@@ -34,6 +35,7 @@ impl Session {
         );
         Ok(Self {
             root: root.to_owned(),
+            awfy,
             directory,
             next: AtomicU64::new(0),
         })
@@ -69,6 +71,9 @@ pub(super) struct Recorder<'a> {
     stages: Vec<Stage>,
 }
 impl<'a> Recorder<'a> {
+    pub(super) fn awfy(&self) -> Option<&Utf8Path> {
+        self.session.awfy.as_deref()
+    }
     pub(super) fn new(session: &'a Session) -> Self {
         Self {
             session,
@@ -472,6 +477,52 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
         );
         assert!(failures.is_empty());
         assert_eq!(failed, Vec::<String>::new());
+        Ok(())
+    }
+
+    #[test]
+    fn missing_awfy_skips_both_reference_compilers_and_retains_one_reason() -> Result<()> {
+        let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut session = Session::new(&root)?;
+        session.awfy = None;
+        let mut recorder = Recorder::new(&session);
+        let out = crate::scratch::ScratchDir::path_in_target("awfy-unavailable");
+        std::fs::create_dir(&out)?;
+        let case = root.join("benchmarks/cases/awfy-bounce");
+        let workload = serde_json::from_value(
+            serde_json::json!({"roots":["work"],"numeric":{"callee":"work","seed":1.0}}),
+        )?;
+        let (cells, absent) = crate::variants(
+            &root,
+            &case,
+            &out,
+            "awfy-bounce",
+            &case.join("tsconfig.json"),
+            nts_core::hir::Memory::ReferenceCounting,
+            &[],
+            &out.join("unused.c"),
+            &out.join("unused-plain.c"),
+            &out.join("unused.ll"),
+            crate::Emission {
+                renderable: false,
+                initializes: false,
+                needs_unicode: false,
+                refused: Some("work"),
+            },
+            &workload,
+            None,
+            &mut recorder,
+        )?;
+        assert!(cells.iter().all(Option::is_none));
+        let reason = absent.cpp.context("missing C++ corpus reason")?;
+        assert!(reason.contains("awfy.ts --acquire"));
+        assert_eq!(absent.java.as_deref(), Some(reason.as_str()));
+        assert!(
+            recorder.finish().stages.is_empty(),
+            "neither reference compiler started"
+        );
+        assert!(crate::references::corpus_absence(&case, "ref.cpp", true)?.is_none());
+        assert!(crate::references::corpus_absence(&case, "ref.java", true)?.is_none());
         Ok(())
     }
 

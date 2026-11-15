@@ -66,10 +66,12 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 work=${NTS_AOT_WORK:-$HOME/.cache/nts-android}/aot.$$
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 package=org.nts.benchprobe
-awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
-# The selected reference source must match the one committed corpus pin.
-if [ -d "$awfy" ]; then
+# Resolve this tree's pin-addressed input; an explicit source is verified too.
+if [ -n "${NTS_AWFY:-}" ]; then
+  awfy=$NTS_AWFY
   node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+else
+  awfy=$(node "$root/tooling/bootstrap/awfy.ts" --java-source "$root") || exit $?
 fi
 
 [ -n "$sdk" ] || { echo "SKIP: no ANDROID_HOME" >&2; exit 0; }

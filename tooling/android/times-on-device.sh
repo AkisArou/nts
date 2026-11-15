@@ -69,10 +69,12 @@ sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 # That is the same trap as `NTS_BIN` and `NTS_CHECKERS`, which this lane already
 # passes as absolute paths into the checkout for exactly this reason, and it
 # was missed because those two are named in the note and this one is not.
-awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
-# The selected reference source must match the one committed corpus pin.
-if [ -d "$awfy" ]; then
+# Resolve this tree's pin-addressed input; an explicit source is verified too.
+if [ -n "${NTS_AWFY:-}" ]; then
+  awfy=$NTS_AWFY
   node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+else
+  awfy=$(node "$root/tooling/bootstrap/awfy.ts" --java-source "$root") || exit $?
 fi
 
 command -v adb > /dev/null 2>&1 || { echo "SKIP: no adb" >&2; exit 0; }

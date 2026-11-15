@@ -63,6 +63,19 @@ test("native producer keeps a runtime abort distinct from refusal and absent ref
   assert.equal(filtered.cells["nts JVM"].status, "NOT_RUN");
 });
 
+test('missing AWFY input gives both references one unavailable reason and preserves present cells',()=>{
+  const original=raw(),why='Are We Fast Yet corpus is unavailable; run node tooling/bootstrap/awfy.ts --acquire';
+  const absent={...original,measured:original.measured.map(row=>({...row,absences:{...row.absences,cpp:why,java:why}}))};
+  const row=fromNts(meta(),absent).rows[0];assert.ok(row);
+  for(const column of ['C++','Java'] as const){
+    const cell=row.cells[column];assert.ok(cell.status==='NOT_PROVIDED');assert.equal(cell.reason,why);
+  }
+  const present={...original,measured:original.measured.map(row=>({...row,results:[measurement,null,measurement,measurement,null,measurement],absences:{...row.absences,cpp:null,java:null}}))};
+  const withOptionalField=fromNts(meta(),present);
+  const withoutOptionalField=fromNts(meta(),{...present,measured:present.measured.map(({absences,...row})=>({...row,absences:{outcomes:absences.outcomes,cpp:null}}))});
+  assert.deepEqual(withOptionalField.rows[0]?.cells,withoutOptionalField.rows[0]?.cells);
+});
+
 test('native build details survive both successful rows and failed builds',()=>{
   const builds={version:1,stages:[{kind:'thread',column:'nts C',phase:'capture/prepare/emit',cpu_s:0.125,
     basis:'getrusage-RUSAGE_THREAD-v1; shared checker CPU excluded',complete:true}]};

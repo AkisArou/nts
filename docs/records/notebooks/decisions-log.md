@@ -3102,6 +3102,9 @@ throughput verdicts stay unchanged.
 
 The reference corpus uses one revision data file beside acquisition. Rust reads
 it through `include_str!`, TypeScript reads it directly, and bootstrap/linking
-and Android/JVM reference routes use the same verifier. Existing shared clones
-are never moved. The provenance audit requires AWFY URLs to name the same pin,
-so the corpus and recorded reference origins cannot drift independently.
+and Android/JVM reference routes use one corpus owner. Its pin source, upstream,
+sparse set and slot select a pin-addressed checkout, so different candidate pins
+coexist without moving the legacy shared directory or old links. A pin bump
+acquires its missing checkout automatically. Missing acquired corpus inputs give
+both AWFY reference cells one unavailable reason before compilation. The
+provenance audit binds recorded reference origins to the same pin.
