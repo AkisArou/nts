@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {dirname,join} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test} from 'node:test';
 import {cargoInputs,installationInputs} from './reader-inputs/main.ts';
 import {moduleGraph} from './module-closure.ts';
@@ -12,6 +12,25 @@ import {gitArguments} from './git-arguments/main.ts';
 import {withPackageManager} from '../inputs/package-manager.ts';
 import {dependencyCache,installDependencies,installationCatalogTrust} from '../inputs/dependency-inputs.ts';
 import {runtimeRepositoryClaims} from './rust-input-claims.ts';
+import {readDependencyCatalog} from '../inputs/dependency-catalog.ts';
+import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
+
+test('oracle workspace staging consumes verified installer pins without unrelated manifests',t=>{
+  const source=fileURLToPath(new URL('../..',import.meta.url)),tree=testScratch(t,'oracle-workspace-pins');
+  const git=(root:string,...args:string[])=>{
+    const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout;
+  };
+  const shared=dirname(git(source,'rev-parse','--path-format=absolute','--git-common-dir').trim());
+  const catalog=readDependencyCatalog(installationCatalogTrust(shared,source),source);assert.equal(catalog.state,'current');
+  if(catalog.state!=='current')throw Error(catalog.reason);
+  const pins=new Set(catalog.catalog.identity.inputs.filter(row=>row.sha256!=='absent').map(row=>row.path));
+  const outside=git(source,'ls-files','-z','--',':(glob)**/package.json').split('\0').find(path=>path&&!pins.has(path));assert.ok(outside);
+  oracleWorkspaceFixture(t,tree,source);
+  for(const path of pins)assert.deepEqual(readFileSync(join(tree,path)),readFileSync(join(source,path)),path);
+  assert.equal(existsSync(join(tree,outside)),false,'a non-importer manifest is not an installation input');
+  const staged=git(tree,'ls-files','-z','--',':(glob)**/package.json').split('\0').filter(Boolean);
+  assert.ok(staged.every(path=>pins.has(path)),'all staged package manifests come from the installation owner');
+});
 
 test('Cargo metadata inputs follow the existing tracked population as a crate is added',t=>{
   const root=testScratch(t,'cargo-population-reader'),destination=testScratch(t,'cargo-population-copy');

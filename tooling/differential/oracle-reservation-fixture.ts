@@ -1,5 +1,5 @@
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
-import {fixtureInput} from '../gate/reader-inputs/main.ts';
+import {fixtureInput,fileInput} from '../gate/reader-inputs/main.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 // A real library test's oracle preparation inside the tests step runs in the
 // run's reservation, whatever the host reads: it neither waits nor refuses for
@@ -17,7 +17,7 @@ import {ownMemory} from '../gate/test-memory.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {oracleWorkspaceFixture} from './oracle-workspace-fixture.ts';
 
-const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
+const GATE_LIST=fileInput(new URL('../gate/all.sh',import.meta.url));
 const [serialized,previousHelper]=process.argv.slice(2);
 assert.ok(serialized,"the exact library test argv is required");
 const library=JSON.parse(serialized) as string[];
@@ -39,7 +39,7 @@ try{
   // for any would be refused at once.
   const memory=ownMemory(join(own,'memory')),low=ownMemory(join(own,'pressure'),{availableKiB:0,totalKiB:2**20}).NTS_HOST_OBSERVATIONS;
   const fake=join(own,'nts');writeFileSync(fake,'#!/bin/sh\nexit 0\n',{mode:0o755});
-  const names=execFileSync('sh',[join(SOURCE,'tooling/gate/all.sh'),'--list'],{env:testEnvironment(),encoding:'utf8'}).trim();
+  const names=execFileSync('sh',[fileURLToPath(GATE_LIST),'--list'],{env:testEnvironment(),encoding:'utf8'}).trim();
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
   writeFileSync(join(tree,'tooling/gate/all.sh'),`#!/bin/sh
 set -eu
