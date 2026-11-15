@@ -12,8 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
 import {linkTree} from "../inputs/linker.ts";
-import {withCargoConfiguration} from './cargo.ts';
-import {ToolingInstrumentError} from './step-result.ts';
+import {cargoConfigurationFailure,withCargoConfigurationSync} from './cargo.ts';
 
 type Arm = { kind: string; asks: string; run: string; if?: string };
 type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
@@ -29,7 +28,7 @@ export class SelectionInfrastructureError extends Error {
 export function selectionInfrastructure(error:unknown):boolean {
   // Endpoint rules import this module from their own committed tree. Their
   // error class has a different module identity, so retain the explicit brand.
-  return error instanceof SelectionInfrastructureError || error instanceof ToolingInstrumentError
+  return error instanceof SelectionInfrastructureError || cargoConfigurationFailure(error)
     || error instanceof Error && "code" in error && error.code === INFRASTRUCTURE_CODE
     || error instanceof AggregateError&&error.errors.some(selectionInfrastructure);
 }
@@ -193,8 +192,10 @@ export function selectRange(repo: string, range: string): RangeSelection {
         infrastructure("selector inputs",()=>linkTree(tree, "work", shared));
       }
       try {
-        const text = selectorQuestion(process.execPath, [SELF, "--endpoint", tree, revision],
-          {purpose:`selector endpoint ${revision}`,cwd:tree,input:JSON.stringify(changes),stdio:["pipe","pipe","pipe"],maxBuffer:64<<20});
+        const env=process.env;
+        const text=withCargoConfigurationSync([tree,...(env.NTS_TEST_SCRATCH_ROOT?[env.NTS_TEST_SCRATCH_ROOT]:[])],env,()=>
+          selectorQuestion(process.execPath, [SELF, "--endpoint", tree, revision],
+            {purpose:`selector endpoint ${revision}`,cwd:tree,env,input:JSON.stringify(changes),stdio:["pipe","pipe","pipe"],maxBuffer:64<<20}));
         views.push(readView(text, revision));
       } catch (error) {
         const command=error as NodeJS.ErrnoException&{signal?:string;status?:number};
@@ -222,7 +223,6 @@ export function selectRange(repo: string, range: string): RangeSelection {
 }
 
 async function endpoint(tree: string, revision: string, changes:PathChange[]): Promise<RuleView> {
-  return withCargoConfiguration([tree,...(process.env.NTS_TEST_SCRATCH_ROOT?[process.env.NTS_TEST_SCRATCH_ROOT]:[])],process.env,async()=>{
   const loaded=new Map<string,string>();let complete=true;
   const hooks=registerHooks({load(url,context,next){
     const result=next(url,context);
@@ -275,7 +275,6 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
   const identity=complete?createHash("sha256").update(JSON.stringify([...loaded].sort(([a],[b])=>a<b?-1:a>b?1:0))).digest("hex"):null;
   return {...full,selector:{identity,existing}};
   }finally{hooks.deregister();}
-  });
 }
 
 runAsCommand(import.meta.url,async()=>{

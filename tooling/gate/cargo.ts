@@ -22,6 +22,9 @@ function rustupHome(env:NodeJS.ProcessEnv):string{
 function fail(path:string,reason:string,cause?:unknown):never{
   throw new ToolingInstrumentError('tooling-setup',`Cargo configuration: ${path}: ${reason}`,{cause});
 }
+export function cargoConfigurationFailure(error:unknown):boolean{
+  return error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'&&error.message.startsWith('Cargo configuration: ');
+}
 function missing(error:unknown):boolean{return ['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??'');}
 function physical(path:string):string{
   try{return realpathSync(path);}catch(error){
@@ -74,7 +77,7 @@ export function cargoConfiguration(cwds:readonly string[],env:NodeJS.ProcessEnv=
 type CargoConfiguration=ReturnType<typeof cargoConfiguration>;
 function finishConfiguration(guard:CargoConfiguration,primary:{error:unknown}|undefined):void{
   try{guard.verify();}catch(error){
-    if(primary)throw new ToolingInstrumentError('tooling-setup',String(error)+'; guarded operation also failed: '+String(primary.error),{cause:new AggregateError([primary.error,error])});
+    if(primary)throw new ToolingInstrumentError('tooling-setup','Cargo configuration: final verification failed: '+String(error)+'; guarded operation also failed: '+String(primary.error),{cause:new AggregateError([primary.error,error])});
     throw error;
   }
   if(primary)throw primary.error;
@@ -83,14 +86,6 @@ export function withCargoConfigurationSync<T>(cwds:readonly string[],env:NodeJS.
   const guard=cargoConfiguration(cwds,env);
   let value:T|undefined,primary:{error:unknown}|undefined;
   try{value=body(guard);}catch(error){primary={error};}
-  finishConfiguration(guard,primary);
-  return value as T;
-}
-/** The current parent also guards historical code through its complete drain. */
-export async function withCargoConfiguration<T>(cwds:readonly string[],env:NodeJS.ProcessEnv,body:(guard:CargoConfiguration)=>Promise<T>):Promise<T>{
-  const guard=cargoConfiguration(cwds,env);
-  let value:T|undefined,primary:{error:unknown}|undefined;
-  try{value=await body(guard);}catch(error){primary={error};}
   finishConfiguration(guard,primary);
   return value as T;
 }

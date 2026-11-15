@@ -46,6 +46,10 @@ test('content precision may fall back on an ordinary missing answer but never on
   const broken=()=>{throw new ToolingInstrumentError('tooling-setup','named content observation unavailable');};
   assert.throws(()=>contentChanges('/owned',[change],'before','after',broken),/named content observation unavailable/);
 });
+test('an unrelated typed instrumentation failure keeps its existing selection classification',()=>{
+  assert.equal(selectionInfrastructure(new ToolingInstrumentError('tooling-setup','unrelated reader observation failed')),false);
+  assert.equal(selectionInfrastructure(new ToolingInstrumentError('tooling-cleanup','Cargo configuration: unrelated cleanup')),false);
+});
 function fixtureRepository(t,repo:string,env:NodeJS.ProcessEnv):void {
   execFileSync("git",gitArguments(["clone","--quiet","--shared","--no-checkout",ROOT,repo]),{env,stdio:["ignore","pipe","pipe"]});
   const git=(cwd:string,...args:string[])=>execFileSync("git",gitArguments(args),{cwd,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
@@ -161,25 +165,31 @@ if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\
 });
 
 test('the current endpoint parent refuses historical Cargo configuration before entry and after drain',t=>{
-  const root=mkdtempSync(join(tmpdir(),'owed-historical-cargo-')),tree=join(root,'parent/tree'),bin=join(root,'bin'),home=join(root,'cargo-home');
+  const root=mkdtempSync(join(tmpdir(),'owed-historical-cargo-')),tree=join(root,'repo'),bin=join(root,'bin'),home=join(root,'cargo-home');
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   for(const path of [join(tree,'tooling/gate'),bin,home])mkdirSync(path,{recursive:true});
-  const marker=join(root,'cargo-started'),config=join(root,'parent/.cargo/config.toml'),policy=join(tree,'tooling/gate/owed.mjs');
+  const marker=join(root,'cargo-started'),policy=join(tree,'tooling/gate/owed.mjs');
   writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'completed');\n`,{mode:0o755});
-  const code=`import {spawnSync} from 'node:child_process';\nimport {writeFileSync} from 'node:fs';
+  const code=`import {spawnSync} from 'node:child_process';\nimport {mkdirSync,writeFileSync} from 'node:fs';
 export const crates=()=>{const ran=spawnSync('cargo',['metadata']);if(ran.status!==0)throw Error('historical metadata failed');return [];};
 export const selfTest=()=>null;export const allSteps=()=>['tooling'];
-export const owed=()=>{CONFIG;return [{name:'legacy',paths:[],steps:['tooling'],arms:[]}];};
+export const owed=()=>[{name:'legacy',paths:[],steps:['tooling'],arms:[]}];
+CONFIG
 export const gateSteps=rules=>rules.flatMap(rule=>rule.steps);\n`;
   writeFileSync(join(tree,'Cargo.toml'),'[workspace]\n');writeFileSync(policy,code.replace('CONFIG',''));
-  const env=fixtureEnvironment(t,{CARGO_HOME:home,PATH:bin+':'+process.env.PATH}),endpoint=fileURLToPath(new URL('./owed-range.ts',import.meta.url));
-  const invoke=()=>spawnSync(process.execPath,[endpoint,'--endpoint',tree,'a'.repeat(40)],{cwd:tree,env,input:'[]',encoding:'utf8'});
-  const clean=invoke();assert.equal(clean.status,0,clean.stdout+clean.stderr);assert.equal(readFileSync(marker,'utf8'),'completed');rmSync(marker);
-  mkdirSync(dirname(config));writeFileSync(config,'[env]\nENDPOINT_POISON="present"\n');
-  const before=invoke();assert.equal(before.status,75,before.stdout+before.stderr);assert.ok(before.stderr.includes(config),before.stderr);
-  assert.equal(existsSync(marker),false,'the current parent refuses before historical metadata starts');rmSync(config);
-  writeFileSync(policy,code.replace('CONFIG',`writeFileSync(${JSON.stringify(config)},'')`));
-  const after=invoke();assert.equal(readFileSync(marker,'utf8'),'completed');assert.equal(after.status,75,after.stdout+after.stderr);assert.ok(after.stderr.includes(config),after.stderr);
+  const env={...fixtureEnvironment(t,{CARGO_HOME:home,PATH:bin+':'+process.env.PATH}),GIT_AUTHOR_NAME:'t',GIT_AUTHOR_EMAIL:'t@t',GIT_COMMITTER_NAME:'t',GIT_COMMITTER_EMAIL:'t@t'};
+  const git=(...args:string[])=>execFileSync('git',gitArguments(args),{cwd:tree,env,encoding:'utf8'}).trim();
+  const commit=()=>{git('add','.');git('commit','-qm','historical fixture');return git('rev-parse','HEAD');};
+  git('init','-qb','main');const base=commit();
+  const script=`import {selectRange,selectionInfrastructure} from ${JSON.stringify(new URL('./owed-range.ts',import.meta.url).href)};
+try{console.log(JSON.stringify(selectRange(process.argv[1],process.argv[2]).checks));}catch(error){console.error(String(error));process.exitCode=selectionInfrastructure(error)?75:1;}`;
+  const invoke=(revision:string)=>spawnSync(process.execPath,['--input-type=module','-e',script,tree,revision+'..'+revision],{cwd:tree,env,encoding:'utf8'});
+  const clean=invoke(base);assert.equal(clean.status,0,clean.stdout+clean.stderr);assert.equal(readFileSync(marker,'utf8'),'completed');rmSync(marker);
+  const config=join(tree,'.cargo/config.toml');mkdirSync(dirname(config));writeFileSync(config,'[env]\nENDPOINT_POISON="present"\n');
+  const before=invoke(commit());assert.equal(before.status,75,before.stdout+before.stderr);assert.ok(before.stderr.includes('.cargo/config.toml'),before.stderr);
+  assert.equal(existsSync(marker),false,'the current parent refuses before historical metadata starts');git('rm','-q','.cargo/config.toml');
+  writeFileSync(policy,code.replace('CONFIG',`process.once('beforeExit',()=>{mkdirSync('.cargo',{recursive:true});writeFileSync('.cargo/config.toml','');});`));
+  const after=invoke(commit());assert.equal(readFileSync(marker,'utf8'),'completed');assert.equal(after.status,75,after.stdout+after.stderr);assert.ok(after.stderr.includes('.cargo/config.toml'),after.stderr);
 });
 
 test("range registries are private, borrow pinned objects, and disappear after success or failure",t=>{

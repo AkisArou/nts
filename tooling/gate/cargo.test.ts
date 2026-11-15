@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {chmodSync,existsSync,lstatSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {delimiter,dirname,join} from 'node:path';
 import {createRequire} from 'node:module';
-import {cargoConfiguration,cargoHome,cargoOutput,withCargoConfiguration,withCargoConfigurationSync,CARGO_OWNER} from './cargo.ts';
+import {cargoConfiguration,cargoHome,cargoOutput,withCargoConfigurationSync,CARGO_OWNER} from './cargo.ts';
 import {inspectCargoCalls,inspectShellCargoCalls} from './cargo-audit.ts';
 import {inspectRustCargoCalls} from './rust-cargo.ts';
 import {inspectCargoTestCalls} from './test-profile-audit.ts';
@@ -43,16 +43,6 @@ test('body and final-observation failures preserve both causes and the configura
   assert.throws(()=>withCargoConfigurationSync([cwd],env,()=>{writeFileSync(config,'');throw primary;}),error=>{
     refusal(error,config);assert.ok(error instanceof Error);assert.ok(error.cause instanceof AggregateError);
     assert.equal(error.cause.errors[0],primary);assert.ok(error.message.includes(primary.message));return true;
-  });
-});
-test('an awaited historical lifetime verifies after its finalizer and preserves both failures',async t=>{
-  const {cwd,home,env}=privateTree(t),config=join(home,'config.toml'),primary=Error('historical operation failed');let drained=false;
-  await assert.rejects(withCargoConfiguration([cwd],env,async()=>{
-    try{await Promise.resolve();throw primary;}
-    finally{await Promise.resolve();writeFileSync(config,'');drained=true;}
-  }),error=>{
-    assert.equal(drained,true);refusal(error,config);assert.ok(error instanceof Error);assert.ok(error.cause instanceof AggregateError);
-    assert.equal(error.cause.errors[0],primary);return true;
   });
 });
 test('physical aliases and unreadable discovery directories never certify absence',t=>{
