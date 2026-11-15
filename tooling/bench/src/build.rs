@@ -276,7 +276,7 @@ fn supervised(
     Ok(result)
 }
 
-/// GNU ld's libgcc script probes cwd for libgcc_s.so.1. This lookup belongs
+/// GNU ld's libgcc script probes cwd for `libgcc_s.so.1`. This lookup belongs
 /// to a fresh owned directory, including outside a test runner. All object,
 /// library and output arguments are absolute when the benchmark calls this.
 pub(super) fn link_output(root: &Utf8Path, tool: &mut Command) -> Result<Output> {
