@@ -40,11 +40,11 @@ export function typescriptOracleIdentity() {
       producer: "pinned transpileModule",
       harness: harnessHashOf("ts"),
       suiteSha256: sourceHash(new URL(import.meta.url)),
-      oracleSha256: sourceHash(identityInputs.oracle.url),
-      preparationSha256: sourceHash(identityInputs.preparation.url),
-      referenceSources: referenceInputs.map(([path,input])=>[path,sourceHash(input.url)]),
-      workspaceSha256: sourceHash(identityInputs.workspace.url),
-      fixtureOptionsSha256: sourceHash(identityInputs.fixtureOptions.url),
+      oracleSha256: sourceHash(identityInputs.oracle),
+      preparationSha256: sourceHash(identityInputs.preparation),
+      referenceSources: referenceInputs.map(([path,input])=>[path,sourceHash(input)]),
+      workspaceSha256: sourceHash(identityInputs.workspace),
+      fixtureOptionsSha256: sourceHash(identityInputs.fixtureOptions),
     },
   };
 }
