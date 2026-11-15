@@ -223,7 +223,8 @@ int main(int argc,char **argv){(void)argc;for(int i=0;i<3;i++){pid_t p=fork();if
   await publishInputTrace({raw,output:index,cwd:root,root:repository,observer:session.receipt,target:{package:'fixture',name:'loaders',kind:['test'],source:'fixture.rs'}});
   const images=new Map<number,InputIndexExecution>(),rows:InputIndexObservation[]=[];let statistics:unknown;
   await readInputTraceIndex(index,row=>{if(row.kind==='execution')images.set(row.id,row);if(row.kind==='observation')rows.push(row);if(row.kind==='image-reader-end')statistics=row.value.statistics;});
-  const captured=[...images.values()].filter(image=>image.path===target&&image.imageLoader?.capture.state==='captured');assert.equal(captured.length,3);
+  const captured=[...images.values()].filter(image=>image.path===target&&image.imageLoader?.capture.state==='captured');
+  assert.equal(captured.length,3,JSON.stringify([...images.values()].filter(image=>image.path===target).map(image=>image.imageLoader)));
   assert.deepEqual(captured.map(image=>image.imageLoader?.capture.state==='captured'?image.imageLoader.capture.loader.libraryPath:null),[first,second,first]);
   const counts=statistics as {elfHits:number;loaderHits:number;loaderMisses:number};assert.ok(counts.elfHits>=2);assert.ok(counts.loaderHits>=1);assert.ok(counts.loaderMisses>=2);
   const classifier=rustTestExecutionClassifier(undefined,repository),sourceClassifier=rustTestExecutionClassifier(undefined,root),validator=runtimeSubjectValidator(repository,{files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},{capturedIdentities:true});
