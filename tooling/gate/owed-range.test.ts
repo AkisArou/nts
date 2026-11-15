@@ -462,6 +462,22 @@ test("transitive imports and rule data both prevent stable-selector narrowing wh
   }
 });
 
+test('the CLI self-test keeps accepted Rust answers trusted beside ignored outputs and sees committed input edits',t=>{
+  const directory=mkdtempSync(join(tmpdir(),'owed-committed-self-test-')),repo=join(directory,'repo');
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const env={...fixtureEnvironment(t),GIT_AUTHOR_NAME:'t',GIT_AUTHOR_EMAIL:'t@t',GIT_COMMITTER_NAME:'t',GIT_COMMITTER_EMAIL:'t@t'};
+  const ignored='ignored-control.tsbuildinfo';fixtureRepository(t,repo,env,{ignoredRuntimeInput:ignored});
+  const run=()=>execFileSync(process.execPath,['tooling/gate/owed.mjs','--self-test'],{cwd:repo,env,encoding:'utf8',stdio:['ignore','pipe','pipe']});
+  const clean=run();assert.match(clean,/Rust selector [a-f0-9]{12}: trusted;.*installation catalog current/);
+  writeFileSync(join(repo,ignored),'retained ignored build output\n');
+  assert.equal(run(),clean,'ignored caller outputs do not change canonical answers or the trusted decision');
+  writeFileSync(join(repo,'docs/runtime-input.txt'),'real committed runtime input edit\n');
+  const git=(args:string[])=>execFileSync('git',gitArguments(args),{cwd:repo,env,encoding:'utf8',stdio:['ignore','pipe','pipe']});
+  git(['add','--','docs/runtime-input.txt']);git(['commit','-qm','candidate runtime input changes']);
+  const changed=run();assert.match(changed,/Rust selector [a-f0-9]{12}: stale-live;/);
+  assert.doesNotMatch(changed,/Rust selector [a-f0-9]{12}: trusted;/);
+});
+
 test("the real unchanged selector reaches a newly added census test without a core fallback",async t=>{
   const directory=mkdtempSync(join(tmpdir(),"owed-real-leaf-"));
   const repo=join(directory,basename(directory)+"-repo"),env={...fixtureEnvironment(t),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};

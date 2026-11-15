@@ -92,6 +92,7 @@ import { moduleGraph } from "./module-closure.ts";
 import {readerObservationDependency,readerObservationIndex,readerDependencyIndex} from './reader-observations.ts';
 import {rustSelectorInputs,rustSelectorTrust} from './rust-selector-selection.ts';
 import {withRustSelectorSource} from './rust-selector-write.ts';
+import {reportRustRecordDecisions} from './rust-selector-decision.ts';
 import {sameOracleObservation} from '../differential/oracle-runtime.ts';
 import {matchesModuleMember} from "./reader-inputs/main.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
@@ -2363,7 +2364,19 @@ function main() {
     if(problems.length){console.error(problems.join("\n"));process.exitCode=1;}
     return;
   }
-  const broken = selfTest();
+  const accepted=rustSelectorTrust(TREE);
+  /** @param {import('./rust-selector-selection.ts').RustSelectorOptions} trust */
+  const check=trust=>{
+    const broken=selfTest(trust);
+    if(!broken&&trust.committedSource){
+      const decision=rustRecordDecision(trust);
+      if(decision)reportRustRecordDecisions([{revision:trust.committedSource.revision,decision}],line=>console.log('  '+line));
+    }
+    return broken;
+  };
+  const broken=readsRustInputs(allSteps())
+    ?withRustSelectorSource(TREE,source=>check({...accepted,committedSource:source}))
+    :check(accepted);
   if (broken) {
     console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
     process.exit(2);

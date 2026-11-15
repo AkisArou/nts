@@ -20,7 +20,7 @@ const ROOT=fileURLToPath(new URL('../..',import.meta.url));
 type Fixture=Parameters<typeof oracleWorkspaceFixture>[0];
 
 /** The real selector and installer, with one independent Rust input owner. */
-export function smallSelectorRepository(t:Fixture,repo:string,env:NodeJS.ProcessEnv):void{
+export function smallSelectorRepository(t:Fixture,repo:string,env:NodeJS.ProcessEnv,options:{ignoredRuntimeInput?:string}={}):void{
   mkdirSync(repo,{recursive:true});
   const entries:InputEntry[]=[fixtureInput(new URL('./owed.mjs',import.meta.url),{dataNamespaces:{}}),...LINKER_INPUTS.map(url=>relative(ROOT,fileURLToPath(url))),
     ...SELECTOR_POLICY_DATA.map(path=>({kind:'file' as const,url:fileInput(pathToFileURL(join(ROOT,path)))}))];
@@ -30,7 +30,7 @@ export function smallSelectorRepository(t:Fixture,repo:string,env:NodeJS.Process
   const put=(path:string,text:string)=>{mkdirSync(dirname(join(repo,path)),{recursive:true});writeFileSync(join(repo,path),text);};
   // This source owner makes real candidate commits, including new tooling
   // entries; the oracle-only fixture's blanket tooling ignore does not apply.
-  put('.gitignore','node_modules/\n/third_party/\n/target/\n');
+  put('.gitignore','node_modules/\n/third_party/\n/target/\n'+(options.ignoredRuntimeInput?'/'+options.ignoredRuntimeInput+'\n':''));
   // The one-crate source has no nts CLI linking LLVM, hence no dependent
   // compiler corpus. Retain every rule/order self-check and its failure arm;
   // only the real full-population control owns that graph-specific assertion.
@@ -49,7 +49,8 @@ ${names.map(name=>'step "'+name+'" '+(commands[name]??'true')).join('\n')}
   put('src/lib.rs','');put('docs/runtime-input.txt','one runtime input\n');
   const inventory=cargoRuntimeTargets(repo);assert.equal(inventory.length,1);assert.equal(inventory[0]!.source,'src/lib.rs');
   const {source,name,kind}=inventory[0]!;
-  put(RUST_RUNTIME_DECLARATIONS,JSON.stringify({version:1,targets:[{target:{source,name,kind},declarations:{imports:[],assets:[{kind:'file',path:'../docs/runtime-input.txt'}]}}]}));
+  put(RUST_RUNTIME_DECLARATIONS,JSON.stringify({version:1,targets:[{target:{source,name,kind},declarations:{imports:[],assets:[{kind:'file',path:'../docs/runtime-input.txt'},
+    ...(options.ignoredRuntimeInput?[{kind:'optional-file',path:'../'+options.ignoredRuntimeInput}]:[])]}}]}));
   rmSync(join(repo,RUST_SELECTOR_RECORD),{force:true});
   // The staging owner supplies membership, including protected recipe code.
   // Private overrides are committed after that copy, never reconstructed from
