@@ -109,16 +109,17 @@ test('the real full-check recordPending candidate route seals and removes finish
   writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\nimport {durableRecord} from '../gate/durable-record.ts';\n"+source.replace(boundary,boundary+`
       assertSealedOracleRun(process.env);
       const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
-      durableRecord(${JSON.stringify(observed)},{sealed:Boolean(capability.seal),canonical:context.report.canonical,tmp:process.env.TMPDIR,registered:context.temporary.path,argv:process.argv.slice(2)});
+      durableRecord(${JSON.stringify(observed)},{sealed:Boolean(capability.seal),canonical:context.report.canonical,tmp:process.env.TMPDIR,registered:context.temporary.path,argv:process.argv.slice(2),diskPool:JSON.parse(readFileSync(process.env.NTS_DISK_CAPACITY,'utf8')).pool});
       process.exitCode=${status};
       return;
   `));
   git(root,'add','-f','tooling/records/record-pending.ts');git(root,'commit','-qm','observe only the sealed recorder handoff');
-  const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env});
+  const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env,owned:ownMemory(join(scratch,'full-check-memory'))});
   assert.equal(result.status,status,readFileSync(join(run,RECORDER_LOG),'utf8'));
   const value=JSON.parse(readFileSync(observed,'utf8'));
   assert.equal(value.sealed,true);assert.equal(value.canonical,true);
   assert.equal(value.tmp,value.registered);assert.deepEqual(value.argv,['--after',part,run]);
+  assert.equal(value.diskPool,null,'the real candidate route carries the fixture disk capability, never the live pool');
   assert.deepEqual(readdirSync(join(planned.env.HOME!,'.cache/nts/oracle-entries')),[],'the whole entry run, including failed runs, is removed after child/session/admission drain');
   }
 });

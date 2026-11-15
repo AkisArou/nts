@@ -50,7 +50,7 @@ test('Git fence descriptors follow their indexed owners and retain control-file 
   assert.deepEqual(literal.files,['space/glob[1]*?.ts']);assert.ok(literal.controls.includes('space/.gitattributes'));
 });
 
-test('oracle workspace staging consumes verified installer pins without unrelated manifests',t=>{
+test('oracle workspace staging separates verified installer pins from explicit status candidates',t=>{
   const source=fileURLToPath(new URL('../..',import.meta.url)),tree=testScratch(t,'oracle-workspace-pins');
   const git=(root:string,...args:string[])=>{
     const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout;
@@ -59,11 +59,15 @@ test('oracle workspace staging consumes verified installer pins without unrelate
   const catalog=readDependencyCatalog(installationCatalogTrust(shared,source),source);assert.equal(catalog.state,'current');
   const pins=new Set(catalog.catalog.identity.inputs.filter(row=>row.sha256!=='absent').map(row=>row.path));
   const outside=git(source,'ls-files','-z','--',':(glob)**/package.json').split('\0').find(path=>path&&!pins.has(path));assert.ok(outside);
-  oracleWorkspaceFixture(t,tree,source);
+  const metadata=oracleWorkspaceFixture(t,tree,source);
   for(const path of pins)assert.deepEqual(readFileSync(join(tree,path)),readFileSync(join(source,path)),path);
-  assert.equal(existsSync(join(tree,outside)),false,'a non-importer manifest is not an installation input');
+  assert.ok(metadata.includes(outside),'the explicit installation-status population reproduces non-importer candidates');
+  assert.deepEqual(readFileSync(join(tree,outside)),readFileSync(join(source,outside)));
   const staged=git(tree,'ls-files','-z','--',':(glob)**/package.json').split('\0').filter(Boolean);
-  assert.ok(staged.every(path=>pins.has(path)),'all staged package manifests come from the installation owner');
+  const tracked=git(source,'ls-files','-z').split('\0').filter(Boolean);
+  const candidates=new Set(installationStatusCandidates(tracked,path=>readFileSync(join(source,path),'utf8')));
+  assert.ok(staged.every(path=>pins.has(path)||candidates.has(path)),'each staged manifest belongs to the pin or status population');
+  assert.ok(!pins.has(outside),'a status candidate is not silently promoted to an image identity input');
 });
 
 test('committed source-guard candidates keep runtime claims while actual and new recipe members select',t=>{

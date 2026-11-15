@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,symlinkSync,writeFileSync,chmodSync,rmSync } from 'node:fs';
+import { existsSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync,chmodSync,rmSync } from 'node:fs';
 import { join,resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,7 @@ import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 import { ownMemoryEnv } from '../gate/test-memory.ts';
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
+import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
 
 await setupOracleTestEnvironment();
 
@@ -27,12 +28,8 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
   const repository=fileURLToPath(new URL('../../',import.meta.url)),binary=resolve(repository,process.env.NTS_BIN??'target/release/nts');
   assert.ok(existsSync(binary),'compiler missing: '+binary);
   const scratch=mkdtempSync(join(tmpdir(),'nts-sampled-records-'));t.after(()=>removeOracleSnapshot(scratch));
-  const fixture=join(scratch,'fixture'),census=join(fixture,'tooling/census');mkdirSync(census,{recursive:true});
-  for(const name of readdirSync(join(repository,'tooling/census'))){
-    const from=join(repository,'tooling/census',name),to=join(census,name);
-    if(name==='conformance262.ts')copyFileSync(fileURLToPath(new URL('./conformance262.ts',import.meta.url)),to);else symlinkSync(from,to);
-  }
-  for(const name of readdirSync(join(repository,'tooling')))if(name!=='census')symlinkSync(join(repository,'tooling',name),join(fixture,'tooling',name));
+  const fixture=join(scratch,'fixture'),census=join(fixture,'tooling/census');mkdirSync(fixture);
+  oracleWorkspaceFixture(t,fixture);
   mkdirSync(join(fixture,'tests/typescript/private'),{recursive:true});
   for(const value of [1,2])writeFileSync(join(fixture,'tests/typescript/private',value+'.ts'),`assert.sameValue(${value},${value});\n`);
   copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true,dataNamespaces:{'tests/typescript':'sampling CLI fixture'}});
@@ -51,7 +48,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
     writeFileSync(rows,JSON.stringify({fingerprint,under:metadata.under,harness:metadata.harness,output_prefix:OUTPUT_PREFIX_VERSION,
       observations:TYPESCRIPT_OBSERVATIONS_VERSION,oracleIdentity:typescriptOracleIdentity()})+'\n'+(observed?JSON.stringify({path:target,...observed})+'\n':''));
     const result=spawnSync(process.execPath,['tooling/census/conformance262.ts','--suite','typescript',mode,record,'--sample','1','--jobs','1','--rows',rows,'--resume','--json',report],
-      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:ownMemoryEnv(join(scratch,'memory'),{...fixtureEnvironment(t),NTS_BIN:binary,NTS_CENSUS_DIR:join(scratch,'run'),NTS_GATE_STEP:'sampling-fixture'})});
+      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:ownMemoryEnv(join(scratch,'memory'),fixtureEnvironment(t,{NTS_BIN:binary,NTS_CENSUS_DIR:join(scratch,'run'),NTS_GATE_STEP:'sampling-fixture'}))});
     return {...result,json:existsSync(report)?JSON.parse(readFileSync(report,'utf8')):undefined};
   };
   await t.test('a recorded case outside the sample is not run or missing',()=>{
@@ -69,6 +66,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
   await t.test('a selected recorded case is still compared',()=>{
     const result=run('--recorded',new Map([[target,pass],[other,pass]]),{bucket:'threw',thrown:'Test262Error',runtimeFailure:{exit:1,signal:null,output:'uncaught Test262Error: wrong'}});
     assert.equal(result.status,1,result.stdout+result.stderr);
+    assert.ok(result.json,result.stdout+result.stderr);
     assert.equal(result.json.comparison.REGRESSED.length,1);assert.ok(result.json.comparison.REGRESSED[0].startsWith(target+':'));
   });
   await t.test('test262 recorded mode does not call its sampled-out row missing',()=>{
@@ -85,7 +83,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
     rmSync(report,{force:true});
     writeFileSync(rows,JSON.stringify({fingerprint,under:'test/language',harness:harnessHashOf('js'),output_prefix:OUTPUT_PREFIX_VERSION})+'\n'+JSON.stringify({path:paths[0],bucket:'strict-pass'})+'\n');
     const result=spawnSync(process.execPath,['tooling/census/conformance262.ts','--recorded',record,'--sample','1','--jobs','1','--rows',rows,'--resume','--json',report],
-      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:ownMemoryEnv(join(scratch,'memory'),{...fixtureEnvironment(t),NTS_BIN:binary,NTS_TEST262_PROTOCOL:protocol,NTS_CENSUS_DIR:join(scratch,'js-run'),NTS_GATE_STEP:'sampling-fixture'})});
+      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:ownMemoryEnv(join(scratch,'memory'),fixtureEnvironment(t,{NTS_BIN:binary,NTS_TEST262_PROTOCOL:protocol,NTS_CENSUS_DIR:join(scratch,'js-run'),NTS_GATE_STEP:'sampling-fixture'}))});
     assert.equal(result.status,0,result.stdout+result.stderr);
     const json=JSON.parse(readFileSync(report,'utf8'));assert.equal(json.population,1);assert.deepEqual(json.comparison.MISSING,[]);
   });

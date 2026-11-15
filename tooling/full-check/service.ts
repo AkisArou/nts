@@ -1291,7 +1291,7 @@ export const RECORDER_LOG = "record-pending.log";
  * lines, past the 256 MiB buffer, and spawnSync killed record-pending (ENOBUFS)
  * before its later kinds ran. The result's output is the log's tail.
  */
-export function recordPending(tree: string, pin: string, run: string, part: Part, options: { nodeInstallations?: string; env?: NodeJS.ProcessEnv } = {}) {
+export function recordPending(tree: string, pin: string, run: string, part: Part, options: { nodeInstallations?: string; env?: NodeJS.ProcessEnv;owned?:Record<string,string> } = {}) {
   const script = join(tree, "tooling/records/record-pending.ts");
   if (!existsSync(script)) return { status: 2, output: `no tooling/records/record-pending.ts at this commit` };
   const log = join(run, RECORDER_LOG);
@@ -1302,7 +1302,7 @@ export function recordPending(tree: string, pin: string, run: string, part: Part
     r = candidateCommand(selected.node, {
       // Its jobs reserve their memory in the machine's ledger at the full
       // check's priority, below a landing check's and an agent's.
-      tree, run: join(run, 'records'), owned: { NTS_BIN: pin, NTS_CHECKERS: '1', NTS_MEMORY_PRIORITY: 'full-check' },
+      tree, run: join(run, 'records'), owned: { ...options.owned,NTS_BIN: pin, NTS_CHECKERS: '1', NTS_MEMORY_PRIORITY: 'full-check' },
       command: [selected.node, script, "--after", part, run], discardTemporary: true,
     }, selected.env, { output: out });
   } finally { closeSync(out); }

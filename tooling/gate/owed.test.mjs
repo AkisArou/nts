@@ -483,6 +483,11 @@ const superset = (got, want, what) => {
   for (const s of want) assert.ok(got.includes(s), `${what} should owe ${s}; owes ${got.join(" ")}`);
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
+const everyChangeSteps = () => {
+  const rules=owed([{path:"tooling/gate/times.tsv",added:false}]).filter(rule=>rule.name==="every change");
+  assert.equal(rules.length,1,"derive standing policy from its own rule, independently of the queried file's readers");
+  return [...gateSteps(rules)].sort();
+};
 
 test("unplaced ECMAScript providers keep their declared reach beside inferred readers", t => {
   const inputs = stepInputs(), path = "runtime/ecmascript", previous = inputs.get(path);
@@ -509,7 +514,7 @@ test("a quoted runtime/* fixture alias does not make tooling read the Chromium r
   for(const path of ["runtime/chromium/host/host.c", "runtime/chromium/adapter/dom_bridge.cc", "runtime/chromium/examples/todo/main.ts"])
     for(const added of [false, true]) {
       const rules = owed([{path,added}]);
-      assert.deepEqual([...gateSteps(rules)].sort(), [...stepsFor("tooling/gate/times.tsv")].filter((/** @type {string} */ step)=>step!=='jvm-members').sort(), path);
+      assert.deepEqual([...gateSteps(rules)].sort(), everyChangeSteps(), path);
       assert.ok(rules.some(rule => rule.name === "the Chromium runtime"));
     }
   assert.deepEqual([...stepsFor("tooling/chromium/processes.ts")].sort(), actualReader);
@@ -992,15 +997,14 @@ test("a private timing fixture does not make committed step estimates a verdict 
 });
 
 test("Chromium runtime files keep their ordinary obligations and tooling bytes owe the audit", () => {
-  // As the gate's step times do: placed, and owing nothing of its own.
-  const always = [...stepsFor("tooling/gate/times.tsv")].sort();
+  const always = everyChangeSteps();
   assert.ok(always.includes("clippy") && !always.includes("blockers"), `every change owes ${always.join(" ")}`);
   for (const p of [
     "tooling/chromium/bindgen/generate.py", "tooling/chromium/smoke.ts", "tooling/chromium/args.gn",
     "runtime/chromium/host/host.c", "runtime/chromium/adapter/dom_bridge.cc", "runtime/chromium/examples/todo/main.ts",
     "runtime/chromium/embedder/program/check.ts", "runtime/chromium/docs/lib-dom.md", "runtime/chromium/dom/types/dom-testing.d.ts",
   ]) {
-    const expected=p.startsWith('tooling/')?always:always.filter(step=>step!=='jvm-members');
+    const expected=p.startsWith('tooling/')?[...new Set([...always,'tooling','jvm-members'])].sort():always;
     assert.deepEqual([...stepsFor(p)].sort(), expected, p);
   }
 });

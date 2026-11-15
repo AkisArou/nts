@@ -40,7 +40,7 @@ test('generated project graph preserves missing supplied selection and immutable
   const base=testScratch(t,'generated-project-selection'),root=join(base,'source');mkdirSync(join(root,'case'),{recursive:true});
   writeFileSync(join(root,'package.json'),'{"name":"generated-project-control","type":"module"}');
   writeFileSync(join(root,'base.json'),'{"compilerOptions":{"types":[]}}');writeFileSync(join(root,'case/main.ts'),'export const value=1;');writeFileSync(join(root,'case/other.ts'),'export const other=2;');
-  const declarations=new Map([['reader.rs',{imports:[],assets:[{kind:'generated-project' as const,path:'./base.json',directory:'./case/',include:'directory' as GeneratedInclude}]}]]);
+  const declarations=new Map([['reader.rs',{imports:[],assets:[{kind:'generated-project' as const,path:'./base.json',directory:'./case/',include:'directory' as GeneratedInclude,role:'compiled-program' as const}]}]]);
   writeFileSync(join(root,'reader.rs'),'');
   const describe=()=>{const graph=moduleGraph({sourceRoot:root,declarations,generatedTemporaryParent:join(base,'private')});try{return graph.describe(['reader.rs']);}finally{graph.close();}};
   const generated=describe();assert.ok(generated.files.includes('case/main.ts'));assert.ok(generated.files.includes('case/other.ts'));

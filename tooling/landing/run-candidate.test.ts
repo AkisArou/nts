@@ -117,13 +117,13 @@ test("the candidate environment launcher preserves killed and unstarted build ob
   }
 });
 
-test("a candidate gate replaces old main's foreign oracle handoff but holds its own changed seal",async t=>{
-  for(const foreign of [true,false])await t.test(foreign?"foreign root gets a fresh capture":"same-root corruption holds",async()=>{
+test("a candidate gate rebinds an equal-input foreign oracle image but holds its own changed seal",async t=>{
+  for(const foreign of [true,false])await t.test(foreign?"foreign root reuses the image under its own seal":"same-root corruption holds",async()=>{
     const f=fixture(t),options=f.options(["rustfmt"]);f.control("rustfmt","oracle-context");
     const launcher=launcherEnvironment(options.env);
     const planned=gateEnvironment(launcher,{run:f.run,owned:{...options.owned,NTS_GATE_STEPS:"rustfmt"},oracleAdmissionContext:"gate",
       ...(!foreign?{oracleRoot:f.tree}:{})});
-    const parent=await sealOracleRun(planned),before=JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!) as {source:string;directory:string;admission:unknown;seal:{record:string}};
+    const parent=await sealOracleRun(planned),before=JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!) as {source:string;sourceRevision:string;directory:string;admission:unknown;seal:{version:number;source:string;sourceRevision:string;record:string}};
     assert.equal(before.source,foreign?resolve(GATE,"../.."):f.tree);
     const original=readFileSync(before.seal.record);
     writeFileSync(join(f.controls,"parent-record"),before.seal.record);
@@ -133,10 +133,11 @@ test("a candidate gate replaces old main's foreign oracle handoff but holds its 
       assert.equal(child.status,0,child.stdout+child.stderr);
       const observed=JSON.parse(readFileSync(join(f.controls,"oracle-context.json"),"utf8")) as {capture:typeof before;imageSource:string;parentSha256:string;temporary:unknown};
       const after=observed.capture;
-      assert.equal(after.source,f.tree);assert.notEqual(after.directory,before.directory);assert.notEqual(after.seal.record,before.seal.record);
+      assert.equal(after.source,f.tree);assert.equal(after.directory,before.directory);assert.equal(after.seal.record,before.seal.record);
+      assert.equal(after.seal.version,2);assert.equal(after.seal.source,f.tree);assert.equal(after.seal.sourceRevision,after.sourceRevision);
       assert.deepEqual(after.admission,before.admission);
       assert.equal(observed.parentSha256,createHash("sha256").update(original).digest("hex"),"the unused parent capture remains intact until cleanup");
-      assert.equal(observed.imageSource,f.tree);assert.deepEqual(observed.temporary,parent.temporary);
+      assert.equal(observed.imageSource,before.source,'the immutable image retains its producer source');assert.deepEqual(observed.temporary,parent.temporary);
     }else{
       assert.notEqual(child.status,0,child.stdout+child.stderr);
       assert.match(child.stdout+child.stderr,/oracle dependency.*(?:changed|identity|seal)/);
