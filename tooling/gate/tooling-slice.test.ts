@@ -4,6 +4,7 @@ import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {generatedJavaScript} from './generated-javascript.ts';
+import {killedScopedToolingOwner} from './tooling-slice-fixture.ts';
 import {requireOwnUnit} from './scopes/bound-slice.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {testScratch} from './test-scratch.ts';
@@ -11,6 +12,12 @@ import {spawnTest,waitFor} from './test-wait.ts';
 import {stopToolingSlice,toolingSliceArgs,unitComponent} from './tooling-slice.ts';
 
 const BOUND=new URL('./scopes/bound-slice.ts',import.meta.url),NAMING=new URL('./tooling-slice.ts',import.meta.url),ENTRY=new URL('../differential/command-entry/main.ts',import.meta.url);
+const RUNNER=new URL('./tooling-runner.ts',import.meta.url);
+
+test('a killed real runScopedTooling owner leaves its tooling slice inactive',async t=>{
+  const result=await killedScopedToolingOwner(testScratch(t,'scoped-owner'),RUNNER,fixtureEnvironment(t));
+  assert.match(result.state,/^ActiveState=inactive$/m,JSON.stringify(result));
+});
 
 test('a shell outside the user manager gets a named scope command instead of an unbound slice',()=>{
   assert.throws(()=>requireOwnUnit('0::/user.slice/user-1000.slice/session-2.scope'),error=>{

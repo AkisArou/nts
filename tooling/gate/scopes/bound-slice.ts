@@ -43,8 +43,8 @@ const checked=(command:string,args:string[]):string=>{
 /** Create the policy before any member starts. The owner keeps an empty
  * start alive; systemd stops the whole hierarchy when that owner unit ends. */
 export function startBoundSlice(slice:string,boundTo:string,limits?:{max:number}):string{
-  checkedUnitName(slice);checkedUnitName(boundTo);
   if(!boundTo)throw new ToolingInstrumentError('tooling-setup','tooling slice requires a bound owner');
+  checkedUnitName(slice);checkedUnitName(boundTo);
   let created=false;
   const memory=limits?['MemoryMax','t',String(limits.max),'MemorySwapMax','t','0']:[];
   const binds=bindsToProperties(boundTo);

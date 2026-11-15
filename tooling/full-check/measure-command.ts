@@ -22,7 +22,6 @@ async function measure(seconds: number, run: string, slice: string, command: str
     throw new Error("a full-check measurement needs a run, its own slice and a positive wall ceiling");
   }
   const unit = `nts-full-check-measure-${randomUUID()}`;
-  const owner = requireOwnUnit();
   const deadline = performance.now() + seconds * 1000;
   const hold = (reason: string) => {
     console.error(reason);
@@ -41,6 +40,7 @@ async function measure(seconds: number, run: string, slice: string, command: str
   let status = 124;
   let cleanupFailed = false;
   try {
+    const owner = requireOwnUnit();
     startBoundSlice(slice,owner);acquired=true;
     const child = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", "--expand-environment=no",
       `--unit=${unit}`, `--slice=${slice}`, `--property=RuntimeMaxSec=${seconds}s`, "--property=TimeoutStopSec=5s",
