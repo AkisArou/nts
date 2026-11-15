@@ -949,7 +949,10 @@ the tooling strict checker owns the source's type checking.
   ledger's margin. An unknown case is charged live use and that margin.
   Active case promises and fixed steps share the run's admitted reservation;
   a case that needs more asks for admitted growth before starting. The hard
-  case cap is separate from this forecast. The common worker owner retains
+  case cap is separate from this forecast. The token broker publishes the
+  held-token transition to the step's execution clock before acknowledging
+  admission, so a running case cannot still be charged as an excluded wait.
+  The common worker owner retains
   each registered persistent scope's acquired device and inode. The worker
   subtree's floor holds those scopes' caps until a fresh cgroup filesystem
   observation proves departure; lease completion alone cannot lower it.

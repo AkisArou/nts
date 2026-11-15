@@ -3078,3 +3078,12 @@ run records and the standing within-run bar keep their existing contracts.
 ## Tooling contention is an on-demand round (11-15)
 
 For #669, reuse the complete tooling collector and the Rust test-profile and per-binary scratch owners. Admit one round at a time, wait for load readiness, and keep load and collector under one fresh owner-bound experiment quota. The first round supplies actual failure output and resource readings; inspect and fix or file those causes before stability repeats. Release admission between rounds so a waiting landing goes first. The harness is an on-demand tool, not a gate step, and no wall-time comparison decides a test.
+
+## Observe case admission before its acknowledgement (11-15)
+
+The token broker observes the held-token transition before answering a grant.
+A client can run immediately on its acknowledgement, so observation after
+the reply can charge running time as excluded admission wait and miss the
+step's execution bound. Unsized, synchronous sized and asynchronous sized
+grants share the same order. The real census control keeps its original
+assertions; a supplied socket/clock interleaving checks the boundary directly.

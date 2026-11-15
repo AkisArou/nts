@@ -77,10 +77,12 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       const n=(pool.held.get(w.step)??0)+1;pool.held.set(w.step,n);
       if(w.bytes!==undefined){const s=pool.sized.get(w.step)??{count:0,bytes:0};pool.sized.set(w.step,{count:s.count+1,bytes:s.bytes+w.bytes});}
       pool.total++;if(n>(pool.peak.get(w.step)??0))pool.peak.set(w.step,n);
+      // The client can run as soon as go is written. Observe its held state
+      // first, so that execution cannot still be charged as admission wait.
+      trace('pool.change');
       const ready=w.bytes===undefined?null:answering(w.step,w);
       const go=()=>{if(!w.gone){if(cancelled)w.sock.end('error: token pool is shutting down\n');else w.sock.write('go\n');}};
       if(ready)void ready.then(go,error=>w.sock.end(`error: ${String(error)}\n`));else go();
-      trace('pool.change');
     }
   };
   pool.start=()=>new Promise(resolve=>{

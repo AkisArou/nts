@@ -1,9 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {connect} from 'node:net';
+import {connect,Socket} from 'node:net';
 import {createTokenPool} from './token-pool.ts';
 import {tokenClient} from './tokens.mjs';
 import {waitFor} from './test-wait.ts';
+import {StepBoundClock,stepBoundWait} from './step-bound.ts';
+
+for(const mode of ['unsized','sized-sync','sized-async'] as const)test(`${mode} admission is observed before its client can spend the execution bound`,async()=>{
+  let now=0,entered=false;
+  const clock=new StepBoundClock(3,0),socket=new Socket(),events:{event:string;now:number;held?:number}[]=[];
+  clock.observe(0,'memory');
+  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,now:()=>now,
+    answering:()=>mode==='sized-async'?Promise.resolve():null,
+    observe:event=>{if(event.event==='pool.change'){
+      const held=pool.held.get('census')??0;
+      const waiting=stepBoundWait({elastic:true,held,outranked:false,requests:pool.waiting.map(row=>row.bytes??1),freeSlots:1-pool.total,freeFrontends:Infinity,freeBytes:1});
+      events.push({event:'runner-observes-held',now,held});clock.observe(now,waiting);
+    }}});
+  // A separately scheduled client may enter and spend its entire allowance
+  // as soon as the acknowledgement is delivered, before the runner resumes.
+  socket.write=(message:string|Uint8Array)=>{
+    assert.equal(String(message),'go\n');entered=true;events.push({event:'client-enters',now});now=4000;return true;
+  };
+  try{
+    pool.waiting.push({sock:socket,id:1,step:'census',pid:1,context:'supplied-interleaving',since:0,granted:false,gone:false,...(mode==='unsized'?{}:{bytes:1})});
+    pool.grant();await Promise.resolve();
+    assert.equal(entered,true);assert.equal(pool.held.get('census'),1);
+    assert.deepEqual(clock.observe(now),{used_s:4,waited_s:{memory:0},expired:true});
+    assert.deepEqual(events,[{event:'runner-observes-held',now:0,held:1},{event:'client-enters',now:0}]);
+  }finally{socket.destroy();pool.close();await pool.closed;}
+});
 
 test('a lost case controller retains its token until its worker drain completes',async t=>{
   let finishDrain!:()=>void,draining!:()=>void;
