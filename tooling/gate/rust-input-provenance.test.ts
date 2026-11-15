@@ -21,7 +21,8 @@ test('capture-time physical identities classify host inputs without resolving hi
   assert.equal(classify(pathname('/host/alias',resolution('/source/input')),content),undefined,'an outside spelling may resolve to source');
   const alias=resolution('/host/library');alias.components.unshift({path:'/source/alias',kind:'symlink',dev:'1',ino:'3'});
   assert.equal(classify(pathname('/source/alias',alias),content),undefined,'a commit can change the source alias');
-  assert.equal(classify(descriptor('/build/unemitted'),content),undefined,'the build namespace itself grants nothing');
+  assert.equal(classify(descriptor('/build/unemitted'),content)?.kind,'build-namespace');
+  assert.equal(classify(descriptor('/source/target/unemitted'),content),undefined,'a target spelling grants nothing');
   assert.equal(classify(descriptor('/source/input'),content),undefined);
   assert.equal(classify(descriptor('/host/library'),{kind:'unknown',reason:'unknown ABI'}),undefined);
   assert.equal(runtimeProvenanceClassifier({...facts(),buildNamespace:undefined}).classify(descriptor('/host/library'),content),undefined,'historical missing namespace stays unknown');
@@ -39,7 +40,7 @@ test('fresh empty root receipts survive deletion, while write attempts and unbou
   assert.throws(()=>runtimeProvenanceClassifier({...facts(),sourceRoot:root,roots:[receipt],window:{start:10,end:30}}),/outside source/);
 });
 
-test('only Cargo-emitted artifacts and actual build-script messages discharge build products',t=>{
+test('Cargo v2 binds the build namespace, while exact artifacts and build-script messages retain their own provenance',t=>{
   const root=testScratch(t,'input-provenance-build'),path=join(root,'cargo.json');
   const value={version:2,status:0,buildFinished:true,buildNamespace:'/build',artifacts:[{reason:'compiler-artifact',filenames:['/build/emitted'],executable:null}],
     buildScripts:[{reason:'build-script-executed',package_id:'crate',out_dir:'/build/owned-out'}]};
@@ -47,7 +48,10 @@ test('only Cargo-emitted artifacts and actual build-script messages discharge bu
   writeFileSync(path,JSON.stringify(value));const build=read(),classify=runtimeProvenanceClassifier({...facts(),...build}).classify;
   assert.equal(classify(descriptor('/build/emitted'),content)?.kind,'cargo-artifact');
   assert.equal(classify(descriptor('/build/owned-out/generated'),content)?.kind,'build-script-output');
-  assert.equal(classify(descriptor('/build/unreported/generated'),content),undefined);
+  assert.equal(classify(descriptor('/build/unreported/generated'),content)?.kind,'build-namespace');
+  const missing=resolution('/build/absent');missing.state='missing';missing.components[0]!.kind='missing';
+  assert.equal(classify(pathname('/build/absent',missing),content)?.kind,'build-namespace','captured absences belong to the recorded build namespace too');
+  assert.equal(classify(pathname('/build/unbound'),content),undefined,'a spelling alone still grants nothing');
   writeFileSync(path,JSON.stringify({...value,version:1}));const historical=read();assert.equal(historical.buildNamespace,undefined);assert.deepEqual(historical.outputDirectories,[]);
   assert.equal(runtimeProvenanceClassifier({...facts(),...historical}).classify(descriptor('/build/owned-out/generated'),content),undefined);
   writeFileSync(path,JSON.stringify({...value,buildScripts:[{reason:'build-script-executed',package_id:'crate',out_dir:'/unowned'}]}));

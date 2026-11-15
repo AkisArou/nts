@@ -7,6 +7,8 @@ import type {CaptureArtifact} from './file-input-observer.ts';
 import type {InputSubject} from './rust-test-inputs.ts';
 import type {InputRequirement} from './rust-input-operations.ts';
 import type {TestScratchReceipt} from './test-scratch.ts';
+import type {InputSnapshot} from './module-closure.ts';
+import type {InstalledProjectDependency} from './project-dependencies.ts';
 
 export type CapturedPathResolution={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:string;finalLink?:boolean;
   namespace?:{dev:string;ino:string;rootDev:string;rootIno:string};
@@ -16,6 +18,7 @@ export type RuntimeProvenanceFacts={sourceRoot:string;buildNamespace?:string;art
   outputDirectories:{package:string;path:string}[];roots:FreshRootReceipt[];window?:{start:number;end:number}};
 export type RuntimeProvenanceClass={kind:'owned-output';path:string;root:FreshRootReceipt}
   |{kind:'cargo-artifact';path:string}|{kind:'build-script-output';path:string;package:string;directory:string}
+  |{kind:'build-namespace';path:string;namespace:string}
   |{kind:'host-environment';path:string;basis:'captured-descriptor'|'captured-components'};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
 const canonical=(path:unknown):path is string=>typeof path==='string'&&isAbsolute(path)&&resolve(path)===path;
@@ -71,9 +74,36 @@ export function runtimeProvenanceClassifier(facts:RuntimeProvenanceFacts){
     if(artifacts.has(path))return {kind:'cargo-artifact',path};
     for(const directory of facts.outputDirectories)if(inside(directory.path,path))
       return {kind:'build-script-output',path,package:directory.package,directory:directory.path};
+    if(facts.buildNamespace&&inside(facts.buildNamespace,path))
+      return {kind:'build-namespace',path,namespace:facts.buildNamespace};
     if(facts.buildNamespace&&!inside(facts.sourceRoot,path)&&!inside(facts.buildNamespace,path)
       &&components.every(row=>!inside(facts.sourceRoot,row.path)&&!inside(facts.buildNamespace!,row.path)))
       return {kind:'host-environment',path,basis:subject.kind==='descriptor'?'captured-descriptor':'captured-components'};
     return undefined;
+  }};
+}
+
+/** The caller validates this target's graph observations before matching.
+ * Package identity and bytes come from that graph's authenticated catalog;
+ * only its exact file facts qualify, never an installed-directory prefix. */
+export function runtimeInstalledInputClassifier(root:string,snapshot:InputSnapshot){
+  const files=new Map<string,InstalledProjectDependency>(),links=new Map<string,string|null>();
+  for(const row of snapshot.observations){
+    if(!row.dependency||row.context.entry!=='<entry>'||row.protocol!=='project'||row.dependency.source!==root)continue;
+    const {observation,dependency}=row;
+    if(observation.kind==='file'&&typeof observation.value==='string'&&dependency.package)
+      files.set(observation.path,structuredClone(dependency));
+    if(observation.kind==='readlink'&&(typeof observation.value==='string'||observation.value===null))links.set(observation.path,observation.value);
+  }
+  return {classify(subject:InputSubject,requirement:InputRequirement):{kind:'installed-dependency';path:string;dependency:InstalledProjectDependency}|undefined{
+    if(requirement.kind!=='content'&&requirement.kind!=='metadata')return;
+    const proof=subject.kind==='path'?subject.resolution:undefined;
+    if(subject.kind==='path'&&(!proof||proof.state!=='resolved'||proof.finalLink&&requirement.following==='no-follow'))return;
+    const path=subject.kind==='descriptor'?subject.target:proof?.path;
+    if(!path)return;
+    const dependency=files.get(path);if(!dependency)return;
+    for(const part of proof?.components??[])if(part.kind==='symlink'&&inside(root,part.path)
+      &&(part.link===undefined||links.get(part.path)!==part.link))return;
+    return {kind:'installed-dependency',path,dependency:structuredClone(dependency)};
   }};
 }

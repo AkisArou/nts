@@ -14,6 +14,7 @@ import {projectConfig} from './reader-inputs/main.ts';
 import {readHostObservation} from '../differential/oracle-filesystem.ts';
 import {validateReaderSourceObservations,readerObservationDependency,replayFixtureReaderObservations} from './reader-observations.ts';
 import {runtimeRepositoryClaims} from './rust-input-claims.ts';
+import {runtimeInstalledInputClassifier} from './rust-input-provenance.ts';
 
 function fixture(t:Parameters<typeof testScratch>[0]){
   const scratch=testScratch(t,'project-installed-catalog'),root=join(scratch,'source');
@@ -51,6 +52,15 @@ test('declared Program package reads retain finite identity and only repository 
     assert.ok(snapshot.runtimeFiles!.includes('package.json'),'the Program independently reads its source package goal; pinning must not demote it');
     assert.ok(!snapshot.files.some(path=>path.startsWith('node_modules/')));
     validateReaderSourceObservations(snapshot,f.root);
+    const runtime=runtimeInstalledInputClassifier(f.root,snapshot),path=join(f.root,f.packagePath,'index.d.ts');
+    const descriptor=(target:string)=>({kind:'descriptor' as const,arg:0,fd:3,target,raw:Buffer.from(target).toString('hex')});
+    const requirement={kind:'content' as const,following:'follow' as const};
+    const classified=runtime.classify(descriptor(path),requirement);
+    assert.equal(classified?.kind,'installed-dependency');assert.equal(classified?.dependency.package?.name,'fixture-package');
+    assert.equal(runtime.classify(descriptor(join(f.root,'node_modules/unlisted.d.ts')),requirement),undefined);
+    assert.equal(runtime.classify(descriptor(path),{kind:'mutation',role:'open',readsContent:false,following:'follow'}),undefined);
+    const alias={kind:'path' as const,arg:1,name:join(f.root,'undeclared-alias'),raw:'00',anchor:{kind:'absolute' as const},resolution:{state:'resolved' as const,path,components:[{path:join(f.root,'undeclared-alias'),kind:'symlink' as const,dev:'1',ino:'2',link:path}]}};
+    assert.equal(runtime.classify(alias,requirement),undefined,'an undeclared source alias stays commit-changeable');
     assert.throws(()=>replayFixtureReaderObservations({...snapshot,observations:installed},f.root,join(f.root,'copy'),new Set(['<entry>'])),/fixture requires its own authenticated installation/);
     const claims=runtimeRepositoryClaims(f.root,snapshot);
     assert.equal(claims.match({kind:'content',following:'follow'},{state:'resolved',path:join(f.root,'pnpm-lock.yaml')}).kind,'uncovered');

@@ -21,6 +21,7 @@ export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
   const owned=new Set(snapshot.ownedFiles);
   const bytes=new Map<string,RuntimeInputClaim[]>(),directories=new Map<string,RuntimeInputClaim[]>(),ancestors=new Map<string,RuntimeInputClaim[]>();
   const optional=new Map<string,RuntimeInputClaim[]>(),memberships=new Map<string,RuntimeInputClaim[]>();
+  const absentMembers=new Map<string,{claims:RuntimeInputClaim[];names:Set<string>}[]>();
   const conservative:RuntimeInputClaim[]=[];
   const observations=new Map<string,{claim:RuntimeInputClaim;kind:string;value:unknown}[]>();
   const add=(map:Map<string,RuntimeInputClaim[]>,path:string,claim:RuntimeInputClaim)=>{
@@ -62,8 +63,16 @@ export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
   }
   for(const row of snapshot.optionalFiles)if(production(row.context))
     add(optional,row.path,{role:'optional-file',reader:row.reader,path:row.path,context:row.context});
-  for(const row of snapshot.memberships)if(production(row.context))
-    add(memberships,row.directory,{role:'membership',reader:row.reader,path:row.directory,context:row.context});
+  for(const row of snapshot.memberships)if(production(row.context)){
+    const claim:RuntimeInputClaim={role:'membership',reader:row.reader,path:row.directory,context:row.context};
+    add(memberships,row.directory,claim);
+    const rows=absentMembers.get(row.directory)??[];
+    rows.push({claims:[claim],names:new Set(row.entries.map(entry=>entry.name))});absentMembers.set(row.directory,rows);
+  }
+  const missingMember=(path:string)=>{
+    const parent=posix.dirname(path),rows=absentMembers.get(parent==='.'?'':parent)??[];
+    return rows.filter(row=>!row.names.has(posix.basename(path))).flatMap(row=>row.claims);
+  };
   for(const row of snapshot.observations){
     if(row.capability||row.dependency||row.selectorOnly||!production(row.context))continue;
     const path=name(row.observation.path);if(path===undefined)continue;
@@ -83,6 +92,7 @@ export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
     const path=name(identity.path);if(path===undefined)return uncovered('identity is outside the repository');
     const content=bytes.get(path)??[],candidate=optional.get(path)??[],facts=observations.get(path)??[];
     const claims:RuntimeInputClaim[]=[];
+    if(identity.state==='missing')claims.push(...missingMember(path));
     // A marked conservative namespace declares all metadata questions below
     // it. Positive content still needs real immutable bytes in this snapshot;
     // unknown operations, mutations and outside aliases retain their refusals.
@@ -118,6 +128,9 @@ export function runtimeRepositoryClaims(root:string,snapshot:InputSnapshot){
   };
   return {match,matchComponent(observation:HostObservation):RuntimeClaimAnswer{
     const path=name(observation.path),facts=path===undefined?[]:observations.get(path)??[];
+    if(path!==undefined&&observation.kind==='runtimeKind'&&observation.value===null){
+      const claims=missingMember(path);if(claims.length)return {kind:'claimed',claims:structuredClone(claims)};
+    }
     const conservativePath=path!==undefined&&conservative.some(row=>row.path===''||path===row.path||path.startsWith(row.path+'/'));
     if(conservativePath){
       const same=facts.some(row=>row.kind===observation.kind&&sameOracleObservation(row.value as HostObservation['value'],observation.value));

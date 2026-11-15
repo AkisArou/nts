@@ -774,6 +774,20 @@
           {
             "kind": "file",
             "path": "../../../benchmarks/tsconfig.json"
+          },
+          {
+            "kind": "membership",
+            "path": "../../../benchmarks/common/"
+          },
+          {
+            "kind": "directory-candidates",
+            "path": "../../../benchmarks/cases/",
+            "candidates": [
+              {
+                "name": "harness.h",
+                "kind": "optional-file"
+              }
+            ]
           }
         ]
       }
@@ -12012,7 +12026,18 @@
       "source": "tooling/bench/src/reference_link.rs",
       "declarations": {
         "imports": [],
-        "assets": []
+        "assets": [
+          {
+            "kind": "directory-candidates",
+            "path": "../../../benchmarks/cases/",
+            "candidates": [
+              {
+                "name": "ref.link",
+                "kind": "optional-file"
+              }
+            ]
+          }
+        ]
       }
     },
     {

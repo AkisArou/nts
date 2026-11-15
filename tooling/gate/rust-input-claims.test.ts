@@ -5,6 +5,7 @@ import {test} from 'node:test';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {moduleGraph,type InputSnapshot,type ModuleDeclarations,type ReaderObservation} from './module-closure.ts';
 import {runtimeRepositoryClaims} from './rust-input-claims.ts';
+import {membershipIndex} from './reader-metadata.ts';
 import {testScratch} from './test-scratch.ts';
 
 const empty=():InputSnapshot=>({files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]});
@@ -48,6 +49,26 @@ test('metadata roles match their own operations and never authorize an unknown c
   assert.equal(claims.match({...metadata,query:'stat'},identity('/source/stat')).kind,'claimed');
   assert.equal(claims.match({...metadata,query:'stat',following:'no-follow'},identity('/source/stat')).kind,'uncovered');
   assert.equal(claims.match({kind:'readlink',following:'no-follow'},identity('/source/link')).kind,'claimed');
+});
+
+test('membership covers only a captured absent direct child and adding that child owes its reader',t=>{
+  const root=testScratch(t,'runtime-membership-absence');mkdirSync(join(root,'includes'));
+  writeFileSync(join(root,'entry.rs'),'// include directory reader');writeFileSync(join(root,'includes/present.h'),'present');
+  const graph=moduleGraph({sourceRoot:root,declarations:new Map([['entry.rs',{imports:[],assets:[{kind:'membership',path:'./includes/'}]}]])});
+  try{
+    const snapshot=graph.describe(['entry.rs']),claims=runtimeRepositoryClaims(root,snapshot),missing=join(root,'includes/absent.h');
+    assert.equal(claims.match(content,{state:'missing',path:missing,component:missing,kind:null}).kind,'claimed');
+    assert.equal(claims.matchComponent({kind:'runtimeKind',path:missing,value:null}).kind,'claimed');
+    assert.equal(claims.match(content,identity(missing)).kind,'uncovered','present bytes need a real byte declaration');
+    assert.equal(claims.match(content,identity(join(root,'includes/present.h'))).kind,'uncovered');
+    assert.equal(claims.matchComponent({kind:'runtimeKind',path:join(root,'includes/present.h'),value:null}).kind,'uncovered','a listed name cannot become a claimed absence');
+    assert.equal(claims.match(content,{state:'missing',path:missing+'/nested',component:missing,kind:null}).kind,'uncovered','missing intermediate components stay separate');
+    assert.equal(claims.matchComponent({kind:'runtimeKind',path:missing+'/nested',value:null}).kind,'uncovered');
+    writeFileSync(missing,'new override');
+    assert.ok(membershipIndex(snapshot.files).affected(snapshot.memberships[0]!,[{path:'includes/absent.h',added:true}]));
+    const refreshed=runtimeRepositoryClaims(root,graph.describe(['entry.rs']));
+    assert.equal(refreshed.match(content,{state:'missing',path:missing,component:missing,kind:null}).kind,'uncovered');
+  }finally{graph.close();}
 });
 
 test('directory populations authorize enumeration while bytes remain the canonical exact file set',()=>{

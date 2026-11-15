@@ -17,7 +17,7 @@ import {runtimeSourceAnchor} from './rust-source-anchor.ts';
 import {readRustTestExecution,rustTestExecutionClassifier} from './rust-test-execution.ts';
 import type {CaptureArtifact} from './file-input-observer.ts';
 import {rustInputReportPool} from './rust-input-report.ts';
-import {readRustBuildProvenance,runtimeProvenanceClassifier} from './rust-input-provenance.ts';
+import {readRustBuildProvenance,runtimeProvenanceClassifier,runtimeInstalledInputClassifier} from './rust-input-provenance.ts';
 
 export type RuntimeSubjectAssessment={subject:InputSubject;requirement:InputRequirement;outcome:'unknown';
   state:'claimed'|'uncovered'|'literal';spelling?:string;identity?:InputIdentity;endpoint?:RuntimeClaimAnswer;
@@ -94,7 +94,7 @@ export type RuntimeTargetInputs={target:RustRuntimeTarget;snapshot:InputSnapshot
  * There is no second index read whose changed rows could inherit authority.
  * Product status and setup work remain separate from runtime coverage. */
 export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string}}){
-  const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>();
+  const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>(),installed=new Map<string,ReturnType<typeof runtimeInstalledInputClassifier>>();
   const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=execution?rustTestExecutionClassifier(execution):undefined,images=new Map<number,InputIndexExecution>();
   const buildReference=options.build??(execution?.cargo.path?{...execution.cargo,path:execution.cargo.path}:undefined);
   const build=buildReference?readRustBuildProvenance(buildReference):{artifacts:[],outputDirectories:[]};
@@ -104,7 +104,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
     throw Error('Rust input validation: Cargo provenance differs from replay receipt');
   if(execution&&JSON.stringify(execution.target)!==JSON.stringify(capture.target))throw Error('Rust input validation: replay receipt has a different Cargo target');
   const counts={runtimeAttempts:0,subjects:0,reportedSubjects:0,claimed:0,literals:0,gaps:0,probes:0,setupAttempts:0,terminalFacts:0,
-    emittedExecutables:0,loaderProbes:0,ownedOutputs:0,buildArtifacts:0,buildScriptOutputs:0,hostEnvironment:0,
+    emittedExecutables:0,loaderProbes:0,ownedOutputs:0,buildArtifacts:0,buildScriptOutputs:0,hostEnvironment:0,buildNamespace:0,installedDependencies:0,
     repositorySubjects:0,externalSubjects:0,unresolvedSubjects:0,repositoryEndpointGaps:0,repositoryComponentGaps:0,externalEndpointGaps:0,externalComponentGaps:0};
   const unresolvedByKind:Record<string,number>={};
   const repositoryCoverage=()=>counts.repositoryEndpointGaps||counts.repositoryComponentGaps?'incomplete' as const:
@@ -119,7 +119,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
       batch.push(line);size+=bytes;if(size>=64*1024)await flush();
     };
     const pool=rustInputReportPool(emit);
-    await emit({kind:'validation-start',version:5,retention:'uncovered-and-probes',index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'capture-identity-or-labelled-history',
+    await emit({kind:'validation-start',version:6,retention:'uncovered-and-probes',index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'capture-identity-or-labelled-history',
       provenance:{build:buildReference??null,execution:options.execution??null}});
     receipt=await authenticateRustInputTrace(capture,async row=>{
       if(row.kind==='execution'){images.set(row.id,row);return;}
@@ -143,16 +143,20 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
         for(const fact of inputs.snapshot.observations)if(fact.dependency)
           await emit({kind:'project-installed-observation',source,observation:fact.observation,dependency:fact.dependency,scope:'installed-dependency'});
         validator=runtimeSubjectValidator(capture.root,inputs.snapshot,{capturedIdentities:execution?.version===2||build.buildNamespace!==undefined});validators.set(source,validator);
+        installed.set(source,runtimeInstalledInputClassifier(capture.root,inputs.snapshot));
       }
       counts.runtimeAttempts++;counts.probes+=row.probes.length;
       const image=images.get(row.image);if(image)classifier?.observe(row,image);
       for(const subject of row.subjects){
         counts.subjects++;
-        const known=provenance.classify(subject,runtimeInputRequirement(row,subject,capture.observer));
+        const requirement=runtimeInputRequirement(row,subject,capture.observer);
+        const known=provenance.classify(subject,requirement)??installed.get(source)?.classify(subject,requirement);
         if(known){
           if(known.kind==='owned-output')counts.ownedOutputs++;
           else if(known.kind==='cargo-artifact')counts.buildArtifacts++;
           else if(known.kind==='build-script-output')counts.buildScriptOutputs++;
+          else if(known.kind==='build-namespace')counts.buildNamespace++;
+          else if(known.kind==='installed-dependency')counts.installedDependencies++;
           else counts.hostEnvironment++;
           if(inside(capture.root,known.path))counts.repositorySubjects++;else counts.externalSubjects++;
           continue;
@@ -184,7 +188,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
     if(execution&&(receipt.complete.raw.path!==execution.raw.path||receipt.complete.raw.sha256!==execution.raw.sha256
       ||receipt.complete.raw.bytes!==execution.raw.bytes||receipt.complete.terminal.root!==execution.pid))
       throw Error('Rust input validation: replay receipt differs from authenticated raw capture');
-    await emit({kind:'validation-complete',version:5,complete:true,coverage:counts.gaps||counts.probes?'incomplete':'complete',repositoryCoverage:repositoryCoverage(),counts,unresolvedByKind,
+    await emit({kind:'validation-complete',version:6,complete:true,coverage:counts.gaps||counts.probes?'incomplete':'complete',repositoryCoverage:repositoryCoverage(),counts,unresolvedByKind,
       indexRowsSha256:receipt.indexRowsSha256,raw:receipt.complete.raw,terminal:receipt.complete.terminal});
     await flush();
   },{gzip:true});

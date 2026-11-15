@@ -12,6 +12,9 @@ import { typedTimer } from "./typed-timer.ts";
 import { absent } from "./run-producers.ts";
 import { COMPARATORS, type Cell, type Comparator, type Json } from "./run-record.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
+import { optionalFile } from "../gate/reader-inputs/main.ts";
+// Bun consults this configuration in the repository cwd used below.
+export const BUN_CONFIGURATION = optionalFile(new URL("../../bunfig.toml", import.meta.url));
 type Receipt = {
   command: string[];
   cwd: string;
