@@ -6,6 +6,7 @@ import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.t
 import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
 import { typedTimer } from "./typed-timer.ts";
@@ -304,12 +305,14 @@ export async function hostColumns(
   cells.node = await measure(process.execPath, [entry, ...input], root, null, null, `${name}-node`);
   const expected = cells.node.status === "OK" ? cells.node.checksum : null;
   if (pins.bun && !process.env.NTS_BENCH_LANES) {
-    cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], root, expected, null, `${name}-bun-jit`);
+    const bunRoot = dirname(fileURLToPath(BUN_CONFIGURATION));
+    assert.equal(resolve(root), bunRoot, "Bun's launch cwd must own its declared configuration");
+    cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], bunRoot, expected, null, `${name}-bun-jit`);
     const binary = join(directory, "bun-aot"),
       build = await execute(
         pins.bun,
         ["build", "--compile", "--aot", entry, "--outfile", binary],
-        root,
+        bunRoot,
         false,
       );
     cells["Bun AOT"] =

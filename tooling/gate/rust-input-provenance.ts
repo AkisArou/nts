@@ -98,11 +98,12 @@ export function runtimeInstalledInputClassifier(root:string,snapshot:InputSnapsh
   return {classify(subject:InputSubject,requirement:InputRequirement):{kind:'installed-dependency';path:string;dependency:InstalledProjectDependency}|undefined{
     if(requirement.kind!=='content'&&requirement.kind!=='metadata')return;
     const proof=subject.kind==='path'?subject.resolution:undefined;
-    if(subject.kind==='path'&&(!proof||proof.state!=='resolved'||proof.finalLink&&requirement.following==='no-follow'))return;
-    const path=subject.kind==='descriptor'?subject.target:proof?.path;
+    const resolved=proof?.state==='resolved'?proof:undefined;
+    if(subject.kind==='path'&&(!resolved||resolved.finalLink&&requirement.following==='no-follow'))return;
+    const path=subject.kind==='descriptor'?subject.target:resolved?.path;
     if(!path)return;
     const dependency=files.get(path);if(!dependency)return;
-    for(const part of proof?.components??[])if(part.kind==='symlink'&&inside(root,part.path)
+    for(const part of resolved?.components??[])if(part.kind==='symlink'&&inside(root,part.path)
       &&(part.link===undefined||links.get(part.path)!==part.link))return;
     return {kind:'installed-dependency',path,dependency:structuredClone(dependency)};
   }};
