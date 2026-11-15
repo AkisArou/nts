@@ -36,7 +36,7 @@ export function oracleEntryFacts(facts:SourceFacts):OracleEntryFacts{
     if(seen.has(input))return;seen.add(input);const node=facts.resolve(input);
     if(node!==input){urls(node,seen);return;}
     if(ast.isNewExpression(node)&&facts.name(node.expression)==='URL'&&node.arguments?.[0]&&ast.isStringLiteralLikeNode(node.arguments[0])&&node.arguments[1]&&facts.code(node.arguments[1])==='import.meta.url')commands.push(modulePath(facts.file,node.arguments[0].text));
-    ast.forEachChild(node,child=>{urls(child,seen);});
+    node.forEachChild(child=>{urls(child,seen);});
   };
   for(const call of executed)if(/(?:^|\.)(?:spawn|spawnSync|execFile|execFileSync|activeCommand|compileActive)$/.test(facts.name(call.expression)))for(const argument of call.arguments)urls(argument);
   for(const node of facts.constructions)if(reached.has(owner(node))&&/(?:^|\.)Worker$/.test(facts.name(node.expression)))for(const argument of node.arguments??[])urls(argument);

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
 
 import {CHECK_STATUSES, FAILURE_KINDS, COUNT_NAMES} from "./check-report-types.ts";
-import type { CheckCommandResult, CheckConsumer, CheckCounts, CheckFormat, CheckObservation, CheckRefusal, CheckReport,
+import type { CheckConsumer, CheckCounts, CheckFormat, CheckObservation, CheckRefusal, CheckReport,
   DecodedCheck, LegacyIdentity } from "./check-report-types.ts";
 import {normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput} from "../conformance/observation-text.ts";
 import {CommandNotMeasuredError} from "../gate/active-command.ts";

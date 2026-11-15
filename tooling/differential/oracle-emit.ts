@@ -1,4 +1,4 @@
-import {REPOSITORY,ORACLE_LOADER,oracleIdentity} from './oracle-services.ts';
+import {REPOSITORY,oracleIdentity} from './oracle-services.ts';
 import {removeOracleSnapshot} from './oracle-snapshot.ts';
 import {captureToolchain,type Capture,type TypeScriptIdentity} from './oracle-toolchain.ts';
 export type {TypeScriptIdentity} from './oracle-toolchain.ts';

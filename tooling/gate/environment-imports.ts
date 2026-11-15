@@ -53,7 +53,7 @@ export function movedEnvironmentImportProblems(facts:SourceFacts,argv:readonly s
     if(!ast.isCallExpression(value)||value.expression.kind!==ast.SyntaxKind.ImportKeyword||!value.arguments[0])continue;
     const path=pathOf(value.arguments[0]);
     if(path===undefined||!canonical(path))continue;
-    for(const element of row.name.elements){const name=element.propertyName?facts.code(element.propertyName):facts.code(element.name);if(moved.has(name))report(row,name);}
+    for(const element of row.name.elements){const part=element.propertyName??element.name;if(!part)continue;const name=facts.code(part);if(moved.has(name))report(row,name);}
   }
   for(const node of facts.nodes)if(ast.isPropertyAccessExpression(node)&&moved.has(node.name.text)){
     const name=facts.name(node),match=/^(.*canonical-environment\.ts)\.([A-Za-z_]\w*)$/.exec(name);

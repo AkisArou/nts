@@ -1,4 +1,3 @@
-import {OracleBudgetError} from './oracle-budget.ts';
 import {runAsCommand} from "./command-entry/main.ts";
 import {assertSealedOracleRun} from './oracle-seal/main.ts';
 // The recorder and the native differential execute the same population under
