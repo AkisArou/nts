@@ -94,7 +94,7 @@ test('optional build details retain their CPU bases without changing historical 
   const parsed=parseRun(JSON.parse(JSON.stringify(recorded)));
   assert.deepEqual(parsed.rows[0].builds,recorded.rows[0].builds);
   assert.deepEqual(parsed.rows.map(row=>row.verdicts),old.rows.map(row=>row.verdicts));
-  const page=renderFull(parsed);
+  const page=renderFull([parsed]);
   assert.match(page,/RUSAGE_THREAD; shared checker CPU excluded/);assert.match(page,/wait4; user/);
   assert.match(page,/final waited CPU unavailable/);assert.match(page,/604\.130 CPU s sampled at bound/);
   const malformed=structuredClone(recorded);malformed.rows[0].builds!.version=2 as 1;
