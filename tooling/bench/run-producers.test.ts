@@ -67,11 +67,13 @@ test('native build details survive both successful rows and failed builds',()=>{
   const builds={version:1,stages:[{kind:'thread',column:'nts C',phase:'capture/prepare/emit',cpu_s:0.125,
     basis:'getrusage-RUSAGE_THREAD-v1; shared checker CPU excluded',complete:true}]};
   const successful=fromNts(meta(),{...raw(),builds:{a:builds}});
-  assert.deepEqual(successful.rows[0].builds,builds);
+  const successfulRow=successful.rows[0];assert.ok(successfulRow);
+  assert.deepEqual(successfulRow.builds,builds);
   const failed=fromNts(meta(),{...raw(),measured:[],builds:{a:builds},row_failures:{a:{kind:'build_failed',reason:'clang timed out'}}});
-  assert.equal(failed.rows[0].cells['nts C'].status,'BUILD_FAILED');assert.deepEqual(failed.rows[0].builds,builds);
-  assert.equal(fromNts(meta(),raw()).rows[0].builds,undefined);
-  builds.stages[0].cpu_s=-1;
+  const failedRow=failed.rows[0];assert.ok(failedRow);assert.ok(failedRow.cells['nts C']);
+  assert.equal(failedRow.cells['nts C'].status,'BUILD_FAILED');assert.deepEqual(failedRow.builds,builds);
+  const historical=fromNts(meta(),raw()).rows[0];assert.ok(historical);assert.equal(historical.builds,undefined);
+  const stage=builds.stages[0];assert.ok(stage);stage.cpu_s=-1;
   assert.throws(()=>fromNts(meta(),{...raw(),builds:{a:builds}}),/thread CPU/);
 });
 test("checksum mutation invalidates every timing instead of publishing a fast wrong result", () => {

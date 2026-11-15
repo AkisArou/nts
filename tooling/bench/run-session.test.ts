@@ -10,7 +10,7 @@ import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
 import { newTestScratch, testScratch } from "../gate/test-scratch.ts";
 import { readJournal } from "./run-journal.ts";
-import {fromNts} from './run-producers.ts';
+import {fromNts,type Metadata} from './run-producers.ts';
 import {createRequire} from 'node:module';
 import {SourceFacts} from '../gate/source-facts.ts';
 import {inspectCommandForwarders,inspectGitInvocations} from '../gate/git-observations.ts';
@@ -19,7 +19,7 @@ const pin = "a".repeat(40),
   sha = "b".repeat(64);
 function fixture() {
   const measurement = { ns_per_op: 100, checksum: "4000000000000000", spread: 1 };
-  const metadata = {
+  const metadata:Metadata = {
     schemaVersion: 1,
     id: "2026-10-29-" + pin + "-console",
     startedAt: null,
@@ -31,7 +31,7 @@ function fixture() {
     compiler: { commit: pin, sha256: sha },
     harness: { identity: sha, contract: null, files: [] },
     machine: { identity: null, conditions: null },
-    comparators: Object.fromEntries(COMPARATORS.map((c) => [c, null])),
+    comparators: Object.fromEntries(COMPARATORS.map((c) => [c, null])) as Metadata['comparators'],
     verdictPolicy: POLICY,
     provenance: null,
   };
@@ -75,14 +75,15 @@ test('journal recovery preserves completed build CPU on a failed row and omits a
   const root=testScratch(t,'bench-build-journal'),path=join(root,'run.jsonl'),raw=fixture();
   const builds={version:1,stages:[{kind:'external',column:'nts C',phase:'clang compile',receipt:{version:1,command:'clang',args:['case.c'],status:125,
     waited:null,unavailable:'observer killed',sampledAtBound:{pid:71,cpu_s:604.13},reason:'used its 600 s CPU bound'}}]};
-  const header={version:1,metadata:raw.metadata,cases:['control','next'],requested:[],lanes:null};
+  const header={version:1,metadata:{...raw.metadata,inventory:['control','next']},cases:['control','next'],requested:[],lanes:null};
   const frame={name:'control',measured:null,failure:{kind:'build_failed',reason:'clang timed out'},spoiled:false,failed:['clang timed out'],conditions:{},builds};
   writeFileSync(path,JSON.stringify(header)+'\n'+JSON.stringify(frame)+'\n'+JSON.stringify({name:'next',builds}));
   const saved=readJournal(path);
   assert.deepEqual(saved.raw.builds,{control:builds});assert.deepEqual(saved.unreached,['next']);
-  const record=fromNts(raw.metadata,saved.raw);
-  assert.deepEqual(record.rows[0].builds,builds);assert.equal(record.rows[0].cells['nts C'].status,'BUILD_FAILED');
-  assert.equal(record.rows[1].builds,undefined);
+  const record=fromNts(header.metadata,saved.raw);
+  const first=record.rows[0],second=record.rows[1];assert.ok(first);assert.ok(second);assert.ok(first.cells['nts C']);
+  assert.deepEqual(first.builds,builds);assert.equal(first.cells['nts C'].status,'BUILD_FAILED');
+  assert.equal(second.builds,undefined);
 });
 test("actual session CLI renders a header and a typed row, and rejects the old missing-import bridge", () => {
   const root = newTestScratch("bench-session-cli");

@@ -115,7 +115,7 @@ process.exitCode=await runCaseBound(${JSON.stringify(options)},process.env,undef
 
 test('build usage retains exact completed CPU and original streams and exits',async t=>{
   const f=frame(t),directory=join(f.path,'..'),prepared=prepareChildObserver(directory,f.env);
-  assert.ok(prepared.observer,prepared.error);
+  assert.ok(prepared.observer,prepared.error??'the owned waited-child observer was prepared');
   for(const status of [0,7]){
     const report=join(directory,'usage-'+status+'.json'),out:string[]=[],err:string[]=[];
     const args=['-e',"let x=0;for(let i=0;i<5e6;i++)x^=i;process.stdout.write('answer:'+x);process.stderr.write('diagnostic');process.exitCode="+status];
