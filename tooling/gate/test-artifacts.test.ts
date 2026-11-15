@@ -10,6 +10,7 @@ import {readStepInstrument} from "./step-result.ts";
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createRequire } from 'node:module';
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { pruneTestArtifacts } from "./test-artifacts.ts";
@@ -17,6 +18,10 @@ import { pruneTestArtifacts } from "./test-artifacts.ts";
 /** Stage the parsed module graph, then give the tree its own Git inventory. */
 function testsFixture(root: string): void {
   copyModuleClosure(["tooling/gate/tests.mjs"], root);
+  // The traced observer's image reader uses the installed TypeScript parser.
+  // Package acquisition is separate from executable-module staging.
+  mkdirSync(join(root,'node_modules'));
+  symlinkSync(dirname(createRequire(import.meta.url).resolve('typescript/package.json')),join(root,'node_modules/typescript'));
   const initialized = spawnSync("git", gitArguments(["init", "--quiet"]), {cwd: root, encoding: "utf8",
     env: {...testEnvironment(), GIT_DIR: join(root,".git"), GIT_WORK_TREE: root,
       GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1"}});

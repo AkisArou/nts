@@ -114,7 +114,7 @@ async function installInputs(capability:DependencyCapability,counts:{pnpmSelecti
   const metadata=selectionRows(capability,capability.sourceRevision);
   if(metadata.some(row=>!/^100(?:644|755) blob /.test(row)))throw Error('oracle dependency selection input is not a tracked regular file');
   const selectionPaths=metadata.map(row=>row.slice(row.indexOf('\t')+1));
-  cleanInputs({...INSTALLATION_STATUS_INPUTS,url:pathToFileURL(capability.source)},[...DEPENDENCY_ROOT_INPUTS,...selectionPaths]);
+  inputRows(capability,[...DEPENDENCY_ROOT_INPUTS,...selectionPaths],metadata);
   mkdirSync(capability.directory,{recursive:true});
   const selection=mkdtempSync(join(capability.directory,'selection-')),tree=join(selection,'tree'),archive=join(selection,'source.tar');mkdirSync(tree);
   try{
