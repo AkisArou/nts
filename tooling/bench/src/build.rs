@@ -276,13 +276,14 @@ fn supervised(
     Ok(result)
 }
 
-/// GNU ld's libgcc script probes cwd for `libgcc_s.so.1`. This lookup belongs
-/// to a fresh owned directory, including outside a test runner. All object,
-/// library and output arguments are absolute when the benchmark calls this.
+#[cfg(test)]
 pub(super) fn link_output(root: &Utf8Path, tool: &mut Command) -> Result<Output> {
     with_link_directory(tool, |tool| output(root, tool))
 }
 
+/// GNU ld's libgcc script probes cwd for `libgcc_s.so.1`. This lookup belongs
+/// to a fresh owned directory, including outside a test runner. All object,
+/// library and output arguments are absolute when the benchmark calls this.
 fn with_link_directory(
     tool: &mut Command,
     run: impl FnOnce(&mut Command) -> Result<Output>,

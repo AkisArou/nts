@@ -66,7 +66,6 @@ impl Libraries {
                     .arg(binary),
             )
             .context("probing C++ reference libraries with clang++")?;
-
         std::fs::write(format!("{binary}.stdout"), &output.stdout)?;
         std::fs::write(format!("{binary}.stderr"), &output.stderr)?;
         if output.status.success() {

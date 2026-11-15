@@ -2569,7 +2569,6 @@ fn compile(
                 .args(libraries.flags()),
         )
         .context("linking")?;
-
     if !link.status.success() {
         bail!("link: {}", String::from_utf8_lossy(&link.stderr));
     }
