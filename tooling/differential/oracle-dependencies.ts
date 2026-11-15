@@ -156,7 +156,7 @@ export async function sealDependencyCapability(capability:DependencyCapability,e
   const unsealed={...capability};delete unsealed.seal;
   let ready:string|undefined;
   if(unsealed.parentImage){
-    const began=performance.now(),parent=unsealed.parentImage;
+    const observations=hostObservations(env),began=observations.now(),parent=unsealed.parentImage;
     const record=dependencyImageReady(parent);
     if(!record||!parent.seal)throw new ToolingInstrumentError('tooling-setup','parent oracle image is not sealed');
     const bytes=readFileSync(record),semanticBytes=readFileSync(join(dirname(record),'semantic.json'));
@@ -173,7 +173,7 @@ export async function sealDependencyCapability(capability:DependencyCapability,e
         const ledger=join(unsealed.admission.kind==='gate'?unsealed.admission.temporary.parent:unsealed.directory,'oracle-dependency-calls.jsonl');
         mkdirSync(dirname(ledger),{recursive:true});
         const result={...unsealed,directory:parent.directory,seal:{...parent.seal,source:unsealed.source,sourceRevision:unsealed.sourceRevision}};delete result.parentImage;
-        appendFileSync(ledger,JSON.stringify({version:1,step:result.ownerStep,nodeVersion:process.versions.node,directory:dirname(ready),mode:'hit',rebound:true,source:result.source,wallMs:performance.now()-began,pnpmSelectionCommands:0})+'\n');
+        appendFileSync(ledger,JSON.stringify({version:1,step:result.ownerStep,nodeVersion:process.versions.node,directory:dirname(ready),mode:'hit',rebound:true,source:result.source,wallMs:observations.now()-began,pnpmSelectionCommands:0})+'\n');
         // Parent sealing already validated and protected the complete tree.
         // Do not chmod its records again: even an unchanged mode changes ctime
         // and would invalidate the parent's still-live immutable-image seal.
