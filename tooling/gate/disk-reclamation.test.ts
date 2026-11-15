@@ -194,6 +194,22 @@ test('snapshot never collects; explicit admission reclamation uses the same prom
   finally{release();}
 });
 
+test('temporary acquisition reclaims before atomically claiming its bytes',t=>{
+  const f=fixture(t),tree=f.tree('1'),debug=f.output(tree,'debug',16*GiB);
+  const capacity=new DiskCapacity({env:f.s.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:f.options.ownership}});
+  assert.equal(capacity.snapshot(f.dir).freeBytes,44*GiB);assert.ok(existsSync(debug));
+  const attempt=capacity.tryTemporary(join(f.s.dir,'capture'),GiB);
+  assert.ok(attempt.lease,'reclaim must preserve temporary admission');
+  try{
+    assert.equal(existsSync(debug),false);
+    assert.equal(attempt.snapshot.freeBytes,60*GiB);
+    assert.equal(capacity.snapshot(f.dir).temporaryReservedBytes,GiB);
+    const audit=JSON.parse(readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8'));
+    assert.equal(audit.root,debug);assert.equal(audit.kind,'obsolete-profile');
+  }finally{attempt.lease.release();}
+  assert.equal(capacity.snapshot(f.dir).temporaryReservedBytes,0);
+});
+
 test('process ownership includes cwd, executable and open files and refuses unreadability',t=>{
   const f=fixture(t),root=join(f.s.dir,'owned'),proc=join(f.s.dir,'proc');mkdirSync(root);mkdirSync(proc);
   const pid=join(proc,'42');mkdirSync(join(pid,'fd'),{recursive:true});
