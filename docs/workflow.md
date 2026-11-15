@@ -693,7 +693,9 @@ admission, temporary and complete entry run on every terminal outcome. Internal 
 their sealed-parent handoff. The host audit inventories command entries and
 shell Node invocations and refuses consumer reach without one of those owners.
 Report decoding and identity readers import pure leaves, independently of
-execution and command entries. Pure metadata and error modes do not prepare.
+execution and command entries. Modes that compute or compare an oracle-dependent
+identity prepare before doing so, including checkpoint resume and report modes.
+Usage, error and listing modes that compare no oracle identity do not prepare.
 The dependency image archives installation metadata and named workspace command
 targets, together with the installed third-party packages. Importer directories
 are not installation inputs. Workspace aliases retain their verified installed

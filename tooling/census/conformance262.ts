@@ -325,6 +325,9 @@ for (const file of [recordedFile, checkFile]) {
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE, backend: BACKEND, fresh: FRESH };
 // Census uses the source oracle even when nts itself is a pinned binary.
 // Bind both its verified toolchain and the single-case roots/options contract.
+// Resume and report compare this identity too, so they need the same prepared
+// recipe as the run that wrote the checkpoint, even when no cases remain.
+if(TYPESCRIPT)await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 const SOURCE_ORACLE = TYPESCRIPT ? typescriptOracleIdentity() : undefined;
 
 // --- the population --------------------------------------------------------

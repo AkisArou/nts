@@ -6,7 +6,7 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import {execFileSync, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
-import {copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, appendFileSync, cpSync, lstatSync} from "node:fs";
+import {copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, appendFileSync, cpSync, lstatSync} from "node:fs";
 
 import {join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -21,6 +21,7 @@ import {ownMemoryEnv} from "../gate/test-memory.ts";
 import {removable} from "../gate/run-temporary.ts";
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
+import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
 
 await setupOracleTestEnvironment();
 
@@ -53,14 +54,9 @@ function row(observed: TypeScriptObservation): object {
 test("the CLI holds every recorded outcome and fails closed before recorded selection", async t => {
   assert.ok(existsSync(binary), `compiler missing: ${binary}; set NTS_BIN to a built pin`);
   const scratch = newTestScratch("typescript-record-cli");t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
-  const sourceRoot = repository, fixture = join(scratch, "fixture"), census = join(fixture, "tooling/census");
-  mkdirSync(census, { recursive: true });
-  for (const name of readdirSync(join(sourceRoot, "tooling/census"))) {
-    const from = join(sourceRoot, "tooling/census", name), to = join(census, name);
-    if (name === "conformance262.ts") copyFileSync(from, to); else symlinkSync(from, to);
-  }
-  for (const name of readdirSync(join(sourceRoot, "tooling"))) if (name !== "census")
-    symlinkSync(join(sourceRoot, "tooling", name), join(fixture, "tooling", name));
+  const sourceRoot = repository, fixture = join(scratch, "fixture");
+  mkdirSync(fixture);
+  oracleWorkspaceFixture(t,fixture);
   const familyPath = "tests/typescript/record-protocol";
   mkdirSync(join(fixture, familyPath), { recursive: true });
   const fixturePaths = ["control", "subject"].map(name => `${familyPath}/${name}.ts`);
@@ -86,26 +82,22 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   const sourceOracle = typescriptOracleIdentity();
   const one = join(scratch, "one.tsv"), expected = join(scratch, "expected.tsv"), rows = join(scratch, "rows.jsonl"), json = join(scratch, "report.json"),instrumentFile=join(scratch,'instrument.json');
   writeFileSync(one, serializeTypeScriptRecord({ metadata: recorded.metadata, cases: new Map([[target, pass]]) }));
-  // A ledger and a reading of the run's own, never the machine's. The
-  // starved machine has 1 GiB and none of it available: a request for any
-  // memory could never fit beside the ledger's 2 GiB floor, so it would fail
-  // the run at once.
-  const memory=join(scratch,"memory"),starved=join(scratch,"starved-memory");
+  // Preparation and result reading use this fixture's own observations.
+  const memory=join(scratch,"memory");
   function invoke(contents: string, observed: object, observations = TYPESCRIPT_OBSERVATIONS_VERSION,
-    oracleIdentity: ReturnType<typeof typescriptOracleIdentity> | null = sourceOracle, consumerRoot=root, lowMemory=false) {
+    oracleIdentity: ReturnType<typeof typescriptOracleIdentity> | null = sourceOracle, consumerRoot=root, unsealed=false) {
     writeFileSync(expected, contents);
     writeFileSync(rows, JSON.stringify({ fingerprint, under: "tests/typescript", harness: harnessHashOf("ts"), observations,
       ...(oracleIdentity === null ? {} : { oracleIdentity }), output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" +
       JSON.stringify({ path: target, ...observed }) + "\n");
     rmSync(json, { force: true });
     rmSync(instrumentFile,{force:true});
-    process.stderr.write(`record CLI control: ${JSON.stringify({observations, observed, lowMemory})}\n`);
+    process.stderr.write(`record CLI control: ${JSON.stringify({observations, observed, unsealed})}\n`);
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
       { cwd: consumerRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: ownMemoryEnv(lowMemory?starved:memory, { ...fixtureEnvironment(t,{NTS_ORACLE_DEPENDENCIES:undefined}), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
-          NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile },
-          lowMemory?{availableKiB:0,totalKiB:2**20}:undefined) });
+        env: ownMemoryEnv(memory, { ...fixtureEnvironment(t,unsealed?{NTS_ORACLE_DEPENDENCIES:undefined}:{}), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
+          NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile }) });
   }
   for (const [before, after, word, status] of [
     [pass, wrong, "REGRESSED", 1], [refused, wrong, "REGRESSED", 1], [invalid, abort, "CHANGED", 1],
@@ -160,12 +152,12 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(shifted.status, 0, shifted.stdout + shifted.stderr);
   assert.equal(JSON.parse(readFileSync(json, "utf8")).observations[target].validator, "Queue<N>#push TypeId(N) type N at: 7");
   const contents = serializeTypeScriptRecord(recorded);
-  // Resume and report use no dependency seal and admit no work at all.
+  // An initially unsealed resume prepares before comparing the complete
+  // oracle identity; the checkpoint written with a seal retains that identity.
   const resumed=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,root,true);
   assert.equal(resumed.status,0,resumed.stdout+resumed.stderr);
   assert.deepEqual(JSON.parse(readFileSync(json,"utf8")).observations[target],pass);
-  assert.doesNotMatch(resumed.stderr,/memory:|waiting for|holding new cases/);
-  assert.equal(existsSync(join(starved,"ledger")),false,"a fully resumed run asks the memory ledger for nothing");
+  assert.deepEqual(JSON.parse(readFileSync(json,"utf8")).oracleIdentity,sourceOracle);
 
   // A case the record has no row for is pending: listed, and not a failure.
   const pending = invoke(contents.split("\n").filter(line => !line.startsWith(target + "\t")).join("\n"), row(pass));
@@ -188,21 +180,26 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   // Change the actual adapter bytes, rather than only a synthetic header hash.
   // The copied production consumer and its one identity function own both arms.
   const copied=join(scratch,'copied-consumer');mkdirSync(copied);
-  cpSync(join(sourceRoot,'tooling'),join(copied,'tooling'),{recursive:true,verbatimSymlinks:true});
-  for(const file of ['package.json','.tool-versions','tsconfig.fixtures.json'])cpSync(join(sourceRoot,file),join(copied,file));
-  symlinkSync(join(sourceRoot,'node_modules'),join(copied,'node_modules'),'dir');
+  oracleWorkspaceFixture(t,copied);
   cpSync(join(root,'tests'),join(copied,'tests'),{recursive:true});
-  symlinkSync(join(sourceRoot,'third_party'),join(copied,'third_party'),'dir');
-  symlinkSync(join(sourceRoot,'runtime'),join(copied,'runtime'),'dir');
   copyModuleClosure(['tooling/census/conformance262.ts'],copied,{reuseSourceLinks:true,dataNamespaces:{'tests/typescript':'copied TypeScript record consumer'}});
   // The real report records its consumer repository's HEAD. Bind the actual
   // copied files in this isolated fixture, without borrowing the author's Git.
   execFileSync('git',gitArguments(['init','--quiet',copied]), {env:fixtureEnvironment(t)});
-  execFileSync('git',gitArguments(['-C',copied,'add','--','tooling','package.json','.tool-versions','tsconfig.fixtures.json','node_modules','tests','third_party','runtime']), {env:fixtureEnvironment(t)});
+  execFileSync('git',gitArguments(['-C',copied,'add','-f','--','tooling','tests']), {env:fixtureEnvironment(t)});
   execFileSync('git',gitArguments(['-C',copied,'-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Bind copied oracle consumer inputs']), {env:fixtureEnvironment(t)});
   const unchangedAdapter=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,copied);
   assert.equal(unchangedAdapter.status,0,unchangedAdapter.stdout+unchangedAdapter.stderr);
   assert.deepEqual(JSON.parse(readFileSync(json,'utf8')).oracleIdentity,sourceOracle);
+  const recipe=join(copied,'tooling/differential/oracle-dependencies.ts'),recipeBytes=readFileSync(recipe);
+  appendFileSync(recipe,'\n// committed recipe edit in the resume control\n');
+  const commitRecipe=()=>{git(['add','-f','tooling/differential/oracle-dependencies.ts'],copied);git(['commit','--quiet','-m','Private recipe identity'],copied);};
+  commitRecipe();
+  const changedRecipe=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,copied);
+  assert.equal(changedRecipe.status,2,changedRecipe.stdout+changedRecipe.stderr);
+  assert.match(changedRecipe.stdout+changedRecipe.stderr,/missing or different TypeScript oracle identity/);
+  assert.equal(existsSync(json),false,'an edited recipe cannot resume the sealed checkpoint');
+  writeFileSync(recipe,recipeBytes);commitRecipe();
   assert.ok(lstatSync(join(copied,'tooling/differential')).isDirectory(),'the adapter mutation owns a physical copy');
   appendFileSync(join(copied,'tooling/census/typescript-oracle-results.ts'),'\n// changed adapter bytes in the resume control\n');
   const changedAdapter=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,copied);

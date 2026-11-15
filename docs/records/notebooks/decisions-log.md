@@ -3385,6 +3385,10 @@ and admission drain in ownership order. Internal workers require their parent
 seal. The entry audit and shared shell observer cover imports, command entries,
 prefixed Node commands and inline programs. Report/identity readers use pure
 leaves; moved-name checks include executable generated and shell Node programs.
+Identity-verifying resume and report modes use that preparation boundary too:
+their recipe identity must equal the sealed writer's. Only modes that compute
+or compare no oracle identity skip preparation; recipe derivation remains owned
+by preparation, without a second graph or identity reader in the child runtime.
 
 
 ## Project execution roles and failed oracle acquisition (11-15)
