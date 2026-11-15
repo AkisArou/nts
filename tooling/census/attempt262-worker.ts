@@ -26,7 +26,7 @@ import { workspace } from "./project.ts";
 import { oracle } from "./suites/typescript.ts";
 import type { PrintedOutput } from "../conformance/output-prefix.ts";
 import { OracleWorker } from "../differential/oracle-emit.ts";
-import { oracleToolchainLocation } from "../gate/canonical-environment.ts";
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import { OracleFilesystem } from '../differential/oracle-filesystem.ts';
 import type { TypeScriptOracleCapture } from './typescript-oracle-capture.ts';
 import { oracleResultHash,openTypeScriptOracleResults } from './typescript-oracle-results.ts';

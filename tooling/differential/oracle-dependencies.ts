@@ -1,3 +1,4 @@
+import type {Identity} from '../inputs/dependency-identity.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {registerCommandCloser,runAsCommand} from "./command-entry/main.ts";
 // One run-owned, offline dependency image. The existing pinned pnpm provisioner
@@ -9,7 +10,7 @@ import {appendFileSync,chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,read
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {setTimeout as pause} from 'node:timers/promises';
-import {DEPENDENCY_ROOT_INPUTS,identity,installDependencies,type Identity} from '../inputs/dependency-inputs.ts';
+import {DEPENDENCY_ROOT_INPUTS,identity,installDependencies} from '../inputs/dependency-inputs.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 import {managerPin,withPackageManager} from '../inputs/package-manager.ts';
 import {activeCommand} from '../gate/active-command.ts';

@@ -14,7 +14,7 @@ import {dependencyCache,installDependencies,installationCatalogTrust} from '../i
 import {runtimeRepositoryClaims} from './rust-input-claims.ts';
 import {readDependencyCatalog} from '../inputs/dependency-catalog.ts';
 import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
-import {dependencySourceCandidates} from '../inputs/dependency-source-state.ts';
+import {dependencySourceCandidates} from '../inputs/dependency-source-candidates.ts';
 import {installationSelectionPath,installationStatusCandidates,gitStatusInputPopulation} from '../inputs/dependency-input-names.ts';
 
 test('Git fence descriptors follow their indexed owners and retain control-file absences',t=>{
@@ -146,4 +146,17 @@ console.log(JSON.stringify({ordinary:choose('docs/ordinary.md'),pin:choose('pnpm
   const staleSelection=select(current);
   assert.ok(staleSelection.ordinary.steps.includes('proof'));
   assert.ok(staleSelection.ordinary.unknown.some(row=>/pin changed: pnpm-lock.yaml/.test(row.name)&&row.steps.includes('proof')));
+});
+
+test('population and host leaves do not inherit the execution fences',()=>{
+  const root=fileURLToPath(new URL('../..',import.meta.url)),graph=moduleGraph({sourceRoot:root});
+  try{
+    for(const entry of ['tooling/inputs/dependency-source-candidates.ts','tooling/gate/host-environment.ts','tooling/inputs/dependency-catalog.ts','tooling/gate/module-closure.ts']){
+      const snapshot=graph.describe([entry]);
+      assert.ok(!snapshot.files.includes('tooling/tasks/new.ts'),entry+' owns no tooling-wide status reads');
+      assert.ok(!snapshot.moduleFiles.includes('tooling/inputs/dependency-source-state.ts'),entry+' never executes the source fence');
+      assert.ok(!snapshot.moduleFiles.includes('tooling/differential/oracle-dependencies.ts'),entry+' never prepares a dependency image');
+    }
+    assert.ok(graph.describe(['tooling/inputs/dependency-source-state.ts']).files.includes('tooling/tasks/new.ts'),'the actual executable fence keeps its declared population');
+  }finally{graph.close();}
 });

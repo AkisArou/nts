@@ -51,7 +51,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis, AXIS_PREFIX, axisFailure } from "./compiled-axis-rows.mjs";
 import { nodeToolingEnvironment } from "./node-environment.ts";
-import { childTemporary } from "../gate/canonical-environment.ts";
+import {childTemporary} from '../gate/host-environment.ts';
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

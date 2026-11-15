@@ -6,20 +6,12 @@ import {lstatSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {gitArguments} from '../gate/git-arguments/main.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';
-import {toolingModuleName} from '../gate/tooling-module-name.ts';
 import {dependencySourceInputs} from '../gate/reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 export const SOURCE_STATE_INPUTS=dependencySourceInputs(new URL('../../',import.meta.url));
 const failure=(message:string)=>new ToolingInstrumentError('tooling-setup','dependency inputs: '+message);
 function gitBytes(repo:string,...args:string[]):string{
   return execFileSync('git',gitArguments(args),{cwd:repo,encoding:'utf8',maxBuffer:Infinity,stdio:['ignore','pipe','pipe']});
-}
-/** An index-only query needs neither the parser nor worktree-wide stats. */
-export function dependencySourceCandidates(repo:string):string[]{
-  return dependencySourceInputPopulation({...SOURCE_STATE_INPUTS,url:pathToFileURL(repo)});
-}
-function dependencySourceInputPopulation(input:ReturnType<typeof dependencySourceInputs>):string[]{
-  return gitBytes(fileURLToPath(input.url),'ls-files','-z','--cached').split('\0').filter(toolingModuleName);
 }
 export type SourceState={paths:ReadonlySet<string>;index:Map<string,string>;status:Map<string,string>;dirty:Map<string,string>};
 function workingBlob(repo:string,path:string,blob:string):string{
@@ -38,6 +30,10 @@ function workingBlob(repo:string,path:string,blob:string):string{
  * after installation, so the pre-install set covers the tooling owner's module
  * candidates. Every eventual member must have been selected in that set. */
 export function sourceState(repo:string,paths:readonly string[]):SourceState{
+  return captureSourceState({...SOURCE_STATE_INPUTS,url:pathToFileURL(repo)},paths);
+}
+function captureSourceState(input:ReturnType<typeof dependencySourceInputs>,paths:readonly string[]):SourceState{
+  const repo=fileURLToPath(input.url);
   if(!paths.length)throw failure('source snapshot has no module candidates');
   const selected=new Set(paths);
   for(const path of selected)if(!path||path.startsWith('/')||path.split('/').some(part=>!part||part==='.'||part==='..')||/[\\\x00-\x1f]/.test(path))throw failure('invalid source member: '+path);

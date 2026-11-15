@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {constants,closeSync,existsSync,fstatSync,openSync,readFileSync,readSync} from 'node:fs';
 import {dirname,join,relative,resolve,isAbsolute,sep} from 'node:path';
 import {dependencyInventory,dependencyPackageInventory,type DependencyEntry} from './dependency-inventory.ts';
-import type {Identity} from './dependency-inputs.ts';
+import type {Identity} from './dependency-identity.ts';
 
 export type DependencyPackage={path:string;name:string;version:string;contentSha256:string};
 export type DependencyCatalog={version:1;tree:string;identity:Identity;recipes:{path:string;sha256:string}[];

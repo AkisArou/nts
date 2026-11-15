@@ -1,4 +1,4 @@
-import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {bundledDependencies} from './node-deps.mjs';
 import {OracleWorker,oracleLoaderReady,oracleExecution,closeOracleExecution,finishOracleSnapshot,removeOracleSnapshot} from '../differential/oracle-emit.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';

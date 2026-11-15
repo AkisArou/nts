@@ -1,4 +1,4 @@
-import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 // The Node output of the exact materialized census project. Scripts share one
 // realm; module cases retain their module goal and their fixture imports.
 import { spawnSync } from "node:child_process";

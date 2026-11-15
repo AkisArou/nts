@@ -3,7 +3,7 @@
 import { lstatSync, readdirSync, realpathSync, unlinkSync, type Stats } from "node:fs";
 import { userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { nodeCompileCacheRoot } from "../gate/canonical-environment.ts";
+import {nodeCompileCacheRoot} from '../gate/host-environment.ts';
 import { acquire, type Lock } from "../landing/lock.ts";
 
 export const NODE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;

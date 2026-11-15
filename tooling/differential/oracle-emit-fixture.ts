@@ -5,7 +5,8 @@ import {testEnvironment} from "../gate/test-environment.ts";
 // 143 tests ran one after another for 480 s; split by subject, they run
 // beside each other.
 import * as oracleOwner from './oracle-emit.ts';
-import {oracleToolchainLocation,gateEnvironment,hostEnvironment,sealOracleRun} from "../gate/canonical-environment.ts";
+import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
+import {oracleToolchainLocation,hostEnvironment} from '../gate/host-environment.ts';
 import {ownMemory} from "../gate/test-memory.ts";
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 import assert from "node:assert/strict";

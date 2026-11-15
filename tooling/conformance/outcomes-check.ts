@@ -1,4 +1,4 @@
-import {oracleToolchainLocation,ownTemporary} from "../gate/canonical-environment.ts";
+import {oracleToolchainLocation,ownTemporary} from '../gate/host-environment.ts';
 // Defects that neither `tests/programs/` nor `blockers/` can hold, each pinned to what
 // it does today, re-measured against whatever compiler is current.
 //

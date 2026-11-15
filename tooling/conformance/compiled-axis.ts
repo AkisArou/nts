@@ -8,7 +8,7 @@ import {memoryEvents} from "../census/worker-memory.ts";
 import {reportCheckFailure,checkFailurePolicy} from "../differential/check-report.ts";
 import {AXIS_PREFIX,axisRow,axisFailure,nodeFiles,commandObservation} from "./compiled-axis-rows.mjs";
 import {nodeEnvironment,nodeToolingEnvironment} from "./node-environment.ts";
-import {childTemporary} from "../gate/canonical-environment.ts";
+import {childTemporary} from '../gate/host-environment.ts';
 
 const root=resolve(import.meta.dirname,"../.."),out=resolve(process.env.NTS_ADDON_OUT??join(root,"target/node"));
 mkdirSync(out,{recursive:true});

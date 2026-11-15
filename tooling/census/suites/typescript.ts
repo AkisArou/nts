@@ -1,4 +1,4 @@
-import {oracleToolchainLocation} from "../../gate/canonical-environment.ts";
+import {oracleToolchainLocation} from '../../gate/host-environment.ts';
 // The TypeScript conformance suite's selection: every case under
 // `tests/typescript/<under>`, as the records `nts-test262-protocol select`
 // writes for test262, so the runner treats both suites alike.

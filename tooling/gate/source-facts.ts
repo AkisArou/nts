@@ -217,14 +217,14 @@ export class SourceFacts {
         :ast.isImportEqualsDeclaration(node)&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
         :ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword?node.arguments[0]:undefined;
       if(!specifier||!ast.isStringLiteralLikeNode(specifier)||!/^\.\.?\//.test(specifier.text))continue;
-      all.push(specifier.text);
       const typeOnly=ast.isImportDeclaration(node)?node.importClause?.phaseModifier===ast.SyntaxKind.TypeKeyword
         :(ast.isExportDeclaration(node)||ast.isImportEqualsDeclaration(node))&&node.isTypeOnly;
-      if(!typeOnly)host.push(specifier.text);
+      if(!typeOnly){all.push(specifier.text);host.push(specifier.text);}
     }
     return this.moduleEdges={all,host};
   }
-  /** Type imports stay source inputs without pretending the host enters them. */
+  /** Clause-level type imports are erased. Named type specifiers retain the
+   * side-effect import produced by Node's verbatim module stripping. */
   hostModuleImports():string[]{return [...this.moduleImports().host];}
   moduleDeclarations():ModuleDeclarations{
     const ast=this.ast,imports=[...this.moduleImports().all],assets:ReaderInput[]=[];

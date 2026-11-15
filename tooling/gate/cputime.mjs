@@ -1,4 +1,4 @@
-import { FIXED_AMBIENT } from "./canonical-environment.ts";
+import {FIXED_AMBIENT} from './host-environment.ts';
 import { commandWorker } from "../census/worker-memory.ts";
 // The CPU time a child process spends itself, sampled from /proc while it
 // runs: `utime + stime` of the process (every thread of it), not of the

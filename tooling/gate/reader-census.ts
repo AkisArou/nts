@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
-import {hostEnvironment} from './canonical-environment.ts';
+import {hostEnvironment} from './host-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {removable} from './run-temporary.ts';
 import {runAsCommand} from '../differential/command-entry/main.ts';

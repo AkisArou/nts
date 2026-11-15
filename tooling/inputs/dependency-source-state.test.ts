@@ -1,3 +1,4 @@
+import {dependencySourceCandidates} from './dependency-source-candidates.ts';
 import assert from 'node:assert/strict';
 import {mkdirSync,renameSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
@@ -7,7 +8,7 @@ import {gitArguments} from '../gate/git-arguments/main.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {dependencyRecipeModules} from './dependency-inputs.ts';
-import {dependencySourceCandidates,sourceState,assertSourceState} from './dependency-source-state.ts';
+import {sourceState,assertSourceState} from './dependency-source-state.ts';
 
 test('literal source pathspecs fence clean, dirty, renamed and unusual members only',t=>{
   const root=testScratch(t,'dependency-source-state');
@@ -58,6 +59,6 @@ test('imported JSON is data while executable code outside tooling refuses the so
   }
   const members=dependencyRecipeModules(root);
   assert.ok(!members.includes('data.json'));assert.ok(members.includes('outside.ts'));
-  const snapshot=sourceState(root,dependencySourceCandidates(root));
+  const snapshot=sourceState(root(root));
   assert.throws(()=>assertSourceState(root,snapshot,members,'producer'),/not captured before installation: outside\.ts.*git add <path>/);
 });

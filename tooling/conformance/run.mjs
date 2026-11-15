@@ -38,7 +38,7 @@ import { checkFailurePolicy, reportCheckFailure } from "../differential/check-re
 import {nodePreloadPlan} from './node-preloads.ts';
 import {prepareOracles,preparedOracle} from '../differential/oracle-batch.ts';
 import {oracleExecution,oracleLoaderReady,closeOracleExecution,oracleRuntimeFiles,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot} from '../differential/oracle-emit.ts';
-import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import { nodeEnvironment,nodeInputs } from "./node-environment.ts";
 import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';

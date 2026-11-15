@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 import {testScratch} from './test-scratch.ts';
 import {durableRecord} from './durable-record.ts';
 import {installationCatalog,dependencyHash,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
-import type {Identity} from '../inputs/dependency-inputs.ts';
+import type {Identity} from '../inputs/dependency-identity.ts';
 import {projectDependencies} from './project-dependencies.ts';
 import {projectInputOwner} from './project-inputs.ts';
 import {moduleGraph} from './module-closure.ts';

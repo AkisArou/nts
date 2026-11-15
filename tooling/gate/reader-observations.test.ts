@@ -49,7 +49,7 @@ test('an exact non-directory negative replays only with its own unchanged regula
 test('explicit Node capture retains nearer package candidates without entering type-only modules',t=>{
   const f=fixture(t),first=snapshot(f.source,['src/main.ts'],true);
   assert.deepEqual(first.hostFiles,['src/helper.ts','src/main.ts']);
-  assert.ok(first.moduleFiles.includes('types.ts'));
+  assert.ok(!first.moduleFiles.includes('types.ts'),'erased types belong to the explicit compiler project');
   assert.ok(first.ownedFiles.includes('package.json'));assert.ok(!first.placingFiles.includes('package.json'));
   assert.ok(first.observations.some(row=>row.protocol==='node26'&&row.observation.kind==='file'&&row.observation.path===join(f.source,'src/package.json')&&row.observation.value===null));
   assert.equal(snapshot(f.source,['src/main.ts']).observations.length,0);

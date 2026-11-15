@@ -1,6 +1,6 @@
 import {CARGO_OWNER} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
-import {childTemporary,oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {childTemporary,oracleToolchainLocation} from '../gate/host-environment.ts';
 // Explicit recording only. Plans come from the checker's actual population;
 // a partial oracle can never publish a smaller promise.
 import { createHash } from "node:crypto";

@@ -21,7 +21,7 @@ import type {ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
 import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 import {cargoInputNames} from './cargo-input-population.ts';
-import {dependencySourceCandidates} from '../inputs/dependency-source-state.ts';
+import {dependencySourceCandidates} from '../inputs/dependency-source-candidates.ts';
 import {gitStatusInputPopulation,installationStatusCandidates} from '../inputs/dependency-input-names.ts';
 import type {GeneratedProjectCapability} from './generated-project.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
@@ -63,7 +63,7 @@ export function closeModuleGraphOwners(owners:readonly ({name:string;close:()=>v
   if(errors.length)throw new AggregateError(errors,'module graph cleanup failed');
 }
 
-/** Declarations, including type imports, re-exports and literal relative
+/** Runtime declarations, including re-exports and literal relative
  * import() calls. Data strings,
  * computed imports and package resolution cannot invent file inputs. Each
  * graph reads fresh bytes; closures share only this graph's parsed references.

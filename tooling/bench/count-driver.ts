@@ -5,7 +5,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {closeSync,mkdirSync,openSync,readFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {durableRecord} from '../gate/durable-record.ts';
-import {FIXED_AMBIENT,hostEnvironment} from '../gate/canonical-environment.ts';
+import {FIXED_AMBIENT,hostEnvironment} from '../gate/host-environment.ts';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 
 export const COUNT_INSTRUMENT='instruction-calibrated-empty-subtracted-v1';

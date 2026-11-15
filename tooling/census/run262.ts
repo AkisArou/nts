@@ -58,7 +58,7 @@ import { BACKENDS, attempt, selfChecks } from "./attempt262.ts";
 import { pinCompiler, workspace } from "./project.ts";
 
 import { serialRun } from "./worker-memory.ts";
-import { ownTemporary } from "../gate/canonical-environment.ts";
+import {ownTemporary} from '../gate/host-environment.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");

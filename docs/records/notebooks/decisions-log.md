@@ -3331,3 +3331,11 @@ importer directories. The image retains verified workspace alias layout while
 oracle snapshots project selected implementations from the live consumer
 closure. Unread workspace code does not invalidate installation or gain a runtime
 grant; command-target bytes remain inputs because pnpm reads their shebangs.
+
+## Runtime input edges and preparation owners (11-15)
+
+Runtime module declarations exclude erased clause-level type imports and
+exports. Named type specifiers preserve side-effect imports under Node's
+verbatim stripping. Type checking owns its complete project independently.
+Population, identity data and host-environment utilities are separate leaves;
+only executable source and installation fences declare their Git populations.

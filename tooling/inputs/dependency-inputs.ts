@@ -15,7 +15,8 @@ import {durableRecord} from "../gate/durable-record.ts";
 import {withPackageManager,type PackageManager} from "./package-manager.ts";
 import {fileURLToPath} from 'node:url';
 import {moduleGraph} from '../gate/module-closure.ts';
-import {dependencySourceCandidates,sourceState,assertSourceState} from './dependency-source-state.ts';
+import {sourceState,assertSourceState} from './dependency-source-state.ts';
+import {dependencySourceCandidates} from './dependency-source-candidates.ts';
 import {DEPENDENCY_ROOT_INPUTS,installationBinPaths} from './dependency-input-names.ts';
 export {DEPENDENCY_ROOT_INPUTS} from './dependency-input-names.ts';
 import {executableModuleSource} from '../gate/reader-inputs/main.ts';
@@ -65,7 +66,8 @@ async function locked<T>(path:string,operation:()=>Promise<T>):Promise<T> {
   while(!(lock=GateResource.tryAcquire(path)))await pause(100);
   try{return await operation();}finally{lock.close();}
 }
-export type Identity={version:2;key:string;pnpm:string;manager:string;node:string;platform:string;arch:string;inputs:{path:string;sha256:string}[];importers:string[]};
+import type {Identity} from './dependency-identity.ts';
+export type {Identity} from './dependency-identity.ts';
 export async function identity(tree:string,manager:PackageManager):Promise<Identity> {
   const version=(await manager.run(["--version"])).trim();
   const manifest=JSON.parse(readFileSync(join(tree,"package.json"),"utf8"));

@@ -163,7 +163,7 @@ import { runMemoryWorkers } from "./worker-pool.ts";
 import { acquireToken, withToken } from "../gate/tokens.mjs";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
-import { ownTemporary } from "../gate/canonical-environment.ts";
+import {ownTemporary} from '../gate/host-environment.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");

@@ -100,7 +100,7 @@ import { pendingContradiction, recordPath } from "./oracle-records.ts";
 import { pendingLine } from "../records/pending.ts";
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
-import { childTemporary } from "../gate/canonical-environment.ts";
+import {childTemporary} from '../gate/host-environment.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");

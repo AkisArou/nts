@@ -34,15 +34,15 @@ test('generated project declarations retain literal include recipes through lexi
   }finally{api.close();}
 });
 
-test('host edges exclude erased type declarations while retaining source ownership and side-effect imports',()=>{
-  const api=new API(),source="import type {A} from './types.ts';export type {B} from './more-types.ts';import {type C} from './effects.ts';export {type D} from './more-effects.ts';import './side-effect.ts';";
+test('runtime edges exclude erased clauses and retain named type side effects and mixed imports',()=>{
+  const api=new API(),source="import type {A} from './types.ts';export type {B} from './more-types.ts';import {type C} from './effects.ts';export {type D} from './more-effects.ts';import './side-effect.ts';import {type E,value} from './mixed.ts';";
   const lease=api.createSourceFile('host-edges.ts',source);
   try{
     const facts=new SourceFacts('host-edges.ts',source,lease.sourceFile);
-    assert.deepEqual(facts.moduleDeclarations().imports,['./types.ts','./effects.ts','./side-effect.ts','./more-types.ts','./more-effects.ts']);
-    assert.deepEqual(facts.hostModuleImports(),['./effects.ts','./side-effect.ts','./more-effects.ts']);
+    assert.deepEqual(facts.moduleDeclarations().imports,['./effects.ts','./side-effect.ts','./mixed.ts','./more-effects.ts']);
+    assert.deepEqual(facts.hostModuleImports(),['./effects.ts','./side-effect.ts','./mixed.ts','./more-effects.ts']);
     const detached=facts.hostModuleImports();detached.length=0;
-    assert.deepEqual(facts.hostModuleImports(),['./effects.ts','./side-effect.ts','./more-effects.ts']);
+    assert.deepEqual(facts.hostModuleImports(),['./effects.ts','./side-effect.ts','./mixed.ts','./more-effects.ts']);
   }finally{lease.dispose();api.close();}
 });
 

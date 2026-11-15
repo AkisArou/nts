@@ -1,4 +1,4 @@
-import { measuredCompileEnvironment } from "./canonical-environment.ts";
+import {measuredCompileEnvironment} from './host-environment.ts';
 // Did lowering a runtime module regress beyond its calibrated instruction budget?
 //
 //   node tooling/gate/compile-time.mjs [--arm rc]           check against results/compile-times.tsv

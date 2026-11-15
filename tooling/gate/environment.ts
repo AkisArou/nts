@@ -1,4 +1,4 @@
-import { HOST_CAPABILITIES, FIXED_AMBIENT, hostEnvironment } from "./canonical-environment.ts";
+import {HOST_CAPABILITIES,FIXED_AMBIENT,hostEnvironment} from './host-environment.ts';
 // Variables a detached gate unit must inherit, and the capabilities that
 // require them. The launcher and both gate entry points read this one list.
 import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";

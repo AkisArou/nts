@@ -10,7 +10,7 @@ import type { CheckCommandResult, CheckConsumer, CheckCounts, CheckFormat, Check
   CheckRunOptions, DecodedCheck, LegacyIdentity, CaseTimeout } from "./check-report-types.ts";
 import {normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput} from "../conformance/observation-text.ts";
 import {activeCommand, CommandNotMeasuredError, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
-import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {OracleBudgetError,type OracleBudget} from "./oracle-execution.ts";
 import {CaseBudgetError, PressureError, ToolingInstrumentError, instrumentPolicy,
   publishHung, publishRunaway, publishToolingFailure, publishPressure, readStepInstrument} from "../gate/step-result.ts";

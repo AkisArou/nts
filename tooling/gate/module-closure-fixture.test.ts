@@ -336,7 +336,7 @@ test('namespace reuse never writes a missing input through a linked parent',t=>{
   assert.equal(existsSync(join(foreign,'input.json')),false);
 });
 
-test("the public parser follows transitive imports, re-exports, type imports and cycles", t => {
+test("the public parser follows runtime imports and cycles while erasing type-only clauses", t => {
   const f = fixture(t);
   f.write("entry.ts", `import './side.ts'; import type {T} from './types.ts'; export * from './middle.ts';
 // import './comment.ts';
@@ -346,12 +346,13 @@ const data = "import './data.ts'"; void data;
   f.write("types.ts", "export type T = number;");
   f.write("middle.ts", "export {leaf} from './nested/leaf.ts'; export type {T} from './types.ts';");
   f.write("nested/leaf.ts", "import '../entry.ts'; export const leaf = 2;");
-  const expected = ["entry.ts", "middle.ts", "nested/leaf.ts", "side.ts", "types.ts"];
+  const expected = ["entry.ts", "middle.ts", "nested/leaf.ts", "side.ts"];
   assert.deepEqual(moduleClosure(["entry.ts", "side.ts"], {sourceRoot: f.source}), expected);
   assert.deepEqual(moduleClosure(["side.ts", "entry.ts"], {sourceRoot: f.source}), expected);
   assert.deepEqual(copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source}), expected);
   for (const file of expected) assert.deepEqual(readFileSync(join(f.destination, file)), readFileSync(join(f.source, file)));
   assert.equal(existsSync(join(f.destination, "data.ts")), false);
+  assert.equal(existsSync(join(f.destination, "types.ts")), false);
 });
 
 for (const link of [false, true]) test(`the complete ${link ? "linked" : "copied"} graph executes`, t => {
@@ -917,4 +918,25 @@ try{
 }finally{if(server.listening)await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 `,f.source,new URL('./module-closure.ts',import.meta.url).href],{cwd:join(f.source,'data'),encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
+});
+
+for(const [label,statement,entered]of [
+  ['erased clause',"import type {A} from './dependency.ts';",false],
+  ['erased export clause',"export type {A} from './dependency.ts';",false],
+  ['named type side effect',"import {type A} from './dependency.ts';",true],
+  ['mixed bindings',"import {type A,b} from './dependency.ts';",true],
+  ['explicit side effect',"import './dependency.ts';",true],
+] as const)test('runtime input edits follow '+label,t=>{
+  const f=fixture(t);
+  f.write('entry.ts',statement+"process.stdout.write('entry');");
+  f.write('dependency.ts',"process.stdout.write('dependency ');export type A=number;export const b=1;");
+  const before=moduleClosure(['entry.ts'],{sourceRoot:f.source});
+  assert.equal(before.includes('dependency.ts'),entered,'only runtime edges owe an edit to the dependency');
+  copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source});
+  const actual=spawnTest(process.execPath,[join(f.destination,'entry.ts')],{cwd:f.destination,encoding:'utf8'});
+  assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,entered?'dependency entry':'entry');
+  f.write('dependency.ts',"throw Error('edited dependency');export type A=string;export const b=2;");
+  const after=moduleGraph({sourceRoot:f.source});
+  try{assert.equal(after.describe(['entry.ts']).files.includes('dependency.ts'),entered);}
+  finally{after.close();}
 });

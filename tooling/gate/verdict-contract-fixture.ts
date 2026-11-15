@@ -1,5 +1,6 @@
 import { verdictContract } from "./verdict-contract.ts";
-import { FIXED_AMBIENT, type EnvironmentReport } from "./canonical-environment.ts";
+import {FIXED_AMBIENT} from './host-environment.ts';
+import type {EnvironmentReport} from './environment-types.ts';
 
 export function contractReport(): EnvironmentReport {
   return {

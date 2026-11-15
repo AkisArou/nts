@@ -7,6 +7,8 @@ import {rustRuntimeInputGraph} from './rust-runtime-inputs.ts';
 import type {RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testScratch} from './test-scratch.ts';
+import {projectConfig} from './reader-inputs/main.ts';
+import {pathToFileURL} from 'node:url';
 
 test('a future optional driver enters a pre-existing helper through its actual host closure',t=>{
   const base=testScratch(t,'optional-host-module'),source=join(base,'source');mkdirSync(source);
@@ -32,14 +34,15 @@ test('a future optional driver enters a pre-existing helper through its actual h
 test('optional modules preserve compiled-only host roles and later promotion in both entry orders',t=>{
   const source=testScratch(t,'optional-module-promotion');
   writeFileSync(join(source,'package.json'),'{"type":"module"}');
-  writeFileSync(join(source,'entry.ts'),"import type {Value} from './compiled.ts';export type Copy=Value;");
+  writeFileSync(join(source,'tsconfig.json'),'{"files":["compiled.ts"]}');
   writeFileSync(join(source,'compiled.ts'),'export type Value=number;');
   writeFileSync(join(source,'driver.mjs'),"export {helper} from './helper.mjs';");writeFileSync(join(source,'helper.mjs'),'export const helper=1;');
   const declarations=new Map([['compiled.ts',{imports:[],assets:[{kind:'optional-module' as const,path:'./driver.mjs'}]}]]);
   const graph=moduleGraph({sourceRoot:source,declarations,nodeMajor:26});
   try{
-    const compiled=graph.describe(['entry.ts']);assert.deepEqual(compiled.hostFiles,['entry.ts']);assert.ok(compiled.files.includes('helper.mjs'));
-    for(const entries of [['entry.ts','driver.mjs'],['driver.mjs','entry.ts']]){
+    const project=projectConfig(pathToFileURL(join(source,'tsconfig.json')));
+    const compiled=graph.describe([project]);assert.deepEqual(compiled.hostFiles,[]);assert.ok(compiled.files.includes('helper.mjs'));
+    for(const entries of [[project,'driver.mjs'],['driver.mjs',project]]){
       const promoted=graph.describe(entries);assert.ok(promoted.hostFiles.includes('driver.mjs'));assert.ok(promoted.hostFiles.includes('helper.mjs'));
     }
   }finally{graph.close();}

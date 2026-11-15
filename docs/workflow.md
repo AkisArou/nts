@@ -254,7 +254,9 @@ Presence and type facts ignore content-only edits, while file reads and file
 stats retain byte sensitivity. Structural dependencies survive prose and
 records shortcuts and the runner's parsed output handovers.
 The graph distinguishes compiled module roots from host-entered modules in
-each fixture context. Erased type imports remain source inputs; later host
+each fixture context. Clause-level type imports are erased runtime edges; explicit compiler projects
+own their type inputs. Named type-specifier lists retain their side-effect
+imports under Node stripping. Later host
 reach promotes a module and its nested fixtures without losing either role.
 An actual Node invocation owner may select the explicit Node 26 package-scope
 recipe for host entries, retaining logical and physical scope candidates. This
@@ -1279,6 +1281,14 @@ the first node task.
   before either reference compiler starts. Present corpus cells are unchanged.
   A pin edit reaches its benchmark readers through their data declarations
   ([log](records/notebooks/decisions-log.md#awfy-reference-corpus-is-pinned-11-15)).
+
+- **Runtime module edges follow Node stripping.** Clause-level `import type` and
+  `export type` do not make runtime inputs; the tooling type project owns them.
+  Named type-specifier lists retain the module's side effects. Parser-free
+  population, identity data and host-environment utilities have independent
+  owners, so consuming them does not acquire executable preparation or Git
+  fence inputs. The fences retain their own observed populations.
+
 
 - **Load diagnosis uses the real test owners.** An on-demand tooling round
   shares one owner-bound quota between ready load and the real collector and

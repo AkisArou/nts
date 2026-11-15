@@ -23,7 +23,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
+import {FIXED_AMBIENT,hostEnvironment} from '../gate/host-environment.ts';
 import { OOM_SCORE } from "../gate/memory-ledger.ts";
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs } from "../landing/pool.ts";

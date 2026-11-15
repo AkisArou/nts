@@ -1,6 +1,6 @@
 import {gitArguments} from "./git-arguments/main.ts";
 import {runAsCommand} from '../differential/command-entry/main.ts';
-import { FIXED_AMBIENT, measuredCompileEnvironment } from "./canonical-environment.ts";
+import {FIXED_AMBIENT,measuredCompileEnvironment} from './host-environment.ts';
 // Five A/A repetitions of every compile-time module, on one immutable compiler.
 // node tooling/gate/compile-counter-calibrate.ts --run-dir <evidence directory>
 // --record measures then publishes; --publish <summary.json> uses retained raw evidence.

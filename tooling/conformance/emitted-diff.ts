@@ -69,7 +69,7 @@ import {registerCommandCloser, runAsCommand} from '../differential/command-entry
 
 import { spawn, spawnSync } from "node:child_process";
 import { nodeEnvironment,nodeToolingEnvironment } from "./node-environment.ts";
-import { childTemporary } from "../gate/canonical-environment.ts";
+import {childTemporary} from '../gate/host-environment.ts';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
