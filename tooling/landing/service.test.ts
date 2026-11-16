@@ -168,7 +168,6 @@ test("a held check waits aside, and lands once retried", async t => {
 test('a disk-held entry lets a no-build landing pass and returns at its original arrival after a release',async t=>{
   const f=service(t),a=f.task('fix/disk',{'src/disk.txt':'build\n'}),b=f.task('fix/docs',{'docs/disk.md':'no build\n'});
   f.pool.give('fix/docs');
-  const c=f.task('fix/later',{'docs/after.md':'later arrival\n'});f.pool.give('fix/later');
   ownMemory(dirname(f.s.env.NTS_HOST_OBSERVATIONS!),{disk:{freeBytes:53*2**30,freeInodes:100}});
   const temporary=f.pool.capacity.tryTemporary(join(f.s.dir,'capture'),2**30).lease;assert.ok(temporary);
   const ea=f.submit('fix/disk',a.sha),eb=f.submit('fix/docs',b.sha);
@@ -194,11 +193,10 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   assert.match(status.service.message!,new RegExp(`waiting for disk: ${ea.id} needs 1073741824 more bytes`));
   assert.match(status.service.message!,/automatic retry/);assert.equal(status.held[0]?.retryWhen,'disk-capacity');
   assert.match(statusText(status),new RegExp(`waiting for disk: ${ea.id}`));assert.match(statusText(status),/automatic retry when disk permits/);
-  const ec=f.queue.submit(c.sha,{branch:null});
   temporary.release();
   const result=await running;
   assert.equal(result.state,'drained');assert.equal(attempts,2);
-  assert.deepEqual(result.answered.map(row=>[row.id,row.state]),[[ea.id,'held'],[eb.id,'landed'],[ea.id,'landed'],[ec.id,'landed']]);
+  assert.deepEqual(result.answered.map(row=>[row.id,row.state]),[[ea.id,'held'],[eb.id,'landed'],[ea.id,'landed']]);
   assert.equal(f.queue.result(ea.id)?.state,'landed');assert.equal(f.queue.held().length,0);
   assert.ok(f.logs.some(line=>line.includes('returns at its original queue arrival')),f.logs.join('\n'));
 });

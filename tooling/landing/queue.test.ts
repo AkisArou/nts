@@ -67,12 +67,12 @@ test("a held change waits aside until it is retried, at the front", t => {
 });
 
 test('disk readiness restores its original key and cannot resurrect a newer answer',t=>{
-  const q=new Queue(home(t)),entry=q.submit(sha('a'));
+  const q=new Queue(home(t)),entry=q.submit(sha('a')),later=q.submit(sha('b'));
   const disk={root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
   const held=q.answer(q.take()!,{state:'held',message:'disk',retryDisk:[disk]});
   assert.equal(q.retryDiskReady(entry.id,'different answer'),null);
   assert.deepEqual(q.retryDiskReady(entry.id,held.answerNonce!),entry);
-  assert.deepEqual(q.waiting(),[entry]);assert.equal(q.retryDiskReady(entry.id,held.answerNonce!),null);
+  assert.deepEqual(q.waiting(),[entry,later]);assert.equal(q.retryDiskReady(entry.id,held.answerNonce!),null);
   q.answer(q.take()!,{state:'held',message:'disk again',retryDisk:[disk]});
   // A durable request can arrive just before the drained result is published.
   writeFileSync(join(q.home,'withdraw',entry.id),JSON.stringify({version:1,at:'fixture',request:'before-held'}));
