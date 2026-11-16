@@ -20,11 +20,11 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { join } from "node:path";
 import {treeUsers,describeUsers} from "./tree-users.ts";
 import { Pool } from "./pool.ts";
-import { Queue } from "./queue.ts";
+import { createWithdrawalWatch,Queue } from "./queue.ts";
 import type { Ran, RunOptions } from "./run.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import { landingCpuMeasure,landingSelection, type Selection } from "./selection.ts";
-import { drain, prepareTree, prune, recordCosts, type Config } from "./service.ts";
+import { drain,machineConfig, prepareTree, prune, recordCosts, type Config } from "./service.ts";
 import {holder} from './lock.ts';
 import {lockChild} from './lock-fixture.ts';
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
@@ -63,7 +63,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
       return { state: red ? "red" : "green", message: red ? `tests FAIL; logs ${options.run}` : "green", run: options.run, wall_s: 2, pending: [],
         steps: options.steps.map(name => ({ name, verdict: red && name === "tests" ? "FAIL" as const : "PASS" as const, cpu: 5, cpu_measure:landingCpuMeasure(name),wall: 1 })) };
     },
-    log: line => logs.push(line), ...overrides,
+    watchWithdrawals:createWithdrawalWatch,log: line => logs.push(line), ...overrides,
   };
   const queue = new Queue(config.home);
   /** A task's change, made in its pool tree on its branch, pushed there too. */
@@ -266,12 +266,12 @@ test('a restarted service certifies a persisted held entry whose group is gone a
 });
 
 test('a watcher fault leaves the current verdict intact, fences a later marker, and takes no next entry',async t=>{
-  const stage=testScratch(t,'landing-watch-fault');copyModuleClosure(['tooling/landing/service.ts'],stage);
+  const stage=testScratch(t,'landing-watch-fault');copyModuleClosure(['tooling/landing/queue.ts'],stage);
   const file=join(stage,'tooling/landing/queue.ts'),source=readFileSync(file,'utf8');
   const anchor="this.watcher.on('error',error=>this.failed(error));";
   assert.equal(source.split(anchor).length,2);
   writeFileSync(file,source.replace(anchor,anchor+"\nthis.watcher.on('change',()=>{if(existsSync(join(queue.home,'withdraw','watch-error')))this.watcher.emit('error',Error('controlled inotify failure'));});"));
-  const {drain:stagedDrain}:typeof import('./service.ts')=await import(pathToFileURL(join(stage,'tooling/landing/service.ts')).href);
+  const {WithdrawalWatch:FaultingWatch}:typeof import('./queue.ts')=await import(pathToFileURL(file).href);
   for(const arm of ['green','red','marker'] as const){
     const f=service(t),a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
     const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main();
@@ -281,7 +281,8 @@ test('a watcher fault leaves the current verdict intact, fences a later marker, 
       signal=options.signal;entered();await closed;
       return {state:arm==='red'?'red':'green',message:'own verdict '+arm,run:options.run,steps:[],pending:[],wall_s:1};
     };
-    const pending=stagedDrain(f.config);t.after(async()=>{release();await pending;});await started;
+    f.config.watchWithdrawals=(queue,onFailure)=>new FaultingWatch(queue,onFailure);
+    const pending=drain(f.config);t.after(async()=>{release();await pending;});await started;
     writeFileSync(join(f.config.home,'withdraw','watch-error'),'fault');
     await waitFor('the recorded withdrawal watcher error',()=>f.queue.status().message?.includes('controlled inotify failure')===true);
     assert.equal(signal?.aborted,false,'a watch fault has no authority to cancel healthy work');
@@ -293,6 +294,11 @@ test('a watcher fault leaves the current verdict intact, fences a later marker, 
     assert.match(f.queue.status().message!,/service held: withdrawal watcher failed:.*controlled inotify failure.*restart nts-landing-check/);
     if(arm!=='green')assert.equal(f.main(),base);
   }
+});
+
+test('the production service entry binds only the source-owned real withdrawal watch',t=>{
+  const f=service(t);
+  assert.equal(machineConfig(f.s.root,f.config.select).watchWithdrawals,createWithdrawalWatch);
 });
 
 test("a change already on main lands as nothing, and its branch and tree are still cleaned up", async t => {

@@ -108,6 +108,8 @@ export class WithdrawalWatch {
   }
   close():void{this.watcher.close();}
 }
+/** The production service's source-owned watch capability. */
+export const createWithdrawalWatch=(queue:Queue,onFailure:(error:Error)=>void)=>new WithdrawalWatch(queue,onFailure);
 
 export class Queue {
   readonly home: string;

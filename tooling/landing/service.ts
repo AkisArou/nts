@@ -30,7 +30,7 @@ import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingI
 import { issueOfBranch } from "../tasks/branch.ts";
 import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
-import { Queue, WithdrawalWatch, type Checking, type Entry, type Result } from "./queue.ts";
+import { createWithdrawalWatch,Queue, WithdrawalWatch, type Checking, type Entry, type Result } from "./queue.ts";
 import {landingLayout} from './layout.ts';
 import { recoverLandingCancellation,removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
@@ -50,6 +50,7 @@ export type Config = {
   select: (base: string, tip: string, paths: string[]) => Selected;
   prepare: (tip: string) => void;
   runSteps: (options: RunOptions) => Promise<Ran>;
+  watchWithdrawals:typeof createWithdrawalWatch;
   log: (line: string) => void;
   /** Whether the service should stop after this landing, to run its own new code. */
   restartAfter?: (paths: string[]) => boolean;
@@ -74,7 +75,7 @@ export async function drain(config: Config): Promise<Drained> {
       const message=`service held: withdrawal watcher failed: ${error.message}; restart nts-landing-check`;
       queue.setStatus({state:'held',...(current?{id:current.id,sha:current.sha,...(current.run?{run:current.run}:{})}:{}),message});config.log(message);
     };
-    try{withdrawals=new WithdrawalWatch(queue,watcherFailed);}
+    try{withdrawals=config.watchWithdrawals(queue,watcherFailed);}
     catch(error){watcherFailed(error as Error);throw error;}
     const recovered = await recover(config, queue,withdrawals);
     if (recovered) answered.push(recovered);
@@ -294,7 +295,7 @@ export function machineConfig(root: string, select: Config["select"], log: Confi
   const {home,tree,target}=landingLayout();
   return {
     home, root, remote: "origin", tree, target, pool: existsSync(POOL_HOME) ? new Pool(POOL_HOME, { root }, linkInputs(root)) : null,
-    select, prepare: tip => prepareTree(root, tree, tip), runSteps: runLanding, log, restartAfter: ownCode,
+    select, prepare: tip => prepareTree(root, tree, tip), runSteps: runLanding,watchWithdrawals:createWithdrawalWatch, log, restartAfter: ownCode,
   };
 }
 

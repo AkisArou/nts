@@ -103,7 +103,7 @@ test("status --json is the same state, versioned, with numbers as numbers and ea
   const s = JSON.parse(out.out);
   assert.equal(s.version, 1);
   assert.equal(s.kind, "landing");
-  assert.deepEqual(s.service, { running: false, pid: null, unit: "nts-landing-check", state: "idle", since: s.service.since, message: null });
+  assert.deepEqual(s.service, { running: false, pid: null, unit: "nts-landing-check", state: "idle", since: s.service.since, message: null,run:null });
   assert.equal(s.checking, null);
   assert.deepEqual(s.waiting.map((w: { branch: string; issue: number | null; note: string }) => [w.branch, w.issue, w.note]), [["fix/b", null, "after it"]]);
   const [r] = s.recent;
