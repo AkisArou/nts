@@ -56,7 +56,8 @@ test('native matching leaves warm outputs outside both selector keys and retains
     assert.equal(validateRustSelectorMaterial(material,f.options).state,'current');
     assert.equal(validateRustSelectorKey(compact,f.options).state,'key-current');
     const rebuilt=f.build();assert.equal(rebuilt.keySha256,material.keySha256,'nonmatching output leaves the complete material key unchanged');
-    assert.equal(encodeRustSelectorRecord(rebuilt).keySha256,compact.keySha256);
+    assert.equal(rebuilt.targetsSha256,material.targetsSha256,'acquisition-only additions leave the persisted selection roles unchanged');
+    assert.deepEqual(encodeRustSelectorRecord(rebuilt),compact,'ignored outputs leave the complete accepted projection unchanged');
     assert.throws(()=>validateReaderSourceObservations(snapshot,f.root),/filesystem entries changed/,'raw reads still guard the original acquisition');
     const changes=[{path:'src/notes.tsv',added:true}];
     assert.equal(readerObservationIndex(f.root,snapshot.observations,['src/main.ts']).affected(changes).size,0);
