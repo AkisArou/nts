@@ -17,7 +17,7 @@ export type RecordedDomain = { identity: string; declaration: { version: number;
 export type Populations = Record<string, { count: number; cases_sha256: string }>;
 /**
  * Runs that delivered every case within their CPU bound, but past the half of
- * it a count needs: recorded with the CPU each used, and no count, since a
+ * it a count needs: raw evidence keeps the CPU each used, and no count, since a
  * slower run could lose cases (record-oracles.ts's recordAll).
  */
 export type MarginBudget = { phase: "execute"; outcome: "margin"; bound: number; signal: null; cpu_s: number[]; reason: string };
@@ -134,10 +134,12 @@ export function domainDeclaration(value: unknown): RecordedDomain["declaration"]
 
 function parseBudget(value:unknown):BudgetClassification{
   const raw=object(value,'oracle budget');fields(raw,['version','phase','outcome','bound','signal'],'oracle budget');
-  if(raw.version!==2||!['plan','prepare','execute'].includes(String(raw.phase))||!['timeout','memory-cap','margin'].includes(String(raw.outcome))
+  if(raw.version!==2||typeof raw.phase!=='string'||!['plan','prepare','execute'].includes(raw.phase)
+    ||typeof raw.outcome!=='string'||!['timeout','memory-cap','margin'].includes(raw.outcome)
     ||typeof raw.bound!=='number'||!Number.isFinite(raw.bound)||raw.bound<=0
     ||!(raw.signal===null||typeof raw.signal==='string'&&/^SIG[A-Z0-9]+$/.test(raw.signal))
-    ||raw.outcome==='margin'&&(raw.phase!=='execute'||raw.signal!==null))fail('invalid versioned oracle budget');
+    ||raw.outcome==='margin'&&(raw.phase!=='execute'||raw.signal!==null)
+    ||raw.phase==='plan'&&raw.outcome!=='timeout')fail('invalid versioned oracle budget');
   return {version:2,phase:raw.phase as OracleBudget['phase'],outcome:raw.outcome as RecordedBudget['outcome'],bound:raw.bound,signal:raw.signal as string|null};
 }
 

@@ -149,3 +149,8 @@ test('budget records require revision 2 and can claim neither count nor completi
   for(const field of ['count','complete'])assert.throws(()=>parseShard({...shard,rows:[{...budget,[field]:field==='count'?0:true}]},shard.fixture),/budget row cannot claim/);
   assert.throws(()=>parseShard({...shard,version:99},shard.fixture),/invalid or misnamed/);
 });
+
+test('classification decoding never coerces a plan memory cap into a timeout',async()=>{
+  const {classifyBudget}=await import('../differential/oracle-records.ts');
+  assert.throws(()=>classifyBudget({phase:'plan',outcome:'memory-cap',bound:1024,signal:'SIGKILL',reason:'raw memory limit'}),/invalid versioned oracle budget/);
+});
