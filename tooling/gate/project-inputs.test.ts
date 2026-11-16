@@ -13,20 +13,21 @@ import {testScratch} from './test-scratch.ts';
 import {moduleGraph,closeModuleGraphOwners} from './module-closure.ts';
 import {validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
-import {projectConfig} from './reader-inputs/main.ts';
+import {projectConfig,conservativeDirectory} from './reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
-test('a directory used for matching and ordinary Program type discovery is promoted in both acquisition orders',t=>{
-  const root=testScratch(t,'project-directory-promotion');mkdirSync(join(root,'src'));mkdirSync(join(root,'src/ambient'));
-  writeFileSync(join(root,'src/main.ts'),'export {};');writeFileSync(join(root,'src/ambient/index.d.ts'),'declare const ambient:number;');
+test('matching never narrows the same directory ordinary traversal in either acquisition order',t=>{
+  const root=testScratch(t,'project-directory-promotion');mkdirSync(join(root,'src'));
+  writeFileSync(join(root,'src/main.ts'),'export {};');
   writeFileSync(join(root,'matching.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"]}');
-  writeFileSync(join(root,'ordinary.json'),'{"compilerOptions":{"typeRoots":["./src"]},"files":["src/main.ts"]}');
+  const matching=projectConfig(pathToFileURL(join(root,'matching.json')),'type-check');
+  const ordinary={kind:'conservative' as const,url:conservativeDirectory(pathToFileURL(join(root,'src/')))};
   const owner=moduleGraph({sourceRoot:root});
-  try{for(const names of [['matching.json','ordinary.json'],['ordinary.json','matching.json']]){
-    const entries=names.map(name=>projectConfig(pathToFileURL(join(root,name)),'type-check'));
-    const snapshot=owner.describe(entries),rows=snapshot.observations.filter(row=>row.observation.kind==='entries'&&row.observation.path===join(root,'src'));
-    assert.ok(rows.some(row=>row.observationOnly),'matching context retains its raw observation role');
-    assert.ok(rows.some(row=>!row.observationOnly),'ordinary Program discovery retains selection authority');
+  try{for(const entries of [[matching,ordinary],[ordinary,matching]]){
+    const snapshot=owner.describe(entries),rows=snapshot.observations.filter(row=>row.observation.path===join(root,'src'));
+    assert.ok(rows.some(row=>row.observation.kind==='entries'&&row.observationOnly),'matching retains its raw observation role');
+    assert.ok(rows.some(row=>row.observation.kind==='runtimeEntries'&&!row.observationOnly),'ordinary traversal retains selection authority');
+    assert.ok(rows.some(row=>row.observation.kind==='runtimeKind'&&!row.observationOnly),'shared metadata retains ordinary authority');
     assert.ok(readerObservationIndex(root,rows,snapshot.files).affected([{path:'src/new.md',added:true}]).size>0);
   }}finally{owner.close();}
 });

@@ -38,6 +38,7 @@ function pending(record:RustSelectorMaterial,options:Parameters<typeof validateR
 }
 test('native matching leaves warm outputs outside both selector keys and retains raw race and native-claim facts',t=>{
   const f=fixture(t);mkdirSync(join(f.root,'src'));
+  writeFileSync(join(f.root,'package.json'),'{"type":"module"}');
   writeFileSync(join(f.root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"]}');
   writeFileSync(join(f.root,'src/main.ts'),'export {};');
   f.manifest.targets[0]!.declarations.assets=[{kind:'project-config',path:'../tsconfig.json',role:'type-check'}];
@@ -70,7 +71,8 @@ test('native matching leaves warm outputs outside both selector keys and retains
 
 test('compact project queries authenticate their native recipe and reject malformed routing before replay',t=>{
   const f=fixture(t);writeFileSync(join(f.root,'base.json'),'{"compilerOptions":{"types":[]}}');mkdirSync(join(f.root,'src'));writeFileSync(join(f.root,'src/main.ts'),'export {};');
-  f.manifest.targets[0]!.declarations.assets=[{kind:'generated-project',path:'../base.json',directory:'../src/',include:'typescript-tree',role:'compiled-program'}];
+  writeFileSync(join(f.root,'package.json'),'{"type":"module"}');
+  f.manifest.targets[0]!.declarations.assets=[{kind:'generated-project',path:'../base.json',directory:'./src/',include:'typescript-tree',role:'compiled-program'}];
   writeFileSync(join(f.root,'declarations.json'),JSON.stringify(f.manifest));
   const material=f.build(),compact=encodeRustSelectorRecord(material);
   assert.deepEqual(material.key.projects,[{request:{kind:'generated',path:'base.json',directory:'src',include:'typescript-tree'},files:['src/main.ts']}]);
