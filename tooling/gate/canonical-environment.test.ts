@@ -677,6 +677,7 @@ test('preparation exports cannot become compatibility owners for host utilities'
 });
 
 for(const changed of ['directory','birth'] as const)test('a resolution scope refuses a changed '+changed+' before reuse',t=>{
+ if(process.platform!=='linux'){t.skip('Linux process birth and scope');return;}
  const {run,base}=fixture(t),planned=gateEnvironment(base,{run});
  const owner=JSON.parse(planned.env[ENVIRONMENT_CONTEXT]!).resolutionOwner;
  assert.equal(nodeResolutionDirectory(owner),join(planned.temporary.path,'oracle-resolution','node-'+process.versions.node));
@@ -689,10 +690,15 @@ for(const changed of ['directory','birth'] as const)test('a resolution scope ref
 });
 
 test('unsealed contexts keep dependency-image reuse separate from fresh resolution scopes',t=>{
+ if(process.platform!=='linux'){t.skip('Linux process birth and scope');return;}
  const {run,base}=fixture(t),parent=gateEnvironment(base,{run});
  const child=gateEnvironment(parent.env,{run:join(run,'child')});
  assert.equal(JSON.parse(child.env.NTS_ORACLE_DEPENDENCIES!).directory,JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!).directory);
  const before=JSON.parse(parent.env[ENVIRONMENT_CONTEXT]!).resolutionOwner,after=JSON.parse(child.env[ENVIRONMENT_CONTEXT]!).resolutionOwner;
  assert.notEqual(nodeResolutionDirectory(before),nodeResolutionDirectory(after));
  assert.equal(after.root.path,join(child.temporary.path,'oracle-resolution'));
+});
+
+test('an absent resolution scope has a named refusal',()=>{
+ assert.throws(()=>nodeResolutionDirectory(undefined),/oracle resolution run owner is missing or changed/);
 });

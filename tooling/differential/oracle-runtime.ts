@@ -211,7 +211,7 @@ export type NodeResolutionRun={pid:number;birth:string;root:{path:string;dev:num
 const resolutionRootStat=lstatSync;
 /** The same locator serves preparation and emission; a new temporary in a sealed
  * child does not transfer ownership of its parent's pinned resolver. */
-export function nodeResolutionDirectory(owner:NodeResolutionRun,nodeVersion=process.versions.node):string{
+export function nodeResolutionDirectory(owner:NodeResolutionRun|undefined,nodeVersion=process.versions.node):string{
   if(!owner||!Number.isSafeInteger(owner.pid)||owner.pid<=0||typeof owner.birth!=='string'||!nodeProcessAlive(owner))
     throw Error('oracle resolution run owner is missing or changed');
   const root=owner.root;
