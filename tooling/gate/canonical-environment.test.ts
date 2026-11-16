@@ -7,7 +7,7 @@ import {assignTestValues} from './test-environment.ts';
 import {durableRecord} from './durable-record.ts';
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {mkdirSync,existsSync,readFileSync,writeFileSync,symlinkSync,utimesSync,rmSync,readdirSync,lstatSync} from "node:fs";
+import {mkdirSync,existsSync,readFileSync,writeFileSync,symlinkSync,utimesSync,rmSync,readdirSync,lstatSync,renameSync} from "node:fs";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {homedir,userInfo} from "node:os";
 import {dirname, join} from "node:path";
@@ -20,6 +20,7 @@ import {instrumentPolicy} from "./step-result.ts";
 import * as hostEnvironmentAuthority from "./host-environment.ts";
 import {assertLandingEnvironment,ENVIRONMENT_EXPERIMENT,gateEnvironment,oracleStepEnvironment,nodeHeapOomReason,reportEnvironment} from './canonical-environment.ts';
 import {FIXED_AMBIENT,measuredCompileEnvironment,oracleToolchainLocation,ownTemporary,childTemporary} from './host-environment.ts';
+import {nodeResolutionDirectory,nodeProcessBirth} from '../differential/oracle-runtime.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {newTestScratch} from "./test-scratch.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
@@ -673,4 +674,25 @@ test('preparation exports cannot become compatibility owners for host utilities'
   const preparation=await import('./canonical-environment.ts');
   for(const name of Object.keys(hostEnvironmentAuthority))
     assert.equal(Object.hasOwn(preparation,name),false,name+' has only its host utility owner');
+});
+
+for(const changed of ['directory','birth'] as const)test('a resolution scope refuses a changed '+changed+' before reuse',t=>{
+ const {run,base}=fixture(t),planned=gateEnvironment(base,{run});
+ const owner=JSON.parse(planned.env[ENVIRONMENT_CONTEXT]!).resolutionOwner;
+ assert.equal(nodeResolutionDirectory(owner),join(planned.temporary.path,'oracle-resolution','node-'+process.versions.node));
+ assert.equal(owner.birth,nodeProcessBirth(process.pid));
+ if(changed==='birth')assert.throws(()=>nodeResolutionDirectory({...owner,birth:'0'}),/oracle resolution run owner is missing or changed/);
+ else{
+  renameSync(owner.root.path,owner.root.path+'-previous');mkdirSync(owner.root.path,{mode:0o700});
+  assert.throws(()=>nodeResolutionDirectory(owner),/oracle resolution run root changed/);
+ }
+});
+
+test('unsealed contexts keep dependency-image reuse separate from fresh resolution scopes',t=>{
+ const {run,base}=fixture(t),parent=gateEnvironment(base,{run});
+ const child=gateEnvironment(parent.env,{run:join(run,'child')});
+ assert.equal(JSON.parse(child.env.NTS_ORACLE_DEPENDENCIES!).directory,JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!).directory);
+ const before=JSON.parse(parent.env[ENVIRONMENT_CONTEXT]!).resolutionOwner,after=JSON.parse(child.env[ENVIRONMENT_CONTEXT]!).resolutionOwner;
+ assert.notEqual(nodeResolutionDirectory(before),nodeResolutionDirectory(after));
+ assert.equal(after.root.path,join(child.temporary.path,'oracle-resolution'));
 });

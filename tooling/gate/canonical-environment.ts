@@ -8,7 +8,7 @@ import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path
 import { fileURLToPath,pathToFileURL } from "node:url";
 import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
 import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,discardRunTemporary,removable,assertRunTemporary,assertRunTemporaryOpen} from "./run-temporary.ts";
-import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
+import {nodeProcessBirth,nodeResolutionDirectory,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession,closeNodeResolutionSession} from '../differential/oracle-resolution.ts';
@@ -214,8 +214,19 @@ export function gateEnvironment(
     host: Object.fromEntries(HOST_CAPABILITIES.map(name => [name, env[name] ?? null])),
     ambient, dropped, experiments,
   };
-  const resolutionOwner=process.platform==='linux'?(prior?.resolutionOwner??{pid:process.pid,birth:nodeProcessBirth(process.pid)}):undefined;
-  if(resolutionOwner&&!nodeProcessAlive(resolutionOwner))throw new Error('oracle resolution run owner changed');
+  // A sealed child borrows the exact live parent session. An unsealed command
+  // owns fresh mutable state even when it reuses the parent's dependency image.
+  let resolutionOwner:Context['resolutionOwner'];
+  if(process.platform==='linux'){
+    if(inheritedCapability?.seal&&!foreignRoot){
+      assertSealedOracleRun(launcher);resolutionOwner=prior!.resolutionOwner!;
+    }else{
+      const path=join(temporary.path,'oracle-resolution');mkdirSync(path,{recursive:true,mode:0o700});
+      const info=lstatSync(path);
+      resolutionOwner={pid:process.pid,birth:nodeProcessBirth(process.pid),root:{path,dev:info.dev,ino:info.ino,uid:info.uid}};
+    }
+    nodeResolutionDirectory(resolutionOwner);
+  }
   env[ENVIRONMENT_CONTEXT] = JSON.stringify({ report, owned, temporary,...(resolutionOwner?{resolutionOwner}:{}) } satisfies Context);
   return { env, report, temporary, observations };
 }
@@ -229,11 +240,10 @@ export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal,
     cap=await sealDependencyCapability(JSON.parse(raw),planned.env,signal);
     signal?.throwIfAborted();
     if(process.platform==='linux'){
-      context.resolutionOwner??={pid:process.pid,birth:nodeProcessBirth(process.pid)};
-      if(!nodeProcessAlive(context.resolutionOwner))throw new Error('oracle resolution run owner changed');
+      const sessionDirectory=nodeResolutionDirectory(context.resolutionOwner!);
       const execution=JSON.parse(readFileSync(new URL('../differential/oracle-toolchain.json',import.meta.url),'utf8')).execution.args as string[];
       const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
-      await startNodeResolutionSession(join(cap.directory,'oracle-resolution','node-'+process.versions.node),nodeResolutionOptions(execution,planned.env,bootstrap),planned.env,context.resolutionOwner.pid,onSession);
+      await startNodeResolutionSession(sessionDirectory,nodeResolutionOptions(execution,planned.env,bootstrap),planned.env,context.resolutionOwner!.pid,onSession);
     }
   }catch(error){if(isCommandExit(error))throw error;if(error instanceof CaseBudgetError)throw error;throw new ToolingInstrumentError('tooling-setup',String(error));}
   const next=JSON.stringify(cap);

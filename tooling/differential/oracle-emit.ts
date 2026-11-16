@@ -16,7 +16,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dependencySealReady,dependencySealError,ownsDependencyRun,checkerImportIdentity,OracleFilesystem,OraclePathPrefixes,validateHostObservations,OracleResolutionDomain,capturedPackageMetadata,ORACLE_NODE_RESOLUTION_RECIPE,capturedModuleIdentity,writeOracleSnapshotIndex,readOracleSnapshotIndex,type OracleSnapshotReference,type CheckerImportRelation,type CapturedModulePath,type CapturedAlias,type HostObservation} from './oracle-filesystem.ts';
 
 import {startNodeResolutionSession,queryNodeResolutions,nodeResolutionOptions,type NodeResolutionSession,type NodeResolutionQuery} from './oracle-resolution.ts';
-import {ORACLE_RUNTIME_FILES,ORACLE_EXECUTION_FILES,oracleIdentityFor,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,oracleTranspileFileName,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
+import {ORACLE_RUNTIME_FILES,ORACLE_EXECUTION_FILES,oracleIdentityFor,nodeResolutionDirectory,parseOracleLoaderEvents,sourceAssetPath,oracleTranspileFileName,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
 export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
 const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
@@ -1509,8 +1509,7 @@ export class OracleWorker{
       writeFileSync(join(directory,'emit.stdout'),run.stdout);writeFileSync(join(directory,'emit.stderr'),run.stderr);
       const raw=process.env.NTS_ORACLE_DEPENDENCIES,cap=raw?JSON.parse(raw):null,scope=cap&&ownerRunScope(cap);
       const owner=scope?JSON.parse(process.env.NTS_GATE_ENV_CONTEXT??'null')?.resolutionOwner:undefined;
-      if(scope&&(!owner||!nodeProcessAlive(owner)))throw Error('oracle resolution run owner is missing or changed');
-      const sessionDirectory=scope?join(scope.directory,'oracle-resolution','node-'+process.versions.node):join(directory,'resolution');
+      const sessionDirectory=scope&&process.platform==='linux'?nodeResolutionDirectory(owner):join(directory,'resolution');
       stored.runtimeIndex=await publishRuntimeSnapshot(directory,stored,runtimeIndex,{api:this.api,ast:this.runtimeSyntax},sessionDirectory,owner?.pid??this.resolutionOwnerPid,tree.dependency);
       const manifestBytes=Buffer.from(JSON.stringify(stored,null,2)+'\n');
       writeFileSync(manifest+'.pending',manifestBytes);

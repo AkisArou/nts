@@ -186,3 +186,15 @@ test('a resolution watcher-construction failure keeps its original error through
   assert.equal(watched,true);assert.equal(published,false);
   rmSync(directory,{recursive:true});
 });
+
+test('completed holder metadata is terminal and cannot be acquired as a live session',async t=>{
+ if(process.platform!=='linux'){t.skip('Linux holder identity');return;}
+ const directory=join(fixture(t),'terminal'),options=nodeResolutionOptions([],process.env);
+ let completion:Promise<void>|undefined;
+ const session=await startNodeResolutionSession(directory,options,process.env,process.pid,(_value,closed)=>{completion=closed;});
+ assert.ok(session);assert.ok(completion);
+ await closeNodeResolutionSession(session);await completion;
+ const before=readFileSync(join(directory,'holder.json'));
+ await assert.rejects(startNodeResolutionSession(directory,options,process.env),/oracle Node executable holder changed/);
+ assert.deepEqual(readFileSync(join(directory,'holder.json')),before,'terminal metadata is neither deleted nor rewritten');
+});

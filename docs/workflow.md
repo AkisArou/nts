@@ -684,7 +684,11 @@ real repository. Git-fence descriptors consume their owner's indexed candidate
 population and its ignore/attribute controls, without executable placement.
 Standalone oracle command entries use `withPreparedOracle` at their boundary.
 It takes their admission, creates the canonical run and uses the same sealing
-owner as the gate. A valid inherited seal for the same source is consumed directly.
+owner as the gate. Resolver state belongs to the entry's own temporary, with
+its root identity and live owner birth pinned independently of the dependency
+image. An unsealed sibling acquires a fresh scope. A valid inherited seal for
+the same source consumes the parent's exact live scope without closing it.
+Completed holder metadata is terminal evidence, never a reusable live session.
 For another source, preparation treats the parent's image as a candidate inside
 the owned handoff. Matching producer, lockfile and validated installation inputs
 reuse that existing immutable image under a handoff bound to the new source;
@@ -1307,6 +1311,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- Mutable Node resolution sessions belong to their prepared run, independently
+  of reusable dependency images. One shared locator validates the captured
+  scope root and owner birth for preparation and emission. Sealed children
+  borrow the parent's scope; unsealed entries own and join their own helper.
+  A completed or replaced holder still refuses, without deletion or restart.
 
 - **Held oracle records have stable classifications and behavioral identities.**
   Version-2 budgets retain phase, outcome, bound and signal; raw measurements and

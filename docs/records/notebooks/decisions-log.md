@@ -3635,3 +3635,11 @@ Readiness has no cached projection or periodic polling. Claim releases, pool
 lease changes, upkeep and reclaim supply events; upkeep also bounds detection
 of disk freed outside those owners. The floor, promises and reclamation policy
 are unchanged.
+## Run-owned oracle resolution scopes (11-16)
+
+Unsealed sibling oracle commands reuse immutable package images but acquire
+separate mutable resolution scopes under their own temporaries. The canonical
+handoff pins the private scope root identity and actual owner birth, and the
+same Node-only locator serves preparation and emission. Sealed children borrow
+the exact parent's live scope. Completed holders remain terminal evidence;
+dead-holder and reused-holder refusals and consume-only seals remain.

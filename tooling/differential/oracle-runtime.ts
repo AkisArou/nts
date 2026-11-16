@@ -206,6 +206,25 @@ const executableStat=statSync,processIdentityRead=readFileSync;
 export const nodeExecutableIdentity=(pid:number):NodeExecutableIdentity=>{const info=executableStat('/proc/'+pid+'/exe',{bigint:true});return {dev:String(info.dev),ino:String(info.ino)};};
 export const nodeProcessBirth=(pid:number)=>{const text=processIdentityRead('/proc/'+pid+'/stat','utf8'),end=text.lastIndexOf(')');if(end<0)throw Error('invalid process identity');const fields=text.slice(end+2).split(' ');if(fields[0]==='Z'||!fields[19])throw Error('process is not alive');return fields[19];};
 export const nodeProcessAlive=(owner:{pid:number;birth:string})=>{try{return nodeProcessBirth(owner.pid)===owner.birth;}catch{return false;}};
+/** Mutable resolver state belongs to one run, independently of its reusable image. */
+export type NodeResolutionRun={pid:number;birth:string;root:{path:string;dev:number;ino:number;uid:number}};
+const resolutionRootStat=lstatSync;
+/** The same locator serves preparation and emission; a new temporary in a sealed
+ * child does not transfer ownership of its parent's pinned resolver. */
+export function nodeResolutionDirectory(owner:NodeResolutionRun,nodeVersion=process.versions.node):string{
+  if(!owner||!Number.isSafeInteger(owner.pid)||owner.pid<=0||typeof owner.birth!=='string'||!nodeProcessAlive(owner))
+    throw Error('oracle resolution run owner is missing or changed');
+  const root=owner.root;
+  try{
+    if(!root||typeof root.path!=='string'||!isAbsolute(root.path)||resolve(root.path)!==root.path||
+       ![root.dev,root.ino,root.uid].every(Number.isSafeInteger))throw Error('invalid root');
+    const actual=resolutionRootStat(root.path);
+    if(!actual.isDirectory()||actual.isSymbolicLink()||(actual.mode&0o077)!==0||actual.uid!==process.getuid!()||
+       actual.dev!==root.dev||actual.ino!==root.ino||actual.uid!==root.uid)throw Error('replaced root');
+  }catch(error){throw Error('oracle resolution run root changed: '+String(root?.path),{cause:error});}
+  if(!/^26\.\d+\.\d+$/.test(nodeVersion))throw Error('oracle resolution Node version is invalid');
+  return join(root.path,'node-'+nodeVersion);
+}
 /** A flag that sets V8's heap limit, as node and V8 spell it, dashes or underscores. */
 export const V8_HEAP_FLAG=/^--max[-_](?:old[-_]space[-_]size(?:[-_]percentage)?|semi[-_]space[-_]size|heap[-_]size)(?:=|$)/;
 export function nodeResolutionOptions(flags:string[],env:NodeJS.ProcessEnv=process.env,bootstrap?:string,preloads:readonly string[]=[]):NodeResolutionOptions{
