@@ -40,10 +40,11 @@ const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(jo
  * client of it as the resident pool's token policy, with the pool's own
  * request, grant, release and cancel counts.
  */
-async function gatePool(n: number) {
+async function gatePool(n: number,attach?:Parameters<typeof createTokenPool>[0]['attach']) {
   const seen = { request: 0, grant: 0, release: 0, cancel: 0 };
   const history:{event:string;context?:unknown}[]=[];
   const pool: any = createTokenPool({
+    attach,
     free: () => n - pool.total,
     claim: (_step: string, { waitedS }: { waitedS: number }) => waitedS,
     observe: (row: { event: string;context?:unknown }) => {
@@ -861,4 +862,40 @@ test("startup pressure returns the reserved first case before a fresh generation
  assert.equal(existsSync(join(CGROUP,actual.group)),false);await gate.settled();
  assert.deepEqual(gate.seen,{request:2,grant:2,release:2,cancel:0});
  assert.equal(summary.returnedOffers,1,JSON.stringify({summary,history:gate.history}));
+});
+
+test('a warm offer returned after scope attachment is counted once before its replacement dispatch',async t=>{
+ const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const actual=new MemoryRun({budgetBytes:192*2**20,id:'warm-offer-return'}),rows:any[]=[],groups:string[]=[];
+ const observedClose=Promise.withResolvers<void>();let generations=0,attachments=0,killed=false;
+ let captured:{worker:ReturnType<MemoryRun['worker']>;scope:ReturnType<ReturnType<MemoryRun['worker']>['scope']>}|undefined;
+ const forward=(target:object,key:string|symbol)=>{const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;};
+ // Pressure counters are supplied; stopping and joining the warm generation
+ // uses its actual scope. No machine-wide OOM or scheduling delay decides it.
+ const memory=new Proxy(actual,{get(run,key){
+  if(key==='aggregateOoms')return()=>run.aggregateOoms()+Number(killed);
+  if(key!=='worker')return forward(run,key);
+  return(index:string|number,bytes:number)=>{
+   const worker=run.worker(index,bytes),first=generations++===0;groups.push(worker.group);
+   return new Proxy(worker,{get(inner,name){
+    if(name==='counters')return()=>{const counters=inner.counters();return {...counters,kills:counters.kills+Number(first&&killed)};};
+    if(name==='scope')return(...args:Parameters<typeof inner.scope>)=>{const scope=inner.scope(...args);if(first)captured={worker:inner,scope};return scope;};
+    return forward(inner,name);
+   }});
+  };
+ }});
+ const gate=await gatePool(1,async()=>{
+  if(++attachments!==2)return;
+  assert.deepEqual(rows.map(row=>row.path),['warm-first']);assert.ok(captured);
+  killed=true;captured.worker.stop(captured.scope);await observedClose.promise;
+ });t.after(gate.close);
+ const summary=await runMemoryWorkers({paths:['warm-first','warm-second'],jobs:1,memory,workerBytes:96*2**20,token:gate.token,
+  args:index=>[fixture,directory,String(index)],onRow:row=>rows.push(row),
+  report:line=>{if(line.startsWith('resident pressure: idle worker '))observedClose.resolve();}});
+ assert.deepEqual(rows.map(row=>[row.path,row.bucket]),[['warm-first','strict-pass'],['warm-second','strict-pass']]);
+ assert.equal(generations,2);assert.equal(summary.returnedOffers,1,JSON.stringify({summary,history:gate.history}));
+ assert.equal(summary.pressureRequeues,0);assert.equal(summary.idlePressureRestarts,1);assert.equal(summary.isolatedReplays,0);
+ await gate.settled();assert.deepEqual(gate.seen,{request:3,grant:3,release:3,cancel:0});
+ for(const group of groups)assert.equal(existsSync(join(CGROUP,group)),false);
+ assert.equal(existsSync(join(CGROUP,actual.group)),false);
 });

@@ -67,7 +67,6 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
   const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
   let idleRestarts = 0;
-  const returnOffer=async(offered:FeedOffer)=>{await offered.return();accounting.returnedOffers++;};
   const unregister=registerCommandCloser('resident case feed',{close:()=>{stop.abort();memory.close();},closed:async()=>{await Promise.allSettled(tasks);await memory.closed;}});
   const worker = async (index: number) => {
     let again = true;
@@ -77,7 +76,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
       const offered=await queue.reserve({signal:stop.signal,exited:()=>stop.signal.aborted,end:()=>{}});
       if(!offered)break;
       const leave=cohort.tryEnter();
-      if(!leave){await returnOffer(offered);continue;}
+      if(!leave){await offered.return();continue;}
       let bound:ReturnType<MemoryRun['worker']>|undefined;
       let childClosed:Promise<void>=Promise.resolve(),draining:Promise<void>|undefined,feedFlight:Promise<unknown>=Promise.resolve();
       const drain=()=>draining??=Promise.resolve().then(async()=>{
@@ -86,7 +85,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         try{await returned;}catch(error){failures.push(error);}
         let scopeDrained=true;
         if(bound){try{bound.close();await bound.closed;}catch(error){scopeDrained=false;failures.push(error);}}
-        if(!offered.committed){try{await returnOffer(offered);}catch(error){scopeDrained=false;failures.push(error);}}
+        if(!offered.committed){try{await offered.return();}catch(error){scopeDrained=false;failures.push(error);}}
         if(scopeDrained)leave();
         if(failures.length)throw new AggregateError(failures,'resident worker generation failed to drain');
       });
@@ -259,6 +258,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
   try {
     for (let index = 0; index < Math.min(jobs, work.length); index++) tasks.push(worker(index));
     await Promise.all(tasks);
+    accounting.returnedOffers+=queue.returnedOffers;
     return pressure;
   } catch (error) {
     stop.abort();memory.close();

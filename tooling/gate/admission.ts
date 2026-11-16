@@ -130,6 +130,7 @@ export type FeedOptions = {
 export function createFeed(paths: readonly string[], { token = untokened, outranked = () => false, everyMs = 1000, pause:pauseOwner,resume:resumeOwner }: FeedOptions = {}) {
   let next = 0;
   let written = 0;
+  let returnedOffers=0;
   const returned: number[] = [];
   const remaining = () => returned.length > 0 || next < paths.length;
   let yielding:{resume?:Promise<void>}|undefined;
@@ -177,7 +178,7 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
           commit(){if(committed||returning)throw Error('case feed offer is no longer reserved');committed=true;written++;},
           return(){
             if(committed)throw Error('case feed cannot return an already dispatched offer');
-            return returning??=Promise.resolve().then(async()=>{await releaseToken(release);returned.push(reserved);});
+            return returning??=Promise.resolve().then(async()=>{await releaseToken(release);returned.push(reserved);returnedOffers++;});
           },
         };
         if(worker.exited()||worker.signal?.aborted||outranked()||yielding){
@@ -190,6 +191,7 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
   };
   return {
     get dispatched() {return written;},
+    get returnedOffers(){return returnedOffers;},
     reserve,
     async feed(worker: FedWorker): Promise<void> {
       const offer=await reserve(worker);if(!offer)return;

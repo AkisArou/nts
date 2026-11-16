@@ -29,6 +29,7 @@ test('a raced grant is returned before owned yield and an already aborted worker
  await started.promise;outranked=true;grant.resolve(()=>{events.push('release');});
  await waitFor('raced grant returned and owned idle close',()=>events.includes('close'));assert.ok(events.indexOf('release')<events.indexOf('close'));
  stop.abort();await pending;assert.equal(feed.dispatched,0);
+ assert.equal(feed.returnedOffers,1,'the raced grant returned inside reserve, before any offer escaped');
  let asked=0;const aborted=createFeed(['one'],{token:async()=>{asked++;return()=>{};}});
  await aborted.feed({signal:stop.signal,exited:()=>false,end:()=>{},write:()=>assert.fail('aborted worker dispatched')});assert.equal(asked,0);
 });
@@ -42,10 +43,12 @@ test('an undispatched offer returns its exact path only after its token joins',a
  const returned=first.return();assert.equal(first.return(),returned);
  await waitFor('unused offer token release',()=>events.includes('release'));
  assert.equal(await feed.reserve(endpoint),undefined,'a path was re-offered before its old token drained');
- assert.equal(feed.dispatched,0);closed.resolve();await returned;
+ assert.equal(feed.dispatched,0);assert.equal(feed.returnedOffers,0,'an unjoined return is not counted');closed.resolve();await returned;
+ assert.equal(feed.returnedOffers,1);await first.return();assert.equal(feed.returnedOffers,1,'repeated returns join the same counted event');
  const next=await feed.reserve(endpoint);assert.ok(next);assert.equal(next.path,'one');
  next.commit();assert.equal(feed.dispatched,1);assert.throws(()=>next.commit(),/no longer reserved/);
  assert.throws(()=>next.return(),/already dispatched/);next.release();
+ assert.equal(feed.returnedOffers,1,'ordinary committed releases are not returned offers');
 });
 test('dispatch failure returns its offer without counting a case or losing the primary error',async()=>{
  let releases=0;const feed=createFeed(['one'],{token:async()=>()=>{releases++;}});
