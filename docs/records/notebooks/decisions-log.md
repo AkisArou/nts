@@ -3582,3 +3582,19 @@ consumer still reads once after existence, without parse retries. Branding
 the injected fragment lets the existing publication audit inspect code placed
 through a source replacement. Other structured fixture handoffs already use
 the owner; marker-only and joined-completion cases keep their contracts.
+## Oracle image process observations (11-16)
+
+A #797 producer fixture failed in the root-identity landing because its image
+remained after a failed close. The close registered the retained temporary,
+but the fixture asserted image absence before printing its per-image
+disposition, then removed its private registry. The particular vetoing process
+or guard cannot be recovered from that run. Its cleanup did depend on a live
+scan of every same-user process, contrary to the owned-fixture contract.
+
+Process-user observations now belong to the run's required `HostObservations`
+capability. Both image-disposal paths consume that view through the unchanged
+tree ownership guard. Production scans live processes and keeps unreadable
+ownership fail-closed; fixtures supply their own proc tree or explicitly
+observe only captured child PIDs. Missing observations refuse by name. Tests
+check full dispositions before path existence and pair a supplied holder with
+an empty owned view. This changes neither image retention policy nor recovery.

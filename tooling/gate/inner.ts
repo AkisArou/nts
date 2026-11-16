@@ -265,6 +265,6 @@ runAsCommand(import.meta.url,async()=>{
   const planned=gateEnvironment(process.env,{run:join(homedir(),'.cache/nts-inner',String(Date.now())+'-'+process.pid),standalone:!process.env.NTS_GATE_ENV_CONTEXT,oracleAdmissionContext:'gate'});
   let status=1;
   try{const sealed=await sealOracleRun(planned);launchEnvironment=sealed.env;status=main(process.argv.slice(2),new DiskCapacity({env:sealed.env}));}
-  finally{finishRunTemporary(planned.temporary,planned.env.HOME!,status===0);}
+  finally{finishRunTemporary(planned.temporary,planned.env.HOME!,status===0,{host:hostObservations(planned.env)});}
   process.exitCode=status;
 },{realpath:true});

@@ -76,7 +76,10 @@ export function treeUsers(tree:string,options:TreeProcessOptions={}):TreeUser[]{
   return reading.users.map(({pid,command,where})=>({pid,command,where}));
 }
 export function assertNoProcessUsers(roots:readonly string[],options:TreeProcessOptions={}):string[]{
-  const reading=observeTreeProcesses(roots,options);
+  return assertNoObservedProcessUsers(observeTreeProcesses(roots,options));
+}
+/** The same guard consumes a run's supplied process observation. */
+export function assertNoObservedProcessUsers(reading:TreeProcessObservation):string[]{
   const owner=reading.users[0];if(owner)throw Error('process '+owner.pid+' owns '+owner.link+' in '+owner.path);
   complete(reading);return reading.ignored.map(row=>'ignored non-dumpable outside nts: pid '+row.pid+' '+row.command+'; birth '+row.birth+'; cgroup '+row.group);
 }

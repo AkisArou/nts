@@ -292,7 +292,7 @@ export async function withPreparedOracle(
         finally{
           if(run){
             const same=()=>{const actual=lstatSync(run!.path);if(!actual.isDirectory()||actual.isSymbolicLink()||actual.dev!==run!.dev||actual.ino!==run!.ino||actual.uid!==run!.uid)throw new ToolingInstrumentError('tooling-cleanup','oracle entry run directory changed: '+run!.path);};
-            same();if(planned)discardRunTemporary(planned.temporary,planned.env.HOME!);same();
+            same();if(planned)discardRunTemporary(planned.temporary,planned.env.HOME!,hostObservations(planned.env));same();
             removable(run.path);rmSync(run.path,{recursive:true});
           }
         }

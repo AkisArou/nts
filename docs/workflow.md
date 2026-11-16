@@ -2192,3 +2192,11 @@ death; an absent timestamp remains explicit after forced termination.
   inside the authenticated gate temporary and removes only that subtree after
   child, helper and admission drain. A cold image follows the same lifetime as
   a parent-image hit.
+
+- **Oracle image disposal uses the run's process observations.** Both green
+  discard and failed-close disposal consume the required process-users view in
+  `HostObservations`. Production retains the existing live ownership scanner
+  and its unreadable-process refusal. Fixtures own an empty proc tree or state
+  the exact child PIDs they observe live; unrelated machine processes cannot
+  decide their cleanup assertions. A close reports each complete image
+  disposition before a fixture checks whether the image still exists.

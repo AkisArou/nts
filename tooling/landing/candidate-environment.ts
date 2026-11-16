@@ -1,3 +1,4 @@
+import {hostObservations} from '../gate/host-observations.ts';
 import {registerCommandCloser,runAsCommand} from "../differential/command-entry/main.ts";
 // Cross-version contract: the candidate's tooling/gate/canonical-environment.ts
 // exports gateEnvironment. No other version creates its environment or grants.
@@ -155,7 +156,7 @@ async function launch():Promise<number>{
   }finally{
     // Recorder evidence lives in its own run files, as before. Its run-owned
     // scratch is discarded even when recording refuses or cannot start.
-    if(request.discardTemporary)finishRunTemporary(planned.temporary,planned.env.HOME!,true);
+    if(request.discardTemporary)finishRunTemporary(planned.temporary,planned.env.HOME!,true,{host:hostObservations(planned.env)});
   }
 }
 

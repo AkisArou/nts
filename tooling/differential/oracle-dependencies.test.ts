@@ -1,3 +1,4 @@
+import {hostObservations} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
@@ -134,9 +135,10 @@ test('an ordinary sealed producer image is registered to its run and a failed cl
   const ready=sealed.seal.record,semantic=join(dirname(ready),'semantic.json'),tree=join(dirname(ready),'tree');
   const readyBytes=readFileSync(ready),semanticBytes=readFileSync(semantic);
   assert.ok(existsSync(join(tree,'node_modules')));assert.equal(await captureDependencies(sealed,undefined,canonicalFixture(sealed)),ready,'a ready hit owns no second image');
-  const result=finishRunTemporary(owned,f.parent,false,{freeBytes:()=>Number.MAX_SAFE_INTEGER});
-  assert.equal(result.state,'retained after red');assert.equal(existsSync(tree),false);assert.deepEqual(readFileSync(ready),readyBytes);assert.deepEqual(readFileSync(semantic),semanticBytes);
-  assert.equal(result.oracle_images?.length,1);const dropped=result.oracle_images?.[0];assert.ok(dropped);assert.equal(dropped.path,tree);assert.equal(dropped.state,'dropped');assert.ok(dropped.bytes!==null&&dropped.bytes>0);
+  const result=finishRunTemporary(owned,f.parent,false,{freeBytes:()=>Number.MAX_SAFE_INTEGER,host:hostObservations(canonicalFixture(sealed))});
+  assert.equal(result.state,'retained after red',JSON.stringify(result));
+  assert.equal(result.oracle_images?.length,1,JSON.stringify(result));const dropped=result.oracle_images?.[0];assert.ok(dropped);assert.equal(dropped.path,tree);assert.equal(dropped.state,'dropped',JSON.stringify(result));assert.ok(dropped.bytes!==null&&dropped.bytes>0);
+  assert.equal(existsSync(tree),false);assert.deepEqual(readFileSync(ready),readyBytes);assert.deepEqual(readFileSync(semantic),semanticBytes);
 });
 
 test('committing an unrelated file preserves an existing dependency image',async t=>{

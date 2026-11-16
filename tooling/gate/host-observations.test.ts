@@ -13,6 +13,26 @@ import {waitFor} from './test-wait.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {compileActive,closeMemoryRun} from '../census/worker-memory.ts';
+import {treeProcessFixture} from '../landing/tree-users-fixture.ts';
+import {assertNoObservedProcessUsers} from '../landing/tree-users.ts';
+
+test('process users come from the owned observation, with missing or malformed views refusing by name',t=>{
+  const f=treeProcessFixture(t),env=ownMemory(join(f.root,'observations')),host=hostObservations(env);
+  assert.deepEqual(host.processUsers([f.tree]),{users:[],ignored:[],unreadable:[]});
+  ownMemory(join(f.root,'observations'),{processUsers:{kind:'proc',root:f.proc}});
+  assert.deepEqual(host.processUsers([f.tree]),{users:[],ignored:[],unreadable:[]});
+  const file=env.NTS_HOST_OBSERVATIONS,complete=JSON.parse(readFileSync(file,'utf8'));
+  for(const value of [undefined,{kind:'proc'},{kind:'proc',root:'relative'},{kind:'live'},{kind:'live',pids:[0]},{kind:'live',pids:[42,42]}]){
+    writeFileSync(file,JSON.stringify({...complete,processUsers:value}));
+    assert.throws(()=>hostObservations(env),/host observation processUsers/);
+  }
+  writeFileSync(file,JSON.stringify(complete));
+  ownMemory(join(f.root,'observations'),{availableKiB:123});
+  assert.deepEqual(JSON.parse(readFileSync(file,'utf8')).processUsers,complete.processUsers,'memory updates preserve the selected process observation');
+  assert.deepEqual(assertNoObservedProcessUsers(host.processUsers([f.tree])),[]);
+  rmSync(f.proc,{recursive:true});
+  assert.throws(()=>host.processUsers([f.tree]),/host observation processUsers failed/);
+});
 
 test('one complete owned view supplies every resource, including child observations',t=>{
   const root=testScratch(t,'host-observations'),clock=join(root,'clock');

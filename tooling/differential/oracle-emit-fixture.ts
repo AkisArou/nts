@@ -1,3 +1,4 @@
+import {hostObservations} from '../gate/host-observations.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 // Shared by the oracle emit test files: their oracle test environment, the
 // toolchain, and the helpers their tests call. Each file closes the
@@ -179,6 +180,6 @@ export async function ownerObservationInvalidation(t:TestContext,kind:'listing'|
     t.diagnostic(JSON.stringify({kind,owner:join(root,'tsconfig.json'),calls,observations:records.map(record=>record.observations)}));green=true;
   }finally{
     for(const [index,key] of keys.entries())if(previous[index]===undefined)delete process.env[key];else process.env[key]=previous[index];
-    finishRunTemporary(planned.temporary,planned.env.HOME!,green);if(green)removeOracleSnapshot(outside);
+    finishRunTemporary(planned.temporary,planned.env.HOME!,green,{host:hostObservations(planned.env)});if(green)removeOracleSnapshot(outside);
   }
 }

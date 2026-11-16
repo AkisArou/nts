@@ -6,7 +6,7 @@ import {execFileSync} from "node:child_process";
 import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from "node:fs";
 import {userInfo} from "node:os";
 import {basename,dirname,join,resolve,relative,isAbsolute} from "node:path";
-import {assertNoProcessUsers} from '../landing/tree-users.ts';
+import {assertNoObservedProcessUsers} from '../landing/tree-users.ts';
 
 export const FAILED_TEMP_MAX_BYTES=8*2**30;
 export const TEMP_DISK_FLOOR_BYTES=40*2**30;
@@ -159,13 +159,13 @@ function registeredImage(file:string,owned:RunTemporary,home:string,receipt=imag
     }
     return {file,dropped,receipt,present:Boolean(info),...(prior?{prior}:{})};
 }
-function registeredImages(owned:RunTemporary,home:string):RegisteredImage[] {
+function registeredImages(owned:RunTemporary,home:string,host:HostObservations):RegisteredImage[] {
   const entries=registeredImageFiles(owned,home).flatMap(file=>{const entry=registeredImage(file,owned,home);return entry?[entry]:[];});
   const live=entries.filter(entry=>entry.present).map(entry=>entry.receipt.image.path);
-  if(live.length)assertNoProcessUsers(live,{self:process.pid});
+  if(live.length)assertNoObservedProcessUsers(host.processUsers(live));
   return entries;
 }
-function dropOracleImages(owned:RunTemporary,home:string):OracleImageDisposition[] {
+function dropOracleImages(owned:RunTemporary,home:string,host:HostObservations):OracleImageDisposition[] {
   const kept=(path:string,error:unknown):OracleImageDisposition=>({path,bytes:null,state:`kept: ${error instanceof Error?error.message:String(error)}`});
   let files:string[];try{files=registeredImageFiles(owned,home);}catch(error){return [kept(imageRegistry(owned),error)];}
   const dropped:OracleImageDisposition[]=[];
@@ -178,7 +178,7 @@ function dropOracleImages(owned:RunTemporary,home:string):OracleImageDisposition
     if(entry.prior){dropped.push(entry.prior);continue;}
     let bytes=0;
     if(entry.present){
-      assertNoProcessUsers([path],{self:process.pid});
+      assertNoObservedProcessUsers(host.processUsers([path]));
       bytes=Number(execFileSync('du',['-sx','-B1','--',path],{encoding:'utf8'}).split('\t')[0]);
       if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('cannot measure registered oracle image: '+path);
       imageParents(entry.receipt.temporary,path,home);sameDirectory(entry.receipt.parent);sameDirectory(entry.receipt.image);
@@ -242,9 +242,9 @@ export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
 }
 
 /** A command which has drained may discard its temporary on any verdict. */
-export function discardRunTemporary(owned:RunTemporary,home:string):void {
+export function discardRunTemporary(owned:RunTemporary,home:string,host:HostObservations=hostObservations()):void {
   assertRunTemporary(owned,home);
-  const images=registeredImages(owned,home);
+  const images=registeredImages(owned,home,host);
   removable(owned.path);rmSync(owned.path,{recursive:true});
   // A nested green temporary leaves its enclosing run's index intact.
   for(const image of images)for(const file of [image.file,image.dropped])rmSync(file,{force:true});
@@ -255,9 +255,10 @@ export function discardRunTemporary(owned:RunTemporary,home:string):void {
 export type RunTemporaryClose={path:string;state:string;enclosing?:string;pruning?:ReturnType<typeof pruneRunTemporaries>;oracle_images?:OracleImageDisposition[];error?:string};
 export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean,prune:PruneOptions={}):RunTemporaryClose {
   try {
-    if (green) {discardRunTemporary(owned,home);return {path:owned.path,state:"removed after green"};}
+    const host=prune.host??hostObservations();
+    if (green) {discardRunTemporary(owned,home,host);return {path:owned.path,state:"removed after green"};}
     assertRunTemporary(owned,home);
-    const oracle_images=dropOracleImages(owned,home);
+    const oracle_images=dropOracleImages(owned,home,host);
     const directory=registry(home),file=join(directory,key(owned));
     if (owned.enclosing) {
       assertRunTemporary(owned.enclosing,home);

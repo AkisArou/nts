@@ -1,3 +1,6 @@
+import {hostObservations} from './host-observations.ts';
+import {ownMemory} from './test-host-observations.ts';
+import {treeProcessFixture} from '../landing/tree-users-fixture.ts';
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {spawn,execFileSync} from 'node:child_process';
@@ -13,7 +16,8 @@ const roomy={freeBytes:()=>Number.MAX_SAFE_INTEGER};
 function fixture(t:{after(fn:()=>void):void}) {
  const home=newTestScratch("run-temporary-home");t.after(()=>{removable(home);rmSync(home,{recursive:true,force:true});});
  const run=(name:string)=>join(home,".cache/runs",name);
- return {home,run};
+ const observations=join(home,'observations'),env=ownMemory(observations);
+ return {home,run,observations,env,host:hostObservations(env)};
 }
 function duRecorder(t:{after(fn:()=>void):void},home:string) {
  const bin=join(home,"bin"),calls=join(home,"du-calls");mkdirSync(bin);writeFileSync(calls,"");
@@ -36,7 +40,7 @@ function legacyEntry(home:string,name:string,owned:ReturnType<typeof captureRunT
 }
 test("closing a failure measures once and later prunes use its stored size without du",t=>{
  const f=fixture(t),du=duRecorder(t,f.home),owned=captureRunTemporary(f.run("stored"));writeFileSync(join(owned.path,"evidence"),"retained");
- const closed=finishRunTemporary(owned,f.home,false,roomy);
+ const closed=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
  assert.equal(closed.state,"retained after red");assert.deepEqual(du.read(),[owned.path]);
  const entry=closedEntries(f.home)[0]!.entry;assert.ok(Number.isSafeInteger(entry.bytes)&&entry.bytes!>0);
  assert.equal(closed.pruning?.retained_bytes,entry.bytes);du.clear();
@@ -60,23 +64,23 @@ test("nested jobs retain evidence under their authenticated outer run without se
  const f=fixture(t),du=duRecorder(t,f.home),outer=captureRunTemporary(f.run("outer"));
  const job=captureRunTemporary(join(outer.path,"job"),outer),nested=captureRunTemporary(join(job.path,"nested"),job);
  writeFileSync(join(nested.path,"evidence"),"nested failure");
- assert.equal(finishRunTemporary(nested,f.home,false,roomy).state,"retained after red");
- assert.equal(finishRunTemporary(job,f.home,false,roomy).state,"retained after red");
+ assert.equal(finishRunTemporary(nested,f.home,false,{...roomy,host:f.host}).state,"retained after red");
+ assert.equal(finishRunTemporary(job,f.home,false,{...roomy,host:f.host}).state,"retained after red");
  assert.deepEqual(closedEntries(f.home),[]);assert.deepEqual(du.read(),[]);assert.ok(existsSync(nested.path));
- const result=finishRunTemporary(outer,f.home,false,roomy);
+ const result=finishRunTemporary(outer,f.home,false,{...roomy,host:f.host});
  assert.deepEqual(closedEntries(f.home).map(row=>row.entry.owned.path),[outer.path]);assert.deepEqual(du.read(),[outer.path]);
  assert.equal(result.pruning?.retained_bytes,closedEntries(f.home)[0]!.entry.bytes);
- assert.equal(finishRunTemporary(outer,f.home,true).state,"removed after green");assert.equal(existsSync(nested.path),false);
+ assert.equal(finishRunTemporary(outer,f.home,true,{host:f.host}).state,"removed after green");assert.equal(existsSync(nested.path),false);
 });
 test("a job outside its inherited run remains independently registered",t=>{
  const f=fixture(t),outer=captureRunTemporary(f.run("outer")),job=captureRunTemporary(f.run("outside-job"),outer);
- assert.equal(finishRunTemporary(job,f.home,false,roomy).state,"retained after red");
+ assert.equal(finishRunTemporary(job,f.home,false,{...roomy,host:f.host}).state,"retained after red");
  assert.deepEqual(closedEntries(f.home).map(row=>row.entry.owned.path),[job.path]);
- assert.equal(finishRunTemporary(outer,f.home,true).state,"removed after green");assert.ok(existsSync(job.path));
+ assert.equal(finishRunTemporary(outer,f.home,true,{host:f.host}).state,"removed after green");assert.ok(existsSync(job.path));
 });
 test("a sibling job reached from a nested handoff keeps the same outer lifetime",t=>{
  const f=fixture(t),outer=captureRunTemporary(f.run("outer")),a=captureRunTemporary(join(outer.path,"a"),outer),b=captureRunTemporary(join(outer.path,"b"),a);
- assert.equal(finishRunTemporary(b,f.home,false,roomy).state,"retained after red");assert.deepEqual(closedEntries(f.home),[]);
+ assert.equal(finishRunTemporary(b,f.home,false,{...roomy,host:f.host}).state,"retained after red");assert.deepEqual(closedEntries(f.home),[]);
 });
 test("legacy nested registrations collapse into their measured outer retention root",t=>{
  const f=fixture(t),du=duRecorder(t,f.home),outer=captureRunTemporary(f.run("outer")),job=captureRunTemporary(join(outer.path,"job"));
@@ -88,7 +92,7 @@ test("legacy nested registrations collapse into their measured outer retention r
 });
 test("a replaced enclosing run cannot authorize a nested close",t=>{
  const f=fixture(t),outer=captureRunTemporary(f.run("outer")),job=captureRunTemporary(join(outer.path,"job"),outer);
- const result=finishRunTemporary({...job,enclosing:{...outer,ino:outer.ino+1}},f.home,false,roomy);
+ const result=finishRunTemporary({...job,enclosing:{...outer,ino:outer.ino+1}},f.home,false,{...roomy,host:f.host});
  assert.match(result.state,/kept/);assert.match(result.error!,/replaced/);assert.ok(existsSync(job.path));assert.deepEqual(closedEntries(f.home),[]);
 });
 test("malformed stored sizes never authorize eviction or a fallback measurement",t=>{
@@ -104,19 +108,19 @@ test("green removes only its own tmp and keeps logs and symlink destinations",t=
  const f=fixture(t),run=f.run("green"),owned=captureRunTemporary(run),peer=join(f.home,"peer");
  mkdirSync(peer);writeFileSync(join(peer,"source"),"keep");writeFileSync(join(run,"raw.log"),"evidence");
  symlinkSync(peer,join(owned.path,"link"));writeFileSync(join(owned.path,"generated"),"scratch");
- assert.equal(finishRunTemporary(owned,f.home,true).state,"removed after green");
+ assert.equal(finishRunTemporary(owned,f.home,true,{host:f.host}).state,"removed after green");
  assert.equal(existsSync(owned.path),false);assert.equal(readFileSync(join(peer,"source"),"utf8"),"keep");assert.equal(readFileSync(join(run,"raw.log"),"utf8"),"evidence");
 });
 test("a red keeps its temporary evidence and reports it",t=>{
  const f=fixture(t),owned=captureRunTemporary(f.run("red"));writeFileSync(join(owned.path,"generated.c"),"first failure");
- const result=finishRunTemporary(owned,f.home,false,roomy);
+ const result=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
  assert.equal(result.state,"retained after red");assert.equal(result.path,owned.path);assert.equal(readFileSync(join(owned.path,"generated.c"),"utf8"),"first failure");
  assert.equal(result.pruning?.free_bytes,Number.MAX_SAFE_INTEGER,"the result names the reading its decision used");
 });
 test("below the disk floor a red's temporary folder is evicted, and the result says by what",t=>{
  const f=fixture(t),owned=captureRunTemporary(f.run("floor"));writeFileSync(join(owned.path,"generated.c"),"evidence");
  const log:string[]=[];
- const result=finishRunTemporary(owned,f.home,false,{freeBytes:()=>5,minimumFreeBytes:10,write:line=>log.push(line)});
+ const result=finishRunTemporary(owned,f.home,false,{host:f.host,freeBytes:()=>5,minimumFreeBytes:10,write:line=>log.push(line)});
  assert.equal(result.state,"evicted by failed-temporary bound");assert.equal(existsSync(owned.path),false);
  assert.deepEqual([result.pruning?.free_bytes,result.pruning?.minimum_free_bytes],[5,10]);
  assert.ok(result.pruning!.retained_bytes<=result.pruning!.max_bytes,"the size bound did not decide it");
@@ -124,25 +128,25 @@ test("below the disk floor a red's temporary folder is evicted, and the result s
 });
 test("retained failures evict oldest first and can make room below the size bound",t=>{
  const f=fixture(t),a=captureRunTemporary(f.run("old")),b=captureRunTemporary(f.run("new"));
- for (const owned of [a,b]) {writeFileSync(join(owned.path,"generated"),"bytes");finishRunTemporary(owned,f.home,false,roomy);}
+ for (const owned of [a,b]) {writeFileSync(join(owned.path,"generated"),"bytes");finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});}
  const directory=join(f.home,".cache/nts-gate/closed-temporaries");
  for (const name of readdirSync(directory)) {const file=join(directory,name),entry=JSON.parse(readFileSync(file,"utf8"));entry.closed=entry.owned.path===a.path?1:2;writeFileSync(file,JSON.stringify(entry));}
  const log:string[]=[];
  const capped=pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:line=>log.push(line)});
  assert.deepEqual(capped.removed,[a.path,b.path]);assert.equal(capped.retained_bytes,0);assert.match(log.join("\n"),/logs retained/);
- const c=captureRunTemporary(f.run("disk-pressure"));finishRunTemporary(c,f.home,false,roomy);
+ const c=captureRunTemporary(f.run("disk-pressure"));finishRunTemporary(c,f.home,false,{...roomy,host:f.host});
  const pressure=pruneRunTemporaries(f.home,{maxBytes:Number.MAX_SAFE_INTEGER,minimumFreeBytes:10,freeBytes:()=>existsSync(c.path)?0:10,write:()=>{}});
  assert.deepEqual(pressure.removed,[c.path]);
 });
 test("replaced directories and root symlinks are kept even under pressure",t=>{
  const f=fixture(t);
  for (const symlink of [false,true]) {
-  const owned=captureRunTemporary(f.run(String(symlink)));finishRunTemporary(owned,f.home,false,roomy);
+  const owned=captureRunTemporary(f.run(String(symlink)));finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
   renameSync(owned.path,owned.path+"-original");
   const peer=join(f.home,"peer-"+symlink);mkdirSync(peer);writeFileSync(join(peer,"keep"),"peer");
   if (symlink) symlinkSync(peer,owned.path);else {mkdirSync(owned.path);writeFileSync(join(owned.path,"keep"),"replacement");}
   assert.throws(()=>captureRunTemporary(f.run(String(symlink)),owned),/replaced|not an owned real directory/);
-  assert.match(finishRunTemporary(owned,f.home,true).state,/kept/);
+  assert.match(finishRunTemporary(owned,f.home,true,{host:f.host}).state,/kept/);
   const result=pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:()=>{}});
   assert.equal(result.removed.length,0);assert.ok(result.protected.length>0);assert.ok(existsSync(owned.path));assert.ok(existsSync(owned.path+"-original"));assert.equal(readFileSync(join(peer,"keep"),"utf8"),"peer");
  }
@@ -154,8 +158,8 @@ test("read-only owned captures are removed on green and closed-red eviction with
  for(const green of [true,false]){
   const owned=captureRunTemporary(f.run('readonly-'+green)),nested=join(owned.path,'capture/nested');mkdirSync(nested,{recursive:true});writeFileSync(join(nested,'bytes'),'captured');chmodSync(join(nested,'bytes'),0o444);
   symlinkSync(peer,join(nested,'outside'));chmodSync(nested,0o555);chmodSync(join(owned.path,'capture'),0o555);
-  if(green)assert.equal(finishRunTemporary(owned,f.home,true).state,'removed after green');
-  else{finishRunTemporary(owned,f.home,false);assert.deepEqual(pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:()=>{}}).removed,[owned.path]);}
+  if(green)assert.equal(finishRunTemporary(owned,f.home,true,{host:f.host}).state,'removed after green');
+  else{finishRunTemporary(owned,f.home,false,{host:f.host});assert.deepEqual(pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:()=>{}}).removed,[owned.path]);}
   assert.equal(existsSync(owned.path),false);assert.equal(lstatSync(peer).mode&0o777,0o555);assert.equal(lstatSync(join(peer,'keep')).mode&0o777,0o444);assert.equal(readFileSync(join(peer,'keep'),'utf8'),'outside bytes');
  }
  chmodSync(peer,0o755);
@@ -169,8 +173,8 @@ test("a name that is not UTF-8 is removed on green and on closed-red eviction, r
   const owned=captureRunTemporary(f.run('bytes-'+green)),nested=join(owned.path,'nts-fs-bytes/inner');mkdirSync(nested,{recursive:true});
   writeFileSync(notUtf8(nested),'raw');chmodSync(nested,0o555);
   const log:string[]=[];
-  if(green)assert.equal(finishRunTemporary(owned,f.home,true).state,'removed after green');
-  else{finishRunTemporary(owned,f.home,false,roomy);assert.deepEqual(pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:line=>log.push(line)}).removed,[owned.path]);}
+  if(green)assert.equal(finishRunTemporary(owned,f.home,true,{host:f.host}).state,'removed after green');
+  else{finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});assert.deepEqual(pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:line=>log.push(line)}).removed,[owned.path]);}
   assert.equal(existsSync(owned.path),false);
   assert.ok(!log.some(line=>line.includes('kept')),log.join("\n"));
  }
@@ -178,7 +182,7 @@ test("a name that is not UTF-8 is removed on green and on closed-red eviction, r
 
 test("a failed root ownership check changes no read-only directory permissions",t=>{
  const f=fixture(t),owned=captureRunTemporary(f.run('ownership')),nested=join(owned.path,'capture');mkdirSync(nested);chmodSync(nested,0o555);
- const result=finishRunTemporary({...owned,uid:owned.uid+1},f.home,true);assert.match(result.state,/kept/);assert.equal(lstatSync(nested).mode&0o777,0o555);
+ const result=finishRunTemporary({...owned,uid:owned.uid+1},f.home,true,{host:f.host});assert.match(result.state,/kept/);assert.equal(lstatSync(nested).mode&0o777,0o555);
  chmodSync(nested,0o755);
 });
 
@@ -196,41 +200,41 @@ const allocated=(path:string)=>Number(execFileSync('du',['-sx','-B1','--',path],
 test('a failed close drops its acquired image and records its path and bytes while retaining exact identity files',t=>{
  const f=fixture(t),owned=captureRunTemporary(f.run('image-red'),undefined,f.home),image=registeredImage(owned,f.home);
  chmodSync(image.tree,0o755);writeFileSync(join(image.tree,'payload'),Buffer.alloc(2**24,1),{flush:true});chmodSync(image.tree,0o555);
- const before=allocated(owned.path),imageBytes=allocated(image.tree),result=finishRunTemporary(owned,f.home,false,roomy);
- assert.equal(result.state,'retained after red');assert.equal(existsSync(image.tree),false);
- assert.deepEqual(result.oracle_images,[{path:image.tree,bytes:imageBytes,state:'dropped'}]);
+ const before=allocated(owned.path),imageBytes=allocated(image.tree),result=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
+ assert.equal(result.state,'retained after red',JSON.stringify(result));
+ assert.deepEqual(result.oracle_images,[{path:image.tree,bytes:imageBytes,state:'dropped'}]);assert.equal(existsSync(image.tree),false);
  for(const [name,bytes]of image.identities){assert.equal(readFileSync(join(image.parent,name),'utf8'),bytes);assert.equal(lstatSync(join(image.parent,name)).mode&0o777,0o444);}
  const entry=closedEntries(f.home)[0]!.entry;assert.ok(entry.bytes!==undefined);
  assert.deepEqual(entry.oracle_images,result.oracle_images);assert.equal(entry.bytes,allocated(owned.path));assert.ok(before-entry.bytes>2**23);
- const repeated=finishRunTemporary(owned,f.home,false,roomy);assert.deepEqual(repeated.oracle_images,result.oracle_images);
+ const repeated=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});assert.deepEqual(repeated.oracle_images,result.oracle_images);
  t.diagnostic(JSON.stringify({beforeBytes:before,retainedBytes:entry.bytes,dropped:result.oracle_images}));
 });
 
 test('an unregistered legacy image is retained on a failed close',t=>{
  const f=fixture(t),owned=captureRunTemporary(f.run('legacy-image')),tree=join(owned.path,'oracle-dependencies/node-old/tree');
  mkdirSync(tree,{recursive:true});writeFileSync(join(tree,'package'),'legacy bytes');chmodSync(tree,0o555);
- const result=finishRunTemporary(owned,f.home,false,roomy);assert.equal(result.state,'retained after red');assert.equal(result.oracle_images,undefined);
+ const result=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});assert.equal(result.state,'retained after red');assert.equal(result.oracle_images,undefined);
  assert.equal(readFileSync(join(tree,'package'),'utf8'),'legacy bytes');assert.equal(lstatSync(tree).mode&0o777,0o555);
 });
 
 test('a child close never owns its parent image, and an outer close includes its nested image history',t=>{
  const f=fixture(t),outer=captureRunTemporary(f.run('outer-images')),parent=registeredImage(outer,f.home);
  const child=captureRunTemporary(join(outer.path,'child'),outer),image=registeredImage(child,f.home);
- const nested=finishRunTemporary(child,f.home,false,roomy);assert.equal(nested.state,'retained after red');assert.equal(existsSync(image.tree),false);assert.ok(existsSync(parent.tree));assert.deepEqual(closedEntries(f.home),[]);
- const result=finishRunTemporary(outer,f.home,false,roomy);assert.equal(result.state,'retained after red');assert.equal(existsSync(parent.tree),false);
+ const nested=finishRunTemporary(child,f.home,false,{...roomy,host:f.host});assert.equal(nested.state,'retained after red');assert.equal(existsSync(image.tree),false);assert.ok(existsSync(parent.tree));assert.deepEqual(closedEntries(f.home),[]);
+ const result=finishRunTemporary(outer,f.home,false,{...roomy,host:f.host});assert.equal(result.state,'retained after red');assert.equal(existsSync(parent.tree),false);
  assert.deepEqual(new Set(result.oracle_images!.map(row=>row.path)),new Set([parent.tree,image.tree]));assert.ok(result.oracle_images!.every(row=>row.bytes!==null&&row.bytes>0));
 });
 
 test('a nested green close removes its registrations without changing its borrowed parent image',t=>{
  const f=fixture(t),outer=captureRunTemporary(f.run('outer-green-child')),parent=registeredImage(outer,f.home);
  const child=captureRunTemporary(join(outer.path,'child'),outer),image=registeredImage(child,f.home);
- assert.equal(finishRunTemporary(child,f.home,true).state,'removed after green');assert.equal(existsSync(image.tree),false);assert.ok(existsSync(parent.tree));
- const result=finishRunTemporary(outer,f.home,false,roomy);assert.equal(result.state,'retained after red');assert.deepEqual(result.oracle_images!.map(row=>row.path),[parent.tree]);
+ assert.equal(finishRunTemporary(child,f.home,true,{host:f.host}).state,'removed after green');assert.equal(existsSync(image.tree),false);assert.ok(existsSync(parent.tree));
+ const result=finishRunTemporary(outer,f.home,false,{...roomy,host:f.host});assert.equal(result.state,'retained after red');assert.deepEqual(result.oracle_images!.map(row=>row.path),[parent.tree]);
 });
 
 test('a green run removes its registered image with its temporary and preserves the run logs',t=>{
  const f=fixture(t),run=f.run('image-green'),owned=captureRunTemporary(run),image=registeredImage(owned,f.home);writeFileSync(join(run,'raw.log'),'retained log');
- assert.equal(finishRunTemporary(owned,f.home,true).state,'removed after green');assert.equal(existsSync(image.tree),false);assert.equal(readFileSync(join(run,'raw.log'),'utf8'),'retained log');
+ assert.equal(finishRunTemporary(owned,f.home,true,{host:f.host}).state,'removed after green');assert.equal(existsSync(image.tree),false);assert.equal(readFileSync(join(run,'raw.log'),'utf8'),'retained log');
 });
 
 test('image acquisition refuses an existing tree and a source-alias ancestor without adopting either',t=>{
@@ -246,7 +250,7 @@ for(const replaced of ['temporary','parent','image','link'])test('a replaced '+r
  const path=replaced==='temporary'?owned.path:replaced==='parent'?image.parent:image.tree;renameSync(path,path+'-original');
  const originalImage=replaced==='temporary'?join(path+'-original','oracle-dependencies/node-fixture/tree'):replaced==='parent'?join(path+'-original','tree'):path+'-original';
  if(replaced==='link')symlinkSync(originalImage,path);else mkdirSync(path);
- const result=finishRunTemporary(owned,f.home,false,roomy);
+ const result=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
  if(replaced==='temporary'){assert.match(result.state,/kept/);assert.match(result.error!,/replaced/);assert.deepEqual(closedEntries(f.home),[]);}
  else{assert.equal(result.state,'retained after red');assert.match(result.oracle_images![0]!.state,/kept: .*replaced|kept: .*not an owned directory/);assert.equal(closedEntries(f.home).length,1);}
  assert.equal(lstatSync(originalImage).mode&0o777,0o555);assert.ok(existsSync(join(originalImage,'node_modules/package.js')));
@@ -256,14 +260,32 @@ test('a live image holder stays registered while a valid sibling drops, then its
  const f=fixture(t),owned=captureRunTemporary(f.run('live-holder')),image=registeredImage(owned,f.home),sibling=registeredImage(owned,f.home,'node-sibling');
  const child=spawn(process.execPath,['-e',`process.stdout.write('ready\\n');process.stdin.resume();process.stdin.once('end',()=>process.exit(0));`],{cwd:image.tree,stdio:['pipe','pipe','pipe']});
  const closed=once(child,'close');
+ ownMemory(f.observations,{processUsers:{kind:'live',pids:[child.pid!]}});
  try{
   const [ready]=await once(child.stdout,'data');assert.equal(String(ready),'ready\n');
-  const kept=finishRunTemporary(owned,f.home,false,roomy);assert.equal(kept.state,'retained after red');
+  const kept=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});assert.equal(kept.state,'retained after red');
   assert.match(kept.oracle_images!.find(row=>row.path===image.tree)!.state,/kept: process .* owns/);assert.equal(lstatSync(image.tree).mode&0o777,0o555);
   assert.equal(kept.oracle_images!.find(row=>row.path===sibling.tree)!.state,'dropped');assert.equal(existsSync(sibling.tree),false);
   const entry=closedEntries(f.home)[0]!.entry;assert.deepEqual(entry.oracle_images,kept.oracle_images);assert.equal(entry.bytes,allocated(owned.path));
  }finally{child.stdin.end();const [status,signal]=await closed;assert.equal(status,0);assert.equal(signal,null);}
- const result=finishRunTemporary(owned,f.home,false,roomy);assert.equal(result.state,'retained after red');assert.equal(existsSync(image.tree),false);
+ const result=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});assert.equal(result.state,'retained after red');assert.equal(existsSync(image.tree),false);
+});
+
+test('a supplied foreign holder keeps its named image, and an owned empty view disposes it',t=>{
+ const f=fixture(t),owned=captureRunTemporary(f.run('observed-holder'),undefined,f.home),image=registeredImage(owned,f.home),processes=treeProcessFixture(t);
+ rmSync(join(processes.task,'cwd'));symlinkSync(image.tree,join(processes.task,'cwd'));
+ ownMemory(f.observations,{processUsers:{kind:'proc',root:processes.proc}});
+ const kept=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
+ const disposition={path:image.tree,bytes:null,state:'kept: process 42 owns cwd in '+image.tree};
+ assert.equal(kept.state,'retained after red',JSON.stringify(kept));assert.deepEqual(kept.oracle_images,[disposition]);
+ assert.deepEqual(closedEntries(f.home)[0]!.entry.oracle_images,[disposition]);
+ assert.ok(existsSync(image.tree));assert.equal(lstatSync(image.tree).mode&0o777,0o555);
+ const green=finishRunTemporary(owned,f.home,true,{host:f.host});
+ assert.equal(green.state,'kept: cleanup guard or operation failed');assert.equal(green.error,'process 42 owns cwd in '+image.tree);assert.ok(existsSync(image.tree));
+ rmSync(join(processes.task,'cwd'));symlinkSync('/outside',join(processes.task,'cwd'));
+ const bytes=allocated(image.tree),dropped=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
+ assert.deepEqual(dropped.oracle_images,[{path:image.tree,bytes,state:'dropped'}]);assert.equal(existsSync(image.tree),false);
+ for(const [name,body]of image.identities)assert.equal(readFileSync(join(image.parent,name),'utf8'),body);
 });
 
 for(const mutation of ['version','outside'])test('a '+mutation+' registration cannot authorize image disposal',t=>{
@@ -272,13 +294,13 @@ for(const mutation of ['version','outside'])test('a '+mutation+' registration ca
  const receipt=JSON.parse(readFileSync(file,'utf8'));assert.equal(lstatSync(file).mode&0o777,0o400);
  if(mutation==='version')receipt.version=2;else receipt.image.path=join(f.home,'source/tree');
  chmodSync(file,0o600);writeFileSync(file,JSON.stringify(receipt));
- const result=finishRunTemporary(owned,f.home,false,roomy);assert.equal(result.state,'retained after red');assert.match(result.oracle_images![0]!.state,/kept: invalid oracle image registration/);assert.equal(lstatSync(image.tree).mode&0o777,0o555);assert.ok(existsSync(join(image.tree,'node_modules/package.js')));assert.equal(closedEntries(f.home).length,1);
+ const result=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});assert.equal(result.state,'retained after red');assert.match(result.oracle_images![0]!.state,/kept: invalid oracle image registration/);assert.equal(lstatSync(image.tree).mode&0o777,0o555);assert.ok(existsSync(join(image.tree,'node_modules/package.js')));assert.equal(closedEntries(f.home).length,1);
 });
 
 test('a closed temporary cannot be acquired again, while fresh and live inherited roots can',t=>{
  const f=fixture(t),run=f.run('one-lifetime'),owned=captureRunTemporary(run,undefined,f.home);writeFileSync(join(owned.path,'evidence'),'original');
  const capturedChild=captureRunTemporary(join(owned.path,'captured-child'),owned,f.home);
- assert.equal(finishRunTemporary(owned,f.home,false,roomy).state,'retained after red');
+ assert.equal(finishRunTemporary(owned,f.home,false,{...roomy,host:f.host}).state,'retained after red');
  assert.throws(()=>captureRunTemporary(run,undefined,f.home),/registered closed: .*choose a new run directory/);assert.equal(readFileSync(join(owned.path,'evidence'),'utf8'),'original');
  for(const previous of [undefined,owned]){
   const childRun=join(owned.path,previous?'new-inherited-child':'new-child');

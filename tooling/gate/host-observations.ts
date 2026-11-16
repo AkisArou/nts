@@ -9,7 +9,8 @@ export type {PressureReading,LoopDelay,LoopDelayMeter} from './host-pressure.ts'
 import {availableParallelism,cpus,loadavg} from 'node:os';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
-import {dirname,resolve} from 'node:path';
+import {dirname,isAbsolute,resolve} from 'node:path';
+import {observeTreeProcesses,type TreeProcessObservation} from '../landing/tree-users.ts';
 
 export const HOST_OBSERVATIONS = 'NTS_HOST_OBSERVATIONS';
 export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR','NTS_DISK_CAPACITY'] as const;
@@ -40,6 +41,7 @@ export type HostObservationFixture = {
   wallClock:{kind:'live'}|{kind:'fixed';now:number};
   pressure:{kind:'live'}|{kind:'fixed';ownGroup:string;machine:PressureReading;default:PressureReading;cgroups?:Record<string,PressureReading>};
   loopDelay:{kind:'live'}|{kind:'fixed';value:LoopDelay};
+  processUsers:{kind:'proc';root:string}|{kind:'live';pids:number[]};
 };
 
 export interface HostObservations {
@@ -63,6 +65,7 @@ export interface HostObservations {
   machinePressure():PressureReading;
   cgroupPressure(group:string):PressureReading;
   loopDelay():LoopDelayMeter;
+  processUsers(roots:readonly string[]):TreeProcessObservation;
 }
 
 function checkedGroup(group:string):string{
@@ -238,6 +241,11 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       }else if(value.pressure?.kind!=='live')throw new HostObservationError('host observation pressure is missing or invalid');
       if(value.loopDelay?.kind==='fixed')loopDelay(value.loopDelay.value);
       else if(value.loopDelay?.kind!=='live')throw new HostObservationError('host observation loopDelay is missing or invalid');
+      if(value.processUsers?.kind==='proc'){
+        if(typeof value.processUsers.root!=='string'||!isAbsolute(value.processUsers.root))throw new HostObservationError('host observation processUsers.root is missing or invalid');
+      }else if(value.processUsers?.kind==='live'){
+        if(!Array.isArray(value.processUsers.pids)||value.processUsers.pids.some(pid=>!Number.isSafeInteger(pid)||pid<=0)||new Set(value.processUsers.pids).size!==value.processUsers.pids.length)throw new HostObservationError('host observation processUsers.pids is missing or invalid');
+      }else throw new HostObservationError('host observation processUsers is missing or invalid');
       return value;
     };
     read();
@@ -259,6 +267,11 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       swap:()=>swap(read().memory.file),
       load:()=>read().load,
       paging:()=>paging(read().paging?.file??''),
+      processUsers:roots=>{
+        const value=read().processUsers;
+        try{return observeTreeProcesses(roots,{self:process.pid,...(value.kind==='proc'?{proc:value.root}:{pids:value.pids})});}
+        catch(error){throw new HostObservationError('host observation processUsers failed: '+String(error));}
+      },
       disk:()=>{const value=read().disk;return {freeBytes:number(value?.freeBytes,'disk.freeBytes'),freeInodes:number(value?.freeInodes,'disk.freeInodes')};},
       allocatedBytes:path=>{const value=read().allocated;return value.kind==='live'?liveAllocatedBytes(path,env):number(value.paths?.[path]??value.defaultBytes,'allocated.paths.'+path);},
       processCharge:pid=>charge('processes',String(pid)),
@@ -287,6 +300,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
   return {
     memory:()=>memory('/proc/meminfo'),
     paging:()=>paging('/proc/vmstat'),
+    processUsers:roots=>observeTreeProcesses(roots,{self:process.pid}),
     swap:()=>swap('/proc/meminfo'),
     load:()=>loadavg() as [number,number,number],
     disk:path=>{let existing=resolve(path);while(!existsSync(existing))existing=dirname(existing);const value=statfsSync(existing);return {freeBytes:value.bavail*value.bsize,freeInodes:value.ffree};},

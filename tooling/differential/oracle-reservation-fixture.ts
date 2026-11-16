@@ -1,3 +1,4 @@
+import {hostObservations} from '../gate/host-observations.ts';
 // The tooling producer proof executes from its own staged, committed source.
 // Rust tests consume a parent seal and never stage or install dependencies.
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
@@ -52,7 +53,7 @@ if(mode==='--consume'){
     const cold=acquisitions[0],image=JSON.parse(readFileSync(first,'utf8'));assert.ok(cold);assert.ok(cold.wallMs>0);assert.ok(image.cost.peakBytes>0);
     console.log(JSON.stringify({producerSource:source,counts,modes:acquisitions.map(row=>row.mode)}));
     accountingPassed=true;
-  }finally{finishRunTemporary(accounting.temporary,accounting.env.HOME!,accountingPassed);}
+  }finally{finishRunTemporary(accounting.temporary,accounting.env.HOME!,accountingPassed,{host:hostObservations(accounting.env)});}
   const fake=join(own,'nts');writeFileSync(fake,'#!/bin/sh\nexit 0\n',{mode:0o755});
   const names=execFileSync('sh',[fileURLToPath(GATE_LIST),'--list'],{env:testEnvironment(),encoding:'utf8'}).trim();
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";

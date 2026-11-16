@@ -1,3 +1,4 @@
+import {hostObservations} from '../gate/host-observations.ts';
 // A directly launched oracle test owns the same canonical services as tooling.
 import {rmSync} from 'node:fs';
 import {newTestScratch,testScratch} from '../gate/test-scratch.ts';
@@ -38,7 +39,7 @@ async function ownOracleTestEnvironment():Promise<void>{
   let planned:GateEnvironment|undefined,closed=false;
   const cleanup=()=>{
     if(closed)return;closed=true;
-    if(planned)finishRunTemporary(planned.temporary,planned.env.HOME!,true);
+    if(planned)finishRunTemporary(planned.temporary,planned.env.HOME!,true,{host:hostObservations(planned.env)});
     removable(root);rmSync(root,{recursive:true,force:true});
   };
   finish=cleanup;
