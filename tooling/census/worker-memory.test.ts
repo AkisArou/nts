@@ -62,40 +62,6 @@ async function gatePool(n: number) {
   };
 }
 
-/**
- * A landing check's request in this file's ledger and reading, made at once:
- * it is waiting when this returns, and withdrawn when test `t` ends. It is a
- * job of its own, not one inside a pool's reservation, which this process
- * names while the pool runs. Its 7 GiB does not fit beside a pool in the
- * 8 GiB read less the 2 kept for the system, so it outranks the pool until it
- * is withdrawn; `ended` settles once it has.
- */
-/**
- * Another landing's job, admitted before a pool starts: it holds 4 of the
- * reading's 6 GiB beside the floor, so `landingAhead`'s request waits though
- * it could fit once that job ends -- the only kind of waiter that makes a
- * lower-priority job yield (memory-ledger.ts's `outranked`).
- */
-async function landingBlocker(t: { after(fn: () => void): void }): Promise<void> {
-  const env: NodeJS.ProcessEnv = { ...fixtureEnvironment(t), ...ownMemory };
-  delete env.NTS_MEMORY_RESERVATION;
-  const held = await reserve({ bytes: 4 * 2 ** 30, what: "another landing's job", priority: "landing" }, { env });
-  t.after(() => held.release());
-}
-
-function landingAhead(t: { after(fn: () => void): void }): { withdraw: () => void; ended: Promise<unknown> } {
-  const ahead = new AbortController(), env: NodeJS.ProcessEnv = { ...fixtureEnvironment(t), ...ownMemory };
-  delete env.NTS_MEMORY_RESERVATION;
-  t.after(() => ahead.abort());
-  const ended = reserve({ bytes: 4 * 2 ** 30, what: "landing", priority: "landing" }, { env, signal: ahead.signal, everyMs: 50 });
-  ended.catch(() => {});
-  if (readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.length !== 1) {
-    ahead.abort();
-    assert.fail("the landing request does not wait in the ledger");
-  }
-  return { withdraw: () => ahead.abort(), ended };
-}
-
 test("a resident pool requires an explicit token policy before setup", async () => {
   let closed = 0, setup = 0;
   const memory = { effectiveBudgetBytes: () => { setup++; return 1; }, close: () => { closed++; } } as unknown as MemoryRun;
