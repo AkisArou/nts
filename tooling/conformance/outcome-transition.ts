@@ -44,7 +44,7 @@ export function outcomeTransition(
 }
 
 /** A recorded case got better: a pass, a refusal or a loud stop where it was worse. */
-export function improves(transition: {word:string}): boolean {
+export function improves(transition: Pick<OutcomeTransition,'word'>): boolean {
   return transition.word === "FIXED" || transition.word === "REFUSES NOW" || transition.word === "LOUD NOW";
 }
 
@@ -53,6 +53,6 @@ export function improves(transition: {word:string}): boolean {
  * for other reasons, which is not one. It passes, is listed, and the full
  * check rewrites its row; any other change fails.
  */
-export function acceptedChange(transition: {word:string}): boolean {
+export function acceptedChange(transition: Pick<OutcomeTransition,'word'>): boolean {
   return improves(transition) || transition.word === "REFUSES DIFFERENTLY";
 }
