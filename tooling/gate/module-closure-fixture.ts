@@ -318,7 +318,7 @@ export function copyFixtureProject(project:FixtureInput,root:string,options:Fixt
   validateSources();
   const entries=row.files.map(file=>relative(source,resolve(dirname(configPath),file)).split(sep).join('/'));
   const configs=[...complete].map(path=>path===configPath?project:fixtureInput(pathToFileURL(path),{dataNamespaces:{}}));
-  const staged=copyModuleClosure([...configs,...entries,...[...oracleFiles].map(name=>fileInput(pathToFileURL(resolve(source,name)))),...options.entries??[]],destination,{...options,sourceRoot:source,localTypeEntries:[...entries,...options.localTypeEntries??[]]});
+  const staged=copyModuleClosure([...configs,...entries,...[...oracleFiles].map(name=>({kind:'file' as const,url:fileInput(pathToFileURL(resolve(source,name)))})),...options.entries??[]],destination,{...options,sourceRoot:source,localTypeEntries:[...entries,...options.localTypeEntries??[]]});
   for(const [path,expected]of captured){
     const placed=join(destination,relative(source,path));metadataParents(destination,placed,'staged fixture project config');
     const stat=lstatSync(placed);
