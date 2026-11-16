@@ -39,7 +39,7 @@ function fixture(t: TestContext) {
     new URL('./hijackstdio.mjs',import.meta.url),new URL('./run-cjs-worker.mjs',import.meta.url),
   ].map(url=>relative(SOURCE,fileURLToPath(url)))});
   oracleWorkspaceFixture(t,root);
-  for(const name of ['tsconfig.base.json','tsconfig.fixtures.json'])write(name,readFileSync(join(SOURCE,name),'utf8'));
+  for(const name of ['tsconfig.fixtures.json'])write(name,readFileSync(join(SOURCE,name),'utf8'));
   assert.equal(readFileSync(join(root,'tooling/conformance/tsconfig.json'),'utf8'),readFileSync(preloadProject.url,'utf8'));
   write("runtime/node/subject/tsconfig.json", '{"files":["src/main.ts"]}\n');
   write("runtime/node/subject/src/main.ts", "export const value = 7;\n");

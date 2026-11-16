@@ -958,3 +958,37 @@ for(const change of [{include:['**/*.ts']},{files:undefined},{references:[{path:
   assert.throws(()=>copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source}),/fixture project requires explicit files and an empty include/);
   assert.equal(existsSync(f.destination),false);
 });
+
+
+test('fixture project staging binds parsed config bytes to the placed config',t=>{
+  const f=fixture(t);f.write('tsconfig.json',JSON.stringify({files:['entry.ts'],include:[]}));f.write('entry.ts','export const value=1;');f.write('new.ts','export const other=2;');
+  const options={sourceRoot:f.source,get entries():readonly string[]{f.write('tsconfig.json',JSON.stringify({files:['entry.ts','new.ts'],include:[]}));return [];}};
+  assert.throws(()=>copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,options),/fixture project config changed during staging/);
+});
+
+test('fixture project staging fences source config links before reading their bytes',t=>{
+  const f=fixture(t),outside=join(f.source,'..','outside');mkdirSync(outside);writeFileSync(join(outside,'tsconfig.json'),'not JSON');
+  symlinkSync(join(outside,'tsconfig.json'),join(f.source,'leaf.json'));
+  symlinkSync(outside,join(f.source,'alias'),'dir');
+  for(const path of ['leaf.json','alias/tsconfig.json'])assert.throws(()=>copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,path)),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source}),/not an owned source file|not an owned directory/);
+  assert.equal(existsSync(f.destination),false);
+});
+
+test('fixture project staging gives commented root JSON a named refusal',t=>{
+  const f=fixture(t);f.write('tsconfig.json','{// comment\n"files":[],"include":[]}');
+  assert.throws(()=>copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source}),/fixture project config must be plain JSON/);
+});
+
+test('fixture project staging owns the unchanged JSONC inheritance chain',t=>{
+  const f=fixture(t);f.write('project/tsconfig.json',JSON.stringify({extends:'../base.json',files:['entry.ts'],include:[]}));
+  f.write('project/entry.ts','export const value=1;');f.write('base.json','{ // compiler options\n"extends":"./grand.json", "compilerOptions":{"strict":true},\n}');f.write('grand.json','{"compilerOptions":{"target":"ESNext"}}');
+  const files=copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'project/tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source});
+  assert.deepEqual(files,['base.json','grand.json','project/entry.ts','project/tsconfig.json']);
+  for(const path of ['base.json','grand.json','project/tsconfig.json'])assert.deepEqual(readFileSync(join(f.destination,path)),readFileSync(join(f.source,path)));
+});
+
+for(const [label,extended]of [['package','package/config'],['missing','./absent.json'],['escape','../outside.json'],['cycle','./tsconfig.json']] as const)test('fixture project staging refuses '+label+' extends before publishing',t=>{
+  const f=fixture(t);f.write('tsconfig.json',JSON.stringify({extends:extended,files:['entry.ts'],include:[]}));f.write('entry.ts','export const value=1;');
+  assert.throws(()=>copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source}),/fixture project (?:cannot stage extends|extends cycle)/);
+  assert.equal(existsSync(f.destination),false);
+});

@@ -54,6 +54,7 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
     'tests/outcomes':'one pending outcome fixture',
     'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture',
     ...Object.fromEntries(otherData.map(area=>[area,'pending-outcome records fixture']))}});
+  assert.deepEqual(readFileSync(join(root,'tsconfig.base.json')),readFileSync(join(SOURCE,'tsconfig.base.json')),'the declared project inherits unchanged staged base options');
   assert.deepEqual(readFileSync(join(root,'tooling/conformance/tsconfig.json')),readFileSync(preloadProject.url),'the fixture uses unchanged project options over its staged modules');
   renameSync(join(root,'tooling/records/outcomes-recorder-fixture.ts'),join(root,'tooling/records/record-pending.ts'));
   const stagedFamilies=readdirSync(join(root,'tooling'),{recursive:true,withFileTypes:true}).filter(entry=>entry.isFile()&&entry.name.endsWith('-record-family.ts')).map(entry=>join(entry.parentPath,entry.name).slice(root.length+1)).sort();
@@ -62,7 +63,7 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[],'the pending outcome starts without production records');
   for(const area of ['tests/programs','benchmarks/cases'])assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
   for(const area of otherData)assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
-  for(const file of ["tsconfig.base.json","tsconfig.fixtures.json","runtime/jvm/test-vm-flags.txt"]){
+  for(const file of ["tsconfig.fixtures.json","runtime/jvm/test-vm-flags.txt"]){
     mkdirSync(dirname(join(root,file)),{recursive:true});copyFileSync(join(SOURCE,file),join(root,file));
   }
   oracleWorkspaceFixture(t,root);

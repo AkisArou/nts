@@ -2,10 +2,11 @@
 // Package installations and non-module assets remain explicit fixture inputs.
 import {copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync} from "node:fs";
 import {dirname, join, relative, resolve, sep} from "node:path";
-import {fileURLToPath} from "node:url";
+import {fileURLToPath,pathToFileURL} from "node:url";
+import {createRequire} from "node:module";
 import {moduleGraph, type ModuleClosureOptions,type InputSnapshot} from "./module-closure.ts";
 import {outsideSource} from "./source-containment.ts";
-import {canonicalNamespace as canonical,fixtureNamespaces,type FixtureInput,type InputEntry} from './reader-inputs/main.ts';
+import {canonicalNamespace as canonical,fixtureNamespaces,fixtureInput,type FixtureInput,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 import {directoryEntries,memberType,metadataParents} from './reader-metadata.ts';
@@ -229,14 +230,62 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
 
 /** Stage a fixture's explicit-root project recipe unchanged. The runtime
  * emitter still observes and checks that project; this copies no installed
- * Program and does not infer compiler options. */
+ * Program and does not infer compiler options. Roots must be plain JSON;
+ * the pinned SDK decodes captured JSONC ancestors without a Program or a
+ * second filesystem acquisition. */
 export function copyFixtureProject(project:FixtureInput,root:string,options:FixtureClosureOptions&{entries?:readonly InputEntry[]}={}):string[]{
-  const config:unknown=JSON.parse(readFileSync(project.url,'utf8'));
+  const source=realpathSync(options.sourceRoot??SOURCE),destination=outsideSource(source,root,'fixture destination');
+  const captured=new Map<string,Buffer>();
+  const bytes=(path:string):Buffer=>{
+    const prior=captured.get(path);if(prior)return prior;
+    metadataParents(source,path,'fixture project config');
+    const stat=lstatSync(path);
+    if(!stat.isFile()||stat.isSymbolicLink()||realpathSync(path)!==path)throw Error('fixture project config is not an owned source file: '+path);
+    const value=readFileSync(path);captured.set(path,value);return value;
+  };
+  const configPath=resolve(fileURLToPath(project.url)),body=bytes(configPath);
+  let config:unknown;
+  try{config=JSON.parse(body.toString('utf8'));}catch(error){throw Error('fixture project config must be plain JSON: '+configPath,{cause:error});}
   if(!config||typeof config!=='object')throw Error('fixture project requires explicit files and an empty include: '+project.url.href);
   const row=config as {files?:unknown;include?:unknown;references?:unknown};
   if(!Array.isArray(row.files)||!row.files.every((file):file is string=>typeof file==='string'&&file.length>0)||!Array.isArray(row.include)||row.include.length||row.references!==undefined&&(!Array.isArray(row.references)||row.references.length))
     throw Error('fixture project requires explicit files and an empty include: '+project.url.href);
-  const source=realpathSync(options.sourceRoot??SOURCE),directory=dirname(fileURLToPath(project.url));
-  const entries=row.files.map(file=>relative(source,resolve(directory,file)).split(sep).join('/'));
-  return copyModuleClosure([project,...entries,...options.entries??[]],root,options);
+  let api:import('typescript/sync').API|undefined;
+  const decoded=(path:string):unknown=>{
+    if(!api){
+      const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync'),{serverFS}=require('typescript/fs') as typeof import('typescript/fs');
+      api=new API({cwd:source,useCaseSensitiveFileNames:true,fs:{
+        readFile:path=>{const value=captured.get(resolve(path));if(!value)throw Error('fixture project decoder requested uncaptured bytes: '+path);return value.toString('utf8');},
+        directoryExists:serverFS.error,fileExists:serverFS.error,getAccessibleEntries:serverFS.error,realpath:serverFS.error,stat:serverFS.error,writeFile:serverFS.error,removeFile:serverFS.error,
+      }});
+    }
+    const result=api.readConfigFile(path);if(result.error)throw Error('fixture project extended config is invalid: '+path+': '+result.error.text);
+    return result.config;
+  };
+  const visiting=new Set<string>(),complete=new Set<string>();
+  const parents=(path:string,value:unknown):void=>{
+    if(visiting.has(path))throw Error('fixture project extends cycle: '+path);
+    if(complete.has(path))return;
+    visiting.add(path);
+    if(!value||typeof value!=='object')throw Error('fixture project config is not an object: '+path);
+    const extended=(value as {extends?:unknown}).extends;
+    const refs=extended===undefined?[]:Array.isArray(extended)?extended:[extended];
+    for(const ref of refs){
+      if(typeof ref!=='string'||!/^\.\.?[\/]/.test(ref)||!ref.endsWith('.json'))throw Error('fixture project cannot stage extends '+JSON.stringify(ref)+' in '+path+'; use an explicit relative .json config');
+      const parent=resolve(dirname(path),ref);
+      try{bytes(parent);}catch(error){throw Error('fixture project cannot stage extends '+ref+' in '+path+': '+String(error),{cause:error});}
+      parents(parent,decoded(parent));
+    }
+    visiting.delete(path);complete.add(path);
+  };
+  try{parents(configPath,config);}finally{api?.close();}
+  const entries=row.files.map(file=>relative(source,resolve(dirname(configPath),file)).split(sep).join('/'));
+  const configs=[...captured.keys()].map(path=>path===configPath?project:fixtureInput(pathToFileURL(path),{dataNamespaces:{}}));
+  const staged=copyModuleClosure([...configs,...entries,...options.entries??[]],destination,{...options,sourceRoot:source});
+  for(const [path,expected]of captured){
+    const placed=join(destination,relative(source,path));metadataParents(destination,placed,'staged fixture project config');
+    const stat=lstatSync(placed);
+    if(!stat.isFile()||stat.isSymbolicLink()||!readFileSync(placed).equals(expected))throw Error('fixture project config changed during staging: '+path);
+  }
+  return staged;
 }
