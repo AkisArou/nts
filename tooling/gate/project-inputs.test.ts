@@ -32,6 +32,43 @@ test('matching never narrows the same directory ordinary traversal in either acq
   }}finally{owner.close();}
 });
 
+test('compiled Programs retain the emitter nearest-config probes while type checks keep the declared config',t=>{
+  const root=testScratch(t,'project-nearest-owner');mkdirSync(join(root,'src'));
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
+  writeFileSync(join(root,'src/main.ts'),'export {};');
+  const config=pathToFileURL(join(root,'tsconfig.json')),owner=moduleGraph({sourceRoot:root});
+  try{
+    const filesystem=new OracleFilesystem();assert.equal(filesystem.projectFor(join(root,'src/main.ts')),join(root,'tsconfig.json'));
+    const checked=owner.describe([projectConfig(config,'type-check')]),compiled=owner.describe([projectConfig(config,'compiled-program')]);
+    const path=join(root,'src/tsconfig.json'),probe=compiled.observations.filter(row=>row.observation.kind==='fileExists'&&row.observation.path===path);
+    assert.equal(probe.length,1);assert.equal(probe[0]!.observation.value,false);assert.equal(probe[0]!.observationOnly,undefined);
+    assert.equal(readerObservationIndex(root,checked.observations,checked.files).affected([{path:'src/tsconfig.json',added:true}]).size,0);
+    assert.ok(readerObservationIndex(root,compiled.observations,compiled.files).affected([{path:'src/tsconfig.json',added:true}]).has(probe[0]!));
+    writeFileSync(path,'{"compilerOptions":{"types":[]},"files":["main.ts"]}');
+    assert.equal(new OracleFilesystem().projectFor(join(root,'src/main.ts')),path);
+    assert.throws(()=>validateReaderSourceObservations({...compiled,observations:probe},root),/fileExists changed: .*src\/tsconfig.json/);
+    const changed=owner.describe([projectConfig(config,'compiled-program')]);assert.ok(changed.files.includes('src/tsconfig.json'));
+    assert.ok(!owner.describe([projectConfig(config,'type-check')]).files.includes('src/tsconfig.json'));
+  }finally{owner.close();}
+});
+
+test('a compiled owner walk retains genuine ancestor config absences and refuses a positive external owner',t=>{
+  const own=testScratch(t,'project-external-owner'),root=join(own,'source');mkdirSync(root);mkdirSync(join(root,'src'));
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');writeFileSync(join(root,'program.json'),'{"compilerOptions":{"types":[]},"files":["src/main.ts"]}');
+  writeFileSync(join(root,'src/main.ts'),'export {};');const config=pathToFileURL(join(root,'program.json')),owner=moduleGraph({sourceRoot:root});
+  try{
+    const snapshot=owner.describe([projectConfig(config,'compiled-program')]),path=join(own,'tsconfig.json');
+    const host=snapshot.observations.filter(row=>row.observation.path===path);assert.equal(host.length,2);
+    assert.ok(host.every(row=>row.environment?.programs.some(program=>program.ownerLookups?.includes('src/main.ts'))));
+    validateReaderSourceObservations(snapshot,root);
+    const forged=structuredClone(snapshot);for(const row of forged.observations)if(row.environment)for(const program of row.environment.programs)delete program.ownerLookups;
+    assert.throws(()=>validateReaderSourceObservations(forged,root),/host absence has no declared Program provenance/);
+    writeFileSync(path,'{}');
+    assert.throws(()=>owner.describe([projectConfig(config,'compiled-program')]),/nearest config is outside source/);
+    assert.ok(owner.describe([projectConfig(config,'type-check')]).files.includes('src/main.ts'));
+  }finally{owner.close();}
+});
+
 test('declared real Programs retain ancestor package absences as host provenance without repository reach',()=>{
   const root=fileURLToPath(new URL('../..',import.meta.url)),owner=moduleGraph({sourceRoot:root});
   try{

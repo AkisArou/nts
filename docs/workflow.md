@@ -1974,7 +1974,11 @@ death; an absent timestamp remains explicit after forced termination.
   Compact accepted records retain this role distinction explicitly. Ignored,
   nonmatching build output leaves the key unchanged; matching source changes
   invalidate it. Config bytes, negative resolution and alias facts retain
-  their independent obligations.
+  their independent obligations. Compiled programs also retain the emitter's
+  actual nearest-config lookups for local non-declaration modules as ordinary
+  selection facts, including absent nearer configs. Queried Program modules
+  witness genuine ancestor config absences outside the source; a positive
+  external config refuses. Type-check-only inputs keep their declared config.
 - **Installed Program inputs owe their repository pins:** a declared config's
   installed reads must match the verified installation's finite package catalog,
   including aliases, membership and content hashes. Selection retains package

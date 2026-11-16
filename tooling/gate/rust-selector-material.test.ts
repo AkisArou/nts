@@ -86,6 +86,22 @@ test('compact project queries authenticate their native recipe and reject malfor
   assert.throws(()=>parseRustSelectorRecord(duplicate),/duplicate project discovery/);
   writeFileSync(join(f.root,'src/new.ts'),'export {};');assert.equal(validateRustSelectorKey(compact,f.options).state,'pending');
 });
+
+test('the actual oracle nearest-config lookup owes through ordinary Node and compact dependencies',t=>{
+  const f=fixture(t);mkdirSync(join(f.root,'src'));writeFileSync(join(f.root,'package.json'),'{"type":"module"}');
+  writeFileSync(join(f.root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');writeFileSync(join(f.root,'src/main.ts'),'export {};');
+  f.manifest.targets[0]!.declarations.assets=[{kind:'project-config',path:'../tsconfig.json',role:'compiled-program'}];
+  writeFileSync(join(f.root,'declarations.json'),JSON.stringify(f.manifest));
+  const discovery=new OracleFilesystem();assert.equal(discovery.projectFor(join(f.root,'src/main.ts')),join(f.root,'tsconfig.json'));
+  const material=f.build(),compact=encodeRustSelectorRecord(material),dependencies=material.targets[0]!.roles.typedDependencies;
+  const lookup=dependencies.find(row=>row.dependency.path==='src/tsconfig.json'&&row.dependency.kind==='fileExists');assert.ok(lookup);assert.equal(lookup.dependency.observationOnly,undefined);
+  assert.ok(readerDependencyIndex(dependencies,row=>row.dependency,['src/main.ts']).affected([{path:'src/tsconfig.json',added:true}]).has(lookup));
+  assert.equal(validateRustSelectorKey(compact,f.options).state,'key-current');
+  writeFileSync(join(f.root,'src/tsconfig.json'),'{"files":["main.ts"]}');
+  assert.equal(new OracleFilesystem().projectFor(join(f.root,'src/main.ts')),join(f.root,'src/tsconfig.json'));
+  pending(material,f.options,'fileExists',/src\/tsconfig.json$/);
+  const changed=validateRustSelectorKey(compact,f.options);assert.equal(changed.state,'pending');if(changed.state==='pending')assert.equal(changed.pending.kind,'fileExists');
+});
 test('portable selector records retain live roles, exact bytes and candidate absences without a reusable snapshot',t=>{
   const f=fixture(t),record=f.build();
   assert.deepEqual(parseRustSelectorMaterial(JSON.parse(JSON.stringify(record))),record);

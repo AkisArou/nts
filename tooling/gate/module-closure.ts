@@ -18,7 +18,7 @@ import {directoryEntries,metadataParents,membershipIndex} from './reader-metadat
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
 import {captureReaderObservations,validateReaderBatchObservations} from './reader-observations.ts';
-import type {ProjectEnvironmentAbsence} from './project-environment.ts';
+import {projectOwnerAncestorAbsence,type ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
 import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 import {cargoInputNames} from './cargo-input-population.ts';
@@ -396,6 +396,27 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const compiled:Context={entry:context.entry,namespaces:context.namespaces,entered:new Set(),host:new Set(),owned:new Set(),projects:context.projects,data:context.data,
           projectRole:role,compiledImports:new Map(project.modules.map(row=>[row.path,row.imports]))};
         for(const entry of new Set([...project.roots,...project.modules.map(row=>row.path)]))visit(compiled,resolve(root,entry),true,true,false);
+        if(role==='compiled-program'){
+          const modules=project.modules.map(row=>row.path).filter(path=>! /\.d\.[cm]?ts$/.test(path)),lookups=new OracleFilesystem();
+          for(const module of modules){
+            const physical=lookups.realpath(resolve(root,module));if(!inside(root,physical))throw Error('compiled project module resolves outside source: '+module);
+            const nearest=lookups.projectFor(physical);
+            if(nearest){
+              if(!inside(root,nearest))throw Error('compiled project nearest config is outside source: '+nearest+' ('+module+')');
+              lookups.readBytes(nearest);
+            }
+          }
+          const local:HostObservation[]=[];
+          const environment:ProjectEnvironmentAbsence={kind:'project-environment-absence',source:root,programs:[{request:structuredClone(request),config:entry,imports:[],types:[],ownerLookups:modules}]};
+          for(const observation of lookups.captured()){
+            if(inside(root,observation.path)){local.push(observation);continue;}
+            if(!projectOwnerAncestorAbsence(root,observation)||lookups.runtimeKind(observation.path)!==null)
+              throw Error('compiled project owner lookup has no genuine ancestor absence: '+observation.path);
+            for(const fact of [observation,{kind:'runtimeKind' as const,path:observation.path,value:null}])
+              observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',observation:structuredClone(fact),environment:structuredClone(environment),causes:[{kind:fact.kind,path:fact.path}]});
+          }
+          observe(context,reader,'project',local);
+        }
         return;
       }
       if (!lstatSync(path).isDirectory()) {

@@ -257,7 +257,7 @@ console.log(JSON.stringify({steps:gateSteps(owed([{path:'docs/data/new.md',added
   }
 });
 
-test('actual project facts retain typed precision, metadata-only fallback and runner handover',t=>{
+test('fixed-config type checks retain matched precision, metadata fallback and runner handover without nearest discovery',t=>{
   const root=mkdtempSync(join(tmpdir(),'owed-project-facts-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
   put('Cargo.toml','[package]\nname="project-facts"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
@@ -269,10 +269,12 @@ step "tooling" node tooling/empty.test.ts
 `);
   put('tooling/gate/run.mjs','if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = "output";');
   put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');put('tooling/private/receiver.ts','');
-  put('tooling/gate/reader-inputs/main.ts','export const projectConfig=url=>({kind:"project-config",role:"compiled-program",url});');
-  put('tooling/private/reader.ts',"import {projectConfig} from '../gate/reader-inputs/main.ts';projectConfig(new URL('../../docs/data/tsconfig.json',import.meta.url),'compiled-program');projectConfig(new URL('../census/data/tsconfig.json',import.meta.url),'compiled-program');");
+  // This consumer checks a literal config. It never resolves a file through
+  // the oracle's nearest-config lookup; that compiled role has its own lookup controls.
+  put('tooling/gate/reader-inputs/main.ts','export const projectConfig=url=>({kind:"project-config",role:"type-check",url});');
+  put('tooling/private/reader.ts',"import {projectConfig} from '../gate/reader-inputs/main.ts';projectConfig(new URL('../../docs/data/tsconfig.json',import.meta.url),'type-check');projectConfig(new URL('../census/data/tsconfig.json',import.meta.url),'type-check');");
   for(const prefix of ['docs/data','tooling/census/data']){
-    put(prefix+'/tsconfig.json','{"include":["src/**/*.ts"]}');put(prefix+'/src/main.ts','export const value=1;');
+    put(prefix+'/tsconfig.json','{"include":["src/**/*.ts"]}');put(prefix+'/src/main.ts','export const value=1;');put(prefix+'/src/new.ts','export const added=1;');
     put(prefix+'/src/notes.md','old prose');put(prefix+'/src/unexecuted.mjs','export const value=1;');
   }
   put('docs/data/target.md','target prose');put('docs/data/directory/child.md','child');
@@ -291,6 +293,8 @@ retarget:select([{path:'docs/data/src/alias',before:'../relay',after:'../directo
 relay:select([{path:'docs/data/relay',before:'target.md',after:'directory',sameMode:true}]),
 targetRemoved:select([{path:'docs/data/target.md',deleted:true}]),
 physicalConfig:select([{path:'docs/data/real-configs/base.json',before:'// old\\n{}\\n',after:'// new\\n{}\\n',sameMode:true}]),
+configAlias:select([{path:'docs/data/configs',before:'real-configs',after:'directory',sameMode:true}]),
+matching:select([{path:'docs/data/src/new.ts',added:true}]),
 add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
 renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
 nearer:select([{path:'docs/data/src/tsconfig.json',added:true}]),
@@ -301,7 +305,8 @@ unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),
   for(const step of ['profile','addons']){
     assert.ok(!value.edit.steps.includes(step),'prose bytes do not change a directory answer');
     assert.ok(!value.targetEdit.steps.includes(step),'followed target prose does not change an entries answer');
-    for(const key of ['add','removed','renamed','nearer','config','retarget','relay','targetRemoved','physicalConfig'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+    for(const key of ['config','physicalConfig','configAlias','matching'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+    for(const key of ['add','removed','renamed','nearer','retarget','relay','targetRemoved'])assert.ok(!value[key].steps.includes(step),key+' is outside the fixed Program match: '+step);
     assert.ok(value.metadata.observations.every((/** @type {{steps:string[]}} */ row)=>row.steps.includes(step)),step+' survives in typed provenance');
   }
   assert.ok(value.unknown.fallback,'enumeration never supplies placement for an unexecuted utility');

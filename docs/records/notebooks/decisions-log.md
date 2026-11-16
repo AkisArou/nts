@@ -3860,3 +3860,7 @@ claim roles, while selection consumes the matched view. Shared ordinary
 directory reads promote before selection, independent of order. Generated
 requests reuse the literal config owner and store its recipe, never its
 temporary path. Compact selector records carry the role and schema identity.
+Compiled programs retain the emitter's nearest-config probes independently
+of matching, with queried modules witnessing genuine external ancestor
+absences. A positive external owner refuses. Type checks keep their fixed
+config and do not acquire an oracle ownership walk.

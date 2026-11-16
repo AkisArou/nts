@@ -77,7 +77,7 @@ unplaced:owed([{path:'tooling/unowned/input.ts',sameMode:true}]).some(row=>row.f
   assert.ok(['tests','doctests','addons'].every(step=>stat.steps.includes(step)));
   const staged=testScratch(t,'rust-selector-typed-byte-mutant');
   copyModuleClosure([fixtureInput(new URL('./owed.mjs',import.meta.url),{dataNamespaces:{}})],staged);
-  const entry=join(staged,'tooling/gate/owed.mjs'),body=readFileSync(entry,'utf8'),needle='if(row.dependency.bytes){map.add(row.dependency.path,step);byteReaders.add(row.dependency.path,step);}';
+  const entry=join(staged,'tooling/gate/owed.mjs'),body=readFileSync(entry,'utf8'),needle='if(!row.dependency.observationOnly&&row.dependency.bytes){map.add(row.dependency.path,step);byteReaders.add(row.dependency.path,step);}';
   assert.equal(body.split(needle).length,2,'the staged mutation removes exactly the typed-byte merge');
   writeFileSync(entry,body.replace(needle,'/* typed byte composition deliberately removed */'));
   // A staged instrument keeps the same installed SDK capability as the
