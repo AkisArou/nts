@@ -116,7 +116,10 @@ had refreshed for a6. The records guard correctly refused the edited stale
 selector candidate. The complete run also had an independent oracle image
 disposal assertion failure at oracle-dependencies.test.ts:138, with 2,804
 tooling passes, one failure and the two existing Unicode TODOs. Both failures
-remain excluded from green proof; cleanup and diagnostics completed.
+remain excluded from green proof; cleanup and diagnostics completed. The
+process-observation correction at 687d4d446f53 (Part of #797) owns the
+oracle-dependencies:138 failure; its supplied process view removes this
+fixture's machine-wide process-scan dependency without weakening the guard.
 
 The accepted retry drops the selector-only commit and inherits main's exact
 rust-runtime.json. The root fix itself changes no selector input or target role;
