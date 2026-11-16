@@ -1,7 +1,7 @@
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {userInfo} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
@@ -12,6 +12,7 @@ import {ownMemory,ownMemoryEnv} from './test-memory.ts';
 import {fixtureEnvironment,testEnvironment,testEnvironmentHandoff} from './test-environment.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation,contentCacheEnvironment} from './cache-environment.ts';
 import {testScratch} from './test-scratch.ts';
+import {assertNoProcessUsers} from '../landing/tree-users.ts';
 
 test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
   const poison={PATH:process.env.PATH,HOME:'/unowned/home',XDG_CONFIG_HOME:'/unowned/config',TMPDIR:'/unowned/tmp',
@@ -19,7 +20,9 @@ test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
     GIT_DIR:'/unowned/repository',GIT_CONFIG_COUNT:'1',GIT_CONFIG_KEY_0:'core.bare',GIT_CONFIG_VALUE_0:'true',
     NTS_GATE_SLOTS:'1',NTS_TEST_UNKNOWN:'poison',PRIVATE_TOKEN:'hidden'};
   const env=testEnvironment({},poison),other=testEnvironment({},poison);
-  for(const name of ['NODE_OPTIONS','NODE_PATH','RUSTFLAGS','GIT_DIR','GIT_CONFIG_COUNT','GIT_CONFIG_KEY_0','GIT_CONFIG_VALUE_0','NTS_GATE_SLOTS','NTS_TEST_UNKNOWN','PRIVATE_TOKEN'])assert.equal(env[name],undefined,name);
+  for(const name of ['NODE_OPTIONS','NODE_PATH','RUSTFLAGS','GIT_DIR','NTS_GATE_SLOTS','NTS_TEST_UNKNOWN','PRIVATE_TOKEN'])assert.equal(env[name],undefined,name);
+  assert.equal(env.GIT_CONFIG_COUNT,'2');assert.equal(env.GIT_CONFIG_KEY_0,'maintenance.auto');assert.equal(env.GIT_CONFIG_VALUE_0,'false');
+  assert.equal(env.GIT_CONFIG_KEY_1,'gc.auto');assert.equal(env.GIT_CONFIG_VALUE_1,'0');
   for(const name of ['HOME','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_STATE_HOME','TMPDIR']){
     assert.ok(existsSync(env[name]!),name);assert.notEqual(env[name],other[name],name);
     assert.ok(env[name]!.startsWith(join(userInfo().homedir,'.cache/')));
@@ -34,6 +37,21 @@ test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
 test('explicit fixture values override the allowlist',()=>{
   const env=testEnvironment({NTS_GATE_SLOTS:'2',NODE_OPTIONS:'--no-warnings',FIXTURE_PROTOCOL:'owned'});
   assert.equal(env.NTS_GATE_SLOTS,'2');assert.equal(env.NODE_OPTIONS,'--no-warnings');assert.equal(env.FIXTURE_PROTOCOL,'owned');
+});
+
+test('fixture commit storms launch no detached automatic Git maintenance',t=>{
+  const root=testScratch(t,'environment-git'),repo=join(root,'repo'),trace=join(root,'git-events.jsonl');mkdirSync(repo);
+  const env=fixtureEnvironment(t,{GIT_TRACE2_EVENT:trace});
+  const git=(...args:string[])=>{const result=spawnSync('git',gitArguments(args),{cwd:repo,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
+  git('init','-q','-b','main');git('config','maintenance.auto','true');git('config','gc.auto','1');
+  assert.equal(git('config','--get','maintenance.auto'),'false');assert.equal(git('config','--get','gc.auto'),'0');
+  writeFileSync(join(repo,'value'),'0');git('add','value');
+  for(let i=0;i<24;i++){writeFileSync(join(repo,'value'),String(i+1));git('commit','-qam','fixture generation '+i);}
+  const events=readFileSync(trace,'utf8').trim().split('\n').map(line=>JSON.parse(line) as {event:string;argv?:string[]});
+  assert.ok(events.some(row=>row.event==='start'&&row.argv?.includes('commit')),'the trace observed the real commits');
+  assert.deepEqual(events.filter(row=>row.event==='child_start'&&row.argv?.some(arg=>arg==='maintenance'||arg==='gc')),[]);
+  assert.equal(existsSync(join(repo,'.git/objects/maintenance.lock')),false);assert.equal(existsSync(join(repo,'.git/gc.pid')),false);
+  assertNoProcessUsers([repo],{self:process.pid});
 });
 
 test('mutable state has one fixture lifetime and shared caches are named capabilities',()=>{
@@ -69,6 +87,8 @@ test('a fixture retains canonical compiler and resource capabilities with a nest
   const cargo=join(root,'private-cargo');
   const withCargo=testEnvironment({CARGO_HOME:cargo},parent),cargoContext=JSON.parse(withCargo[ENVIRONMENT_CONTEXT]!);
   assert.equal(cargoContext.owned.CARGO_HOME,cargo);
+  assert.equal(context.owned.GIT_CONFIG_COUNT,'2');assert.equal(context.owned.GIT_CONFIG_KEY_0,'maintenance.auto');
+  assert.equal(gateEnvironment(child,{run:join(child.TMPDIR!,'git-child')}).env.GIT_CONFIG_VALUE_1,'0');
   assert.equal(gateEnvironment(withCargo,{run:join(withCargo.TMPDIR!,'nested-run')}).env.CARGO_HOME,cargo);
   assert.ok(child.TMPDIR!.startsWith(parent.TMPDIR!+'/'));assert.equal(context.report.host.HOME,child.HOME);
   const independent=ownMemoryEnv(join(root,'independent'),child),handoff=JSON.parse(independent[ENVIRONMENT_CONTEXT]!);
@@ -86,6 +106,7 @@ test('generated CommonJS and ESM shims forward only named fixture handoffs',()=>
     assert.equal(child.status,0,child.stderr);const actual=JSON.parse(child.stdout);
     assert.equal(actual.FIXTURE_READY,'owned');assert.equal(actual.NTS_MEMORY_RESERVATION,'explicit-reservation');
     assert.equal(actual.UNRELATED_POISON,undefined);assert.equal(actual.HOME,env.HOME);
+    for(const name of ['GIT_CONFIG_COUNT','GIT_CONFIG_KEY_0','GIT_CONFIG_VALUE_0','GIT_CONFIG_KEY_1','GIT_CONFIG_VALUE_1'])assert.equal(actual[name],env[name],name);
   }
 });
 

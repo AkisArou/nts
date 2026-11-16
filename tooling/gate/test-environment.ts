@@ -17,9 +17,11 @@ import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,contentCacheEnvironment} f
 const HANDOFF = ['NTS_BIN','NTS_SUITE_BIN','NTS_TOOLING_SLICE','NTS_ORACLE_TYPESCRIPT','NTS_ORACLE_DEPENDENCIES'] as const;
 const RUN_HANDOFF = ['NTS_TOOLING_SLICE','NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_GATE_SCOPE_EXPECTED',
   'NTS_GATE_STEP','NTS_GATE_STEP_ATTEMPT','NTS_GATE_STEP_RESULT','NTS_GATE_STEP_MEMORY_BYTES','NTS_GATE_CASE_COSTS_DIR','NTS_CHECKERS'] as const;
+const FIXTURE_GIT={GIT_CONFIG_COUNT:'2',GIT_CONFIG_KEY_0:'maintenance.auto',GIT_CONFIG_VALUE_0:'false',
+  GIT_CONFIG_KEY_1:'gc.auto',GIT_CONFIG_VALUE_1:'0'} as const;
 const WRITABLE = ['HOME','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_STATE_HOME','TMPDIR','NODE_COMPILE_CACHE',
   'GIT_CONFIG_GLOBAL','GIT_CONFIG_SYSTEM','GIT_CONFIG_NOSYSTEM','GIT_TERMINAL_PROMPT',
-  'GIT_AUTHOR_NAME','GIT_AUTHOR_EMAIL','GIT_COMMITTER_NAME','GIT_COMMITTER_EMAIL'] as const;
+  'GIT_AUTHOR_NAME','GIT_AUTHOR_EMAIL','GIT_COMMITTER_NAME','GIT_COMMITTER_EMAIL',...Object.keys(FIXTURE_GIT)] as const;
 const roots=new Set<string>();
 type Fixture={after(fn:()=>void):void};
 const fixtures=new WeakMap<Fixture,NodeJS.ProcessEnv>();
@@ -74,7 +76,7 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
     env[ENVIRONMENT_CONTEXT]=JSON.stringify(context);env.TMPDIR=context.temporary.path;
   }
   ownTemporary(root,env);
-  assignTestValues(env,{NTS_GATE_RUN_DIR:root});
+  assignTestValues(env,{NTS_GATE_RUN_DIR:root,...FIXTURE_GIT});
   assignTestValues(env,owned);
   if(owned.PATH===undefined)env.PATH=[...toolchainDirectories(process.execPath,env),...(env.PATH?[env.PATH]:[])].join(delimiter);
   if(context){

@@ -3438,3 +3438,12 @@ lifetimes and races its own prune. Live inherited use and open-run retries are
 unchanged. Dead-owner recovery remains a separate, unimplemented deletion kind
 awaiting the user's approval.
 
+
+
+## Fixture Git writers share the fixture lifetime (11-16)
+
+The common test-environment owner supplies its own command-scope Git settings:
+maintenance.auto=false and gc.auto=0. The owned-value packet and generated
+handoffs carry those settings, while inherited Git configuration is discarded.
+Fixture commits therefore start no detached automatic maintenance writer;
+cleanup retains its real-directory and live-user guards.

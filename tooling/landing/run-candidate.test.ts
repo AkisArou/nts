@@ -73,10 +73,11 @@ test("the candidate creates its build and gate environment with its own changed 
   const expected=createHash('sha256').update(readFileSync(producer)).digest('hex');
   const options=f.options(['build','rustfmt'],{build:[process.execPath,'--input-type=module','-e',`import {mkdirSync,writeFileSync} from 'node:fs';import {dirname} from 'node:path';writeFileSync(${JSON.stringify(join(f.controls,'build-capture'))},process.env.NTS_ORACLE_DEPENDENCIES);mkdirSync(dirname(process.env.NTS_BIN),{recursive:true});writeFileSync(process.env.NTS_BIN,'#!/bin/sh\\n',{mode:0o755});`]});
   // A controller-owned same-root grant cannot be verified by this producer.
-  const wrong=gateEnvironment(launcherEnvironment(options.env),{run:f.run,owned:options.owned,oracleRoot:f.tree});
+  const wrongRun=f.run+'-wrong-producer';
+  const wrong=gateEnvironment(launcherEnvironment(options.env),{run:wrongRun,owned:options.owned,oracleRoot:f.tree});
   const before=spawnSync(process.execPath,[join(f.tree,'tooling/gate/run.mjs')],{cwd:f.tree,env:{...wrong.env,NTS_GATE_STEPS:'rustfmt'},encoding:'utf8'});
   assert.notEqual(before.status,0);assert.match(before.stdout+before.stderr,/oracle dependency provisioner source mismatch/);
-  assert.equal(JSON.parse(readFileSync(join(f.run,'summary.json'),'utf8')).steps[0].verdict,'INSTRUMENT');
+  assert.equal(JSON.parse(readFileSync(join(wrongRun,'summary.json'),'utf8')).steps[0].verdict,'INSTRUMENT');
   const ran=await runLanding(options);assert.equal(ran.state,'green',ran.message);
   assert.equal(JSON.parse(readFileSync(join(f.controls,'build-capture'),'utf8')).helperSha256,expected);
   const summary=JSON.parse(readFileSync(join(f.run,'summary.json'),'utf8'));

@@ -1232,6 +1232,8 @@ the tooling strict checker owns the source's type checking.
 - **Test children receive an owned environment.** `fixtureEnvironment` in
   `tooling/gate/test-environment.ts` gives each test fixture private HOME, XDG,
   temporary and Git state, reused by its children and removed with the fixture.
+  Its owned Git configuration disables automatic maintenance and garbage
+  collection, so fixture commits never leave a detached writer in that state.
   Tools and named run, oracle and resource capabilities are allowlisted;
   unknown shell variables never reach a child. Declared Node, JDK and rustup
   directories precede version-manager shims that consult HOME. Shared

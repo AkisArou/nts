@@ -195,7 +195,7 @@ const allocated=(path:string)=>Number(execFileSync('du',['-sx','-B1','--',path],
 
 test('a failed close drops its acquired image and records its path and bytes while retaining exact identity files',t=>{
  const f=fixture(t),owned=captureRunTemporary(f.run('image-red'),undefined,f.home),image=registeredImage(owned,f.home);
- chmodSync(image.tree,0o755);writeFileSync(join(image.tree,'payload'),Buffer.alloc(2**24,1));chmodSync(image.tree,0o555);
+ chmodSync(image.tree,0o755);writeFileSync(join(image.tree,'payload'),Buffer.alloc(2**24,1),{flush:true});chmodSync(image.tree,0o555);
  const before=allocated(owned.path),imageBytes=allocated(image.tree),result=finishRunTemporary(owned,f.home,false,roomy);
  assert.equal(result.state,'retained after red');assert.equal(existsSync(image.tree),false);
  assert.deepEqual(result.oracle_images,[{path:image.tree,bytes:imageBytes,state:'dropped'}]);
