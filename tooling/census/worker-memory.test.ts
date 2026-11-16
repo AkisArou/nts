@@ -680,7 +680,7 @@ compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024*
 
 test('a yielding resident pool releases successive heads and resumes each remaining case once',async t=>{
  const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
- writeOwnMemory(memoryDirectory,{availableKiB:21.75*2**20,totalKiB:32*2**20,clock:{kind:'live'}});
+ writeOwnMemory(memoryDirectory,{availableKiB:22.0625*2**20,totalKiB:32*2**20,clock:{kind:'live'}});
  t.after(()=>writeOwnMemory(memoryDirectory,{availableKiB:8*2**20,totalKiB:32*2**20}));
  const key='priority-idle-worker',memory=new MemoryRun({budgetBytes:4*2**30,id:key}),gate=await gatePool(1),rows:{path:string;pid:number;waitingInLedger?:number}[]=[],reports:string[]=[];
  const clock=hostObservations(ownMemory),tick=()=>clock.now();
@@ -697,14 +697,14 @@ test('a yielding resident pool releases successive heads and resumes each remain
     assert.deepEqual(children,[],'idle worker slices must be joined before the model returns their physical memory');
     const own=readLedger(ownMemory.NTS_MEMORY_LEDGER).admitted.find(entry=>entry.what.includes('resident workers'));
     assert.ok(own);assert.equal(own.bytes,peakReservation([1]));
-    writeOwnMemory(memoryDirectory,{availableKiB:24.75*2**20,totalKiB:32*2**20});
+    writeOwnMemory(memoryDirectory,{availableKiB:25.0625*2**20,totalKiB:32*2**20});
    }
   }});
  try{
   for(const [index,path] of ['gate-a','gate-b'].entries()){
    await waitFor('resident case ready: '+path,()=>existsSync(join(directory,'ready-'+path)));
    if(index>0)restarts.push(tick()-readmittedAt);
-   writeOwnMemory(memoryDirectory,{availableKiB:21.75*2**20,totalKiB:32*2**20});
+   writeOwnMemory(memoryDirectory,{availableKiB:22.0625*2**20,totalKiB:32*2**20});
    higher=await reserve({bytes:12*2**30,what:'higher landing '+index,priority:'landing'},{env:independent});
    const grown=higher.grow(8*2**30);void grown.catch(()=>{});
    await waitFor('higher growth waiting behind the resident cohort',()=>readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.grows===higher!.id));
