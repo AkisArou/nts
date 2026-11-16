@@ -264,6 +264,9 @@ test('a plan budget is refreshed as a budget is: planned on the backends it name
   assert.deepEqual(auditRecord('oracle-counts',file,before,narrowed,new Set()),[`${source} plan budget -> measured`,`${source} plan budget narrowed to llvm`]);
   const planned=record([measured({c:'c'.repeat(32),llvm:'f'.repeat(32)})]);
   assert.deepEqual(auditRecord('oracle-counts',file,narrowed,planned,new Set()),[`${source} planned on llvm`,`${source} plan budget gone: planned on every backend`]);
+  assert.deepEqual(auditRecord('oracle-counts',file,before,before,new Set()),[]);
+  const classified=record([],{...unplanned,budget:{...unplanned.budget,signal:'SIGXCPU'}});
+  assert.deepEqual(auditRecord('oracle-counts',file,before,classified,new Set()),[`${source} plan budget identity changed`]);
   const identity=record([],{...unplanned,revision:{...unplanned.revision,entry:'9'.repeat(64)}});
   assert.deepEqual(auditRecord('oracle-counts',file,before,identity,new Set()),[`${source} plan budget identity changed`]);
   for(const [was,now,refusal] of [

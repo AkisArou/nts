@@ -51,7 +51,7 @@ function auditOracleRefresh(file: string, fixture: string, before: string, after
   if (JSON.stringify(was.unplanned) !== JSON.stringify(now.unplanned)) {
     const changed = now.unplanned;
     if (changed === undefined) improved.push(`${unplanned!.source} plan budget gone: planned on every backend`);
-    else if (unplanned?.source === changed.source && JSON.stringify(changed.revision) !== JSON.stringify(unplanned.revision)) improved.push(`${changed.source} plan budget identity changed`);
+    else if (unplanned?.source === changed.source && (JSON.stringify(changed.revision) !== JSON.stringify(unplanned.revision) || JSON.stringify(changed.budget)!==JSON.stringify(unplanned.budget))) improved.push(`${changed.source} plan budget identity changed`);
     else if (unplanned?.source === changed.source && JSON.stringify({ ...changed, backends: unplanned.backends }) === JSON.stringify(unplanned) && changed.backends.every(backend => unplanned.backends.includes(backend))) improved.push(`${changed.source} plan budget narrowed to ${changed.backends.join(", ")}`);
     else {
       assert.ok(unplanned === undefined && !now.rows.some(row => row.source === changed.source && row.kind === "measured" && changed.backends.some(backend => row.keys[backend] !== undefined)), "a plan budget may only narrow, go or change its identity, and a new one cannot replace a measured population");

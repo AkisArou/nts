@@ -2,7 +2,7 @@ import {fixtureEnvironment} from "./test-environment.ts";
 import { after, test } from "node:test";
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { addRecord, canonicalDriver, completeRows, noOracleRecord, oracleUnplannedRevision, planAll, recordAll, runOracleArm, STDERR_TAIL_BYTES, validateSourcePlan } from "../differential/record-oracles.ts";
@@ -223,12 +223,11 @@ test("an oracle stopped at V8's heap limit is a memory-cap budget at that limit,
   });
   const [row]=JSON.parse(readFileSync(arm.output,'utf8')).rows;
   assert.equal(row.kind,'budget');assert.equal(row.count,undefined);
-  const {reason,...budget}=row.budget;
-  assert.deepEqual(budget,{version:2,phase:'execute',outcome:'memory-cap',bound:ORACLE_EXECUTION_POLICY.heapBytes,signal:'SIGABRT'},'the row names the policy\'s heap, not the resident bound the run never reached');
-  assert.match(reason,new RegExp(`^oracle memory-cap: ${arm.source} stopped at V8's ${ORACLE_EXECUTION_POLICY.heapBytes} byte JavaScript heap limit, the oracle execution policy's: FATAL ERROR: `));
+  assert.deepEqual(row.budget,{version:2,phase:'execute',outcome:'memory-cap',bound:ORACLE_EXECUTION_POLICY.heapBytes,signal:'SIGABRT'},'the row names the policy\'s heap, not the resident bound the run never reached');
   const [finding]=arm.summary().findings;
+  const failure=readFileSync(finding!.detail,'utf8'),reason=failure.split("\n\nThe end of the child's stderr:\n")[0]!;
+  assert.match(reason,new RegExp(`^oracle memory-cap: ${arm.source} stopped at V8's ${ORACLE_EXECUTION_POLICY.heapBytes} byte JavaScript heap limit, the oracle execution policy's: FATAL ERROR: `));
   assert.equal(finding!.outcome,'memory-cap');
-  const failure=readFileSync(finding!.detail,'utf8');
   assert.ok(failure.startsWith(reason+"\n\nThe end of the child's stderr:\n"),failure);
   assert.match(failure,/\n<--- Last few GCs --->\n[\s\S]*\nFATAL ERROR: [^\n]*heap limit[^\n]* - JavaScript heap out of memory\n/);
 });
@@ -366,7 +365,7 @@ test("runs past half their CPU bound persist a stable margin, retain raw CPU evi
   for(const extra of [{cpu_s:[7.6,7.6]},{reason:'changing diagnostics'}])
     assert.throws(()=>parseShard(shard({...row(near).budget,...extra}),'tests/programs/margin'),/unknown field/);
   // A population measured before, past half now, is refused as a regression.
-  await assert.rejects(recordAll(root,output,async p=>({cpu:[7.6,7.6],count:2})),/REGRESSED oracle population: tests\/programs\/margin\/under\.ts measured -> margin/);
+  await assert.rejects(recordAll(root,output,async()=>({cpu:[7.6,7.6],count:2})),/REGRESSED oracle population: tests\/programs\/margin\/under\.ts measured -> margin/);
 });
 
 /** Program fixtures under `root`, each a tsconfig and its src/main.ts entry. */
@@ -542,4 +541,45 @@ test("a repeated held classification preserves bytes despite CPU and reason drif
   assert.throws(()=>marginBudget([30,30],60),/not a margin measurement/);
   const stopped=addBudgetRecord(first,subject,{phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'raw timed out'});
   assert.equal(stopped.rows[0]!.budget!.outcome,'timeout','a changed classification is not silently kept as a margin');
+});
+
+test("two records-route refreshes keep jetstream bytes and accept no delta when only held CPU samples differ",async t=>{
+  const {addBudgetRecord,marginBudget}=await import('../differential/record-oracles.ts');
+  const {writeRecords,recordPath}=await import('../differential/oracle-records.ts');
+  const {createRecorder}=await import('../records/recorder-core.ts');
+  const {oracleFamily}=await import('../differential/oracle-record-family.ts');
+  const {recordPending}=createRecorder({'oracle-counts':{family:oracleFamily,steps:[],part:'core'}});
+  const root=testScratch(t,'jetstream-record-route'),fixture='benchmarks/cases/jetstream-lazy-collections',source=fixture+'/case.ts';
+  const home=process.env.HOME;process.env.HOME=join(root,'home');
+  t.after(()=>{if(home===undefined)delete process.env.HOME;else process.env.HOME=home;});
+  mkdirSync(join(root,fixture),{recursive:true});mkdirSync(join(root,'tests/programs'),{recursive:true});
+  writeFileSync(join(root,source),'export function work(n:number):number{return n;}');
+  const subject={...plan,source,source_digest:'a'.repeat(32),repository_root:root,case_key:'b'.repeat(32),generator_digest:'c'.repeat(32)};
+  const first=addBudgetRecord({version:1,rows:[]},subject,marginBudget([32.8,33],60));
+  writeRecords(root,first,new Set([fixture]));
+  const file=join(root,recordPath(fixture)),before=readFileSync(file);
+  writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,plans:[subject],failures:[]}));
+  const samples=[[32.8,33],[33.8,37]];
+  for(const [index,cpu]of samples.entries()){
+    const delta=join(root,'delta-'+index+'.json'),lines:string[]=[];let runs=0;
+    const status=recordPending(root,['oracle-counts'],(args,actualRoot)=>{
+      assert.equal(actualRoot,root);assert.deepEqual(args,['tooling/differential/record-oracles.ts',fixture]);runs++;
+      const script=`
+        import {readFileSync} from 'node:fs';
+        import {recordAll,writeTable} from ${JSON.stringify(new URL('../differential/record-oracles.ts',import.meta.url).href)};
+        import {readRecords,writeRecords,parseLegacyTable} from ${JSON.stringify(new URL('../differential/oracle-records.ts',import.meta.url).href)};
+        const root=${JSON.stringify(root)},output=${JSON.stringify(join(root,'counts.json'))};
+        writeTable(output,readRecords(root));
+        await recordAll(root,output,async plan=>({cpu:${JSON.stringify(cpu)},count:plan.case_count}));
+        writeRecords(root,parseLegacyTable(JSON.parse(readFileSync(output))),new Set([${JSON.stringify(fixture)}]));
+      `;
+      const run=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env:{...fixtureEnvironment(t),NTS_BENCH_CPUS:'4'},encoding:'utf8'});
+      assert.equal(run.status,0,run.stdout+run.stderr);return run.status??1;
+    },line=>lines.push(line),new Map([['oracle-counts',[{kind:'oracle-counts',name:fixture,record:recordPath(fixture)}]]]),delta);
+    assert.equal(status,0,lines.join('\n'));assert.equal(runs,1);
+    assert.deepEqual(readFileSync(file),before,'held output bytes stay exact');
+    assert.deepEqual(JSON.parse(readFileSync(delta,'utf8')).rows,[],'the real recorder accepts no delta');
+    const summary=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8'));
+    assert.deepEqual((Object.values(summary.measurements) as {cpu:number[]}[])[0]!.cpu,cpu,'raw evidence retains each distinct sample');
+  }
 });
