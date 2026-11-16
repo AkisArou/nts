@@ -7,6 +7,10 @@ Exclusive creation prevents adoption of an older image. Borrowed parent images
 and ready-image hits acquire no new receipt. Failed close removes only a
 registered tree, retaining ready.json, semantic.json, ledgers and other evidence;
 its report and retention row name the path and allocated bytes removed.
+An image guard failure records that image as kept, without blocking valid
+siblings or omitting the temporary from closed-failure accounting. A null
+per-image byte count means it was not measured for disposal; the whole retained
+temporary is still measured and registered.
 
 A registered closed temporary is one completed lifetime. Reopening it through
 NTS_GATE_RUN_DIR used to let preparation consume its old ready image while the
@@ -15,6 +19,11 @@ name and asks for a new directory. Automatic queue retries, re-measurements and
 bisect probes already allocate new runs; imported landing evidence contains
 verdicts, contracts and binary observations rather than an installed image.
 Live inherited handoffs and retries before close remain within one lifetime.
+
+The existing size- and disk-pressure prune may evict a closed failed temporary
+without a process-user check. That is a pre-existing limitation of whole-root
+retention, unchanged by this image-disposal change; the new image guard does
+not claim to repair it.
 
 ## Proposed interrupted recovery: not implemented
 

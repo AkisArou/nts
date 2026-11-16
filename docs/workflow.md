@@ -1264,7 +1264,9 @@ the first node task.
   temporary owner. A drained failed close drops only those registered trees,
   retaining identity files and reporting each removed path and allocated bytes.
   Borrowed images and pre-existing unregistered images receive no ownership
-  grant. Replacements, aliases and live holders refuse disposal. A registered
+  grant. An image whose guard refuses is kept by name while valid siblings
+  can drop; the failed temporary still registers its full retained bytes.
+  Replacements, aliases and live holders refuse image disposal. A registered
   closed temporary cannot be acquired again: `NTS_GATE_RUN_DIR` names one run
   lifetime, and a new run needs a new directory. Live inherited handoffs and
   retries within an open run retain their existing lifetime. Interrupted-run

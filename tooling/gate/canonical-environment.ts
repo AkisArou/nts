@@ -204,7 +204,7 @@ export function gateEnvironment(
   const parentImage=foreignRoot&&inheritedCapability?.seal?inheritedCapability:undefined;
   if(parentImage)assertSealedOracleRun(launcher);
   const dependencies=inheritedCapability&&!foreignRoot?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
-    JSON.stringify({...dependencyCapability(toolingRoot,capture,admission,null,env,temporary),...(parentImage?{parentImage}:{})}):undefined);
+    JSON.stringify({...dependencyCapability(toolingRoot,capture,admission,null,env,{owned:temporary,home:host.HOME!}),...(parentImage?{parentImage}:{})}):undefined);
   if(dependencies){env.NTS_ORACLE_DEPENDENCIES=dependencies;owned.NTS_ORACLE_DEPENDENCIES=dependencies;}
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,

@@ -127,7 +127,9 @@ function installFixture(t:import('node:test').TestContext){
 
 test('an ordinary sealed producer image is registered to its run and a failed close retains its exact identity',async t=>{
   const f=installFixture(t),owned=captureRunTemporary(join(f.parent,'owned-run'),undefined,f.parent),base=f.cap('owned');
-  const initial=dependencyCapability(f.root,join(owned.path,'oracle-dependencies'),base.admission,base.ownerStep,testEnvironment(),owned);
+  const initial=dependencyCapability(f.root,join(owned.path,'oracle-dependencies'),base.admission,base.ownerStep,testEnvironment(),{owned,home:f.parent});
+  const missing=structuredClone(initial);Reflect.deleteProperty(missing.temporary!,'home');
+  await assert.rejects(dependencyOwner.sealDependencyCapability(missing,canonicalFixture(missing)),/temporary requires its bound validation home/);
   const sealed=await dependencyOwner.sealDependencyCapability(initial,canonicalFixture(initial));assert.ok(sealed.seal);
   const ready=sealed.seal.record,semantic=join(dirname(ready),'semantic.json'),tree=join(dirname(ready),'tree');
   const readyBytes=readFileSync(ready),semanticBytes=readFileSync(semantic);

@@ -3429,6 +3429,8 @@ image tree under the actual run temporary, separately from disk admission.
 Failed close authenticates that acquisition and its ancestors, refuses live
 users or replacements, and removes only the registered tree. Both the close
 report and failed-retention row name the removed path and allocated bytes.
+An image whose guard refuses is recorded as kept while valid siblings drop;
+the temporary remains registered with its complete retained-byte measurement.
 Borrowed parent images and existing ready hits never acquire an ownership
 grant. A registered closed temporary refuses fresh acquisition, including an
 explicit reused NTS_GATE_RUN_DIR, because reopening retained evidence mixes

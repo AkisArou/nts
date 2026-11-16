@@ -30,7 +30,7 @@ export {CaseBudgetError,ToolingInstrumentError};
 
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
-export type DependencyCapability={seal?:DependencyRunSeal;parentImage?:DependencyCapability;temporary?:RunTemporary;version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
+export type DependencyCapability={seal?:DependencyRunSeal;parentImage?:DependencyCapability;temporary?:{owned:RunTemporary;home:string};version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
 import {dependencyInventory,dependencyPackageInventory,type DependencyEntry as Entry} from '../inputs/dependency-inventory.ts';
 export {dependencyInventory,dependencyPackageInventory} from '../inputs/dependency-inventory.ts';
 type InstallInputs={version:1;identity:Identity;paths:string[];selectionPaths:string[];treeRows:string[];treeSha256:string};
@@ -61,7 +61,7 @@ function producerIdentity(source:string){
     return hash(JSON.stringify(recipe.map(file=>[file,hash(readFileSync(join(source,file)))])));
   }finally{graph.close();}
 }
-export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null,env:NodeJS.ProcessEnv=process.env,temporary?:RunTemporary):DependencyCapability{
+export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null,env:NodeJS.ProcessEnv=process.env,temporary?:{owned:RunTemporary;home:string}):DependencyCapability{
   source=realpathSync(source);
   // sourceRevision is the committed revision anchor. Only the async install-input
   // projection below determines the source image, never HEAD's whole tree.
@@ -83,6 +83,7 @@ function publish(file:string,value:unknown){const pending=file+'.pending';writeF
 function checked(capability:DependencyCapability){
   if(capability?.version!==1||!isAbsolute(capability.source)||!isAbsolute(capability.directory)||!capability.directory.includes(sep+'tmp'+sep))throw Error('invalid oracle dependency capability');
   if(capability.admission?.kind!=='gate'&&capability.admission?.kind!=='standalone')throw Error('invalid oracle dependency admission context');
+  if(capability.temporary!==undefined&&(!capability.temporary||!capability.temporary.owned||typeof capability.temporary.home!=='string'||!isAbsolute(capability.temporary.home)))throw Error('oracle dependency temporary requires its bound validation home');
   if(capability.ownerStep!==null&&(typeof capability.ownerStep!=='string'||!/^[a-z][a-z0-9-]*$/.test(capability.ownerStep)))throw Error('invalid oracle dependency owner step');
   if(hash(readFileSync(fileURLToPath(import.meta.url)))!==capability.helperSha256)throw Error('oracle dependency provisioner source mismatch');
   if(producerIdentity(capability.source)!==capability.producerSha256)throw Error('oracle dependency producer source changed');
@@ -295,8 +296,7 @@ async function build(capability:DependencyCapability,inputSha256:string){
   if(JSON.stringify(inputRows(capability,[...new Set([...inputSet.paths,...inputSet.selectionPaths])].sort()))!==JSON.stringify(inputSet.treeRows))throw Error('oracle dependency install inputs changed before archive');
   const tree=join(capability.directory,'tree'),archive=join(capability.directory,'source.tar');
   if(capability.temporary){
-    const home=process.env.HOME;if(!home)throw Error('oracle image creation requires canonical HOME');
-    createRunOracleImage(capability.temporary,home,tree);
+    createRunOracleImage(capability.temporary.owned,capability.temporary.home,tree);
   }else mkdirSync(tree);
   const present=new Set<string>();
   for(const row of inputSet.treeRows)for(let path=row.slice(row.indexOf('\t')+1);path!=='.';path=dirname(path))present.add(path);

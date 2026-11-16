@@ -5,14 +5,15 @@ import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from "node:fs";
 import {userInfo} from "node:os";
-import {dirname,join,resolve,relative,isAbsolute} from "node:path";
+import {basename,dirname,join,resolve,relative,isAbsolute} from "node:path";
 import {assertNoProcessUsers} from '../landing/tree-users.ts';
 
 export const FAILED_TEMP_MAX_BYTES=8*2**30;
 export const TEMP_DISK_FLOOR_BYTES=40*2**30;
 export type RunTemporary={path:string;parent:string;dev:number;ino:number;uid:number;enclosing?:RunTemporary};
 export type DroppedOracleImage={path:string;bytes:number;state:'dropped'|'already absent'};
-type ClosedTemporary={owned:RunTemporary;closed:number;bytes?:number;oracle_images?:DroppedOracleImage[]};
+export type OracleImageDisposition=DroppedOracleImage|{path:string;bytes:null;state:`kept: ${string}`};
+type ClosedTemporary={owned:RunTemporary;closed:number;bytes?:number;oracle_images?:OracleImageDisposition[]};
 const registry=(home:string)=>join(home,".cache/nts-gate/closed-temporaries");
 const pathKey=(path:string)=>createHash("sha256").update(path).digest("hex");
 const key=(owned:RunTemporary)=>pathKey(owned.path)+".json";
@@ -125,14 +126,19 @@ function imageFact(file:string):unknown {
   if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.()||info.nlink!==1)throw Error('oracle image receipt is not an owned regular file: '+file);
   return JSON.parse(readFileSync(file,'utf8')) as unknown;
 }
-function registeredImages(owned:RunTemporary,home:string):RegisteredImage[] {
-  const directory=checkedImageRegistry(owned,home,false);if(!existsSync(directory))return [];
-  const entries:RegisteredImage[]=[];
-  for(const name of readdirSync(directory).filter(name=>name.endsWith('.image.json')).sort()){
-    const file=join(directory,name),receipt=imageFact(file) as OracleImageReceipt;
+function registeredImageFiles(owned:RunTemporary,home:string):string[] {
+  const directory=checkedImageRegistry(owned,home,false);
+  return existsSync(directory)?readdirSync(directory).filter(name=>name.endsWith('.image.json')).sort().map(name=>join(directory,name)):[];
+}
+function imageReceipt(file:string):OracleImageReceipt {
+    const receipt=imageFact(file) as OracleImageReceipt;
     if(!receipt||receipt.version!==1||receipt.kind!=='oracle-dependency-image'||!receipt.temporary||typeof receipt.temporary.path!=='string')throw Error('invalid oracle image registration: '+file);
+    return receipt;
+}
+function registeredImage(file:string,owned:RunTemporary,home:string,receipt=imageReceipt(file)):RegisteredImage|undefined {
+    const name=basename(file),directory=dirname(file);
     if(!under((owned.enclosing??owned).path,receipt.temporary.path))throw Error('oracle image registration is outside its enclosing run: '+file);
-    if(!under(owned.path,receipt.temporary.path))continue;
+    if(!under(owned.path,receipt.temporary.path))return undefined;
     assertRunTemporary(receipt.temporary,home);
     const path=receipt.image?.path;
     if(typeof path!=='string'||path!==join(receipt.parent?.path??'','tree')||name!==pathKey(path)+'.image.json')throw Error('invalid oracle image registration path: '+file);
@@ -144,19 +150,28 @@ function registeredImages(owned:RunTemporary,home:string):RegisteredImage[] {
       if(!prior||prior.path!==path||!Number.isSafeInteger(prior.bytes)||prior.bytes<0||!['dropped','already absent'].includes(prior.state))throw Error('invalid oracle image disposal receipt: '+dropped);
       if(info)throw Error('disposed oracle image is present again: '+path);
     }
-    entries.push({file,dropped,receipt,present:Boolean(info),...(prior?{prior}:{})});
-  }
+    return {file,dropped,receipt,present:Boolean(info),...(prior?{prior}:{})};
+}
+function registeredImages(owned:RunTemporary,home:string):RegisteredImage[] {
+  const entries=registeredImageFiles(owned,home).flatMap(file=>{const entry=registeredImage(file,owned,home);return entry?[entry]:[];});
   const live=entries.filter(entry=>entry.present).map(entry=>entry.receipt.image.path);
   if(live.length)assertNoProcessUsers(live,{self:process.pid});
   return entries;
 }
-function dropOracleImages(owned:RunTemporary,home:string):DroppedOracleImage[] {
-  const entries=registeredImages(owned,home),dropped:DroppedOracleImage[]=[];
-  for(const entry of entries){
+function dropOracleImages(owned:RunTemporary,home:string):OracleImageDisposition[] {
+  const kept=(path:string,error:unknown):OracleImageDisposition=>({path,bytes:null,state:`kept: ${error instanceof Error?error.message:String(error)}`});
+  let files:string[];try{files=registeredImageFiles(owned,home);}catch(error){return [kept(imageRegistry(owned),error)];}
+  const dropped:OracleImageDisposition[]=[];
+  for(const file of files){
+   let path=file;
+   try{
+    const receipt=imageReceipt(file),reported=receipt.image?.path;
+    if(typeof reported==='string'&&reported===resolve(reported)&&under(owned.path,reported))path=reported;
+    const entry=registeredImage(file,owned,home,receipt);if(!entry)continue;
     if(entry.prior){dropped.push(entry.prior);continue;}
-    const path=entry.receipt.image.path;
     let bytes=0;
     if(entry.present){
+      assertNoProcessUsers([path],{self:process.pid});
       bytes=Number(execFileSync('du',['-sx','-B1','--',path],{encoding:'utf8'}).split('\t')[0]);
       if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('cannot measure registered oracle image: '+path);
       imageParents(entry.receipt.temporary,path,home);sameDirectory(entry.receipt.parent);sameDirectory(entry.receipt.image);
@@ -164,6 +179,7 @@ function dropOracleImages(owned:RunTemporary,home:string):DroppedOracleImage[] {
     }
     const result:DroppedOracleImage={path,bytes,state:entry.present?'dropped':'already absent'};
     writeFileSync(entry.dropped,JSON.stringify(result)+'\n',{flag:'wx',mode:0o400});dropped.push(result);
+   }catch(error){dropped.push(kept(path,error));}
   }
   return dropped;
 }
