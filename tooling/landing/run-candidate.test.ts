@@ -88,7 +88,10 @@ test('the candidate launcher validates its owned view before a downlevel factory
  const descriptor=JSON.parse(readFileSync(f.memory.NTS_HOST_OBSERVATIONS,'utf8'));delete descriptor.processUsers;durableRecord(f.memory.NTS_HOST_OBSERVATIONS,descriptor);
  const result=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:options.owned!,command:['/must-not-start']},launcherEnvironment(options.env));
  assert.equal(result.status,2);assert.match(result.error!.message,/host observation processUsers is missing or invalid/);
- assert.equal(existsSync(entered),false);assert.equal(existsSync(f.run),false);
+ assert.equal(existsSync(entered),false);assert.equal(existsSync(join(f.run,'tmp')),false);
+ assert.equal(existsSync(join(f.run,'tmp/compat-image/tree')),false);
+ assert.deepEqual(readdirSync(f.run),['candidate-groups'],'only the launcher receipt namespace was allocated');
+ assert.deepEqual(readdirSync(join(f.run,'candidate-groups')),[],'the actual group receipt was removed after joined refusal');
 });
 
 test('a candidate that rewrites its owned observation descriptor refuses before the payload',async t=>{

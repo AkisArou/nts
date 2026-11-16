@@ -3582,6 +3582,7 @@ consumer still reads once after existence, without parse retries. Branding
 the injected fragment lets the existing publication audit inspect code placed
 through a source replacement. Other structured fixture handoffs already use
 the owner; marker-only and joined-completion cases keep their contracts.
+
 ## Oracle image process observations (11-16)
 
 A #797 producer fixture failed in the root-identity landing because its image

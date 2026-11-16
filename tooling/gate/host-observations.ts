@@ -204,13 +204,6 @@ function paging(file:string){
 
 /** No fixture method falls back to a live observation. Reloading its owned
  * file lets the fixture move one resource without replacing its capability. */
-/** Bind the launcher's explicit resource packet before another version's
- * factory allocates. The descriptor and validated view share one input set. */
-export function acquireHostObservations(base:NodeJS.ProcessEnv,owned:Readonly<Record<string,string>>):{readonly descriptor:string|undefined;readonly observations:HostObservations}{
-  const inputs={...base,...owned};
-  return {descriptor:inputs[HOST_OBSERVATIONS],observations:hostObservations(inputs)};
-}
-
 export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservations {
   const file=env[HOST_OBSERVATIONS];
   if(file!==undefined){

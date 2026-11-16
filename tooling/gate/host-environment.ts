@@ -9,6 +9,16 @@ import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-
 import {ToolingInstrumentError} from './step-result.ts';
 import type {Context} from './environment-types.ts';
 import {HOST_INFRASTRUCTURE} from "./host-infrastructure.ts";
+import {HOST_OBSERVATIONS,hostObservations,type HostObservations} from './host-observations.ts';
+
+/** The environment owner binds a launcher's explicit resource packet before
+ * another version's factory allocates. Validation and sampling stay with the
+ * observation owner; descriptor and held view share one input set. */
+export function acquireHostObservations(base:NodeJS.ProcessEnv,owned:Readonly<Record<string,string>>):{readonly descriptor:string|undefined;readonly observations:HostObservations}{
+  const inputs={...base,...owned};
+  return {descriptor:inputs[HOST_OBSERVATIONS],observations:hostObservations(inputs)};
+}
+
 export const HOST_CAPABILITIES = [
   "PATH", "HOME", ...HOST_INFRASTRUCTURE, "CARGO_HOME", "RUSTUP_HOME",
   "JAVA_HOME", "JDK_HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_AVD_HOME", "DEBUGINFOD_URLS",

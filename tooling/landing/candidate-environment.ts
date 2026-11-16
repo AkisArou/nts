@@ -10,7 +10,8 @@ import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {assertObservedGroupEmpty,ownedProcessGroup} from '../gate/process-group.ts';
 import {randomUUID} from 'node:crypto';
 import {durableRecord} from '../gate/durable-record.ts';
-import {HOST_OBSERVATIONS,acquireHostObservations} from '../gate/host-observations.ts';
+import {HOST_OBSERVATIONS} from '../gate/host-observations.ts';
+import {acquireHostObservations} from '../gate/host-environment.ts';
 
 export type CandidateCommand = {tree:string;run:string;owned:Record<string,string>;command:readonly string[];standalone?:boolean;discardTemporary?:boolean};
 type LaunchRequest=CandidateCommand&{treeLock?:boolean;node?:string};
