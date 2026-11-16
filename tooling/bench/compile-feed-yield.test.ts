@@ -19,7 +19,7 @@ test('compile lanes quiesce before yielding and pending cells wait for normal re
  },{cohort,outranked:()=>outranked,token:async()=>{grants++;return()=>{releases++;};}});
  await waitFor('both initial compile lanes running',()=>started.length===2);
  outranked=true;answers[0]!.resolve({kind:'pass'});await paused.promise;
- assert.equal(started.length,2);assert.deepEqual(events,[],'the remaining compile must drain before the shared owner yields');
+ assert.equal(started.length,2);assert.equal(events.length,0,'the remaining compile must drain before the shared owner yields');
  answers[1]!.resolve({kind:'pass'});
  await waitFor('compile owner yielded after its last live child',()=>events.some(line=>line.startsWith('case cohort yielded:')));
  assert.equal(started.length,2,'a pending compile cannot start while priority yields');
