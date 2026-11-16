@@ -10,6 +10,7 @@ import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {assertObservedGroupEmpty,ownedProcessGroup} from '../gate/process-group.ts';
 import {randomUUID} from 'node:crypto';
 import {durableRecord} from '../gate/durable-record.ts';
+import {HOST_OBSERVATIONS,hostObservations} from '../gate/host-observations.ts';
 
 export type CandidateCommand = {tree:string;run:string;owned:Record<string,string>;command:readonly string[];standalone?:boolean;discardTemporary?:boolean};
 type LaunchRequest=CandidateCommand&{treeLock?:boolean;node?:string};
@@ -138,8 +139,14 @@ async function launch():Promise<number>{
     candidate=await import(pathToFileURL(module).href);
     if(typeof candidate.gateEnvironment!=='function')throw Error('gateEnvironment is not exported');
   }catch(error){throw new CandidateEnvironmentContractError(`candidate environment contract: ${module} must export gateEnvironment: ${String(error)}`);}
+  // A downlevel factory cannot return the in-process observation field. The
+  // launcher still owns its exact resource packet before that factory allocates.
+  const inputs={...process.env,...request.owned},acquired=hostObservations(inputs);
   const planned=candidate.gateEnvironment(process.env,{run:request.run,owned:request.owned,oracleRoot:request.tree,standalone:request.standalone,node:request.node});
+  let observations=acquired;
   try{
+    if(planned.env[HOST_OBSERVATIONS]!==inputs[HOST_OBSERVATIONS])throw Error('candidate environment changed the owned host observation descriptor: '+HOST_OBSERVATIONS);
+    observations=planned.observations??acquired;
     const child=spawn(request.command[0]!,request.command.slice(1),{cwd:request.tree,env:planned.env,
       stdio:request.treeLock?['inherit','inherit','inherit','ignore','ignore','ignore','ignore','ignore',8]:'inherit'});
     let error:Error|undefined;
@@ -155,7 +162,7 @@ async function launch():Promise<number>{
   }finally{
     // Recorder evidence lives in its own run files, as before. Its run-owned
     // scratch is discarded even when recording refuses or cannot start.
-    if(request.discardTemporary)finishRunTemporary(planned.temporary,planned.env.HOME!,true,{host:planned.observations});
+    if(request.discardTemporary)finishRunTemporary(planned.temporary,planned.env.HOME!,true,{host:observations});
   }
 }
 

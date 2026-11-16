@@ -5,7 +5,7 @@ import {test} from "node:test";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {chmodSync,copyFileSync,existsSync,mkdirSync,readFileSync,unlinkSync,writeFileSync} from "node:fs";
+import {chmodSync,copyFileSync,existsSync,mkdirSync,readFileSync,unlinkSync,writeFileSync,symlinkSync,readdirSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {join,dirname,resolve} from "node:path";
 import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
@@ -17,6 +17,88 @@ import {fullEnvironment} from "../census/full-plan.ts";
 import {candidateCommand,candidateCommandAsync} from "./candidate-environment.ts";
 import {GATE,fixture} from './run-fixture.ts';
 import {clippyTarget} from "../gate/build-targets.ts";
+import {ownMemory} from '../gate/test-memory.ts';
+import {HOST_OBSERVATIONS,hostObservations} from '../gate/host-observations.ts';
+import {finishRunTemporary} from '../gate/run-temporary.ts';
+import {treeProcessFixture} from './tree-users-fixture.ts';
+import {durableRecord} from '../gate/durable-record.ts';
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
+import {pathToFileURL} from 'node:url';
+
+function downlevelFactory(file:string,entered?:string){
+ const source=readFileSync(file,'utf8'),anchor='export function gateEnvironment(';
+ assert.equal(source.split(anchor).length,2);unlinkSync(file);
+ writeFileSync(file,source.replace(anchor,'function heldGateEnvironment(')+generatedJavaScript(`
+import {writeFileSync as mark797Factory} from 'node:fs';
+export function gateEnvironment(...args){
+ ${entered?`mark797Factory(${JSON.stringify(entered)},'entered');`:''}
+ const planned=heldGateEnvironment(...args),{observations,...legacy}=planned;
+ return legacy;
+}
+`));
+}
+
+test('a downlevel candidate closes a red image with its owned view instead of the ambient empty view',async t=>{
+ for(const held of [true,false])await t.test(held?'owned holder keeps the image':'owned empty view permits disposal',async t=>{
+ const f=fixture(t),options=f.options([]),processes=treeProcessFixture(t),image=join(f.run,'tmp/compat-image/tree');
+ if(held)symlinkSync(image,join(processes.task,'fd/3'));
+ const memory=ownMemory(join(f.own,'supplied-view'),{processUsers:{kind:'proc',root:processes.proc}}),ambient=ownMemory(join(f.own,'ambient-view'));
+ downlevelFactory(join(f.tree,'tooling/gate/canonical-environment.ts'));
+ const receipt=join(f.controls,'red-image.json'),command=join(f.controls,'red-image.mjs');
+ writeFileSync(command,generatedJavaScript(`
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {createRunOracleImage,finishRunTemporary} from ${JSON.stringify(pathToFileURL(join(f.tree,'tooling/gate/run-temporary.ts')).href)};
+import {hostObservations} from ${JSON.stringify(pathToFileURL(join(f.tree,'tooling/gate/host-observations.ts')).href)};
+import {durableRecord} from ${JSON.stringify(pathToFileURL(join(f.tree,'tooling/gate/durable-record.ts')).href)};
+const owned=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT).temporary,parent=join(owned.path,'compat-image');mkdirSync(parent);
+const tree=createRunOracleImage(owned,process.env.HOME,join(parent,'tree'));writeFileSync(join(tree,'payload'),'identity bytes');
+const result=finishRunTemporary(owned,process.env.HOME,false,{host:hostObservations(process.env)});
+durableRecord(${JSON.stringify(receipt)},{owned,result});process.exitCode=1;
+`));
+ let owned:import('../gate/run-temporary.ts').RunTemporary|undefined;
+ try{
+  const result=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:{...options.owned,...memory},command:[process.execPath,command],discardTemporary:true},
+   {...launcherEnvironment(options.env),...ambient});
+  assert.equal(result.status,1,(result.stdout??'')+(result.stderr??''));assert.equal(result.signal,null);assert.equal(result.error,undefined);
+  const closed=JSON.parse(readFileSync(receipt,'utf8'));owned=closed.owned;
+  assert.equal(closed.result.state,'retained after red',JSON.stringify(closed.result));
+  const directory=join(options.env!.HOME!,'.cache/nts-gate/closed-temporaries'),rows=readdirSync(directory).filter(name=>name.endsWith('.json'));
+  if(held){
+   assert.deepEqual(closed.result.oracle_images,[{path:image,bytes:null,state:'kept: process 42 owns fd/3 in '+image}]);
+   assert.equal(readFileSync(join(image,'payload'),'utf8'),'identity bytes','the wrapper did not discard through its empty ambient view');
+   assert.equal(rows.length,1);const registered=JSON.parse(readFileSync(join(directory,rows[0]!),'utf8'));
+   assert.deepEqual(registered.oracle_images,closed.result.oracle_images);assert.equal(registered.owned.path,owned!.path);
+  }else{
+   assert.equal(closed.result.oracle_images.length,1);assert.equal(closed.result.oracle_images[0].state,'dropped');assert.ok(closed.result.oracle_images[0].bytes>0);
+   assert.equal(existsSync(image),false);assert.equal(existsSync(owned!.path),false);assert.deepEqual(rows,[]);
+  }
+ }finally{
+  if(held)unlinkSync(join(processes.task,'fd/3'));
+  if(owned&&existsSync(owned.path))assert.equal(finishRunTemporary(owned,options.env!.HOME!,true,{host:hostObservations(memory)}).state,'removed after green');
+ }
+ });
+});
+
+test('the candidate launcher validates its owned view before a downlevel factory can allocate',async t=>{
+ const f=fixture(t),options=f.options([]),entered=join(f.controls,'factory-entered'),file=join(f.tree,'tooling/gate/canonical-environment.ts');
+ downlevelFactory(file,entered);
+ // Keep the generated factory synchronous, with an observable entry before the
+ // real factory's own validation. Only the launcher's precondition can prevent it.
+ const descriptor=JSON.parse(readFileSync(f.memory.NTS_HOST_OBSERVATIONS,'utf8'));delete descriptor.processUsers;durableRecord(f.memory.NTS_HOST_OBSERVATIONS,descriptor);
+ const result=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:options.owned!,command:['/must-not-start']},launcherEnvironment(options.env));
+ assert.equal(result.status,2);assert.match(result.error!.message,/host observation processUsers is missing or invalid/);
+ assert.equal(existsSync(entered),false);assert.equal(existsSync(f.run),false);
+});
+
+test('a candidate that rewrites its owned observation descriptor refuses before the payload',async t=>{
+ const f=fixture(t),options=f.options([]),file=join(f.tree,'tooling/gate/canonical-environment.ts'),other=ownMemory(join(f.own,'rewritten-view'));
+ const source=readFileSync(file,'utf8'),anchor='return { env, report, temporary, observations };';assert.equal(source.split(anchor).length,2);unlinkSync(file);
+ writeFileSync(file,source.replace(anchor,`env.NTS_HOST_OBSERVATIONS=${JSON.stringify(other.NTS_HOST_OBSERVATIONS)};${anchor}`));
+ const result=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:options.owned!,command:['/must-not-start'],discardTemporary:true},launcherEnvironment(options.env));
+ assert.equal(result.status,2);assert.match(result.error!.message,/candidate environment changed the owned host observation descriptor: NTS_HOST_OBSERVATIONS/);
+ assert.equal(existsSync(join(f.run,'tmp')),false,'the launcher still closes the allocated empty root through its held view');
+});
 
 test("a runner's in-process provisioning ignores a launcher-supplied Git", t => {
   const f = fixture(t), options = f.options([]), bin = join(f.own, "launcher-tools");

@@ -3602,6 +3602,10 @@ The canonical acquisition owner validates the descriptor before allocating a
 temporary and retains that same capability through close. Construction samples
 nothing. Direct temporary callers acquire an omitted view lazily within each
 image guard, so a malformed view cannot prevent closed-root accounting.
+A candidate launcher acquires its own supplied resource packet before calling
+a downlevel factory, uses the candidate's held object when present and its own
+when absent, and refuses a rewritten descriptor. A downlevel return never
+grants permission to substitute the wrapper's ambient observation.
 
 The full-tooling repeat exposed #808's latent idle-pressure accounting flake:
 an uncommitted startup offer can return and acquire another token without

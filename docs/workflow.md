@@ -2200,7 +2200,10 @@ death; an absent timestamp remains explicit after forced termination.
   the exact child PIDs they observe live; unrelated machine processes cannot
   decide their cleanup assertions. `gateEnvironment` validates the complete
   named view before creating a run temporary, without sampling its resources,
-  and holds that in-process capability through close. Direct temporary owners
+  and holds that in-process capability through close. A candidate launcher
+  acquires its supplied observation packet before invoking another version's
+  factory, retains it when that factory has no in-process observation field,
+  and refuses a factory that rewrites the descriptor. Direct temporary owners
   acquire an omitted view only inside the image guard that needs it: a failed
   view keeps that image by name and still registers the closed root. A close
   reports each complete image disposition before a fixture checks whether the
