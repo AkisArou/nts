@@ -5,7 +5,7 @@ import {dirname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {moduleGraph, type ModuleClosureOptions,type InputSnapshot} from "./module-closure.ts";
 import {outsideSource} from "./source-containment.ts";
-import {canonicalNamespace as canonical,fixtureNamespaces,type InputEntry} from './reader-inputs/main.ts';
+import {canonicalNamespace as canonical,fixtureNamespaces,type FixtureInput,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 import {directoryEntries,memberType,metadataParents} from './reader-metadata.ts';
@@ -224,4 +224,19 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   if(data.publish)durableRecord(join(destination,FIXTURE_INPUT_MANIFEST),data.manifest);
   replayFixtureReaderObservations(staged,source,destination,fixtureEntries,!!(options.link||options.reuseSourceLinks));
   return files;
+}
+
+
+/** Stage a fixture's explicit-root project recipe unchanged. The runtime
+ * emitter still observes and checks that project; this copies no installed
+ * Program and does not infer compiler options. */
+export function copyFixtureProject(project:FixtureInput,root:string,options:FixtureClosureOptions&{entries?:readonly InputEntry[]}={}):string[]{
+  const config:unknown=JSON.parse(readFileSync(project.url,'utf8'));
+  if(!config||typeof config!=='object')throw Error('fixture project requires explicit files and an empty include: '+project.url.href);
+  const row=config as {files?:unknown;include?:unknown;references?:unknown};
+  if(!Array.isArray(row.files)||!row.files.every((file):file is string=>typeof file==='string'&&file.length>0)||!Array.isArray(row.include)||row.include.length||row.references!==undefined&&(!Array.isArray(row.references)||row.references.length))
+    throw Error('fixture project requires explicit files and an empty include: '+project.url.href);
+  const source=realpathSync(options.sourceRoot??SOURCE),directory=dirname(fileURLToPath(project.url));
+  const entries=row.files.map(file=>relative(source,resolve(directory,file)).split(sep).join('/'));
+  return copyModuleClosure([project,...entries,...options.entries??[]],root,options);
 }

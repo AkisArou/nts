@@ -1281,7 +1281,10 @@ the first node task.
   importing a family or compiler parser. Each `*-record-family.ts` owns its
   population, format rules and source identity. Command entries prepare their
   oracle explicitly, then pass the sealed environment to `recorder-command.ts`
-  for supervised execution. A fixture composes the core and its own family;
+  for supervised execution. `copyFixtureProject` stages an explicit-root
+  fixture project from its unchanged config and authoritative `files` list,
+  through `copyModuleClosure`; it grants no installed Program. A fixture
+  composes the core and its own family;
   composition controls retain the complete production table
   ([log](records/notebooks/decisions-log.md#independent-record-families-11-16)).
 

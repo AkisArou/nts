@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import {existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {test, type TestContext} from "node:test";
-import {copyModuleClosure, moduleClosure, FIXTURE_INPUT_MANIFEST} from "./module-closure-fixture.ts";
+import {copyFixtureProject, copyModuleClosure, moduleClosure, FIXTURE_INPUT_MANIFEST} from "./module-closure-fixture.ts";
 import {moduleGraph} from './module-closure.ts';
 import {spawnTest} from "./test-wait.ts";
 import {testScratch} from "./test-scratch.ts";
@@ -939,4 +939,22 @@ for(const [label,statement,entered]of [
   const after=moduleGraph({sourceRoot:f.source});
   try{assert.equal(after.describe(['entry.ts']).files.includes('dependency.ts'),entered);}
   finally{after.close();}
+});
+
+
+test('fixture project staging follows its one explicit root list and preserves configuration bytes',t=>{
+  const f=fixture(t),project=fixtureInput(pathToFileURL(join(f.source,'project/tsconfig.json')),{dataNamespaces:{}});
+  const config=JSON.stringify({files:['entry.ts'],include:[]});
+  f.write('project/tsconfig.json',config);f.write('project/entry.ts',"import './dependency.ts';");f.write('project/dependency.ts','export const value=1;');f.write('project/added.ts','export const added=2;');
+  assert.deepEqual(copyFixtureProject(project,f.destination,{sourceRoot:f.source}),['project/dependency.ts','project/entry.ts','project/tsconfig.json']);
+  assert.equal(readFileSync(join(f.destination,'project/tsconfig.json'),'utf8'),config);assert.equal(existsSync(join(f.destination,'project/added.ts')),false);
+  f.write('project/tsconfig.json',JSON.stringify({files:['entry.ts','added.ts'],include:[]}));
+  const next=join(f.source,'..','next');
+  assert.ok(copyFixtureProject(project,next,{sourceRoot:f.source}).includes('project/added.ts'));
+});
+
+for(const change of [{include:['**/*.ts']},{files:undefined},{references:[{path:'../other'}]}])test('fixture project staging refuses an implicit or referenced root recipe '+JSON.stringify(change),t=>{
+  const f=fixture(t);f.write('tsconfig.json',JSON.stringify({files:['entry.ts'],include:[],...change}));f.write('entry.ts','export const value=1;');
+  assert.throws(()=>copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source}),/fixture project requires explicit files and an empty include/);
+  assert.equal(existsSync(f.destination),false);
 });
