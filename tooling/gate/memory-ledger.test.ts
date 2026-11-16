@@ -174,7 +174,7 @@ for (const priority of ['full-check', 'agent'] as const) for (const order of ['b
     f.memory(3.5);
     lowerGrowth = lower.grow(2 * GiB, { draining: true });
     await waitFor('lower growth is queued first', () => readLedger(f.dir).waiting.some(row => row.grows === lower.id));
-  }
+  } else f.memory(4.5);
   const higherGrowth = higher.grow(3 * GiB);
   await waitFor('higher growth is blocked', () => readLedger(f.dir).waiting.some(row => row.grows === higher.id));
   let freshGranted = false;

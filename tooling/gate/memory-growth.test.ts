@@ -33,7 +33,7 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
   const pending:{bytes:number;draining:boolean;answer:ReturnType<typeof Promise.withResolvers<void>>;done:boolean}[]=[];
   void closed.promise.catch(()=>{});
   const state={
-    stopping:false,summaryWritten:false,yielding:false,drainReturn:null as Promise<void>|null,withholdBytes:0,memoryWanted:21*GiB,
+    stopping:false,summaryWritten:false,yielding:false,outrankedNow:false,drainReturn:null as Promise<void>|null,withholdBytes:0,memoryWanted:21*GiB,
     capacity:32*GiB,BLOCK:GiB,running:new Map<string,{draining:boolean;want:number}>(),growth:null as null|{bytes:number;draining:boolean;controller:AbortController;withdrawn:boolean},
     memoryRecord:{shrinks:0,growths:0,withdrawn:0,waited_s:0},
     used:()=>({bytes:0}),outranked:():boolean=>state.yielding,reserved:()=>allocated,tokenShort:()=>0,
