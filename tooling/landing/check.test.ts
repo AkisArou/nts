@@ -17,6 +17,8 @@ import { Queue } from "./queue.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {landingStatus,reportLandingStatus} from './status.ts';
 import {Pool} from './pool.ts';
+import {spawnTest} from "../gate/test-wait.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {hostObservations} from '../gate/host-observations.ts';
 import {ownMemory} from '../gate/test-memory.ts';
 
@@ -131,4 +133,33 @@ test('landing status reports an ownership failure on its tree line and returns s
     const text=output.pop()!;assert.ok(text.includes(tree.path));assert.ok(text.includes(failure.message));
   }
   assert.throws(()=>pool.trees(),error=>error===failure,'status diagnostics cannot certify ownership for reset');
+});
+
+
+test('a real held-then-green --here run prints its final PASS report and exits zero',t=>{
+ const code=`import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {readFileSync} from 'node:fs';import {join} from 'node:path';import {mock} from 'node:test';
+const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)};
+const realRules=await import(rules),realRun=await import(run);
+const {landingSelection}=await import(${JSON.stringify(new URL('./selection.ts',import.meta.url).href)});
+const {gitArguments}=await import(${JSON.stringify(new URL('../gate/git-arguments/main.ts',import.meta.url).href)});
+const {fixture}=await import(${JSON.stringify(new URL('./run-fixture.ts',import.meta.url).href)});
+const cleanup=[],f=fixture({after(fn){cleanup.push(fn);}});f.control('rustfmt','pressure');
+const git=(...args)=>execFileSync('git',gitArguments(args),{cwd:f.tree,env:f.options([]).env,encoding:'utf8'}).trim();
+git('add','.');git('-c','user.name=retry control','-c','user.email=retry@example.invalid','commit','-qm','private here retry inputs');
+const commit=git('rev-parse','HEAD');let actualRun;
+const selection=landingSelection({owed:{steps:['build','rustfmt']},paths:[],catalogue:['build','rustfmt'],table:{build:{form:'as-is'},rustfmt:{form:'as-is'}},inCorpus:()=>false,rows:new Map(),cost:()=>({cpu:1,measured:true,source:'control'}),budget:{slots:24,frontends:24,seconds:600}});
+mock.module(rules,{namedExports:{...realRules,ruleSelect:()=>()=>({selection,kind:'other',interop:null,doctests:null})}});
+mock.module(run,{namedExports:{...realRun,runLanding:options=>{actualRun=options.run;return realRun.runLanding({...options,build:f.options([]).build,owned:f.options([]).owned,env:{...options.env,HOME:f.options([]).env.HOME}});}}});
+const before=process.cwd();process.chdir(f.tree);process.argv=[process.execPath,${JSON.stringify(CHECK)},commit,'--here'];
+try{
+ await import(${JSON.stringify(new URL('./check.ts',import.meta.url).href)});
+ assert.equal(process.exitCode,0);const result=JSON.parse(readFileSync(join(actualRun,'landing.json'),'utf8'));
+ assert.equal(result.state,'green');assert.equal(result.steps.find(row=>row.name==='rustfmt').attempt,2);
+ const retry=JSON.parse(readFileSync(join(actualRun,'attempt-2/summary.json'),'utf8'));assert.equal(retry.environment.canonical,true);
+ assert.equal(retry.steps.find(row=>row.name==='rustfmt').verdict,'PASS');
+}finally{process.chdir(before);for(const fn of cleanup.reverse())await fn();}`;
+ const imports=process.execArgv.flatMap((argument,index,args)=>argument==='--import'&&args[index+1]?[argument,args[index+1]!] : []);
+ const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{encoding:'utf8',env:fixtureEnvironment(t)});
+ const output=(result.stdout??'')+(result.stderr??'');assert.equal(result.status,0,output);
+ assert.match(output,/PASS\s+build/);assert.match(output,/PASS\s+rustfmt/);assert.match(output,/landing: green in .*green/);
 });
