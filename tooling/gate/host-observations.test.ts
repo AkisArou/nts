@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,parseCgroupCpu} from './host-observations.ts';
+import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,acquireHostObservations,parseCgroupCpu} from './host-observations.ts';
 import {gateEnvironment,assertLandingEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
 import {TemporaryAdmission} from './admission.ts';
@@ -42,6 +42,15 @@ test('constructing an observation validates descriptors without walking proc or 
  assert.equal(typeof host.processUsers,'function');assert.equal(typeof host.memory,'function');
  assert.throws(()=>host.processUsers([root]),/host observation processUsers failed/);
  assert.throws(()=>host.memory(),/host observation memory.file/);
+});
+
+test('launch acquisition binds the descriptor and view from the supplied packet without changing ambient values',t=>{
+ const root=testScratch(t,'host-launch-packet'),ambient=ownMemory(join(root,'ambient'));
+ const supplied=ownMemory(join(root,'supplied'),{processUsers:{kind:'proc',root:join(root,'not-read-at-acquisition')}}),before={...ambient};
+ const acquired=acquireHostObservations(ambient,supplied);
+ assert.equal(acquired.descriptor,supplied.NTS_HOST_OBSERVATIONS);assert.notEqual(acquired.descriptor,ambient.NTS_HOST_OBSERVATIONS);
+ assert.deepEqual(ambient,before);assert.throws(()=>acquired.observations.processUsers([root]),/host observation processUsers failed/);
+ assert.deepEqual(hostObservations(ambient).processUsers([root]),{users:[],ignored:[],unreadable:[]});
 });
 
 test('one complete owned view supplies every resource, including child observations',t=>{

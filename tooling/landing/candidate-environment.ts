@@ -10,7 +10,7 @@ import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {assertObservedGroupEmpty,ownedProcessGroup} from '../gate/process-group.ts';
 import {randomUUID} from 'node:crypto';
 import {durableRecord} from '../gate/durable-record.ts';
-import {HOST_OBSERVATIONS,hostObservations} from '../gate/host-observations.ts';
+import {HOST_OBSERVATIONS,acquireHostObservations} from '../gate/host-observations.ts';
 
 export type CandidateCommand = {tree:string;run:string;owned:Record<string,string>;command:readonly string[];standalone?:boolean;discardTemporary?:boolean};
 type LaunchRequest=CandidateCommand&{treeLock?:boolean;node?:string};
@@ -141,12 +141,12 @@ async function launch():Promise<number>{
   }catch(error){throw new CandidateEnvironmentContractError(`candidate environment contract: ${module} must export gateEnvironment: ${String(error)}`);}
   // A downlevel factory cannot return the in-process observation field. The
   // launcher still owns its exact resource packet before that factory allocates.
-  const inputs={...process.env,...request.owned},acquired=hostObservations(inputs);
+  const acquired=acquireHostObservations(process.env,request.owned);
   const planned=candidate.gateEnvironment(process.env,{run:request.run,owned:request.owned,oracleRoot:request.tree,standalone:request.standalone,node:request.node});
-  let observations=acquired;
+  let observations=acquired.observations;
   try{
-    if(planned.env[HOST_OBSERVATIONS]!==inputs[HOST_OBSERVATIONS])throw Error('candidate environment changed the owned host observation descriptor: '+HOST_OBSERVATIONS);
-    observations=planned.observations??acquired;
+    if(planned.env[HOST_OBSERVATIONS]!==acquired.descriptor)throw Error('candidate environment changed the owned host observation descriptor: '+HOST_OBSERVATIONS);
+    observations=planned.observations??acquired.observations;
     const child=spawn(request.command[0]!,request.command.slice(1),{cwd:request.tree,env:planned.env,
       stdio:request.treeLock?['inherit','inherit','inherit','ignore','ignore','ignore','ignore','ignore',8]:'inherit'});
     let error:Error|undefined;
