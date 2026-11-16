@@ -22,13 +22,13 @@ export {RUST_SELECTOR_RECORD} from './rust-selector-material.ts';
 const KINDS=['file','fileExists','directoryExists','entries','realpath','readlink','runtimeEntries','runtimeKind','stat'] as const;
 const ROOTS=['source','sdk','sdk-native','source-parent'] as const;
 const DIRECTORY_KINDS=['module','data','inspection','conservative'] as const;
-const SCHEMA=selectorHash({version:2,roots:ROOTS,kinds:KINDS,directoryKinds:DIRECTORY_KINDS,protocols:READER_PROTOCOLS,
-  format:'parent/name path nodes; collision-checked 48-bit SHA256 routing IDs; key-referenced path bindings; context/role pools; ordered reference blocks split at 64 or routing hash nibble zero; base64url SHA256 key rows; exact typed-answer parent-scope digests; native config matches; observation-only dependency bit; acquired main blob required'});
+const SCHEMA=selectorHash({version:3,roots:ROOTS,kinds:KINDS,directoryKinds:DIRECTORY_KINDS,protocols:READER_PROTOCOLS,
+  format:'parent/name path nodes; collision-checked 48-bit SHA256 routing IDs; key-referenced path bindings; context/selection-role pools; two fixed ordered reference levels split at 64 or routing hash nibble zero; base64url SHA256 key rows; exact typed-answer parent-scope digests; native config matches; acquired main blob required'});
 export const MAX_RUST_SELECTOR_RECORD_BYTES=6*1024*1024;
 type Row=unknown[];
 type WireTarget={target:string;files:string[];moduleFiles:string[];placingFiles:string[];directories:string[];optionalFiles:string[];memberships:string[];byteInputs:string[];typedDependencies:string[]};
 type WireKey={engine:Row[];declarations:Row;cargo:{inputs:Row[];targets:Row[]};sdk:TypeScriptIdentity;files:Row[];facts:Row[];projects:Row[];candidates:Row[];populations:Row[]};
-export type RustSelectorRecord={version:1;schemaSha256:string;paths:Row[];contexts:Row[];dependencies:Row[];directories:Row[];optional:Row[];memberships:Row[];byteInputs:Row[];lists:Row[];key:WireKey;targets:WireTarget[];keySha256:string;targetsSha256:string};
+export type RustSelectorRecord={version:1;schemaSha256:string;paths:Row[];contexts:Row[];dependencies:Row[];directories:Row[];optional:Row[];memberships:Row[];byteInputs:Row[];lists:Row[];references:Row[];key:WireKey;targets:WireTarget[];keySha256:string;targetsSha256:string};
 export type RustSelectorTarget={target:RustRuntimeTarget;roles:RustSelectorRoles};
 export type TrustedRustSelectorRecord={revision:string;blob:string;sha256:string};
 export type RustSelectorRead={state:'current';targets:RustSelectorTarget[];trusted:TrustedRustSelectorRecord}|{state:'pending';pending:SelectorPending};
@@ -74,7 +74,7 @@ class Paths extends Pool{
   source(path:string):string|-1{return path==='<entry>'?-1:this.path({root:'source',path});}
 }
 const payload=(record:RustSelectorRecord)=>({paths:record.paths,contexts:record.contexts,dependencies:record.dependencies,directories:record.directories,
-  optional:record.optional,memberships:record.memberships,byteInputs:record.byteInputs,lists:record.lists,targets:record.targets});
+  optional:record.optional,memberships:record.memberships,byteInputs:record.byteInputs,lists:record.lists,references:record.references,targets:record.targets});
 /** Hash bindings belong to their consuming key. The complete path table also
  * carries raw claim roles, whose new names must not change selection identity.
  * This is a projection, not validation: the decoder checks all references and
@@ -105,21 +105,25 @@ export const rustSelectorRecordHashes=(record:RustSelectorRecord)=>({keySha256:s
 
 /** The writer calls this only after checking the complete live material. */
 export function encodeRustSelectorRecord(material:RustSelectorMaterial):RustSelectorRecord{
-  const paths=new Paths(),contexts=new Pool(),dependencies=new Pool(),directories=new Pool(),optional=new Pool(),memberships=new Pool(),byteInputs=new Pool(),lists=new Pool();
-  const blocks=(values:readonly (string|-1)[]):string[]=>{
+  const paths=new Paths(),contexts=new Pool(),dependencies=new Pool(),directories=new Pool(),optional=new Pool(),memberships=new Pool(),byteInputs=new Pool(),lists=new Pool(),references=new Pool();
+  const blocks=(values:readonly (string|-1)[],pool:Pool):string[]=>{
     const result:string[]=[];let pending:(string|-1)[]=[];
-    for(const value of values){pending.push(value);if(pending.length>=64||(createHash('sha256').update(JSON.stringify(value)).digest()[0]!&15)===0){result.push(lists.add(pending));pending=[];}}
-    if(pending.length)result.push(lists.add(pending));return result;
+    for(const value of values){pending.push(value);if(pending.length>=64||(createHash('sha256').update(JSON.stringify(value)).digest()[0]!&15)===0){result.push(pool.add(pending));pending=[];}}
+    if(pending.length)result.push(pool.add(pending));return result;
   };
+  const roleBlocks=(values:readonly (string|-1)[])=>blocks(blocks(values,lists),references);
   const context=(row:ReaderContext)=>contexts.add([paths.source(row.entry),Object.entries(row.dataNamespaces).sort(([a],[b])=>a.localeCompare(b,'en')).map(([name,owner])=>[paths.source(name),owner])]);
   const file=(row:SelectorFile):Row=>[paths.path(row.path),row.mode,row.bytes,encodeDigest(row.sha256),...(row.identity||row.linkText!==undefined?[{
     ...(row.linkText===undefined?{}:{linkText:row.linkText}),...(row.identity?{physical:paths.path(row.identity.path),aliases:row.identity.aliases.map(alias=>[paths.path(alias.path),alias.text])}:{})}]:[])];
-  const targets=material.targets.map(({target,roles}):WireTarget=>({target:paths.path({root:'source',path:target.source}),files:blocks(roles.files.map(path=>paths.source(path))),moduleFiles:blocks(roles.moduleFiles.map(path=>paths.source(path))),placingFiles:blocks(roles.placingFiles.map(path=>paths.source(path))),
-    directories:blocks(roles.directories.map(row=>directories.add([paths.source(row.reader),paths.source(row.directory),DIRECTORY_KINDS.indexOf(row.kind),row.fileCount,row.member??null,row.fixture?[paths.source(row.fixture.entry),row.fixture.owner]:null,row.context?context(row.context):null]))),
-    optionalFiles:blocks(roles.optionalFiles.map(row=>optional.add([paths.source(row.reader),paths.source(row.path),context(row.context),Number(row.present)]))),
-    memberships:blocks(roles.memberships.map(row=>memberships.add([paths.source(row.reader),paths.source(row.directory),context(row.context),row.entries.map(entry=>[paths.source(row.directory?row.directory+'/'+entry.name:entry.name),['file','directory','symlink'].indexOf(entry.type)])]))),
-    byteInputs:blocks(roles.byteInputs.map(row=>byteInputs.add([paths.source(row.reader),paths.source(row.path)]))),
-    typedDependencies:blocks(roles.typedDependencies.map(row=>dependencies.add([paths.source(row.reader),READER_PROTOCOLS.indexOf(row.protocol),paths.source(row.dependency.path),KINDS.indexOf(row.dependency.kind),Number(row.dependency.bytes)|(Number(row.dependency.directoryStat)<<1)|(Number(row.dependency.observationOnly===true)<<2),context(row.dependency.context)]))),
+  const targets=material.targets.map(({target,roles}):WireTarget=>({target:paths.path({root:'source',path:target.source}),files:roleBlocks(roles.files.map(path=>paths.source(path))),moduleFiles:roleBlocks(roles.moduleFiles.map(path=>paths.source(path))),placingFiles:roleBlocks(roles.placingFiles.map(path=>paths.source(path))),
+    directories:roleBlocks(roles.directories.map(row=>directories.add([paths.source(row.reader),paths.source(row.directory),DIRECTORY_KINDS.indexOf(row.kind),row.fileCount,row.member??null,row.fixture?[paths.source(row.fixture.entry),row.fixture.owner]:null,row.context?context(row.context):null]))),
+    optionalFiles:roleBlocks(roles.optionalFiles.map(row=>optional.add([paths.source(row.reader),paths.source(row.path),context(row.context),Number(row.present)]))),
+    memberships:roleBlocks(roles.memberships.map(row=>memberships.add([paths.source(row.reader),paths.source(row.directory),context(row.context),row.entries.map(entry=>[paths.source(row.directory?row.directory+'/'+entry.name:entry.name),['file','directory','symlink'].indexOf(entry.type)])]))),
+    byteInputs:roleBlocks(roles.byteInputs.map(row=>byteInputs.add([paths.source(row.reader),paths.source(row.path)]))),
+    typedDependencies:roleBlocks(roles.typedDependencies.map(row=>{
+      if(row.dependency.observationOnly)throw Error('acquisition-only observation is not a selector role');
+      return dependencies.add([paths.source(row.reader),READER_PROTOCOLS.indexOf(row.protocol),paths.source(row.dependency.path),KINDS.indexOf(row.dependency.kind),Number(row.dependency.bytes)|(Number(row.dependency.directoryStat)<<1),context(row.dependency.context)]);
+    })),
   }));
   const factGroups=new Map<string,typeof material.key.facts>();
   for(const fact of material.key.facts){const scope={...fact.path,path:posix.dirname(fact.path.path)==='.'?'':posix.dirname(fact.path.path)},key=JSON.stringify([fact.kind,scope]);
@@ -134,7 +138,7 @@ export function encodeRustSelectorRecord(material:RustSelectorMaterial):RustSele
       :[1,paths.source(match.request.path),paths.source(match.request.directory),['directory','typescript-tree'].indexOf(match.request.include),encodeDigest(selectorHash(match.files))]),
     candidates:[...candidateGroups.values()].map(rows=>[paths.source(rows[0]!.reader),rows.map(row=>paths.source(row.path)),encodeDigest(selectorHash(rows))]),
     populations:material.key.populations.map(row=>[paths.source(row.directory),row.member??null,encodeDigest(selectorHash(row))])};
-  const record:RustSelectorRecord={version:1,schemaSha256:SCHEMA,paths:paths.rows,contexts:contexts.sorted(),dependencies:dependencies.sorted(),directories:directories.sorted(),optional:optional.sorted(),memberships:memberships.sorted(),byteInputs:byteInputs.sorted(),lists:lists.sorted(),key,targets,keySha256:'',targetsSha256:''};
+  const record:RustSelectorRecord={version:1,schemaSha256:SCHEMA,paths:paths.rows,contexts:contexts.sorted(),dependencies:dependencies.sorted(),directories:directories.sorted(),optional:optional.sorted(),memberships:memberships.sorted(),byteInputs:byteInputs.sorted(),lists:lists.sorted(),references:references.sorted(),key,targets,keySha256:'',targetsSha256:''};
   Object.assign(record,rustSelectorRecordHashes(record));
   const bytes=Buffer.byteLength(JSON.stringify(record)+'\n');
   if(bytes>MAX_RUST_SELECTOR_RECORD_BYTES)throw Error('Rust selector record exceeds its committed size budget: '+bytes+' bytes; fields '+
@@ -185,8 +189,8 @@ function decoder(record:RustSelectorRecord,decodeTargets=true){
     const kind=array(row[2],'Cargo kinds').map(value=>text(value,'Cargo kind'));if(!kind.length||new Set(kind).size!==kind.length)fail('invalid Cargo kinds');
     return {source:source(row[0]),name:text(row[1],'Cargo name'),kind,unitTests:!!(flags&1),doctests:!!(flags&2)};});
   const bySource=new Map(cargo.map(row=>[row.source,row]));if(bySource.size!==cargo.length)fail('duplicate Cargo source');
-  const dependency=(value:unknown)=>{const row=tuple(ref(value,record.dependencies,'dependency reference'),6,'dependency'),protocol=integer(row[1],'dependency protocol',READER_PROTOCOLS.length-1),kind=KINDS[integer(row[3],'dependency kind',KINDS.length-1)]!,flags=integer(row[4],'dependency flags',7);
-    return {reader:source(row[0]),protocol:READER_PROTOCOLS[protocol]!,dependency:{path:source(row[2],true),kind,bytes:!!(flags&1),directoryStat:!!(flags&2),context:context(row[5]),...(flags&4?{observationOnly:true as const}:{})}};};
+  const dependency=(value:unknown)=>{const row=tuple(ref(value,record.dependencies,'dependency reference'),6,'dependency'),protocol=integer(row[1],'dependency protocol',READER_PROTOCOLS.length-1),kind=KINDS[integer(row[3],'dependency kind',KINDS.length-1)]!,flags=integer(row[4],'dependency flags',3);
+    return {reader:source(row[0]),protocol:READER_PROTOCOLS[protocol]!,dependency:{path:source(row[2],true),kind,bytes:!!(flags&1),directoryStat:!!(flags&2),context:context(row[5])}};};
   const directory=(value:unknown)=>{const row=tuple(ref(value,record.directories,'directory reference'),7,'directory'),kind=DIRECTORY_KINDS[integer(row[2],'directory kind',DIRECTORY_KINDS.length-1)]!;
     if(kind==='conservative'&&(row[6]===null||row[4]!==null||row[5]!==null))fail('conservative directory lacks an immutable reader context');
     const fixture=row[5]===null?undefined:tuple(row[5],2,'fixture');
@@ -199,13 +203,17 @@ function decoder(record:RustSelectorRecord,decodeTargets=true){
       return {name:name.slice(prefix.length),type:(['file','directory','symlink'] as const)[integer(child[1],'membership child type',2)]!};});
     return {reader:source(row[0],false,true),directory,context:context(row[2]),entries};};
   const byte=(value:unknown):ByteInputDeclaration=>{const row=tuple(ref(value,record.byteInputs,'byte reference'),2,'byte input');return {reader:source(row[0],false,true),path:source(row[1])};};
-  const checked=new Map<string,Set<string>>();
+  const checked=new Map<string,Set<string>>(),checkedReferences=new Map<string,Set<string>>();
   const roles=<T>(values:unknown,kind:string,read:(value:unknown)=>T):T[]=>{
-    const result:T[]=[],known=checked.get(kind)??new Set<string>();checked.set(kind,known);
+    const result:T[]=[],known=checked.get(kind)??new Set<string>(),knownReferences=checkedReferences.get(kind)??new Set<string>();checked.set(kind,known);checkedReferences.set(kind,knownReferences);
     for(const value of array(values,kind+' blocks')){
-      const at=reference(value,'ordered block reference'),block=ref(at,record.lists,'ordered block');
-      if(decodeTargets){for(const value of block)result.push(read(value));}
-      else if(!known.has(at)){for(const value of block)read(value);known.add(at);}
+      const at=reference(value,'reference block');if(!decodeTargets&&knownReferences.has(at))continue;
+      for(const leaf of ref(at,record.references,'reference block')){
+        const id=reference(leaf,'ordered block reference'),block=ref(id,record.lists,'ordered block');
+        if(decodeTargets){for(const value of block)result.push(read(value));}
+        else if(!known.has(id)){for(const value of block)read(value);known.add(id);}
+      }
+      knownReferences.add(at);
     }
     return result;
   };
@@ -228,16 +236,17 @@ function decoder(record:RustSelectorRecord,decodeTargets=true){
 }
 
 export function parseRustSelectorRecord(value:unknown):RustSelectorRecord{
-  const root=object(value,['version','schemaSha256','paths','contexts','dependencies','directories','optional','memberships','byteInputs','lists','key','targets','keySha256','targetsSha256'],'record');
+  const root=object(value,['version','schemaSha256','paths','contexts','dependencies','directories','optional','memberships','byteInputs','lists','references','key','targets','keySha256','targetsSha256'],'record');
   if(root.version!==1||root.schemaSha256!==SCHEMA)fail('schema hash/version mismatch');
-  const tables=['paths','contexts','dependencies','directories','optional','memberships','byteInputs','lists'] as const;
+  const tables=['paths','contexts','dependencies','directories','optional','memberships','byteInputs','lists','references'] as const;
   for(const key of tables){const seen=new Set<string>();for(const value of array(root[key],key)){
     const row=array(value,key+' row'),id=reference(row[0],key+' ID');if(seen.has(id))fail('duplicate routing ID: '+key+' '+id);seen.add(id);
     if(rowId(row.slice(1))!==id)fail('routing ID/content mismatch: '+key+' '+id);
   }}
-  for(const value of array(root.lists,'ordered blocks')){
+  const leafIds=new Set(array(root.lists,'ordered blocks').map(value=>array(value,'ordered block')[0]));
+  for(const name of ['lists','references'])for(const value of array(root[name],'ordered blocks')){
     const block=array(value,'ordered block').slice(1);if(!block.length||block.length>64)fail('invalid ordered block length');
-    for(const value of block)reference(value,'ordered block value');
+    for(const value of block){reference(value,'ordered block value');if(name==='references'&&!leafIds.has(value))fail('reference block names a missing ordered block');}
   }
   const key=object(root.key,['engine','declarations','cargo','sdk','files','facts','projects','candidates','populations'],'key'),cargo=object(key.cargo,['inputs','targets'],'Cargo');
   for(const name of ['engine','files','facts','projects','candidates','populations'])for(const row of array(key[name],name))array(row,name+' row');

@@ -15,7 +15,7 @@ import {changedCargoInputName} from './cargo-input-population.ts';
 import {projectDiscoveryOwner,projectRequest,type ProjectMatch} from './project-discovery.ts';
 
 export const RUST_SELECTOR_RECORD='results/gate-inputs/rust-runtime.json';
-const SCHEMA='rust-runtime-selector/2:portable-anchors,file-mode-bytes-hash,positive-alias-facts,typed-exact-answers,rust-candidates,tracked-populations,native-config-matches,observation-selection-roles';
+const SCHEMA='rust-runtime-selector/3:portable-anchors,file-mode-bytes-hash,positive-alias-facts,typed-exact-answers,rust-candidates,tracked-populations,native-config-matches,selection-only-roles';
 export const selectorHash=(value:unknown):string=>createHash('sha256').update(JSON.stringify(value,(_key:string,item:unknown)=>{
   if(item&&typeof item==='object'&&!Array.isArray(item))return Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b,'en')));
   return item;
@@ -153,8 +153,8 @@ const observationKinds=new Set(['file','fileExists','directoryExists','entries',
 function kind(value:unknown):HostObservation['kind']{if(!observationKinds.has(String(value)))fail('unknown fact kind');return value as HostObservation['kind'];}
 function dependency(value:unknown):ReaderDependency{
   const row=object(value,['path','kind','bytes','directoryStat','context','observationOnly'],'dependency');
-  if(row.observationOnly!==undefined&&row.observationOnly!==true)fail('invalid dependency observation-only role');
-  return {path:local(row.path,'dependency path',true),kind:kind(row.kind),bytes:boolean(row.bytes,'dependency bytes'),directoryStat:boolean(row.directoryStat,'directory stat'),context:context(row.context),...(row.observationOnly?{observationOnly:true as const}:{})};
+  if(row.observationOnly!==undefined)fail('acquisition-only observation is not a selector role');
+  return {path:local(row.path,'dependency path',true),kind:kind(row.kind),bytes:boolean(row.bytes,'dependency bytes'),directoryStat:boolean(row.directoryStat,'directory stat'),context:context(row.context)};
 }
 function roles(value:unknown):RustSelectorMaterialTarget['roles']{
   const row=object(value,['files','moduleFiles','placingFiles','directories','optionalFiles','memberships','byteInputs','typedDependencies'],'roles');

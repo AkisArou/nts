@@ -49,7 +49,8 @@ test('native matching leaves warm outputs outside both selector keys and retains
     assert.deepEqual(material.key.projects,[{request:{kind:'config',path:'tsconfig.json'},files:['src/main.ts']}]);
     const raw=snapshot.observations.find(row=>row.observation.kind==='entries'&&row.observation.path===join(f.root,'src'));
     assert.equal(raw?.observationOnly,true);
-    assert.ok(material.targets[0]!.roles.typedDependencies.some(row=>row.dependency.path==='src'&&row.dependency.kind==='entries'&&row.dependency.observationOnly));
+    assert.ok(!material.targets[0]!.roles.typedDependencies.some(row=>row.dependency.path==='src'&&row.dependency.kind==='entries'),'acquisition-only rows never enter selector roles');
+    assert.ok(!material.targets[0]!.roles.typedDependencies.some(row=>row.dependency.observationOnly));
     assert.ok(!material.key.facts.some(row=>row.kind==='entries'&&row.path.root==='source'&&row.path.path==='src'));
     for(const path of ['tsconfig.tsbuildinfo','src/build-output.js','src/notes.tsv'])writeFileSync(join(f.root,path),'ignored output');
     assert.equal(validateRustSelectorMaterial(material,f.options).state,'current');

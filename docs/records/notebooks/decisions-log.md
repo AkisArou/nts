@@ -3864,3 +3864,9 @@ Compiled programs retain the emitter's nearest-config probes independently
 of matching, with queried modules witnessing genuine external ancestor
 absences. A positive external owner refuses. Type checks keep their fixed
 config and do not acquire an oracle ownership walk.
+
+Acquisition-only observations stay in the live snapshot and are omitted by the
+shared selector-role projection. The compact encoding shares two fixed levels
+of ordered reference blocks through the same bounded chunk and pool algorithm;
+it preserves ordinary role order and multiplicity without raising the file
+limit. Both changes have their own schema identity.

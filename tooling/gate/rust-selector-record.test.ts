@@ -13,14 +13,19 @@ const interned=(row:unknown[])=>[createHash('sha256').update(JSON.stringify(row)
 
 test('compact dependencies preserve the explicit filesystem protocol',t=>{
   const f=fixture(t);
-  f.material.targets[0]!.roles.typedDependencies.push({reader:'crate/lib.rs',protocol:'filesystem',dependency:{path:'data/input.txt',kind:'runtimeKind',bytes:false,directoryStat:false,context:{entry:'<entry>',dataNamespaces:{}},observationOnly:true}});
+  f.material.targets[0]!.roles.typedDependencies.push({reader:'crate/lib.rs',protocol:'filesystem',dependency:{path:'data/input.txt',kind:'runtimeKind',bytes:false,directoryStat:false,context:{entry:'<entry>',dataNamespaces:{}}}});
   f.material.targets[0]!.roles.directories.push({reader:'crate/lib.rs',directory:'data',kind:'conservative',fileCount:1,context:{entry:'<entry>',dataNamespaces:{}}});
   f.material.targetsSha256=selectorHash(f.material.targets);
   writeRustSelectorRecord(f.path,f.material);f.options.trusted.sha256=createHash('sha256').update(readFileSync(f.path)).digest('hex');
   const parsed=readRustSelectorRecord(f.path,f.options);assert.equal(parsed.state,'current');if(parsed.state!=='current')throw Error('expected current');
   assert.ok(parsed.targets[0]!.roles.typedDependencies.some(row=>row.protocol==='filesystem'));
-  assert.ok(parsed.targets[0]!.roles.typedDependencies.some(row=>row.dependency.observationOnly===true),'the compact codec retains the selection role');
+  assert.ok(!parsed.targets[0]!.roles.typedDependencies.some(row=>row.dependency.observationOnly),'the compact codec carries only selection roles');
   assert.ok(parsed.targets[0]!.roles.directories.some(row=>row.kind==='conservative'&&row.context?.entry==='<entry>'));
+});
+test('acquisition-only dependencies cannot be published as selector roles',t=>{
+  const f=fixture(t);
+  f.material.targets[0]!.roles.typedDependencies.push({reader:'crate/lib.rs',protocol:'filesystem',dependency:{path:'data/input.txt',kind:'runtimeKind',bytes:false,directoryStat:false,context:{entry:'<entry>',dataNamespaces:{}},observationOnly:true}});
+  assert.throws(()=>encodeRustSelectorRecord(f.material),/acquisition-only observation is not a selector role/);
 });
 
 function fixture(t:Parameters<typeof testScratch>[0]){
@@ -75,7 +80,7 @@ test('malformed path graphs, references and hashes refuse instead of becoming pe
   const f=fixture(t),cycle=structuredClone(f.record);cycle.paths[0]=interned(['AAAAAAAA','cycle']);Object.assign(cycle,rustSelectorRecordHashes(cycle));
   assert.throws(()=>parseRustSelectorRecord(cycle),/path parent/);
   const escape=structuredClone(f.record);escape.paths.push(interned([escape.paths[0]![0],'..']));Object.assign(escape,rustSelectorRecordHashes(escape));assert.throws(()=>parseRustSelectorRecord(escape),/noncanonical path/);
-  const ref=structuredClone(f.record);ref.targets[0]!.files.push('AAAAAAAA');Object.assign(ref,rustSelectorRecordHashes(ref));assert.throws(()=>parseRustSelectorRecord(ref),/ordered block/);
+  const ref=structuredClone(f.record);ref.targets[0]!.files.push('AAAAAAAA');Object.assign(ref,rustSelectorRecordHashes(ref));assert.throws(()=>parseRustSelectorRecord(ref),/reference block/);
   const payload=structuredClone(f.record);payload.targets[0]!.files=[];assert.throws(()=>parseRustSelectorRecord(payload),/payload hash/);
 });
 test('ordered blocks preserve repeated role order, complete digests and detached answers',t=>{
@@ -83,9 +88,10 @@ test('ordered blocks preserve repeated role order, complete digests and detached
   f.material.targets[0]!.roles.typedDependencies=Array.from({length:257},()=>structuredClone(dependency));
   f.material.targetsSha256=selectorHash(f.material.targets);
   writeRustSelectorRecord(f.path,f.material);f.options.trusted.sha256=createHash('sha256').update(readFileSync(f.path)).digest('hex');
-  const encoded=parseRustSelectorRecord(JSON.parse(readFileSync(f.path,'utf8'))),refs=encoded.targets[0]!.typedDependencies;
+  const encoded=parseRustSelectorRecord(JSON.parse(readFileSync(f.path,'utf8'))),references=new Map(encoded.references.map(row=>[row[0],row.slice(1)])),refs=encoded.targets[0]!.typedDependencies.flatMap(id=>references.get(id)!);
   assert.ok(new Set(refs).size<refs.length,'identical ordered blocks are shared');
   assert.ok(encoded.lists.every(row=>row.length>1&&row.length<=65));
+  assert.ok(encoded.references.every(row=>row.length>1&&row.length<=65));
   assert.equal(typeof encoded.key.files[0]![3],'string');assert.equal((encoded.key.files[0]![3] as string).length,43);
   const current=readRustSelectorRecord(f.path,f.options);assert.equal(current.state,'current');if(current.state!=='current')throw Error('expected current');
   assert.deepEqual(current.targets[0]!.roles,f.material.targets[0]!.roles);
@@ -98,20 +104,24 @@ test('malformed blocks and noncanonical full-width digest encodings refuse',t=>{
     const bad=structuredClone(f.record);bad.lists.push(interned(block));Object.assign(bad,rustSelectorRecordHashes(bad));
     assert.throws(()=>parseRustSelectorRecord(bad),/ordered block/);
   }
-  const missing=structuredClone(f.record),block=interned(['AAAAAAAA']);missing.lists.push(block);missing.targets[0]!.files=[block[0] as string];
+  const missing=structuredClone(f.record),block=interned(['AAAAAAAA']),upper=interned([block[0]]);missing.lists.push(block);missing.references.push(upper);missing.targets[0]!.files=[upper[0] as string];
   Object.assign(missing,rustSelectorRecordHashes(missing));assert.throws(()=>parseRustSelectorRecord(missing),/path reference/);
+  for(const refs of [[],Array(65).fill(f.record.lists[0]![0]),['AAAAAAAA'],[f.record.references[0]![0]]]){
+    const bad=structuredClone(f.record);bad.references.push(interned(refs));Object.assign(bad,rustSelectorRecordHashes(bad));
+    assert.throws(()=>parseRustSelectorRecord(bad),/ordered block/,'reference levels are fixed, bounded and cannot point to themselves');
+  }
   for(const hash of ['a'.repeat(64),'a'.repeat(42)+'_']){
     const bad=structuredClone(f.record);bad.key.declarations[3]=hash;Object.assign(bad,rustSelectorRecordHashes(bad));
     assert.throws(()=>parseRustSelectorRecord(bad),/canonical base64url SHA256/);
   }
 });
 test('untrusted block validation reads a repeated dictionary once without expanding its targets',t=>{
-  const f=fixture(t),candidate=structuredClone(f.record),first=candidate.lists.find(row=>row[0]===candidate.targets[0]!.files[0])!,path=first[1];let reads=0;
+  const f=fixture(t),candidate=structuredClone(f.record),upper=candidate.references.find(row=>row[0]===candidate.targets[0]!.files[0])!,first=candidate.lists.find(row=>row[0]===upper[1])!,path=first[1];let reads=0;
   const values=interned(Array(64).fill(path)),block=new Proxy(values,{get(target,key,receiver){
     if(key==='1'){reads++;assert.ok(reads<=5,'untrusted dictionary repeatedly materialized');}
     return Reflect.get(target,key,receiver);
   }});
-  candidate.lists.push(block);candidate.targets[0]!.files=Array(2000).fill(block[0]);
+  const reference=interned(Array(64).fill(block[0]));candidate.lists.push(block);candidate.references.push(reference);candidate.targets[0]!.files=Array(2000).fill(reference[0]);
   Object.assign(candidate,rustSelectorRecordHashes(candidate));parseRustSelectorRecord(candidate);assert.equal(reads,5);
 });
 test('routing IDs retain unaffected paths and rows after an earlier insertion and reject collisions',t=>{

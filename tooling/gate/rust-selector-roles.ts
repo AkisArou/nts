@@ -14,6 +14,7 @@ export function rustSelectorRoles(root:string,snapshot:InputSnapshot,byteInputs:
     directories:structuredClone(snapshot.directories.map(({files,...row})=>({...row,fileCount:files.length}))),
     optionalFiles:snapshot.optionalFiles.filter(selectionInput).map(({reader,path,present,context})=>structuredClone({reader,path,present,context})),memberships:structuredClone(snapshot.memberships),byteInputs:byteInputs.map(row=>({...row})),
     typedDependencies:snapshot.observations.flatMap(row=>{
+      if(row.observationOnly)return [];
       const dependency=readerObservationProjection(root,row);return dependency?[{reader:row.reader,protocol:row.protocol,dependency}]:[];
     })};
 }

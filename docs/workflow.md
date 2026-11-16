@@ -871,11 +871,15 @@ The byte-bounded reader decodes untrusted material without acquiring a compiler.
 Key validation replays project discovery through one lazy, closed native
 parse-only session; it constructs no Program. Its identity hashes only the
 path bindings referenced by the key, in canonical order. The complete path
-table and raw claim roles remain bound by the payload hash and accepted blob.
+table and selection roles remain bound by the payload hash and accepted blob.
+Acquisition-only observations stay in the live snapshot for race and native-claim
+validation; the shared selector role projection omits them before persistence.
 
-Interned paths, roles and ordered blocks use content-derived routing IDs, so a
+Interned paths, roles and two fixed levels of ordered blocks use content-derived routing IDs, so a
 new input cannot renumber existing references. Every ID is checked against its
 row and duplicate IDs refuse; these short IDs grant no authentication authority.
+Targets share blocks of block references as well as the leaf role blocks. Both
+levels are bounded, preserve order and multiplicity, and cannot recurse.
 The complete payload and key retain SHA256 authentication. The committed file
 bound has headroom over the measured stable format; packed history growth,
 rather than the uncompressed file size alone, determines this representation.
