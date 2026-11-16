@@ -1247,7 +1247,7 @@
         "tooling/gate/owed.test.mjs": 83,
         "tooling/gate/precise-changes.test.ts": 1,
         "tooling/gate/registry-inputs.test.ts": 1,
-        "tooling/gate/run.mjs": 224,
+        "tooling/gate/run.mjs": 221,
         "tooling/gate/step-bound.ts": 1,
         "tooling/gate/step-result.test.ts": 1,
         "tooling/gate/step-scheduling.test.ts": 1,
@@ -1280,7 +1280,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:16de12d6ecbc03c65c00ae81a0c157bfa54a1f265cfe3c2cb539a03077675a9c"
+      "source": "sha256:61c0654b6ae0bbe917bbe71b5a738e30945d54fab60d50fee5500e312aa59ce9"
     }
   }
 }
