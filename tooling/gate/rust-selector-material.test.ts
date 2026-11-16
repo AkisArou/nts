@@ -12,6 +12,10 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import type {RustRuntimeManifest,RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {testScratch} from './test-scratch.ts';
 import {rustSelectorRoles} from './rust-selector-roles.ts';
+import {encodeRustSelectorRecord,parseRustSelectorRecord,rustSelectorRecordHashes,validateRustSelectorKey} from './rust-selector-record.ts';
+import {readerDependencyIndex,readerObservationIndex,validateReaderSourceObservations} from './reader-observations.ts';
+import {projectConfig} from './reader-inputs/main.ts';
+import {pathToFileURL} from 'node:url';
 
 const target:RustRuntimeTarget={source:'crate/lib.rs',name:'crate',kind:['lib'],unitTests:true,doctests:false};
 function fixture(t:Parameters<typeof testScratch>[0]){
@@ -32,6 +36,54 @@ function pending(record:RustSelectorMaterial,options:Parameters<typeof validateR
   const result=validateRustSelectorMaterial(record,options);assert.equal(result.state,'pending');
   if(result.state!=='pending')throw Error('expected pending');assert.equal(result.pending.kind,kind);assert.match(result.pending.path,path);
 }
+test('native matching leaves warm outputs outside both selector keys and retains raw race and native-claim facts',t=>{
+  const f=fixture(t);mkdirSync(join(f.root,'src'));
+  writeFileSync(join(f.root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"]}');
+  writeFileSync(join(f.root,'src/main.ts'),'export {};');
+  f.manifest.targets[0]!.declarations.assets=[{kind:'project-config',path:'../tsconfig.json',role:'type-check'}];
+  writeFileSync(join(f.root,'declarations.json'),JSON.stringify(f.manifest));
+  const material=f.build(),compact=encodeRustSelectorRecord(material),graph=moduleGraph({sourceRoot:f.root});
+  try{
+    const snapshot=graph.describe([projectConfig(pathToFileURL(join(f.root,'tsconfig.json')),'type-check')]);
+    assert.deepEqual(material.key.projects,[{request:{kind:'config',path:'tsconfig.json'},files:['src/main.ts']}]);
+    const raw=snapshot.observations.find(row=>row.observation.kind==='entries'&&row.observation.path===join(f.root,'src'));
+    assert.equal(raw?.observationOnly,true);
+    assert.ok(material.targets[0]!.roles.typedDependencies.some(row=>row.dependency.path==='src'&&row.dependency.kind==='entries'&&row.dependency.observationOnly));
+    assert.ok(!material.key.facts.some(row=>row.kind==='entries'&&row.path.root==='source'&&row.path.path==='src'));
+    for(const path of ['tsconfig.tsbuildinfo','src/build-output.js','src/notes.tsv'])writeFileSync(join(f.root,path),'ignored output');
+    assert.equal(validateRustSelectorMaterial(material,f.options).state,'current');
+    assert.equal(validateRustSelectorKey(compact,f.options).state,'key-current');
+    const rebuilt=f.build();assert.equal(rebuilt.keySha256,material.keySha256,'nonmatching output leaves the complete material key unchanged');
+    assert.equal(encodeRustSelectorRecord(rebuilt).keySha256,compact.keySha256);
+    assert.throws(()=>validateReaderSourceObservations(snapshot,f.root),/filesystem entries changed/,'raw reads still guard the original acquisition');
+    const changes=[{path:'src/notes.tsv',added:true}];
+    assert.equal(readerObservationIndex(f.root,snapshot.observations,['src/main.ts']).affected(changes).size,0);
+    const projected=material.targets[0]!.roles.typedDependencies;
+    assert.equal(readerDependencyIndex(projected,row=>row.dependency,['src/main.ts']).affected(changes).size,0);
+    writeFileSync(join(f.root,'src/new.ts'),'export {};');
+    pending(material,f.options,'project-discovery',/tsconfig.json/);
+    const stale=validateRustSelectorKey(compact,f.options);assert.equal(stale.state,'pending');if(stale.state==='pending')assert.equal(stale.pending.kind,'project-discovery');
+    const next=f.build();assert.ok(next.targets[0]!.roles.files.includes('src/new.ts'));
+    assert.notEqual(next.keySha256,material.keySha256);
+  }finally{graph.close();}
+});
+
+test('compact project queries authenticate their native recipe and reject malformed routing before replay',t=>{
+  const f=fixture(t);writeFileSync(join(f.root,'base.json'),'{"compilerOptions":{"types":[]}}');mkdirSync(join(f.root,'src'));writeFileSync(join(f.root,'src/main.ts'),'export {};');
+  f.manifest.targets[0]!.declarations.assets=[{kind:'generated-project',path:'../base.json',directory:'../src/',include:'typescript-tree',role:'compiled-program'}];
+  writeFileSync(join(f.root,'declarations.json'),JSON.stringify(f.manifest));
+  const material=f.build(),compact=encodeRustSelectorRecord(material);
+  assert.deepEqual(material.key.projects,[{request:{kind:'generated',path:'base.json',directory:'src',include:'typescript-tree'},files:['src/main.ts']}]);
+  assert.equal(validateRustSelectorKey(parseRustSelectorRecord(compact),f.options).state,'key-current');
+  assert.ok(!JSON.stringify(compact).includes('project-config-'));
+  for(const row of [[2,...compact.key.projects[0]!.slice(1)],[0,compact.key.projects[0]![1]],[1,compact.key.projects[0]![1],compact.key.projects[0]![2],2,compact.key.projects[0]![4]]]){
+    const changed=structuredClone(compact);changed.key.projects=[row];Object.assign(changed,rustSelectorRecordHashes(changed));
+    assert.throws(()=>parseRustSelectorRecord(changed),/project discovery|config discovery|generated include/);
+  }
+  const duplicate=structuredClone(compact);duplicate.key.projects.push([...duplicate.key.projects[0]!]);Object.assign(duplicate,rustSelectorRecordHashes(duplicate));
+  assert.throws(()=>parseRustSelectorRecord(duplicate),/duplicate project discovery/);
+  writeFileSync(join(f.root,'src/new.ts'),'export {};');assert.equal(validateRustSelectorKey(compact,f.options).state,'pending');
+});
 test('portable selector records retain live roles, exact bytes and candidate absences without a reusable snapshot',t=>{
   const f=fixture(t),record=f.build();
   assert.deepEqual(parseRustSelectorMaterial(JSON.parse(JSON.stringify(record))),record);
@@ -47,7 +99,7 @@ test('selector projection never traverses unconsumed callback provenance or unus
   // fail deterministically, without allocating a multi-gigabyte test string.
   const snapshot:Parameters<typeof rustSelectorRoles>[1]={files:['input.ts'],moduleFiles:['input.ts'],placingFiles:['input.ts'],stagingFiles:['input.ts'],
     get ownedFiles():never{throw Error('selector traversed unused ownership column');},
-    get hostFiles():never{throw Error('selector traversed unused host column');},directories:[],optionalFiles:[],memberships:[],
+    get hostFiles():never{throw Error('selector traversed unused host column');},directories:[],optionalFiles:[],memberships:[],projectMatches:[],
     observations:[{reader:'reader.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{}},
       observation:{kind:'file',path:'/source/input.ts',value:'0'.repeat(64)},get causes():never{throw Error('selector traversed callback causes');}}]};
   const roles=rustSelectorRoles('/source',snapshot,[]);
@@ -58,7 +110,7 @@ test('selector projection never traverses unconsumed callback provenance or unus
 test('selector roles omit race-guard metadata while retaining a promoted member',()=>{
   const context={entry:'<entry>',dataNamespaces:{}};
   const snapshot:Parameters<typeof rustSelectorRoles>[1]={files:['member.ts'],runtimeFiles:['member.ts','candidate.ts'],ownedFiles:['member.ts','candidate.ts'],
-    moduleFiles:['member.ts'],hostFiles:[],placingFiles:['member.ts'],stagingFiles:['member.ts'],directories:[],memberships:[],observations:[],
+    moduleFiles:['member.ts'],hostFiles:[],placingFiles:['member.ts'],stagingFiles:['member.ts'],directories:[],memberships:[],projectMatches:[],observations:[],
     optionalFiles:[{reader:'fence.ts',path:'candidate.ts',present:true,context,observationOnly:true},{reader:'fence.ts',path:'member.ts',present:true,context,observationOnly:true},{reader:'installer.ts',path:'package.json',present:false,context}]};
   const roles=rustSelectorRoles('/source',snapshot,[]);
   assert.deepEqual(roles.files,['member.ts']);assert.deepEqual(roles.optionalFiles.map(row=>row.path),['package.json']);

@@ -1744,12 +1744,13 @@ function stepInputGraph(options) {
         const previous=observations.get(key);
         if(previous&&!sameOracleObservation(previous.observation.value,row.observation.value))throw Error('reader observation changed during selection: '+row.observation.path);
         const fact=previous??{...row,steps:new Set()};fact.steps.add(step);observations.set(key,fact);
+        if(!row.observationOnly)delete fact.observationOnly;
         if(previous){
           const causes=new Map(fact.causes.map(value=>[JSON.stringify(value),value]));
           for(const value of row.causes)causes.set(JSON.stringify(value),value);fact.causes=[...causes.values()];
         }
         const dependency=readerObservationDependency(TREE,row);
-        if(dependency?.bytes){map.add(dependency.path,step);byteReaders.add(dependency.path,step);}
+        if(!row.observationOnly&&dependency?.bytes){map.add(dependency.path,step);byteReaders.add(dependency.path,step);}
       }
     };
     /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'>}>} */
@@ -1883,7 +1884,7 @@ function stepInputGraph(options) {
         for(const row of roles.byteInputs){map.add(row.path,step);byteReaders.add(row.path,step);}
         for(const row of roles.typedDependencies){
           const key=JSON.stringify(row),fact=projectedDependencies.get(key)??{...structuredClone(row),steps:new Set()};fact.steps.add(step);projectedDependencies.set(key,fact);
-          if(row.dependency.bytes){map.add(row.dependency.path,step);byteReaders.add(row.dependency.path,step);}
+          if(!row.dependency.observationOnly&&row.dependency.bytes){map.add(row.dependency.path,step);byteReaders.add(row.dependency.path,step);}
         }
       }
     }

@@ -10,6 +10,7 @@ import {metadataParents,membershipIndex,type MetadataChange} from './reader-meta
 import {generatedProjectFact} from './generated-project.ts';
 import {projectEnvironmentFact} from './project-environment.ts';
 import {projectDependencies} from './project-dependencies.ts';
+import {projectDiscoveryOwner} from './project-discovery.ts';
 
 /** The original callback remains unchanged. Additional real observations
  * retain alias text, intermediate presence/kind and followed target identity.
@@ -60,10 +61,10 @@ export function readerObservationDependency(root:string,row:ReaderObservation):{
 
 /** A selector projection retains sensitivity, provenance and paths; it is
  * never a reusable filesystem answer for a copier or runtime consumer. */
-export type ReaderDependency={path:string;kind:HostObservation['kind'];bytes:boolean;directoryStat:boolean;context:ReaderObservation['context']};
+export type ReaderDependency={path:string;kind:HostObservation['kind'];bytes:boolean;directoryStat:boolean;context:ReaderObservation['context'];observationOnly?:true};
 export function readerObservationProjection(root:string,row:ReaderObservation):ReaderDependency|undefined{
   const dependency=readerObservationDependency(root,row);
-  return dependency?{...dependency,kind:row.observation.kind,context:structuredClone(row.context)}:undefined;
+  return dependency?{...dependency,kind:row.observation.kind,context:structuredClone(row.context),...(row.observationOnly?{observationOnly:true as const}:{})}:undefined;
 }
 export function readerObservationIndex<R extends ReaderObservation>(root:string,rows:Iterable<R>,paths:Iterable<string>,names?:ReturnType<typeof membershipIndex>){
   return readerDependencyIndex(rows,row=>readerObservationProjection(root,row),paths,names);
@@ -77,7 +78,7 @@ export function readerDependencyIndex<R>(rows:Iterable<R>,dependencyOf:(row:R)=>
   const dependencies=new Map<R,ReaderDependency>();
   const add=(map:Map<string,Set<R>>,path:string,row:R)=>{const values=map.get(path)??new Set<R>();values.add(row);map.set(path,values);};
   for(const row of rows){
-    const supplied=dependencyOf(row);if(!supplied)continue;
+    const supplied=dependencyOf(row);if(!supplied||supplied.observationOnly)continue;
     const dependency=structuredClone(supplied);dependencies.set(row,dependency);
     for(let parent=dependency.path;;parent=posix.dirname(parent)){
       add(ancestors,parent==='.'?'':parent,row);if(parent===''||parent==='.')break;
@@ -184,7 +185,7 @@ function derivedReaderValidator(source?:string){
 /** One explicit batch validates every distinct answer before returning any
  * snapshot. Deduplication changes only the number of identical replay reads;
  * conflicting answers refuse, and no fact supplies ownership to another row. */
-export function validateReaderBatchObservations(snapshots:readonly InputSnapshot[]):void{
+export function validateReaderBatchObservations(snapshots:readonly InputSnapshot[],source:string):void{
   const installed=derivedReaderValidator(),facts=new Map<string,string>();
   for(const snapshot of snapshots)for(const row of snapshot.observations){
     const key=JSON.stringify([row.observation.kind,row.observation.path]),answer=JSON.stringify(row.observation.value);
@@ -199,6 +200,19 @@ export function validateReaderBatchObservations(snapshots:readonly InputSnapshot
     facts.set(key,answer);
     if(!installed(row))validateHostObservations([row.observation]);
   }
+  validateProjectMatches(snapshots.flatMap(snapshot=>snapshot.projectMatches),source);
+}
+/** Matching is replayed by the pinned parser; raw acquisition facts above
+ * still guard races and grant no cross-tree selection meaning. */
+function validateProjectMatches(matches:InputSnapshot['projectMatches'],source:string):void{
+  if(!matches.length)return;
+  const owner=projectDiscoveryOwner(source),seen=new Map<string,string>();
+  try{for(const match of matches){
+    const key=JSON.stringify(match.request),expected=JSON.stringify(match.files),previous=seen.get(key);
+    if(previous!==undefined){if(previous!==expected)throw Error('project discovery changed during capture: '+match.request.path);continue;}
+    seen.set(key,expected);
+    if(JSON.stringify(owner.read(match.request).files)!==expected)throw Error('project discovery matched files changed: '+match.request.path+' ('+match.reader+')');
+  }}finally{owner.close();}
 }
 /** ENOTDIR is an exact negative, witnessed by this callback's own regular
  * blocking component. It grants neither leaf bytes nor alias authority. */
@@ -227,6 +241,7 @@ export function validateReaderSourceObservations(snapshot:InputSnapshot,source:s
       throw Error('reader byte observation has no immutable owned input: '+name+' ('+row.reader+')');
     validateHostObservations([row.observation]);
   }
+  validateProjectMatches(snapshot.projectMatches,source);
 }
 
 export class NonPortableReaderObservation extends Error{
@@ -249,6 +264,7 @@ export function replayFixtureReaderObservations(snapshot:InputSnapshot,source:st
   const owned=new Set(snapshot.ownedFiles),installed=derivedReaderValidator(source);
   for(const row of snapshot.observations){
     if(row.context.entry!=='<entry>'&&!fixtureEntries.has(row.context.entry))continue;
+    if(row.observationOnly)continue;
     if(row.dependency)throw Error('fixture requires its own authenticated installation for declared Program: '+row.reader);
     if(installed(row))continue;
     const name=nameIn(source,row.observation.path),path=join(destination,name);
@@ -265,4 +281,5 @@ export function replayFixtureReaderObservations(snapshot:InputSnapshot,source:st
     try{validateHostObservations([{kind:row.observation.kind,path,value:expected}],()=>actual.value);}
     catch{throw new NonPortableReaderObservation(row,actual);}
   }
+  validateProjectMatches(snapshot.projectMatches.filter(row=>row.context.entry==='<entry>'||fixtureEntries.has(row.context.entry)),destination);
 }

@@ -12,9 +12,10 @@ import type {RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {matchesModuleMember,READER_PROTOCOLS,type ReaderProtocol} from './reader-inputs/main.ts';
 import {metadataParents} from './reader-metadata.ts';
 import {changedCargoInputName} from './cargo-input-population.ts';
+import {projectDiscoveryOwner,projectRequest,type ProjectMatch} from './project-discovery.ts';
 
 export const RUST_SELECTOR_RECORD='results/gate-inputs/rust-runtime.json';
-const SCHEMA='rust-runtime-selector/1:portable-anchors,file-mode-bytes-hash,positive-alias-facts,typed-exact-answers,rust-candidates,tracked-populations,consumed-selector-roles-only';
+const SCHEMA='rust-runtime-selector/2:portable-anchors,file-mode-bytes-hash,positive-alias-facts,typed-exact-answers,rust-candidates,tracked-populations,native-config-matches,observation-selection-roles';
 export const selectorHash=(value:unknown):string=>createHash('sha256').update(JSON.stringify(value,(_key:string,item:unknown)=>{
   if(item&&typeof item==='object'&&!Array.isArray(item))return Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b,'en')));
   return item;
@@ -29,7 +30,7 @@ export type TrackedFile={path:string;mode:string};
 export type TrackedPopulation={directory:string;member?:string;files:TrackedFile[]};
 export type RustSelectorMaterialTarget={target:RustRuntimeTarget;roles:RustSelectorRoles};
 export type RustSelectorMaterialKey={engine:SelectorFile[];declarations:SelectorFile;cargo:{inputs:SelectorFile[];targets:RustRuntimeTarget[]};
-  sdk:TypeScriptIdentity;files:SelectorFile[];facts:SelectorFact[];candidates:{reader:string;path:string;present:boolean}[];populations:TrackedPopulation[]};
+  sdk:TypeScriptIdentity;files:SelectorFile[];facts:SelectorFact[];projects:ProjectMatch[];candidates:{reader:string;path:string;present:boolean}[];populations:TrackedPopulation[]};
 export type RustSelectorMaterial={version:1;schemaSha256:string;key:RustSelectorMaterialKey;targets:RustSelectorMaterialTarget[];keySha256:string;targetsSha256:string};
 export type SelectorPending={kind:string;path:string;reason:string};
 export type SelectorRead={state:'current';targets:RustSelectorMaterialTarget[]}|{state:'pending';pending:SelectorPending};
@@ -151,8 +152,9 @@ function context(value:unknown):ReaderDependency['context']{
 const observationKinds=new Set(['file','fileExists','directoryExists','entries','realpath','readlink','runtimeEntries','runtimeKind','stat']);
 function kind(value:unknown):HostObservation['kind']{if(!observationKinds.has(String(value)))fail('unknown fact kind');return value as HostObservation['kind'];}
 function dependency(value:unknown):ReaderDependency{
-  const row=object(value,['path','kind','bytes','directoryStat','context'],'dependency');
-  return {path:local(row.path,'dependency path',true),kind:kind(row.kind),bytes:boolean(row.bytes,'dependency bytes'),directoryStat:boolean(row.directoryStat,'directory stat'),context:context(row.context)};
+  const row=object(value,['path','kind','bytes','directoryStat','context','observationOnly'],'dependency');
+  if(row.observationOnly!==undefined&&row.observationOnly!==true)fail('invalid dependency observation-only role');
+  return {path:local(row.path,'dependency path',true),kind:kind(row.kind),bytes:boolean(row.bytes,'dependency bytes'),directoryStat:boolean(row.directoryStat,'directory stat'),context:context(row.context),...(row.observationOnly?{observationOnly:true as const}:{})};
 }
 function roles(value:unknown):RustSelectorMaterialTarget['roles']{
   const row=object(value,['files','moduleFiles','placingFiles','directories','optionalFiles','memberships','byteInputs','typedDependencies'],'roles');
@@ -192,7 +194,7 @@ export function parseRustSelectorMaterial(value:unknown):RustSelectorMaterial{
   if(row.version!==1||row.schemaSha256!==SELECTOR_SCHEMA_SHA256)fail('schema hash/version mismatch');
   const keySha256=digest(row.keySha256,'key hash'),targetsSha256=digest(row.targetsSha256,'targets hash');
   if(selectorHash(row.key)!==keySha256||selectorHash(row.targets)!==targetsSha256)fail('payload hash mismatch');
-  const input=object(row.key,['engine','declarations','cargo','sdk','files','facts','candidates','populations'],'key');
+  const input=object(row.key,['engine','declarations','cargo','sdk','files','facts','projects','candidates','populations'],'key');
   const cargo=object(input.cargo,['inputs','targets'],'Cargo key');
   const sdk=object(input.sdk,['version','rootPackageSha256','packageSha256','nativeSha256','nativePackageSha256'],'SDK identity');
   const sdkIdentity:TypeScriptIdentity={version:string(sdk.version,'SDK version'),rootPackageSha256:digest(sdk.rootPackageSha256,'SDK root'),packageSha256:digest(sdk.packageSha256,'SDK package'),nativeSha256:digest(sdk.nativeSha256,'SDK native'),nativePackageSha256:digest(sdk.nativePackageSha256,'SDK native package')};
@@ -203,7 +205,12 @@ export function parseRustSelectorMaterial(value:unknown):RustSelectorMaterial{
     try{validateRuntimeObservations([probe],()=>probe.value);}catch{fail('invalid typed '+fact.kind+' answer');}return fact;
   });
   const key:RustSelectorMaterialKey={engine:list(input.engine,'engine').map(file),declarations:file(input.declarations),cargo:{inputs:list(cargo.inputs,'Cargo inputs').map(file),targets:list(cargo.targets,'Cargo targets').map(target)},sdk:sdkIdentity,
-    files:list(input.files,'files').map(file),facts,candidates:list(input.candidates,'candidates').map(value=>{
+    files:list(input.files,'files').map(file),facts,projects:list(input.projects,'project discovery').map(value=>{
+      const item=object(value,['request','files'],'project discovery');let request;
+      try{request=projectRequest(item.request);}catch{fail('invalid project discovery request');}
+      const files=list(item.files,'matched files').map(value=>local(value,'matched file'));if(new Set(files).size!==files.length)fail('duplicate matched file');
+      return {request,files};
+    }),candidates:list(input.candidates,'candidates').map(value=>{
       const item=object(value,['reader','path','present'],'candidate');return {reader:local(item.reader,'candidate reader'),path:local(item.path,'candidate path'),present:boolean(item.present,'candidate presence')};
     }),populations:list(input.populations,'populations').map(value=>{
       const item=object(value,['directory','member','files'],'population');
@@ -211,6 +218,7 @@ export function parseRustSelectorMaterial(value:unknown):RustSelectorMaterial{
         const entry=object(value,['path','mode'],'tracked file'),mode=string(entry.mode,'tracked mode');if(!/^[0-7]{6}$/.test(mode))fail('invalid tracked mode');return {path:local(entry.path,'tracked path'),mode};
       })};
     })};
+  const projects=new Set<string>();for(const match of key.projects){const id=JSON.stringify(match.request);if(projects.has(id))fail('duplicate project discovery');projects.add(id);}
   const targets=list(row.targets,'targets').map(value=>{const item=object(value,['target','roles'],'projected target');return {target:target(item.target),roles:roles(item.roles)};});
   if(selectorHash(targets.map(row=>row.target))!==selectorHash(key.cargo.targets))fail('projected Cargo inventory mismatch');
   return {version:1,schemaSha256:SELECTOR_SCHEMA_SHA256,key,targets,keySha256,targetsSha256};
@@ -236,6 +244,12 @@ export function validateRustSelectorMaterial(value:unknown,options:{roots:Select
   for(const row of record.key.facts){const fact=restoreFact(options.roots,row);
     try{if(!sameOracleObservation(fact.value,readHostObservation(fact.kind,fact.path)))return pending(fact.kind,fact.path,'recorded answer changed');}
     catch(error){return pending(fact.kind,fact.path,String(error));}
+  }
+  if(record.key.projects.length){const owner=projectDiscoveryOwner(options.roots.source);
+    try{for(const match of record.key.projects){
+      try{if(selectorHash(owner.read(match.request).files)!==selectorHash(match.files))return pending('project-discovery',match.request.path,'compiler-matched files changed');}
+      catch(error){return pending('project-discovery',match.request.path,String(error));}
+    }}finally{owner.close();}
   }
   for(const row of record.key.candidates){const path=resolve(options.roots.source,row.path);
     try{

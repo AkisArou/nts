@@ -11,7 +11,8 @@ import {createHash} from 'node:crypto';
 import {SourceFacts} from './source-facts.ts';
 import {captureToolchain,type Capture,type InstalledTypeScript} from '../differential/oracle-toolchain.ts';
 import type {BuildModuleInputs} from './rust-modules.ts';
-import {projectInputOwner,type ProjectInputs,type ProjectRequest} from './project-inputs.ts';
+import {projectInputOwner,type ProjectInputs} from './project-inputs.ts';
+import type {ProjectMatch,ProjectRequest} from './project-discovery.ts';
 import {projectRole,executableModuleSource,fixtureNamespaces,moduleMemberName,projectMemberPrefix,relativeProjectInput,matchesModuleMember,directoryCandidates,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration,type ReaderContext,type ReaderProtocol} from './reader-inputs/main.ts';
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
@@ -26,6 +27,7 @@ import {gitStatusInputPopulation,installationStatusCandidates} from '../inputs/d
 import type {GeneratedProjectCapability} from './generated-project.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 export type ReaderObservation={reader:string;context:ReaderContext;protocol:ReaderProtocol;observation:HostObservation;
+  observationOnly?:true;
   environment?:ProjectEnvironmentAbsence;
   dependency?:InstalledProjectDependency;selectorOnly?:true;
   capability?:InstalledTypeScript|GeneratedProjectCapability;causes:{kind:HostObservation['kind'];path:string}[]};
@@ -51,7 +53,8 @@ export class InstalledPackageReachUnavailable extends Error{
  * by superset race guards. Placement and fixture reproduction are independent. */
 export type InputSnapshot={files:string[];runtimeFiles?:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];stagingFiles:string[];directories:DirectoryDeclaration[];
   unavailableInputs?:UnavailableInput[];
-  optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[];observations:ReaderObservation[]};
+  optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[];observations:ReaderObservation[];
+  projectMatches:(ProjectMatch&{reader:string;context:ReaderContext})[]};
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
 export type ByteInputDeclaration={reader:string;path:string};
@@ -177,16 +180,18 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),hostFiles=new Set<string>(),placing=new Set<string>(),staging=new Set<string>(),directories:DirectoryDeclaration[]=[];
     const optionalFiles:OptionalFileDeclaration[]=[],memberships:MembershipDeclaration[]=[];
     const observations:ReaderObservation[]=[];
+    const projectMatches:InputSnapshot['projectMatches']=[];
     const unavailableInputs:UnavailableInput[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
       localTypes?:true;projectRole?:import('./reader-inputs/main.ts').ProjectRole;compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
-    const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[])=>{
+    const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[],matchingEntries:ReadonlySet<string>=new Set())=>{
       for(const captured of captureReaderObservations(root,rows)){
         if(captured.observation.kind==='file'&&captured.observation.value!==null&&inside(root,captured.observation.path))
           visit(context,captured.observation.path,false,false,false);
-        observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured});
+        const observationOnly=captured.causes.length>0&&captured.causes.every(cause=>cause.kind==='entries'&&matchingEntries.has(cause.path));
+        observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured,...(observationOnly?{observationOnly:true as const}:{})});
       }
     };
     function optionalPresence(context:Context,reader:string,path:string,inspectionOnly=false,observationOnly=false):boolean{
@@ -353,7 +358,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const key=JSON.stringify([kind,entry,input.directory,input.include,role]);
         if(context.projects.has(key))return;
         context.projects.add(key);
-        let request:import('./project-inputs.ts').ProjectRequest={kind:'config',path:entry};
+        let request:ProjectRequest={kind:'config',path:entry};
         if(kind==='generated-project'){
           if(typeof input.directory!=='string'||input.include!=='directory'&&input.include!=='typescript-tree')throw Error('generated project has no exact include recipe: '+reader);
           const directory=fileURLToPath(new URL(relativeProjectInput(input.directory),pathToFileURL(path)));
@@ -363,7 +368,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         }
         if(kind!=='generated-project'||request.kind==='generated')visit(context,path,false,true,false);
         const project=projectRead(request,{entry:context.entry,dataNamespaces:context.namespaces});
-        observe(context,reader,'project',project.observations);
+        observe(context,reader,'project',project.observations,new Set(project.matchingEntries));
+        for(const match of project.matches)projectMatches.push({...structuredClone(match),reader,context:{entry:context.entry,dataNamespaces:structuredClone(context.namespaces)}});
         // Selection forces the reader's steps; a materializing consumer refuses
         // before any source-parent check; an unasked graph keeps its reads.
         if(project.installationReach&&options.unavailableInputs){
@@ -485,7 +491,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         visit(types,resolve(root,entry),true,true,false,true);
       }
     }
-    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,...(unavailableInputs.length?{unavailableInputs}:{})};
+    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,projectMatches,...(unavailableInputs.length?{unavailableInputs}:{})};
   }
   /** A batch is one transaction, not a graph-lifetime result cache. Compiler
    * requests include their complete recipe and namespace context. Each first
@@ -512,7 +518,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const snapshot=describeUsing(request.entries,()=>{},row=>byteInputs.push({...row}),request.buildModules,batchRead);
         return {snapshot,byteInputs};
       });
-      validateReaderBatchObservations(results.map(row=>row.snapshot));
+      validateReaderBatchObservations(results.map(row=>row.snapshot),root);
       for(const result of results){
         for(const row of result.snapshot.optionalFiles){
           const path=resolve(root,row.path);metadataParents(root,path,'reader batch optional file');

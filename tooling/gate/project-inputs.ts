@@ -4,7 +4,8 @@ import {dirname,join,relative,resolve,sep} from 'node:path';
 import {captureToolchain,toolchainFact,toolchainDescriptor,type Capture,type InstalledTypeScript} from '../differential/oracle-toolchain.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {type HostObservation} from '../differential/oracle-runtime.ts';
-import {prepareGeneratedProject,generatedProjectFact,type GeneratedProjectCapability,type GeneratedInclude} from './generated-project.ts';
+import {prepareGeneratedProject,generatedProjectFact,type GeneratedProjectCapability} from './generated-project.ts';
+import {projectMatch,type ProjectMatch,type ProjectRequest} from './project-discovery.ts';
 import {projectAncestorAbsence,type ProjectEnvironmentAbsence,type ProjectProgramProvenance} from './project-environment.ts';
 import {projectDependencies,type InstalledProjectDependency} from './project-dependencies.ts';
 import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
@@ -16,17 +17,17 @@ export type ProjectInputs={configs:string[];roots:string[];modules:{path:string;
   /** Present only while the installation catalog is pending: the installed
    * packages this Program itself classifies as external libraries. Their reads
    * stay ordinary observations; a materializing consumer owes the catalog. */
-  installationReach?:InstallationReach};
+  installationReach?:InstallationReach;
+  matches:ProjectMatch[];matchingEntries:string[]};
 /** The Program's own external-library classification, named by its resolved
  * package identity where an import supplies one, else its package directory. */
 export type InstallationReach={reason:string;packages:{package:string;file:string}[]};
-export type ProjectRequest={kind:'config';path:string}|{kind:'generated';path:string;directory:string;include:GeneratedInclude};
 /** One graph owns one lazy SDK process. Every read still constructs a fresh
  * Program and filesystem transaction; no result or observation is cached. */
 export function projectInputOwner(source:string,installed?:()=>Capture,generatedTemporaryParent?:string,dependencyCatalog:DependencyCatalogTrust|null=null){
   const require=createRequire(import.meta.url);
   let api:import('typescript/sync').API|undefined,closed=false;
-  let active:{filesystem:OracleFilesystem;configs:Set<string>;readingConfig:boolean;generated:ReturnType<typeof prepareGeneratedProject>[]} |undefined;
+  let active:{filesystem:OracleFilesystem;configs:Set<string>;readingConfig:boolean;generated:ReturnType<typeof prepareGeneratedProject>[];matchingEntries:Set<string>;ordinaryEntries:Set<string>} |undefined;
   const state=()=>{if(!active)throw Error('project input API has no active filesystem transaction');return active;};
   const owned=(path:string):string=>{
     const name=relative(source,path);
@@ -39,7 +40,10 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
     const {serverFS}=require('typescript/fs') as typeof import('typescript/fs');
     return api=new API({cwd:source,fs:{
       directoryExists:path=>state().filesystem.directoryExists(path),fileExists:path=>state().filesystem.fileExists(path),
-      getAccessibleEntries:path=>({...state().filesystem.getAccessibleEntries(path),symlinks:undefined}),
+      getAccessibleEntries:path=>{
+        const transaction=state();(transaction.readingConfig?transaction.matchingEntries:transaction.ordinaryEntries).add(path);
+        return {...transaction.filesystem.getAccessibleEntries(path),symlinks:undefined};
+      },
       realpath:path=>state().filesystem.realpath(path),stat:path=>state().filesystem.stat(path),writeFile:serverFS.error,removeFile:serverFS.error,
       readFile(path){
         const transaction=state(),bytes=transaction.filesystem.readFile(path);
@@ -57,7 +61,8 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
       if(!programContext||!projectAncestorAbsence(source,observation))return;
       const key=JSON.stringify([observation.kind,observation.path]),contexts=hostContexts.get(key)??new Set();
       contexts.add(programContext);hostContexts.set(key,contexts);
-    }),configs:new Set<string>(),readingConfig:false,generated:[] as ReturnType<typeof prepareGeneratedProject>[]};active=transaction;
+    }),configs:new Set<string>(),readingConfig:false,generated:[] as ReturnType<typeof prepareGeneratedProject>[],matchingEntries:new Set<string>(),ordinaryEntries:new Set<string>()};active=transaction;
+    const matches:ProjectMatch[]=[];
     const {filesystem,configs}=transaction,roots=new Set<string>(),modules=new Map<string,Set<string>>();
     const externalFiles=new Map<string,string>(),externalPackages=new Map<string,string>();
     let captured:Capture|undefined;
@@ -117,6 +122,8 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
         projects.add(project); if(!transaction.generated.some(row=>row.config===project))configs.add(owned(project));
         let parsed:ReturnType<typeof api.parseConfigFile>;
         transaction.readingConfig=true;try{parsed=api.parseConfigFile(project);}finally{transaction.readingConfig=false;}
+        const generated=transaction.generated.find(row=>row.config===project);
+        matches.push(projectMatch(source,generated?request:{kind:'config',path:owned(project)},parsed.fileNames));
         compile(parsed,parsed.fileNames,project,request);
         for (const reference of parsed.projectReferences ?? []) {
           const path = filesystem.runtimeKind(reference.path)==='directory' ? join(reference.path, "tsconfig.json") : reference.path;
@@ -160,7 +167,8 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
       for(const [file,directory]of external){const label=labels.get(directory)??directory;if(!reached.has(label))reached.set(label,file);}
       const installationReach:InstallationReach|undefined=dependencies.state==='pending'&&reached.size
         ?{reason:dependencies.reason,packages:[...reached].map(([name,file])=>({package:name,file}))}:undefined;
-      return {configs:[...configs],roots:[...roots],modules:[...modules].map(([path,imports])=>({path,imports:[...imports]})),observations,installedObservations,generatedObservations,hostObservations,dependencyObservations,pinObservations:pinFilesystem.captured(),
+      return {configs:[...configs],roots:[...roots],modules:[...modules].map(([path,imports])=>({path,imports:[...imports]})),observations,installedObservations,generatedObservations,hostObservations,dependencyObservations,pinObservations:pinFilesystem.captured(),matches,
+        matchingEntries:[...transaction.matchingEntries].filter(path=>!transaction.ordinaryEntries.has(path)),
         ...(installationReach?{installationReach}:{})};
     }catch(error){failure={error};throw error;}
     finally{active=undefined;const failures:unknown[]=[];for(const generated of transaction.generated)try{generated.close();}catch(error){failures.push(error);}if(failures.length)throw new AggregateError(failure?[failure.error,...failures]:failures,'generated project cleanup failed',failure?{cause:failure.error}:undefined);}

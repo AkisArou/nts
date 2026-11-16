@@ -10,7 +10,7 @@ import type {InputSubject,RuntimeObservation} from './rust-test-inputs.ts';
 import {testScratch} from './test-scratch.ts';
 
 const basis:FileObserverReceipt={version:1,observedPath:'/observer',artifactPath:'/retained/observer',sha256:'0'.repeat(64),sourceSha256:'1'.repeat(64),abi:'linux-x86_64-v1'};
-const empty:InputSnapshot={files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]};
+const empty:InputSnapshot={files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],projectMatches:[],observations:[]};
 test('source anchor components retain exact identity without endpoint authority',t=>{
   const root=testScratch(t,'runtime-source-anchor'),anchor=runtimeSourceAnchor(root),parent=dirname(root);
   const first=anchor.component({kind:'runtimeKind',path:parent,value:'directory'});assert.equal(first.kind,'claimed');

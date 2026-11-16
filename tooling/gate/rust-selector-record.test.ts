@@ -13,12 +13,13 @@ const interned=(row:unknown[])=>[createHash('sha256').update(JSON.stringify(row)
 
 test('compact dependencies preserve the explicit filesystem protocol',t=>{
   const f=fixture(t);
-  f.material.targets[0]!.roles.typedDependencies.push({reader:'crate/lib.rs',protocol:'filesystem',dependency:{path:'data/input.txt',kind:'runtimeKind',bytes:false,directoryStat:false,context:{entry:'<entry>',dataNamespaces:{}}}});
+  f.material.targets[0]!.roles.typedDependencies.push({reader:'crate/lib.rs',protocol:'filesystem',dependency:{path:'data/input.txt',kind:'runtimeKind',bytes:false,directoryStat:false,context:{entry:'<entry>',dataNamespaces:{}},observationOnly:true}});
   f.material.targets[0]!.roles.directories.push({reader:'crate/lib.rs',directory:'data',kind:'conservative',fileCount:1,context:{entry:'<entry>',dataNamespaces:{}}});
   f.material.targetsSha256=selectorHash(f.material.targets);
   writeRustSelectorRecord(f.path,f.material);f.options.trusted.sha256=createHash('sha256').update(readFileSync(f.path)).digest('hex');
   const parsed=readRustSelectorRecord(f.path,f.options);assert.equal(parsed.state,'current');if(parsed.state!=='current')throw Error('expected current');
   assert.ok(parsed.targets[0]!.roles.typedDependencies.some(row=>row.protocol==='filesystem'));
+  assert.ok(parsed.targets[0]!.roles.typedDependencies.some(row=>row.dependency.observationOnly===true),'the compact codec retains the selection role');
   assert.ok(parsed.targets[0]!.roles.directories.some(row=>row.kind==='conservative'&&row.context?.entry==='<entry>'));
 });
 

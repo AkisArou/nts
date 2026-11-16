@@ -1959,6 +1959,18 @@ death; an absent timestamp remains explicit after forced termination.
   oracle's existing owner and parsed inputs, with no guessed neighbouring config or
   separate copier option
   ([log](records/notebooks/decisions-log.md#compiled-readers-name-their-config-11-14)).
+- **Project discovery selects the compiler-matched view.** Each native config
+  parse captures its request and ordered matched file names. Selection keys
+  replay those requests through the same pinned parser in one lazy, closed,
+  parse-only session. Generated requests retain their literal recipe and use
+  the generated-config owner. Raw matching directory reads and the metadata
+  they alone cause remain acquisition race guards and native claims; they do
+  not create selection reach. A read also used by an ordinary Program
+  operation keeps its selection obligation, in either acquisition order.
+  Compact accepted records retain this role distinction explicitly. Ignored,
+  nonmatching build output leaves the key unchanged; matching source changes
+  invalidate it. Config bytes, negative resolution and alias facts retain
+  their independent obligations.
 - **Installed Program inputs owe their repository pins:** a declared config's
   installed reads must match the verified installation's finite package catalog,
   including aliases, membership and content hashes. Selection retains package

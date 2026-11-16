@@ -50,7 +50,7 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
   const inventory=structuredClone([...options.inventory()]),tracked=[...options.tracked()];
   const owner=rustRuntimeInputGraph({sourceRoot:root,manifest:options.manifest,inventory,nodeMajor:26,dependencyCatalog:options.dependencyCatalog??null,...(options.linkage?{linkage:options.linkage}:{})});
   const targets:RustSelectorMaterialTarget[]=[],files=new Set<string>(),facts=new Map<string,SelectorFact>(),candidates=new Map<string,RustSelectorMaterial['key']['candidates'][number]>(),populations=new Map<string,RustSelectorMaterial['key']['populations'][number]>();
-  const sourceInputs=new Map<string,string>();
+  const sourceInputs=new Map<string,string>(),projects=new Map<string,RustSelectorMaterial['key']['projects'][number]>();
   const fact=(row:HostObservation)=>{
     const portable=selectorFact(roots,row),key=JSON.stringify([portable.kind,portable.path]),previous=facts.get(key);
     if(previous&&selectorHash(previous)!==selectorHash(portable))throw Error('Rust selector input changed during projection: '+row.kind+' '+row.path);
@@ -75,6 +75,7 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
       for(const path of snapshot.files)files.add(path);
       for(const row of described.candidates)candidates.set(JSON.stringify([row.reader,row.path]),row);
       for(const row of snapshot.observations){
+        if(row.observationOnly)continue;
         if(row.dependency)continue; // Installed contents are represented by the pin observations, never repository bytes.
         if(row.capability?.kind==='generated-project'){
           // These prepared private bytes/names are determined by the declared
@@ -82,6 +83,11 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
           // path is reused in the committed projection.
           if(!generatedProjectFact(row.capability,row.observation))throw Error('generated project recipe fact changed: '+row.observation.path);
         }else fact(row.observation);
+      }
+      for(const match of snapshot.projectMatches){
+        const key=JSON.stringify(match.request),previous=projects.get(key);
+        if(previous&&selectorHash(previous.files)!==selectorHash(match.files))throw Error('Rust selector project discovery changed during projection: '+match.request.path);
+        projects.set(key,{request:structuredClone(match.request),files:[...match.files]});
       }
       for(const row of snapshot.optionalFiles.filter(selectionInput)){
         const path=join(root,row.path);parents(path);fact({kind:'runtimeKind',path,value:row.present?'file':null});
@@ -105,7 +111,7 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
   const sdkFiles=[...installed.files.keys()].map(path=>join(installed.root,path)).concat([...installed.nativeFiles.keys()].map(path=>join(installed.nativeRoot,path)));
   const key:RustSelectorMaterial['key']={engine,declarations,cargo:{inputs:cargoInputs,targets:inventory},
     sdk:{...installed.identity},files:[...capturedFiles,...sdkFiles.sort().map(path=>selectorFile(roots,path))],
-    facts:[...facts.values()],candidates:[...candidates.values()],populations:[...populations.values()]};
+    facts:[...facts.values()],projects:[...projects.values()],candidates:[...candidates.values()],populations:[...populations.values()]};
   const record=parseRustSelectorMaterial({version:1,schemaSha256:SELECTOR_SCHEMA_SHA256,key,targets,keySha256:selectorHash(key),targetsSha256:selectorHash(targets)});
   // Validate again after every graph transaction and key read. A concurrent
   // input change cannot publish roles measured from a different answer.

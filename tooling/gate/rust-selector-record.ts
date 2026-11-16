@@ -14,6 +14,7 @@ import {READER_PROTOCOLS,type MembershipDeclaration,type OptionalFileDeclaration
 import type {RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {metadataParents} from './reader-metadata.ts';
 import {changedCargoInputName} from './cargo-input-population.ts';
+import {projectDiscoveryOwner,type ProjectRequest} from './project-discovery.ts';
 import {selectorHash,selectorFile,selectorFact,selectorPopulation,resolveSelectorPath,
   type RustSelectorMaterial,type PortablePath,type SelectorRoots,type SelectorFile,type TrackedFile,type SelectorPending} from './rust-selector-material.ts';
 export {RUST_SELECTOR_RECORD} from './rust-selector-material.ts';
@@ -21,12 +22,12 @@ export {RUST_SELECTOR_RECORD} from './rust-selector-material.ts';
 const KINDS=['file','fileExists','directoryExists','entries','realpath','readlink','runtimeEntries','runtimeKind','stat'] as const;
 const ROOTS=['source','sdk','sdk-native','source-parent'] as const;
 const DIRECTORY_KINDS=['module','data','inspection','conservative'] as const;
-const SCHEMA=selectorHash({version:1,roots:ROOTS,kinds:KINDS,directoryKinds:DIRECTORY_KINDS,protocols:READER_PROTOCOLS,
-  format:'parent/name path nodes; collision-checked 48-bit SHA256 routing IDs; context/role pools; ordered reference blocks split at 64 or routing hash nibble zero; base64url SHA256 key rows; exact typed-answer parent-scope digests; acquired main blob required'});
+const SCHEMA=selectorHash({version:2,roots:ROOTS,kinds:KINDS,directoryKinds:DIRECTORY_KINDS,protocols:READER_PROTOCOLS,
+  format:'parent/name path nodes; collision-checked 48-bit SHA256 routing IDs; context/role pools; ordered reference blocks split at 64 or routing hash nibble zero; base64url SHA256 key rows; exact typed-answer parent-scope digests; native config matches; observation-only dependency bit; acquired main blob required'});
 export const MAX_RUST_SELECTOR_RECORD_BYTES=6*1024*1024;
 type Row=unknown[];
 type WireTarget={target:string;files:string[];moduleFiles:string[];placingFiles:string[];directories:string[];optionalFiles:string[];memberships:string[];byteInputs:string[];typedDependencies:string[]};
-type WireKey={engine:Row[];declarations:Row;cargo:{inputs:Row[];targets:Row[]};sdk:TypeScriptIdentity;files:Row[];facts:Row[];candidates:Row[];populations:Row[]};
+type WireKey={engine:Row[];declarations:Row;cargo:{inputs:Row[];targets:Row[]};sdk:TypeScriptIdentity;files:Row[];facts:Row[];projects:Row[];candidates:Row[];populations:Row[]};
 export type RustSelectorRecord={version:1;schemaSha256:string;paths:Row[];contexts:Row[];dependencies:Row[];directories:Row[];optional:Row[];memberships:Row[];byteInputs:Row[];lists:Row[];key:WireKey;targets:WireTarget[];keySha256:string;targetsSha256:string};
 export type RustSelectorTarget={target:RustRuntimeTarget;roles:RustSelectorRoles};
 export type TrustedRustSelectorRecord={revision:string;blob:string;sha256:string};
@@ -92,7 +93,7 @@ export function encodeRustSelectorRecord(material:RustSelectorMaterial):RustSele
     optionalFiles:blocks(roles.optionalFiles.map(row=>optional.add([paths.source(row.reader),paths.source(row.path),context(row.context),Number(row.present)]))),
     memberships:blocks(roles.memberships.map(row=>memberships.add([paths.source(row.reader),paths.source(row.directory),context(row.context),row.entries.map(entry=>[paths.source(row.directory?row.directory+'/'+entry.name:entry.name),['file','directory','symlink'].indexOf(entry.type)])]))),
     byteInputs:blocks(roles.byteInputs.map(row=>byteInputs.add([paths.source(row.reader),paths.source(row.path)]))),
-    typedDependencies:blocks(roles.typedDependencies.map(row=>dependencies.add([paths.source(row.reader),READER_PROTOCOLS.indexOf(row.protocol),paths.source(row.dependency.path),KINDS.indexOf(row.dependency.kind),Number(row.dependency.bytes)|(Number(row.dependency.directoryStat)<<1),context(row.dependency.context)]))),
+    typedDependencies:blocks(roles.typedDependencies.map(row=>dependencies.add([paths.source(row.reader),READER_PROTOCOLS.indexOf(row.protocol),paths.source(row.dependency.path),KINDS.indexOf(row.dependency.kind),Number(row.dependency.bytes)|(Number(row.dependency.directoryStat)<<1)|(Number(row.dependency.observationOnly===true)<<2),context(row.dependency.context)]))),
   }));
   const factGroups=new Map<string,typeof material.key.facts>();
   for(const fact of material.key.facts){const scope={...fact.path,path:posix.dirname(fact.path.path)==='.'?'':posix.dirname(fact.path.path)},key=JSON.stringify([fact.kind,scope]);
@@ -102,7 +103,10 @@ export function encodeRustSelectorRecord(material:RustSelectorMaterial):RustSele
   const key:WireKey={engine:material.key.engine.map(file),declarations:file(material.key.declarations),cargo:{inputs:material.key.cargo.inputs.map(file),targets:material.key.cargo.targets.map(row=>[paths.source(row.source),row.name,[...row.kind],Number(row.unitTests)|(Number(row.doctests)<<1)])},
     sdk:{...material.key.sdk},files:material.key.files.map(file),facts:[...factGroups.values()].map(rows=>{
       const first=rows[0]!,parent=posix.dirname(first.path.path);return [KINDS.indexOf(first.kind),paths.path({...first.path,path:parent==='.'?'':parent}),rows.map(row=>paths.path(row.path)),encodeDigest(selectorHash(rows))];
-    }),candidates:[...candidateGroups.values()].map(rows=>[paths.source(rows[0]!.reader),rows.map(row=>paths.source(row.path)),encodeDigest(selectorHash(rows))]),
+    }),projects:material.key.projects.map(match=>match.request.kind==='config'
+      ?[0,paths.source(match.request.path),encodeDigest(selectorHash(match.files))]
+      :[1,paths.source(match.request.path),paths.source(match.request.directory),['directory','typescript-tree'].indexOf(match.request.include),encodeDigest(selectorHash(match.files))]),
+    candidates:[...candidateGroups.values()].map(rows=>[paths.source(rows[0]!.reader),rows.map(row=>paths.source(row.path)),encodeDigest(selectorHash(rows))]),
     populations:material.key.populations.map(row=>[paths.source(row.directory),row.member??null,encodeDigest(selectorHash(row))])};
   const record:RustSelectorRecord={version:1,schemaSha256:SCHEMA,paths:paths.rows,contexts:contexts.sorted(),dependencies:dependencies.sorted(),directories:directories.sorted(),optional:optional.sorted(),memberships:memberships.sorted(),byteInputs:byteInputs.sorted(),lists:lists.sorted(),key,targets,keySha256:'',targetsSha256:''};
   Object.assign(record,rustSelectorRecordHashes(record));
@@ -155,8 +159,8 @@ function decoder(record:RustSelectorRecord,decodeTargets=true){
     const kind=array(row[2],'Cargo kinds').map(value=>text(value,'Cargo kind'));if(!kind.length||new Set(kind).size!==kind.length)fail('invalid Cargo kinds');
     return {source:source(row[0]),name:text(row[1],'Cargo name'),kind,unitTests:!!(flags&1),doctests:!!(flags&2)};});
   const bySource=new Map(cargo.map(row=>[row.source,row]));if(bySource.size!==cargo.length)fail('duplicate Cargo source');
-  const dependency=(value:unknown)=>{const row=tuple(ref(value,record.dependencies,'dependency reference'),6,'dependency'),protocol=integer(row[1],'dependency protocol',READER_PROTOCOLS.length-1),kind=KINDS[integer(row[3],'dependency kind',KINDS.length-1)]!,flags=integer(row[4],'dependency flags',3);
-    return {reader:source(row[0]),protocol:READER_PROTOCOLS[protocol]!,dependency:{path:source(row[2],true),kind,bytes:!!(flags&1),directoryStat:!!(flags&2),context:context(row[5])}};};
+  const dependency=(value:unknown)=>{const row=tuple(ref(value,record.dependencies,'dependency reference'),6,'dependency'),protocol=integer(row[1],'dependency protocol',READER_PROTOCOLS.length-1),kind=KINDS[integer(row[3],'dependency kind',KINDS.length-1)]!,flags=integer(row[4],'dependency flags',7);
+    return {reader:source(row[0]),protocol:READER_PROTOCOLS[protocol]!,dependency:{path:source(row[2],true),kind,bytes:!!(flags&1),directoryStat:!!(flags&2),context:context(row[5]),...(flags&4?{observationOnly:true as const}:{})}};};
   const directory=(value:unknown)=>{const row=tuple(ref(value,record.directories,'directory reference'),7,'directory'),kind=DIRECTORY_KINDS[integer(row[2],'directory kind',DIRECTORY_KINDS.length-1)]!;
     if(kind==='conservative'&&(row[6]===null||row[4]!==null||row[5]!==null))fail('conservative directory lacks an immutable reader context');
     const fixture=row[5]===null?undefined:tuple(row[5],2,'fixture');
@@ -188,7 +192,13 @@ function decoder(record:RustSelectorRecord,decodeTargets=true){
     if(decodeTargets)targets.push(value);
   }
   if(seenTargets.size!==cargo.length)fail('projected Cargo inventory is incomplete');
-  return {path,source,file,cargo,targets};
+  const project=(value:unknown):{request:ProjectRequest;sha256:string}=>{
+    const row=tuple(value,[3,5],'project discovery'),kind=integer(row[0],'project discovery kind',1);
+    if(kind===0){if(row.length!==3)fail('config discovery has invalid arity');return {request:{kind:'config',path:source(row[1])},sha256:decodeDigest(row[2],'matched files hash')};}
+    if(row.length!==5)fail('generated discovery has invalid arity');
+    return {request:{kind:'generated',path:source(row[1]),directory:source(row[2],true),include:integer(row[3],'generated include',1)===0?'directory':'typescript-tree'},sha256:decodeDigest(row[4],'matched files hash')};
+  };
+  return {path,source,file,cargo,targets,project};
 }
 
 export function parseRustSelectorRecord(value:unknown):RustSelectorRecord{
@@ -203,8 +213,8 @@ export function parseRustSelectorRecord(value:unknown):RustSelectorRecord{
     const block=array(value,'ordered block').slice(1);if(!block.length||block.length>64)fail('invalid ordered block length');
     for(const value of block)reference(value,'ordered block value');
   }
-  const key=object(root.key,['engine','declarations','cargo','sdk','files','facts','candidates','populations'],'key'),cargo=object(key.cargo,['inputs','targets'],'Cargo');
-  for(const name of ['engine','files','facts','candidates','populations'])for(const row of array(key[name],name))array(row,name+' row');
+  const key=object(root.key,['engine','declarations','cargo','sdk','files','facts','projects','candidates','populations'],'key'),cargo=object(key.cargo,['inputs','targets'],'Cargo');
+  for(const name of ['engine','files','facts','projects','candidates','populations'])for(const row of array(key[name],name))array(row,name+' row');
   for(const name of ['inputs','targets'])for(const row of array(cargo[name],'Cargo '+name))array(row,'Cargo row');array(key.declarations,'declarations');
   const sdk=object(key.sdk,['version','rootPackageSha256','packageSha256','nativeSha256','nativePackageSha256'],'SDK');text(sdk.version,'SDK version');
   for(const name of ['rootPackageSha256','packageSha256','nativeSha256','nativePackageSha256'])digest(sdk[name],'SDK '+name);
@@ -218,6 +228,7 @@ export function parseRustSelectorRecord(value:unknown):RustSelectorRecord{
     for(const query of queries){const path=decoded.path(query),parent=posix.dirname(path.path);if(selectorHash({...path,path:parent==='.'?'':parent})!==selectorHash(scope))fail('fact group scope mismatch');
       const key=JSON.stringify([kind,path]);if(seen.has(key))fail('duplicate fact query');seen.add(key);}
   }
+  const projects=new Set<string>();for(const value of record.key.projects){const {request}=decoded.project(value),key=JSON.stringify(request);if(projects.has(key))fail('duplicate project discovery');projects.add(key);}
   for(const value of record.key.candidates){const row=tuple(value,3,'candidate group');decoded.source(row[0]);for(const query of array(row[1],'candidate queries'))decoded.source(query);decodeDigest(row[2],'candidate group hash');}
   for(const value of record.key.populations){const row=tuple(value,3,'population');decoded.source(row[0],true);if(row[1]!==null)component(row[1]);decodeDigest(row[2],'population hash');}
   return record;
@@ -241,6 +252,13 @@ export function validateRustSelectorKey(record:RustSelectorRecord,options:{roots
       });
       if(selectorHash(answers)!==decodeDigest(row[3],'fact group hash'))return pending(kind,name,'canonical answers changed in this scope; query paths: '+JSON.stringify(array(row[2],'fact queries').map(query=>decoded.path(query))));
     }catch(error){return pending(kind,name,String(error));}
+  }
+  if(record.key.projects.length){
+    const owner=projectDiscoveryOwner(options.roots.source);
+    try{for(const value of record.key.projects){const expected=decoded.project(value);
+      try{if(selectorHash(owner.read(expected.request).files)!==expected.sha256)return pending('project-discovery',expected.request.path,'native matched files changed');}
+      catch(error){return pending('project-discovery',expected.request.path,String(error));}
+    }}finally{owner.close();}
   }
   for(const value of record.key.candidates){const row=tuple(value,3,'candidate group'),reader=decoded.source(row[0]);
     try{const answers=array(row[1],'candidate queries').map(query=>{const path=decoded.source(query),absolute=join(options.roots.source,path);metadataParents(options.roots.source,absolute,'Rust selector candidate');let present=false;

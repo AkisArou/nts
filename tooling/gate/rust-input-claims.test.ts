@@ -8,7 +8,7 @@ import {runtimeRepositoryClaims,compileRuntimeRepositoryClaims} from './rust-inp
 import {membershipIndex} from './reader-metadata.ts';
 import {testScratch} from './test-scratch.ts';
 
-const empty=():InputSnapshot=>({files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]});
+const empty=():InputSnapshot=>({files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],projectMatches:[],observations:[]});
 const context={entry:'<entry>',dataNamespaces:{}};
 const identity=(path:string)=>({state:'resolved' as const,path});
 const content={kind:'content' as const,following:'follow' as const};

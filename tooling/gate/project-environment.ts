@@ -2,7 +2,7 @@
 // These are replayed host facts, never repository reach or copier authority.
 import {dirname,join,resolve} from 'node:path';
 import type {HostObservation} from '../differential/oracle-runtime.ts';
-import type {ProjectRequest} from './project-inputs.ts';
+import type {ProjectRequest} from './project-discovery.ts';
 
 export type ProjectProgramProvenance={request:ProjectRequest;config:string;
   imports:{source:string;specifier:string}[];types:string[]};

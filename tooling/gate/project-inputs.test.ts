@@ -11,10 +11,25 @@ import {OracleFilesystem,validateHostObservations} from '../differential/oracle-
 import {projectInputs,projectInputOwner} from './project-inputs.ts';
 import {testScratch} from './test-scratch.ts';
 import {moduleGraph,closeModuleGraphOwners} from './module-closure.ts';
-import {validateReaderSourceObservations,readerObservationDependency} from './reader-observations.ts';
+import {validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {projectConfig} from './reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
+
+test('a directory used for matching and ordinary Program type discovery is promoted in both acquisition orders',t=>{
+  const root=testScratch(t,'project-directory-promotion');mkdirSync(join(root,'src'));mkdirSync(join(root,'src/ambient'));
+  writeFileSync(join(root,'src/main.ts'),'export {};');writeFileSync(join(root,'src/ambient/index.d.ts'),'declare const ambient:number;');
+  writeFileSync(join(root,'matching.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"]}');
+  writeFileSync(join(root,'ordinary.json'),'{"compilerOptions":{"typeRoots":["./src"]},"files":["src/main.ts"]}');
+  const owner=moduleGraph({sourceRoot:root});
+  try{for(const names of [['matching.json','ordinary.json'],['ordinary.json','matching.json']]){
+    const entries=names.map(name=>projectConfig(pathToFileURL(join(root,name)),'type-check'));
+    const snapshot=owner.describe(entries),rows=snapshot.observations.filter(row=>row.observation.kind==='entries'&&row.observation.path===join(root,'src'));
+    assert.ok(rows.some(row=>row.observationOnly),'matching context retains its raw observation role');
+    assert.ok(rows.some(row=>!row.observationOnly),'ordinary Program discovery retains selection authority');
+    assert.ok(readerObservationIndex(root,rows,snapshot.files).affected([{path:'src/new.md',added:true}]).size>0);
+  }}finally{owner.close();}
+});
 
 test('declared real Programs retain ancestor package absences as host provenance without repository reach',()=>{
   const root=fileURLToPath(new URL('../..',import.meta.url)),owner=moduleGraph({sourceRoot:root});
