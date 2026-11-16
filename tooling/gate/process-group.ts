@@ -18,9 +18,10 @@ export function assertProcessGroupIdentity(pid:number,birth:ProcessGroupIdentity
     throw Error('refusing to stop a changed command group');
 }
 
-/** Capture synchronously, before the parent can reap a fast child. A vanished
- * leader does not authorize another process: its original group may still
- * contain children. This is the active-process fence, shared by all callers. */
+/** Capture synchronously, before the parent can reap a fast child. Linux keeps
+ * a PGID reserved while any group member lives, so an exited leader does not
+ * revoke this group's signal authority. An observed new leader must still
+ * match the captured birth identity. This is active-process's shared fence. */
 export function ownedProcessGroup(child:ChildProcess){
   const pid=child.pid;
   if(pid===undefined)return;
