@@ -32,11 +32,17 @@ function writeClosed(file:string,entry:ClosedTemporary):void {
 
 /** A retained failure is evidence from one lifetime, never a new run's scratch. */
 export function assertRunTemporaryOpen(run:string,home:string):void {
-  const path=join(resolve(run),'tmp'),file=join(registry(home),pathKey(path)+'.json');
-  if(!existsSync(file))return;
-  const entry=JSON.parse(readFileSync(file,'utf8')) as ClosedTemporary;
-  if(entry.owned?.path!==path||!Number.isFinite(entry.closed))throw Error('invalid closed run temporary registration: '+file);
-  throw Error('run temporary is registered closed: '+path+'; choose a new run directory');
+  for(let path=join(resolve(run),'tmp');;path=dirname(path)){
+    if(basename(path)==='tmp'){
+      const file=join(registry(home),pathKey(path)+'.json');
+      if(existsSync(file)){
+        const entry=JSON.parse(readFileSync(file,'utf8')) as ClosedTemporary;
+        if(!entry||entry.owned?.path!==path||!Number.isFinite(entry.closed))throw Error('invalid closed run temporary registration: '+file);
+        throw Error('run temporary is registered closed: '+path+'; choose a new run directory');
+      }
+    }
+    if(path===dirname(path))return;
+  }
 }
 
 export function captureRunTemporary(run:string,previous?:RunTemporary,home=userInfo().homedir):RunTemporary {
@@ -112,6 +118,7 @@ function checkedImageRegistry(owned:RunTemporary,home:string,create:boolean):str
  * Immutable receipts survive a red close alongside the image's identity files.
  * No registry is scanned for dead owners and no interrupted run is recovered. */
 export function createRunOracleImage(owned:RunTemporary,home:string,path:string):string {
+  assertRunTemporaryOpen(dirname(owned.path),home);
   imageParents(owned,path,home);
   if(path!==join(dirname(path),'tree'))throw Error('oracle image root must be its producer tree: '+path);
   const parent=directoryIdentity(dirname(path));

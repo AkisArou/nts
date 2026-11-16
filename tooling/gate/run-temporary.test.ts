@@ -277,8 +277,18 @@ for(const mutation of ['version','outside'])test('a '+mutation+' registration ca
 
 test('a closed temporary cannot be acquired again, while fresh and live inherited roots can',t=>{
  const f=fixture(t),run=f.run('one-lifetime'),owned=captureRunTemporary(run,undefined,f.home);writeFileSync(join(owned.path,'evidence'),'original');
+ const capturedChild=captureRunTemporary(join(owned.path,'captured-child'),owned,f.home);
  assert.equal(finishRunTemporary(owned,f.home,false,roomy).state,'retained after red');
  assert.throws(()=>captureRunTemporary(run,undefined,f.home),/registered closed: .*choose a new run directory/);assert.equal(readFileSync(join(owned.path,'evidence'),'utf8'),'original');
+ for(const previous of [undefined,owned]){
+  const childRun=join(owned.path,previous?'new-inherited-child':'new-child');
+  assert.throws(()=>captureRunTemporary(childRun,previous,f.home),/registered closed: .*choose a new run directory/);assert.equal(existsSync(childRun),false,'closed enclosing acquisition refuses before mkdir');
+ }
+ for(const owner of [owned,capturedChild]){
+  const parent=join(owner.path,'new-image');
+  assert.throws(()=>createRunOracleImage(owner,f.home,join(parent,'tree')),/registered closed: .*choose a new run directory/);assert.equal(existsSync(parent),false,'direct image acquisition refuses before mkdir');
+ }
  const fresh=captureRunTemporary(f.run('fresh'),undefined,f.home);assert.deepEqual(captureRunTemporary(f.run('fresh'),fresh,f.home),fresh);
  const child=captureRunTemporary(join(fresh.path,'child'),fresh,f.home);assert.equal(child.enclosing?.path,fresh.path);
+ const outside=captureRunTemporary(f.run('outside-closed-root'),owned,f.home);assert.equal(outside.enclosing,undefined,'a new unrelated run does not share the closed lifetime');
 });
