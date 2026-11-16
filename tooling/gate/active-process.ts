@@ -5,6 +5,7 @@ import {StringDecoder} from "node:string_decoder";
 import {CommandLiveness,validateCommandPolicy} from "./command-liveness.ts";
 import {hostObservations} from "./host-observations.ts";
 import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
+import {ownedProcessGroup} from './process-group.ts';
 
 export {COMMAND_IDLE_GUARD_MS,COMMAND_CPU_BUDGET_SECONDS,COMMAND_STARTUP_BOUND_MS} from "./command-liveness.ts";
 export const COMMAND_ACTIVITY_POLL_MS=5000;
@@ -51,15 +52,6 @@ export function threadsBusy(pid:number):boolean {
 function processAt(pid:number) {
   try{return processActivity(readFileSync(`/proc/${pid}/stat`,"utf8"));}
   catch(error){if(error instanceof Error&&"code" in error&&(error.code==="ENOENT"||error.code==="ESRCH"))return;throw error;}
-}
-function processIdentityAt(pid:number){
-  let text:string;
-  try{text=readFileSync(`/proc/${pid}/stat`,"utf8");}
-  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT'||(error as NodeJS.ErrnoException).code==='ESRCH')return;throw error;}
-  const end=text.lastIndexOf(')');if(end<0)throw Error('invalid process activity record');
-  const fields=text.slice(end+2).trim().split(/\s+/),values=[2,3,19].map(at=>Number(fields[at]));
-  if(values.some(value=>!Number.isSafeInteger(value)||value<0))throw Error('invalid process activity counters');
-  return {group:values[0]!,session:values[1]!,started:values[2]!};
 }
 /** Read-only identity and counters; a rooted observer gains no signal owner. */
 export function commandProcessIdentity(pid:number){return processAt(pid);}
@@ -186,13 +178,9 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
     }catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
     const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]});
     let out="",stdout="",stderr="",started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,timeout:string|undefined,instrument:ToolingInstrumentError|undefined;
-    let cancelActivity=()=>{},sampledAtBound:ActiveResult['sampledAtBound'];
+    let cancelActivity=()=>{},sampledAtBound:ActiveResult['sampledAtBound'],group:ReturnType<typeof ownedProcessGroup>;
     const stop=()=>{
-      if(!child.pid||child.pid<=1)return;
-      // A re-used leader PID can never authorize signalling its new group.
-      const leader=processIdentityAt(child.pid);
-      if(started!==undefined&&leader&&(leader.started!==started||leader.group!==child.pid||leader.session!==child.pid))throw new Error("refusing to stop a changed command group");
-      try{process.kill(-child.pid,"SIGKILL");}catch(error){if(!(error instanceof Error)||!("code" in error)||error.code!=="ESRCH")throw error;}
+      group?.signal('SIGKILL');
     };
     const broken=(cause:unknown)=>{
       if(instrument)return;
@@ -247,9 +235,9 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
     try{
       // Capture birth identity synchronously, before the event loop can reap a
       // fast child. Descendants can retain this group after its leader exits.
-      const leader=processIdentityAt(child.pid);
-      if(!leader||leader.group!==child.pid||leader.session!==child.pid)throw new Error("spawned command has no owned process group");
-      started=leader.started;liveness.baseline(observations.initialCpu(child.pid));
+      group=ownedProcessGroup(child);
+      if(!group)throw new Error("spawned command has no owned process group");
+      started=group.started;liveness.baseline(observations.initialCpu(child.pid));
       cancelActivity=observations.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,busy,processOwn)=>{
         try{
           const now=observations.now(),previous=liveness.cpu;
