@@ -25,7 +25,7 @@ for(const sealed of [false,true])test((sealed?'sealed siblings borrow one parent
  const planner=join(dirname(resolve(binary)),'oracle-plan');
  const fixtures=join(root,'fixtures'),project=join(fixtures,'tests/programs/sibling');
  // These unchanged corpus markers let the real native planner name private sources.
- copyModuleClosure([fixtureInput(new URL('../../tsconfig.fixtures.json',import.meta.url)),fixtureInput(new URL('../differential/Cargo.toml',import.meta.url))],fixtures);
+ copyModuleClosure([fixtureInput(new URL('../../tsconfig.fixtures.json',import.meta.url),{dataNamespaces:{}}),fixtureInput(new URL('../differential/Cargo.toml',import.meta.url),{dataNamespaces:{}})],fixtures);
  mkdirSync(join(project,'src'),{recursive:true});mkdirSync(join(fixtures,'benchmarks/cases'),{recursive:true});
  writeFileSync(join(project,'package.json'),' {"type":"module"}\n');
  writeFileSync(join(project,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'Bundler',strict:true,types:[]},files:['src/main.ts']}));
