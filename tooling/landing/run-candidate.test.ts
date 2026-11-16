@@ -18,7 +18,7 @@ import {candidateCommand,candidateCommandAsync} from "./candidate-environment.ts
 import {GATE,fixture} from './run-fixture.ts';
 import {clippyTarget} from "../gate/build-targets.ts";
 import {ownMemory} from '../gate/test-memory.ts';
-import {HOST_OBSERVATIONS,hostObservations} from '../gate/host-observations.ts';
+import {hostObservations} from '../gate/host-observations.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {treeProcessFixture} from './tree-users-fixture.ts';
 import {durableRecord} from '../gate/durable-record.ts';
