@@ -1009,15 +1009,19 @@ test("a private timing fixture does not make committed step estimates a verdict 
   }
 });
 
-test("Chromium runtime files keep their ordinary obligations and tooling bytes owe the audit", () => {
+test("Chromium manual assets keep policy checks while matched tooling sources owe the suite", () => {
   const always = everyChangeSteps();
   assert.ok(always.includes("clippy") && !always.includes("blockers"), `every change owes ${always.join(" ")}`);
+  // verify.ts:71 invokes generate.py, and chromium.ts generate reads args.gn.
+  // The settled Chromium rule assigns that manual route; no tooling step runs
+  // it. Their former suite reach came only from raw config-discovery listings.
+  // smoke.ts is a matched tooling Program source and keeps its suite reader.
   for (const p of [
     "tooling/chromium/bindgen/generate.py", "tooling/chromium/smoke.ts", "tooling/chromium/args.gn",
     "runtime/chromium/host/host.c", "runtime/chromium/adapter/dom_bridge.cc", "runtime/chromium/examples/todo/main.ts",
     "runtime/chromium/embedder/program/check.ts", "runtime/chromium/docs/lib-dom.md", "runtime/chromium/dom/types/dom-testing.d.ts",
   ]) {
-    const expected=p.startsWith('tooling/')?[...new Set([...always,'tooling','jvm-members'])].sort():always;
+    const expected=p.startsWith('tooling/')?[...new Set([...always,'jvm-members','tooling-types',...(p.endsWith('.ts')?['tooling']:[])])].sort():always;
     assert.deepEqual([...stepsFor(p)].sort(), expected, p);
   }
 });
