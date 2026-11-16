@@ -21,6 +21,8 @@ import { cgroupCharge, reserveJob, type Reservation } from "../gate/memory-ledge
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
+import {caseCohort} from '../gate/case-cohort.ts';
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {registerCaseScope,releaseToken,type TokenRelease} from '../gate/case-context.ts';
 
 export type ResidentPoolOptions = {
@@ -58,33 +60,54 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
   work: Dispatch[], isolated: boolean, reservation: Reservation, indexOffset = 0): Promise<Pressure[]> {
   const exclusive = isolated || Math.min(jobs, work.length) === 1;
   // Asked before each case, which takes far longer than the ledger's answer.
+  const stop=new AbortController(),cohort=caseCohort(reservation,process.env,stop.signal,report);
   const queue = createFeed(work.map((_, index) => String(index)), {
-    token: (entry, signal) => token(work[Number(entry)]!.path, signal), outranked: () => reservation.outranked(),
+    token: (entry, signal) => token(work[Number(entry)]!.path, signal), outranked: () => reservation.outranked(),pause:cohort.pause,resume:cohort.resume,
   });
   const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
   let idleRestarts = 0;
+  const unregister=registerCommandCloser('resident case feed',{close:()=>{stop.abort();memory.close();},closed:async()=>{await Promise.allSettled(tasks);await memory.closed;}});
   const worker = async (index: number) => {
-    const bound = memory.worker(index, workerBytes);
     let again = true;
     let returned=Promise.resolve();
     while (again) {
       await returned;
+      let first:{entry:string;grant:()=>void;leave:()=>void}|undefined;
+      await queue.feed({signal:stop.signal,exited:()=>stop.signal.aborted,end:()=>{},write:(entry,grant)=>{let returned=false;const owned:TokenRelease=()=>{if(!returned){returned=true;grant();}};owned.case=(grant as TokenRelease).case;owned.closed=(grant as TokenRelease).closed;
+        try{first={entry,grant:owned,leave:cohort.enter()};}catch(error){void releaseToken(owned);throw error;}}});
+      if(!first)break;
+      const offered=first;
+      let bound:ReturnType<MemoryRun['worker']>|undefined;
+      let childClosed:Promise<void>=Promise.resolve(),draining:Promise<void>|undefined,feedFlight:Promise<unknown>=Promise.resolve();
+      const drain=()=>draining??=Promise.resolve().then(async()=>{
+        const failures:unknown[]=[];
+        try{await childClosed;}catch(error){failures.push(error);}
+        try{await returned;}catch(error){failures.push(error);}
+        let scopeDrained=true;
+        if(bound){try{bound.close();await bound.closed;}catch(error){scopeDrained=false;failures.push(error);}}
+        if(scopeDrained)offered.leave();
+        if(failures.length)throw new AggregateError(failures,'resident worker generation failed to drain');
+      });
+      try{
+      bound=memory.worker(index,workerBytes);
+      const current=bound;
       again = await new Promise<boolean>((resolve, reject) => {
         // Include startup and waits between dispatches: an idle scope can be
         // collateral damage from the same aggregate or system-wide killer.
-        let before: MemoryCounters = bound.counters();
+        let before: MemoryCounters = current.counters();
         let aggregateBefore = memory.aggregateOoms();
-        const scope = bound.scope(command, args(index + indexOffset));
+        const scope = current.scope(command, args(index + indexOffset));
         assignOwnedValues(scope.env,{NTS_CENSUS_POOL_WORKER:'1',
           NTS_CENSUS_CASE_CONCURRENCY:exclusive?'exclusive':'parallel',NTS_GATE_TOKEN_HELD:'1'});
         const child = spawn("systemd-run", scope.argv, { stdio: ["pipe", "pipe", "inherit"], env: scope.env });
         const stopped = new AbortController();
         let exited = false;
-        let restarting = false;
+        let restarting = false,priorityYield=false;
+        let resolveClosed!:()=>void;childClosed=new Promise<void>(resolve=>{resolveClosed=resolve;});
         let completedCases = 0;
         let active: Dispatch | undefined;
-        let release: (() => void) | undefined;
+        let release: (() => void) | undefined=offered.grant;
         const returnToken = () => {
           const held = release;
           release = undefined;
@@ -95,7 +118,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           returnToken();
           const dispatch = active;
           const dispatchedBefore = before;
-          const after = bound.counters();
+          const after = current.counters();
           const aggregateAfter = memory.aggregateOoms();
           const cause = memoryCause(before, after, aggregateBefore, aggregateAfter);
           active = undefined;
@@ -103,7 +126,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           aggregateBefore = aggregateAfter;
           if (memoryDisposition(cause, exclusive ? "exclusive" : "parallel") === "budget") {
             onRow({ path: dispatch.path, bucket: "memory-cap", why: cause === "own-limit" ? "worker's own resident limit fired" : caseBudgetMessage(dispatch.path, memory.budgetBytes),
-              residentWorkerBytes: bound.bytes, residentRunBytes: memory.budgetBytes, residentPressureRetries: Number(isolated) });
+              residentWorkerBytes: current.bytes, residentRunBytes: memory.budgetBytes, residentPressureRetries: Number(isolated) });
             return true;
           }
           if (cause) {
@@ -121,29 +144,32 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           exited = true;
           stopped.abort();
           returnToken();
-          try { bound.stop(scope); } catch {}
+          try { current.stop(scope); } catch {}
           reject(error);
         };
-        const feed = () => returned.then(()=>queue.feed({
-          write: async (entry, granted) => {
+        const dispatch=async(entry:string,granted:()=>void)=>{
             if (active !== undefined) {
-              granted();
+              await releaseToken(granted);
               throw new Error(`worker ${index} already owns ${active.path}`);
             }
             // Owned before anything here can throw, so a failure returns it.
             release = granted;
             const group=readFileSync(scope.ready,'utf8').trim().replace(/^0::/,'');
-            await registerCaseScope((granted as TokenRelease).case,bound.group,bound.bytes,group);
+            await registerCaseScope((granted as TokenRelease).case,current.group,current.bytes,group);
             if(exited||restarting){returnToken();return;}
-            before = bound.counters();
+            before = current.counters();
             aggregateBefore = memory.aggregateOoms();
             active = work[Number(entry)]!;
             child.stdin.write(`${active.path}\n`);
-          },
-          end: () => child.stdin.end(),
-          exited: () => exited || restarting,
-          signal: stopped.signal,
-        })).catch(fail);
+          };
+        const feed = () => {
+          feedFlight=returned.then(()=>queue.feed({
+            write:dispatch,end:()=>child.stdin.end(),exited:()=>exited||restarting,
+            signal:AbortSignal.any([stopped.signal,stop.signal]),
+            yield:async()=>{priorityYield=true;restarting=true;current.stop(scope);await drain();},
+          })).catch(fail);
+          return feedFlight;
+        };
         child.on("error", fail);
         child.stdin.on("error", (error) => { if (!exited && !restarting) fail(error); });
         createInterface({ input: child.stdout }).on("line", (line) => {
@@ -153,7 +179,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             const answered = row.path;
             const failed = finish(row);
             const recycled = recycleAfterCases !== undefined && ++completedCases >= recycleAfterCases;
-            const held = recycleAboveBytes === undefined || failed || recycled ? 0 : charge(bound.group);
+            const held = recycleAboveBytes === undefined || failed || recycled ? 0 : charge(current.group);
             const heavy = held > recycleAboveBytes!;
             const restart = failed || recycled || heavy;
             // Stop the entire scope before reuse, including any compiler child
@@ -162,7 +188,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
               restarting = true;
               if(recycled&&!failed)report(`resident worker ${index}: recycling after ${completedCases} completed cases`);
               if(heavy)report(`resident worker ${index}: recycling after ${answered} left it holding ${Math.round(held/2**20)} MiB`);
-              bound.stop(scope);
+              current.stop(scope);
             } else {
               void feed();
             }
@@ -175,12 +201,13 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           exited = true;
           stopped.abort();
           try {
-            const entered = bound.ready(scope);
-            bound.stop(scope);
-            if (active !== undefined) {
+            const entered = current.ready(scope);
+            current.stop(scope);
+            if(priorityYield){if(active!==undefined)throw Error('priority yield attempted to stop an active case');restarting=true;}
+            else if (active !== undefined) {
               restarting = finish();
             } else if (!restarting) {
-              const after = bound.counters();
+              const after = current.counters();
               const cause = memoryCause(before, after, aggregateBefore, memory.aggregateOoms());
               if (cause === "own-limit") throw new Error(`resident instrument failure: idle worker ${index} reached its own limit without an in-flight case`);
               if (cause) {
@@ -197,19 +224,23 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           } catch (error) { reject(error); }
           // Its process is gone, so no case of this worker runs any more,
           // whichever way the classification above ended.
-          finally { returnToken(); }
+          finally { returnToken();resolveClosed(); }
         });
         const start = async () => {
           const deadline = Date.now() + 15_000;
-          while (!bound.ready(scope)) {
+          while (!current.ready(scope)) {
             if (exited) return; // close classifies startup pressure or setup failure.
             if (Date.now() >= deadline) throw new Error(`resident cap: worker ${index} scope did not become ready`);
             await new Promise((resume) => setTimeout(resume, 10));
           }
-          await feed();
+          await dispatch(offered.entry,offered.grant);
         };
         void start().catch(fail);
       });
+      await drain();await feedFlight;
+      }catch(error){
+        try{await releaseToken(offered.grant);}finally{await drain();}throw error;
+      }
     }
     await returned;
   };
@@ -218,13 +249,13 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
     await Promise.all(tasks);
     return pressure;
   } catch (error) {
-    memory.close();
+    stop.abort();memory.close();
     await memory.closed;
     await Promise.allSettled(tasks);
     throw error;
   } finally {
-    memory.close();
-    await memory.closed;
+    stop.abort();memory.close();
+    await memory.closed;unregister();
   }
 }
 

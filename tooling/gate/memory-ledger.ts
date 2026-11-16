@@ -1515,6 +1515,31 @@ export async function reserveJob(request: JobRequest,
   };
 }
 
+/** A quiescent job returns only its own idle forecast. Its existing sampler
+ * keeps the whole job's peak, and normal growth restores capacity before work.
+ * An inherited handle never rewrites its parent's reservation. */
+export async function yieldJobMemory(reservation:Reservation,env:NodeJS.ProcessEnv,signal?:AbortSignal):Promise<{returned:number;resume:()=>Promise<void>}>{
+  signal?.throwIfAborted();
+  const idle={returned:0,resume:async()=>{signal?.throwIfAborted();}};
+  if(reservation.inherited)return idle;
+  const entry=admittedEntry(reservation.ledger,reservation.id);
+  if(!entry||!reservation.active())throw Error('memory: cannot yield an ended job reservation: '+reservation.id);
+  const identity=processIdentity(process.pid);
+  if(!identity||entry.owner.pid!==identity.pid||entry.owner.start!==identity.start||entry.owner.boot!==identity.boot)
+    throw Error('memory: idle yield requires the job reservation owner: '+reservation.id);
+  if(entry.liveUse)return idle;
+  const forecast=reservation.bytes,retained=Math.min(forecast,peakReservation([Math.max(1,entryUsage(entry,{env}))]));
+  const returned=forecast-retained;
+  if(returned>0)await reservation.shrink(returned);
+  let restoring:Promise<void>|undefined;
+  return {returned,resume:()=>restoring??=Promise.resolve().then(async()=>{
+    signal?.throwIfAborted();
+    if(!reservation.active())throw Error('memory: cannot resume an ended job reservation: '+reservation.id);
+    const missing=forecast-reservation.bytes;
+    if(missing>0)await reservation.grow(missing,{signal,draining:false});
+  })};
+}
+
 /** The admitted entry `id` in `dir` while its owner lives; null once it is released, or dropped, or its owner has exited. */
 export function admittedEntry(dir: string, id: string): LedgerEntry | null {
   const file = entryPath(dir, "admitted", id);

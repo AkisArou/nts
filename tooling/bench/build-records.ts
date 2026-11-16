@@ -1,3 +1,4 @@
+import {caseCohort} from '../gate/case-cohort.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 /** Compile-only benchmark observations. This command never executes a workload. */
@@ -151,20 +152,21 @@ export function recordsJob(lanes: number, what: string): JobRequest {
  * thrown, so nothing is measured past it, as one at a time.
  */
 export async function compileCells(cells: readonly CompileCell[], lanes: number, compile: (cell: CompileCell, lane: number) => Promise<BenchmarkOutcome>,
-  { token = (cell, signal) => acquireToken({ project: cell.path, backend: cell.backend }, signal), outranked = () => false, ended = () => {} }: {
+  { token = (cell, signal) => acquireToken({ project: cell.path, backend: cell.backend }, signal), outranked = () => false, ended = () => {},cohort }: {
     token?: (cell: CompileCell, signal: AbortSignal) => Promise<(() => void) | null>;
     outranked?: () => boolean;
     ended?: (cell: CompileCell, outcome: BenchmarkOutcome) => void;
+    cohort?:ReturnType<typeof caseCohort>;
   } = {}): Promise<BenchmarkOutcome[]> {
   assert.ok(Number.isSafeInteger(lanes) && lanes >= 1, `compile lanes are a whole number of at least 1, not ${lanes}`);
   const outcomes: BenchmarkOutcome[] = new Array(cells.length), stop = new AbortController();
   let failure: { error: unknown } | undefined;
   const cellToken: CaseToken = (entry, signal) => token(cells[Number(entry)]!, signal);
-  const feed = createFeed(cells.map((_, index) => String(index)), { token: cellToken, outranked });
+  const feed = createFeed(cells.map((_, index) => String(index)), { token: cellToken, outranked,pause:cohort?.pause,resume:cohort?.resume });
   const lane = async (index: number) => {
     for (;;) {
-      let taken: { cell: number; release: () => void } | undefined;
-      await feed.feed({ write: (entry, release) => { taken = { cell: Number(entry), release }; }, end: () => {}, exited: () => failure !== undefined, signal: stop.signal });
+      let taken: { cell: number; release: () => void;leave:()=>void } | undefined;
+      await feed.feed({ write: (entry, release) => { taken = { cell: Number(entry), release,leave:cohort?.enter()??(()=>{}) }; }, end: () => {}, exited: () => failure !== undefined, signal: stop.signal });
       if (taken === undefined) return;
       const active=taken;
       try {
@@ -174,7 +176,7 @@ export async function compileCells(cells: readonly CompileCell[], lanes: number,
       } catch (error) {
         failure ??= { error };
         stop.abort();
-      } finally { await releaseToken(taken.release); }
+      } finally { try{await releaseToken(taken.release);}finally{taken.leave();} }
     }
   };
   await Promise.all(Array.from({ length: Math.min(lanes, cells.length) }, (_, index) => lane(index)));
@@ -275,13 +277,13 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       // The compiles' memory, reserved once: the step's, inside one; alone,
       // what each lane held in this job's earlier runs, times the lanes.
       reservation = await reserveJob(recordsJob(lanes, `benchmark compile records (${mode}), ${lanes} at once`), { report: message => console.error(message) });
-      const held = reservation;
+      const held = reservation,cohort=caseCohort(held,process.env,new AbortController().signal,message=>console.error(message));
       // Each compile on a lane of its own (worker-memory.ts), at
       // COMPILE_CAP_BYTES, under an aggregate that holds every lane's cap: a
       // compile meets no limit but its own, as it would alone.
       memoryRun(lanes * COMPILE_CAP_BYTES);
       const outcomes = await compileCells(order, lanes, (one, lane) => observeCompile({ backend: one.backend, project: projects.get(one.path)!, output: join(scratch, `output-${lane}`),
-        binary, root: ROOT, env: environment }), { outranked: () => held.outranked(), ended: (one, outcome) => console.log(`${one.backend} ${one.path}: ${outcome.kind}`) });
+        binary, root: ROOT, env: environment }), { outranked: () => held.outranked(),cohort, ended: (one, outcome) => console.log(`${one.backend} ${one.path}: ${outcome.kind}`) });
       for (const [index, one] of order.entries()) measured.set(cell(one.path, one.backend), outcomes[index]!);
     }
     // The rows in the order one compile at a time keeps them, whatever order the compiles ended in.

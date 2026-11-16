@@ -99,7 +99,7 @@ import {clippyTarget} from "./build-targets.ts";
 import {hostObservations,HostObservationError} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {RESERVATION_PER_PEAK, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {StepBoundClock, stepBound, stepBoundReason, stepBoundWait} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
@@ -1020,16 +1020,25 @@ function watchMemory() {
   }
   account();
   if (reservation) outranked();
+  let idleReturned=false;
   for (const [name, r] of running) {
     if (r.draining) continue;
     sampleStep(r);
+    // Idle pooled workers have no case promise while priority yields. Their
+    // actual charge retains the same margin; historic extras may return only
+    // as those resources drain. Active cases keep their complete grant.
+    if(outrankedNow&&r.elastic&&tokensOf(name,r)===0){
+      const retained=Math.min(r.extra,peakReservation([Math.max(1,r.charge)]));
+      idleReturned ||= retained<r.extra||r.want>0;r.extra=retained;r.want=0;
+      continue;
+    }
     const grant = limitOf(name, r);
     if (stopping) { r.want = 0; continue; }
     if (r.charge >= grant - nearGrant(grant)) r.want = Math.max(r.want, Math.ceil((Math.max(0, r.charge - grant) + growthOf(grant)) / MIB) * MIB);
   }
   feedSteps();
   for (const [name, r] of running) if (!r.draining) applyBound(name, r);
-  if ([...running.values()].some(r => r.want > 0)) adjustMemory();
+  if (idleReturned||[...running.values()].some(r => r.want > 0)) adjustMemory();
 }
 // What running steps want beyond their grants, from the reservation's slack.
 function feedSteps() {

@@ -75,10 +75,11 @@ export type CaseToken = (path: string, signal: AbortSignal) => Promise<(() => vo
  * is answered or lost. `signal` aborts the worker's wait for a token when the
  * worker stops.
  */
-export type FedWorker = { write: (path: string, release: () => void) => unknown; end: () => void; exited: () => boolean; signal?: AbortSignal };
+export type FedWorker = { write: (path: string, release: () => void) => unknown; end: () => void; exited: () => boolean; signal?: AbortSignal;
+  /** Close and join only this idle worker's resources, never an active case. */
+  yield?:()=>Promise<void> };
 
 const untokened: CaseToken = () => Promise.resolve(() => {});
-const never = new AbortController().signal;
 
 export type FeedOptions = {
   /** Each case's gate token (`CaseToken`); none outside a gate. */
@@ -88,6 +89,9 @@ export type FeedOptions = {
    * asked before each case: while it is, no new case starts.
    */
   outranked?: () => boolean;
+  /** One shared owned pause/resume boundary after idle workers have drained. */
+  pause?:()=>Promise<void>;
+  resume?:()=>Promise<void>;
   /** How often a feed held by `outranked` looks again. */
   everyMs?: number;
 };
@@ -114,33 +118,60 @@ export type FeedOptions = {
  * stops while it waits, or that the job gives way with, goes back to the
  * queue, so no worker waits for a token while no path is left for it.
  */
-export function createFeed(paths: readonly string[], { token = untokened, outranked = () => false, everyMs = 1000 }: FeedOptions = {}) {
+export function createFeed(paths: readonly string[], { token = untokened, outranked = () => false, everyMs = 1000, pause:pauseOwner,resume:resumeOwner }: FeedOptions = {}) {
   let next = 0;
   let written = 0;
   const returned: number[] = [];
   const remaining = () => returned.length > 0 || next < paths.length;
+  let yielding:{resume?:Promise<void>}|undefined;
+  const idle=async(worker:FedWorker)=>{
+    if(!pauseOwner||!resumeOwner)throw Error('case feed priority yield requires its owned pause and resume');
+    yielding??={};
+    await worker.yield?.();await pauseOwner();
+  };
+  const waitingToken=async(path:string,worker:FedWorker)=>{
+    const withdraw=new AbortController(),watch=new AbortController();let failure:unknown;
+    const signal=worker.signal?AbortSignal.any([worker.signal,withdraw.signal]):withdraw.signal;
+    const observer=(async()=>{
+      try{for(;;){await pause(everyMs,undefined,{signal:watch.signal});if(outranked()||yielding){withdraw.abort();return;}}}
+      catch(error){if(!watch.signal.aborted){failure=error;withdraw.abort(error);}}
+    })();
+    try{
+      let release;
+      try{release=await token(path,signal);}catch(error){if(!signal.aborted||(error as Error)?.name!=='AbortError')throw error;release=null;}
+      if(failure){if(release)await releaseToken(release);throw failure;}
+      return release;
+    }finally{watch.abort();await observer;}
+  };
   return {
     get dispatched() {
       return written;
     },
     async feed(worker: FedWorker): Promise<void> {
       for (;;) {
-        if (worker.exited()) return;
+        if (worker.exited()||worker.signal?.aborted) return;
         if (!remaining()) return worker.end();
-        if (outranked()) {
-          await pause(everyMs, undefined, { signal: worker.signal }).catch(() => {});
+        if (outranked()||yielding) {
+          await idle(worker);
+          if(worker.exited()||worker.signal?.aborted)return;
+          if(!outranked()){
+            const flight=yielding!;await(flight.resume??=resumeOwner!());
+            if(yielding===flight)yielding=undefined;
+          }else await pause(everyMs, undefined, { signal: worker.signal }).catch(() => {});
           continue;
         }
         const reserved = returned.pop() ?? next++;
-        const release = await token(paths[reserved]!, worker.signal ?? never);
-        if (release === null || worker.exited()) {
+        let release;
+        try{release=await waitingToken(paths[reserved]!,worker);}
+        catch(error){returned.push(reserved);throw error;}
+        if (release === null || worker.exited()||worker.signal?.aborted) {
           if(release)await releaseToken(release);
           returned.push(reserved);
-          if (worker.exited()) return;
+          if (worker.exited()||worker.signal?.aborted) return;
           continue;
         }
         // Outranked while the token was awaited: the case gives way, with its token.
-        if (outranked()) {
+        if (outranked()||yielding) {
           await releaseToken(release);
           returned.push(reserved);
           continue;
