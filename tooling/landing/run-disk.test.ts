@@ -15,7 +15,7 @@ import {readSummary,verdictOf} from '../full-check/measure.ts';
 
 function inUnit(t:TestContext,f:ReturnType<typeof fixture>,steps:string[],commit?:string):Ran{
   const unit='nts-test-disk-run-'+randomUUID(),output=join(f.own,'drained.json');
-  t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{env:fixtureEnvironment(t),stdio:'ignore'});});
+  t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{env:fixtureEnvironment(t),stdio:'ignore',encoding:'utf8'});});
   const code=generatedJavaScript(`
     import {runLanding} from ${JSON.stringify(new URL('./run.ts',import.meta.url).href)};
     import {registerCommandCloser} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};

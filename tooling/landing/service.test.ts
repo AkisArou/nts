@@ -183,7 +183,7 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   };
   let finished=false;const running=drain(f.config).finally(()=>{finished=true;});
   t.after(async()=>{temporary.release();await running;});
-  await waitFor('the no-build entry lands past the disk hold',()=>f.queue.result(eb.id)?.state==='landed'&&f.queue.status().message?.startsWith('waiting for disk:'),{stopped:()=>finished?'service ended before the release':undefined});
+  await waitFor('the no-build entry lands past the disk hold',()=>f.queue.result(eb.id)?.state==='landed'&&f.queue.status().message?.startsWith('waiting for disk:')===true,{stopped:()=>finished?'service ended before the release':undefined});
   assert.equal(f.queue.result(ea.id)?.state,'held');assert.equal(attempts,1,'no repeated build under the unchanged shortage');
   assert.equal(f.queue.checking(),null,'the held entry owns no running check');
   assert.equal(existsSync(f.pool.capacity.stateFile),false,'the refused build owns no claim');
@@ -215,7 +215,7 @@ test('withdrawing a disk-held entry answers it immediately and the idle service 
   };
   let finished=false;const running=drain(f.config).finally(()=>{finished=true;});
   t.after(async()=>{f.queue.withdraw(ea.id);await running;});
-  await waitFor('the service names the disk wait and its actual shortfall',()=>f.queue.status().message?.includes('waiting for disk: '+ea.id),{stopped:()=>finished?'service ended before disk wait':undefined});
+  await waitFor('the service names the disk wait and its actual shortfall',()=>f.queue.status().message?.includes('waiting for disk: '+ea.id)===true,{stopped:()=>finished?'service ended before disk wait':undefined});
   assert.match(f.queue.status().message!,/needs 1073741824 more bytes/);
   assert.equal(f.queue.checking(),null);assert.equal(f.queue.result(ea.id)?.state,'held');
   const cliHome=join(f.s.dir,'withdraw-home');mkdirSync(join(cliHome,'.cache'),{recursive:true});
