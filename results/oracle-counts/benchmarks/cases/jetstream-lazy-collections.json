@@ -41,21 +41,16 @@
       },
       "source_digest": "47668d1dbd0042c1a4cc56e1946044ff",
       "budget": {
-        "version": 1,
+        "version": 2,
         "phase": "execute",
         "outcome": "margin",
         "bound": 60,
-        "signal": null,
-        "cpu_s": [
-          32.9,
-          32.9
-        ],
-        "reason": "node used 32.9 and 32.9 s of its 60 s CPU bound; a count needs both runs within half of it (30 s)"
+        "signal": null
       },
       "revision": {
         "entry": "92d455d6cb81629eaf89d9ba4cc1add3c321a4a6cb50f4dad15efaec91388a39",
         "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
-        "producer": "7ff437fe74de8a44455e096bfd2634c7f5c950b0c33a158acd8de46c73bc5e21",
+        "producer": "f76157d0ab52a9db0404246c9bdf884014a12249c74712c4a242927d13928d98",
         "policy": "107a794ccdddc63115352b76fec22bcf4edcc9bd27929c408f6d4885db52f8da"
       }
     }

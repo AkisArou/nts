@@ -137,7 +137,7 @@
       "counts": {
         "runtime/web-platform/test/wpt/harness.ts": 38
       },
-      "source": "sha256:d4b7a58dcaaf3c95d360db7a5b5c828306d45fa3353f0bced866bca8459221eb"
+      "source": "sha256:b3c65527fa38b682fd4abc505210a2678121ffe11a032dc82abf27f0b1df9e7a"
     },
     "tooling/conformance/ecmascript/icu-compiled/tsconfig.c.json": {
       "modules": [
@@ -1430,7 +1430,7 @@
         "tooling/gate/measurement.ts": 8,
         "tooling/gate/memory-ledger.test.ts": 1,
         "tooling/gate/native-case-result.test.ts": 2,
-        "tooling/gate/oracle-record.test.ts": 15,
+        "tooling/gate/oracle-record.test.ts": 14,
         "tooling/gate/oracle-records.test.ts": 2,
         "tooling/gate/owed-range.test.ts": 12,
         "tooling/gate/owed-range.ts": 22,
@@ -1471,7 +1471,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:6ea2911a0cd209b95d2866e8facdb1a3a6a7202f8487caf8eb61f357a2b29f01"
+      "source": "sha256:15450cf230cd61e95664e3b07bf483e25cac3e54e395c649ba06cbe5d3672ef1"
     }
   }
 }
