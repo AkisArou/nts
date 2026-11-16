@@ -19,6 +19,7 @@ export class DiskReadinessWake{
     try{
       add(join(home,'queue'),()=>changed(false));
       add(join(home,'held'),()=>changed(false));
+      add(join(home,'withdraw'),()=>changed(false));
       const names=new Set([capacity.stateFile,capacity.temporaryStateFile,capacity.changesFile].map(file=>basename(file)));
       add(dirname(capacity.stateFile),name=>{if(name===null||names.has(name))changed(true);});
     }catch(error){this.close();throw new Error('landing disk readiness watch could not start: '+String(error),{cause:error});}

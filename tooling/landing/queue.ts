@@ -195,6 +195,9 @@ export class Queue {
       const found = this.find(asked);
       if (!found) return this.results().some(e=>e.state==='landed'&&(e.id===asked||(asked.length>=7&&e.sha.startsWith(asked))))?'too-late':"unknown";
       if(found.where==='checking'&&this.checking()?.phase==='landing')return 'too-late';
+      if(found.where==='held'&&this.result(found.entry.id)?.retryDisk?.length){
+        this.answer(found.entry,{state:'withdrawn',message:'withdrawn while waiting for disk: its run already drained'});return 'withdrawn';
+      }
       if(found.where==='checking'||found.where==='held'&&this.withdrawRequested(found.entry.id)){
         this.record(this.path('withdraw',found.entry.id),{version:1,at:now(),request:randomUUID()});return 'requested';
       }

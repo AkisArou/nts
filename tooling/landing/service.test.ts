@@ -197,6 +197,27 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   assert.ok(f.logs.some(line=>line.includes('returns at its original queue arrival')),f.logs.join('\n'));
 });
 
+test('withdrawing a disk-held entry answers it immediately and the idle service exits',async t=>{
+  const f=service(t),a=f.task('fix/disk-withdraw',{'src/withdraw-disk.txt':'build\n'});
+  ownMemory(dirname(f.s.env.NTS_HOST_OBSERVATIONS!),{disk:{freeBytes:52*2**30,freeInodes:100}});
+  const ea=f.submit('fix/disk-withdraw',a.sha);
+  f.config.runSteps=async options=>{
+    let error:unknown;
+    try{const release=f.pool.capacity.beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});release();}
+    catch(problem){error=problem;}
+    assert.ok(error instanceof DiskBuildAdmissionError);
+    return {state:'held',message:error.message,run:options.run,pending:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',instrument:{kind:error.kind,disk:error.disk}}]};
+  };
+  let finished=false;const running=drain(f.config).finally(()=>{finished=true;});
+  t.after(async()=>{f.queue.withdraw(ea.id);await running;});
+  await waitFor('the service names the disk wait and its actual shortfall',()=>f.queue.status().message?.includes('waiting for disk: '+ea.id),{stopped:()=>finished?'service ended before disk wait':undefined});
+  assert.match(f.queue.status().message!,/needs 1073741824 more bytes/);
+  assert.equal(f.queue.checking(),null);assert.equal(f.queue.result(ea.id)?.state,'held');
+  assert.equal(f.queue.withdraw(ea.id),'withdrawn');
+  assert.equal((await running).state,'drained');assert.equal(f.queue.result(ea.id)?.state,'withdrawn');
+  assert.equal(f.queue.held().length,0);assert.equal(f.queue.status().state,'idle');
+});
+
 test("main moved during a check: the change is checked again on the new main", async t => {
   let moved = false;
   const f = service(t);

@@ -74,7 +74,10 @@ test('disk readiness restores its original key and cannot resurrect a newer answ
   assert.deepEqual(q.retryDiskReady(entry.id,held.at),entry);
   assert.deepEqual(q.waiting(),[entry]);assert.equal(q.retryDiskReady(entry.id,held.at),null);
   q.answer(q.take()!,{state:'held',message:'disk again',retryDisk:[disk]});
+  // A durable request can arrive just before the drained result is published.
+  writeFileSync(join(q.home,'withdraw',entry.id),JSON.stringify({version:1,at:'fixture',request:'before-held'}));
   assert.equal(q.withdraw(entry.id),'withdrawn');assert.equal(q.retryDiskReady(entry.id,q.result(entry.id)!.at),null);
+  assert.equal(q.withdrawRequested(entry.id),false);assert.deepEqual(q.held(),[]);
 });
 
 test("a withdrawal answers a waiting change at once and the one being checked when its check ends", t => {

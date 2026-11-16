@@ -956,6 +956,9 @@ the tooling strict checker owns the source's type checking.
   re-read the capacity owner's full snapshot. Once its equation permits the
   request, the entry returns at its original arrival position. Readiness never
   admits a build, caches a capacity projection, or guesses from elapsed time.
+  The service intentionally stays up while a disk-held entry exists; status
+  names it and its last measured shortfall. Withdrawal answers this already
+  drained entry immediately, and the service exits when no work remains.
 - **Pressure reclaims rebuildable disk state.** DiskCapacity explicitly reclaims
   under its pool lock before admission and during upkeep; status reads do not
   delete. Below the floor plus live promises and one measured cold build, it
