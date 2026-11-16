@@ -44,6 +44,9 @@ export type ModuleDescriptionRequest={entries:readonly InputEntry[];buildModules
 export type ModuleDescription={snapshot:InputSnapshot;byteInputs:ByteInputDeclaration[]};
 export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
   dependencyCatalog?:DependencyCatalogTrust|null;
+  /** Fixture project roots whose local type source closure is reproduced in
+   * addition to ordinary runtime inputs; never resolves installed packages. */
+  localTypeEntries?:readonly string[];
   /** A selector retains an explicit any-change obligation. Every materializing
    * consumer instead refuses inputs whose population it cannot authenticate. */
   unavailableInputs?:'conservative'|'refuse';
@@ -90,6 +93,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   // Captured protocol observations have their own fresh read/validation path.
   const ownedSources=new Set<string>();
   const hostImports=new Map<string,Set<string>>();
+  const localTypeImports=new Map<string,readonly string[]>();
   let tracked: string[] | undefined;
   // A graph owns one tracked inventory. Contexts select from that inventory;
   // they never need to rescan every tracked path for the same directory.
@@ -128,6 +132,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     try {
       const facts=new SourceFacts(relative(root,path).split(sep).join('/'),source,lease.sourceFile),result=facts.moduleDeclarations();
       hostImports.set(path,new Set(facts.hostModuleImports()));
+      localTypeImports.set(path,facts.localTypeImports());
       references.set(path,result);return result;
     } finally {lease.dispose();}
   }
@@ -145,7 +150,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const observations:ReaderObservation[]=[];
     const unavailableInputs:UnavailableInput[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
-      projectRole?:import('./reader-inputs/main.ts').ProjectRole;compiledImports?:ReadonlyMap<string,readonly string[]>};
+      localTypes?:true;projectRole?:import('./reader-inputs/main.ts').ProjectRole;compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
     const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[])=>{
@@ -405,6 +410,18 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       // Aggregate ownership never suppresses another namespace context. A
       // later production import must still restore its real data membership.
       if(!executableModuleSource(path)&&!options.declarations?.has(name))return;
+      if(context.localTypes){
+        parsed(path);
+        const imports=localTypeImports.get(path);
+        if(!imports)throw Error('local type inputs require parsed source facts: '+name);
+        for(const specifier of imports){
+          if(!/^\.\.?\//.test(specifier)||specifier.includes('\\'))throw Error('local type reference must name a relative source file: '+name+': '+specifier);
+          const target=fileURLToPath(new URL(specifier,pathToFileURL(path)));
+          if(nameOf(target).split('/').includes('node_modules'))throw Error('local type input enters an installed package: '+name+' -> '+specifier);
+          visit(context,target,true,true,false,true);
+        }
+        return;
+      }
       if(context.projectRole==='type-check')return;
       for(const target of buildModules?.imports.get(name)??[])visit(context,resolve(root,target),true,true,false,true);
       const {imports,assets}=parsed(path);
@@ -426,6 +443,13 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
       else visit(production,path,true,true,!buildModules?.files.has(nameOf(path)),buildModules?.files.has(nameOf(path))??false);
     }
+    if(options.localTypeEntries?.length){
+      const types:Context={entry:'<entry>',namespaces:{},entered:new Set(),host:new Set(),owned:new Set(),projects:new Set(),data:new Set(),localTypes:true};
+      for(const entry of options.localTypeEntries){
+        if(isAbsolute(entry)||entry.split('/').includes('node_modules'))throw Error('local type entry must be a repository-local source: '+entry);
+        visit(types,resolve(root,entry),true,true,false,true);
+      }
+    }
     return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,...(unavailableInputs.length?{unavailableInputs}:{})};
   }
   /** A batch is one transaction, not a graph-lifetime result cache. Compiler
@@ -438,7 +462,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     batching=true;
     // Parser references are an intra-walk optimization too. Another explicit
     // batch must parse changed modules and enumerate its current tracked set.
-    references.clear();sourceInputs.clear();ownedSources.clear();hostImports.clear();
+    references.clear();sourceInputs.clear();ownedSources.clear();hostImports.clear();localTypeImports.clear();
     tracked=undefined;directoryFiles.clear();memberFiles.clear();metadataIndex=undefined;
     const discoveries=new Map<string,ProjectInputs>();
     const batchRead:ProjectRead=(request,context)=>{

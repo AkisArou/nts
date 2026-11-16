@@ -229,8 +229,9 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
 
 
 /** Stage a fixture's explicit-root project recipe unchanged. The runtime
- * emitter still observes and checks that project; this copies no installed
- * Program and does not infer compiler options. Roots must be plain JSON;
+ * emitter still observes and checks that project. Its local type source
+ * edges are staged separately from runtime assets; installed packages stay
+ * with the sealed dependency image. This does not infer compiler options. Roots must be plain JSON;
  * the pinned SDK decodes captured JSONC ancestors without a Program or a
  * second filesystem acquisition. */
 export function copyFixtureProject(project:FixtureInput,root:string,options:FixtureClosureOptions&{entries?:readonly InputEntry[]}={}):string[]{
@@ -281,7 +282,7 @@ export function copyFixtureProject(project:FixtureInput,root:string,options:Fixt
   try{parents(configPath,config);}finally{api?.close();}
   const entries=row.files.map(file=>relative(source,resolve(dirname(configPath),file)).split(sep).join('/'));
   const configs=[...captured.keys()].map(path=>path===configPath?project:fixtureInput(pathToFileURL(path),{dataNamespaces:{}}));
-  const staged=copyModuleClosure([...configs,...entries,...options.entries??[]],destination,{...options,sourceRoot:source});
+  const staged=copyModuleClosure([...configs,...entries,...options.entries??[]],destination,{...options,sourceRoot:source,localTypeEntries:[...entries,...options.localTypeEntries??[]]});
   for(const [path,expected]of captured){
     const placed=join(destination,relative(source,path));metadataParents(destination,placed,'staged fixture project config');
     const stat=lstatSync(placed);

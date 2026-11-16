@@ -992,3 +992,35 @@ for(const [label,extended]of [['package','package/config'],['missing','./absent.
   assert.throws(()=>copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source}),/fixture project (?:cannot stage extends|extends cycle)/);
   assert.equal(existsSync(f.destination),false);
 });
+
+
+test('fixture projects reproduce transitive local type inputs without granting their runtime assets or packages',t=>{
+  const f=fixture(t);
+  f.write('tsconfig.json',JSON.stringify({files:['entry.ts'],include:[]}));
+  f.write('entry.ts',"import type {A} from './types.ts';export type B=import('./query.ts').B;export const value=1;");
+  f.write('types.ts',"export type {A} from './deep.ts';new URL('./missing-runtime-data.bin',import.meta.url);");
+  f.write('deep.ts',"import type {Installed} from 'installed-types';export type A=Installed;");
+  f.write('query.ts','export type B=number;');
+  f.write('node_modules/installed-types/index.d.ts','export type Installed=string;');
+  const runtime=copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source});
+  assert.deepEqual(runtime,['entry.ts']);
+  const files=copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source});
+  assert.deepEqual(files,['deep.ts','entry.ts','query.ts','tsconfig.json','types.ts']);
+  assert.equal(existsSync(join(f.destination,'node_modules')),false);
+  assert.equal(existsSync(join(f.destination,'missing-runtime-data.bin')),false);
+  for(const file of files)assert.deepEqual(readFileSync(join(f.destination,file)),readFileSync(join(f.source,file)));
+});
+
+test('fixture local type traversal follows relative triple-slash paths and refuses escapes and installed paths',t=>{
+  const f=fixture(t);
+  f.write('tsconfig.json',JSON.stringify({files:['entry.ts'],include:[]}));
+  f.write('entry.ts','/// <reference path="ambient.d.ts" />\nexport const value=1;');
+  f.write('ambient.d.ts','/// <reference path="./nested/deep.d.ts" />\ndeclare const ambient:number;');
+  f.write('nested/deep.d.ts','declare const deeper:string;');
+  const project=fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}});
+  assert.deepEqual(copyFixtureProject(project,f.destination,{sourceRoot:f.source}),['ambient.d.ts','entry.ts','nested/deep.d.ts','tsconfig.json']);
+  f.write('entry.ts','/// <reference path="../escape.d.ts" />\nexport const value=1;');
+  assert.throws(()=>copyFixtureProject(project,join(f.source,'..','escape-destination'),{sourceRoot:f.source}),/module escapes source root/);
+  f.write('entry.ts','/// <reference path="node_modules/dependency/index.d.ts" />\nexport const value=1;');
+  assert.throws(()=>copyFixtureProject(project,join(f.source,'..','package-destination'),{sourceRoot:f.source}),/local type input enters an installed package/);
+});

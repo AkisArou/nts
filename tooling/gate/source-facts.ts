@@ -63,7 +63,7 @@ export class SourceFacts {
   private readonly callOrders:number[]=[];
   private readonly lines=[0];
   private ambientAliases:Map<string,string>|undefined;
-  private moduleEdges:{all:string[];host:string[]}|undefined;
+  private moduleEdges:{all:string[];host:string[];local:string[]}|undefined;
 
   readerFactory(expression:Node):{name:string;kind:InputKind}|undefined{
     const match=/^(\.{1,2}\/.*)\.([A-Za-z_]\w*)$/.exec(this.name(expression));
@@ -209,23 +209,36 @@ export class SourceFacts {
     }
     return name(node);
   }
-  private moduleImports():{all:string[];host:string[]}{
+  private moduleImports():{all:string[];host:string[];local:string[]}{
     if(this.moduleEdges)return this.moduleEdges;
-    const ast=this.ast,all:string[]=[],host:string[]=[];
+    const ast=this.ast,all:string[]=[],host:string[]=[],local:string[]=[];
     for(const node of [...this.imports,...this.ofKind(ast.SyntaxKind.ExportDeclaration),...this.ofKind(ast.SyntaxKind.ImportEqualsDeclaration),...this.calls]){
       const specifier=ast.isImportDeclaration(node)||ast.isExportDeclaration(node)?node.moduleSpecifier
         :ast.isImportEqualsDeclaration(node)&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
         :ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword?node.arguments[0]:undefined;
       if(!specifier||!ast.isStringLiteralLikeNode(specifier)||!/^\.\.?\//.test(specifier.text))continue;
+      local.push(specifier.text);
       const typeOnly=ast.isImportDeclaration(node)?node.importClause?.phaseModifier===ast.SyntaxKind.TypeKeyword
         :(ast.isExportDeclaration(node)||ast.isImportEqualsDeclaration(node))&&node.isTypeOnly;
       if(!typeOnly){all.push(specifier.text);host.push(specifier.text);}
     }
-    return this.moduleEdges={all,host};
+    for(const node of this.ofKind(ast.SyntaxKind.ImportType))if(ast.isImportTypeNode(node)&&ast.isLiteralTypeNode(node.argument)&&ast.isStringLiteralLikeNode(node.argument.literal)){
+      const specifier=node.argument.literal.text;if(/^\.\.?\//.test(specifier))local.push(specifier);
+    }
+    return this.moduleEdges={all,host,local};
   }
   /** Clause-level type imports are erased. Named type specifiers retain the
    * side-effect import produced by Node's verbatim module stripping. */
   hostModuleImports():string[]{return [...this.moduleImports().host];}
+  /** Relative source edges needed to reproduce a fixture's local type inputs.
+   * Package resolution and runtime reader assets keep their separate owners. */
+  localTypeImports():string[]{
+    const ast=this.ast,local=[...this.moduleImports().local];
+    if(ast.isSourceFile(this.root))for(const ref of this.root.referencedFiles){
+      local.push(/^(?:[\/]|[a-z][a-z0-9+.-]*:)/i.test(ref.fileName)||/^\.\.?\//.test(ref.fileName)||ref.fileName.includes('\\')?ref.fileName:'./'+ref.fileName);
+    }
+    return [...new Set(local)];
+  }
   moduleDeclarations():ModuleDeclarations{
     const ast=this.ast,imports=[...this.moduleImports().all],assets:ReaderInput[]=[];
     const fixtureGrants=(node:Node|undefined):DataNamespaces=>{

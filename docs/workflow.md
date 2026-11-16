@@ -1283,7 +1283,10 @@ the first node task.
   oracle explicitly, then pass the sealed environment to `recorder-command.ts`
   for supervised execution. `copyFixtureProject` stages an explicit-root
   fixture project from its unchanged config and authoritative `files` list,
-  through `copyModuleClosure`; it grants no installed Program. A fixture
+  including relative runtime and local type source edges and triple-slash
+  paths. The local type context grants no runtime assets and never resolves
+  installed packages; those remain owned by the sealed oracle image. The
+  helper uses `copyModuleClosure` and grants no installed Program. A fixture
   composes the core and its own family;
   composition controls retain the complete production table
   ([log](records/notebooks/decisions-log.md#independent-record-families-11-16)).
