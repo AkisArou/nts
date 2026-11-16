@@ -26,7 +26,7 @@ function policy(name='adjustMemory'){
   }finally{lease.dispose();api.close();}
 }
 
-function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,deferAll=false}={}){
+function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,deferAll=false,backfill=false}={}){
   let allocated=initial,drained=0,active=0,maximumActive=0,reschedules=0;
   const calls:number[]=[],kinds:boolean[]=[],cancelled:number[]=[],reports:string[]=[];
   const closed=Promise.withResolvers<void>();
@@ -54,10 +54,10 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
           signal.addEventListener('abort',()=>{
             if(flight.done)return;flight.done=true;
             cancelled.push(bytes);active--;
-            if(grantAtCancellation){allocated+=bytes;if(draining)drained+=bytes;answer.resolve();}
+            if(grantAtCancellation){allocated+=bytes;if(draining&&(backfill||state.yielding))drained+=bytes;answer.resolve();}
             else answer.reject(Error('controlled cancellation'));
           },{once:true});
-        }else{allocated+=bytes;if(draining)drained+=bytes;active--;answer.resolve();}
+        }else{allocated+=bytes;if(draining&&(backfill||state.yielding))drained+=bytes;active--;answer.resolve();}
         return answer.promise;
       },
     },
@@ -66,7 +66,7 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
   state.schedule=()=>{if(state.stopping)return;adjust();if(!state.growth)closed.resolve();};
   return {state,adjust,closed:closed.promise,calls,kinds,cancelled,reports,
     allocated:()=>allocated,maximumActive:()=>maximumActive,reschedules:()=>reschedules,
-    grantFirst(){const first=pending.find(flight=>!flight.done);assert.ok(first);first.done=true;allocated+=first.bytes;if(first.draining)drained+=first.bytes;active--;first.answer.resolve();}};
+    grantFirst(){const first=pending.find(flight=>!flight.done);assert.ok(first);first.done=true;allocated+=first.bytes;if(first.draining&&(backfill||state.yielding))drained+=first.bytes;active--;first.answer.resolve();}};
 }
 
 test('an excessive ticket settles before its replacement can request the current gap',async()=>{
@@ -154,7 +154,7 @@ test('yielding forbids a new step while keeping the started cohort eligible for 
 });
 
 async function equalRankDrain(){
-  const run=controlledGrowth({allocated:4*GiB});
+  const run=controlledGrowth({allocated:4*GiB,backfill:true});
   run.state.memoryWanted=0;run.state.used=()=>({bytes:4*GiB});
   run.state.running.set('started',{draining:false,want:2*GiB});
   run.adjust();run.grantFirst();await run.closed;

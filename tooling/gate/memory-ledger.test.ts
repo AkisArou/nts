@@ -184,6 +184,7 @@ for (const priority of ['full-check', 'agent'] as const) for (const order of ['b
   if (order === 'after') lowerGrowth = lower.grow(2 * GiB, { draining: true });
   assert.ok(lowerGrowth); await lowerGrowth;
   assert.equal(lower.bytes, 6 * GiB);
+  assert.equal(lower.drained,2*GiB);
   assert.equal(lower.outranked(), priority === 'full-check', 'draining grants preserve the priority yield rule');
   assert.equal(freshGranted, false, 'new work cannot use the remaining half GiB');
   assert.ok(readLedger(f.dir).waiting.some(row => row.grows === higher.id));
@@ -217,10 +218,25 @@ test('a draining request that cannot fit waits without holding a fitting blocker
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });
 
+test('marked growth admitted through the normal prefix remains ordinary capacity',async t=>{
+  const f=fixture(t),held=await f.ask({bytes:4*GiB,what:'ordinary owner'});
+  await held.grow(2*GiB,{draining:true});
+  assert.equal(held.bytes,6*GiB);assert.equal(held.drained,0);
+  assert.equal(f.of('ordinary owner').at(-1)!.backfilled,false);
+  assert.equal(readLedger(f.dir).admitted.find(row=>row.id===held.id)!.drained,undefined);
+  held.release();await held.closed;
+});
+
 test('drained promises survive ordinary growth and consumption, and shrink returns them before the discount resumes', async t => {
   const f=fixture(t);f.memory(64);
+  const head=await f.ask({bytes:17*GiB,what:'blocking head',priority:'agent'});
   const lower=await f.ask({bytes:4*GiB,what:'draining owner',priority:'full-check'});
-  await lower.grow(2*GiB,{draining:true});f.memory(10);
+  f.used.set('blocking head',head.bytes);f.used.set('draining owner',lower.bytes);f.memory(4.5);
+  const waiting=head.grow(3*GiB),withdrawn=assert.rejects(waiting,/reservation was released while it waited to grow/);
+  await waitFor('head blocks the protected grant',()=>readLedger(f.dir).waiting.some(row=>row.grows===head.id));
+  await lower.grow(2*GiB,{draining:true});
+  assert.equal(f.of('draining owner').at(-1)!.backfilled,true);
+  head.release();await withdrawn;await head.closed;f.used.set('draining owner',0);f.memory(10);
   assert.equal(lower.drained,2*GiB);
   const probe=async(what:string,pending:number)=>{
     const held=await f.ask({bytes:GiB,what,priority:'agent'});
@@ -249,10 +265,11 @@ test('fresh fixed and live borrowers cannot move protected drain bytes into an o
   const higher=await f.ask({bytes:17*GiB,what:'higher',priority:'agent'});
   const lower=await f.ask({bytes:4*GiB,what:'lower',priority:'full-check'});
   f.used.set('higher',higher.bytes);f.used.set('lower',lower.bytes);
-  await lower.grow(2*GiB,{draining:true});f.memory(6.5);
+  f.memory(4.5);
   const growth=higher.grow(3*GiB);
   const ended=assert.rejects(growth,/reservation was released while it waited to grow/);
   await waitFor('higher waits behind the protected promise',()=>readLedger(f.dir).waiting.some(row=>row.grows===higher.id));
+  await lower.grow(2*GiB,{draining:true});assert.equal(lower.drained,2*GiB);f.memory(6.5);
   for(const liveUse of [false,true]){
     const cancel=new AbortController(),what=liveUse?'live borrower':'fixed borrower';
     const request=f.ask({bytes:liveUse?0:GiB,liveUse,what,priority:'full-check',owner:{pid:ownerProcess(t).pid},drawsOn:lower.id},{signal:cancel.signal});

@@ -278,10 +278,10 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
         }
       }
       if(excessGrowth){
-        const condition='bytes < growth.bytes && !growth.withdrawn';
-        const end='    return;\n  }\n  if (bytes <= 0 || yielding) return;';
+        const condition='(bytes < growth.bytes || yielding && !growth.draining) && !growth.withdrawn';
+        const end='    return;\n  }\n  if (bytes <= 0 || yielding && !draining) return;';
         assert.ok(source.includes(condition)&&source.includes(end),'the growth replay follows the current ticket owner');
-        if(excessGrowth==='before')source=source.replace(condition,'need <= 0 && !growth.withdrawn');
+        if(excessGrowth==='before')source=source.replace(condition,'(need <= 0 || yielding && !growth.draining) && !growth.withdrawn');
         source=source.replace(end,`    if(u.bytes===0 && bytes>0 && growth.bytes>bytes){
       process.stdout.write('control: growth observed '+JSON.stringify({reserved:reserved(),wanted:memoryWanted,queued:growth.bytes,useful:bytes,withdrawn:growth.withdrawn})+'\\n');
       if(!growth.withdrawn)stop('control: stale queued growth exceeds current demand');
@@ -289,8 +289,8 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
 `+end);
       }
       if(handoffBarrier){
-        const entry='function adjustMemory() {',shrink='reservation.shrink(back).catch',growth='  let need = Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());';
-        const protectedBack='Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + Math.max(2 * BLOCK, wanted))) / BLOCK) * BLOCK';
+        const entry='function adjustMemory() {',shrink='reservation.shrink(back).catch',growth='  let need = yielding ? drainTarget - reserved()\n    : Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());';
+        const protectedBack='Math.floor((reserved() - Math.max(memoryWanted, drainTarget + withholdBytes, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK';
         assert.ok(source.includes(entry)&&source.includes(shrink)&&source.includes(growth)&&source.includes(protectedBack),'handoff control follows the real retention and growth');
         // The before arm mutates this private closure copy, never the tree's
         // runner. Commit the fix before running the retained negative control.

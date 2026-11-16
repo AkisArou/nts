@@ -1305,7 +1305,10 @@ the first node task.
 
 - **Started work may drain past a non-fitting head.** The ledger
   backfills only explicitly draining growth of admitted owners at equal or lower priority, in its
-  existing order and room. New admissions and ordinary growth stay queued.
+  existing order and room. The marker declares eligibility; only a grant
+  that actually backfills creates protected drained bytes. A normal prefix
+  grant remains ordinary capacity and preserves earlier drain debt.
+  New admissions and ordinary growth stay queued behind a non-fitting head.
   Yielding runners keep only their live started cohort eligible for case
   leases and growth, with no pending-step demand. New starts cannot spend
   outstanding drained bytes even without a higher-priority yield; an empty

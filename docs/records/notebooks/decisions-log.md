@@ -3483,3 +3483,8 @@ starts, independently of a priority-yield signal. Otherwise an equal-rank owner
 could spend a drain grant on a pending step before its running want or token
 consumed it. Running wants and tokens retain the full reservation; an empty
 cohort returns its drain grant before scheduling a successor on the next turn.
+
+The draining ticket marker grants eligibility, not automatic protection. The
+queue plan distinguishes an ordinary prefix grant from one that actually
+backfills a blocked head. Only the latter adds protected drained bytes; normal
+growth remains ordinary capacity and preserves any earlier drain debt.

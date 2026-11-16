@@ -419,8 +419,8 @@ export function queueOrder(a: Pick<Queued, "priority" | "seq" | "order">, b: Pic
  * admitted equal- or lower-priority owner may finish. Fresh admissions and ordinary
  * growth never bypass that head, which retains its priority and place.
  */
-export function admissible(room: number, queue: readonly Queued[]): Set<string> {
-  const admitted = new Set<string>();
+function queuePlan(room: number, queue: readonly Queued[]): {admitted:Set<string>;backfilled:Set<string>} {
+  const admitted = new Set<string>(), backfilled = new Set<string>();
   let left = room;
   let blocked: Queued | undefined;
   for (const request of [...queue].sort(queueOrder)) {
@@ -429,9 +429,11 @@ export function admissible(room: number, queue: readonly Queued[]): Set<string> 
     if (request.bytes > left) { blocked ??= request; continue; }
     left -= request.bytes;
     admitted.add(request.id);
+    if(blocked!==undefined)backfilled.add(request.id);
   }
-  return admitted;
+  return {admitted,backfilled};
 }
+export function admissible(room: number, queue: readonly Queued[]): Set<string> { return queuePlan(room,queue).admitted; }
 
 // ---------------------------------------------------------------------------
 // The files.
@@ -651,6 +653,8 @@ export type ReserveRequest = {
 /** One decision on one request: what it saw and what it decided. */
 export type Decision = {
   id: string; what: string; admitted: boolean;
+  /** This grant bypassed a non-fitting head, rather than using the ordinary prefix. */
+  backfilled: boolean;
   /** For a growth, the reservation it would grow; null for a request of its own. */
   grows: string | null;
   availableBytes: number; pendingBytes: number;
@@ -1080,14 +1084,16 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
   // reservation it draws on covers asks the queue nothing, so it waits behind
   // nobody: a holder whose child needs memory never waits for itself.
   const queue = everyone.filter(entry => ask(entry) > 0 && whole(entry) <= freeBytes).map(entry => ({ ...entry, bytes: ask(entry) }));
+  const plan = queuePlan(roomBytes,queue);
   const drawnBytes = draws.get(self.id) ?? 0;
-  const memoryFits = fits && (ask(self) === 0 || admissible(roomBytes, queue).has(self.id));
+  const memoryFits = fits && (ask(self) === 0 || plan.admitted.has(self.id));
   const resourceBusy = memoryFits && joint !== undefined && !joint.acquire();
   const go = memoryFits && !resourceBusy;
+  const backfilled = go && plan.backfilled.has(self.id);
   if (go && grown !== undefined) {
     // The growth joins its reservation: one entry, and one measure, per job.
     writeEntry(dir, "admitted", { ...grown, bytes: grown.bytes + self.bytes,
-      ...((grown.drained ?? 0) || self.draining ? {drained: (grown.drained ?? 0) + (self.draining ? self.bytes : 0)} : {}),
+      ...((grown.drained ?? 0) || backfilled ? {drained: (grown.drained ?? 0) + (backfilled ? self.bytes : 0)} : {}),
       ...(drawnBytes ? { drawn: (grown.drawn ?? 0) + drawnBytes } : {}) });
     if (listed) removeQuietly(entryPath(dir, "waiting", self.id));
   } else if (go) {
@@ -1113,7 +1119,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
     report(`memory: ${self.what} took over ${replaced.what}'s reservation of ${gib(replaced.bytes)}`);
   }
   return {
-    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.findIndex(entry => entry.id === self.id), fits, drawnBytes },
+    decision: { id: self.id, what: self.what, admitted: go, backfilled, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.findIndex(entry => entry.id === self.id), fits, drawnBytes },
     registered: !go && !resourceBusy,
   };
 }
@@ -1125,7 +1131,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
  * anything else. Returns that decision, and how long the request waited
  * (null when it did not).
  */
-async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | undefined, waits: () => string, admitted: () => void = () => {}, joint?: JointAdmission): Promise<{ decision: Decision; waitedMs: number | null }> {
+async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | undefined, waits: () => string, admitted: (decision:Decision) => void = () => {}, joint?: JointAdmission): Promise<{ decision: Decision; waitedMs: number | null }> {
   let registered = false;
   let waitedFrom: number | undefined;
   // A decision holds the lock for milliseconds, so a busy lock is tried again
@@ -1153,7 +1159,7 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
       registered = outcome.registered;
       const { decision } = outcome;
       if (decision.admitted) {
-        admitted();
+        admitted(outcome.decision);
         return { decision, waitedMs: waitedFrom === undefined ? null : context.host.now() - waitedFrom };
       }
       context.observe(decision);
@@ -1216,7 +1222,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
           () => `waits to grow by ${gib(more)} to ${gib(bytes + more)}`,
           // With the entry's own write, so no shrink in between can write the
           // entry without these bytes.
-          () => { bytes += more; if(draining)drained += more; });
+          decision => { bytes += more; if(decision.backfilled)drained += more; });
       } catch (error) {
         throw withdraw.signal.aborted ? withdraw.signal.reason : error;
       } finally { growing = null; }
