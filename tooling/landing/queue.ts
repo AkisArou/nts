@@ -19,7 +19,7 @@ import {withStateLock,versionedRecord,withStateWrite} from '../gate/state-file.t
 // full check calls it with `first` to put a revert ahead of every change.
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, watch } from "node:fs";
 import {LANDING_HOME} from './layout.ts';
 export {LANDING_HOME} from './layout.ts';
 import { join } from "node:path";
@@ -52,6 +52,50 @@ export type Status = { version: 1; state: "idle" | "checking" | "landing" | "hel
 const now = () => new Date().toISOString();
 const readJson = <T>(path: string): T | null => { try { const value:unknown=JSON.parse(readFileSync(path,"utf8"));assertStateVersion(value,1,path);return value as T; } catch(error) {if(error instanceof FutureStateVersionError)throw error;return null;} };
 const files = (dir: string) => { try { return readdirSync(dir).filter(name => name.endsWith(".json")).sort(); } catch { return []; } };
+
+/** Only this reason means a requested withdrawal; a broken watcher is an
+ * instrument failure and must never authorize a withdrawn answer. */
+export class WithdrawalRequested extends Error {
+  constructor(readonly id:string){super(`withdrawal requested for ${id}`);}
+}
+
+/** One service-owned watch, armed before taking any entry. Subscribing then
+ * re-reading the durable marker closes both the startup and subscription race.
+ * Watch setup/error failures are loud; cancellation never depends on a timer. */
+export class WithdrawalWatch {
+  private readonly entries=new Map<string,{controller:AbortController;marker?:string;generation:number;seen:number;wake?:()=>void}>();
+  private failure:Error|undefined;
+  private readonly watcher:ReturnType<typeof watch>;
+  constructor(private readonly queue:Queue){
+    try{this.watcher=watch(join(queue.home,'withdraw'),()=>this.refresh());}
+    catch(error){throw new Error(`landing withdrawal watcher could not start in ${join(queue.home,'withdraw')}: ${String(error)}`,{cause:error});}
+    this.watcher.on('error',error=>{
+      this.failure=new Error(`landing withdrawal watcher failed: ${error.message}`,{cause:error});
+      for(const entry of this.entries.values()){entry.controller.abort(this.failure);entry.wake?.();}
+    });
+  }
+  assertHealthy():void{if(this.failure)throw this.failure;}
+  private refresh():void{
+    for(const [id,entry] of this.entries){
+      const marker=this.queue.withdrawalMarker(id);
+      if(marker===undefined||marker===entry.marker)continue;
+      entry.marker=marker;entry.generation++;entry.controller.abort(new WithdrawalRequested(id));entry.wake?.();
+    }
+  }
+  entry(id:string):{signal:AbortSignal;waitForRetry:()=>Promise<void>;close:()=>void}{
+    this.assertHealthy();
+    if(this.entries.has(id))throw Error(`withdrawal watch already owns ${id}`);
+    const controller=new AbortController(),entry:{controller:AbortController;marker?:string;generation:number;seen:number;wake?:()=>void}={controller,generation:0,seen:0};this.entries.set(id,entry);
+    this.refresh();
+    entry.seen=entry.generation;
+    return {signal:controller.signal,waitForRetry:async()=>{
+      this.assertHealthy();
+      if(entry.seen===entry.generation)await new Promise<void>(resolve=>{entry.wake=resolve;});
+      entry.wake=undefined;this.assertHealthy();entry.seen=entry.generation;
+    },close:()=>{this.entries.delete(id);}};
+  }
+  close():void{this.watcher.close();}
+}
 
 export class Queue {
   readonly home: string;
@@ -122,18 +166,22 @@ export class Queue {
   }
 
   /** Answer `entry`: its result is durable before it leaves `checking.json`. */
-  answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at" | "task">): Result {
+  answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at" | "task">,options:{retainChecking?:boolean}={}): Result {
     return this.mutate(()=>{
+      if(options.retainChecking&&result.state!=='held')throw Error('only a held cancellation can retain its checking owner');
       // Validate every existing destination before publishing any part of a
       // transition; an incompatible checking/held record cannot leave an answer.
       const checking=this.checking();
       for(const path of [this.path("results",`${entry.id}.json`),this.path("withdraw",entry.id),
-        ...(result.state==="held"?[this.path("held",`${entry.id}.json`)]:[])])assertWritableState(path,1);
+        this.path("held",`${entry.id}.json`)])assertWritableState(path,1);
       const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), task: entry.branch, ...result };
       this.record(this.path("results", `${entry.id}.json`), full);
       if (result.state === "held") this.record(this.path("held", `${entry.id}.json`), entry);
-      if (checking?.id === entry.id) this.remove(this.path("checking.json"));
-      this.remove(this.path("withdraw", entry.id));
+      else this.remove(this.path("held",`${entry.id}.json`));
+      if (checking?.id === entry.id&&!options.retainChecking) this.remove(this.path("checking.json"));
+      // A held cancellation has not proved its drain. Keep the request so a
+      // repeated withdrawal cannot turn live ownership into a terminal answer.
+      if(result.state!=="held")this.remove(this.path("withdraw", entry.id));
       return full;
     });
   }
@@ -150,6 +198,7 @@ export class Queue {
     return this.mutate(()=>{
       const entry = readJson<Entry>(this.path("held", `${id}.json`));
       if (!entry) throw new Error(`no held change ${id}`);
+      if(this.withdrawRequested(id))throw Error(`withdrawal of ${id} has not drained; its check cannot be retried`);
       const again: Entry = { ...entry, first: true, submitted_at: now() };
       this.record(this.path("queue", `${this.key(again)}.json`), again);
       this.remove(this.path("held", `${id}.json`));
@@ -168,13 +217,18 @@ export class Queue {
   }
   /**
    * Withdraw a change: one waiting or held is answered at once; the one being
-   * checked is answered when its check ends, and never lands.
+   * checked is cancelled and answered only after its owned work drains.
+   * Publication and this request share the same lock: after main advances,
+   * a withdrawal is too late rather than a promise that it cannot land.
    */
-  withdraw(asked: string): "withdrawn" | "requested" | "unknown" {
+  withdraw(asked: string): "withdrawn" | "requested" | "too-late" | "unknown" {
     return this.mutate(()=>{
       const found = this.find(asked);
-      if (!found) return "unknown";
-      if (found.where === "checking") { assertWritableState(this.path("withdraw",found.entry.id),1);writeFileSync(this.path("withdraw", found.entry.id), `${now()}\n`); return "requested"; }
+      if (!found) return this.results().some(e=>e.state==='landed'&&(e.id===asked||(asked.length>=7&&e.sha.startsWith(asked))))?'too-late':"unknown";
+      if(found.where==='checking'&&this.checking()?.phase==='landing')return 'too-late';
+      if(found.where==='checking'||found.where==='held'&&this.withdrawRequested(found.entry.id)){
+        this.record(this.path('withdraw',found.entry.id),{version:1,at:now(),request:randomUUID()});return 'requested';
+      }
       for (const dir of ["queue", "held"]) for (const name of files(this.path(dir))) {
         if (readJson<Entry>(this.path(dir, name))?.id === found.entry.id) this.remove(this.path(dir, name));
       }
@@ -183,6 +237,24 @@ export class Queue {
     });
   }
   withdrawRequested(id: string): boolean { return existsSync(this.path("withdraw", id)); }
+  withdrawalMarker(id:string):string|undefined{
+    try{return readFileSync(this.path('withdraw',id),'utf8');}
+    catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+  }
+
+  /** The final withdrawal check and main's compare-and-swap are one queue
+   * transition. A failed compare-and-swap restores the cancellable phase. */
+  publish<T extends {ok:boolean}>(id:string,advance:()=>T):{withdrawn:true}|{withdrawn:false;result:T}{
+    return this.mutate(()=>{
+      const current=this.checking();
+      if(current?.id!==id||current.phase==='landing')throw Error(`no cancellable landing check ${id}`);
+      if(this.withdrawRequested(id))return {withdrawn:true};
+      this.update({phase:'landing'});
+      const result=advance();
+      if(!result.ok)this.update({phase:'checking'});
+      return {withdrawn:false,result};
+    });
+  }
 
   status(): Status { return readJson<Status>(this.path("status.json")) ?? { version: 1, state: "idle", at: now() }; }
   setStatus(fields: Omit<Status, "version" | "at">): void {

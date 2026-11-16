@@ -54,6 +54,9 @@ import { isListedLine } from "../records/pending.ts";
 import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
 import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
 import {readRustRecordDecisions,type RustRecordDecisionAtRevision} from '../gate/rust-selector-decision.ts';
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {fileURLToPath} from 'node:url';
+import {WithdrawalRequested} from './queue.ts';
 
 export const PROFILE = TEST_PROFILE;
 type BinaryIdentities = Record<string, string | null>;
@@ -64,7 +67,7 @@ export type StepResult = {
   binaries?: BinaryIdentities;
   diagnostics?:StepDiagnostics;
 };
-export type Ran = { state: "green" | "red" | "held"; message: string; run: string; steps: StepResult[]; pending: string[]; wall_s: number;
+export type Ran = { state: "green" | "red" | "held" | "cancelled"; message: string; run: string; steps: StepResult[]; pending: string[]; wall_s: number;
   rustRecords?:RustRecordDecisionAtRevision[];
   contract?: VerdictContract; binaries?: BinaryIdentities };
 export type RunOptions = {
@@ -89,7 +92,72 @@ export type RunOptions = {
   nodeInstallations?: string;
   /** The most any step may run, in seconds: the landing check's ceiling (step-bound.ts's landingCeiling). */
   ceiling?: number;
+  /** A submission's durable withdrawal watch, never an environment policy. */
+  signal?:AbortSignal;
+  /** Report retained ownership while cancellation has not proved its drain. */
+  cancellationHold?:(reason:string)=>void;
+  /** A repeated durable withdrawal wakes certification after a failed drain. */
+  drainRetry?:()=>Promise<void>;
 };
+
+/** The run is a resource too: process shutdown waits for its actual drain
+ * before reaching the older reservation closer. Move it after acquiring the
+ * hold so reverse-acquisition shutdown preserves that order. */
+class RunLifetime{
+  private readonly abort=new AbortController();
+  readonly signal:AbortSignal;
+  private readonly closed:Promise<void>;
+  private resolve!:()=>void;
+  private unregister:(()=>void)|undefined;
+  constructor(signal:AbortSignal|undefined){
+    this.signal=signal?AbortSignal.any([signal,this.abort.signal]):this.abort.signal;
+    this.closed=new Promise<void>(resolve=>{this.resolve=resolve;});this.move();
+  }
+  move():void{
+    this.unregister?.();
+    this.unregister=registerCommandCloser('landing run drain',{cancel:reason=>this.abort.abort(reason),close:()=>this.closed});
+  }
+  complete():void{this.resolve();this.unregister?.();}
+}
+
+async function certifyDrain(options:RunOptions,check:()=>void|Promise<void>):Promise<void>{
+  for(;;){
+    try{await check();return;}
+    catch(error){
+      options.cancellationHold?.(String(error));
+      if(options.drainRetry){
+        try{await options.drainRetry();continue;}
+        catch(retry){options.cancellationHold?.(`drain retry watch failed: ${String(retry)}`);}
+      }
+      // This is retained ownership, not a rejected promise pretending that
+      // children disappeared. The command lifetime's existing guard remains.
+      await new Promise<void>(()=>{});
+    }
+  }
+}
+
+async function runCandidate(options:RunOptions,node:string,request:Parameters<typeof candidateCommandAsync>[1],launcher:NodeJS.ProcessEnv,gate=false,log?:string){
+  options.signal?.throwIfAborted();
+  const result=await candidateCommandAsync(node,request,launcher,{signal:options.signal,cancelled:()=>options.cancellationHold?.('waiting for the owned candidate command and its children to close')});
+  if(result.cancelled){
+    if(log)appendFileSync(log,`${result.stdout??''}${result.stderr??''}`);
+    await certifyDrain(options,()=>result.certifyDrain?.());
+    if(gate)await certifyDrain(options,async()=>{
+      const owner=join(options.tree,'target/gate-scope-owner.json');
+      try{
+        const summary:Summary=JSON.parse(readFileSync(join(request.run,'summary.json'),'utf8'));
+        if(summary.identities?.commit===options.commit&&summary.scope_cleanup?.state==='complete'&&summary.diagnostics?.state==='complete'&&!existsSync(owner))return;
+      }catch{/* A missing summary proves nothing; the dead-owner reaper must certify the root. */}
+      const cleanup=await candidateCommandAsync(node,{
+        tree:options.tree,run:join(request.run,'drain'),owned:request.owned,
+        command:[node,fileURLToPath(new URL('./gate-drain.ts',import.meta.url)),owner],
+      },launcher);
+      if(cleanup.error||cleanup.signal||cleanup.status!==0)throw Error(`gate scope drain could not be certified: ${cleanup.error?.message??cleanup.signal??cleanup.stderr??cleanup.status}`);
+    });
+    options.signal?.throwIfAborted();
+  }
+  return result;
+}
 
 /** The workers a landing build is sized by: the gate's build step's, its row's slots. */
 const BUILD_WIDTH = STEPS.find(row => row.name === "build")!.slots;
@@ -109,6 +177,11 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
 }
 
 export async function runLanding(options: RunOptions): Promise<Ran> {
+  const lifetime=new RunLifetime(options.signal);
+  try{return await runLandingOwned({...options,signal:lifetime.signal},lifetime);}
+  finally{lifetime.complete();}
+}
+async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<Ran>{
   const clock=hostObservations({...options.env??process.env,...options.owned});
   const started = clock.wallNow();
   const { tree, target, run } = options;
@@ -124,6 +197,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
     return ran;
   };
   const execute=async():Promise<Ran>=>{
+    options.signal?.throwIfAborted();
     let selected: ReturnType<typeof nodeToolchain>;
     try { selected=nodeToolchain(nodePin(tree),launcherEnvironment(options.env),options.nodeInstallations); }
     catch(error) { return finish("held", String(error)); }
@@ -145,7 +219,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
       if (!existsSync(helper)) return undefined;
       const file = join(run, "verdict-contract.json");
       try {
-        const result = await candidateCommandAsync(selected.node, {
+        const result = await runCandidate(options,selected.node, {
           tree, run: join(run, "contract"), owned, discardTemporary: true,
           command: [selected.node, helper, file],
         }, launcher);
@@ -154,6 +228,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
         if (!validContract(value)) throw Error("candidate wrote an invalid verdict contract");
         return value;
       } catch (error) {
+        options.signal?.throwIfAborted();
         appendFileSync(join(run, "verdict-contract.log"), String(error) + "\n");
         return undefined;
       }
@@ -185,8 +260,10 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
         const log = join(run, "build.log");
         try {
           hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}` },
-            { env: { ...launcher, ...owned }, report: line => appendFileSync(log, `${line}\n`) });
+            { env: { ...launcher, ...owned },signal:options.signal, report: line => appendFileSync(log, `${line}\n`) });
+          lifetime.move();
         } catch (error) {
+          options.signal?.throwIfAborted();
           appendFileSync(log, `${String(error)}\n`);
           const reason = `its memory was not reserved: ${(error as Error).message}`;
           results.push({ name: "build", verdict: "INSTRUMENT", reason, log });
@@ -194,6 +271,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
           return finish("held", `build: ${reason}`);
         }
         for (let attempt = 1; ; attempt++) {
+          options.signal?.throwIfAborted();
           const built = await buildCompiler(options, selected.node, launcher, { ...owned, ...hold.env }, attempt);
           if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
           results.push(built);
@@ -210,8 +288,20 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
       catch(error){if(primary!==undefined&&primary.error!==error)throw new AggregateError([primary.error,error],'landing failed and its build reservation failed to drain');throw error;}
     }
   };
-  const ran=await execute();
-  const completed=ran.state==='green'&&contract?await probeContract?.():undefined;
+  let ran:Ran;
+  try{ran=await execute();}
+  catch(error){
+    if(!options.signal?.aborted)throw error;
+    ran=finish(options.signal.reason instanceof WithdrawalRequested?'cancelled':'held',`cancelled and drained: ${String(options.signal.reason)}`);
+  }
+  let completed:VerdictContract|undefined;
+  try{
+    options.signal?.throwIfAborted();
+    completed=ran.state==='green'&&contract?await probeContract?.():undefined;
+  }catch(error){
+    if(!options.signal?.aborted)throw error;
+    ran=finish(options.signal.reason instanceof WithdrawalRequested?'cancelled':'held',`cancelled and drained: ${String(options.signal.reason)}`);
+  }
   if(ran.state==='green'&&contract&&completed?.identity!==contract.identity){
     appendFileSync(join(run,'verdict-contract.log'),'landing verdict contract changed or became unavailable during the check\n');
     contract=undefined;
@@ -232,6 +322,7 @@ async function finishSteps(options: RunOptions, node: string, launcher: NodeJS.P
   const rows = new Map<string, StepResult>();
   let pending = [...rest];
   for (let attempt = 1; pending.length; attempt++) {
+    options.signal?.throwIfAborted();
     const dir = attempt === 1 ? options.run : join(options.run, `attempt-${attempt}`);
     const handover: Record<string, string> = attempt === 1 && hold && !hold.inherited ? { NTS_MEMORY_HANDOVER: hold.id } : {};
     const measured = await runSteps(options, node, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" "), ...handover }, dir, pending);
@@ -265,7 +356,7 @@ async function buildCompiler(options: RunOptions, node: string, launcher: NodeJS
   try{
     release=new DiskCapacity({env:{...launcher,...owned}}).beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});
     return await buildCompilerAdmitted(options,node,launcher,owned,attempt);
-  }catch(error){return {name:'build',verdict:'INSTRUMENT',reason:String(error),log:join(options.run,'build.log')};}
+  }catch(error){options.signal?.throwIfAborted();return {name:'build',verdict:'INSTRUMENT',reason:String(error),log:join(options.run,'build.log')};}
   finally{release?.();}
 }
 async function buildCompilerAdmitted(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): Promise<StepResult> {
@@ -275,7 +366,7 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
   const command = options.build ?? [node, join(options.tree,"tooling/gate/cargo.ts"), "build", "--profile", PROFILE, "--jobs", String(slots)];
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   const launch = gateCommand(timed[0]!, timed.slice(1));
-  const r = await candidateCommandAsync(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);
+  const r = await runCandidate(options,node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher,false,log);
   appendFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
   try {
@@ -296,11 +387,11 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
 }
 
 type Summary = { identities?: { commit?: string | null; nts?: { sha256?: string | null }; nts_suite?: { sha256?: string | null } };
-  interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[] };
+  interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[];scope_cleanup?:{state:string};diagnostics?:{state:string} };
 async function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): Promise<{ rows: StepResult[] } | { held: string }> {
   mkdirSync(dir, { recursive: true });
   const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")]);
-  const r = await candidateCommandAsync(node, { tree: options.tree, run: dir, owned, command: [launch.command, ...launch.args] }, launcher);
+  const r = await runCandidate(options,node, { tree: options.tree, run: dir, owned, command: [launch.command, ...launch.args] }, launcher,true,join(dir,'gate.log'));
   writeFileSync(join(dir, "gate.log"), `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let summary: Summary;
   try { summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")) as Summary; }

@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { acquire, holder, withLock } from "./lock.ts";
-import { ensureService, Queue, serviceRunning, submit } from "./queue.ts";
+import { ensureService, Queue, serviceRunning, submit, WithdrawalRequested, WithdrawalWatch } from "./queue.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 
 const home = (t: { after: (f: () => void) => void }) => {
@@ -87,6 +87,46 @@ test("the status says what the service does, and since when", t => {
   q.setStatus({ state: "held", id: "x", message: "memory: 10.0 GB" });
   assert.equal(q.status().since, since, "the same hold keeps its start");
   assert.equal(q.status().message, "memory: 10.0 GB");
+});
+
+test('the withdrawal watch sees both an existing marker and a later request, without aborting another entry',async t=>{
+  const q=new Queue(home(t)),a=q.submit(sha('a')),b=q.submit(sha('b'));
+  q.take();q.withdraw(a.id);
+  const watcher=new WithdrawalWatch(q);t.after(()=>watcher.close());
+  const first=watcher.entry(a.id),other=watcher.entry(b.id);
+  assert.equal(first.signal.aborted,true);
+  assert.ok(first.signal.reason instanceof WithdrawalRequested);
+  first.close();
+  q.answer(a,{state:'withdrawn',message:'drained'});q.take();
+  const aborted=new Promise<void>(resolve=>other.signal.addEventListener('abort',()=>resolve(),{once:true}));
+  q.withdraw(b.id);await aborted;
+  assert.ok(other.signal.reason instanceof WithdrawalRequested);
+  assert.equal(q.withdraw(b.id),'requested');
+  other.close();
+});
+
+test('withdrawal and publication have one irreversible transition',t=>{
+  const q=new Queue(home(t)),a=q.submit(sha('a'));q.take();
+  q.withdraw(a.id);
+  assert.deepEqual(q.publish(a.id,()=>{throw Error('must not advance main');}),{withdrawn:true});
+  q.answer(a,{state:'withdrawn',message:'drained'});
+  const b=q.submit(sha('b'));q.take();
+  assert.deepEqual(q.publish(b.id,()=>({ok:false,moved:sha('c')})),{withdrawn:false,result:{ok:false,moved:sha('c')}});
+  assert.equal(q.checking()?.phase,'checking');
+  assert.deepEqual(q.publish(b.id,()=>({ok:true})),{withdrawn:false,result:{ok:true}});
+  assert.equal(q.withdraw(b.id),'too-late');
+  assert.equal(q.withdrawRequested(b.id),false);
+  q.answer(b,{state:'landed',message:'landed'});
+  assert.equal(q.withdraw(b.id),'too-late');
+});
+
+test('an unproved cancellation remains held with its request and cannot be retried or answered withdrawn by a repeat',t=>{
+  const q=new Queue(home(t)),a=q.submit(sha('a'));q.take();q.withdraw(a.id);
+  q.answer(a,{state:'held',message:'scope drain unproved'});
+  assert.equal(q.withdrawRequested(a.id),true);
+  assert.equal(q.withdraw(a.id),'requested');
+  assert.equal(q.result(a.id)?.state,'held');
+  assert.throws(()=>q.retry(a.id),/has not drained/);
 });
 
 test("submit, as the full check calls it, puts a revert first and starts no second service", t => {

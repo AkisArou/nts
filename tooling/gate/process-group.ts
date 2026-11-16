@@ -38,7 +38,12 @@ export function ownedProcessGroup(child:ChildProcess){
     catch(cleanup){throw new AggregateError([error,cleanup],'process-group acquisition and spawned-child cleanup failed');}
     throw error;
   }
-  return {pid,started:birth.started,signal(signal:NodeJS.Signals):void{
+  return {pid,started:birth.started,assertEmpty():void{
+    assertProcessGroupIdentity(pid,birth,identityAt(pid));
+    try{process.kill(-pid,0);}
+    catch(error){if((error as NodeJS.ErrnoException).code==='ESRCH')return;throw error;}
+    throw Error(`owned command group ${pid} has not drained`);
+  },signal(signal:NodeJS.Signals):void{
     assertProcessGroupIdentity(pid,birth,identityAt(pid));
     try{process.kill(-pid,signal);}
     catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}

@@ -30,7 +30,7 @@ import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingI
 import { issueOfBranch } from "../tasks/branch.ts";
 import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
-import { Queue, type Checking, type Entry, type Result } from "./queue.ts";
+import { Queue, WithdrawalWatch, type Checking, type Entry, type Result } from "./queue.ts";
 import {landingLayout} from './layout.ts';
 import { removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
@@ -66,14 +66,20 @@ export async function drain(config: Config): Promise<Drained> {
   if (!lock) return { state: "busy", answered: [] };
   const queue = new Queue(config.home);
   const answered: Result[] = [];
+  let withdrawals:WithdrawalWatch|undefined;
   try {
+    // A broken watch refuses service startup before any queued entry is taken.
+    withdrawals=new WithdrawalWatch(queue);
     const recovered = recover(config, queue);
     if (recovered) answered.push(recovered);
     pushIfBehind(config);
-    for (let entry = queue.take(); entry; entry = queue.take()) {
+    const take=()=>{withdrawals!.assertHealthy();return queue.take();};
+    for (let entry = take(); entry; entry = take()) {
+      const cancellation=withdrawals.entry(entry.id);
       let result: Result;
-      try { result = await landOne(config, queue, entry); }
+      try { result = await landOne(config, queue, entry,cancellation); }
       catch (error) { result = unfinished(config, queue, error); }
+      finally{cancellation.close();}
       answered.push(result);
       config.log(`${result.state.toUpperCase()} ${short(entry.sha)}: ${result.message}`);
       if (result.state === "landed" && result.base && result.tip && config.restartAfter?.(changedPaths(git(config), result.base, result.tip))) {
@@ -85,7 +91,7 @@ export async function drain(config: Config): Promise<Drained> {
     prune(join(config.home, "runs"), KEEP_DAYS);
     queue.setStatus({ state: "idle" });
     return { state: "drained", answered };
-  } finally { lock.release(); }
+  } finally { withdrawals?.close();lock.release(); }
 }
 
 const git = (config: Config): Git => ({ root: config.root, env: config.env });
@@ -125,7 +131,7 @@ function pushIfBehind(config: Config): void {
   config.log(pushed.ok ? `pushed main to ${config.remote}` : `main is not on ${config.remote}: ${pushed.reason}`);
 }
 
-export async function landOne(config: Config, queue: Queue, entry: Checking): Promise<Result> {
+export async function landOne(config: Config, queue: Queue, entry: Checking,cancellation?:{signal:AbortSignal;waitForRetry:()=>Promise<void>}): Promise<Result> {
   const g = git(config);
   if (queue.withdrawRequested(entry.id)) return queue.answer(entry, { state: "withdrawn", message: "withdrawn before its check started" });
   if (!hasCommit(g, entry.sha)) return queue.answer(entry, { state: "refused", message: `${short(entry.sha)} is not a commit in ${config.root}` });
@@ -168,11 +174,18 @@ export async function landOne(config: Config, queue: Queue, entry: Checking): Pr
       ran = await config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,
         rustRecords:selected.rustRecords,
         ceiling: landingCeiling(selected.selection.estimate.seconds),
-        env: config.env, hold: reason => queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
+        env: config.env,signal:cancellation?.signal,drainRetry:cancellation?.waitForRetry,
+        cancellationHold:reason=>{
+          const message=`service held: cancellation of ${entry.id} could not prove its drain: ${reason}; run ${run}; retry certification with node tooling/landing/check.ts withdraw ${entry.id}`;
+          queue.answer(queue.checking()??entry,{state:'held',base,tip,run,message},{retainChecking:true});
+          queue.setStatus({state:'held',id:entry.id,sha:entry.sha,run,message});config.log(message);
+        },
+        hold: reason => queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
       // What the steps cost is for the next estimate; it never decides this one.
       try { recordCosts(config.home, ran, selected.kind); } catch (error) { config.log(`costs not recorded: ${String(error)}`); }
     }
     const facts = { base, tip, run, landing: steps, deferred: deferredSteps(selected.selection), estimate_s: Math.round(selected.selection.estimate.seconds), wall_s: Math.round(ran.wall_s), pending: ran.pending };
+    if(ran.state==='cancelled')return queue.answer(entry,{state:'withdrawn',...facts,message:'withdrawn: its owned commands, scopes and reservation have drained'});
     if (ran.state === "red") return queue.answer(entry, { state: "refused", ...facts, message: `red: ${ran.message}` });
     if (ran.state === "held") return queue.answer(entry, { state: "held", ...facts, message: `held: ${ran.message}` });
     if (queue.withdrawRequested(entry.id)) return queue.answer(entry, { state: "withdrawn", ...facts, message: "withdrawn while it was checked: green, and not landed" });
@@ -182,9 +195,12 @@ export async function landOne(config: Config, queue: Queue, entry: Checking): Pr
       });
       if (!receipt) config.log(`landing verdict ${short(tip)}: no portable contract; the core will execute its requested steps`);
     } catch (error) { config.log(`landing verdict ${short(tip)} could not be recorded: ${String(error)}`); }
-    queue.update({ phase: "landing" });
-    queue.setStatus({ state: "landing", id: entry.id, sha: entry.sha, run, message: `main ${short(base)} -> ${short(tip)}` });
-    const advanced = advanceMain(g, base, tip);
+    const publication=queue.publish(entry.id,()=>{
+      queue.setStatus({ state: "landing", id: entry.id, sha: entry.sha, run, message: `main ${short(base)} -> ${short(tip)}` });
+      return advanceMain(g,base,tip);
+    });
+    if(publication.withdrawn)return queue.answer(entry,{state:'withdrawn',...facts,message:'withdrawn after its check drained, before main advanced'});
+    const advanced=publication.result;
     if (!advanced.ok && "moved" in advanced) { config.log(`main moved to ${short(advanced.moved)} during the check; checking ${short(entry.sha)} again on it`); continue; }
     if (!advanced.ok) return queue.answer(entry, { state: "held", ...facts, message: `held: green, but ${advanced.blocked}` });
     return finishLanding(config, queue, entry, base, tip, selected.selection, ran, null);

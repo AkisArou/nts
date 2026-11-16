@@ -135,7 +135,7 @@ async function main(argv: string[]): Promise<number> {
   try { root = sharedCheckout(); } catch (error) { say((error as Error).message); return 2; }
   if (first === "status") return reportLandingStatus(landingStatus(root,LANDING_HOME,POOL_HOME,Date.now()),argv.includes("--json"));
   if (first === "serve") return serve(root);
-  if (first === "withdraw" && second) { const done = new Queue(LANDING_HOME).withdraw(second); say(done === "unknown" ? `no queued, checked or held change is ${second}` : done === "requested" ? `${second} is being checked: it will be answered withdrawn when its check ends, and never land` : `${second} withdrawn`); return done === "unknown" ? 1 : 0; }
+  if (first === "withdraw" && second) { const done = new Queue(LANDING_HOME).withdraw(second); say(done === "unknown" ? `no queued, checked or held change is ${second}` : done === "requested" ? `${second}: cancellation requested; withdrawn only after its owned work drains, held if the drain cannot be proved` : done === "too-late" ? `${second}: too late to withdraw; publication has started` : `${second} withdrawn`); return done === "unknown" || done === "too-late" ? 1 : 0; }
   if (first === "retry" && second) { const entry = new Queue(LANDING_HOME).retry(second); say(`${entry.id} queued again, first; ${ensureService(root)}`); return 0; }
   if (!first || ["withdraw", "retry"].includes(first)) { console.error("usage: check.ts <commit> [--dry-run | --here [--trace-rust-inputs] | --no-wait] [--branch <name>] | status [--json] | withdraw <id|commit> | retry <id> | serve"); return 2; }
   let sha: string;

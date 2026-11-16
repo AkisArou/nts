@@ -26,7 +26,7 @@ export type Answer = {
  */
 export type LandingStatus = {
   version: 1; kind: "landing"; at: string;
-  service: { running: boolean; pid: number | null; unit: string; state: Status["state"]; since: string; message: string | null };
+  service: { running: boolean; pid: number | null; unit: string; state: Status["state"]; since: string; message: string | null;run:string|null };
   checking: (Change & { phase: Checking["phase"] | null; base: string | null; tip: string | null; run: string | null; started_at: string; seconds: number }) | null;
   waiting: Change[];
   held: (Change & { message: string })[];
@@ -54,7 +54,7 @@ export function landingStatus(root: string, home:string, pool:string, now:number
   const main = ref("refs/heads/main"), remote = ref("refs/remotes/origin/main");
   return {
     version: 1, kind: "landing", at: new Date(now).toISOString(),
-    service: { running: pid !== null, pid, unit: SERVICE_UNIT, state: s.state, since: s.since ?? s.at, message: s.message ?? null },
+    service: { running: pid !== null, pid, unit: SERVICE_UNIT, state: s.state, since: s.since ?? s.at, message: s.message ?? null,run:s.run??null },
     checking: checking && { ...change(checking), phase: checking.phase ?? null, base: checking.base ?? null, tip: checking.tip ?? null, run: checking.run ?? null,
       started_at: checking.started_at, seconds: Math.round((now - Date.parse(checking.started_at)) / 1000) },
     waiting: queue.waiting().map(change),
