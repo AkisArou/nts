@@ -839,3 +839,36 @@ setInterval(() => {}, 60_000);`;
     await waitFor(`${slice} unloaded with its unit`, () => !listed().includes(slice));
   }
 });
+
+test("startup pressure returns the reserved first case before a fresh generation",{timeout:TEST_HANG_MS},async t=>{
+ const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const actual=new MemoryRun({budgetBytes:192*2**20,id:'startup-offer-control'}),gate=await gatePool(1);t.after(gate.close);
+ const rows:any[]=[],reports:string[]=[],groups:string[]=[];let generations=0,killed=false;
+ const forward=(target:object,key:string|symbol)=>{const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;};
+ // Supplied pressure observations exercise classification. The scope being
+ // stopped and joined is real; this is not a claim of a kernel OOM.
+ const memory=new Proxy(actual,{get(run,key){
+  if(key==='aggregateOoms')return()=>run.aggregateOoms()+Number(killed);
+  if(key!=='worker')return forward(run,key);
+  return(index:string|number,bytes:number)=>{
+   if(generations>0){assert.equal(killed,true);assert.equal(existsSync(join(CGROUP,groups[0]!)),false,'first generation was not joined');assert.equal(gate.seen.release,1,'unused first grant was not returned');}
+   const worker=run.worker(index,bytes),first=generations++===0;groups.push(worker.group);
+   return new Proxy(worker,{get(inner,name){
+    if(name==='counters')return()=>{const counters=inner.counters();return {...counters,kills:counters.kills+Number(first&&killed)};};
+    if(name==='ready'&&first)return(scope:Parameters<typeof inner.ready>[0])=>{
+     if(!killed&&inner.ready(scope)){killed=true;inner.stop(scope);}
+     return false;
+    };
+    return forward(inner,name);
+   }});
+  };
+ }});
+ await runMemoryWorkers({paths:['one'],jobs:1,memory,workerBytes:96*2**20,token:gate.token,
+  args:index=>[fixture,directory,String(index)],onRow:row=>rows.push(row),report:line=>reports.push(line)});
+ assert.equal(generations,2);assert.deepEqual(rows.map(row=>[row.path,row.bucket]),[['one','strict-pass']]);
+ assert.ok(reports.some(line=>line.includes('idle worker 0 killed by aggregate-pressure')));
+ assert.ok(reports.some(line=>line.includes('idle restarts 1')));
+ for(const group of groups)assert.equal(existsSync(join(CGROUP,group)),false);
+ assert.equal(existsSync(join(CGROUP,actual.group)),false);await gate.settled();
+ assert.deepEqual(gate.seen,{request:2,grant:2,release:2,cancel:0});
+});

@@ -16,7 +16,7 @@
 import { PressureError, ToolingInstrumentError } from "../gate/step-result.ts";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { createFeed, type CaseToken } from "../gate/admission.ts";
+import { createFeed, type CaseToken,type FeedOffer } from "../gate/admission.ts";
 import { cgroupCharge, reserveJob, type Reservation } from "../gate/memory-ledger.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -73,11 +73,10 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
     let returned=Promise.resolve();
     while (again) {
       await returned;
-      let first:{entry:string;grant:()=>void;leave:()=>void}|undefined;
-      await queue.feed({signal:stop.signal,exited:()=>stop.signal.aborted,end:()=>{},write:async(entry,grant)=>{let returned=false;const owned:TokenRelease=()=>{if(!returned){returned=true;grant();}};owned.case=(grant as TokenRelease).case;owned.closed=(grant as TokenRelease).closed;
-        try{first={entry,grant:owned,leave:cohort.enter()};}catch(error){await releaseToken(owned);throw error;}}});
-      if(!first)break;
-      const offered=first;
+      const offered=await queue.reserve({signal:stop.signal,exited:()=>stop.signal.aborted,end:()=>{}});
+      if(!offered)break;
+      const leave=cohort.tryEnter();
+      if(!leave){await offered.return();continue;}
       let bound:ReturnType<MemoryRun['worker']>|undefined;
       let childClosed:Promise<void>=Promise.resolve(),draining:Promise<void>|undefined,feedFlight:Promise<unknown>=Promise.resolve();
       const drain=()=>draining??=Promise.resolve().then(async()=>{
@@ -86,7 +85,8 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         try{await returned;}catch(error){failures.push(error);}
         let scopeDrained=true;
         if(bound){try{bound.close();await bound.closed;}catch(error){scopeDrained=false;failures.push(error);}}
-        if(scopeDrained)offered.leave();
+        if(!offered.committed){try{await offered.return();}catch(error){scopeDrained=false;failures.push(error);}}
+        if(scopeDrained)leave();
         if(failures.length)throw new AggregateError(failures,'resident worker generation failed to drain');
       });
       try{
@@ -107,7 +107,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         let resolveClosed!:()=>void;childClosed=new Promise<void>(resolve=>{resolveClosed=resolve;});
         let completedCases = 0;
         let active: Dispatch | undefined;
-        let release: (() => void) | undefined=offered.grant;
+        let release: (() => void) | undefined=offered.release;
         const returnToken = () => {
           const held = release;
           release = undefined;
@@ -147,7 +147,8 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           try { current.stop(scope); } catch {}
           reject(error);
         };
-        const dispatch=async(entry:string,granted:()=>void)=>{
+        const dispatch=async(offer:FeedOffer)=>{
+            const entry=offer.path,granted=offer.release;
             if (active !== undefined) {
               await releaseToken(granted);
               throw new Error(`worker ${index} already owns ${active.path}`);
@@ -156,18 +157,27 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             release = granted;
             const group=readFileSync(scope.ready,'utf8').trim().replace(/^0::/,'');
             await registerCaseScope((granted as TokenRelease).case,current.group,current.bytes,group);
-            if(exited||restarting){returnToken();return;}
+            if(exited||restarting){returnToken();await offer.return();return;}
             before = current.counters();
             aggregateBefore = memory.aggregateOoms();
             active = work[Number(entry)]!;
             child.stdin.write(`${active.path}\n`);
+            offer.commit();
           };
         const feed = () => {
-          feedFlight=returned.then(()=>queue.feed({
-            write:dispatch,end:()=>child.stdin.end(),exited:()=>exited||restarting,
-            signal:AbortSignal.any([stopped.signal,stop.signal]),
-            yield:async()=>{priorityYield=true;restarting=true;current.stop(scope);await drain();},
-          })).catch(fail);
+          feedFlight=returned.then(async()=>{
+            const offer=await queue.reserve({
+              end:()=>child.stdin.end(),exited:()=>exited||restarting,
+              signal:AbortSignal.any([stopped.signal,stop.signal]),
+              yield:async()=>{priorityYield=true;restarting=true;current.stop(scope);await drain();},
+            });
+            if(!offer)return;
+            try{await dispatch(offer);}
+            catch(error){
+              if(!offer.committed){try{await offer.return();}catch(cleanup){throw new AggregateError([error,cleanup],'resident dispatch and offer return failed',{cause:error});}}
+              throw error;
+            }
+          }).catch(fail);
           return feedFlight;
         };
         child.on("error", fail);
@@ -233,13 +243,14 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             if (Date.now() >= deadline) throw new Error(`resident cap: worker ${index} scope did not become ready`);
             await new Promise((resume) => setTimeout(resume, 10));
           }
-          await dispatch(offered.entry,offered.grant);
+          await dispatch(offered);
         };
         void start().catch(fail);
       });
       await drain();await feedFlight;
       }catch(error){
-        try{await releaseToken(offered.grant);}finally{await drain();}throw error;
+        try{await drain();}catch(cleanup){throw new AggregateError([error,cleanup],'resident worker failed and did not drain',{cause:error});}
+        throw error;
       }
     }
     await returned;

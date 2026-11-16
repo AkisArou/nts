@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
-import {releaseToken} from './case-context.ts';
+import {releaseToken,type TokenRelease} from './case-context.ts';
 import {DiskCapacity,type TemporaryDiskLease} from './disk-capacity.ts';
 
 /** The source-owned caller chooses the policy; launcher variables never do. */
@@ -79,6 +79,15 @@ export type FedWorker = { write: (path: string, release: () => void) => unknown;
   /** Close and join only this idle worker's resources, never an active case. */
   yield?:()=>Promise<void> };
 
+export type FeedEndpoint = Omit<FedWorker,'write'>;
+/** The feed retains the path until its caller actually dispatches it. */
+export type FeedOffer = {
+  path:string; release:TokenRelease; readonly committed:boolean;
+  commit():void;
+  /** Return the unused path only after its old token has fully drained. */
+  return():Promise<void>;
+};
+
 const untokened: CaseToken = () => Promise.resolve(() => {});
 
 export type FeedOptions = {
@@ -124,12 +133,12 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
   const returned: number[] = [];
   const remaining = () => returned.length > 0 || next < paths.length;
   let yielding:{resume?:Promise<void>}|undefined;
-  const idle=async(worker:FedWorker)=>{
+  const idle=async(worker:FeedEndpoint)=>{
     if(!pauseOwner||!resumeOwner)throw Error('case feed priority yield requires its owned pause and resume');
     yielding??={};
     await worker.yield?.();await pauseOwner();
   };
-  const waitingToken=async(path:string,worker:FedWorker)=>{
+  const waitingToken=async(path:string,worker:FeedEndpoint)=>{
     const withdraw=new AbortController(),watch=new AbortController();let failure:unknown;
     const signal=worker.signal?AbortSignal.any([worker.signal,withdraw.signal]):withdraw.signal;
     const observer=(async()=>{
@@ -143,14 +152,10 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
       return release;
     }finally{watch.abort();await observer;}
   };
-  return {
-    get dispatched() {
-      return written;
-    },
-    async feed(worker: FedWorker): Promise<void> {
+  const reserve=async(worker:FeedEndpoint):Promise<FeedOffer|undefined>=>{
       for (;;) {
         if (worker.exited()||worker.signal?.aborted) return;
-        if (!remaining()) return worker.end();
+        if (!remaining()) {worker.end();return;}
         if (outranked()||yielding) {
           await idle(worker);
           if(worker.exited()||worker.signal?.aborted)return;
@@ -161,24 +166,37 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
           continue;
         }
         const reserved = returned.pop() ?? next++;
-        let release;
-        try{release=await waitingToken(paths[reserved]!,worker);}
+        let grant;
+        try{grant=await waitingToken(paths[reserved]!,worker);}
         catch(error){returned.push(reserved);throw error;}
-        if (release === null || worker.exited()||worker.signal?.aborted) {
-          if(release)await releaseToken(release);
-          returned.push(reserved);
-          if (worker.exited()||worker.signal?.aborted) return;
+        if(grant===null){returned.push(reserved);continue;}
+        let released=false,committed=false,returning:Promise<void>|undefined;
+        const release:TokenRelease=()=>{if(!released){released=true;grant();}};
+        release.case=(grant as TokenRelease).case;release.closed=(grant as TokenRelease).closed;
+        const offer:FeedOffer={path:paths[reserved]!,release,get committed(){return committed;},
+          commit(){if(committed||returning)throw Error('case feed offer is no longer reserved');committed=true;written++;},
+          return(){
+            if(committed)throw Error('case feed cannot return an already dispatched offer');
+            return returning??=Promise.resolve().then(async()=>{await releaseToken(release);returned.push(reserved);});
+          },
+        };
+        if(worker.exited()||worker.signal?.aborted||outranked()||yielding){
+          await offer.return();
+          if(worker.exited()||worker.signal?.aborted)return;
           continue;
         }
-        // Outranked while the token was awaited: the case gives way, with its token.
-        if (outranked()||yielding) {
-          await releaseToken(release);
-          returned.push(reserved);
-          continue;
-        }
-        written++;
-        await worker.write(paths[reserved]!, release);
-        return;
+        return offer;
+      }
+  };
+  return {
+    get dispatched() {return written;},
+    reserve,
+    async feed(worker: FedWorker): Promise<void> {
+      const offer=await reserve(worker);if(!offer)return;
+      try{await worker.write(offer.path,offer.release);offer.commit();}
+      catch(error){
+        try{await offer.return();}catch(cleanup){throw new AggregateError([error,cleanup],'case feed dispatch and token return failed',{cause:error});}
+        throw error;
       }
     },
   };

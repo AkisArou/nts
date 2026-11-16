@@ -6,12 +6,16 @@ export function caseCohort(reservation:Reservation,env:NodeJS.ProcessEnv,signal:
  let quiet:(()=>void)|undefined;
  let pause:Promise<void>|undefined,resume:Promise<void>|undefined;
  let obligation:Awaited<ReturnType<typeof yieldJobMemory>>|undefined;
- return {
-  /** The case owns its generation until the token and any scope have drained. */
-  enter():()=>void{
-   if(pause)throw Error('case cohort started work before its priority resume');
+ const enter=()=>{
+   if(pause)return null;
    const owner={};live.add(owner);let done=false;
    return ()=>{if(done)return;done=true;live.delete(owner);if(!live.size)quiet?.();};
+ };
+ return {
+  tryEnter:enter,
+  /** The case owns its generation until the token and any scope have drained. */
+  enter():()=>void{
+   const leave=enter();if(!leave)throw Error('case cohort started work before its priority resume');return leave;
   },
   pause():Promise<void>{
    return pause??=Promise.resolve().then(async()=>{

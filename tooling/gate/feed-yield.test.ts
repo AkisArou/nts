@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createFeed} from './admission.ts';
 import {waitFor} from './test-wait.ts';
+import type {TokenRelease} from './case-context.ts';
 
 test('outranking cancels a token wait and joins idle close before resuming its one returned path',async()=>{
  let outranked=false,requests=0,closed=false,resumed=false;
@@ -30,4 +31,27 @@ test('a raced grant is returned before owned yield and an already aborted worker
  stop.abort();await pending;assert.equal(feed.dispatched,0);
  let asked=0;const aborted=createFeed(['one'],{token:async()=>{asked++;return()=>{};}});
  await aborted.feed({signal:stop.signal,exited:()=>false,end:()=>{},write:()=>assert.fail('aborted worker dispatched')});assert.equal(asked,0);
+});
+
+test('an undispatched offer returns its exact path only after its token joins',async()=>{
+ const closed=Promise.withResolvers<void>(),events:string[]=[];
+ const token:TokenRelease=()=>{events.push('release');};token.closed=closed.promise;
+ const feed=createFeed(['one'],{token:async()=>token});
+ const endpoint={exited:()=>false,end:()=>{events.push('end');}};
+ const first=await feed.reserve(endpoint);assert.ok(first);assert.equal(feed.dispatched,0);
+ const returned=first.return();assert.equal(first.return(),returned);
+ await waitFor('unused offer token release',()=>events.includes('release'));
+ assert.equal(await feed.reserve(endpoint),undefined,'a path was re-offered before its old token drained');
+ assert.equal(feed.dispatched,0);closed.resolve();await returned;
+ const next=await feed.reserve(endpoint);assert.ok(next);assert.equal(next.path,'one');
+ next.commit();assert.equal(feed.dispatched,1);assert.throws(()=>next.commit(),/no longer reserved/);
+ assert.throws(()=>next.return(),/already dispatched/);next.release();
+});
+test('dispatch failure returns its offer without counting a case or losing the primary error',async()=>{
+ let releases=0;const feed=createFeed(['one'],{token:async()=>()=>{releases++;}});
+ const error=Error('private dispatch failure');
+ await assert.rejects(feed.feed({exited:()=>false,end:()=>{},write:()=>{throw error;}}),value=>value===error);
+ assert.equal(feed.dispatched,0);assert.equal(releases,1);
+ const offer=await feed.reserve({exited:()=>false,end:()=>assert.fail('failed dispatch lost its case')});
+ assert.equal(offer?.path,'one');await offer!.return();assert.equal(releases,2);
 });
