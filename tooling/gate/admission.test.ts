@@ -134,7 +134,7 @@ test("census feed: a delayed running case finishes, the next path waits while th
   let exited = false;
   worker.on("exit", () => { exited = true; });
   const closed = once(worker, "close"); // Includes the last stdout row.
-  const queue = createFeed(["a", "b"], { outranked: job.outranked, everyMs: 20 });
+  const queue = createFeed(["a", "b"], { outranked: job.outranked,pause:async()=>{},resume:async()=>{}, everyMs: 20 });
   const feed = () => queue.feed({ write: (p) => worker.stdin.write(`${p}\n`), end: () => worker.stdin.end(), exited: () => exited });
   const rows: { path: string; at: number }[] = [];
   const output = createInterface({ input: worker.stdout });
@@ -169,7 +169,7 @@ test("census feed: a worker that exits while it waits is never written to", asyn
   const job = ranked(true);
   const writes: string[] = [];
   let exited = false;
-  const queue = createFeed(["a"], { outranked: job.outranked, everyMs: 10 });
+  const queue = createFeed(["a"], { outranked: job.outranked,pause:async()=>{},resume:async()=>{}, everyMs: 10 });
   const pending = queue.feed({ write: (p) => writes.push(p), end: () => writes.push("<end>"), exited: () => exited });
   exited = true;
   job.state.outranked = false;
@@ -182,7 +182,7 @@ test("census feed: two workers waiting for the last path -- one gets it, the oth
   const job = ranked(true);
   const one: string[] = [];
   const two: string[] = [];
-  const queue = createFeed(["last"], { outranked: job.outranked, everyMs: 10 });
+  const queue = createFeed(["last"], { outranked: job.outranked,pause:async()=>{},resume:async()=>{}, everyMs: 10 });
   const a = queue.feed({ write: (p) => one.push(p), end: () => one.push("<end>"), exited: () => false });
   const b = queue.feed({ write: (p) => two.push(p), end: () => two.push("<end>"), exited: () => false });
   job.state.outranked = false;
@@ -257,7 +257,7 @@ test("census feed: a job outranked while a token is awaited turns the case back,
   const job = ranked();
   const gate = tokens();
   const writes: string[] = [];
-  const queue = createFeed(["a"], { token: gate.token, outranked: job.outranked, everyMs: 10 });
+  const queue = createFeed(["a"], { token: gate.token, outranked: job.outranked,pause:async()=>{},resume:async()=>{}, everyMs: 10 });
   const fed = queue.feed({ write: (p) => writes.push(p), end: () => writes.push("<end>"), exited: () => false });
   await waitFor("a token request", () => gate.waiting.length === 1);
   job.state.outranked = true;

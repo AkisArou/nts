@@ -74,8 +74,8 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
     while (again) {
       await returned;
       let first:{entry:string;grant:()=>void;leave:()=>void}|undefined;
-      await queue.feed({signal:stop.signal,exited:()=>stop.signal.aborted,end:()=>{},write:(entry,grant)=>{let returned=false;const owned:TokenRelease=()=>{if(!returned){returned=true;grant();}};owned.case=(grant as TokenRelease).case;owned.closed=(grant as TokenRelease).closed;
-        try{first={entry,grant:owned,leave:cohort.enter()};}catch(error){void releaseToken(owned);throw error;}}});
+      await queue.feed({signal:stop.signal,exited:()=>stop.signal.aborted,end:()=>{},write:async(entry,grant)=>{let returned=false;const owned:TokenRelease=()=>{if(!returned){returned=true;grant();}};owned.case=(grant as TokenRelease).case;owned.closed=(grant as TokenRelease).closed;
+        try{first={entry,grant:owned,leave:cohort.enter()};}catch(error){await releaseToken(owned);throw error;}}});
       if(!first)break;
       const offered=first;
       let bound:ReturnType<MemoryRun['worker']>|undefined;

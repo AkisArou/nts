@@ -7,7 +7,8 @@ import { after, afterEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { capped } from "./attempt262.ts";
 import { readLedger, reserve } from "../gate/memory-ledger.ts";
-import { useOwnMemory } from "../gate/test-memory.ts";
+import { useOwnMemory,ownMemory as writeOwnMemory } from "../gate/test-memory.ts";
+import {historyFile,writeCostHistory,peakReservation} from "../gate/step-scheduling.ts";
 import { createTokenPool } from "../gate/token-pool.ts";
 import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
@@ -703,34 +704,42 @@ compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024*
   assert.match(record.reason, /named-budget-case.*exceeds the outcomes step's 134217728 byte budget/);
 });
 
-test("a pool whose reservation is outranked starts no new case until the request ahead of it has gone", async t => {
-  const directory = scratch();
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  await landingBlocker(t);
-  const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "outranked-pool" }), gate = await gatePool(1);
-  t.after(gate.close);
-  const rows: { path: string; waitingInLedger?: number }[] = [], asked: string[] = [];
-  // The feed decides on the next case as soon as a row has been taken in; an
-  // immediate callback from that row runs once it has.
-  let decided!: () => void;
-  const afterFirst = new Promise<void>(resolve => { decided = resolve; });
-  const pool = runMemoryWorkers({
-    paths: ["gate-a", "probe-ledger"], jobs: 1, memory, workerBytes: 64 * 2 ** 20,
-    token: (path, signal) => { asked.push(path); return gate.token(path, signal); },
-    args: (index: number) => [fixture, directory, String(index)],
-    onRow: row => { rows.push(row); if (row.path === "gate-a") setImmediate(decided); },
-  });
-  await waitFor("the first case to run", () => existsSync(join(directory, "ready-gate-a")));
-  const landing = landingAhead(t);
-  writeFileSync(join(directory, "go-gate-a"), "go");
-  await afterFirst;
-  assert.deepEqual(asked, ["gate-a"], "the next case asked for no token while the pool was outranked");
-  landing.withdraw();
-  await pool;
-  await assert.rejects(landing.ended, { name: "AbortError" });
-  assert.deepEqual(rows.map(row => row.path), ["gate-a", "probe-ledger"]);
-  assert.equal(rows[1]?.waitingInLedger, 0, "the next case started only once the landing request had gone");
-  await gate.settled();
+test('a yielding resident pool closes its idle cohort, admits the higher growth without withdrawal and resumes exactly once',async t=>{
+ const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ writeOwnMemory(memoryDirectory,{availableKiB:21.75*2**20,totalKiB:32*2**20});
+ t.after(()=>writeOwnMemory(memoryDirectory,{availableKiB:8*2**20,totalKiB:32*2**20}));
+ const key='priority-idle-worker',memory=new MemoryRun({budgetBytes:4*2**30,id:key}),gate=await gatePool(1),rows:{path:string;pid:number;waitingInLedger?:number}[]=[],reports:string[]=[];
+ assert.equal(writeCostHistory(historyFile(process.env),{jobs:[{key,peak:3*2**30,basis:'worker',width:1}]}),undefined);
+ const independent={...fixtureEnvironment(t),...ownMemory};delete independent.NTS_MEMORY_RESERVATION;
+ let higher:Awaited<ReturnType<typeof reserve>>|undefined;
+ const pool=runMemoryWorkers({paths:['gate-a','probe-ledger'],jobs:1,memory,workerBytes:64*2**20,key,
+  token:gate.token,args:index=>[fixture,directory,String(index)],onRow:row=>rows.push(row),report:line=>{
+   reports.push(line);
+   if(line.startsWith('case cohort yielded:')){
+    const children=readdirSync(join(CGROUP,memory.group),{withFileTypes:true}).filter(entry=>entry.isDirectory());
+    assert.deepEqual(children,[],'idle worker slices must be joined before the model returns their physical memory');
+    const own=readLedger(ownMemory.NTS_MEMORY_LEDGER).admitted.find(entry=>entry.what.includes('resident workers'));
+    assert.ok(own);assert.equal(own.bytes,peakReservation([1]));
+    writeOwnMemory(memoryDirectory,{availableKiB:24.75*2**20,totalKiB:32*2**20});
+   }
+  }});
+ try{
+  await waitFor('first resident case ready',()=>existsSync(join(directory,'ready-gate-a')));
+  higher=await reserve({bytes:12*2**30,what:'higher landing',priority:'landing'},{env:independent});
+  const grown=higher.grow(8*2**30);void grown.catch(()=>{});
+  await waitFor('higher growth waiting behind the resident cohort',()=>readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.grows===higher!.id));
+  writeFileSync(join(directory,'go-gate-a'),'go');
+  await grown;assert.equal(higher.bytes,20*2**30,'the higher request was admitted, not withdrawn');
+  await waitFor('lower job ordinary readmission after idle close',()=>readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.grows&&entry.grows!==higher!.id));
+  assert.equal(rows.length,1,'a new worker cannot boot before normal memory readmission');
+  assert.ok(reports.some(line=>line.startsWith('case cohort yielded:')));
+  higher.release();await higher.closed;
+  const summary=await pool;await gate.settled();
+  assert.deepEqual(rows.map(row=>row.path),['gate-a','probe-ledger']);assert.notEqual(rows[0]!.pid,rows[1]!.pid,'the remaining case uses a fresh cohort');
+  assert.equal(rows[1]!.waitingInLedger,0);
+  assert.equal(summary.pressureRequeues,0);assert.equal(summary.idlePressureRestarts,0);assert.equal(summary.isolatedReplays,0);
+  assert.equal(gate.seen.grant,2);assert.equal(gate.seen.release,2);assert.equal(existsSync(join(CGROUP,memory.group)),false);
+ }finally{higher?.release();await higher?.closed;memory.close();await memory.closed;await pool.catch(()=>{});await gate.close();}
 });
 
 for (const family of [false, true]) test(`inside a gate step's bounded worker subtree, the supervisor records pressure from ${family ? "a worker process family" : "one worker"}`, async t => {
