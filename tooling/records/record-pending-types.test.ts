@@ -1,3 +1,4 @@
+import {findPending} from './record-population.ts';
 import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,writeFileSync,existsSync,unlinkSync} from 'node:fs';
 import {dirname,join,relative} from 'node:path';
@@ -7,7 +8,7 @@ import {testScratch} from '../gate/test-scratch.ts';
 import {checkTypeProjects,checkTypeProject,typeRow,writeTypeProjectRecord} from '../gate/tooling-types.ts';
 import {TYPE_PROJECTS,typeProjectName,readTypeRecord} from '../gate/tooling-type-projects.ts';
 import {projectTypeRows,TOOLING_PROJECT,TOOLING_DIAGNOSTICS,parseDiagnosticRecord,serializeDiagnosticRecord} from '../gate/tooling-type-records.ts';
-import {applyDelta,auditRecord,findPending,KIND_STEPS,partOf,recordPending,sourceDigests,type Runner} from './record-pending.ts';
+import {applyDelta,auditRecord,KIND_STEPS,partOf,recordPending,sourceDigests,type Runner} from './record-pending.ts';
 import {parseDelta} from './delta.ts';
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
 const JS=TYPE_PROJECTS.find(row=>row.policy==='javascript')!,NODE=typeProjectName(JS),BINDING='runtime/node/private/bindings.node.mjs';

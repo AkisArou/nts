@@ -8,12 +8,12 @@ const ROOT=fileURLToPath(new URL('../..',import.meta.url));
 export type TypeProject={project:ProjectConfig;policy:'tooling'|'product'|'javascript';population:{directory:string;member?:string;recursive?:boolean}[]};
 export const NODE_BINDINGS=moduleMembers(new URL('../../runtime/node/',import.meta.url),'bindings.node.mjs');
 export const TYPE_PROJECTS:readonly TypeProject[]=[
-  {project:projectConfig(new URL('../tsconfig.json',import.meta.url)),policy:'tooling',population:[{directory:'tooling',recursive:true}]},
-  {project:projectConfig(new URL('../../runtime/node/tsconfig.bindings.json',import.meta.url)),policy:'javascript',population:[{directory:relative(ROOT,fileURLToPath(NODE_BINDINGS.url)).split(sep).join('/'),member:NODE_BINDINGS.member,recursive:true}]},
-  {project:projectConfig(new URL('../../runtime/web-platform/test/wpt/tsconfig.json',import.meta.url)),policy:'product',population:[{directory:'runtime/web-platform/test/wpt',recursive:true}]},
-  {project:projectConfig(new URL('../conformance/ecmascript/icu-compiled/tsconfig.c.json',import.meta.url)),policy:'product',population:[{directory:'runtime/ecmascript/providers/icu/c'}]},
-  {project:projectConfig(new URL('../conformance/ecmascript/icu-compiled/tsconfig.jvm.json',import.meta.url)),policy:'product',population:[{directory:'runtime/ecmascript/providers/icu/java',recursive:true}]},
-  {project:projectConfig(new URL('../../compiler/codegen/jvm/tsconfig.json',import.meta.url)),policy:'product',population:[{directory:'compiler/codegen/jvm'}]},
+  {project:projectConfig(new URL('../tsconfig.json',import.meta.url),'type-check'),policy:'tooling',population:[{directory:'tooling',recursive:true}]},
+  {project:projectConfig(new URL('../../runtime/node/tsconfig.bindings.json',import.meta.url),'type-check'),policy:'javascript',population:[{directory:relative(ROOT,fileURLToPath(NODE_BINDINGS.url)).split(sep).join('/'),member:NODE_BINDINGS.member,recursive:true}]},
+  {project:projectConfig(new URL('../../runtime/web-platform/test/wpt/tsconfig.json',import.meta.url),'type-check'),policy:'product',population:[{directory:'runtime/web-platform/test/wpt',recursive:true}]},
+  {project:projectConfig(new URL('../conformance/ecmascript/icu-compiled/tsconfig.c.json',import.meta.url),'type-check'),policy:'product',population:[{directory:'runtime/ecmascript/providers/icu/c'}]},
+  {project:projectConfig(new URL('../conformance/ecmascript/icu-compiled/tsconfig.jvm.json',import.meta.url),'type-check'),policy:'product',population:[{directory:'runtime/ecmascript/providers/icu/java',recursive:true}]},
+  {project:projectConfig(new URL('../../compiler/codegen/jvm/tsconfig.json',import.meta.url),'type-check'),policy:'product',population:[{directory:'compiler/codegen/jvm'}]},
 ];
 
 export const typeProjectName=(definition:TypeProject)=>relative(ROOT,fileURLToPath(definition.project.url)).split(sep).join('/');
