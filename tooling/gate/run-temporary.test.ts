@@ -1,4 +1,5 @@
-import {hostObservations} from './host-observations.ts';
+import {hostObservations,HOST_OBSERVATIONS} from './host-observations.ts';
+import {assignTestValues} from './test-environment.ts';
 import {ownMemory} from './test-host-observations.ts';
 import {treeProcessFixture} from '../landing/tree-users-fixture.ts';
 import assert from "node:assert/strict";
@@ -286,6 +287,27 @@ test('a supplied foreign holder keeps its named image, and an owned empty view d
  const bytes=allocated(image.tree),dropped=finishRunTemporary(owned,f.home,false,{...roomy,host:f.host});
  assert.deepEqual(dropped.oracle_images,[{path:image.tree,bytes,state:'dropped'}]);assert.equal(existsSync(image.tree),false);
  for(const [name,body]of image.identities)assert.equal(readFileSync(join(image.parent,name),'utf8'),body);
+});
+
+for(const hasImage of [false,true])test('an omitted process view preserves closed-root accounting '+(hasImage?'while keeping the image':'without an image'),t=>{
+ const f=fixture(t),owned=captureRunTemporary(f.run('missing-process-view'),undefined,f.home);
+ const image=hasImage?registeredImage(owned,f.home):undefined;
+ const view=JSON.parse(readFileSync(f.env.NTS_HOST_OBSERVATIONS,'utf8'));delete view.processUsers;
+ writeFileSync(f.env.NTS_HOST_OBSERVATIONS,JSON.stringify(view));
+ const previous=process.env[HOST_OBSERVATIONS];let result:ReturnType<typeof finishRunTemporary>;
+ try{
+  assignTestValues(process.env,{[HOST_OBSERVATIONS]:f.env.NTS_HOST_OBSERVATIONS});
+  result=finishRunTemporary(owned,f.home,false,roomy);
+ }finally{assignTestValues(process.env,{[HOST_OBSERVATIONS]:previous});}
+ assert.equal(result.state,'retained after red',JSON.stringify(result));
+ const entries=closedEntries(f.home);assert.equal(entries.length,1);assert.equal(entries[0]!.entry.owned.path,owned.path);
+ assert.equal(entries[0]!.entry.bytes,allocated(owned.path));
+ if(image){
+  const expected=[{path:image.tree,bytes:null,state:'kept: host observation processUsers is missing or invalid'}];
+  assert.deepEqual(result.oracle_images,expected);assert.deepEqual(entries[0]!.entry.oracle_images,expected);
+  assert.ok(existsSync(image.tree));assert.equal(lstatSync(image.tree).mode&0o777,0o555);
+  for(const [name,body]of image.identities)assert.equal(readFileSync(join(image.parent,name),'utf8'),body);
+ }else assert.equal(result.oracle_images,undefined,'no image requires no process observation');
 });
 
 for(const mutation of ['version','outside'])test('a '+mutation+' registration cannot authorize image disposal',t=>{
