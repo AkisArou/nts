@@ -281,5 +281,16 @@ export function replayFixtureReaderObservations(snapshot:InputSnapshot,source:st
     try{validateHostObservations([{kind:row.observation.kind,path,value:expected}],()=>actual.value);}
     catch{throw new NonPortableReaderObservation(row,actual);}
   }
+  // A source's absent external owner cannot certify a different destination
+  // ancestry. Replay the very same nearest-config operation for its modules.
+  const ownerLookups=new Set<string>(),filesystem=new OracleFilesystem();
+  for(const row of snapshot.observations){
+    if(row.context.entry!=='<entry>'&&!fixtureEntries.has(row.context.entry))continue;
+    for(const program of row.environment?.programs??[])for(const entry of program.ownerLookups??[])ownerLookups.add(entry);
+  }
+  for(const entry of ownerLookups){
+    const nearest=filesystem.projectFor(filesystem.realpath(join(destination,entry)));
+    if(nearest!==null)throw Error('fixture nearest-config ancestry differs for '+entry+': '+nearest);
+  }
   validateProjectMatches(snapshot.projectMatches.filter(row=>row.context.entry==='<entry>'||fixtureEntries.has(row.context.entry)),destination);
 }

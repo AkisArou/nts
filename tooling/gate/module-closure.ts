@@ -397,17 +397,17 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           projectRole:role,compiledImports:new Map(project.modules.map(row=>[row.path,row.imports]))};
         for(const entry of new Set([...project.roots,...project.modules.map(row=>row.path)]))visit(compiled,resolve(root,entry),true,true,false);
         if(role==='compiled-program'){
-          const modules=project.modules.map(row=>row.path).filter(path=>! /\.d\.[cm]?ts$/.test(path)),lookups=new OracleFilesystem();
+          const modules=project.modules.map(row=>row.path).filter(path=>! /\.d\.[cm]?ts$/.test(path)),lookups=new OracleFilesystem(),ancestorLookups:string[]=[];
           for(const module of modules){
             const physical=lookups.realpath(resolve(root,module));if(!inside(root,physical))throw Error('compiled project module resolves outside source: '+module);
             const nearest=lookups.projectFor(physical);
             if(nearest){
               if(!inside(root,nearest))throw Error('compiled project nearest config is outside source: '+nearest+' ('+module+')');
               lookups.readBytes(nearest);
-            }
+            }else ancestorLookups.push(module);
           }
           const local:HostObservation[]=[];
-          const environment:ProjectEnvironmentAbsence={kind:'project-environment-absence',source:root,programs:[{request:structuredClone(request),config:entry,imports:[],types:[],ownerLookups:modules}]};
+          const environment:ProjectEnvironmentAbsence={kind:'project-environment-absence',source:root,programs:[{request:structuredClone(request),config:entry,imports:[],types:[],ownerLookups:ancestorLookups}]};
           for(const observation of lookups.captured()){
             if(inside(root,observation.path)){local.push(observation);continue;}
             if(!projectOwnerAncestorAbsence(root,observation)||lookups.runtimeKind(observation.path)!==null)
