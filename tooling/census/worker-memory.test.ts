@@ -9,6 +9,7 @@ import { capped } from "./attempt262.ts";
 import { readLedger, reserve } from "../gate/memory-ledger.ts";
 import { useOwnMemory,ownMemory as writeOwnMemory } from "../gate/test-memory.ts";
 import {historyFile,writeCostHistory,peakReservation} from "../gate/step-scheduling.ts";
+import {hostObservations} from "../gate/host-observations.ts";
 import { createTokenPool } from "../gate/token-pool.ts";
 import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
@@ -710,10 +711,10 @@ compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024*
 
 test('a yielding resident pool releases successive heads and resumes each remaining case once',async t=>{
  const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
- writeOwnMemory(memoryDirectory,{availableKiB:21.75*2**20,totalKiB:32*2**20});
+ writeOwnMemory(memoryDirectory,{availableKiB:21.75*2**20,totalKiB:32*2**20,clock:{kind:'live'}});
  t.after(()=>writeOwnMemory(memoryDirectory,{availableKiB:8*2**20,totalKiB:32*2**20}));
  const key='priority-idle-worker',memory=new MemoryRun({budgetBytes:4*2**30,id:key}),gate=await gatePool(1),rows:{path:string;pid:number;waitingInLedger?:number}[]=[],reports:string[]=[];
- const tick=()=>performance.now();
+ const clock=hostObservations(ownMemory),tick=()=>clock.now();
  const restarts:number[]=[];let readmittedAt=0;
  assert.equal(writeCostHistory(historyFile(process.env),{jobs:[{key,peak:3*2**30,basis:'worker',width:1}]}),undefined);
  const independent={...fixtureEnvironment(t),...ownMemory};delete independent.NTS_MEMORY_RESERVATION;
