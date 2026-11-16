@@ -13,7 +13,7 @@ import {testScratch} from './test-scratch.ts';
 import {moduleGraph,closeModuleGraphOwners} from './module-closure.ts';
 import {validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
-import {projectConfig,conservativeDirectory} from './reader-inputs/main.ts';
+import {projectConfig} from './reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 test('matching never narrows the same directory ordinary traversal in either acquisition order',t=>{
@@ -21,8 +21,8 @@ test('matching never narrows the same directory ordinary traversal in either acq
   writeFileSync(join(root,'src/main.ts'),'export {};');
   writeFileSync(join(root,'matching.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"]}');
   const matching=projectConfig(pathToFileURL(join(root,'matching.json')),'type-check');
-  const ordinary={kind:'conservative' as const,url:conservativeDirectory(pathToFileURL(join(root,'src/')))};
-  const owner=moduleGraph({sourceRoot:root});
+  const ordinary='ordinary.rs';writeFileSync(join(root,ordinary),'');
+  const owner=moduleGraph({sourceRoot:root,declarations:new Map([[ordinary,{imports:[],assets:[{kind:'conservative',path:'./src/'}]}]])});
   try{for(const entries of [[matching,ordinary],[ordinary,matching]]){
     const snapshot=owner.describe(entries),rows=snapshot.observations.filter(row=>row.observation.path===join(root,'src'));
     assert.ok(rows.some(row=>row.observation.kind==='entries'&&row.observationOnly),'matching retains its raw observation role');

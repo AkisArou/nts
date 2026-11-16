@@ -9,16 +9,6 @@ is in [the records](..).
 
 Dates are 2026.
 
-## Compiler-matched project discovery (11-16)
-
-Issue #798: Program config discovery records the actual pinned native parser's
-matched file names and replays the same query through a closed parse-only
-session. Raw matching directory observations retain their race and native
-claim roles, while selection consumes the matched view. Shared ordinary
-directory reads promote before selection, independent of order. Generated
-requests reuse the literal config owner and store its recipe, never its
-temporary path. Compact selector records carry the role and schema identity.
-
 ## Pressure reclamation uses ownership provenance (11-14)
 
 Issue #709 retains the user's deletion grant: free pool build output keeping
@@ -3861,3 +3851,12 @@ The native recorder receives the green-run pin through its prepared environment.
 The ready summary carries the refresh-only run's cost and the fifteen-row
 native rederivation time, and names the service/state hunks shared with #841
 and #825. This remains the first slice, `Part of #835`.
+## Compiler-matched project discovery (11-16)
+
+Issue #798: Program config discovery records the actual pinned native parser's
+matched file names and replays the same query through a closed parse-only
+session. Raw matching directory observations retain their race and native
+claim roles, while selection consumes the matched view. Shared ordinary
+directory reads promote before selection, independent of order. Generated
+requests reuse the literal config owner and store its recipe, never its
+temporary path. Compact selector records carry the role and schema identity.
