@@ -49,10 +49,12 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
   const otherData=['runtime/node','runtime/web-platform','tests/compile-time'];
   for(const area of otherData)mkdirSync(join(root,area),{recursive:true});
   copyModuleClosure(['tooling/records/outcomes-recorder-fixture.ts'],root,{dataNamespaces:{
-    'tests/typescript':'pending-outcome records fixture','tests/outcomes':'one pending outcome fixture',
+    'tests/outcomes':'one pending outcome fixture',
     'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture',
     ...Object.fromEntries(otherData.map(area=>[area,'pending-outcome records fixture']))}});
   renameSync(join(root,'tooling/records/outcomes-recorder-fixture.ts'),join(root,'tooling/records/record-pending.ts'));
+  const stagedFamilies=readdirSync(join(root,'tooling'),{recursive:true,withFileTypes:true}).filter(entry=>entry.isFile()&&entry.name.endsWith('-record-family.ts')).map(entry=>join(entry.parentPath,entry.name).slice(root.length+1)).sort();
+  assert.deepEqual(stagedFamilies,['tooling/conformance/outcomes-record-family.ts'],'the outcome fixture stages only its own family');
   assert.deepEqual(readdirSync(join(root,'tests/typescript')),[],'an outcome fixture stages no production TypeScript cases');
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[],'the pending outcome starts without production records');
   for(const area of ['tests/programs','benchmarks/cases'])assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
