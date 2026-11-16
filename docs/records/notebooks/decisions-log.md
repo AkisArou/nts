@@ -3598,3 +3598,11 @@ ownership fail-closed; fixtures supply their own proc tree or explicitly
 observe only captured child PIDs. Missing observations refuse by name. Tests
 check full dispositions before path existence and pair a supplied holder with
 an empty owned view. This changes neither image retention policy nor recovery.
+
+The full-tooling repeat exposed #808's latent idle-pressure accounting flake:
+an uncommitted startup offer can return and acquire another token without
+becoming a committed case replay. The resident pool summary now reports those
+joined returns separately as production telemetry. The fixture's exact grant
+equation includes that counter, bounds it to zero or one here, and reports
+per-path token history on failure. Dispatch, admission and retry policy stay
+unchanged; the dedicated forced-startup control requires exactly one return.

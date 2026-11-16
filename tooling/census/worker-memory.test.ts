@@ -42,18 +42,20 @@ const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(jo
  */
 async function gatePool(n: number) {
   const seen = { request: 0, grant: 0, release: 0, cancel: 0 };
+  const history:{event:string;context?:unknown}[]=[];
   const pool: any = createTokenPool({
     free: () => n - pool.total,
     claim: (_step: string, { waitedS }: { waitedS: number }) => waitedS,
-    observe: ({ event }: { event: string }) => {
-      const key = event.replace(/^token\./, "") as keyof typeof seen;
-      if (key in seen) seen[key]++;
+    observe: (row: { event: string;context?:unknown }) => {
+      const key = row.event.replace(/^token\./, "") as keyof typeof seen;
+      if (key in seen) {seen[key]++;history.push({...row});}
     },
   });
   await pool.start();
   const client = tokenClient(pool.addr, "typescript-c");
   return {
     seen,
+    history,
     waiting: () => pool.waiting.length as number,
     token: (path: string, signal: AbortSignal) => client.acquire({ project: path }, signal),
     /** Every control ends here: no token held, no request waiting. */
@@ -85,6 +87,7 @@ test('a bounded resident pool recycles only after completed cases and returns ev
   const counts=new Map<number,number>();for(const row of rows)counts.set(row.pid,(counts.get(row.pid)??0)+1);
   assert.deepEqual([...counts.values()],[2,2,2,2],'each fresh process owns exactly its bounded completed window');
   assert.equal(summary.pressureRequeues,0);assert.equal(summary.idlePressureRestarts,0);
+  assert.equal(summary.returnedOffers,0);
   assert.equal(rows.every(row=>row.bucket==='strict-pass'),true);
   await gate.settled();assert.equal(gate.seen.grant,paths.length);assert.equal(gate.seen.release,paths.length);
   assert.equal(existsSync(join(CGROUP,memory.group)),false,'all worker generations drain before the pool finishes');
@@ -323,7 +326,10 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   assert.equal(summary.systemPressureKills, 0);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
   await returnHold();await gate.settled();
-  assert.equal(gate.seen.grant, 4 + summary.isolatedReplays, JSON.stringify({ seen: gate.seen, summary }));
+  const accounting=JSON.stringify({seen:gate.seen,summary,history:gate.history});
+  assert.ok(summary.returnedOffers===0||summary.returnedOffers===1,accounting);
+  assert.equal(gate.seen.grant, 4 + summary.isolatedReplays + summary.returnedOffers,accounting);
+  assert.equal(gate.seen.release,gate.seen.grant,accounting);
   assert.equal(holdClosed,true,"the fixture idle hold returned and joined its real token");
 });
 
@@ -846,7 +852,7 @@ test("startup pressure returns the reserved first case before a fresh generation
    }});
   };
  }});
- await runMemoryWorkers({paths:['one'],jobs:1,memory,workerBytes:96*2**20,token:gate.token,
+ const summary=await runMemoryWorkers({paths:['one'],jobs:1,memory,workerBytes:96*2**20,token:gate.token,
   args:index=>[fixture,directory,String(index)],onRow:row=>rows.push(row),report:line=>reports.push(line)});
  assert.equal(generations,2);assert.deepEqual(rows.map(row=>[row.path,row.bucket]),[['one','strict-pass']]);
  assert.ok(reports.some(line=>line.includes('idle worker 0 killed by aggregate-pressure')));
@@ -854,4 +860,5 @@ test("startup pressure returns the reserved first case before a fresh generation
  for(const group of groups)assert.equal(existsSync(join(CGROUP,group)),false);
  assert.equal(existsSync(join(CGROUP,actual.group)),false);await gate.settled();
  assert.deepEqual(gate.seen,{request:2,grant:2,release:2,cancel:0});
+ assert.equal(summary.returnedOffers,1,JSON.stringify({summary,history:gate.history}));
 });

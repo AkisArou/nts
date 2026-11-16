@@ -57,7 +57,7 @@ type Dispatch = { path: string; ordinal: number };
 type Pressure = { dispatch?: Dispatch; cause: "aggregate-pressure" | "system-pressure"; kills: number };
 
 async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, token, recycleAfterCases, recycleAboveBytes, charge = sliceCharge }: ResidentPoolOptions,
-  work: Dispatch[], isolated: boolean, reservation: Reservation, indexOffset = 0): Promise<Pressure[]> {
+  work: Dispatch[], isolated: boolean, reservation: Reservation, accounting:{returnedOffers:number}, indexOffset = 0): Promise<Pressure[]> {
   const exclusive = isolated || Math.min(jobs, work.length) === 1;
   // Asked before each case, which takes far longer than the ledger's answer.
   const stop=new AbortController(),cohort=caseCohort(reservation,process.env,stop.signal,report);
@@ -67,6 +67,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
   const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
   let idleRestarts = 0;
+  const returnOffer=async(offered:FeedOffer)=>{await offered.return();accounting.returnedOffers++;};
   const unregister=registerCommandCloser('resident case feed',{close:()=>{stop.abort();memory.close();},closed:async()=>{await Promise.allSettled(tasks);await memory.closed;}});
   const worker = async (index: number) => {
     let again = true;
@@ -76,7 +77,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
       const offered=await queue.reserve({signal:stop.signal,exited:()=>stop.signal.aborted,end:()=>{}});
       if(!offered)break;
       const leave=cohort.tryEnter();
-      if(!leave){await offered.return();continue;}
+      if(!leave){await returnOffer(offered);continue;}
       let bound:ReturnType<MemoryRun['worker']>|undefined;
       let childClosed:Promise<void>=Promise.resolve(),draining:Promise<void>|undefined,feedFlight:Promise<unknown>=Promise.resolve();
       const drain=()=>draining??=Promise.resolve().then(async()=>{
@@ -85,7 +86,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         try{await returned;}catch(error){failures.push(error);}
         let scopeDrained=true;
         if(bound){try{bound.close();await bound.closed;}catch(error){scopeDrained=false;failures.push(error);}}
-        if(!offered.committed){try{await offered.return();}catch(error){scopeDrained=false;failures.push(error);}}
+        if(!offered.committed){try{await returnOffer(offered);}catch(error){scopeDrained=false;failures.push(error);}}
         if(scopeDrained)leave();
         if(failures.length)throw new AggregateError(failures,'resident worker generation failed to drain');
       });
@@ -273,6 +274,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
 
 export type ResidentPoolSummary = {
   pressureRequeues: number; idlePressureRestarts: number; aggregatePressureKills: number; systemPressureKills: number; isolatedReplays: number;
+  returnedOffers:number;
 };
 
 /** Each input has one final row. Parallel pressure is retried once, alone in
@@ -310,7 +312,8 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
 
 async function rounds(options: ResidentPoolOptions, budgetBytes: number, reservation: Reservation): Promise<ResidentPoolSummary> {
   const { paths, jobs, report = () => {} } = options;
-  const pressure = await round(options, paths.map((path, ordinal) => ({ path, ordinal })), false, reservation);
+  const accounting={returnedOffers:0};
+  const pressure = await round(options, paths.map((path, ordinal) => ({ path, ordinal })), false, reservation,accounting);
   const replays = pressure.filter((p): p is Pressure & { dispatch: Dispatch } => p.dispatch !== undefined);
   const summary: ResidentPoolSummary = {
     pressureRequeues: replays.length,
@@ -318,13 +321,15 @@ async function rounds(options: ResidentPoolOptions, budgetBytes: number, reserva
     aggregatePressureKills: pressure.filter(p => p.cause === "aggregate-pressure").reduce((n, p) => n + p.kills, 0),
     systemPressureKills: pressure.filter(p => p.cause === "system-pressure").reduce((n, p) => n + p.kills, 0),
     isolatedReplays: 0,
+    returnedOffers:0,
   };
   for (const { dispatch } of replays.sort((a, b) => a.dispatch.ordinal - b.dispatch.ordinal)) {
     const isolated = new MemoryRun({ budgetBytes });
-    await round({ ...options, memory: isolated, jobs: 1 }, [dispatch], true, reservation, jobs + summary.isolatedReplays);
+    await round({ ...options, memory: isolated, jobs: 1 }, [dispatch], true, reservation,accounting, jobs + summary.isolatedReplays);
     summary.isolatedReplays++;
   }
-  report(`resident pressure requeues: ${summary.pressureRequeues}; idle restarts ${summary.idlePressureRestarts}; aggregate kills ${summary.aggregatePressureKills}; system-wide kills ${summary.systemPressureKills}; isolated replays ${summary.isolatedReplays}`);
+  summary.returnedOffers=accounting.returnedOffers;
+  report(`resident pressure requeues: ${summary.pressureRequeues}; idle restarts ${summary.idlePressureRestarts}; aggregate kills ${summary.aggregatePressureKills}; system-wide kills ${summary.systemPressureKills}; isolated replays ${summary.isolatedReplays}; returned offers ${summary.returnedOffers}`);
   if (paths.length > 0 && summary.pressureRequeues / paths.length > 0.05) report("resident pressure advisory: over 5% of cases needed isolated replay; review the aggregate reservation");
   return summary;
 }
