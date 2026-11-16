@@ -12,7 +12,7 @@
         "llvm": "80840d8c2096e2c92169e8768aa2edc6"
       },
       "cases_sha256": "7a5b73fb6fbb34b784b34b6dc07aded14706062fca4316530c690fb377d8dc00",
-      "driver_sha256": "800b56709a4d17cefe25ef188bdc487d7fa85d92238af94f267efeafba692dfb",
+      "driver_sha256": "1ad8f5f68514ee892a2ea96adac371513345f1f595daa55f5ead3142b188a631",
       "input_domain": {
         "identity": "4c57fabb3d0a37f01e4a5c942cfe186b",
         "declaration": {
@@ -47,15 +47,15 @@
         "bound": 60,
         "signal": null,
         "cpu_s": [
-          33.8,
-          37
+          32.9,
+          32.9
         ],
-        "reason": "node used 33.8 and 37 s of its 60 s CPU bound; a count needs both runs within half of it (30 s)"
+        "reason": "node used 32.9 and 32.9 s of its 60 s CPU bound; a count needs both runs within half of it (30 s)"
       },
       "revision": {
         "entry": "92d455d6cb81629eaf89d9ba4cc1add3c321a4a6cb50f4dad15efaec91388a39",
         "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
-        "producer": "94cc053ca0b79ba660f390483de39400c398699778cdf323b204706878ba5871",
+        "producer": "7ff437fe74de8a44455e096bfd2634c7f5c950b0c33a158acd8de46c73bc5e21",
         "policy": "107a794ccdddc63115352b76fec22bcf4edcc9bd27929c408f6d4885db52f8da"
       }
     }
