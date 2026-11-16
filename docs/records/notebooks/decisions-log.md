@@ -3568,3 +3568,17 @@ of the caller's separator spelling. The first real delta's five product digests
 were exact across the main move; their apply misses came from the trailing slash
 alone, not an overbroad Program. The six-project transport control holds both
 root spellings to the same identities and accepted rows.
+
+## Complete fixture readiness publication (11-16)
+
+The departure fixture's injected runner barrier published `ready.json` with a
+plain write, while its parent waited only for existence before parsing. A
+landing observed the created file before its payload and failed on empty JSON.
+Both readiness and signal records now use the existing durable publication
+owner, staged explicitly. The same generated barrier source serves the real
+normal/cancellation controls and an adversarial child whose payload write is
+paused after opening. The final path stays absent until publication; the
+consumer still reads once after existence, without parse retries. Branding
+the injected fragment lets the existing publication audit inspect code placed
+through a source replacement. Other structured fixture handoffs already use
+the owner; marker-only and joined-completion cases keep their contracts.

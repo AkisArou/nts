@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {createWriteStream,existsSync,readFileSync,writeFileSync} from 'node:fs';
+import {createWriteStream,existsSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {createInterface} from 'node:readline';
 import {startArgs} from '../../agents/agents.ts';
 import {gateEnvironment} from '../canonical-environment.ts';
 import {copyModuleClosure} from '../module-closure-fixture.ts';
@@ -12,30 +13,33 @@ import {ownMemory} from '../test-memory.ts';
 import {fixtureEnvironment} from '../test-environment.ts';
 import {testScratch} from '../test-scratch.ts';
 import {spawnTest,waitFor} from '../test-wait.ts';
+import {generatedJavaScript} from '../generated-javascript.ts';
 import {ownUnit} from './bound-slice.ts';
 
 type Summary={verdict:string;interrupted:string|null;scope_cleanup:{state:string};
   diagnostics:{state:string;workersPressure:{observedAt:string;departedAt:string|null}};steps:{verdict:string}[]};
 
+function departureFence(directory:string):string{return generatedJavaScript(`
+if (!setupFailure) {
+ const fs=await import('node:fs'),{durableRecord}=await import('./durable-record.ts'),directory=${JSON.stringify(directory)};
+ await new Promise(resolve=>{
+  const finish=()=>{if(fs.existsSync(directory+'/release')){watcher.close();process.off('SIGTERM',cancel);resolve();}};
+  const cancel=()=>{durableRecord(directory+'/signal.json',{ownedRootDeparted:scopes.departed()});watcher.close();resolve();};
+  const watcher=fs.watch(directory,finish);process.once('SIGTERM',cancel);
+  durableRecord(directory+'/ready.json',{group:scopes.group,pressure:diagnostics.report().workersPressure});finish();
+ });
+}
+`);}
+
 for(const arm of ['normal','cancel'] as const)test(`an acquired runner root ${arm==='normal'?'closes green':'departs before named cancellation cleanup without becoming green'}`,async t=>{
   const own=testScratch(t,'runner-root-departure-'+arm),repo=join(own,'repo'),run=join(own,'run'),env=fixtureEnvironment(t);
-  copyModuleClosure(['tooling/gate/run.mjs'],repo);
+  copyModuleClosure(['tooling/gate/run.mjs','tooling/gate/durable-record.ts'],repo);
   const entry=join(repo,'tooling/gate/run.mjs'),original=readFileSync(entry,'utf8');
   const marker='if (!setupFailure) {\n  try { await reserveMemory(); }';assert.equal(original.split(marker).length,2);
   // Pause only after the actual root and first pressure endpoint were acquired.
   // There is no active step, and cancellation retains the production signal and
   // summary owners. The normal arm releases the same barrier without a signal.
-  const fence=`
-if (!setupFailure) {
- const fs=await import('node:fs'),directory=${JSON.stringify(own)};
- await new Promise(resolve=>{
-  const finish=()=>{if(fs.existsSync(directory+'/release')){watcher.close();process.off('SIGTERM',cancel);resolve();}};
-  const cancel=()=>{fs.writeFileSync(directory+'/signal.json',JSON.stringify({ownedRootDeparted:scopes.departed()}));watcher.close();resolve();};
-  const watcher=fs.watch(directory,finish);process.once('SIGTERM',cancel);
-  fs.writeFileSync(directory+'/ready.json',JSON.stringify({group:scopes.group,pressure:diagnostics.report().workersPressure}));finish();
- });
-}
-`;
+  const fence=departureFence(own);
   writeFileSync(entry,original.replace(marker,fence+'\n'+marker));
   const listed=spawnTest('sh',[fileURLToPath(new URL('../all.sh',import.meta.url)),'--list'],{cwd:repo,env,encoding:'utf8'});
   assert.equal(listed.status,0,listed.stderr);
@@ -85,4 +89,55 @@ else exit 0; fi
     // files still used by the runner or its resource reporters.
     try{if(!result)stop();}finally{await closed;}
   }
+});
+
+test('departure readiness and signal records stay private until payload output completes',async t=>{
+ const own=testScratch(t,'departure-record-publication'),repo=join(own,'repo'),env=fixtureEnvironment(t);
+ copyModuleClosure(['tooling/gate/durable-record.ts'],repo);
+ const entry=join(repo,'tooling/gate/departure-publication.mjs');
+ writeFileSync(entry,generatedJavaScript(`import * as fs from 'node:fs';
+import {mock} from 'node:test';
+let opened=0;
+const put=(target,bytes,options)=>{
+ const borrowed=typeof target==='number',fd=borrowed?target:fs.openSync(target,'w');
+ try{
+  process.stdout.write(JSON.stringify({opened:++opened})+'\\n');
+  fs.readSync(0,Buffer.alloc(1),0,1,null);
+  fs.writeFileSync(fd,bytes,options);
+ }finally{if(!borrowed)fs.closeSync(fd);}
+};
+const facade={...fs.default,writeFileSync:put},exports={...fs,default:facade,writeFileSync:put};
+if('module.exports' in exports)exports['module.exports']=facade;
+mock.module('node:fs',{exports});
+const setupFailure=false,scopes={group:'owned-group',departed:()=>true},diagnostics={report:()=>({workersPressure:{departedAt:null}})};
+`)+departureFence(own));
+ const name='departure-publication-'+randomUUID(),unit='nts-agent-'+name+'.service',parent=ownUnit();assert.ok(parent);
+ const args=startArgs(name,[process.execPath,'--experimental-test-module-mocks',entry],env,repo);
+ args.splice(args.indexOf('--'),0,'--wait','--pipe','-p','PartOf='+parent);
+ const child=spawn('systemd-run',args,{cwd:repo,env,stdio:['pipe','pipe','pipe']});
+ let output='',ended=false;const opened:number[]=[];
+ child.stderr.on('data',bytes=>output+=String(bytes));
+ createInterface({input:child.stdout}).on('line',line=>{opened.push((JSON.parse(line) as {opened:number}).opened);});
+ const closed=new Promise<{code:number|null;signal:NodeJS.Signals|null}>((resolve,reject)=>{
+  child.once('error',reject);child.once('close',(code,signal)=>{ended=true;resolve({code,signal});});
+ });
+ const ctl=(verb:string)=>{const result=spawnTest('systemctl',['--user',verb,...(verb==='kill'?['--signal=SIGTERM']:[]),unit],{env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
+ try{
+  for(const [index,name]of ['ready.json','signal.json'].entries()){
+   await waitFor('departure publisher opened '+name,()=>opened.length>index,{stopped:()=>ended?output||'publisher exited':undefined});
+   assert.equal(opened[index],index+1);const target=join(own,name);
+   assert.equal(existsSync(target),false,'the final departure record is absent while its payload is incomplete');
+   const pending=readdirSync(own).filter(file=>file.startsWith(name+'.'));assert.equal(pending.length,1);
+   assert.equal(readFileSync(join(own,pending[0]!)).length,0,'the producer is paused before any payload byte');
+   child.stdin.write('x');
+   await waitFor('complete departure publication '+name,()=>existsSync(target),{stopped:()=>ended?output||'publisher exited':undefined});
+   const value=JSON.parse(readFileSync(target,'utf8'));
+   assert.deepEqual(value,index===0?{group:'owned-group',pressure:{departedAt:null}}:{ownedRootDeparted:true});
+   if(index===0)ctl('kill');
+  }
+  assert.deepEqual(await closed,{code:0,signal:null},output);
+  assert.deepEqual(readdirSync(own).filter(file=>/^((ready|signal)\.json)\./.test(file)),[]);
+ }finally{
+  child.stdin.end();if(!ended)ctl('stop');await closed;
+ }
 });

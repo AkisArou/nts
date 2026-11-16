@@ -1288,6 +1288,13 @@ the first node task.
 
 ## Decisions
 
+- **Cross-process fixture records are published atomically.** A consumer may
+  wait for a record's existence and read its complete bytes once. Producers use
+  `durableRecord`, explicitly included in their staged executable inputs;
+  injected command fragments carry the `generatedJavaScript` source brand so
+  the publication audit checks them before execution. Existence-only markers
+  and deliberately incomplete stream controls retain their separate contracts.
+
 - **A record root has one identity across command modes.** Recording and applying
   use the entry's single resolved root. Type-project identities classify local
   paths with relative containment, so equivalent root spellings cannot turn

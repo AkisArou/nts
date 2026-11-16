@@ -67,6 +67,13 @@ function second(){const script="console.log('safe')";writeFileSync('b.mjs',scrip
   assert.equal(inspect(source).length,1);
 });
 
+test('a branded fragment inserted into a staged command retains publication checking',()=>{
+ const patched=(body:string)=>`import{writeFileSync}from'node:fs';import{generatedJavaScript}from'./generated-javascript.ts';
+const fragment=generatedJavaScript(${JSON.stringify(body)});writeFileSync('run.mjs',original.replace(marker,fragment));`;
+ assert.equal(inspect(patched(writer)).length,1);
+ assert.deepEqual(inspect(patched("import{durableRecord}from'./durable-record.ts';durableRecord('ready.json',{ready:true});")),[]);
+});
+
 test('only the sealed oracle inline writer with its complete atomic shape is allowed',()=>{
   const file='tooling/census/output-oracle.ts',source=readFileSync(new URL('../census/output-oracle.ts',import.meta.url),'utf8');
   assert.deepEqual(inspectRecordPublications(file,source),[]);
