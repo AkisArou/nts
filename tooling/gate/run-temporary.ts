@@ -252,7 +252,8 @@ export function discardRunTemporary(owned:RunTemporary,home:string):void {
 }
 
 /** Remove a green run's temporary folder, or close a red one's and prune the closed failures with `prune`. */
-export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean,prune:PruneOptions={}) {
+export type RunTemporaryClose={path:string;state:string;enclosing?:string;pruning?:ReturnType<typeof pruneRunTemporaries>;oracle_images?:OracleImageDisposition[];error?:string};
+export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean,prune:PruneOptions={}):RunTemporaryClose {
   try {
     if (green) {discardRunTemporary(owned,home);return {path:owned.path,state:"removed after green"};}
     assertRunTemporary(owned,home);

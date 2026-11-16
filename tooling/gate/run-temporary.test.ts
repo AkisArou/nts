@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {existsSync, mkdirSync, readdirSync, readFileSync, renameSync, symlinkSync, writeFileSync, chmodSync, lstatSync, rmSync} from "node:fs";
 
 import {join} from "node:path";
-import {removable, captureRunTemporary, finishRunTemporary, pruneRunTemporaries,createRunOracleImage} from "./run-temporary.ts";
+import {removable, captureRunTemporary, finishRunTemporary, pruneRunTemporaries,createRunOracleImage,type OracleImageDisposition} from "./run-temporary.ts";
 import {newTestScratch} from "./test-scratch.ts";
 // The free-disk reading is injected: what these tests decide must not depend
 // on the machine's own free disk.
@@ -26,7 +26,7 @@ function duRecorder(t:{after(fn:()=>void):void},home:string) {
 function closedEntries(home:string) {
  const directory=join(home,".cache/nts-gate/closed-temporaries");
  return existsSync(directory)?readdirSync(directory).filter(name=>name.endsWith(".json")).map(name=>{
-  const file=join(directory,name),entry=JSON.parse(readFileSync(file,"utf8")) as {owned:ReturnType<typeof captureRunTemporary>;closed:number;bytes?:number};
+  const file=join(directory,name),entry=JSON.parse(readFileSync(file,"utf8")) as {owned:ReturnType<typeof captureRunTemporary>;closed:number;bytes?:number;oracle_images?:OracleImageDisposition[]};
   return {file,entry};
  }):[];
 }
@@ -200,7 +200,7 @@ test('a failed close drops its acquired image and records its path and bytes whi
  assert.equal(result.state,'retained after red');assert.equal(existsSync(image.tree),false);
  assert.deepEqual(result.oracle_images,[{path:image.tree,bytes:imageBytes,state:'dropped'}]);
  for(const [name,bytes]of image.identities){assert.equal(readFileSync(join(image.parent,name),'utf8'),bytes);assert.equal(lstatSync(join(image.parent,name)).mode&0o777,0o444);}
- const entry=closedEntries(f.home)[0]!.entry as {bytes:number;oracle_images:unknown};
+ const entry=closedEntries(f.home)[0]!.entry;assert.ok(entry.bytes!==undefined);
  assert.deepEqual(entry.oracle_images,result.oracle_images);assert.equal(entry.bytes,allocated(owned.path));assert.ok(before-entry.bytes>2**23);
  const repeated=finishRunTemporary(owned,f.home,false,roomy);assert.deepEqual(repeated.oracle_images,result.oracle_images);
  t.diagnostic(JSON.stringify({beforeBytes:before,retainedBytes:entry.bytes,dropped:result.oracle_images}));
@@ -261,7 +261,7 @@ test('a live image holder stays registered while a valid sibling drops, then its
   const kept=finishRunTemporary(owned,f.home,false,roomy);assert.equal(kept.state,'retained after red');
   assert.match(kept.oracle_images!.find(row=>row.path===image.tree)!.state,/kept: process .* owns/);assert.equal(lstatSync(image.tree).mode&0o777,0o555);
   assert.equal(kept.oracle_images!.find(row=>row.path===sibling.tree)!.state,'dropped');assert.equal(existsSync(sibling.tree),false);
-  const entry=closedEntries(f.home)[0]!.entry as {bytes:number;oracle_images:unknown};assert.deepEqual(entry.oracle_images,kept.oracle_images);assert.equal(entry.bytes,allocated(owned.path));
+  const entry=closedEntries(f.home)[0]!.entry;assert.deepEqual(entry.oracle_images,kept.oracle_images);assert.equal(entry.bytes,allocated(owned.path));
  }finally{child.stdin.end();const [status,signal]=await closed;assert.equal(status,0);assert.equal(signal,null);}
  const result=finishRunTemporary(owned,f.home,false,roomy);assert.equal(result.state,'retained after red');assert.equal(existsSync(image.tree),false);
 });
