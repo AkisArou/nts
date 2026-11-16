@@ -323,7 +323,7 @@ test("the explicit old-environment comparison is never landing evidence",t=>{
   assert.equal(old.report.canonical,false);assert.equal(old.env.NODE_OPTIONS,"--max-old-space-size=8192");
   assert.equal(old.env.TMPDIR,join(run,"tmp"));
   const expected:NodeJS.ProcessEnv={...launcher,TMPDIR:join(run,"tmp"),NODE_COMPILE_CACHE:join(userInfo().homedir,".cache/nts/node-compile-cache/v1"),XDG_CACHE_HOME:join(base.HOME,".cache"),NTS_GATE_RUN_DIR:run,NTS_ORACLE_TYPESCRIPT:oracleToolchainLocation()};
-  expected.NTS_ORACLE_DEPENDENCIES=JSON.stringify(dependencyCapability(new URL('../../',import.meta.url).pathname,join(run,'tmp','oracle-dependencies')));
+  expected.NTS_ORACLE_DEPENDENCIES=JSON.stringify(dependencyCapability(new URL('../../',import.meta.url).pathname,join(run,'tmp','oracle-dependencies'),{kind:'standalone'},null,launcher,{owned:old.temporary,home:base.HOME}));
   delete expected[ENVIRONMENT_EXPERIMENT];
   assert.deepEqual(Object.fromEntries(Object.entries(old.env).filter(([name])=>name!==ENVIRONMENT_CONTEXT)),expected);
   assert.deepEqual(old.report.dropped,[ENVIRONMENT_EXPERIMENT]);
