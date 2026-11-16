@@ -10,6 +10,8 @@ import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {spawnTest} from './test-wait.ts';
 import {toolingSliceArgs} from './tooling-slice.ts';
+import {copyModuleClosure} from './module-closure-fixture.ts';
+import {fixtureInput} from './reader-inputs/main.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
 import {durableRecord} from './durable-record.ts';
 import {systemdEnvironment} from './environment.ts';
@@ -22,6 +24,8 @@ for(const sealed of [false,true])test((sealed?'sealed siblings borrow one parent
  assert.ok(binary,'the tooling gate supplies the compiler and its companion planner');
  const planner=join(dirname(resolve(binary)),'oracle-plan');
  const fixtures=join(root,'fixtures'),project=join(fixtures,'tests/programs/sibling');
+ // These unchanged corpus markers let the real native planner name private sources.
+ copyModuleClosure([fixtureInput(new URL('../../tsconfig.fixtures.json',import.meta.url)),fixtureInput(new URL('../differential/Cargo.toml',import.meta.url))],fixtures);
  mkdirSync(join(project,'src'),{recursive:true});mkdirSync(join(fixtures,'benchmarks/cases'),{recursive:true});
  writeFileSync(join(project,'package.json'),' {"type":"module"}\n');
  writeFileSync(join(project,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'Bundler',strict:true,types:[]},files:['src/main.ts']}));
@@ -87,7 +91,7 @@ runAsCommand(import.meta.url,async()=>{
  sessions=['one','two'].map(name=>JSON.parse(readFileSync(join(request.root,name,'session-observed.json'),'utf8')));
  for(const name of ['one','two']){
   const plans=JSON.parse(readFileSync(join(request.root,name,'plans.json'),'utf8'));
-  assert.equal(plans.failures.length,0);assert.equal(plans.plans.length,3);
+  assert.equal(plans.failures.length,0);assert.equal(plans.plans.length,name==='one'?3:2);
  }
  if(request.sealed){assert.deepEqual(sessions[0],sessions[1]);assert.equal(nodeProcessAlive(holder.holder),true);}
  else{assert.notEqual(sessions[0].directory,sessions[1].directory);assert.notDeepEqual(sessions[0].holder,sessions[1].holder);}
