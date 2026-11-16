@@ -57,6 +57,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {runAsCommand,registerCommandCloser} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
+import {assignOwnedValues} from ${JSON.stringify(new URL('./environment-values.ts',import.meta.url).href)};
 import {gateEnvironment,sealOracleRun} from ${JSON.stringify(new URL('./canonical-environment.ts',import.meta.url).href)};
 import {hostEnvironment} from ${JSON.stringify(new URL('./host-environment.ts',import.meta.url).href)};
 import {discardRunTemporary} from ${JSON.stringify(new URL('./run-temporary.ts',import.meta.url).href)};
@@ -64,26 +66,33 @@ import {nodeProcessAlive} from ${JSON.stringify(new URL('../differential/oracle-
 import {closeNodeResolutionSession} from ${JSON.stringify(new URL('../differential/oracle-resolution.ts',import.meta.url).href)};
 import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
 const request=JSON.parse(readFileSync(${JSON.stringify(request)},'utf8'));
-let planned=gateEnvironment(hostEnvironment(request.env),{run:join(request.root,'run'),oracleAdmissionContext:'gate',owned:{...request.memory,NTS_BIN:request.binary}}),holder,closed;
-try{
+runAsCommand(import.meta.url,async()=>{
+ let planned=gateEnvironment(hostEnvironment(request.env),{run:join(request.root,'owner'),oracleAdmissionContext:'gate',owned:{...request.memory,NTS_BIN:request.binary}}),holder,closed,sessions,passed=false;
+ registerCommandCloser('sibling resolver fixtures',{close:async()=>{
+  const errors=[];
+  try{if(holder)await closeNodeResolutionSession(holder);}catch(error){errors.push(error);}
+  try{await closed;}catch(error){errors.push(error);}
+  try{if(passed)for(const session of sessions)assert.equal(nodeProcessAlive(session.holder),false,'all helpers joined before returning');}catch(error){errors.push(error);}
+  try{discardRunTemporary(planned.temporary,planned.env.HOME,planned.observations);}catch(error){errors.push(error);}
+  if(errors.length)throw new AggregateError(errors,'sibling resolver fixture drain failed');
+  if(passed)durableRecord(join(request.root,'drained.json'),{sealed:request.sealed,sessions,drained:true});
+ }});
+
  if(request.sealed)planned=await sealOracleRun(planned,undefined,(session,completion)=>{holder=session;closed=completion;});
  const args=request.sealed?[request.script]:[request.canonical,'--pinned',request.script];
- const result=spawnSync(request.sealed?'sh':process.execPath,args,{env:planned.env,encoding:'utf8',maxBuffer:8*1024**2});
+ const launchEnv={...planned.env};
+ if(!request.sealed)assignOwnedValues(launchEnv,{NTS_GATE_RUN_DIR:join(planned.temporary.path,'cli')});
+ const result=spawnSync(request.sealed?'sh':process.execPath,args,{env:launchEnv,encoding:'utf8',maxBuffer:8*1024**2});
  assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.signal,null);
- const sessions=['one','two'].map(name=>JSON.parse(readFileSync(join(request.root,name,'session-observed.json'),'utf8')));
+ sessions=['one','two'].map(name=>JSON.parse(readFileSync(join(request.root,name,'session-observed.json'),'utf8')));
  for(const name of ['one','two']){
   const plans=JSON.parse(readFileSync(join(request.root,name,'plans.json'),'utf8'));
   assert.equal(plans.failures.length,0);assert.equal(plans.plans.length,3);
  }
  if(request.sealed){assert.deepEqual(sessions[0],sessions[1]);assert.equal(nodeProcessAlive(holder.holder),true);}
  else{assert.notEqual(sessions[0].directory,sessions[1].directory);assert.notDeepEqual(sessions[0].holder,sessions[1].holder);}
- if(holder){await closeNodeResolutionSession(holder);await closed;holder=undefined;}
- for(const session of sessions)assert.equal(nodeProcessAlive(session.holder),false,'all helpers joined before returning');
- durableRecord(join(request.root,'drained.json'),{sealed:request.sealed,sessions,drained:true});
-}finally{
- if(holder){await closeNodeResolutionSession(holder);await closed;}
- discardRunTemporary(planned.temporary,planned.env.HOME,planned.observations);
-}
+ passed=true;
+});
 `));
  const result=spawnTest('systemd-run',['--user','--unit='+unit,'--collect','--wait','--pipe','-p','LimitCORE=0',...toolingSliceArgs(env),...systemdEnvironment(env),'--',process.execPath,controller],{env,encoding:'utf8',maxBuffer:16*1024**2});
  assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.signal,null);
