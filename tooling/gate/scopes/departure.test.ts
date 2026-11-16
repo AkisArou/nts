@@ -138,6 +138,11 @@ const setupFailure=false,scopes={group:'owned-group',departed:()=>true},diagnost
   assert.deepEqual(await closed,{code:0,signal:null},output);
   assert.deepEqual(readdirSync(own).filter(file=>/^((ready|signal)\.json)\./.test(file)),[]);
  }finally{
-  child.stdin.end();if(!ended)ctl('stop');await closed;
+  if(!ended){
+   // Deliver EOF to the paused publisher before a synchronous unit-stop wait.
+   await new Promise<void>(resolve=>child.stdin.end(resolve));
+   if(!ended)ctl('stop');
+  }
+  await closed;
  }
 });
