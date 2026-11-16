@@ -882,6 +882,7 @@
         "tooling/gate/oracle-entry-audit.test.ts",
         "tooling/gate/oracle-entry-audit.ts",
         "tooling/gate/oracle-entry-options.ts",
+        "tooling/gate/oracle-entry-sessions.test.ts",
         "tooling/gate/oracle-entry.ts",
         "tooling/gate/oracle-record-identities.test.ts",
         "tooling/gate/oracle-record-identities.ts",
@@ -1474,7 +1475,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:1713f6914d434ddf30cba68dde395f59b95f13faab13f2b5f0c7dfe46f101c00"
+      "source": "sha256:510eb45c51c17eabea4025a35b7d73c76b8eca75adafd20d9fdce7febfb5ce76"
     }
   }
 }
