@@ -34,7 +34,7 @@ import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // landing check first, then agents' work, then the full check. The longest
 // prefix of the queue that fits together is admitted. A non-fitting head
 // blocks new admissions and ordinary growth. Fitting draining growth of an
-// admitted lower owner may backfill: it completes already-started work whose
+// admitted equal- or lower-priority owner may backfill: it completes already-started work whose
 // release makes room for the head. The caller forbids new work while yielding.
 //
 // **A request the machine cannot give now holds nobody.** One that could not
@@ -416,7 +416,7 @@ export function queueOrder(a: Pick<Queued, "priority" | "seq" | "order">, b: Pic
  * The requests that may start now, with `room` bytes free beyond what is
  * pending and the floor: the longest prefix of the queue whose requests fit
  * together. Behind its first nonfit, only fitting draining growth of an
- * admitted lower-priority owner may finish. Fresh admissions and ordinary
+ * admitted equal- or lower-priority owner may finish. Fresh admissions and ordinary
  * growth never bypass that head, which retains its priority and place.
  */
 export function admissible(room: number, queue: readonly Queued[]): Set<string> {
@@ -425,7 +425,7 @@ export function admissible(room: number, queue: readonly Queued[]): Set<string> 
   let blocked: Queued | undefined;
   for (const request of [...queue].sort(queueOrder)) {
     if (blocked !== undefined && !(request.draining === true && typeof request.grows === 'string'
-      && rank(request.priority) > rank(blocked.priority))) continue;
+      && rank(request.priority) >= rank(blocked.priority))) continue;
     if (request.bytes > left) { blocked ??= request; continue; }
     left -= request.bytes;
     admitted.add(request.id);

@@ -86,8 +86,8 @@ test("the landing check outranks agents' work, which outranks the full check, wh
 // when the agent's higher-priority growth arrived. Both retained live work.
 const growthStalemate = {
   room: 2_513_064_512,
-  higher: { ...q("higher-growth", 3, 4), grows: "higher-owner" },
-  lower: { ...q("lower-growth", 2, 3, "full-check"), grows: "lower-owner", draining: true },
+  higher: { ...q("higher-growth", 3, 4), order: 1, grows: "higher-owner" },
+  lower: { ...q("lower-growth", 2, 3, "full-check"), order: 2, grows: "lower-owner", draining: true },
   higherReserved: 18_253_611_008, higherUsed: 1_540_480,
   lowerReserved: 4_218_421_248,
 };
@@ -163,11 +163,11 @@ function fixture(t: TestContext): Fixture {
   };
 }
 
-for (const order of ['before', 'after'] as const) test(`an admitted lower owner drains with its growth queued ${order} the blocker`, async t => {
+for (const priority of ['full-check', 'agent'] as const) for (const order of ['before', 'after'] as const) test(`an admitted ${priority} owner drains with its growth queued ${order} the agent blocker`, async t => {
   const f = fixture(t);
   f.memory(64);
   const higher = await f.ask({ bytes: 17 * GiB, what: 'higher', priority: 'agent' });
-  const lower = await f.ask({ bytes: 4 * GiB, what: 'lower', priority: 'full-check' });
+  const lower = await f.ask({ bytes: 4 * GiB, what: 'lower', priority });
   f.used.set('higher', higher.bytes); f.used.set('lower', lower.bytes);
   let lowerGrowth: Promise<void> | undefined;
   if (order === 'before') {
@@ -178,13 +178,13 @@ for (const order of ['before', 'after'] as const) test(`an admitted lower owner 
   const higherGrowth = higher.grow(3 * GiB);
   await waitFor('higher growth is blocked', () => readLedger(f.dir).waiting.some(row => row.grows === higher.id));
   let freshGranted = false;
-  const fresh = f.ask({ bytes: GiB / 4, what: 'new work', priority: 'full-check' }).then(held => { freshGranted = true; return held; });
+  const fresh = f.ask({ bytes: GiB / 4, what: 'new work', priority }).then(held => { freshGranted = true; return held; });
   await waitFor('fresh work waits behind the blocker', () => f.of('new work').some(row => !row.admitted));
   f.memory(4.5);
   if (order === 'after') lowerGrowth = lower.grow(2 * GiB, { draining: true });
   assert.ok(lowerGrowth); await lowerGrowth;
   assert.equal(lower.bytes, 6 * GiB);
-  assert.equal(lower.outranked(), true, 'draining grants do not authorize new work');
+  assert.equal(lower.outranked(), priority === 'full-check', 'draining grants preserve the priority yield rule');
   assert.equal(freshGranted, false, 'new work cannot use the remaining half GiB');
   assert.ok(readLedger(f.dir).waiting.some(row => row.grows === higher.id));
   lower.release(); await lower.closed;

@@ -3457,6 +3457,7 @@ preparation and the normal supervisor. Pure delta application prepares no
 oracle. This avoids pulling every family's inputs into a consumer of one
 family, while retaining the existing record formats, row rules and order.
 ## Started work may drain past a non-fitting higher request (11-16)
+## Started work may drain past a non-fitting head (11-16)
 
 #804's supplied state has a non-fitting agent growth ahead of a fitting full-
 check growth. Both retain started work, so strict prefix admission and global
@@ -3466,7 +3467,7 @@ the exact deficit; ticket age also misses the reverse arrival order.
 The runner owns the finite cohort: steps already started when it yields may
 finish their case lists, but pending steps cannot start. Only that cohort's
 growth is marked draining, with pending-step reservations and withhold excluded.
-The ledger may backfill fitting draining growth of admitted lower owners while
+The ledger may backfill fitting draining growth of admitted owners at equal or lower priority while
 the head does not fit. New admissions and ordinary growth retain the strict
 priority/FIFO rule. Mixed tickets are joined before drain-only replacement.
 

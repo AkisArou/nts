@@ -1025,8 +1025,8 @@ the tooling strict checker owns the source's type checking.
   yield decisions, status and child handoffs. A higher-rank landing still
   preempts an admitted agent job and its borrowers: only live work and its
   margin remain promised to that landing. Independent new jobs retain FIFO.
-  A non-fitting head permits fitting draining growth of admitted lower
-  owners. The runner declares only its already-started finite step cohort;
+  A non-fitting head permits fitting draining growth of admitted owners
+  at equal or lower priority. The runner declares only its already-started finite step cohort;
   it starts no new steps while yielding. Draining demand excludes pending-step
   reservations and withheld resources. Outstanding drained bytes remain a
   full promise for higher decisions, survive ordinary growth, and return first
@@ -1300,8 +1300,8 @@ the first node task.
   composition controls retain the complete production table
   ([log](records/notebooks/decisions-log.md#independent-record-families-11-16)).
 
-- **Started work may drain past a non-fitting higher request.** The ledger
-  backfills only explicitly draining growth of admitted lower owners, in its
+- **Started work may drain past a non-fitting head.** The ledger
+  backfills only explicitly draining growth of admitted owners at equal or lower priority, in its
   existing order and room. New admissions and ordinary growth stay queued.
   Yielding runners keep only their live started cohort eligible for case
   leases and growth, with no pending-step demand. A mixed ticket is joined
@@ -1309,7 +1309,7 @@ the first node task.
   priority discount and new ancestor draws until shrink returns them; observed
   consumption is still counted once. The head retains its place, and every
   completed growth reschedules on the next event-loop turn
-  ([log](records/notebooks/decisions-log.md#started-work-may-drain-past-a-non-fitting-higher-request-11-16)).
+  ([log](records/notebooks/decisions-log.md#started-work-may-drain-past-a-non-fitting-head-11-16)).
 
 - **Gate memory adjustment retains pending demand.** Shrink and growth use
   the same demand from current grants, withheld memory and running steps'
