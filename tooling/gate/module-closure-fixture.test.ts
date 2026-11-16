@@ -1024,3 +1024,17 @@ test('fixture local type traversal follows relative triple-slash paths and refus
   f.write('entry.ts','/// <reference path="node_modules/dependency/index.d.ts" />\nexport const value=1;');
   assert.throws(()=>copyFixtureProject(project,join(f.source,'..','package-destination'),{sourceRoot:f.source}),/local type input enters an installed package/);
 });
+
+
+test('local type source staging never validates a runtime reader while a real runtime edge still does',t=>{
+  const f=fixture(t);
+  f.write('tsconfig.json',JSON.stringify({files:['entry.ts'],include:[]}));
+  f.write('entry.ts',"import type {A} from './reader.ts';export const value=1;");
+  f.write('reader.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';export type A=number;export function reader(roleVariable){return projectConfig(new URL('./missing.json',import.meta.url),roleVariable);}");
+  f.write('tooling/gate/reader-inputs/main.ts','export function projectConfig(url,role){return {url,role};}');
+  const files=copyFixtureProject(fixtureInput(pathToFileURL(join(f.source,'tsconfig.json')),{dataNamespaces:{}}),f.destination,{sourceRoot:f.source});
+  assert.deepEqual(files,['entry.ts','reader.ts','tooling/gate/reader-inputs/main.ts','tsconfig.json']);
+  assert.equal(existsSync(join(f.destination,'missing.json')),false);
+  f.write('runtime.ts',"import './reader.ts';");
+  assert.throws(()=>copyModuleClosure(['runtime.ts'],join(f.source,'..','runtime-destination'),{sourceRoot:f.source}),/project input needs a literal.*role/);
+});

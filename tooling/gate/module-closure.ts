@@ -88,6 +88,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     throw Error('unsupported host module Node recipe: '+String(options.nodeMajor));
   const references = new Map<string,ModuleDeclarations>();
   const sourceInputs=new Map<string,string>();
+  const sourceTexts=new Map<string,string>();
   // The same graph owns parsed source bytes and their source-file identity.
   // Namespace/host promotion reuses that identity without repeating realpath.
   // Captured protocol observations have their own fresh read/validation path.
@@ -121,20 +122,33 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   let api:import('typescript/sync').API|undefined,toolchain:Capture|undefined,projects:ReturnType<typeof projectInputOwner>|undefined;
   let closed=false,batching=false;
   const installed=()=>toolchain??=captureToolchain(resolve(require.resolve('typescript/package.json'),'..'));
+  function parseSource<T>(path:string,read:(facts:SourceFacts)=>T):T{
+    let source=sourceTexts.get(path);
+    if(source===undefined){
+      const bytes=readFileSync(path);source=bytes.toString('utf8');sourceTexts.set(path,source);
+      sourceInputs.set(relative(root,path).split(sep).join('/'),createHash('sha256').update(bytes).digest('hex'));
+    }
+    api??=new API({cwd:root});
+    const lease=api.createSourceFile(path,source);
+    try{return read(new SourceFacts(relative(root,path).split(sep).join('/'),source,lease.sourceFile));}
+    finally{lease.dispose();}
+  }
+  function localImports(path:string):readonly string[]{
+    const known=localTypeImports.get(path);if(known)return known;
+    if(options.declarations?.has(relative(root,path).split(sep).join('/')))throw Error('local type inputs require parsed source facts: '+path);
+    return parseSource(path,facts=>{const imports=facts.localTypeImports();localTypeImports.set(path,imports);return imports;});
+  }
   function parsed(path: string) {
     const known = references.get(path);
     if (known) return known;
     const supplied=options.declarations?.get(relative(root,path).split(sep).join('/'));
     if(supplied){references.set(path,supplied);hostImports.set(path,new Set(supplied.imports));return supplied;}
-    api??=new API({cwd:root});
-    const bytes=readFileSync(path),source=bytes.toString('utf8'),lease=api.createSourceFile(path,source);
-    sourceInputs.set(relative(root,path).split(sep).join('/'),createHash('sha256').update(bytes).digest('hex'));
-    try {
-      const facts=new SourceFacts(relative(root,path).split(sep).join('/'),source,lease.sourceFile),result=facts.moduleDeclarations();
+    return parseSource(path,facts=>{
+      const result=facts.moduleDeclarations();
       hostImports.set(path,new Set(facts.hostModuleImports()));
       localTypeImports.set(path,facts.localTypeImports());
       references.set(path,result);return result;
-    } finally {lease.dispose();}
+    });
   }
   type ProjectRead=(request:ProjectRequest,context:ReaderContext)=>ProjectInputs;
   const readProject:ProjectRead=request=>(projects??=projectInputOwner(root,installed,options.generatedTemporaryParent,options.dependencyCatalog??null)).read([request]);
@@ -411,9 +425,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       // later production import must still restore its real data membership.
       if(!executableModuleSource(path)&&!options.declarations?.has(name))return;
       if(context.localTypes){
-        parsed(path);
-        const imports=localTypeImports.get(path);
-        if(!imports)throw Error('local type inputs require parsed source facts: '+name);
+        const imports=localImports(path);
         for(const specifier of imports){
           if(!/^\.\.?\//.test(specifier)||specifier.includes('\\'))throw Error('local type reference must name a relative source file: '+name+': '+specifier);
           const target=fileURLToPath(new URL(specifier,pathToFileURL(path)));
@@ -462,7 +474,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     batching=true;
     // Parser references are an intra-walk optimization too. Another explicit
     // batch must parse changed modules and enumerate its current tracked set.
-    references.clear();sourceInputs.clear();ownedSources.clear();hostImports.clear();localTypeImports.clear();
+    references.clear();sourceInputs.clear();sourceTexts.clear();ownedSources.clear();hostImports.clear();localTypeImports.clear();
     tracked=undefined;directoryFiles.clear();memberFiles.clear();metadataIndex=undefined;
     const discoveries=new Map<string,ProjectInputs>();
     const batchRead:ProjectRead=(request,context)=>{
