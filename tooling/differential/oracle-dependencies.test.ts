@@ -136,7 +136,7 @@ test('an ordinary sealed producer image is registered to its run and a failed cl
   assert.ok(existsSync(join(tree,'node_modules')));assert.equal(await captureDependencies(sealed,undefined,canonicalFixture(sealed)),ready,'a ready hit owns no second image');
   const result=finishRunTemporary(owned,f.parent,false,{freeBytes:()=>Number.MAX_SAFE_INTEGER});
   assert.equal(result.state,'retained after red');assert.equal(existsSync(tree),false);assert.deepEqual(readFileSync(ready),readyBytes);assert.deepEqual(readFileSync(semantic),semanticBytes);
-  assert.equal(result.oracle_images?.length,1);assert.equal(result.oracle_images[0]!.path,tree);assert.ok(result.oracle_images[0]!.bytes>0);
+  assert.equal(result.oracle_images?.length,1);const dropped=result.oracle_images?.[0];assert.ok(dropped);assert.equal(dropped.path,tree);assert.equal(dropped.state,'dropped');assert.ok(dropped.bytes!==null&&dropped.bytes>0);
 });
 
 test('committing an unrelated file preserves an existing dependency image',async t=>{
