@@ -9,7 +9,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { acquire, holder, withLock } from "./lock.ts";
-import { ensureService, Queue, serviceRunning, submit, WithdrawalRequested, WithdrawalWatch } from "./queue.ts";
+import { ensureService, Queue, serviceRunning, submit } from "./queue.ts";
+import {WithdrawalRequested,WithdrawalWatch} from './withdrawal-watch.ts';
 import { scratchRepo } from "./scratch-repo.ts";
 
 const home = (t: { after: (f: () => void) => void }) => {

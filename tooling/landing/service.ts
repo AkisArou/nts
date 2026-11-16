@@ -30,7 +30,8 @@ import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingI
 import { issueOfBranch } from "../tasks/branch.ts";
 import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
-import { createWithdrawalWatch,Queue, WithdrawalWatch, type Checking, type Entry, type Result } from "./queue.ts";
+import { Queue, type Checking, type Entry, type Result } from "./queue.ts";
+import {createWithdrawalWatch,type WithdrawalWatch} from './withdrawal-watch.ts';
 import {landingLayout} from './layout.ts';
 import { recoverLandingCancellation,removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";

@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {fixture} from './run-fixture.ts';
 import {runLanding,launcherEnvironment} from './run.ts';
 import {candidateCommandAsync} from './candidate-environment.ts';
-import {WithdrawalRequested} from './queue.ts';
+import {WithdrawalRequested} from './withdrawal-watch.ts';
 import {readLedger} from '../gate/memory-ledger.ts';
 import {waitFor} from '../gate/test-wait.ts';
 import {ownMemory} from '../gate/test-memory.ts';

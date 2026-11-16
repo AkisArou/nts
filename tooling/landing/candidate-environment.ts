@@ -30,6 +30,10 @@ export function certifyCandidateGroups(directory:string):void{
     names=readdirSync(directory);
   }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
   for(const name of names){
+    // Publication completes before a payload receives its request. A crash
+    // may leave durableRecord's unpublished temporary, which grants no work
+    // and is neither interpreted as a fact nor removed by recovery.
+    if(!name.endsWith('.json'))continue;
     if(!/^[0-9a-f-]{36}\.json$/.test(name))throw Error(`unrecognized candidate group receipt ${join(directory,name)}`);
     const file=join(directory,name);
     if(!lstatSync(file).isFile())throw Error(`candidate group receipt is not a regular file: ${file}`);

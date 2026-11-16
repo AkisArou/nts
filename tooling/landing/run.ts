@@ -56,7 +56,7 @@ import { validContract, type VerdictContract } from "../gate/verdict-contract.ts
 import {readRustRecordDecisions,type RustRecordDecisionAtRevision} from '../gate/rust-selector-decision.ts';
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {fileURLToPath} from 'node:url';
-import {WithdrawalRequested} from './queue.ts';
+import {WithdrawalRequested} from './withdrawal-watch.ts';
 
 export const PROFILE = TEST_PROFILE;
 type BinaryIdentities = Record<string, string | null>;

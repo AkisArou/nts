@@ -20,7 +20,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { join } from "node:path";
 import {treeUsers,describeUsers} from "./tree-users.ts";
 import { Pool } from "./pool.ts";
-import { createWithdrawalWatch,Queue } from "./queue.ts";
+import { Queue } from "./queue.ts";
+import {createWithdrawalWatch} from './withdrawal-watch.ts';
 import type { Ran, RunOptions } from "./run.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import { landingCpuMeasure,landingSelection, type Selection } from "./selection.ts";
@@ -249,6 +250,7 @@ test('a restarted service certifies a persisted held entry whose group is gone a
   const f=service(t),a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
   const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main(),entry=f.queue.take()!;
   const run=join(f.config.home,'runs','interrupted'),groups=join(run,'candidate-groups');mkdirSync(groups,{recursive:true});
+  const pendingFact=join(groups,randomUUID()+'.json.123.'+randomUUID());writeFileSync(pendingFact,'{"unfinished');
   const child=spawn(process.execPath,['-e','process.stdin.resume()'],{detached:true,env:fixtureEnvironment(t),stdio:['pipe','ignore','ignore']});
   const closed=once(child,'close'),group=ownedProcessGroup(child);assert.ok(group);
   t.after(async()=>{child.stdin!.end();await closed;});
@@ -262,16 +264,17 @@ test('a restarted service certifies a persisted held entry whose group is gone a
   assert.deepEqual(result.answered.map(row=>row.state),['withdrawn','landed']);
   assert.equal(f.queue.result(ea.id)?.state,'withdrawn');assert.equal(f.queue.result(eb.id)?.state,'landed');
   assert.deepEqual(prepared,[b.sha],'the cancelled tree was never prepared or replayed');
+  assert.equal(readFileSync(pendingFact,'utf8'),'{"unfinished','recovery leaves unpublished durable-record bytes untouched');
   assert.equal(f.queue.held().length,0);assert.equal(f.queue.status().state,'idle');
 });
 
 test('a watcher fault leaves the current verdict intact, fences a later marker, and takes no next entry',async t=>{
-  const stage=testScratch(t,'landing-watch-fault');copyModuleClosure(['tooling/landing/queue.ts'],stage);
-  const file=join(stage,'tooling/landing/queue.ts'),source=readFileSync(file,'utf8');
+  const stage=testScratch(t,'landing-watch-fault');copyModuleClosure(['tooling/landing/withdrawal-watch.ts'],stage);
+  const file=join(stage,'tooling/landing/withdrawal-watch.ts'),source=readFileSync(file,'utf8');
   const anchor="this.watcher.on('error',error=>this.failed(error));";
   assert.equal(source.split(anchor).length,2);
-  writeFileSync(file,source.replace(anchor,anchor+"\nthis.watcher.on('change',()=>{if(existsSync(join(queue.home,'withdraw','watch-error')))this.watcher.emit('error',Error('controlled inotify failure'));});"));
-  const {WithdrawalWatch:FaultingWatch}:typeof import('./queue.ts')=await import(pathToFileURL(file).href);
+  writeFileSync(file,"import {existsSync as fixtureExists} from 'node:fs';\n"+source.replace(anchor,anchor+"\nthis.watcher.on('change',()=>{if(fixtureExists(join(queue.home,'withdraw','watch-error')))this.watcher.emit('error',Error('controlled inotify failure'));});"));
+  const {WithdrawalWatch:FaultingWatch}:typeof import('./withdrawal-watch.ts')=await import(pathToFileURL(file).href);
   for(const arm of ['green','red','marker'] as const){
     const f=service(t),a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
     const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main();
