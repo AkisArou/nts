@@ -11,6 +11,7 @@ import { useOwnMemory,ownMemory as writeOwnMemory } from "../gate/test-memory.ts
 import {historyFile,writeCostHistory,peakReservation} from "../gate/step-scheduling.ts";
 import {hostObservations} from "../gate/host-observations.ts";
 import { createTokenPool } from "../gate/token-pool.ts";
+import {releaseToken} from "../gate/case-context.ts";
 import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
@@ -318,28 +319,30 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   }
   const rows: any[] = [];
   const reports: string[] = [];
-  await landingBlocker(t);
   const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
   const gate = await gatePool(2);
   t.after(gate.close);
-  let landing: ReturnType<typeof landingAhead> | undefined;
+  const holdStop=new AbortController();let hold:Promise<(()=>void)|null>|undefined,returning:Promise<void>|undefined,holdClosed=false;
+  const returnHold=()=>returning??=Promise.resolve().then(async()=>{const release=await hold;if(release)await releaseToken(release);holdClosed=true;});
+  t.after(async()=>{holdStop.abort();await returnHold();});
   const summary = await runMemoryWorkers({
     paths: ["idle-holder", "idle-trigger", "after"], jobs: 2, memory, workerBytes: 768 * 2 ** 20,
     args: index => [fixture, directory, String(index)],
-    token: gate.token,
+    token: async(path,signal)=>{if(path==='after')await hold;return gate.token(path,signal);},
     onRow: row => {
       rows.push(row);
       if (row.path === "idle-holder") {
-        // Its worker stays idle, asking no token for its next case, while a
-        // request of higher priority waits ahead of the pool.
-        landing = landingAhead(t);
-        writeFileSync(join(directory, "idle-reported"), "idle");
+        // Hold the released token explicitly. A priority waiter would now
+        // close this idle worker, removing the intended aggregate victim.
+        hold=gate.token('fixture idle hold',holdStop.signal).then(release=>{
+          assert.ok(release);writeFileSync(join(directory,'idle-reported'),'idle');return release;
+        });
       }
     },
     report: message => {
       reports.push(message);
       if (message.startsWith("resident pressure: idle worker ")) {
-        landing?.withdraw();
+        void returnHold();
         try { writeFileSync(join(directory, "release-trigger"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK }); }
         catch (error) { if (error.code !== "ENXIO") throw error; } // The trigger may also be collateral damage.
       }
@@ -353,9 +356,9 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   assert.ok(summary.aggregatePressureKills >= 1);
   assert.equal(summary.systemPressureKills, 0);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
-  await gate.settled();
-  assert.equal(gate.seen.grant, 3 + summary.isolatedReplays, JSON.stringify({ seen: gate.seen, summary }));
-  await assert.rejects(landing!.ended, { name: "AbortError" }, "the landing request ended only when it was withdrawn");
+  await returnHold();await gate.settled();
+  assert.equal(gate.seen.grant, 4 + summary.isolatedReplays, JSON.stringify({ seen: gate.seen, summary }));
+  assert.equal(holdClosed,true,"the fixture idle hold returned and joined its real token");
 });
 
 test("a worker death without any OOM evidence is an instrument failure", async t => {
