@@ -1286,7 +1286,10 @@ the first node task.
   including relative runtime and local type source edges and triple-slash
   paths. The local type context grants no runtime assets and never resolves
   installed packages; those remain owned by the sealed oracle image. The
-  helper uses `copyModuleClosure` and grants no installed Program. A fixture
+  helper uses `copyModuleClosure` and grants no installed Program. Explicit
+  oracle entries seed original-owner discovery through `projectFor`; each
+  owner keeps its unchanged configuration and local Program sources while
+  installed facts are validated at their source and remain image-owned. A fixture
   composes the core and its own family;
   composition controls retain the complete production table
   ([log](records/notebooks/decisions-log.md#independent-record-families-11-16)).

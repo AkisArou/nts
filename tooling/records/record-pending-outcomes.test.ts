@@ -1,5 +1,7 @@
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyFixtureProject} from '../gate/module-closure-fixture.ts';
+import {moduleGraph} from '../gate/module-closure.ts';
+import {OUTCOME_ORACLE_PRELOADS} from '../conformance/outcomes-project.ts';
 import {fixtureInput} from '../gate/reader-inputs/main.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 // The records run records tests/outcomes through record-pending.ts in a
@@ -11,7 +13,7 @@ import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
 import {copyFileSync,renameSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync} from "node:fs";
 import {homedir} from "node:os";
-import {dirname,join,resolve} from "node:path";
+import {dirname,join,relative,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {gateEnvironment} from '../gate/canonical-environment.ts';
@@ -55,6 +57,14 @@ function assertPrivateModules(root:string,areas:readonly string[],placed:readonl
   }
 }
 
+function assertOutcomeFamily(root:string):void{
+  const graph=moduleGraph({sourceRoot:root});
+  try{
+    const modules=graph.describe(['tooling/records/record-pending.ts']).moduleFiles;
+    assert.deepEqual(modules.filter(file=>file.endsWith('-record-family.ts')).sort(),['tooling/conformance/outcomes-record-family.ts'],'the outcome command executes only its own family');
+  }finally{graph.close();}
+}
+
 /** Stage exactly the same private tree for the setup control and compiler proof. */
 function stageRecordsTree(t:{after(fn:()=>void):void},root:string):string[]{
   // Stage the real command factory and this family alone. The oracle fixture
@@ -66,15 +76,14 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):string[]{
   const otherData=['runtime/node','runtime/web-platform','tests/compile-time'];
   for(const area of otherData)mkdirSync(join(root,area),{recursive:true});
   const preloadProject=fixtureInput(new URL('../conformance/tsconfig.json',import.meta.url),{dataNamespaces:{}});
-  const placed=copyFixtureProject(preloadProject,root,{entries:['tooling/records/outcomes-recorder-fixture.ts','tooling/gate/oracle-entry.ts'],dataNamespaces:{
+  const placed=copyFixtureProject(preloadProject,root,{oracleEntries:OUTCOME_ORACLE_PRELOADS.map(file=>relative(SOURCE,file)),entries:['tooling/records/outcomes-recorder-fixture.ts','tooling/gate/oracle-entry.ts'],dataNamespaces:{
     'tests/outcomes':'one pending outcome fixture',
     'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture',
     ...Object.fromEntries(otherData.map(area=>[area,'pending-outcome records fixture']))}});
   assert.deepEqual(readFileSync(join(root,'tsconfig.base.json')),readFileSync(join(SOURCE,'tsconfig.base.json')),'the declared project inherits unchanged staged base options');
   assert.deepEqual(readFileSync(join(root,'tooling/conformance/tsconfig.json')),readFileSync(preloadProject.url),'the fixture uses unchanged project options over its staged modules');
   renameSync(join(root,'tooling/records/outcomes-recorder-fixture.ts'),join(root,'tooling/records/record-pending.ts'));
-  const stagedFamilies=readdirSync(join(root,'tooling'),{recursive:true,withFileTypes:true}).filter(entry=>entry.isFile()&&entry.name.endsWith('-record-family.ts')).map(entry=>join(entry.parentPath,entry.name).slice(root.length+1)).sort();
-  assert.deepEqual(stagedFamilies,['tooling/conformance/outcomes-record-family.ts'],'the outcome fixture stages only its own family');
+  for(const file of placed.filter(file=>file.endsWith('-record-family.ts')))assert.deepEqual(readFileSync(join(root,file)),readFileSync(join(SOURCE,file)),'checking-only family input retains its source bytes');
   assert.deepEqual(readdirSync(join(root,'tests/typescript')),[],'an outcome fixture stages no production TypeScript cases');
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[],'the pending outcome starts without production records');
   for(const area of ['tests/programs','benchmarks/cases'])assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
@@ -91,6 +100,7 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):string[]{
   assert.equal(existsSync(join(root,RECORD)),false,'the fixture owns a pending case, never its production record');
   git(root,"add","-f","tsconfig.fixtures.json",FIXTURE);git(root,"commit","-qm","one pending outcome");
   assertPrivateModules(root,otherData,placed);
+  assertOutcomeFamily(root);
   return placed;
 }
 
@@ -106,6 +116,15 @@ test('a runtime file outside the project placement list cannot enter the private
   const placed=stageRecordsTree(t,root);
   writeFileSync(join(root,'runtime/node/unclaimed-case.ts'),'export const unrelated=1;');
   assert.throws(()=>assertPrivateModules(root,['runtime/node'],placed),/private namespace contains an undeclared file: runtime\/node\/unclaimed-case.ts/);
+});
+
+test('an executable edge to another family fails the isolated command assertion',t=>{
+  const scratch=newTestScratch('record-pending-outcome-extra-family'),root=join(scratch,'tree');
+  t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
+  stageRecordsTree(t,root);
+  writeFileSync(join(root,'tooling/records/planted-record-family.ts'),'export const planted=true;');
+  const entry=join(root,'tooling/records/record-pending.ts');writeFileSync(entry,readFileSync(entry,'utf8')+"\nimport './planted-record-family.ts';\n");
+  assert.throws(()=>assertOutcomeFamily(root),/the outcome command executes only its own family/);
 });
 
 /** A tree with one pending outcome, a clean pin of the gate's compiler, and the records unit's canonical environment. */

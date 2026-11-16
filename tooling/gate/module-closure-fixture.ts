@@ -6,10 +6,14 @@ import {fileURLToPath,pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
 import {moduleGraph, type ModuleClosureOptions,type InputSnapshot} from "./module-closure.ts";
 import {outsideSource} from "./source-containment.ts";
-import {canonicalNamespace as canonical,fixtureNamespaces,fixtureInput,type FixtureInput,type InputEntry} from './reader-inputs/main.ts';
+import {canonicalNamespace as canonical,fixtureNamespaces,fixtureInput,fileInput,type FixtureInput,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 import {directoryEntries,memberType,metadataParents} from './reader-metadata.ts';
+import {OracleFilesystem,validateHostObservations} from '../differential/oracle-filesystem.ts';
+import type {HostObservation} from '../differential/oracle-runtime.ts';
+import {projectInputOwner} from './project-inputs.ts';
+import {SourceFacts} from './source-facts.ts';
 import {validateReaderSourceObservations,replayFixtureReaderObservations} from './reader-observations.ts';
 import {installationCatalogTrust} from '../inputs/dependency-inputs.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
@@ -234,7 +238,7 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
  * with the sealed dependency image. This does not infer compiler options. Roots must be plain JSON;
  * the pinned SDK decodes captured JSONC ancestors without a Program or a
  * second filesystem acquisition. */
-export function copyFixtureProject(project:FixtureInput,root:string,options:FixtureClosureOptions&{entries?:readonly InputEntry[]}={}):string[]{
+export function copyFixtureProject(project:FixtureInput,root:string,options:FixtureClosureOptions&{entries?:readonly InputEntry[];oracleEntries?:readonly string[]}={}):string[]{
   const source=realpathSync(options.sourceRoot??SOURCE),destination=outsideSource(source,root,'fixture destination');
   const captured=new Map<string,Buffer>();
   const bytes=(path:string):Buffer=>{
@@ -279,14 +283,47 @@ export function copyFixtureProject(project:FixtureInput,root:string,options:Fixt
     }
     visiting.delete(path);complete.add(path);
   };
-  try{parents(configPath,config);}finally{api?.close();}
+  const originalFacts:HostObservation[][]=[],oracleFiles=new Set<string>(),discovery=new OracleFilesystem();
+  let projects:ReturnType<typeof projectInputOwner>|undefined;
+  try{
+    parents(configPath,config);
+    const entered=new Set<string>(),owners=new Set<string>();
+    const runtime=(name:string):void=>{
+      const path=resolve(source,name);
+      if(name.split('/').includes('node_modules'))throw Error('fixture oracle entry is not a local source: '+name);
+      if(entered.has(path))return;entered.add(path);
+      const content=bytes(path),owner=discovery.projectFor(path);
+      if(!owner)throw Error('fixture oracle source has no original project: '+name);
+      if(!owners.has(owner)){
+        owners.add(owner);bytes(owner);parents(owner,decoded(owner));
+        projects??=projectInputOwner(source,undefined,options.generatedTemporaryParent,options.dependencyCatalog===undefined?sourceCatalog(source):options.dependencyCatalog);
+        const inputs=projects.read([{kind:'config',path:relative(source,owner).split(sep).join('/')}]);
+        for(const config of inputs.configs){const file=resolve(source,config);bytes(file);parents(file,decoded(file));}
+        for(const {path:file}of inputs.modules){
+          if(file.split('/').includes('node_modules'))throw Error('fixture oracle Program has an unowned installed source: '+file);
+          oracleFiles.add(file);
+        }
+        originalFacts.push([...inputs.observations,...inputs.pinObservations,...inputs.installedObservations.map(row=>row.observation),
+          ...inputs.dependencyObservations.map(row=>row.observation),...inputs.hostObservations.map(row=>row.observation),...inputs.generatedObservations.map(row=>row.observation)]);
+      }
+      // This decoder uses captured source bytes; only the emitter's runtime
+      // import edges choose additional owners, never URL assets or type edges.
+      const lease=api!.createSourceFile(path,content.toString('utf8'));
+      let imports:string[];try{imports=new SourceFacts(name,content.toString('utf8'),lease.sourceFile).hostModuleImports();}finally{lease.dispose();}
+      for(const specifier of imports)runtime(relative(source,fileURLToPath(new URL(specifier,pathToFileURL(path)))).split(sep).join('/'));
+    };
+    for(const entry of options.oracleEntries??[])runtime(entry);
+  }finally{try{projects?.close();}finally{api?.close();}}
+  const validateSources=()=>{validateHostObservations(discovery.captured());for(const facts of originalFacts)validateHostObservations(facts);};
+  validateSources();
   const entries=row.files.map(file=>relative(source,resolve(dirname(configPath),file)).split(sep).join('/'));
-  const configs=[...captured.keys()].map(path=>path===configPath?project:fixtureInput(pathToFileURL(path),{dataNamespaces:{}}));
-  const staged=copyModuleClosure([...configs,...entries,...options.entries??[]],destination,{...options,sourceRoot:source,localTypeEntries:[...entries,...options.localTypeEntries??[]]});
+  const configs=[...complete].map(path=>path===configPath?project:fixtureInput(pathToFileURL(path),{dataNamespaces:{}}));
+  const staged=copyModuleClosure([...configs,...entries,...[...oracleFiles].map(name=>fileInput(pathToFileURL(resolve(source,name)))),...options.entries??[]],destination,{...options,sourceRoot:source,localTypeEntries:[...entries,...options.localTypeEntries??[]]});
   for(const [path,expected]of captured){
     const placed=join(destination,relative(source,path));metadataParents(destination,placed,'staged fixture project config');
     const stat=lstatSync(placed);
     if(!stat.isFile()||stat.isSymbolicLink()||!readFileSync(placed).equals(expected))throw Error('fixture project config changed during staging: '+path);
   }
+  validateSources();
   return staged;
 }

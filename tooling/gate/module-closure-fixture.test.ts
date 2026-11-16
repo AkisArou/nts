@@ -1038,3 +1038,17 @@ test('local type source staging never validates a runtime reader while a real ru
   f.write('runtime.ts',"import './reader.ts';");
   assert.throws(()=>copyModuleClosure(['runtime.ts'],join(f.source,'..','runtime-destination'),{sourceRoot:f.source}),/project input needs a literal.*role/);
 });
+
+
+test('fixture oracle entries use original nearest owners and their unchanged implicit Program sources',t=>{
+  const f=fixture(t);
+  f.write('project/tsconfig.json',JSON.stringify({compilerOptions:{types:[]},files:['entry.ts'],include:[]}));
+  f.write('project/entry.ts',"import {value} from '../owner/dependency.ts';export {value};");
+  f.write('owner/tsconfig.json',JSON.stringify({compilerOptions:{types:[]},include:['*.ts']}));
+  f.write('owner/dependency.ts','export const value=1;');f.write('owner/extra.ts',"export type Extra=number;new URL('./unread.bin',import.meta.url);");
+  const project=fixtureInput(pathToFileURL(join(f.source,'project/tsconfig.json')),{dataNamespaces:{}});
+  const files=copyFixtureProject(project,f.destination,{sourceRoot:f.source,oracleEntries:['project/entry.ts']});
+  assert.ok(files.includes('owner/extra.ts'));assert.ok(files.includes('owner/tsconfig.json'));
+  assert.equal(existsSync(join(f.destination,'owner/unread.bin')),false,'a source selected only by its owner Program grants no runtime assets');
+  for(const config of ['project/tsconfig.json','owner/tsconfig.json'])assert.deepEqual(readFileSync(join(f.destination,config)),readFileSync(join(f.source,config)));
+});
