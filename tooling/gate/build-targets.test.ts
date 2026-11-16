@@ -47,7 +47,8 @@ durableRecord(${JSON.stringify(capture)},{args:process.argv.slice(2),target:proc
   rmSync(capture,{force:true});
   const receipt=join(root,'disk.json'),memory=ownMemory(join(root,'owned'),{disk:{freeBytes:41*2**30,freeInodes:100}});
   const denied=run(route==='shell'?clippyTarget(target):target,{...memory,NTS_GATE_STEP:'clippy',NTS_GATE_STEP_ATTEMPT:'disk',NTS_GATE_STEP_RESULT:receipt});
-  assert.notEqual(denied.status,0);assert.match(denied.stderr,/DiskBuildAdmissionError: disk build admission/);
+  assert.notEqual(denied.status,0);
   assert.equal(existsSync(capture),false,'a disk refusal never starts Cargo');
-  assert.equal(readStepInstrument(receipt,'clippy','disk')?.kind,'disk-capacity');
+  const instrument=readStepInstrument(receipt,'clippy','disk');
+  assert.equal(instrument?.kind,'disk-capacity');assert.match(instrument!.reason,/disk build admission/);
 });

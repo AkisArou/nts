@@ -169,8 +169,9 @@ export class Queue {
   /** A readiness observation cannot resurrect a withdrawal or a newer answer. */
   retryDiskReady(id:string,answerNonce:string):Entry|null{
     return this.mutate(()=>{
-      const entry=readJson<Entry>(this.path('held',`${id}.json`)),answer=this.result(id);
-      if(!entry||answer?.state!=='held'||!answer.answerNonce||answer.answerNonce!==answerNonce||!answer.retryDisk?.length||this.withdrawRequested(id))return null;
+      const held=readJson<Checking>(this.path('held',`${id}.json`)),answer=this.result(id);
+      if(!held||answer?.state!=='held'||!answer.answerNonce||answer.answerNonce!==answerNonce||!answer.retryDisk?.length||this.withdrawRequested(id))return null;
+      const {started_at:_s,base:_b,tip:_t,run:_r,phase:_p,...entry}=held;
       this.record(this.path('queue',`${this.key(entry)}.json`),entry);
       this.remove(this.path('held',`${id}.json`));
       return entry;

@@ -1,5 +1,5 @@
 import {STEP_CPU_MEASURE,GNU_CPU_MEASURE} from '../gate/step-time.ts';
-import {fixtureEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment,assignTestValues} from "../gate/test-environment.ts";
 // The landing service end to end, in a scratch repository with a local bare
 // origin and a pool of two trees: queue order, rebase and conflict refusal,
 // fast-forward and push, branch deletion here and on origin, the pool tree
@@ -50,6 +50,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
   const s = scratchRepo(t, "landing-service");
   s.commit({"Cargo.toml":"[workspace]\n[profile.nts-dev]\ndebug=0\n",".gitignore":"target/\n"},"fixture build policy");
   // A fixed disk reading: the host's free disk must not decide whether a fixture's tree can be made.
+  assignTestValues(s.env,ownMemory(join(s.dir,'observations')));
   const ownedProcesses=new Set<number>();
   const users=(tree:string)=>treeUsers(tree,{pids:[...ownedProcesses]});
   const pool = new Pool(join(s.dir, "pool"), { root: s.root, env: s.env }, undefined,{users,
@@ -167,6 +168,7 @@ test("a held check waits aside, and lands once retried", async t => {
 test('a disk-held entry lets a no-build landing pass and returns at its original arrival after a release',async t=>{
   const f=service(t),a=f.task('fix/disk',{'src/disk.txt':'build\n'}),b=f.task('fix/docs',{'docs/disk.md':'no build\n'});
   f.pool.give('fix/docs');
+  const c=f.task('fix/later',{'docs/after.md':'later arrival\n'});f.pool.give('fix/later');
   ownMemory(dirname(f.s.env.NTS_HOST_OBSERVATIONS!),{disk:{freeBytes:53*2**30,freeInodes:100}});
   const temporary=f.pool.capacity.tryTemporary(join(f.s.dir,'capture'),2**30).lease;assert.ok(temporary);
   const ea=f.submit('fix/disk',a.sha),eb=f.submit('fix/docs',b.sha);
@@ -192,8 +194,7 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   assert.match(status.service.message!,new RegExp(`waiting for disk: ${ea.id} needs 1073741824 more bytes`));
   assert.match(status.service.message!,/automatic retry/);assert.equal(status.held[0]?.retryWhen,'disk-capacity');
   assert.match(statusText(status),new RegExp(`waiting for disk: ${ea.id}`));assert.match(statusText(status),/automatic retry when disk permits/);
-  const c=f.s.commit({'docs/after.md':'later arrival\n'},'later candidate',join(f.s.dir,'pool/2'));
-  const ec=f.queue.submit(c,{branch:null});
+  const ec=f.queue.submit(c.sha,{branch:null});
   temporary.release();
   const result=await running;
   assert.equal(result.state,'drained');assert.equal(attempts,2);
