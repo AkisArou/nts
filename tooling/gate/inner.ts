@@ -109,7 +109,8 @@ export function cpusOffMeasurement(count: number = availableParallelism()): stri
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
   const invocation=command==='cargo'?[process.execPath,CARGO_OWNER,...args]:[command,...args];
-  const result = spawnSync(invocation[0]!, invocation.slice(1), { cwd: ROOT, stdio: "inherit", env: { ...launchEnvironment, ...env } });
+  const child={...launchEnvironment};assignOwnedValues(child,env);
+  const result = spawnSync(invocation[0]!, invocation.slice(1), { cwd: ROOT, stdio: "inherit", env:child });
   return result.status ?? 1;
 }
 
@@ -146,8 +147,7 @@ function heavy(phase: Phase, command: string, args: readonly string[], env: Node
     ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${phase.memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
     : bounded;
   const receipt=join(launchEnvironment.TMPDIR!,'inner-'+randomUUID()+'.json'),attempt=randomUUID();
-  const child={...launchEnvironment,...env};
-  assignOwnedValues(child,{NTS_GATE_STEP:phase.key,NTS_GATE_STEP_ATTEMPT:attempt,NTS_GATE_STEP_RESULT:receipt});
+  const child={...env,NTS_GATE_STEP:phase.key,NTS_GATE_STEP_ATTEMPT:attempt,NTS_GATE_STEP_RESULT:receipt};
   const status=run(process.execPath, [ADMIT, "--key", phase.key, "--workers", String(phase.workers), "--at-most", String(most),
     "--what", `inner loop: ${phase.what}`, "--", ...scoped], child);
   const instrument=readStepInstrument(receipt,phase.key,attempt);
