@@ -278,16 +278,20 @@ test('a watcher fault leaves the current verdict intact, fences a later marker, 
   for(const arm of ['green','red','marker'] as const){
     const f=service(t),a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
     const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main();
-    let entered!:()=>void,release!:()=>void,signal:AbortSignal|undefined;
+    let entered!:()=>void,release!:()=>void,signal:AbortSignal|undefined,hold:RunOptions['hold'];
     const started=new Promise<void>(resolve=>{entered=resolve;}),closed=new Promise<void>(resolve=>{release=resolve;});
     f.config.runSteps=async options=>{
-      signal=options.signal;entered();await closed;
+      signal=options.signal;hold=options.hold;entered();await closed;
       return {state:arm==='red'?'red':'green',message:'own verdict '+arm,run:options.run,steps:[],pending:[],wall_s:1};
     };
     f.config.watchWithdrawals=(queue,onFailure)=>new FaultingWatch(queue,onFailure);
     const pending=drain(f.config);t.after(async()=>{release();await pending;});await started;
+    hold!('memory: earlier healthy wait');
     writeFileSync(join(f.config.home,'withdraw','watch-error'),'fault');
     await waitFor('the recorded withdrawal watcher error',()=>f.queue.status().message?.includes('controlled inotify failure')===true);
+    assert.match(f.queue.status().message!,/current check held: memory: earlier healthy wait/);
+    hold!('memory: later healthy wait');
+    assert.match(f.queue.status().message!,/withdrawal watcher failed:.*controlled inotify failure.*current check held: memory: later healthy wait/);
     assert.equal(signal?.aborted,false,'a watch fault has no authority to cancel healthy work');
     if(arm==='marker')assert.equal(f.queue.withdraw(ea.id),'requested');
     release();const result=await pending;

@@ -5,7 +5,8 @@ import {join} from 'node:path';
 import {fixture} from './run-fixture.ts';
 import {runLanding,launcherEnvironment} from './run.ts';
 import {candidateCommandAsync} from './candidate-environment.ts';
-import {WithdrawalRequested} from './withdrawal-watch.ts';
+import {WithdrawalRequested,WithdrawalWatch} from './withdrawal-watch.ts';
+import {Queue} from './queue.ts';
 import {readLedger} from '../gate/memory-ledger.ts';
 import {waitFor} from '../gate/test-wait.ts';
 import {ownMemory} from '../gate/test-memory.ts';
@@ -98,4 +99,33 @@ test('withdrawal at the memory retry boundary starts no replacement attempt',asy
   assert.equal(f.calls().filter(line=>line.startsWith('outcomes ')).length,1);
   assert.equal(existsSync(join(f.run,'attempt-2')),false);
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]});
+});
+
+test('a real runner retains a failed scope certificate and recovers through the repeated durable withdrawal',async t=>{
+  const f=fixture(t),options=f.options(['build','outcomes']);f.control('outcomes','stuck');
+  const queue=new Queue(join(f.own,'queue')),entry=queue.submit(options.commit);queue.take();
+  const watch=new WithdrawalWatch(queue),cancellation=watch.entry(entry.id),reasons:string[]=[];
+  const owner=join(f.tree,'target/gate-scope-owner.json');let original:string|undefined,finished=false;
+  const pending=runLanding({...options,signal:cancellation.signal,drainRetry:cancellation.waitForRetry,cancellationHold:reason=>reasons.push(reason)});
+  pending.then(()=>{finished=true;},()=>{finished=true;});
+  try{
+    await waitFor('the real outcomes scope to start',()=>f.calls().some(line=>line.startsWith('outcomes ')));
+    original=readFileSync(owner,'utf8');
+    const future=JSON.stringify({...JSON.parse(original),version:2})+'\n';writeFileSync(owner,future);
+    queue.withdraw(entry.id);
+    await waitFor('the retained future-version scope refusal',()=>reasons.some(reason=>reason.includes('future state version 2')),
+      {stopped:()=>finished?'runner finished before certifying its scope':undefined});
+    assert.equal(finished,false);assert.equal(readFileSync(owner,'utf8'),future);
+    assert.equal(existsSync(join(f.run,'landing.json')),false,'a failed certificate must not publish a terminal');
+    assert.equal(queue.withdrawRequested(entry.id),true);
+    writeFileSync(owner,original);original=undefined;
+    assert.equal(queue.withdraw(entry.id),'requested');
+    const ran=await pending;assert.equal(ran.state,'cancelled',ran.message);
+    assert.equal(existsSync(owner),false,'the existing dead-owner reaper certified and closed the root');
+    assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]});
+    assert.equal(JSON.parse(readFileSync(join(f.run,'landing.json'),'utf8')).state,'cancelled');
+  }finally{
+    if(original!==undefined&&existsSync(owner))writeFileSync(owner,original);
+    queue.withdraw(entry.id);await pending;cancellation.close();watch.close();
+  }
 });
