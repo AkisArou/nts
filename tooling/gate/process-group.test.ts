@@ -25,7 +25,7 @@ test('a reused PID, a changed group and a changed session independently refuse s
 test('a failed boot observation remains inside acquisition cleanup and joins its own spawned child',async t=>{
   const stage=testScratch(t,'group-boot-failure');copyModuleClosure(['tooling/gate/process-group.ts'],stage);
   const file=join(stage,'tooling/gate/process-group.ts'),source=readFileSync(file,'utf8');
-  const anchor="const bootIdentity=()=>readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();";
+  const anchor=source.split('\n').find(line=>line.startsWith('const bootIdentity='));assert.ok(anchor);
   assert.equal(source.split(anchor).length,2);
   writeFileSync(file,source.replace(anchor,"const bootIdentity=()=>{throw Error('controlled boot observation failure');};"));
   const {ownedProcessGroup}:typeof import('./process-group.ts')=await import(pathToFileURL(file).href);
