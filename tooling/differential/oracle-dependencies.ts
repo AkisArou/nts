@@ -31,7 +31,7 @@ export {CaseBudgetError,ToolingInstrumentError};
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
 export type DependencyCapability={seal?:DependencyRunSeal;parentImage?:DependencyCapability;temporary?:{owned:RunTemporary;home:string};version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
-import {dependencyInventory,dependencyPackageInventory,type DependencyEntry as Entry} from '../inputs/dependency-inventory.ts';
+import {dependencyInventory,dependencyPackageInventory,dependencyImageMode,type DependencyEntry as Entry} from '../inputs/dependency-inventory.ts';
 export {dependencyInventory,dependencyPackageInventory} from '../inputs/dependency-inventory.ts';
 type InstallInputs={version:1;identity:Identity;paths:string[];selectionPaths:string[];treeRows:string[];treeSha256:string};
 export type DependencyImage={version:1;source:string;sourceRevision:string;inputSet:InstallInputs;lockfileSha256:string;treeSha256:string;manager:ReturnType<typeof managerPin>;entries:Entry[];ownerStep:string|null;cost:{wallMs:number;selectionWallMs:number;userSeconds:number;systemSeconds:number;bytes:number;allocatedBytes:number;peakBytes:number;residentBudgetBytes:number;cpuBudgetSeconds:number;reservedBytes:number}};
@@ -73,7 +73,7 @@ export function protectDependencyImage(root:string):Entry[]{
   const entries=dependencyInventory(root);
   for(const entry of entries)if(entry.kind==='file'&&lstatSync(join(root,entry.path)).nlink!==1)throw Error('oracle dependency image shares a regular-file inode: '+entry.path);
   for(const entry of entries)if(entry.kind!=='link'){
-    entry.mode=entry.kind==='directory'||entry.mode&0o111?0o555:0o444;
+    entry.mode=dependencyImageMode(entry);
     chmodSync(join(root,entry.path),entry.mode);
   }
   chmodSync(root,0o555);

@@ -227,7 +227,7 @@ test("the dex record starts from its pending rows, takes an improvement, and ref
 test('budget refreshes need an improvement hint or changed identity, and only a measured count improves them',t=>{
   const root=tree(t),fixture='benchmarks/cases/recorded',source=fixture+'/case.ts',file=recordPath(fixture);
   const common={source,signature:'b'.repeat(64),keys:{c:'c'.repeat(32)},cases_sha256:'d'.repeat(64),driver_sha256:'e'.repeat(64)};
-  const budget={kind:'budget',...common,source_digest:'a'.repeat(32),budget:{version:1,phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'},revision:oracleBudgetRevision(root,source)};
+  const budget={kind:'budget',...common,source_digest:'a'.repeat(32),budget:{version:2,phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL'},revision:oracleBudgetRevision(root,source)};
   const before=JSON.stringify({version:2,fixture,rows:[budget]});writeFileSync(join(root,file),before);
   assert.equal(findPending(root,'oracle-counts').some(one=>one.name===fixture),false);
   assert.deepEqual(oracleRefreshes(root),[],'an unchanged budget is not retried by every records pass');
@@ -249,7 +249,7 @@ test('budget refreshes need an improvement hint or changed identity, and only a 
 
 test('a plan budget is refreshed as a budget is: planned on the backends it named, or its identity changed, never over a measured population',t=>{
   const root=tree(t),fixture='benchmarks/cases/recorded',source=fixture+'/case.ts',file=recordPath(fixture);
-  const unplanned={source,backends:['c','llvm'],budget:{version:1,phase:'plan',outcome:'timeout',bound:600,signal:'SIGKILL',reason:'oracle planner timed out'},revision:oracleUnplannedRevision(root,fixture)};
+  const unplanned={source,backends:['c','llvm'],budget:{version:2,phase:'plan',outcome:'timeout',bound:600,signal:'SIGKILL'},revision:oracleUnplannedRevision(root,fixture)};
   const record=(rows:object[],plan?:object)=>JSON.stringify({version:2,fixture,rows,...(plan?{unplanned:plan}:{})});
   const before=record([],unplanned);writeFileSync(join(root,file),before);
   assert.deepEqual(oracleRefreshes(root),[],'an unchanged plan budget is not retried by every records pass');
@@ -274,7 +274,7 @@ test('a plan budget is refreshed as a budget is: planned on the backends it name
   ] as const)assert.throws(()=>auditRecord('oracle-counts',file,was,now,new Set()),refusal);
   // A budget row's entry past its plan bound: a plan budget beside it, never one over a measured population.
   const stopped={kind:'budget',source,signature:'b'.repeat(64),keys:{c:'c'.repeat(32)},cases_sha256:'d'.repeat(64),driver_sha256:'e'.repeat(64),source_digest:'a'.repeat(32),
-    budget:{version:1,phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'},revision:oracleBudgetRevision(root,source)};
+    budget:{version:2,phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL'},revision:oracleBudgetRevision(root,source)};
   assert.deepEqual(auditRecord('oracle-counts',file,record([stopped]),record([stopped],{...unplanned,backends:['c']}),new Set()),[`${source} budget -> plan budget`]);
   assert.throws(()=>auditRecord('oracle-counts',file,record([stopped,{...measured({llvm:'f'.repeat(32)}),signature:'a'.repeat(64)}]),
     record([stopped,{...measured({llvm:'f'.repeat(32)}),signature:'a'.repeat(64)}],{...unplanned,backends:['llvm']}),new Set()),/cannot replace a measured population/);

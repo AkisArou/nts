@@ -230,7 +230,10 @@ fn validate(
         .collect();
     // No row names the population, and the entry's planner planned nothing on
     // this backend: its plan budget is the recorded answer.
-    if found.is_empty() && unplanned(table, source, backend).is_some() {
+    if found.is_empty()
+        && let Some(plan) = unplanned(table, source, backend)
+    {
+        super::oracle_records::validate_budget(&plan["budget"], true)?;
         return Ok(());
     }
     ensure!(
@@ -254,9 +257,10 @@ fn validate(
         ensure!(
             row.get("count").is_none()
                 && row.get("complete").is_none()
-                && row["budget"]["version"] == 1,
+                && row["budget"]["version"] == 2,
             "invalid versioned oracle budget row: {source}"
         );
+        super::oracle_records::validate_budget(&row["budget"], false)?;
         return Ok(());
     }
     ensure!(
@@ -341,6 +345,14 @@ mod tests {
     }
 
     #[test]
+    fn measured_driver_provenance_never_hides_a_changed_count() {
+        let table = json!({"version":1,"rows":[{"kind":"measured","source":"a",
+            "keys":{"c":"key"},"complete":true,"count":2,"driver_sha256":"f".repeat(64)}]});
+        validate(&table, "a", "c", "key", 2, "digest").unwrap();
+        assert!(validate(&table, "a", "c", "key", 3, "digest").is_err());
+    }
+
+    #[test]
     fn a_compact_row_never_borrows_another_backends_identity() {
         let table = json!({"version":1,"rows":[{"kind":"measured","source":"a",
             "keys":{"c":"key"},"complete":true,"count":2}]});
@@ -352,12 +364,11 @@ mod tests {
     fn a_completed_run_improves_on_a_recorded_stop_and_never_on_a_margin() {
         assert!(!improves(None));
         assert!(improves(Some(
-            &json!({"version":1,"phase":"execute","outcome":"timeout",
-            "bound":60,"signal":"SIGKILL","reason":"oracle timed out"})
+            &json!({"version":2,"phase":"execute","outcome":"timeout",
+            "bound":60,"signal":"SIGKILL"})
         )));
-        let margin = json!({"version":1,"phase":"execute","outcome":"margin","bound":60,
-            "signal":null,"cpu_s":[32.2,32.2],
-            "reason":"node used 32.2 and 32.2 s of its 60 s CPU bound; a count needs both runs within half of it (30 s)"});
+        let margin = json!({"version":2,"phase":"execute","outcome":"margin","bound":60,
+            "signal":null});
         assert!(
             !improves(Some(&margin)),
             "a margin's runs complete as recorded"
@@ -369,8 +380,8 @@ mod tests {
 
     #[test]
     fn a_plan_budget_answers_every_driver_of_its_entry_that_no_row_answers() {
-        let plan = json!({"version":1,"phase":"plan","outcome":"timeout","bound":600,
-            "signal":"SIGKILL","reason":"oracle planner timed out"});
+        let plan = json!({"version":2,"phase":"plan","outcome":"timeout","bound":600,
+            "signal":"SIGKILL"});
         let mut table = json!({"version":1,"rows":[],
             "unplanned":{"source":"a","backends":["c","llvm"],"budget":plan}});
         for (key, generated) in [("one", 3), ("another", 0)] {

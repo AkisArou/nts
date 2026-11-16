@@ -119,7 +119,7 @@ test("a partial committed directory never falls back to a leftover flat table", 
 test("a plan budget is its entry's record, alone or beside rows, and reads back as written", () => fixture((root, table) => {
   subject(root, "slow");
   const unplanned = { source: "tests/programs/slow/src/main.ts", backends: ["c", "llvm"],
-    budget: { version: 1 as const, phase: "plan" as const, outcome: "timeout" as const, bound: 600, signal: "SIGKILL", reason: "oracle planner timed out" },
+    budget: { version: 2 as const, phase: "plan" as const, outcome: "timeout" as const, bound: 600, signal: "SIGKILL" },
     revision: { entry: "a".repeat(64), node: "b".repeat(64), producer: "c".repeat(64), policy: "d".repeat(64) } };
   const updated = { ...table, unplanned: [unplanned] };
   writeRecords(root, updated, new Set(["tests/programs/slow"]));
@@ -141,7 +141,7 @@ test("a plan budget is its entry's record, alone or beside rows, and reads back 
 }));
 
 test('budget records require revision 2 and can claim neither count nor completion',()=>{
-  const budget={...row('first'),kind:'budget',source_digest:'a'.repeat(32),budget:{version:1,phase:'execute',outcome:'memory-cap',bound:2*2**30,signal:null,reason:'own resident hit'},revision:{entry:'a'.repeat(64),node:'b'.repeat(64),producer:'c'.repeat(64),policy:'d'.repeat(64)}};
+  const budget={...row('first'),kind:'budget',source_digest:'a'.repeat(32),budget:{version:2,phase:'execute',outcome:'memory-cap',bound:2*2**30,signal:null},revision:{entry:'a'.repeat(64),node:'b'.repeat(64),producer:'c'.repeat(64),policy:'d'.repeat(64)}};
   delete (budget as Partial<OracleRow>).count;delete (budget as Partial<OracleRow>).complete;
   const shard={version:2,fixture:'tests/programs/first',rows:[budget]};
   assert.equal(parseShard(shard,shard.fixture).rows[0]!.kind,'budget');

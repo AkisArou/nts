@@ -59,7 +59,7 @@ test("a recorded source_digest is rechecked from owned bytes, while measured bod
   writeFileSync(join(f.root,f.source),"export function work(n:number):number{return n+1;}\n");
   assert.match(oracleIdentityProblems(f.root,[identity],f.env)[0]!,/source_digest changed/);
   assert.deepEqual(oracleIdentityProblems(f.root,[f.row],f.env),[],"a measured row carries no body-only empty-oracle exception");
-  for(const name of ["keys","signature","cases_sha256","driver_sha256"])assert.ok(oracleIdentityScope().split("require native plans: ")[1]?.includes(name));
+  for(const name of ["keys","signature","cases_sha256"])assert.ok(oracleIdentityScope().split("require native plans: ")[1]?.includes(name));
 });
 
 test("an incomplete source hash observation is an instrument failure, never stale identity evidence",t=>{
@@ -70,4 +70,14 @@ test("an incomplete source hash observation is an instrument failure, never stal
       return {pid:0,status:0,signal:null,stdout,stderr:"",output:[null,stdout,""]};
     }),error=>error instanceof ToolingInstrumentError&&/oracle source_digest/.test(error.message));
   }
+});
+
+test("a foreign measured driver is provenance, never a refresh identity",t=>{
+  const f=fixture(t);
+  const row={...f.row,driver_sha256:"f".repeat(64)};
+  writeRecords(f.root,{version:1,generator_version:1,generator_digest:"e".repeat(32),seed:null,rows:[row]});
+  assert.deepEqual(oracleIdentityProblems(f.root,readRecords(f.root).rows,f.env),[]);
+  assert.deepEqual(findPending(f.root,"oracle-counts"),[]);
+  assert.deepEqual(oracleFamily.refresh!(f.root),[]);
+  assert.match(oracleIdentityScope(),/Recording provenance only: driver_sha256/);
 });

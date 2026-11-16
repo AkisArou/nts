@@ -3615,3 +3615,10 @@ joined returns separately as production telemetry. The fixture's exact grant
 equation includes that counter, bounds it to zero or one here, and reports
 per-path token history on failure. Dispatch, admission and retry policy stay
 unchanged; the dedicated forced-startup control requires exactly one return.
+## Stable held oracle classifications (11-16)
+
+Budget records persist version-2 classifications without CPU readings or error
+transcripts. Their refresh revision binds runtime package content and the oracle
+recipe; installer implementation remains acquisition authority. Measured driver
+digests remain recording provenance, with complete counts checked by executions.
+Only the held jetstream row converts; measured and no-oracle rows are unchanged.

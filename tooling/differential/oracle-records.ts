@@ -23,13 +23,18 @@ export type Populations = Record<string, { count: number; cases_sha256: string }
 export type MarginBudget = { phase: "execute"; outcome: "margin"; bound: number; signal: null; cpu_s: number[]; reason: string };
 /** What a budget row records: an oracle stopped at a bound, or runs too close to one to count. */
 export type RecordedBudget = OracleBudget | MarginBudget;
+/** Stable classification; raw timing and diagnostics belong to run evidence. */
+export type BudgetClassification={version:2;phase:OracleBudget["phase"];outcome:RecordedBudget["outcome"];bound:number;signal:string|null};
+export function classifyBudget(budget:RecordedBudget):BudgetClassification{
+  return parseBudget({version:2,phase:budget.phase,outcome:budget.outcome,bound:budget.bound,signal:budget.signal});
+}
 /** Population identity inputs. The fast gate classifies every field here. */
 export type OracleIdentityInputs = { source: string; signature: string;
   input_domain?: RecordedDomain; source_digest?: string;
   keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
 };
 export type OracleRow = OracleIdentityInputs & { kind: "measured" | "no-oracle" | "budget"; populations?: Populations;
-  budget?: RecordedBudget & {version:1}; revision?: {entry:string;node:string;producer:string;policy:string};
+  budget?: BudgetClassification; revision?: {entry:string;node:string;producer:string;policy:string};
   count?: number; complete?: true; node_cpu_s?: number[]; reason?: string };
 /** What a budget row's provenance names: the entry, Node, the producer and the policy it was measured under. */
 export type BudgetRevision = { entry: string; node: string; producer: string; policy: string };
@@ -41,7 +46,7 @@ export type BudgetRevision = { entry: string; node: string; producer: string; po
  * answers (oracle_coverage.rs). Its revision's entry is the digest of the
  * fixture's files, everything the planner reads.
  */
-export type Unplanned = { source: string; backends: string[]; budget: OracleBudget & { version: 1; phase: "plan" }; revision: BudgetRevision };
+export type Unplanned = { source: string; backends: string[]; budget: BudgetClassification & {phase:"plan";outcome:"timeout"}; revision: BudgetRevision };
 export type OracleTable = { version: number; generator_version?: number; generator_digest?: string; seed?: null; rows: OracleRow[]; unplanned?: Unplanned[] };
 export type Generator = { version: 1; generator_version: number; generator_digest: string; seed: null };
 type Shard = { version: 1|2; fixture: string; rows: OracleRow[]; unplanned?: Unplanned };
@@ -127,6 +132,15 @@ export function domainDeclaration(value: unknown): RecordedDomain["declaration"]
   return { version: 1, functions: converted };
 }
 
+function parseBudget(value:unknown):BudgetClassification{
+  const raw=object(value,'oracle budget');fields(raw,['version','phase','outcome','bound','signal'],'oracle budget');
+  if(raw.version!==2||!['plan','prepare','execute'].includes(String(raw.phase))||!['timeout','memory-cap','margin'].includes(String(raw.outcome))
+    ||typeof raw.bound!=='number'||!Number.isFinite(raw.bound)||raw.bound<=0
+    ||!(raw.signal===null||typeof raw.signal==='string'&&/^SIG[A-Z0-9]+$/.test(raw.signal))
+    ||raw.outcome==='margin'&&(raw.phase!=='execute'||raw.signal!==null))fail('invalid versioned oracle budget');
+  return {version:2,phase:raw.phase as OracleBudget['phase'],outcome:raw.outcome as RecordedBudget['outcome'],bound:raw.bound,signal:raw.signal as string|null};
+}
+
 export function parseRow(value: unknown): OracleRow {
   const raw = object(value, "row");
   fields(raw, ["kind", "source", "signature", "input_domain", "populations", "keys", "cases_sha256", "driver_sha256", "count", "complete", "node_cpu_s", "source_digest", "reason", "budget", "revision"], "row");
@@ -156,17 +170,8 @@ export function parseRow(value: unknown): OracleRow {
   } else if(raw.kind==='budget'){
     if(['count','complete','node_cpu_s','populations','reason'].some(key=>key in raw))fail('budget row cannot claim a count or complete execution');
     row.source_digest=hash(raw.source_digest,32,'source_digest');
-    const budget=object(raw.budget,'oracle budget');fields(budget,['version','phase','outcome','bound','signal','reason','cpu_s'],'oracle budget');
-    if(budget.version!==1||!['prepare','execute'].includes(String(budget.phase))||!['timeout','memory-cap','margin'].includes(String(budget.outcome))||typeof budget.bound!=='number'||!Number.isFinite(budget.bound)||budget.bound<=0||!(budget.signal===null||typeof budget.signal==='string'&&/^SIG[A-Z0-9]+$/.test(budget.signal)))fail('invalid versioned oracle budget');
-    if(budget.outcome==='margin'){
-      // Both runs finished within the bound, and at least one past its half.
-      const cpu=budget.cpu_s,bound=budget.bound;
-      if(budget.phase!=='execute'||budget.signal!==null||!Array.isArray(cpu)||cpu.length!==2||!cpu.every((seconds):seconds is number=>typeof seconds==='number'&&Number.isFinite(seconds)&&seconds>=0&&seconds<=bound)||!cpu.some(seconds=>seconds*2>bound))fail('invalid oracle margin: two runs within the bound, one past its half');
-      row.budget={version:1,phase:'execute',outcome:'margin',bound,signal:null,cpu_s:[...cpu],reason:text(budget.reason,'budget reason')};
-    }else{
-      if('cpu_s' in budget)fail('only a margin names the CPU its runs used');
-      row.budget={version:1,phase:budget.phase as OracleBudget['phase'],outcome:budget.outcome as OracleBudget['outcome'],bound:budget.bound,signal:budget.signal as string|null,reason:text(budget.reason,'budget reason')};
-    }
+    row.budget=parseBudget(raw.budget);
+    if(row.budget.phase==='plan')fail('a planned row cannot carry a plan budget');
     const revision=object(raw.revision,'budget revision');fields(revision,['entry','node','producer','policy'],'budget revision');
     row.revision={entry:hash(revision.entry,64,'entry revision'),node:hash(revision.node,64,'Node revision'),producer:hash(revision.producer,64,'producer revision'),policy:hash(revision.policy,64,'policy revision')};
   } else {
@@ -213,10 +218,9 @@ function parseUnplanned(value: unknown): Unplanned {
   const source = text(raw.source, "plan budget source"); fixtureOf(source);
   if (!Array.isArray(raw.backends) || !raw.backends.length || raw.backends.some(backend => typeof backend !== "string" || !BACKENDS.has(backend))
     || new Set(raw.backends).size !== raw.backends.length || [...raw.backends].sort().join() !== raw.backends.join()) fail("unplanned names its backends once each, in order");
-  const budget = object(raw.budget, "plan budget"); fields(budget, ["version", "phase", "outcome", "bound", "signal", "reason"], "plan budget");
-  if (budget.version !== 1 || budget.phase !== "plan" || budget.outcome !== "timeout" || typeof budget.bound !== "number" || !Number.isFinite(budget.bound) || budget.bound <= 0
-    || !(budget.signal === null || typeof budget.signal === "string" && /^SIG[A-Z0-9]+$/.test(budget.signal))) fail("invalid versioned plan budget");
-  return { source, backends: raw.backends as string[], budget: { version: 1, phase: "plan", outcome: "timeout", bound: budget.bound, signal: budget.signal as string | null, reason: text(budget.reason, "plan budget reason") },
+  const budget=parseBudget(raw.budget);
+  if(budget.phase!=="plan"||budget.outcome!=="timeout")fail("invalid versioned plan budget");
+  return { source, backends: raw.backends as string[], budget:{...budget,phase:"plan",outcome:"timeout"},
     revision: revision(raw.revision, "plan budget revision") };
 }
 

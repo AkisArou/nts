@@ -28,6 +28,43 @@ struct Shard {
     unplanned: Option<Value>,
 }
 
+/// One stable persisted classification. Measurements remain run evidence.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Budget {
+    version: u32,
+    phase: String,
+    outcome: String,
+    bound: f64,
+    signal: Value,
+}
+
+pub(super) fn validate_budget(value: &Value, plan: bool) -> Result<()> {
+    let budget: Budget =
+        serde_json::from_value(value.clone()).context("invalid versioned oracle budget")?;
+    ensure!(
+        budget.version == 2
+            && matches!(budget.phase.as_str(), "plan" | "prepare" | "execute")
+            && matches!(budget.outcome.as_str(), "timeout" | "memory-cap" | "margin")
+            && budget.bound.is_finite()
+            && budget.bound > 0.0
+            && (budget.signal.is_null()
+                || budget
+                    .signal
+                    .as_str()
+                    .is_some_and(|signal| signal.starts_with("SIG")
+                        && signal.len() > 3
+                        && signal[3..]
+                            .bytes()
+                            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())))
+            && (budget.phase == "plan") == plan
+            && (!plan || budget.outcome == "timeout")
+            && (budget.outcome != "margin" || budget.phase == "execute" && budget.signal.is_null()),
+        "invalid versioned oracle budget"
+    );
+    Ok(())
+}
+
 fn fixture_of(source: &str) -> Result<String> {
     let parts: Vec<_> = source.split('/').collect();
     ensure!(
@@ -76,6 +113,7 @@ fn record(bytes: &[u8], expected: &str) -> Result<Value> {
         "oracle budget rows require fixture record version 2"
     );
     if let Some(unplanned) = &record.unplanned {
+        validate_budget(&unplanned["budget"], true)?;
         let backends = unplanned["backends"]
             .as_array()
             .context("a plan budget names its backends")?;
@@ -88,7 +126,7 @@ fn record(bytes: &[u8], expected: &str) -> Result<Value> {
                 && backends
                     .iter()
                     .all(|backend| matches!(backend.as_str(), Some("c" | "llvm" | "jvm")))
-                && unplanned["budget"]["version"] == 1
+                && unplanned["budget"]["version"] == 2
                 && unplanned["budget"]["phase"] == "plan",
             "oracle not measured: invalid plan budget for {expected}"
         );
@@ -96,6 +134,9 @@ fn record(bytes: &[u8], expected: &str) -> Result<Value> {
     let mut identities = std::collections::BTreeSet::new();
     let mut populations = std::collections::BTreeSet::new();
     for row in &record.rows {
+        if row["kind"] == "budget" {
+            validate_budget(&row["budget"], false)?;
+        }
         let source = row["source"]
             .as_str()
             .context("oracle record needs a source")?;
@@ -210,11 +251,19 @@ mod tests {
         let mut shard = json!({"version":2,"fixture":fixture,"rows":[{
             "kind":"budget","source":"benchmarks/cases/private/case.ts",
             "signature":"one","keys":{"c":"key"},
-            "budget":{"version":1,"phase":"execute","outcome":"timeout","bound":60,"signal":"SIGKILL","reason":"oracle timed out"}
+            "budget":{"version":2,"phase":"execute","outcome":"timeout","bound":60,"signal":"SIGKILL"}
         }]});
         let parsed = record(&serde_json::to_vec(&shard).unwrap(), fixture).unwrap();
         assert_eq!(parsed["rows"][0]["kind"], "budget");
         assert!(parsed["rows"][0].get("count").is_none());
+        for stale in [
+            json!({"version":1,"phase":"execute","outcome":"timeout","bound":60,"signal":"SIGKILL"}),
+            json!({"version":2,"phase":"execute","outcome":"timeout","bound":60,"signal":"SIGKILL","reason":"unstable"}),
+        ] {
+            let mut changed = shard.clone();
+            changed["rows"][0]["budget"] = stale;
+            assert!(record(&serde_json::to_vec(&changed).unwrap(), fixture).is_err());
+        }
         shard["version"] = json!(1);
         assert!(
             record(&serde_json::to_vec(&shard).unwrap(), fixture)
@@ -231,7 +280,7 @@ mod tests {
         let fixture = "benchmarks/cases/slow";
         let shard = json!({"version":2,"fixture":fixture,"rows":[],"unplanned":{
             "source":"benchmarks/cases/slow/case.ts","backends":["c","llvm"],
-            "budget":{"version":1,"phase":"plan","outcome":"timeout","bound":600,"signal":"SIGKILL","reason":"oracle planner timed out"},
+            "budget":{"version":2,"phase":"plan","outcome":"timeout","bound":600,"signal":"SIGKILL"},
             "revision":{"entry":"e","node":"n","producer":"p","policy":"q"}}});
         let read = |value: &Value| record(&serde_json::to_vec(value).unwrap(), fixture);
         let parsed = read(&shard).unwrap();
@@ -246,6 +295,7 @@ mod tests {
             ("/unplanned/backends", json!([])),
             ("/unplanned/backends", json!(["wasm"])),
             ("/unplanned/budget/phase", json!("execute")),
+            ("/unplanned/budget/version", json!(1)),
         ] {
             let mut changed = shard.clone();
             *changed.pointer_mut(path).unwrap() = value;

@@ -553,6 +553,10 @@ in two ways:
   with a budget is red. The records pass refreshes a budget after a completed
   check requests it, or its case, Node, producer or bound identity changes.
   A refresh always measures afresh; it reuses no failed execution or count.
+  Persisted budgets use version 2: phase, outcome, bound and signal only.
+  Per-run CPU readings and error text remain in raw evidence. Budget producer
+  identity binds runtime recipe and package content, independently of installer
+  implementation provenance. An unchanged classification keeps its record bytes.
 - **Getting worse is red.** A case that passed and now fails, or a refusal
   that became a wrong answer, makes the full check red, and the culprit is
   reverted.
@@ -567,7 +571,9 @@ the retained record red: the change deletes its fixture record, which makes
 it pending for fresh recording. A measured row carries no body-only digest,
 so a function-body edit alone keeps its population promise. The check names
 the remaining identity inputs that require native plans instead of claiming
-to have validated them. Budget provenance separately schedules refreshes.
+to have validated them. A measured row's driver digest is recording provenance,
+not a freshness key: every execution checks its complete generated count.
+Budget revision separately schedules refreshes.
 Missing fixture records appear in the shared pending format, so the controller
 starts the core recorder even when no other suite requests those fixtures.
 
@@ -1287,6 +1293,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Held oracle records have stable classifications and behavioral identities.**
+  Version-2 budgets retain phase, outcome, bound and signal; raw measurements and
+  failure messages stay in run evidence. Their revision binds runtime recipe and
+  validated package content, not installer implementation. Measured driver
+  digests remain provenance and never schedule refreshes.
 
 - **Cross-process fixture records are published atomically.** A consumer may
   wait for a record's existence and read its complete bytes once. Producers use

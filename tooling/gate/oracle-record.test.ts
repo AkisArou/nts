@@ -74,7 +74,7 @@ test("checked-in fixture records promise complete measured identities", () => {
       continue;
     }
     if (row.kind === "budget") {
-      assert.equal(row.budget?.version, 1);
+      assert.equal(row.budget?.version, 2);
       assert.ok(row.budget && row.budget.bound > 0);
       assert.equal("count" in row, false);
       assert.equal("complete" in row, false);
@@ -224,7 +224,7 @@ test("an oracle stopped at V8's heap limit is a memory-cap budget at that limit,
   const [row]=JSON.parse(readFileSync(arm.output,'utf8')).rows;
   assert.equal(row.kind,'budget');assert.equal(row.count,undefined);
   const {reason,...budget}=row.budget;
-  assert.deepEqual(budget,{version:1,phase:'execute',outcome:'memory-cap',bound:ORACLE_EXECUTION_POLICY.heapBytes,signal:'SIGABRT'},'the row names the policy\'s heap, not the resident bound the run never reached');
+  assert.deepEqual(budget,{version:2,phase:'execute',outcome:'memory-cap',bound:ORACLE_EXECUTION_POLICY.heapBytes,signal:'SIGABRT'},'the row names the policy\'s heap, not the resident bound the run never reached');
   assert.match(reason,new RegExp(`^oracle memory-cap: ${arm.source} stopped at V8's ${ORACLE_EXECUTION_POLICY.heapBytes} byte JavaScript heap limit, the oracle execution policy's: FATAL ERROR: `));
   const [finding]=arm.summary().findings;
   assert.equal(finding!.outcome,'memory-cap');
@@ -335,7 +335,7 @@ process.exit(1);
   assert.equal(existsSync(planned.temporary.path),false,'the run owner releases its image before scratch removal');
 });
 
-test("runs past half their CPU bound are a margin row naming what each used, with no count; just under half is measured",async t=>{
+test("runs past half their CPU bound persist a stable margin, retain raw CPU evidence, and never claim a count",async t=>{
   const root=testScratch(t,'oracle-record-margin'),saved=process.env.NTS_BENCH_CPUS;
   t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
   process.env.NTS_BENCH_CPUS='4';
@@ -353,22 +353,18 @@ test("runs past half their CPU bound are a margin row naming what each used, wit
   await recordAll(root,output,async p=>({cpu:p.source===near?[7.6,7.6]:[7.4,7.4],count:2}));
   const rows=JSON.parse(readFileSync(output,'utf8')).rows,row=(source:string)=>rows.find((value:{source:string})=>value.source===source);
   assert.deepEqual([row(near).kind,row(near).count,row(near).complete],['budget',undefined,undefined],'a margin never claims a count');
-  assert.deepEqual(row(near).budget,{version:1,phase:'execute',outcome:'margin',bound:15,signal:null,cpu_s:[7.6,7.6],
-    reason:'node used 7.6 and 7.6 s of its 15 s CPU bound; a count needs both runs within half of it (7.5 s)'});
+  assert.deepEqual(row(near).budget,{version:2,phase:'execute',outcome:'margin',bound:15,signal:null});
   assert.deepEqual([row(under).kind,row(under).count],['measured',2],'just under half, it is measured');
   const summary=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8'));
   assert.deepEqual(summary.findings.map((finding:{source:string;outcome:string})=>[finding.source,finding.outcome]),[[near,'margin']],'a finding, never not measured');
   assert.ok(lines.some(line=>line.startsWith(`MARGIN c ${near} node used 7.6 and 7.6 s of its 15 s CPU bound`)),lines.join('\n'));
-  // It reads back as written; a margin with no run past half, with no CPU, or a stop that names CPU, does not.
-  // With the recorded identity's digests in place of this file's short test values.
+  assert.deepEqual((Object.values(summary.measurements) as {cpu:number[]}[]).find(one=>one.cpu[0]===7.6)!.cpu,[7.6,7.6]);
   const shard=(budget:object)=>({version:2,fixture:'tests/programs/margin',rows:[{...row(near),keys:{c:'c'.repeat(32)},signature:'d'.repeat(64),cases_sha256:'e'.repeat(64),driver_sha256:'f'.repeat(64),budget}]});
   assert.deepEqual(parseShard(shard(row(near).budget),'tests/programs/margin').rows[0]!.budget,row(near).budget);
-  for(const [budget,refusal] of [
-    [{...row(near).budget,cpu_s:[7.4,7.4]},/invalid oracle margin/],
-    [{...row(near).budget,cpu_s:undefined},/invalid oracle margin/],
-    [{...row(near).budget,cpu_s:[16,1]},/invalid oracle margin/],
-    [{...row(near).budget,outcome:'timeout',signal:'SIGKILL'},/only a margin names the CPU/],
-  ] as const)assert.throws(()=>parseShard(shard(JSON.parse(JSON.stringify(budget))),'tests/programs/margin'),refusal);
+  for(const budget of [{...row(near).budget,version:1},{...row(near).budget,phase:'prepare'},{...row(near).budget,signal:'SIGKILL'}])
+    assert.throws(()=>parseShard(shard(budget),'tests/programs/margin'),/invalid versioned oracle budget/);
+  for(const extra of [{cpu_s:[7.6,7.6]},{reason:'changing diagnostics'}])
+    assert.throws(()=>parseShard(shard({...row(near).budget,...extra}),'tests/programs/margin'),/unknown field/);
   // A population measured before, past half now, is refused as a regression.
   await assert.rejects(recordAll(root,output,async p=>({cpu:[7.6,7.6],count:2})),/REGRESSED oracle population: tests\/programs\/margin\/under\.ts measured -> margin/);
 });
@@ -490,7 +486,7 @@ test("a plan budget is one record for its entry: planned backends leave it, a me
   pass([planned(fine,'c','1')],['c','llvm']);
   await recordAll(root,output,measure);
   const first=JSON.parse(readFileSync(output,'utf8')),revision=oracleUnplannedRevision(root,'tests/programs/slow');
-  assert.deepEqual(first.unplanned,[{source:slow,backends:['c','llvm'],budget:{version:1,...budget},revision}],'one record names both backends');
+  assert.deepEqual(first.unplanned,[{source:slow,backends:['c','llvm'],budget:{version:2,phase:budget.phase,outcome:budget.outcome,bound:budget.bound,signal:budget.signal},revision}],'one record names both backends');
   assert.equal(first.rows.some((row:{source:string})=>row.source===slow),false,'no population, so no row');
   assert.ok(lines.includes(`PLAN BUDGET c ${slow} ${budget.reason}`),lines.join('\n'));
   assert.equal(JSON.parse(lines.at(-1)!).plan_budgets,2);
@@ -499,7 +495,7 @@ test("a plan budget is one record for its entry: planned backends leave it, a me
   pass([planned(fine,'c','1'),planned(slow,'c','2')],['llvm']);
   await recordAll(root,output,measure);
   const second=JSON.parse(readFileSync(output,'utf8'));
-  assert.deepEqual(second.unplanned,[{source:slow,backends:['llvm'],budget:{version:1,...budget},revision}]);
+  assert.deepEqual(second.unplanned,[{source:slow,backends:['llvm'],budget:{version:2,phase:budget.phase,outcome:budget.outcome,bound:budget.bound,signal:budget.signal},revision}]);
   assert.equal(second.rows.find((row:{source:string})=>row.source===slow).kind,'measured');
   assert.deepEqual(fineRow(),recorded,'a row the plan budget does not answer is unchanged');
   // Planned on llvm too: the plan budget goes.
@@ -513,4 +509,37 @@ test("a plan budget is one record for its entry: planned backends leave it, a me
   const shard={version:2,fixture:'tests/programs/slow',rows:[],unplanned:first.unplanned[0]};
   assert.deepEqual(parseShard(shard,'tests/programs/slow').unplanned,first.unplanned[0]);
   assert.throws(()=>parseShard({...shard,unplanned:{...shard.unplanned,driver_sha256:'f'.repeat(64)}},'tests/programs/slow'),/unknown field driver_sha256/,'a plan budget names no driver');
+});
+
+test("budget revision identifies runtime package content and excludes installer provenance",async()=>{
+  const {budgetProducerIdentity}=await import('../differential/record-oracles.ts');
+  const {oracleRecipeIdentity}=await import('../differential/oracle-runtime.ts');
+  const {dependencyPackageContent,dependencyImageMode}=await import('../inputs/dependency-inventory.ts');
+  const entries:import('../inputs/dependency-inventory.ts').DependencyEntry[]=[{path:'node_modules',kind:'directory',mode:0o755},
+    {path:'node_modules/pkg',kind:'directory',mode:0o755},
+    {path:'node_modules/pkg/index.js',kind:'file',mode:0o644,bytes:4,sha256:'a'.repeat(64)},
+    {path:'node_modules/.modules.yaml',kind:'file',mode:0o644,bytes:9,sha256:'b'.repeat(64)}];
+  const content=dependencyPackageContent(entries),runtime=oracleRecipeIdentity();
+  assert.equal(content,dependencyPackageContent([...entries].reverse()));
+  const producer=(installer:string,packages=content)=>budgetProducerIdentity({...runtime,dependencyRecipeSha256:installer},packages);
+  assert.equal(producer('a'.repeat(64)),producer('b'.repeat(64)));
+  assert.equal(content,dependencyPackageContent(entries.map(entry=>entry.kind==='link'?entry:{...entry,mode:dependencyImageMode(entry)})));
+  assert.equal(content,dependencyPackageContent(entries.filter(entry=>!entry.path.endsWith('.modules.yaml'))));
+  const changed=entries.map(entry=>entry.kind==='file'&&entry.path.endsWith('index.js')?{...entry,sha256:'c'.repeat(64)}:entry);
+  assert.notEqual(producer('a'.repeat(64)),producer('a'.repeat(64),dependencyPackageContent(changed)));
+  assert.notEqual(producer('a'.repeat(64)),budgetProducerIdentity({...runtime,executionSha256:'d'.repeat(64)},content));
+});
+
+test("a repeated held classification preserves bytes despite CPU and reason drift",async t=>{
+  const {addBudgetRecord,marginBudget}=await import('../differential/record-oracles.ts');
+  const root=testScratch(t,'held-classification'),source='benchmarks/cases/held/case.ts';
+  mkdirSync(dirname(join(root,source)),{recursive:true});writeFileSync(join(root,source),'export function f(){return 1;}');
+  const subject={...plan,source,source_digest:'a'.repeat(32),repository_root:root};
+  const first=addBudgetRecord({version:1,rows:[]},subject,marginBudget([32.8,33],60));
+  const next=addBudgetRecord(first,{...subject,driver:'different recording provenance'},marginBudget([33.8,37],60));
+  assert.equal(JSON.stringify(next),JSON.stringify(first));
+  assert.deepEqual(first.rows[0]!.budget,{version:2,phase:'execute',outcome:'margin',bound:60,signal:null});
+  assert.throws(()=>marginBudget([30,30],60),/not a margin measurement/);
+  const stopped=addBudgetRecord(first,subject,{phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'raw timed out'});
+  assert.equal(stopped.rows[0]!.budget!.outcome,'timeout','a changed classification is not silently kept as a margin');
 });

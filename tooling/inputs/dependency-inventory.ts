@@ -3,6 +3,13 @@ import {createHash} from 'node:crypto';
 import {lstatSync,readFileSync,readdirSync,readlinkSync} from 'node:fs';
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 export type DependencyEntry={path:string;kind:'directory';mode:number}|{path:string;kind:'file';mode:number;bytes:number;sha256:string}|{path:string;kind:'link';target:string};
+/** The sealed image's mode policy, also used when comparing installed content. */
+export const dependencyImageMode=(entry:Exclude<DependencyEntry,{kind:'link'}>)=>entry.kind==='directory'||entry.mode&0o111?0o555:0o444;
+/** Runtime package content excludes installer bookkeeping and acquisition provenance. */
+export function dependencyPackageContent(entries:DependencyEntry[]):string{
+  return createHash('sha256').update(JSON.stringify(dependencyPackageInventory(entries).sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0).map(entry=>
+    entry.kind==='link'?entry:{...entry,mode:dependencyImageMode(entry)}))).digest('hex');
+}
 const hash=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
 export function dependencyInventory(root:string,directories:readonly string[]=[root]):DependencyEntry[]{

@@ -21,8 +21,9 @@ import {runOracleCommand,runOraclePlanner,oracleExecutionLimits,type OracleLimit
 import {OracleBudgetError} from "./oracle-budget.ts";
 import {type OracleBudget} from "./oracle-runtime.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
+import {installationRuntimeContent} from '../inputs/dependency-inputs.ts';
 
-import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
+import { GENERATOR, classifyBudget, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
   type BudgetRevision, type MarginBudget, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
   tsconfig?: string;
@@ -158,10 +159,15 @@ function withRow(table: Table, plan: Plan, row: Row): Table {
 /** No count is claimed when a case passed its own bound. A measured row
  * cannot get worse through a recording pass. */
 let nodeRevision:string|undefined;
+/** Installer code authenticates acquisition, but cannot change runtime behavior. */
+export function budgetProducerIdentity(runtime:ReturnType<typeof oracleIdentity>,packageContent:string):string{
+  const {dependencyRecipeSha256:_installer,...recipe}=runtime;
+  return digest(JSON.stringify({version:2,recipe,packageContent}));
+}
 /** A budget's provenance, given its entry: the Node, the producer and the policy it was measured under. */
 function budgetRevision(entry:string):BudgetRevision{
   return {entry,node:nodeRevision??=createHash('sha256').update(readFileSync(process.platform==='linux'?'/proc/self/exe':process.execPath)).digest('hex'),
-    producer:digest(JSON.stringify(oracleIdentity(oracleToolchainLocation()))+readFileSync(new URL('./oracle-execution.ts',import.meta.url),'utf8')+readFileSync(new URL('./oracle-batch.ts',import.meta.url),'utf8')),
+    producer:budgetProducerIdentity(oracleIdentity(oracleToolchainLocation()),installationRuntimeContent(fileURLToPath(new URL('../..',import.meta.url)))),
     policy:digest(readFileSync(new URL('./oracle-execution-policy.ts',import.meta.url),'utf8')+JSON.stringify({compileCpu:COMPILE_CPU_BOUND_SECONDS,compileResident:ORACLE_COMPILE_MEMORY_BYTES}))};
 }
 export function oracleBudgetRevision(root:string,source:string){
@@ -195,8 +201,8 @@ export function addUnplanned(table:Table,root:string,source:string,backend:strin
   if(table.rows.some(row=>row.source===source&&row.kind==='measured'&&row.keys[backend]))throw new CaseBudgetError(`REGRESSED oracle population: ${source} (${backend}) measured -> plan timeout`);
   const previous=table.unplanned?.find(one=>fixtureOf(one.source)===fixture),revision=oracleUnplannedRevision(root,fixture);
   const backends=[...new Set([...(previous?.source===source?previous.backends:[]),backend])].sort();
-  const entry=previous?.source===source&&JSON.stringify(previous.revision)===JSON.stringify(revision)?{...previous,backends}
-    :{source,backends,budget:{version:1 as const,...budget},revision};
+  const entry=previous?.source===source&&JSON.stringify(previous.revision)===JSON.stringify(revision)&&JSON.stringify(previous.budget)===JSON.stringify({...classifyBudget(budget),phase:'plan',outcome:'timeout'})?{...previous,backends}
+    :{source,backends,budget:{...classifyBudget(budget),phase:'plan' as const,outcome:'timeout' as const},revision};
   return {...table,unplanned:[...(table.unplanned??[]).filter(one=>fixtureOf(one.source)!==fixture),entry].sort((a,b)=>a.source.localeCompare(b.source,'en'))};
 }
 /** The table with `source` planned on `backend` this time: its plan budget no longer names that backend, and goes when it names none. */
@@ -221,12 +227,12 @@ export function marginBudget(cpu:readonly number[],bound:number):MarginBudget{
 export function addBudgetRecord(table:Table,plan:Plan,budget:RecordedBudget):Table{
   validateSourcePlan(plan);
   if(table.rows.some(row=>row.source===plan.source&&row.kind==='measured'&&row.keys[plan.backend]))throw new CaseBudgetError('REGRESSED oracle population: '+plan.source+' measured -> '+budget.outcome);
-  let row:Row={...identity(plan),kind:'budget',budget:{version:1,...budget},source_digest:plan.source_digest,revision:oracleBudgetRevision(plan.repository_root??process.cwd(),plan.source),
+  let row:Row={...identity(plan),kind:'budget',budget:classifyBudget(budget),source_digest:plan.source_digest,revision:oracleBudgetRevision(plan.repository_root??process.cwd(),plan.source),
     ...(plan.input_domain?{input_domain:plan.input_domain}:{})};
   const previous=table.rows.find(one=>one.source===row.source&&one.signature===row.signature);
   row.keys={...previous?.keys,...row.keys};
   // An unchanged recorded defect keeps its original provenance.
-  if(previous?.kind==='budget'&&JSON.stringify(previous.revision)===JSON.stringify(row.revision))row={...previous,keys:row.keys};
+  if(previous?.kind==='budget'&&JSON.stringify(previous.revision)===JSON.stringify(row.revision)&&JSON.stringify(previous.budget)===JSON.stringify(row.budget))row={...previous,keys:row.keys};
   return withRow(table,plan,row);
 }
 

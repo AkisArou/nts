@@ -54,7 +54,7 @@ test('a recorded budget is retried without treating its missing count as zero',(
 
 test('a plan budget is work to retry: its entry is planned again, once per fixture',()=>{
   const row=(source:string,kind:'measured'|'no-oracle',count?:number)=>({kind,source,signature:'s',keys:{c:'k'},cases_sha256:'c',driver_sha256:'d',...(count===undefined?{}:{count})});
-  const plan=(source:string)=>({source,backends:['c'],budget:{version:1 as const,phase:'plan' as const,outcome:'timeout' as const,bound:600,signal:'SIGKILL',reason:'oracle planner timed out'},
+  const plan=(source:string)=>({source,backends:['c'],budget:{version:2 as const,phase:'plan' as const,outcome:'timeout' as const,bound:600,signal:'SIGKILL'},
     revision:{entry:'e',node:'n',producer:'p',policy:'q'}});
   const measured='tests/programs/measured/src/main.ts',unplanned='benchmarks/cases/slow/case.ts',bare='tests/programs/bare/src/main.ts';
   assert.deepEqual(programOracleSources({rows:[row(measured,'measured',4),row(bare,'no-oracle')],unplanned:[plan(unplanned),plan(measured)]}),[measured,unplanned],

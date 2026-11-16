@@ -20,7 +20,8 @@ import {dependencySourceCandidates} from './dependency-source-candidates.ts';
 import {DEPENDENCY_ROOT_INPUTS,installationBinPaths} from './dependency-input-names.ts';
 export {DEPENDENCY_ROOT_INPUTS} from './dependency-input-names.ts';
 import {executableModuleSource} from '../gate/reader-inputs/main.ts';
-import {installationCatalog,installationCatalogBytes,dependencyHash,type DependencyCatalogTrust} from './dependency-catalog.ts';
+import {installationCatalog,installationCatalogBytes,dependencyHash,readDependencyCatalog,type DependencyCatalogTrust} from './dependency-catalog.ts';
+import {dependencyPackageContent} from './dependency-inventory.ts';
 
 const digest=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");
 export function dependencyCache(root:string):string {
@@ -37,6 +38,13 @@ export function installationCatalogTrust(root:string,tree:string):DependencyCata
   const catalogPath=installationCatalogPath(root,tree);
   try{return {catalogPath,catalogSha256:dependencyHash(installationCatalogBytes(catalogPath))};}
   catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
+}
+/** Acquisition pins authenticate the catalog; only runtime bytes identify behavior. */
+export function installationRuntimeContent(tree:string):string{
+  const shared=dirname(git(tree,'rev-parse','--path-format=absolute','--git-common-dir'));
+  const result=readDependencyCatalog(installationCatalogTrust(shared,tree),tree);
+  if(result.state!=='current')throw failure(`${result.reason}; publish with node tooling/inputs/linker.ts work ${JSON.stringify(shared)} ${JSON.stringify(tree)}`);
+  return dependencyPackageContent(result.catalog.entries);
 }
 const failure=(message:string)=>new ToolingInstrumentError("tooling-setup",`dependency inputs: ${message}`);
 function gitBytes(repo:string,...args:string[]):string {

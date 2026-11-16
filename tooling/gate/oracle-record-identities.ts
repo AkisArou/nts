@@ -8,8 +8,8 @@ import {publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 
 export const ORACLE_IDENTITY_INPUTS={
   source:"tree",source_digest:"tree",input_domain:"tree",
-  signature:"native-plan",keys:"native-plan",cases_sha256:"native-plan",driver_sha256:"native-plan",
-} as const satisfies Record<keyof OracleIdentityInputs,"tree"|"native-plan">;
+  signature:"native-plan",keys:"native-plan",cases_sha256:"native-plan",driver_sha256:"provenance",
+} as const satisfies Record<keyof OracleIdentityInputs,"tree"|"native-plan"|"provenance">;
 type TreeInput={ [K in keyof typeof ORACLE_IDENTITY_INPUTS]:typeof ORACLE_IDENTITY_INPUTS[K] extends "tree"?K:never }[keyof typeof ORACLE_IDENTITY_INPUTS];
 
 /** NumericDomain's declared defaults match the native planner. Explanatory
@@ -68,6 +68,6 @@ export function oracleIdentityProblems(root:string,rows:readonly OracleIdentityI
 }
 
 export function oracleIdentityScope():string{
-  const named=(scope:"tree"|"native-plan")=>Object.entries(ORACLE_IDENTITY_INPUTS).filter(([,value])=>value===scope).map(([name])=>name).join(", ");
-  return `oracle identity inputs checked: ${named("tree")} (input_domain by normalized declaration); require native plans: ${named("native-plan")}, input_domain.identity's native serialization hash, generator version/digest. Budget revision provenance remains the refresh planner's input.`;
+  const named=(scope:"tree"|"native-plan"|"provenance")=>Object.entries(ORACLE_IDENTITY_INPUTS).filter(([,value])=>value===scope).map(([name])=>name).join(", ");
+  return `oracle identity inputs checked: ${named("tree")} (input_domain by normalized declaration); require native plans: ${named("native-plan")}, input_domain.identity's native serialization hash, generator version/digest. Recording provenance only: ${named("provenance")}. Budget revision is the refresh planner's input.`;
 }
