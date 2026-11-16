@@ -142,6 +142,7 @@ const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${
 const realRules=await import(rules),realRun=await import(run);
 const {landingSelection}=await import(${JSON.stringify(new URL('./selection.ts',import.meta.url).href)});
 import {gitArguments} from '../gate/git-arguments/main.ts';
+const {hostEnvironment}=await import(${JSON.stringify(new URL('../gate/host-environment.ts',import.meta.url).href)});
 const {fixture}=await import(${JSON.stringify(new URL('./run-fixture.ts',import.meta.url).href)});
 const cleanup=[],f=fixture({after(fn){cleanup.push(fn);}});f.control('rustfmt','pressure');
 const git=(...args)=>execFileSync('git',gitArguments(args),{cwd:f.tree,env:f.options([]).env,encoding:'utf8'}).trim();
@@ -150,14 +151,14 @@ const commit=git('rev-parse','HEAD');let actualRun;
 const selection=landingSelection({owed:{steps:['build','rustfmt']},paths:[],catalogue:['build','rustfmt'],table:{build:{form:'as-is'},rustfmt:{form:'as-is'}},inCorpus:()=>false,rows:new Map(),cost:()=>({cpu:1,measured:true,source:'control'}),budget:{slots:24,frontends:24,seconds:600}});
 mock.module(rules,{namedExports:{...realRules,ruleSelect:()=>()=>({selection,kind:'other',interop:null,doctests:null})}});
 mock.module(run,{namedExports:{...realRun,runLanding:options=>{actualRun=options.run;return realRun.runLanding({...options,build:f.options([]).build,owned:f.options([]).owned,env:{...options.env,HOME:f.options([]).env.HOME}});}}});
-const before=process.cwd();process.chdir(f.tree);process.argv=[process.execPath,${JSON.stringify(CHECK)},commit,'--here'];
+const before=process.cwd(),beforeEnvironment=process.env;process.env=hostEnvironment(f.options([]).env);process.chdir(f.tree);process.argv=[process.execPath,${JSON.stringify(CHECK)},commit,'--here'];
 try{
  await import(${JSON.stringify(new URL('./check.ts',import.meta.url).href)});
  assert.equal(process.exitCode,0);const result=JSON.parse(readFileSync(join(actualRun,'landing.json'),'utf8'));
  assert.equal(result.state,'green');assert.equal(result.steps.find(row=>row.name==='rustfmt').attempt,2);
  const retry=JSON.parse(readFileSync(join(actualRun,'attempt-2/summary.json'),'utf8'));assert.equal(retry.environment.canonical,true);
  assert.equal(retry.steps.find(row=>row.name==='rustfmt').verdict,'PASS');
-}finally{process.chdir(before);for(const fn of cleanup.reverse())await fn();}`;
+}finally{process.env=beforeEnvironment;process.chdir(before);for(const fn of cleanup.reverse())await fn();}`;
  const imports=process.execArgv.flatMap((argument,index,args)=>argument==='--import'&&args[index+1]?[argument,args[index+1]!] : []);
   const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{cwd:dirname(CHECK),encoding:'utf8',env:fixtureEnvironment(t)});
  const output=(result.stdout??'')+(result.stderr??'');assert.equal(result.status,0,output);

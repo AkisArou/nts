@@ -389,7 +389,9 @@ test('the service lands a real memory retry after its build sampler drains',asyn
  const {fixture}=await import('./run-fixture.ts');const {runLanding}=await import('./run.ts');
  const run=fixture(t),f=service(t);run.control('rustfmt','pressure');
  f.config.select=()=>({selection:selection(['build','rustfmt']),kind:'other',interop:null,doctests:null});
- f.config.runSteps=options=>runLanding(run.options(['build','rustfmt'],{commit:options.commit,priority:'landing'}));
+ // The injected real runner owns an independent repository, and checks its
+ // actual commit; the service's task repository owns queue/publication state.
+ f.config.runSteps=()=>runLanding(run.options(['build','rustfmt'],{priority:'landing'}));
  const task=f.task('fix/sampler-retry',{'src/retry.txt':'retry control\n'}),entry=f.submit('fix/sampler-retry',task.sha);
  const drained=await drain(f.config);assert.equal(drained.state,'drained');
  const result=f.queue.result(entry.id);assert.ok(result);assert.equal(result.state,'landed',result.message);
