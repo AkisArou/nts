@@ -4,6 +4,8 @@ import {readFileSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {installedCatalogFixture} from './installed-catalog-fixture.ts';
+import {spawnTest} from './test-wait.ts';
+import {gitArguments} from './git-arguments/main.ts';
 import {projectDependencies} from './project-dependencies.ts';
 import {projectInputOwner} from './project-inputs.ts';
 import {moduleGraph} from './module-closure.ts';
@@ -91,4 +93,32 @@ test('a pending catalog names the installed packages the Program itself classifi
       assert.equal(owner.read([{kind:'config',path:'local/tsconfig.json'}]).installationReach,undefined,'a Program with no installed reach owes nothing');
     }finally{owner.close();}
   }
+});
+
+test('selection forces a step whose declared Program reaches an installed package only while the catalog is unavailable',t=>{
+  const f=fixture(t);
+  const git=(...args:string[])=>{const result=spawnTest('git',gitArguments(args),{cwd:f.root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
+  f.put('.gitignore','node_modules/\n');f.put('docs/ordinary.md','prose');
+  f.put('Cargo.toml','[package]\nname="installed-reach-selection"\nversion="0.1.0"\nedition="2021"\n');f.put('src/lib.rs','');
+  f.put('tooling/gate/all.sh',`#!/bin/sh
+if [ "$1" = --list ]; then printf '%s\\n' proof; exit; fi
+step "proof" node tooling/private/reach.ts
+`);
+  f.put('tooling/gate/run.mjs','');f.put('tooling/gate/tooling-test-exclusions.json','[]');f.put('tooling/empty.test.ts','');
+  f.put('tooling/gate/reader-inputs/main.ts',"export const projectConfig=(url,role)=>({kind:'project-config',role,url});");
+  f.put('tooling/private/reach.ts',"import {projectConfig} from '../gate/reader-inputs/main.ts';projectConfig(new URL('../../tsconfig.json',import.meta.url),'compiled-program');");
+  git('init','-q');git('add','.');
+  const select=(trust:typeof f.trust|null)=>{
+    const script=`import {owed,gateSteps} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+const rows=owed([{path:'docs/ordinary.md',sameMode:true,before:'old',after:'new'}],${JSON.stringify({acceptedRustRecordBlob:null,dependencyCatalog:trust})});
+console.log(JSON.stringify({steps:gateSteps(rows),unknown:rows.filter(row=>row.name.startsWith('installation inputs unknown:')).map(row=>row.name)}));`;
+    const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:f.root,encoding:'utf8'});
+    assert.equal(result.status,0,result.stdout+result.stderr);
+    return JSON.parse(result.stdout) as {steps:string[];unknown:string[]};
+  };
+  const missing=select(null);
+  assert.ok(missing.steps.includes('proof'),'an unauthenticated package reach owes its reader any change');
+  assert.deepEqual(missing.unknown,['installation inputs unknown: installation catalog is missing (read by tooling/private/reach.ts)']);
+  const current=select(f.trust);
+  assert.ok(!current.steps.includes('proof'),'a current catalog selects the Program by its exact reach');assert.deepEqual(current.unknown,[]);
 });

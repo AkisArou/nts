@@ -13,17 +13,29 @@ to touch them was the source-parent walk, which reported a symptom.
 The project owner now reports `installationReach` only while the catalog is
 pending. It comes from the Program's own external-library classification,
 named by the resolved `packageId` where an import supplies one. The closure
-graph carries it as `installationObligations`. `copyModuleClosure` and
-`copyFixtureProject` refuse it through one helper before any source-parent
-check. The refusal names the project, the reader, the package and the
-`linker.ts work` command.
+graph emits each package as an `installed-package-reach` row of its existing
+`UnavailableInput`, from the one project branch every Program declaration
+passes through. Its modes keep the existing contract:
+
+- **`'refuse'`** (`copyModuleClosure`): `describe` throws before any
+  source-parent check. The copier adds the remedy its source owns.
+- **`'conservative'`** (owed): the row forces the reader's steps through
+  owed's existing unavailable-input path.
+- **Unasked:** the reads stay plain observations.
+
+`copyFixtureProject`'s oracle owner reads the project owner directly and uses
+the same refusal helper. The refusal names the project, the reader, the
+package and the `linker.ts work` command.
 
 | Closure | main (`cc8731ddcc`) | This change |
 | --- | --- | --- |
 | nested `fixtureInput` → `projectConfig`, no catalog | ancestor error | names catalog and command |
-| same, published catalog | passes | passes |
+| reader module, or `projectConfig` as the entry, no catalog | ancestor error | names catalog and command |
+| nested, published catalog | passes | passes |
 | host-only `projectConfig` and modules, no catalog | passes | passes, unchanged files |
 | oracle owner reaching a package, no catalog | `unowned installed source` | names catalog |
+| owed, ordinary change, no catalog | reader's step not selected | reader's step forced |
+| owed, ordinary change, current catalog | not selected | not selected |
 
 The counterfactual runs control (a) against main's copier:
 `~/.cache/nts-scratch/802/counterfactual.test.ts`
@@ -31,26 +43,7 @@ The counterfactual runs control (a) against main's copier:
 The reproduction is `~/.cache/nts-scratch/802/repro6.ts`
 (sha256 `0b38074c19b0978ac4e8e7781f3312757375e24bd654b266a0c0c7a301ee4e75`).
 
-## Follow-up card (for the coordinator to file)
+## Follow-up
 
-**Goal:** Landing selection treats an unmet installation obligation as an
-unavailable authority rather than as ordinary source reach.
-
-**Why:** In a tree with no published catalog, `owed.mjs`'s graph records a
-declared Program's `node_modules` reads as plain observations and module
-edges. It ignores `installationObligations`. A change that reaches an
-installed package is then selected as if the package's bytes were repository
-inputs, rather than being told that the tree lacks its catalog.
-
-**Design:** `owed.mjs` reads `InputSnapshot.installationObligations` from the
-same graph. A non-empty list either forces the declaring reader's steps
-(conservative), or refuses selection, naming the catalog and the publishing
-command. Both use `refuseInstallationReach`'s wording. The choice depends on
-whether the landing check guarantees a published catalog. If it does, an
-obligation there is a defect and refuses.
-
-**Paths:** `tooling/gate/owed.mjs` and its tests
-
-**Done when:** A selection control in a tree with no catalog and a change
-reaching an installed package either forces the declared steps or refuses by
-name. The same control with a catalog selects exactly as today.
+None. Selection receives the obligation through owed's existing
+unavailable-input path; `project-dependencies.test.ts` holds its control.

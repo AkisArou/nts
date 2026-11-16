@@ -1,4 +1,4 @@
-import {fixtureInput,moduleMembers,projectConfig} from './reader-inputs/main.ts';
+import {fixtureInput,moduleMembers,projectConfig,type InputEntry} from './reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
@@ -1062,15 +1062,18 @@ function installedReachFixture(t:TestContext){
   f.put('nested.ts',"import {fixtureInput} from './tooling/gate/reader-inputs/main.ts';fixtureInput(new URL('./child.ts',import.meta.url),{dataNamespaces:{}});");
   return {...f,destination:join(f.root,'..','destination')};
 }
-const catalogRefusal=/fixture closure needs the installation catalog: declared Program tsconfig\.json \(child\.ts\) reaches installed package fixture-package@1\.0\.0; installation catalog is missing; supply a current dependencyCatalog for source /;
+const refusal=(reader:string)=>new RegExp('fixture closure needs the installation catalog: declared Program tsconfig\\.json \\('+reader.replace(/[<>.]/g,'\\$&')+'\\) reaches installed package fixture-package@1\\.0\\.0; installation catalog is missing; supply a current dependencyCatalog for source ');
 
-test('a nested declared Program reaching an installed package names the missing catalog before any source-parent check',t=>{
+test('every route that declares a Program reaching an installed package names the missing catalog before any source-parent check',t=>{
   const f=installedReachFixture(t);
-  for(const dependencyCatalog of [undefined,null]){
-    assert.throws(()=>copyModuleClosure(['nested.ts'],f.destination,{sourceRoot:f.root,...(dependencyCatalog===null?{dependencyCatalog}:{})}),error=>{
-      assert.match(String(error),catalogRefusal);assert.doesNotMatch(String(error),/ancestor/);return true;
+  // Nested fixture grant, a reader module, and the declaration as the entry.
+  const shapes:[string,InputEntry,string][]=[['nested','nested.ts','child.ts'],['module','child.ts','child.ts'],
+    ['direct',projectConfig(pathToFileURL(join(f.root,'tsconfig.json')),'compiled-program'),'<entry>']];
+  for(const [shape,entry,reader] of shapes)for(const dependencyCatalog of [undefined,null]){
+    assert.throws(()=>copyModuleClosure([entry],f.destination,{sourceRoot:f.root,...(dependencyCatalog===null?{dependencyCatalog}:{})}),error=>{
+      assert.match(String(error),refusal(reader),shape);assert.doesNotMatch(String(error),/ancestor/,shape);return true;
     });
-    assert.equal(existsSync(f.destination),false,'nothing is staged');
+    assert.equal(existsSync(f.destination),false,shape+': nothing is staged');
   }
   const files=copyModuleClosure(['nested.ts'],f.destination,{sourceRoot:f.root,dependencyCatalog:f.trust});
   // The Program reads its own package goal; the catalog's pins are its selection reach.
@@ -1078,13 +1081,26 @@ test('a nested declared Program reaching an installed package names the missing 
   assert.equal(existsSync(join(f.destination,'node_modules')),false,'the installation stays with its own catalog');
 });
 
+test('an unmet installed-package reach is a selection obligation, a materializing refusal, and nothing to an unasked graph',t=>{
+  const f=installedReachFixture(t);
+  const describe=(unavailableInputs?:'conservative'|'refuse')=>{const graph=moduleGraph({sourceRoot:f.root,dependencyCatalog:null,...(unavailableInputs?{unavailableInputs}:{})});
+    try{return graph.describe(['nested.ts']);}finally{graph.close();}};
+  assert.deepEqual(describe('conservative').unavailableInputs,[{kind:'installed-package-reach',reader:'child.ts',context:{entry:'child.ts',dataNamespaces:{}},
+    project:'tsconfig.json',package:'fixture-package@1.0.0',reason:'installation catalog is missing'}]);
+  assert.throws(()=>describe('refuse'),{name:'InstalledPackageReachUnavailable',message:/declared Program tsconfig\.json \(child\.ts\) reaches installed package fixture-package@1\.0\.0; installation catalog is missing$/});
+  const unasked=describe();
+  assert.equal(unasked.unavailableInputs,undefined);assert.ok(unasked.files.includes('main.ts'));
+  const current=moduleGraph({sourceRoot:f.root,dependencyCatalog:f.trust,unavailableInputs:'conservative'});
+  try{assert.equal(current.describe(['nested.ts']).unavailableInputs,undefined,'a current catalog owes nothing');}finally{current.close();}
+});
+
 test('closures with no installed-package reach stage unchanged without a catalog',t=>{
   const f=installedReachFixture(t);
   f.put('local/tsconfig.json','{"compilerOptions":{"types":[]},"files":["local.ts"]}');f.put('local/local.ts','export const local=1;');
   f.put('local/reader.ts',"import {projectConfig} from '../tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./tsconfig.json',import.meta.url),'compiled-program');");
   f.put('plain.ts',"import './local/local.ts';");
-  const graph=moduleGraph({sourceRoot:f.root,dependencyCatalog:null});
-  try{assert.equal(graph.describe(['local/reader.ts','plain.ts']).installationObligations,undefined);}finally{graph.close();}
+  const graph=moduleGraph({sourceRoot:f.root,dependencyCatalog:null,unavailableInputs:'conservative'});
+  try{assert.equal(graph.describe(['local/reader.ts','plain.ts']).unavailableInputs,undefined);}finally{graph.close();}
   const files=copyModuleClosure(['local/reader.ts','plain.ts'],f.destination,{sourceRoot:f.root,dependencyCatalog:null});
   assert.deepEqual(files,['local/local.ts','local/reader.ts','local/tsconfig.json','package.json','plain.ts','tooling/gate/reader-inputs/main.ts']);
   for(const file of files)assert.deepEqual(readFileSync(join(f.destination,file)),readFileSync(join(f.root,file)));

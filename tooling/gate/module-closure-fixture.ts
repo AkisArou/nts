@@ -4,7 +4,7 @@ import {copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathS
 import {dirname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
-import {moduleGraph, type ModuleClosureOptions,type InputSnapshot,type InstallationObligation} from "./module-closure.ts";
+import {moduleGraph,installedPackageReachMessage,InstalledPackageReachUnavailable,type ModuleClosureOptions,type InputSnapshot,type InstalledPackageReach} from "./module-closure.ts";
 import {outsideSource} from "./source-containment.ts";
 import {canonicalNamespace as canonical,fixtureNamespaces,fixtureInput,fileInput,type FixtureInput,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
@@ -39,13 +39,13 @@ function sourceCatalog(source:string){
   return shared===null?null:installationCatalogTrust(shared,source);
 }
 /** A declared Program that reaches an installed package owes the catalog that
- * authenticates it. Refuse by that missing authority before any source-parent
- * check; closures with no installed reach need no catalog. */
-export function refuseInstallationReach(rows:readonly Pick<InstallationObligation,'project'|'reader'|'package'|'reason'>[],source:string,supplied:boolean):void{
+ * authenticates it. Refuse by that missing authority, with the remedy this
+ * copier's source owns; closures with no installed reach need no catalog. */
+export function refuseInstallationReach(rows:readonly Pick<InstalledPackageReach,'project'|'reader'|'package'|'reason'>[],source:string,supplied:boolean,cause?:unknown):void{
   const row=rows[0];if(!row)return;
   const shared=supplied?null:sourceShared(source);
-  throw Error('fixture closure needs the installation catalog: declared Program '+row.project+' ('+row.reader+') reaches installed package '+row.package+'; '+row.reason+'; '
-    +(shared===null?'supply a current dependencyCatalog for source '+source:'publish it with '+installationCatalogPublication(shared,source)));
+  throw Error(installedPackageReachMessage(row)+'; '
+    +(shared===null?'supply a current dependencyCatalog for source '+source:'publish it with '+installationCatalogPublication(shared,source)),cause===undefined?undefined:{cause});
 }
 
 export type FixtureClosureOptions = ModuleClosureOptions & {link?: boolean;
@@ -210,9 +210,11 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   const graph = moduleGraph({...options, sourceRoot: source,dependencyCatalog,unavailableInputs:'refuse'});
   let snapshot:InputSnapshot;
   try {snapshot=graph.describe(entries);}
-  catch(error){throw Error('fixture closure '+JSON.stringify(entries)+' from '+source+': '+String(error),{cause:error});}
+  catch(error){
+    if(error instanceof InstalledPackageReachUnavailable)refuseInstallationReach(error.rows,source,options.dependencyCatalog!==undefined,error);
+    throw Error('fixture closure '+JSON.stringify(entries)+' from '+source+': '+String(error),{cause:error});
+  }
   finally {graph.close();}
-  refuseInstallationReach(snapshot.installationObligations??[],source,options.dependencyCatalog!==undefined);
   validateReaderSourceObservations(snapshot,source);
   const staged=fixtureStagingSnapshot(snapshot);
   const data=fixtureData(staged,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;
