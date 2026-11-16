@@ -4,7 +4,6 @@ import {fileURLToPath} from 'node:url';
 import {digestSources,type RecordFamily} from '../records/recorder-core.ts';
 import {auditLines,lineRows,changedLines,validateLine,mergeLines} from '../records/recorder-format.ts';
 import {acceptedChange,improves,type OutcomeTransition} from '../conformance/outcome-transition.ts';
-import type {DeltaRow} from '../records/delta.ts';
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const read=(root:string,file:string)=>readFileSync(join(root,file),'utf8');
 const label=(transition:OutcomeTransition)=>improves(transition)?'improved':'refuses differently';

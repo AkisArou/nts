@@ -4,7 +4,6 @@ import {fileURLToPath} from 'node:url';
 import {digestSources,type RecordFamily} from '../records/recorder-core.ts';
 import {auditLines,lineRows,changedLines,validateLine,mergeLines} from '../records/recorder-format.ts';
 import {acceptedChange,improves,type OutcomeTransition} from '../conformance/outcome-transition.ts';
-import type {DeltaRow} from '../records/delta.ts';
 import {dataDirectory} from '../gate/reader-inputs/main.ts';
 const TYPESCRIPT_CASES=dataDirectory(new URL('../../tests/typescript/',import.meta.url));
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));

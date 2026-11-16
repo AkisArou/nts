@@ -5,7 +5,6 @@ import {fileURLToPath} from 'node:url';
 import {type RecordFamily} from '../records/recorder-core.ts';
 import {auditLines,lineRows,changedLines,validateLine} from '../records/recorder-format.ts';
 
-import type {DeltaRow} from '../records/delta.ts';
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 import {TEST262_SLICES,TEST262_RECORDS,BACKENDS} from '../records/record-paths.ts';
 import {mergeTest262Record,parseTest262Row} from './test262-record.ts';

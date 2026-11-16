@@ -5,7 +5,6 @@ import {fileURLToPath} from 'node:url';
 import {digestSources,type RecordFamily} from '../records/recorder-core.ts';
 import {wholeRow,mergeWhole} from '../records/recorder-format.ts';
 
-import type {DeltaRow} from '../records/delta.ts';
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const read=(root:string,file:string)=>readFileSync(join(root,file),'utf8');
 import {GENERATOR,recordPath,RECORDS,hintedOracleImprovements,parseShard,oracleImprovementPath,oracleBudgetFixtures,pendingFixtures,type OracleRow} from './oracle-records.ts';

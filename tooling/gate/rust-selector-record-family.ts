@@ -5,7 +5,6 @@ import {fileURLToPath} from 'node:url';
 import {type RecordFamily} from '../records/recorder-core.ts';
 import {wholeRow,mergeWhole} from '../records/recorder-format.ts';
 
-import type {DeltaRow} from '../records/delta.ts';
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 import {RUST_SELECTOR_CASE,rustSelectorPending,rustSelectorSourceKey} from './rust-selector-write.ts';
 import {RUST_SELECTOR_RECORD,parseRustSelectorRecord,MAX_RUST_SELECTOR_RECORD_BYTES} from './rust-selector-record.ts';
