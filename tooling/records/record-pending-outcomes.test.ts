@@ -39,8 +39,24 @@ function git(root:string,...args:string[]):string{
     GIT_AUTHOR_NAME:"Records fixture",GIT_AUTHOR_EMAIL:"records-fixture@invalid",GIT_COMMITTER_NAME:"Records fixture",GIT_COMMITTER_EMAIL:"records-fixture@invalid"}}).trim();
 }
 
+/** Private populations may contain only immutable inputs named by their
+ * staging owners, never an independently materialized production case. */
+function assertPrivateModules(root:string,areas:readonly string[],placed:readonly string[]):void{
+  const allowed=new Set(placed);
+  for(const area of areas){
+    const directories=new Set<string>([area]);
+    for(const path of placed.filter(path=>path.startsWith(area+'/')))for(let at=dirname(path);at===area||at.startsWith(area+'/');at=dirname(at))directories.add(at);
+    for(const entry of readdirSync(join(root,area),{recursive:true,withFileTypes:true})){
+      const path=join(entry.parentPath,entry.name).slice(root.length+1);
+      if(entry.isDirectory()){assert.ok(directories.has(path),'private namespace contains an undeclared directory: '+path);continue;}
+      assert.ok(entry.isFile()&&allowed.has(path),'private namespace contains an undeclared file: '+path);
+      assert.deepEqual(readFileSync(join(root,path)),readFileSync(join(SOURCE,path)),'immutable fixture module bytes changed: '+path);
+    }
+  }
+}
+
 /** Stage exactly the same private tree for the setup control and compiler proof. */
-function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
+function stageRecordsTree(t:{after(fn:()=>void):void},root:string):string[]{
   // Stage the real command factory and this family alone. The oracle fixture
   // below supplies its own project and installation inputs.
   mkdirSync(join(root,'tests/typescript'),{recursive:true});
@@ -50,7 +66,7 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
   const otherData=['runtime/node','runtime/web-platform','tests/compile-time'];
   for(const area of otherData)mkdirSync(join(root,area),{recursive:true});
   const preloadProject=fixtureInput(new URL('../conformance/tsconfig.json',import.meta.url),{dataNamespaces:{}});
-  copyFixtureProject(preloadProject,root,{entries:['tooling/records/outcomes-recorder-fixture.ts','tooling/gate/oracle-entry.ts'],dataNamespaces:{
+  const placed=copyFixtureProject(preloadProject,root,{entries:['tooling/records/outcomes-recorder-fixture.ts','tooling/gate/oracle-entry.ts'],dataNamespaces:{
     'tests/outcomes':'one pending outcome fixture',
     'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture',
     ...Object.fromEntries(otherData.map(area=>[area,'pending-outcome records fixture']))}});
@@ -62,11 +78,11 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
   assert.deepEqual(readdirSync(join(root,'tests/typescript')),[],'an outcome fixture stages no production TypeScript cases');
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[],'the pending outcome starts without production records');
   for(const area of ['tests/programs','benchmarks/cases'])assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
-  for(const area of otherData)assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
+  assertPrivateModules(root,otherData,placed);
   for(const file of ["tsconfig.fixtures.json","runtime/jvm/test-vm-flags.txt"]){
     mkdirSync(dirname(join(root,file)),{recursive:true});copyFileSync(join(SOURCE,file),join(root,file));
   }
-  oracleWorkspaceFixture(t,root);
+  placed.push(...oracleWorkspaceFixture(t,root));
   // The pending case: a recorded outcome's sources, without its record.
   for(const file of ["tsconfig.json","src/main.ts"]){
     mkdirSync(dirname(join(root,FIXTURE,file)),{recursive:true});copyFileSync(join(SOURCE,FIXTURE,file),join(root,FIXTURE,file));
@@ -74,12 +90,22 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[FIXTURE.split('/').at(-1)]);
   assert.equal(existsSync(join(root,RECORD)),false,'the fixture owns a pending case, never its production record');
   git(root,"add","-f","tsconfig.fixtures.json",FIXTURE);git(root,"commit","-qm","one pending outcome");
+  assertPrivateModules(root,otherData,placed);
+  return placed;
 }
 
 test('records fixture stages only its declared private populations',t=>{
   const scratch=newTestScratch('record-pending-outcome-staging');
   t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
   stageRecordsTree(t,join(scratch,'tree'));
+});
+
+test('a runtime file outside the project placement list cannot enter the private population',t=>{
+  const scratch=newTestScratch('record-pending-outcome-namespace'),root=join(scratch,'tree');
+  t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
+  const placed=stageRecordsTree(t,root);
+  writeFileSync(join(root,'runtime/node/unclaimed-case.ts'),'export const unrelated=1;');
+  assert.throws(()=>assertPrivateModules(root,['runtime/node'],placed),/private namespace contains an undeclared file: runtime\/node\/unclaimed-case.ts/);
 });
 
 /** A tree with one pending outcome, a clean pin of the gate's compiler, and the records unit's canonical environment. */
