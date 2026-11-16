@@ -18,7 +18,7 @@ export interface RecordFamily{
  files(root:string):readonly string[];
  records(row:DeltaRow):readonly string[];
  runs(pending:readonly Pending[]):string[][];
- audit(file:string,before:string|null,after:string,pending:ReadonlySet<string>):string[];
+ audit(file:string,before:string|null,after:string,pending:ReadonlySet<string>,root?:string):string[];
  rows(file:string,text:string):Map<string,RecordRow>|null;
  changes(kind:string,file:string,before:string|null,after:string):Omit<DeltaRow,'sources'>[];
  validate(row:DeltaRow,bad:(row:DeltaRow,why:string)=>never):void;
@@ -97,7 +97,7 @@ export function createRecorder(table:RecordTable,defaultRun:Runner=()=>{throw Er
  const findPending=(root:string,kind:string):Pending[]=>family(kind).pending(root).map(one=>({kind,name:one.name,record:one.record}));
  const recordFiles=(root:string,kind:string)=>family(kind).files(root);
  const recorderRuns=(kind:string,pending:readonly Pending[])=>family(kind).runs(pending);
- const auditRecord=(kind:string,file:string,before:string|null,after:string|null,pending:ReadonlySet<string>):string[]=>{if(before===after)return [];assert.ok(after!==null,`${file} was removed`);return family(kind).audit(file,before,after,pending);};
+ const auditRecord=(kind:string,file:string,before:string|null,after:string|null,pending:ReadonlySet<string>,root?:string):string[]=>{if(before===after)return [];assert.ok(after!==null,`${file} was removed`);return family(kind).audit(file,before,after,pending,root);};
  const changedRows=(kind:string,file:string,before:string|null,after:string)=>family(kind).changes(kind,file,before,after);
  const sourceDigests=(root:string,cases:readonly {kind:string;name:string}[]):Map<string,string|null>=>{const digests=new Map<string,string|null>();for(const [kind,group]of Map.groupBy(cases,one=>one.kind))for(const [name,digest]of family(kind).sourceDigests(root,group.map(one=>one.name)))digests.set(`${kind}\0${name}`,digest);return digests;};
 function acceptedIn(root: string, run: string): { byKind: Map<string, Pending[]>; pendingByKind: Map<string, Pending[]>; unowned: string[] } {
@@ -149,7 +149,7 @@ function recordPending(root: string, kinds: readonly string[], run: Runner = def
       const now = existsSync(join(root, file)) ? read(root, file) : null;
       const names = new Set(pending.filter(one => one.record === file).map(one => one.name));
       try {
-        for (const row of auditRecord(kind, file, was, now, names)) { say(`  recorded ${file}: ${row}`); recorded += 1; }
+        for (const row of auditRecord(kind, file, was, now, names, root)) { say(`  recorded ${file}: ${row}`); recorded += 1; }
         if (now !== null && now !== was) changed.push(...changedRows(kind, file, was, now));
       } catch (error) {
         say(`  REFUSED ${error instanceof Error ? error.message : String(error)}; put back as it was`);
@@ -264,7 +264,7 @@ async function applyDelta(root: string, delta: Delta, options: ApplyOptions = {}
       : pending instanceof Error ? [] : [...pending].filter(id => id.startsWith(`${record}\0`)).map(id => id.slice(record.length + 1)));
     const merge = (text: string | null, these: readonly DeltaRow[]) => {
       const next = family(kind).merge(record,text,these,delta.headers[record]);
-      auditRecord(kind, record, text, next, names);
+      auditRecord(kind, record, text, next, names, root);
       return next;
     };
     let text = was, applied: DeltaRow[] = [];

@@ -1,4 +1,3 @@
-import {findPending} from './record-population.ts';
 import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,writeFileSync,existsSync,unlinkSync} from 'node:fs';
 import {dirname,join,relative} from 'node:path';
@@ -8,7 +7,9 @@ import {testScratch} from '../gate/test-scratch.ts';
 import {checkTypeProjects,checkTypeProject,typeRow,writeTypeProjectRecord} from '../gate/tooling-types.ts';
 import {TYPE_PROJECTS,typeProjectName,readTypeRecord} from '../gate/tooling-type-projects.ts';
 import {projectTypeRows,TOOLING_PROJECT,TOOLING_DIAGNOSTICS,parseDiagnosticRecord,serializeDiagnosticRecord} from '../gate/tooling-type-records.ts';
-import {applyDelta,auditRecord,KIND_STEPS,partOf,recordPending,sourceDigests,type Runner} from './record-pending.ts';
+import {createRecorder,type Runner} from './recorder-core.ts';
+import {typeChecksFamily} from '../gate/type-checks-record-family.ts';
+const {findPending,applyDelta,auditRecord,partOf,recordPending,sourceDigests}=createRecorder({'type-checks':{family:typeChecksFamily,steps:['tooling-types'],part:'core'}});
 import {parseDelta} from './delta.ts';
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
 const JS=TYPE_PROJECTS.find(row=>row.policy==='javascript')!,NODE=typeProjectName(JS),BINDING='runtime/node/private/bindings.node.mjs';
@@ -29,7 +30,7 @@ const runner:Runner=(args,root)=>{
 
 test('type projects join the green core pending recorder and publish real measured rows',async t=>{
   const root=tree(t),main=tree(t),delta=join(testScratch(t,'type-delta'),'delta.json'),lines:string[]=[];
-  assert.deepEqual(KIND_STEPS['type-checks'],['tooling-types']);assert.equal(partOf('type-checks'),'core');
+  assert.equal(partOf('type-checks'),'core');
   assert.deepEqual(findPending(root,'type-checks'),[{kind:'type-checks',name:NODE,record:TOOLING_DIAGNOSTICS}]);
   assert.equal(recordPending(root,['type-checks'],runner,line=>lines.push(line),new Map(),delta),0);
   const recorded=readTypeRecord(root);assert.equal(recorded.projects[NODE]!.counts[BINDING],1);assert.deepEqual(findPending(root,'type-checks'),[]);

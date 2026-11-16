@@ -7,6 +7,7 @@ import {outcomesFamily} from '../conformance/outcomes-record-family.ts';
 import {dexFamily} from '../android/dex-record-family.ts';
 import {oracleFamily} from '../differential/oracle-record-family.ts';
 import {compileTimesFamily} from '../gate/compile-times-record-family.ts';
+import {typeChecksFamily} from '../gate/type-checks-record-family.ts';
 import {rustSelectorFamily} from '../gate/rust-selector-record-family.ts';
 import {fileURLToPath} from 'node:url';
 import {WIDE} from '../gate/owed.mjs';
@@ -26,6 +27,7 @@ export const RECORD_FAMILIES={
 "outcomes":member(outcomesFamily,["outcomes"]),
 "dex":member(dexFamily,["dex"]),
 "compile-times":member(compileTimesFamily,["compile-time", "compile-time-rc"]),
+"type-checks":member(typeChecksFamily,["tooling-types"]),
 "rust-selector":member(rustSelectorFamily,["records"]),
 } satisfies RecordTable;
 export type Kind=keyof typeof RECORD_FAMILIES;
