@@ -3559,3 +3559,12 @@ all prior processes. They cannot reconstruct a signal capability. Publication
 and the last marker read share the queue lock, giving an honest too-late answer
 after the irreversible transition. This changes no memory, timeout or verdict
 policy and retains the existing cleanup guards.
+
+## 2026-11-16: Type-project identity ignores root spelling (#719)
+
+The records entry resolves one root for recording and applying. The type checker
+uses relative containment when normalizing Program reads and options, independent
+of the caller's separator spelling. The first real delta's five product digests
+were exact across the main move; their apply misses came from the trailing slash
+alone, not an overbroad Program. The six-project transport control holds both
+root spellings to the same identities and accepted rows.

@@ -67,3 +67,34 @@ test('record auditing accepts an inventory deletion only with the owner observin
   assert.throws(()=>auditRecord('type-checks',TOOLING_DIAGNOSTICS,text,next,new Set()),/missing from its project/);
   assert.equal(auditRecord('type-checks',TOOLING_DIAGNOSTICS,text,next,new Set(),root).length,1);
 });
+
+
+function sixProjectTree(t:{after(fn:()=>void):void}):string{
+  const root=testScratch(t,'six-type-projects');
+  const subjects=['tooling/subject.ts',BINDING,'runtime/web-platform/test/wpt/subject.ts',
+    'runtime/ecmascript/providers/icu/c/subject.ts','runtime/ecmascript/providers/icu/java/subject.ts','compiler/codegen/jvm/subject.ts'];
+  for(const [index,definition]of TYPE_PROJECTS.entries()){
+    const name=typeProjectName(definition),file=subjects[index]!;
+    put(root,file,'export const answer=1;');
+    put(root,name,JSON.stringify({extends:join(SOURCE,'tsconfig.base.json'),compilerOptions:{
+      rootDir:relative(dirname(join(root,name)),root),types:[],allowJs:true,checkJs:true,noCheck:false,
+      composite:false,incremental:false,declaration:false,declarationMap:false,emitDeclarationOnly:false,noEmit:true,
+    },files:[relative(dirname(join(root,name)),join(root,file))]}));
+  }
+  put(root,TOOLING_DIAGNOSTICS,serializeDiagnosticRecord({version:2,projects:{}}));return root;
+}
+test('one six-project delta has identical identities and applies with either root spelling',async t=>{
+  const source=sixProjectTree(t),normal=sixProjectTree(t),slash=sixProjectTree(t),delta=join(testScratch(t,'six-type-delta'),'delta.json');
+  assert.equal(recordPending(source,['type-checks'],runner,()=>{},new Map(),delta),0);
+  const carried=parseDelta(readFileSync(delta,'utf8'));assert.equal(carried.rows.length,6);
+  const names=carried.rows.map(row=>({kind:row.kind,name:row.case}));
+  for(const root of [normal,slash]){
+    const canonical=sourceDigests(root,names),trailing=sourceDigests(root+'/',names);
+    assert.deepEqual(trailing,canonical,'a separator spelling cannot change any project identity');
+    for(const row of carried.rows)assert.equal(canonical.get(row.kind+'\0'+row.case),row.sources,row.case);
+  }
+  assert.deepEqual(await applyDelta(normal,carried,{say:()=>{}}),{applied:6,already:0,skipped:0});
+  assert.deepEqual(await applyDelta(slash+'/',carried,{say:()=>{}}),{applied:6,already:0,skipped:0});
+  assert.deepEqual(readTypeRecord(normal),readTypeRecord(slash));
+  assert.equal(Object.keys(readTypeRecord(normal).projects).length,6);
+});

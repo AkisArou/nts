@@ -1,6 +1,6 @@
 // One gate owner checks each project under its own declarations and ratchet.
 import {readFileSync,readdirSync,existsSync,mkdirSync,renameSync,writeFileSync} from 'node:fs';
-import {dirname,join,relative,resolve,sep} from 'node:path';
+import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
@@ -55,7 +55,10 @@ export function checkTypeProject(root:string,definition:TypeProject):ToolingType
   const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync');
   const {serverFS}=require('typescript/fs') as typeof import('typescript/fs');
   const filesystem=new OracleFilesystem(),reads=new Map<string,{path:string;sha:string}>();
-  const inputName=(path:string)=>path===root||path.startsWith(root+sep)?'<root>/'+named(root,path):normalize(path);
+  const inputName=(path:string)=>{
+    const local=relative(root,path);
+    return local!== '..'&&!local.startsWith('..'+sep)&&!isAbsolute(local)?'<root>/'+normalize(local):normalize(path);
+  };
   const api=new API({cwd:root,fs:{directoryExists:filesystem.directoryExists,fileExists:filesystem.fileExists,realpath:filesystem.realpath,stat:filesystem.stat,
     getAccessibleEntries:path=>({...filesystem.getAccessibleEntries(path),symlinks:undefined}),writeFile:serverFS.error,removeFile:serverFS.error,
     readFile(path){const body=filesystem.readFile(path);if(body!==null){const name=inputName(path),sha=hash(body),old=reads.get(name);if(old&&old.sha!==sha)throw Error('type input changed during checking: '+path);reads.set(name,{path,sha});}return body??undefined;}}});
@@ -81,7 +84,7 @@ export function checkTypeProject(root:string,definition:TypeProject):ToolingType
         if(file&&ownedNames.has(file)&&!invalidProject.has(identity(diagnostic)))counts[file]=(counts[file]??0)+1;else problems.push(`strict project TS${diagnostic.code}: ${diagnostic.text}`);}
       for(const input of reads.values())if(hash(readFileSync(input.path,'utf8'))!==input.sha)problems.push('type input changed during checking: '+input.path);
       if(JSON.stringify(populationModules(root,definition.population))!==JSON.stringify(expected))problems.push('type project population changed during checking: '+config);
-      const options=JSON.parse(JSON.stringify(project.options,(_key,value:unknown)=>{return typeof value==='string'&&(value===root||value.startsWith(root+sep))?inputName(value):value;})) as unknown;
+      const options=JSON.parse(JSON.stringify(project.options,(_key,value:unknown)=>{return typeof value==='string'&&isAbsolute(value)?inputName(value):value;})) as unknown;
       const recipe=RECIPE_INPUTS.map(url=>[named(ROOT,fileURLToPath(url)),hash(readFileSync(url,'utf8'))]);
       const source='sha256:'+hash(JSON.stringify({config,options,modules,reads:[...reads].sort(([a],[b])=>a.localeCompare(b)).map(([path,input])=>[path,input.sha]),recipe}));
       return {modules,counts,diagnostics:unique,problems,source};

@@ -1288,6 +1288,13 @@ the first node task.
 
 ## Decisions
 
+- **A record root has one identity across command modes.** Recording and applying
+  use the entry's single resolved root. Type-project identities classify local
+  paths with relative containment, so equivalent root spellings cannot turn
+  local inputs into absolute host names. A source change remains a source
+  change; a trailing separator is not one.
+
+
 - **Withdrawal cancels and certifies the running check.** The queue owns one
   watch on its durable withdrawal directory, armed before taking entries and
   re-read after each subscription. Watch setup failures refuse service startup;

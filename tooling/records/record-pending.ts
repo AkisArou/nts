@@ -10,6 +10,7 @@ import {compileTimesFamily} from '../gate/compile-times-record-family.ts';
 import {typeChecksFamily} from '../gate/type-checks-record-family.ts';
 import {rustSelectorFamily} from '../gate/rust-selector-record-family.ts';
 import {fileURLToPath} from 'node:url';
+import {resolve} from 'node:path';
 import {WIDE} from '../gate/owed.mjs';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {createRecorderCommand,recorderRequest} from './recorder-command.ts';
@@ -17,6 +18,7 @@ import {createRecorder} from './recorder-core.ts';
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {oracleCommandOptions} from '../gate/oracle-entry-options.ts';
 import type {RecordTable,RecordFamily,Part} from './recorder-core.ts';
+const ROOT=resolve(fileURLToPath(new URL('../..',import.meta.url)));
 const member=(family:RecordFamily,steps:readonly string[])=>({family,steps,part:(steps.some(step=>WIDE.has(step))?'wide':'core') as Part});
 export const RECORD_FAMILIES={
 "oracle-counts":member(oracleFamily,[]),
@@ -37,7 +39,7 @@ export const {partOf,acceptedIn,findPending,recorderRuns,auditRecord,sourceDiges
 export const KIND_STEPS=Object.fromEntries(Object.entries(RECORD_FAMILIES).map(([kind,row])=>[kind,row.steps])) as Readonly<Record<Kind,readonly string[]>>;
 runAsCommand(import.meta.url,async()=>{
  const request=recorderRequest(process.argv.slice(2),KINDS,process.env);
- if('apply' in request){process.exitCode=await recorder.applyCommand(fileURLToPath(new URL('../..',import.meta.url)),request.apply);return;}
+ if('apply' in request){process.exitCode=await recorder.applyCommand(ROOT,request.apply);return;}
  if('status' in request){process.exitCode=request.status;return;}
- process.exitCode=await withPreparedOracle(env=>createRecorderCommand(RECORD_FAMILIES,env).command(request),{entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BIN:'text'})})??0;
+ process.exitCode=await withPreparedOracle(env=>createRecorderCommand(RECORD_FAMILIES,env).command(request,ROOT),{entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BIN:'text'})})??0;
 });
