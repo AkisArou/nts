@@ -2,6 +2,7 @@
 // environment it creates with its own producer, and the oracle handoff it
 // inherits or holds. Shared helpers are in run-fixture.ts.
 import {test} from "node:test";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {chmodSync,copyFileSync,existsSync,mkdirSync,readFileSync,unlinkSync,writeFileSync} from "node:fs";
@@ -154,7 +155,7 @@ test('the candidate launcher refuses a malformed inherited oracle grant before e
   const raw=JSON.stringify(cap);context.owned.NTS_ORACLE_DEPENDENCIES=raw;context.report.host.NTS_ORACLE_DEPENDENCIES=raw;
   const child=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:{},command:['sh','-c',`echo forbidden > ${JSON.stringify(join(f.controls,'launched'))}`]},
     {...planned.env,NTS_ORACLE_DEPENDENCIES:raw,[ENVIRONMENT_CONTEXT]:JSON.stringify(context)});
-  assert.equal(child.status,2);assert.match(child.stderr,/invalid owned oracle dependency handoff/);
+  assert.equal(child.status,2);assert.ok(child.stderr!==null);assert.match(child.stderr,/invalid owned oracle dependency handoff/);
   assert.match(child.error!.message,/invalid owned oracle dependency handoff/);
   assert.equal(existsSync(join(f.controls,'launched')),false);
 });

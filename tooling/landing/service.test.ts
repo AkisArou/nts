@@ -392,7 +392,7 @@ test('the service lands a real memory retry after its build sampler drains',asyn
  f.config.runSteps=options=>runLanding(run.options(['build','rustfmt'],{commit:options.commit,priority:'landing'}));
  const task=f.task('fix/sampler-retry',{'src/retry.txt':'retry control\n'}),entry=f.submit('fix/sampler-retry',task.sha);
  const drained=await drain(f.config);assert.equal(drained.state,'drained');
- const result=f.queue.result(entry.id);assert.equal(result?.state,'landed',result?.message);
+ const result=f.queue.result(entry.id);assert.ok(result);assert.equal(result.state,'landed',result.message);
  assert.equal(JSON.parse(readFileSync(join(run.run,'landing.json'),'utf8')).state,'green');
  const retry=JSON.parse(readFileSync(join(run.run,'attempt-2/summary.json'),'utf8'));assert.equal(retry.steps.find((row:{name:string})=>row.name==='rustfmt').verdict,'PASS');
  assert.match(readFileSync(join(run.run,'build.log'),'utf8'),/worker drain: .*"stage":"exit"/);
