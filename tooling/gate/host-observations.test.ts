@@ -34,6 +34,16 @@ test('process users come from the owned observation, with missing or malformed v
   assert.throws(()=>host.processUsers([f.tree]),/host observation processUsers failed/);
 });
 
+test('constructing an observation validates descriptors without walking proc or reading resource files',t=>{
+ const root=testScratch(t,'host-validation-only'),env=ownMemory(root,{processUsers:{kind:'proc',root:join(root,'unread-proc')}});
+ const file=env.NTS_HOST_OBSERVATIONS,value=JSON.parse(readFileSync(file,'utf8'));
+ value.memory.file=join(root,'unread-memory');value.paging.file=join(root,'unread-paging');writeFileSync(file,JSON.stringify(value));
+ const host=hostObservations(env);
+ assert.equal(typeof host.processUsers,'function');assert.equal(typeof host.memory,'function');
+ assert.throws(()=>host.processUsers([root]),/host observation processUsers failed/);
+ assert.throws(()=>host.memory(),/host observation memory.file/);
+});
+
 test('one complete owned view supplies every resource, including child observations',t=>{
   const root=testScratch(t,'host-observations'),clock=join(root,'clock');
   writeFileSync(clock,'125');

@@ -96,7 +96,7 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 
 import {RunDiagnostics} from "./run-diagnostics.ts";
 import {clippyTarget} from "./build-targets.ts";
-import {hostObservations,HostObservationError} from "./host-observations.ts";
+import {HostObservationError} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
 import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
@@ -229,7 +229,7 @@ reportEnvironment(normalized.report);
 // last built into ./target (the-gate-drives-target-release-nts).
 const ntsBin = resolve(env.NTS_BIN ?? join(target, "release/nts"));
 const suiteBin = resolve(env.NTS_SUITE_BIN ?? join(dirname(ntsBin), "nts-suite"));
-const host = hostObservations(env);
+const host = normalized.observations;
 const cores = host.machineWidth();
 const intEnv = (name, fallback) => {
   const v = env[name];

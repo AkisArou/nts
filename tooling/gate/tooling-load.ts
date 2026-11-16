@@ -177,7 +177,7 @@ async function round(directory:string):Promise<number>{
     try{unregister();}catch(error){errors.push(error);}
     try{job.release();}catch(error){errors.push(error);}
     try{await job.closed;}catch(error){errors.push(error);}
-    try{await finishRunTemporary(planned.temporary,planned.env.HOME!,good&&primary===undefined&&errors.length===0,{host:hostObservations(planned.env)});}catch(error){errors.push(error);}
+    try{await finishRunTemporary(planned.temporary,planned.env.HOME!,good&&primary===undefined&&errors.length===0,{host:planned.observations});}catch(error){errors.push(error);}
     if(errors.length)primary=new ToolingInstrumentError('tooling-cleanup','tooling load experiment drain failed: '+[...(primary===undefined?[]:[primary]),...errors].map(String).join('; '),{cause:new AggregateError([...(primary===undefined?[]:[primary]),...errors])});
   }
   durableRecord(join(directory,'terminal.json'),{...outcome,version:1,pin,status:primary===undefined?status:2,cleanupComplete:primary===undefined,error:primary===undefined?null:String(primary)});

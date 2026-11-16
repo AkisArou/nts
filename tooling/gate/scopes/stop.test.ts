@@ -1,4 +1,3 @@
-import {hostObservations} from '../host-observations.ts';
 import {gitArguments} from "../git-arguments/main.ts";
 import {fixtureEnvironment} from "../test-environment.ts";
 import assert from "node:assert/strict";
@@ -99,7 +98,7 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
     writeFileSync(join(own, "escape-release"), "finish the owned control");
     await waitFor("the escaped fixture descendant to exit", () => !descendantAlive());
     if (control.oracleCancellation && planned && existsSync(planned.temporary.path)) {
-      const cleanup = finishRunTemporary(planned.temporary, planned.env.HOME!, true,{host:hostObservations(planned.env)});
+      const cleanup = finishRunTemporary(planned.temporary, planned.env.HOME!, true,{host:planned.observations});
       assert.equal(cleanup.state, "removed after green", JSON.stringify(cleanup));
     }
     removable(own);rmSync(own, { recursive: true, force: true });

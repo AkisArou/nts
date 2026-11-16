@@ -2,10 +2,12 @@ import {gitArguments} from "./git-arguments/main.ts";
 import {generatedJavaScript} from './generated-javascript.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-environment.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
-import {removable} from "./run-temporary.ts";
+import {removable,discardRunTemporary} from "./run-temporary.ts";
+import {assignTestValues} from './test-environment.ts';
+import {durableRecord} from './durable-record.ts';
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {mkdirSync,existsSync,readFileSync,writeFileSync,symlinkSync,utimesSync,rmSync} from "node:fs";
+import {mkdirSync,existsSync,readFileSync,writeFileSync,symlinkSync,utimesSync,rmSync,readdirSync,lstatSync} from "node:fs";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {homedir,userInfo} from "node:os";
 import {dirname, join} from "node:path";
@@ -189,6 +191,55 @@ function fixture(t:{after(fn:()=>void):void}) {
   const run=newTestScratch("canonical-environment-run");t.after(()=>{removable(run);rmSync(run,{recursive:true,force:true});});
   return {run,base:{PATH:process.env.PATH,HOME:join(run,"home"),XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,JAVA_HOME:"/jdk with spaces",CARGO_HOME:"/cargo",RUSTUP_HOME:"/rustup"}};
 }
+
+test('an inherited canonical command refuses a missing process view before creating its temporary',t=>{
+ const {run,base}=fixture(t),memory=ownMemory(join(run,'observations'));
+ const parent=gateEnvironment(base,{run:join(run,'parent'),owned:memory}),childRun=join(parent.temporary.path,'child');
+ const env={...parent.env};assignTestValues(env,{NTS_GATE_RUN_DIR:childRun});
+ const view=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));delete view.processUsers;
+ durableRecord(memory.NTS_HOST_OBSERVATIONS,view);
+ const script=join(run,'never-started.sh');writeFileSync(script,'#!/bin/sh\nexit 0\n');
+ const result=spawnTest(process.execPath,[new URL('./canonical-environment.ts',import.meta.url).pathname,'--pinned',script],{env,encoding:'utf8'});
+ assert.equal(result.status,2,result.stdout+result.stderr);assert.match(result.stderr,/host observation processUsers is missing or invalid/);
+ assert.equal(existsSync(childRun),false,'acquisition refused before even the requested run directory existed');
+ assert.equal(existsSync(join(childRun,'tmp/oracle-dependencies')),false);
+ discardRunTemporary(parent.temporary,parent.env.HOME!,parent.observations);
+});
+
+test('a canonical command holds its acquired view through a red image close and closed registration',t=>{
+ const {run,base}=fixture(t),memory=ownMemory(join(run,'observations'));
+ const planned=gateEnvironment(base,{run:join(run,'command'),owned:memory});
+ const before=readFileSync(memory.NTS_HOST_OBSERVATIONS),payload=join(run,'invalidate-process-view.mjs'),script=join(run,'red.sh');
+ writeFileSync(payload,generatedJavaScript(`
+import {mkdirSync,writeFileSync,readFileSync,chmodSync} from 'node:fs';
+import {join} from 'node:path';
+import {createRunOracleImage} from ${JSON.stringify(new URL('./run-temporary.ts',import.meta.url).href)};
+import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
+const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),parent=join(context.temporary.path,'owned-image');
+mkdirSync(parent);const tree=createRunOracleImage(context.temporary,process.env.HOME,join(parent,'tree'));
+writeFileSync(join(tree,'payload'),'image bytes');chmodSync(tree,0o555);
+durableRecord(join(parent,'ready.json'),{identity:'ready'});durableRecord(join(parent,'semantic.json'),{identity:'semantic'});
+const path=process.env.NTS_HOST_OBSERVATIONS,view=JSON.parse(readFileSync(path,'utf8'));delete view.processUsers;durableRecord(path,view);
+process.exitCode=1;
+`));
+ const quoted=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
+ writeFileSync(script,'#!/bin/sh\nexec '+quoted(process.execPath)+' '+quoted(payload)+'\n');
+ try{
+  const result=spawnTest(process.execPath,[new URL('./canonical-environment.ts',import.meta.url).pathname,'--pinned',script],{env:planned.env,encoding:'utf8'});
+  assert.equal(result.status,1,result.stdout+result.stderr);
+  const directory=join(planned.env.HOME!,'.cache/nts-gate/closed-temporaries'),files=readdirSync(directory).filter(name=>name.endsWith('.json'));
+  assert.equal(files.length,1);const entry=JSON.parse(readFileSync(join(directory,files[0]!),'utf8'));
+  const parent=join(planned.temporary.path,'owned-image'),tree=join(parent,'tree');
+  assert.equal(entry.owned.path,planned.temporary.path);assert.ok(entry.bytes>0);
+  assert.deepEqual(entry.oracle_images,[{path:tree,bytes:null,state:'kept: host observation processUsers is missing or invalid'}]);
+  assert.equal(readFileSync(join(tree,'payload'),'utf8'),'image bytes');assert.equal(lstatSync(tree).mode&0o777,0o555);
+  assert.deepEqual(JSON.parse(readFileSync(join(parent,'ready.json'),'utf8')),{identity:'ready'});
+  assert.deepEqual(JSON.parse(readFileSync(join(parent,'semantic.json'),'utf8')),{identity:'semantic'});
+ }finally{
+  writeFileSync(memory.NTS_HOST_OBSERVATIONS,before);
+  discardRunTemporary(planned.temporary,planned.env.HOME!,planned.observations);
+ }
+});
 
 test("canonical Git status keeps its index unchanged after a stat refresh",t=>{
   const {run,base}=fixture(t),repo=join(run,"repo");mkdirSync(repo);

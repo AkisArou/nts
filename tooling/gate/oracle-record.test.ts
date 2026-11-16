@@ -1,4 +1,3 @@
-import {hostObservations} from './host-observations.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import { after, test } from "node:test";
 import { createHash, randomUUID } from "node:crypto";
@@ -332,7 +331,7 @@ process.exit(1);
     assert.notEqual(result.status,0,result.stdout+result.stderr);
     assert.match(result.stderr,/building the fixture planner failed/);
     assert.equal(readFileSync(log,"utf8"),"held\n");
-  }finally{discardRunTemporary(planned.temporary,planned.env.HOME!,hostObservations(planned.env));}
+  }finally{discardRunTemporary(planned.temporary,planned.env.HOME!,planned.observations);}
   assert.equal(existsSync(planned.temporary.path),false,'the run owner releases its image before scratch removal');
 });
 

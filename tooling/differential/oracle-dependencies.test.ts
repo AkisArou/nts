@@ -123,11 +123,11 @@ function installFixture(t:import('node:test').TestContext){
   write('docs/outside.md','outside input control\n');git('init','--quiet');git('add','--','.');git('commit','--quiet','-m','Bind install input fixture');
   const parentCapability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES!),admission=parentCapability.admission;
   const cap=(name:string)=>dependencyCapability(root,join(parent,'capture-'+name,'tmp','dependencies'),admission,parentCapability.ownerStep??null);
-  return {root,parent,write,git,cap};
+  return {root,parent,write,git,cap,memory};
 }
 
 test('an ordinary sealed producer image is registered to its run and a failed close retains its exact identity',async t=>{
-  const f=installFixture(t),owned=captureRunTemporary(join(f.parent,'owned-run'),undefined,f.parent),base=f.cap('owned');
+  const f=installFixture(t),observations=hostObservations(f.memory),owned=captureRunTemporary(join(f.parent,'owned-run'),undefined,f.parent),base=f.cap('owned');
   const initial=dependencyCapability(f.root,join(owned.path,'oracle-dependencies'),base.admission,base.ownerStep,testEnvironment(),{owned,home:f.parent});
   const missing=structuredClone(initial);Reflect.deleteProperty(missing.temporary!,'home');
   await assert.rejects(dependencyOwner.sealDependencyCapability(missing,canonicalFixture(missing)),/temporary requires its bound validation home/);
@@ -135,7 +135,7 @@ test('an ordinary sealed producer image is registered to its run and a failed cl
   const ready=sealed.seal.record,semantic=join(dirname(ready),'semantic.json'),tree=join(dirname(ready),'tree');
   const readyBytes=readFileSync(ready),semanticBytes=readFileSync(semantic);
   assert.ok(existsSync(join(tree,'node_modules')));assert.equal(await captureDependencies(sealed,undefined,canonicalFixture(sealed)),ready,'a ready hit owns no second image');
-  const result=finishRunTemporary(owned,f.parent,false,{freeBytes:()=>Number.MAX_SAFE_INTEGER,host:hostObservations(canonicalFixture(sealed))});
+  const result=finishRunTemporary(owned,f.parent,false,{freeBytes:()=>Number.MAX_SAFE_INTEGER,host:observations});
   assert.equal(result.state,'retained after red',JSON.stringify(result));
   assert.equal(result.oracle_images?.length,1,JSON.stringify(result));const dropped=result.oracle_images?.[0];assert.ok(dropped);assert.equal(dropped.path,tree);assert.equal(dropped.state,'dropped',JSON.stringify(result));assert.ok(dropped.bytes!==null&&dropped.bytes>0);
   assert.equal(existsSync(tree),false);assert.deepEqual(readFileSync(ready),readyBytes);assert.deepEqual(readFileSync(semantic),semanticBytes);

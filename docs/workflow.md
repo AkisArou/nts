@@ -2198,5 +2198,10 @@ death; an absent timestamp remains explicit after forced termination.
   `HostObservations`. Production retains the existing live ownership scanner
   and its unreadable-process refusal. Fixtures own an empty proc tree or state
   the exact child PIDs they observe live; unrelated machine processes cannot
-  decide their cleanup assertions. A close reports each complete image
-  disposition before a fixture checks whether the image still exists.
+  decide their cleanup assertions. `gateEnvironment` validates the complete
+  named view before creating a run temporary, without sampling its resources,
+  and holds that in-process capability through close. Direct temporary owners
+  acquire an omitted view only inside the image guard that needs it: a failed
+  view keeps that image by name and still registers the closed root. A close
+  reports each complete image disposition before a fixture checks whether the
+  image still exists.

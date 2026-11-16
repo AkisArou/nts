@@ -1,4 +1,3 @@
-import {hostObservations} from '../gate/host-observations.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The Node oracle's emission and preparation (oracle-emit.ts): owner runtime
 // capture, shared owner reuse and invalidation, run seals, runtime bindings,
@@ -234,7 +233,7 @@ test('gate and standalone seals share owner emissions until their own run ends',
       assert.deepEqual(report.owners.map(owner=>owner.project),[join(root,'tsconfig.json')]);t.diagnostic(JSON.stringify({kind,contexts,calls,report}));green=true;
     }finally{
       for(const [index,key] of keys.entries())if(previous[index]===undefined)delete process.env[key];else process.env[key]=previous[index];
-      const cleanup=finishRunTemporary(planned.temporary,planned.env.HOME!,green,{host:hostObservations(planned.env)});
+      const cleanup=finishRunTemporary(planned.temporary,planned.env.HOME!,green,{host:planned.observations});
       if(green){assert.equal(cleanup.state,'removed after green');assert.equal(existsSync(contexts[0].directory),false);removeOracleSnapshot(outside);}
     }
   });

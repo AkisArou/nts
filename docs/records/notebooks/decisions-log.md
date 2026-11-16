@@ -3598,6 +3598,10 @@ ownership fail-closed; fixtures supply their own proc tree or explicitly
 observe only captured child PIDs. Missing observations refuse by name. Tests
 check full dispositions before path existence and pair a supplied holder with
 an empty owned view. This changes neither image retention policy nor recovery.
+The canonical acquisition owner validates the descriptor before allocating a
+temporary and retains that same capability through close. Construction samples
+nothing. Direct temporary callers acquire an omitted view lazily within each
+image guard, so a malformed view cannot prevent closed-root accounting.
 
 The full-tooling repeat exposed #808's latent idle-pressure accounting flake:
 an uncommitted startup offer can return and acquire another token without

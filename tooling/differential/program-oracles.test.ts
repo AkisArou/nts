@@ -1,4 +1,3 @@
-import {hostObservations} from '../gate/host-observations.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
@@ -93,7 +92,7 @@ test('the measured example corpus names every type-directed emit project',()=>{
 test('program consumers read completed answers from an nts-dev planner after the SDK workers drain',async t=>{
   await setupOracleTestEnvironment();
   const root=newTestScratch('program-producer');let privateRun:GateEnvironment|undefined;
-  t.after(()=>{try{if(privateRun)finishRunTemporary(privateRun.temporary,privateRun.env.HOME!,true,{host:hostObservations(privateRun.env)});}finally{removeOracleSnapshot(root);}});
+  t.after(()=>{try{if(privateRun)finishRunTemporary(privateRun.temporary,privateRun.env.HOME!,true,{host:privateRun.observations});}finally{removeOracleSnapshot(root);}});
   const project=join(root,'input'),source=join(project,'src');mkdirSync(source,{recursive:true});
   writeFileSync(join(project,'package.json'),'{"type":"module"}');
   writeFileSync(join(project,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'Bundler',rootDir:'src',strict:true},include:['src']}));

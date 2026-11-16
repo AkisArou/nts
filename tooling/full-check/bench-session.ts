@@ -1,4 +1,3 @@
-import {hostObservations} from '../gate/host-observations.ts';
 import {runAsCommand} from "../differential/command-entry/main.ts";
 // The session owns a unit for everything it starts, including nested build
 // supervisors. A budget ends that unit before the durable prefix is sealed.
@@ -59,7 +58,7 @@ export async function runSession(tree: string, run: string, binary: string, hist
   } finally {
     cancelBudget();
     rmSync(handoff, { force: true });
-    finishRunTemporary(planned.temporary, planned.env.HOME!, true,{host:hostObservations(planned.env)});
+    finishRunTemporary(planned.temporary, planned.env.HOME!, true,{host:planned.observations});
   }
   if (!exhausted) return status === 75 ? { admitted: false, reason: "not admitted" } : { admitted: true, status };
 

@@ -173,8 +173,11 @@ export function gateEnvironment(
   }
   Object.assign(env, owned);
   if(oracle)env.NTS_ORACLE_TYPESCRIPT=oracle;else delete env.NTS_ORACLE_TYPESCRIPT;
+  // Construction validates the complete named view without sampling it.
+  // Keep this object through drain; cleanup must not first acquire authority.
+  const observations=hostObservations(env);
   assertRunTemporaryOpen(options.run,host.HOME!);
-  if (!prior) pruneRunTemporaries(host.HOME!,{host:hostObservations(env)});
+  if (!prior) pruneRunTemporaries(host.HOME!,{host:observations});
   const temporary=captureRunTemporary(options.run,prior?.temporary,host.HOME!);
   // /tmp is a small tmpfs. Neither a launcher nor an experiment owns these paths.
   const storage=ownedCacheEnvironment(launcher,{temporary:temporary.path});
@@ -214,7 +217,7 @@ export function gateEnvironment(
   const resolutionOwner=process.platform==='linux'?(prior?.resolutionOwner??{pid:process.pid,birth:nodeProcessBirth(process.pid)}):undefined;
   if(resolutionOwner&&!nodeProcessAlive(resolutionOwner))throw new Error('oracle resolution run owner changed');
   env[ENVIRONMENT_CONTEXT] = JSON.stringify({ report, owned, temporary,...(resolutionOwner?{resolutionOwner}:{}) } satisfies Context);
-  return { env, report, temporary };
+  return { env, report, temporary, observations };
 }
 
 /** Validate once in the run parent, then forward its exact pinned seal. */
@@ -292,7 +295,7 @@ export async function withPreparedOracle(
         finally{
           if(run){
             const same=()=>{const actual=lstatSync(run!.path);if(!actual.isDirectory()||actual.isSymbolicLink()||actual.dev!==run!.dev||actual.ino!==run!.ino||actual.uid!==run!.uid)throw new ToolingInstrumentError('tooling-cleanup','oracle entry run directory changed: '+run!.path);};
-            same();if(planned)discardRunTemporary(planned.temporary,planned.env.HOME!,hostObservations(planned.env));same();
+            same();if(planned)discardRunTemporary(planned.temporary,planned.env.HOME!,planned.observations);same();
             removable(run.path);rmSync(run.path,{recursive:true});
           }
         }
@@ -361,7 +364,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     // Setup-only success and failures before run.mjs still own a temporary
     // root. Normal row completion already records its lifecycle in summary.
     if (!existsSync(join(run,"summary.json"))) {
-      const outcome=finishRunTemporary(planned.temporary,planned.env.HOME!,result.status===0 && !result.signal && !result.error,{host:hostObservations(planned.env)});
+      const outcome=finishRunTemporary(planned.temporary,planned.env.HOME!,result.status===0 && !result.signal && !result.error,{host:planned.observations});
       process.stderr.write(`gate tmp: ${outcome.state}: ${outcome.path}\n`);
     }
     if (result.error) throw result.error;
