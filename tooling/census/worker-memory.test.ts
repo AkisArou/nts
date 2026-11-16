@@ -717,7 +717,7 @@ test('a yielding resident pool releases successive heads and resumes each remain
  const clock=hostObservations(ownMemory),tick=()=>clock.now();
  const restarts:number[]=[];let readmittedAt=0;
  assert.equal(writeCostHistory(historyFile(process.env),{jobs:[{key,peak:3*2**30,basis:'worker',width:1}]}),undefined);
- const independent={...fixtureEnvironment(t),...ownMemory};delete independent.NTS_MEMORY_RESERVATION;
+ const independent:NodeJS.ProcessEnv={...fixtureEnvironment(t),...ownMemory};delete independent.NTS_MEMORY_RESERVATION;
  let higher:Awaited<ReturnType<typeof reserve>>|undefined;
  const pool=runMemoryWorkers({paths:['gate-a','gate-b','probe-ledger'],jobs:1,memory,workerBytes:64*2**20,key,
   token:gate.token,args:index=>[fixture,directory,String(index)],onRow:row=>{rows.push(row);if(row.path==='probe-ledger')restarts.push(tick()-readmittedAt);},report:line=>{
