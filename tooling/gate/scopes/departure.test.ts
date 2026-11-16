@@ -14,6 +14,7 @@ import {fixtureEnvironment} from '../test-environment.ts';
 import {testScratch} from '../test-scratch.ts';
 import {spawnTest,waitFor} from '../test-wait.ts';
 import {generatedJavaScript} from '../generated-javascript.ts';
+import {hostObservations} from '../host-observations.ts';
 import {ownUnit} from './bound-slice.ts';
 
 type Summary={verdict:string;interrupted:string|null;scope_cleanup:{state:string};
@@ -93,6 +94,7 @@ else exit 0; fi
 
 test('departure readiness and signal records stay private until payload output completes',async t=>{
  const own=testScratch(t,'departure-record-publication'),repo=join(own,'repo'),env=fixtureEnvironment(t);
+ const observations=hostObservations(env);
  copyModuleClosure(['tooling/gate/durable-record.ts'],repo);
  const entry=join(repo,'tooling/gate/departure-publication.mjs');
  writeFileSync(entry,generatedJavaScript(`import * as fs from 'node:fs';
@@ -138,11 +140,13 @@ const setupFailure=false,scopes={group:'owned-group',departed:()=>true},diagnost
   assert.deepEqual(await closed,{code:0,signal:null},output);
   assert.deepEqual(readdirSync(own).filter(file=>/^((ready|signal)\.json)\./.test(file)),[]);
  }finally{
+  const teardownStarted=observations.now();
   if(!ended){
    // Deliver EOF to the paused publisher before a synchronous unit-stop wait.
    await new Promise<void>(resolve=>child.stdin.end(resolve));
    if(!ended)ctl('stop');
   }
   await closed;
+  t.diagnostic(JSON.stringify({publicationTeardownMs:observations.now()-teardownStarted,child:await closed}));
  }
 });
