@@ -126,3 +126,39 @@ try{
   const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{encoding:'utf8',env:fixtureEnvironment(t)});
   assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/reporter closed before return/);
 });
+
+
+test('a memory retry joins the build sampler before the next attempt or final publication',t=>{
+ const code=`import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';import {mkdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';import {join} from 'node:path';import {mock} from 'node:test';
+const ledger=${JSON.stringify(new URL('../gate/memory-ledger.ts',import.meta.url).href)},candidate=${JSON.stringify(new URL('./candidate-environment.ts',import.meta.url).href)};
+const realLedger=await import(ledger),realCandidate=await import(candidate);
+const {workerLifecycle,newWorkerTerminal}=await import(${JSON.stringify(new URL('../gate/worker-lifecycle.ts',import.meta.url).href)});
+let now=0,guard,cancelled=false,released,closeObserved=false,attempts=0;const releasedEvent=new Promise(done=>{released=done;});
+const worker=new EventEmitter(),terminal=newWorkerTerminal(),diagnostics=[];
+Object.assign(worker,{postMessage(){released();},unref(){},async terminate(){worker.emit('exit',1);return 1;}});
+const life=workerLifecycle(worker,'retry control sampler',line=>diagnostics.push(line),{wallNow:()=>now,arm(callback){guard=callback;return()=>{cancelled=true;};}},terminal);
+life.closed.then(()=>{closeObserved=true;},()=>{});
+mock.module(ledger,{namedExports:{...realLedger,reserveJob:async()=>({id:'owned-retry-control',ledger:'/owned',inherited:false,env:{},bytes:1,drained:0,active:()=>true,grow:async()=>{},shrink:async()=>{},outranked:()=>false,noteOver:async()=>{},release:()=>life.stop(),closed:life.closed})}});
+function launch(_node,request){
+ const result={status:0,signal:null,stdout:'',stderr:''};
+ if(request.command.includes('sh')||request.command.some(word=>word.endsWith('/all.sh'))){
+  attempts++;if(attempts===2){now=90001;if(!cancelled)guard();assert.equal(closeObserved,true,'retry started before owned worker exit was joined');}
+  mkdirSync(request.run,{recursive:true});writeFileSync(join(request.run,'summary.json'),JSON.stringify({identities:{commit:request.commit??commit},environment:{canonical:true},steps:[{name:'rustfmt',verdict:attempts===1?'INSTRUMENT':'PASS',...(attempts===1?{instrument:{kind:'memory-pressure'}}:{})}]}));
+ }else if(request.command.some(word=>word.endsWith('/verdict-contract.ts')))result.status=1;
+ return result;
+}
+mock.module(candidate,{namedExports:{...realCandidate,candidateCommand:launch,candidateCommandAsync:async(...args)=>launch(...args)}});
+const {fixture}=await import(${JSON.stringify(new URL('./run-fixture.ts',import.meta.url).href)});
+const {runLanding}=await import(${JSON.stringify(new URL('./run.ts',import.meta.url).href)});
+const cleanup=[],f=fixture({after(fn){cleanup.push(fn);}}),commit=f.options([]).commit;
+const pending=runLanding(f.options(['build','rustfmt']));let returned=false;pending.then(()=>{returned=true;},()=>{returned=true;});
+try{
+ await releasedEvent;await Promise.resolve();assert.equal(attempts,1);assert.equal(returned,false);assert.equal(existsSync(join(f.run,'landing.json')),false,'verdict appeared before sampler drain');
+ now=19;worker.emit('message',{kind:'stopped',peak:0});Atomics.store(terminal,0,23n);now=29;worker.emit('exit',0);
+ const ran=await pending;assert.equal(ran.state,'green',ran.message);assert.equal(attempts,2);assert.equal(ran.steps.find(row=>row.name==='rustfmt').attempt,2);
+ assert.equal(JSON.parse(readFileSync(join(f.run,'landing.json'),'utf8')).state,'green');assert.ok(diagnostics.some(line=>line.includes('"workerTerminalHookAt":23')&&line.includes('"exitObservedAt":29')));console.log('retry and publication follow joined sampler');
+}finally{if(!closeObserved){worker.emit('message',{kind:'stopped',peak:0});worker.emit('exit',0);}await pending.catch(()=>{});for(const fn of cleanup.reverse())await fn();}`;
+ const imports=process.execArgv.flatMap((argument,index,args)=>argument==='--import'&&args[index+1]?[argument,args[index+1]!] : []);
+ const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{encoding:'utf8',env:fixtureEnvironment(t)});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/retry and publication follow joined sampler/);
+});

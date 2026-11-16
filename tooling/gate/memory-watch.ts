@@ -23,7 +23,8 @@
 import { setTimeout as pause } from "node:timers/promises";
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
 import { admittedEntry, entryUsage, noteOver, noteSampledPeak, WATCH_MS } from "./memory-ledger.ts";
-import {HostObservationError} from "./host-observations.ts";
+import {HostObservationError,hostObservations} from "./host-observations.ts";
+import {recordWorkerTerminal} from './worker-lifecycle.ts';
 import { KEY, writeCostHistory } from "./step-scheduling.ts";
 import {enterWatcherFlush} from "./memory-watch-scope.ts";
 import {ToolingInstrumentError} from "./step-result.ts";
@@ -60,7 +61,8 @@ export async function watchReservation(ledger: string, id: string, key: string, 
 function startThread():void {
   const port=parentPort;
   if(!port)throw new Error('memory sampler has no parent port');
-  const {ledger,id,key,peak,observations}=workerData as {ledger:string;id:string;key:string;peak:SharedArrayBuffer;observations:NodeJS.ProcessEnv};
+  const {ledger,id,key,peak,terminal,observations}=workerData as {ledger:string;id:string;key:string;peak:SharedArrayBuffer;terminal:SharedArrayBuffer;observations:NodeJS.ProcessEnv};
+  recordWorkerTerminal(new BigInt64Array(terminal),()=>hostObservations(observations).wallNow());
   const cell=new BigInt64Array(peak),ending=new AbortController();
   let started=false;
   port.on('message',(message:{kind:string})=>{

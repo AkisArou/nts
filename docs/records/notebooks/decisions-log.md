@@ -3511,3 +3511,17 @@ shared owner observes no directory entry for its source. Existing omitted files
 remain coverage refusals. Renaming a file with diagnostics deletes one module
 and creates another whose initial limit is zero, so it refuses until those
 errors are fixed, as under the existing tooling policy.
+
+
+### 2026-11-16: join landing build samplers before retries (#806)
+
+The landing's candidate commands run asynchronously, with one shared wire codec
+for the retained synchronous full-check contracts. The build reservation's close
+is joined before any retry and before final verdict publication. Its disk guard
+also spans the awaited child. The sampler stop guard remains 60 seconds; supplied
+clock and real Worker controls distinguish an actual wedge from parent event-loop
+starvation without a long test sleep. Shared worker exit-hook timestamps and
+parent-observed exit times are diagnostic facts with distinct labels, not a claim
+of exact kernel thread-death time. The synchronous full-check measurement,
+record/apply and benchmark publication contracts are retained rather than making
+the controller's transaction APIs asynchronous in this correction.

@@ -1288,6 +1288,23 @@ the first node task.
 
 ## Decisions
 
+### Landing attempts keep worker lifetimes asynchronous
+
+A landing's compiler build, step attempts and contract probes use the candidate
+launcher's asynchronous form. Its synchronous form remains for the full check's
+synchronous measurement and record transaction contracts; both share one request
+encoder and child-receipt decoder. Candidate Node, argv, environment, descriptor
+passing and output limits have the same owner in both forms.
+
+After the first step attempt, the landing releases and joins the build sampler
+before starting a retry. Disk ownership spans the awaited build. A final
+`landing.json` is published only after the build reservation and sampler have
+drained; primary and cleanup failures both remain visible. The worker's existing
+stop guard stays in force. Drain diagnostics distinguish the worker thread's own
+exit-hook wall timestamp, read through shared memory, from the parent's observed
+exit event. The hook timestamp is not a claim about the kernel's exact thread
+death; an absent timestamp remains explicit after forced termination.
+
 - **A run closes the oracle image it creates.** Cold preparation exclusively
   acquires an image tree and registers its directory identity with the run's
   temporary owner. A drained failed close drops only those registered trees,

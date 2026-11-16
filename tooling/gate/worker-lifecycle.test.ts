@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {test} from 'node:test';
-import {workerLifecycle,WORKER_DRAIN_MS,type WorkerTransport} from './worker-lifecycle.ts';
+import {workerLifecycle,WORKER_DRAIN_MS,newWorkerTerminal,type WorkerTransport} from './worker-lifecycle.ts';
 function fixture(){
- const worker=new EventEmitter(),messages:unknown[]=[],warnings:string[]=[];let terminated=0,unrefs=0,callback:(()=>void)|undefined,cancelled=false;
+ const worker=new EventEmitter(),messages:unknown[]=[],warnings:string[]=[],diagnostics:Record<string,unknown>[]=[],terminal=newWorkerTerminal();let now=0,terminated=0,unrefs=0,callback:(()=>void)|undefined,cancelled=false;
  const transport=Object.assign(worker,{postMessage(message:unknown){messages.push(message);},unref(){unrefs++;},async terminate(){terminated++;worker.emit('exit',1);return 1;}}) as unknown as WorkerTransport;
- const lifecycle=workerLifecycle(transport,'control sampler',line=>warnings.push(line),{arm(fn,milliseconds){assert.equal(milliseconds,WORKER_DRAIN_MS);callback=fn;return()=>{cancelled=true;};}});
- return {worker,messages,warnings,lifecycle,get terminated(){return terminated;},get unrefs(){return unrefs;},get cancelled(){return cancelled;},expire(){assert.ok(callback);callback();}};
+ const lifecycle=workerLifecycle(transport,'control sampler',line=>line.startsWith('worker drain: ')?diagnostics.push(JSON.parse(line.slice('worker drain: '.length))):warnings.push(line),{wallNow:()=>now,arm(fn,milliseconds){assert.equal(milliseconds,WORKER_DRAIN_MS);callback=fn;return()=>{cancelled=true;};}},terminal);
+ return {worker,messages,warnings,diagnostics,terminal,lifecycle,at(value:number){now=value;},get terminated(){return terminated;},get unrefs(){return unrefs;},get cancelled(){return cancelled;},expire(){assert.ok(callback);callback();}};
 }
 test('a worker stops by one message and closes only after its final reply and exit',async()=>{
  const f=fixture();let closed=false;void f.lifecycle.closed.then(()=>{closed=true;});
@@ -33,6 +33,22 @@ test('a valid final reply followed by exit is clean when the reservation ends na
 });
 test('a throwing owned reporter rejects closed without escaping the worker callback',async()=>{
  const worker=new EventEmitter();Object.assign(worker,{postMessage(){},unref(){},async terminate(){return 1;}});
- const lifetime=workerLifecycle(worker as unknown as WorkerTransport,'owned reporter',()=>{throw Error('report namespace unavailable');},{arm(){return()=>{};}});
+ const lifetime=workerLifecycle(worker as unknown as WorkerTransport,'owned reporter',()=>{throw Error('report namespace unavailable');},{wallNow:()=>0,arm(){return()=>{};}});
  assert.doesNotThrow(()=>worker.emit('exit',1));await assert.rejects(lifetime.closed,/reporting failed.*report namespace unavailable/);
+});
+
+
+test('worker terminal-hook time is distinct from parent-observed exit and never substitutes for joining',async()=>{
+ const f=fixture();f.at(11);f.lifecycle.stop();f.at(17);f.worker.emit('message',{kind:'stopped',peak:9});
+ Atomics.store(f.terminal,0,23n);let closed=false;void f.lifecycle.closed.then(()=>{closed=true;});
+ await Promise.resolve();assert.equal(closed,false);f.at(101);f.worker.emit('exit',0);await f.lifecycle.closed;
+ assert.deepEqual(f.diagnostics,[{version:1,label:'control sampler',stage:'exit',stopRequestedAt:11,replyObservedAt:17,workerTerminalHookAt:23,exitObservedAt:101,code:0,problem:null}]);
+});
+
+test('a wedged worker keeps missing terminal time explicit beside the guard and forced exit',async()=>{
+ const f=fixture();f.at(7);f.lifecycle.stop();f.at(7+WORKER_DRAIN_MS);f.expire();
+ await assert.rejects(f.lifecycle.closed,/did not stop within 60000 ms/);
+ assert.equal(f.diagnostics.length,2);assert.equal(f.diagnostics[0]!.stage,'guard');assert.equal(f.diagnostics[0]!.exitObservedAt,null);
+ assert.equal(f.diagnostics[1]!.stage,'exit');assert.equal(f.diagnostics[1]!.exitObservedAt,7+WORKER_DRAIN_MS);
+ for(const row of f.diagnostics){assert.equal(row.workerTerminalHookAt,null);assert.equal(row.stopRequestedAt,7);}
 });

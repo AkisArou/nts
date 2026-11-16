@@ -383,3 +383,19 @@ test("the checked tip's portable receipt is durable before main is published and
   assert.notEqual(f.checked[0], task.sha);
   assert.equal(existsSync(verdictPath(f.config.home, task.sha)), false);
 });
+
+
+test('the service lands a real memory retry after its build sampler drains',async t=>{
+ const {fixture}=await import('./run-fixture.ts');const {runLanding}=await import('./run.ts');
+ const run=fixture(t),f=service(t);run.control('rustfmt','pressure');
+ f.config.select=()=>({selection:selection(['build','rustfmt']),kind:'other',interop:null,doctests:null});
+ f.config.runSteps=options=>runLanding(run.options(['build','rustfmt'],{commit:options.commit,priority:'landing'}));
+ const task=f.task('fix/sampler-retry',{'src/retry.txt':'retry control\n'}),entry=f.submit('fix/sampler-retry',task.sha);
+ const drained=await drain(f.config);assert.equal(drained.state,'drained');
+ const result=f.queue.result(entry.id);assert.equal(result?.state,'landed',result?.message);
+ assert.equal(JSON.parse(readFileSync(join(run.run,'landing.json'),'utf8')).state,'green');
+ const retry=JSON.parse(readFileSync(join(run.run,'attempt-2/summary.json'),'utf8'));assert.equal(retry.steps.find((row:{name:string})=>row.name==='rustfmt').verdict,'PASS');
+ assert.match(readFileSync(join(run.run,'build.log'),'utf8'),/worker drain: .*"stage":"exit"/);
+ assert.doesNotMatch(readFileSync(join(run.run,'build.log'),'utf8'),/did not stop within/);
+ assert.ok(f.logs.some(line=>line.includes('LANDED')),'service printed its final landing report');
+});

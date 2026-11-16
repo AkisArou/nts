@@ -13,7 +13,7 @@ import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {launcherEnvironment,PROFILE,runLanding} from "./run.ts";
 import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 import {fullEnvironment} from "../census/full-plan.ts";
-import {candidateCommand} from "./candidate-environment.ts";
+import {candidateCommand,candidateCommandAsync} from "./candidate-environment.ts";
 import {GATE,fixture} from './run-fixture.ts';
 import {clippyTarget} from "../gate/build-targets.ts";
 
@@ -110,9 +110,9 @@ test('an exception creating the candidate environment holds the landing instead 
   assert.equal(existsSync(join(f.controls,'built')),false);
 });
 
-test("the candidate environment launcher preserves killed and unstarted build observations",t=>{
+test("the candidate environment launcher preserves killed and unstarted build observations",async t=>{
   for(const command of [['sh','-c','kill -TERM $$'],['/no-such-nts-build-command']]){
-    const f=fixture(t),options=f.options([]),result=candidateCommand(process.execPath,{tree:f.tree,run:f.run,owned:options.owned!,command},launcherEnvironment(options.env));
+    const f=fixture(t),options=f.options([]),result=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:options.owned!,command},launcherEnvironment(options.env));
     if(command[0]==='sh')assert.equal(result.signal,'SIGTERM');
     else assert.match(result.error!.message,/ENOENT/);
   }
@@ -129,9 +129,9 @@ test("a candidate gate rebinds an equal-input foreign oracle image but holds its
     const original=readFileSync(before.seal.record);
     writeFileSync(join(f.controls,"parent-record"),before.seal.record);
     if(!foreign){chmodSync(before.seal.record,0o644);writeFileSync(before.seal.record,Buffer.concat([original,Buffer.from(" ")]));chmodSync(before.seal.record,0o444);}
-    const child=candidateCommand(process.execPath,{tree:f.tree,run:f.run,owned:{},command:[process.execPath,join(f.tree,"tooling/gate/run.mjs")]},parent.env);
+    const child=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:{},command:[process.execPath,join(f.tree,"tooling/gate/run.mjs")]},parent.env);
     if(foreign){
-      assert.equal(child.status,0,child.stdout+child.stderr);
+      assert.equal(child.status,0,(child.stdout??'')+(child.stderr??''));
       const observed=JSON.parse(readFileSync(join(f.controls,"oracle-context.json"),"utf8")) as {capture:typeof before;imageSource:string;parentSha256:string;temporary:unknown};
       const after=observed.capture;
       assert.equal(after.source,f.tree);assert.equal(after.directory,before.directory);assert.equal(after.seal.record,before.seal.record);
@@ -140,19 +140,19 @@ test("a candidate gate rebinds an equal-input foreign oracle image but holds its
       assert.equal(observed.parentSha256,createHash("sha256").update(original).digest("hex"),"the unused parent capture remains intact until cleanup");
       assert.equal(observed.imageSource,before.source,'the immutable image retains its producer source');assert.deepEqual(observed.temporary,parent.temporary);
     }else{
-      assert.notEqual(child.status,0,child.stdout+child.stderr);
-      assert.match(child.stdout+child.stderr,/oracle dependency.*(?:changed|identity|seal)/);
+      assert.notEqual(child.status,0,(child.stdout??'')+(child.stderr??''));
+      assert.match((child.stdout??'')+(child.stderr??''),/oracle dependency.*(?:changed|identity|seal)/);
       assert.equal(existsSync(join(f.controls,"oracle-context.json")),false,"a corrupt owned seal grants no execution");
       assert.deepEqual(readFileSync(before.seal.record),Buffer.concat([original,Buffer.from(" ")]),"no replacement hides the corruption");
     }
   });
 });
 
-test('the candidate launcher refuses a malformed inherited oracle grant before executing a command',t=>{
+test('the candidate launcher refuses a malformed inherited oracle grant before executing a command',async t=>{
   const f=fixture(t),options=f.options(['rustfmt']),planned=gateEnvironment(options.env!,{run:f.run,owned:options.owned,oracleRoot:f.tree});
   const context=JSON.parse(planned.env[ENVIRONMENT_CONTEXT]!),cap=JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!);cap.version=0;
   const raw=JSON.stringify(cap);context.owned.NTS_ORACLE_DEPENDENCIES=raw;context.report.host.NTS_ORACLE_DEPENDENCIES=raw;
-  const child=candidateCommand(process.execPath,{tree:f.tree,run:f.run,owned:{},command:['sh','-c',`echo forbidden > ${JSON.stringify(join(f.controls,'launched'))}`]},
+  const child=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:{},command:['sh','-c',`echo forbidden > ${JSON.stringify(join(f.controls,'launched'))}`]},
     {...planned.env,NTS_ORACLE_DEPENDENCIES:raw,[ENVIRONMENT_CONTEXT]:JSON.stringify(context)});
   assert.equal(child.status,2);assert.match(child.stderr,/invalid owned oracle dependency handoff/);
   assert.match(child.error!.message,/invalid owned oracle dependency handoff/);
@@ -166,4 +166,32 @@ test("the real gate runner selects the declared Clippy cache",async t=>{
   assert.equal(ran.state,"green",ran.message);
   assert.equal(readFileSync(join(f.controls,"target-dir"),"utf8"),clippyTarget(f.target));
   assert.equal(existsSync(join(f.target,"debug")),false);
+});
+
+
+test('synchronous transaction and asynchronous candidate launchers share output and child receipts',async t=>{
+ const f=fixture(t),options=f.options([]),request={tree:f.tree,run:f.run,owned:options.owned!,command:[process.execPath,'-e',"process.stdout.write('out');process.stderr.write('err');process.exitCode=7;"]};
+ const sync=candidateCommand(process.execPath,request,launcherEnvironment(options.env));
+ const asyncResult=await candidateCommandAsync(process.execPath,request,launcherEnvironment(options.env));
+ const fields=(result:typeof asyncResult)=>({status:result.status,signal:result.signal,stdout:result.stdout,stderr:result.stderr,error:result.error?.message});
+ assert.deepEqual(fields(asyncResult),fields(sync));assert.equal(asyncResult.status,7);assert.equal(asyncResult.stdout,'out');assert.equal(asyncResult.stderr,'err');
+});
+
+
+test('a candidate child leaves the parent available to join a real Worker',async t=>{
+ const {Worker}=await import('node:worker_threads');
+ const {workerLifecycle,newWorkerTerminal,workerDrainClock}=await import('../gate/worker-lifecycle.ts');
+ const {waitFor}=await import('../gate/test-wait.ts');
+ const f=fixture(t),options=f.options([]),ready=join(f.controls,'child-ready'),release=join(f.controls,'child-release'),workerFile=join(f.controls,'sampler.mjs'),terminal=newWorkerTerminal(),reports:string[]=[];
+ writeFileSync(workerFile,`import {parentPort,workerData} from 'node:worker_threads';import {recordWorkerTerminal} from ${JSON.stringify(new URL('../gate/worker-lifecycle.ts',import.meta.url).href)};recordWorkerTerminal(new BigInt64Array(workerData.terminal),()=>71);parentPort.on('message',()=>{parentPort.postMessage({kind:'stopped',peak:0});parentPort.close();});`);
+ const worker=new Worker(workerFile,{execArgv:[],env:fixtureEnvironment(t),workerData:{terminal:terminal.buffer}});
+ const life=workerLifecycle(worker,'real candidate control',line=>reports.push(line),{...workerDrainClock({...options.env,...options.owned}),wallNow:()=>101},terminal);
+ const command=[process.execPath,'--input-type=module','-e',`import {writeFileSync,existsSync,watch} from 'node:fs';const release=${JSON.stringify(release)};const closed=new Promise(resolve=>{const watcher=watch(${JSON.stringify(f.controls)},()=>{if(existsSync(release)){watcher.close();resolve();}});if(existsSync(release)){watcher.close();resolve();}});writeFileSync(${JSON.stringify(ready)},'ready');await closed;`];
+ let returned=false;const pending=candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:options.owned!,command},launcherEnvironment(options.env));pending.then(()=>{returned=true;},()=>{returned=true;});
+ try{
+  await waitFor('candidate child entry',()=>existsSync(ready),{stopped:()=>returned?'candidate exited before readiness':undefined});
+  life.stop();await life.closed;assert.equal(returned,false,'child finished before parent Worker delivery control');
+  assert.equal(Atomics.load(terminal,0),71n);assert.ok(reports.some(line=>line.includes('"workerTerminalHookAt":71')&&line.includes('"exitObservedAt":101')));
+  writeFileSync(release,'release');const result=await pending;assert.equal(result.status,0,(result.stdout??'')+(result.stderr??''));
+ }finally{writeFileSync(release,'release');await pending.catch(()=>{});life.stop();await life.closed.catch(()=>{});}
 });

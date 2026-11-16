@@ -141,7 +141,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import {workerLifecycle} from "./worker-lifecycle.ts";
+import {workerLifecycle,workerDrainClock,newWorkerTerminal} from "./worker-lifecycle.ts";
 import {hostInfrastructure} from "./host-infrastructure.ts";
 import {peakWatcherScope} from "./memory-watch-scope.ts";
 import {toolingSliceArgs,toolingSlice} from "./tooling-slice.ts";
@@ -1407,13 +1407,14 @@ export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: 
  */
 function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string, env:NodeJS.ProcessEnv,report:(line:string)=>void): { stop(): number;closed:Promise<void> } {
   const shared = new SharedArrayBuffer(8), cell = new BigInt64Array(shared);
+  const terminal=newWorkerTerminal();
   let worker: Worker | null = null, fixtureFailure:Error|undefined;
   let lifecycle:ReturnType<typeof workerLifecycle>|undefined;
   try {
     // The file-backed sampler owns its flags. Eval modes and parent preloads
     // describe the caller, and cannot be applied to this Worker entry.
-    worker = new Worker(WATCHER, { execArgv: [], workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared, observations:hostObservationEnvironment(env) } });
-    lifecycle=workerLifecycle(worker,`memory: ${key} sampler`,report);
+    worker = new Worker(WATCHER, { execArgv: [], workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared, terminal:terminal.buffer, observations:hostObservationEnvironment(env) } });
+    lifecycle=workerLifecycle(worker,`memory: ${key} sampler`,report,workerDrainClock(env),terminal);
     worker.postMessage({kind:"start"});
     // A sampler that fails leaves the job less measured, never stopped.
     worker.on("error", error => {if(error instanceof Error && error.name==="HostObservationError")fixtureFailure=error;});

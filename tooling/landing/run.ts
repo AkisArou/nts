@@ -47,7 +47,7 @@ import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
 import { nodePin } from "../bootstrap/node.ts";
 import { nodeToolchain } from "../gate/toolchain.ts";
-import { candidateCommand } from "./candidate-environment.ts";
+import { candidateCommandAsync } from "./candidate-environment.ts";
 import { STEPS } from "../gate/step-table.mjs";
 import { isListedLine } from "../records/pending.ts";
 import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
@@ -114,95 +114,110 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
   mkdirSync(run, { recursive: true });
   const results: StepResult[] = [];
   let contract: VerdictContract | undefined;
-  let probeContract: (() => VerdictContract | undefined) | undefined;
+  let probeContract: (() => Promise<VerdictContract | undefined>) | undefined;
   const finish = (state: Ran["state"], message: string): Ran => {
-    const completed = state === "green" && contract ? probeContract?.() : undefined;
-    if (state === "green" && contract && completed?.identity !== contract.identity) {
-      appendFileSync(join(run, "verdict-contract.log"), "landing verdict contract changed or became unavailable during the check\n");
-      contract = undefined;
-    }
-    const binaries = results.find(row => row.name === "build")?.binaries ??
-      results.find(row => row.binaries)?.binaries ?? {};
     const ran: Ran = { state, message, run, steps: results, pending: pendingLines(run), wall_s: (Date.now() - started) / 1000,
       ...(rustRecords?{rustRecords}:{}),
-      ...(state === "green" && contract ? { contract, binaries } : {}) };
-    writeFileSync(join(run, "landing.json"), JSON.stringify(ran, null, 2) + "\n");
+      };
     return ran;
   };
-  let selected: ReturnType<typeof nodeToolchain>;
-  try { selected=nodeToolchain(nodePin(tree),launcherEnvironment(options.env),options.nodeInstallations); }
-  catch(error) { return finish("held", String(error)); }
-  const launcher=selected.env;
-  const owned = {
-    NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
-    NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
-    ...STANDING_GATE_POLICY,
-    NTS_MEMORY_PRIORITY: options.priority ?? "landing",
-    // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
-    ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),
-    ...(options.interop && options.steps.includes("interop") ? { NTS_INTEROP_PROJECTS: options.interop } : {}),
-    // A stuck step holds the queue for minutes, not the hour the full check allows.
-    ...(options.ceiling !== undefined ? { NTS_GATE_STEP_CEILING_S: String(options.ceiling) } : {}),
-    ...options.owned,
-  };
-  probeContract = () => {
-    const helper = join(tree, "tooling/gate/verdict-contract.ts");
-    if (!existsSync(helper)) return undefined;
-    const file = join(run, "verdict-contract.json");
-    try {
-      const result = candidateCommand(selected.node, {
-        tree, run: join(run, "contract"), owned, discardTemporary: true,
-        command: [selected.node, helper, file],
-      }, launcher);
-      if (result.error || result.signal || result.status !== 0) throw Error(result.error?.message ?? result.signal ?? result.stderr);
-      const value: unknown = JSON.parse(readFileSync(file, "utf8"));
-      if (!validContract(value)) throw Error("candidate wrote an invalid verdict contract");
-      return value;
-    } catch (error) {
-      appendFileSync(join(run, "verdict-contract.log"), String(error) + "\n");
-      return undefined;
-    }
-  };
-  contract = probeContract();
-  const rest = options.steps.filter(step => step !== "build");
-  let environment: string | null;
-  try { environment = rest.length ? gateEnvironmentError(tree, rest, options.interop ?? null, launcher) : null; }
-  catch (error) { return finish("held", `the tree's gate could not say what its steps need: ${(error as Error).message}`); }
-  if (environment) return finish("held", `environment: ${environment}`);
-
-  // **The landing holds one reservation from its build to its gate run's
-  // admission.** It reserves landing-build in this process, so the build runs
-  // inside it, and hands it to the gate run (NTS_MEMORY_HANDOVER): the
-  // decision that admits the run's first request ends it, under the ledger's
-  // lock, so nothing is admitted between the two. A job admitted in the
-  // seconds between a build and its gate run held that run's growth for the
-  // rest of the run (#615).
-  let hold: Reservation | undefined;
-  try {
-    if (options.steps.includes("build")) {
-      const log = join(run, "build.log");
+  const execute=async():Promise<Ran>=>{
+    let selected: ReturnType<typeof nodeToolchain>;
+    try { selected=nodeToolchain(nodePin(tree),launcherEnvironment(options.env),options.nodeInstallations); }
+    catch(error) { return finish("held", String(error)); }
+    const launcher=selected.env;
+    const owned = {
+      NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
+      NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
+      ...STANDING_GATE_POLICY,
+      NTS_MEMORY_PRIORITY: options.priority ?? "landing",
+      // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
+      ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),
+      ...(options.interop && options.steps.includes("interop") ? { NTS_INTEROP_PROJECTS: options.interop } : {}),
+      // A stuck step holds the queue for minutes, not the hour the full check allows.
+      ...(options.ceiling !== undefined ? { NTS_GATE_STEP_CEILING_S: String(options.ceiling) } : {}),
+      ...options.owned,
+    };
+    probeContract = async () => {
+      const helper = join(tree, "tooling/gate/verdict-contract.ts");
+      if (!existsSync(helper)) return undefined;
+      const file = join(run, "verdict-contract.json");
       try {
-        hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}` },
-          { env: { ...launcher, ...owned }, report: line => appendFileSync(log, `${line}\n`) });
+        const result = await candidateCommandAsync(selected.node, {
+          tree, run: join(run, "contract"), owned, discardTemporary: true,
+          command: [selected.node, helper, file],
+        }, launcher);
+        if (result.error || result.signal || result.status !== 0) throw Error(result.error?.message ?? result.signal ?? result.stderr ?? 'candidate left no result');
+        const value: unknown = JSON.parse(readFileSync(file, "utf8"));
+        if (!validContract(value)) throw Error("candidate wrote an invalid verdict contract");
+        return value;
       } catch (error) {
-        appendFileSync(log, `${String(error)}\n`);
-        const reason = `its memory was not reserved: ${(error as Error).message}`;
-        results.push({ name: "build", verdict: "INSTRUMENT", reason, log });
-        for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: "needs build, which is INSTRUMENT" });
-        return finish("held", `build: ${reason}`);
+        appendFileSync(join(run, "verdict-contract.log"), String(error) + "\n");
+        return undefined;
       }
-      for (let attempt = 1; ; attempt++) {
-        const built = buildCompiler(options, selected.node, launcher, { ...owned, ...hold.env }, attempt);
-        if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
-        results.push(built);
-        if (built.verdict === "PASS") break;
-        for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: `needs build, which is ${built.verdict}` });
-        return built.verdict === "FAIL" ? finish("red", `build FAIL; log ${built.log}`) : finish("held", `build: ${built.reason}`);
+    };
+    contract = await probeContract();
+    const rest = options.steps.filter(step => step !== "build");
+    let environment: string | null;
+    try { environment = rest.length ? gateEnvironmentError(tree, rest, options.interop ?? null, launcher) : null; }
+    catch (error) { return finish("held", `the tree's gate could not say what its steps need: ${(error as Error).message}`); }
+    if (environment) return finish("held", `environment: ${environment}`);
+
+    // **The landing holds one reservation from its build to its gate run's
+    // admission.** It reserves landing-build in this process, so the build runs
+    // inside it, and hands it to the gate run (NTS_MEMORY_HANDOVER): the
+    // decision that admits the run's first request ends it, under the ledger's
+    // lock, so nothing is admitted between the two. A job admitted in the
+    // seconds between a build and its gate run held that run's growth for the
+    // rest of the run (#615).
+    let hold: Reservation | undefined,drain:Promise<void>|undefined,primary:{error:unknown}|undefined;
+    const closeBuildHold=()=>drain??=(async()=>{
+      const errors:unknown[]=[];
+      try{hold?.release();}catch(error){errors.push(error);}
+      try{await hold?.closed;}catch(error){errors.push(error);}
+      if(errors.length===1)throw errors[0];
+      if(errors.length)throw new AggregateError(errors,'landing build reservation failed to drain');
+    })();
+    try {
+      if (options.steps.includes("build")) {
+        const log = join(run, "build.log");
+        try {
+          hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}` },
+            { env: { ...launcher, ...owned }, report: line => appendFileSync(log, `${line}\n`) });
+        } catch (error) {
+          appendFileSync(log, `${String(error)}\n`);
+          const reason = `its memory was not reserved: ${(error as Error).message}`;
+          results.push({ name: "build", verdict: "INSTRUMENT", reason, log });
+          for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: "needs build, which is INSTRUMENT" });
+          return finish("held", `build: ${reason}`);
+        }
+        for (let attempt = 1; ; attempt++) {
+          const built = await buildCompiler(options, selected.node, launcher, { ...owned, ...hold.env }, attempt);
+          if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
+          results.push(built);
+          if (built.verdict === "PASS") break;
+          for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: `needs build, which is ${built.verdict}` });
+          return built.verdict === "FAIL" ? finish("red", `build FAIL; log ${built.log}`) : finish("held", `build: ${built.reason}`);
+        }
       }
+      if (!rest.length) return finish("green", "green");
+      return await finishSteps(options, selected.node, launcher, owned, rest, results, finish, hold,closeBuildHold);
+    } catch(error){primary={error};throw error;}
+    finally {
+      try{await closeBuildHold();}
+      catch(error){if(primary!==undefined&&primary.error!==error)throw new AggregateError([primary.error,error],'landing failed and its build reservation failed to drain');throw error;}
     }
-    if (!rest.length) return finish("green", "green");
-    return finishSteps(options, selected.node, launcher, owned, rest, results, finish, hold);
-  } finally { hold?.release(); await hold?.closed; }
+  };
+  const ran=await execute();
+  const completed=ran.state==='green'&&contract?await probeContract?.():undefined;
+  if(ran.state==='green'&&contract&&completed?.identity!==contract.identity){
+    appendFileSync(join(run,'verdict-contract.log'),'landing verdict contract changed or became unavailable during the check\n');
+    contract=undefined;
+  }
+  if(ran.state==='green'&&contract){ran.contract=contract;ran.binaries=results.find(row=>row.name==='build')?.binaries??results.find(row=>row.binaries)?.binaries??{};}
+  ran.pending=pendingLines(run);ran.wall_s=(Date.now()-started)/1000;
+  writeFileSync(join(run,'landing.json'),JSON.stringify(ran,null,2)+'\n');
+  return ran;
 }
 
 /**
@@ -210,15 +225,15 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
  * some from measuring. The first run takes over `hold`, the build's
  * reservation; a run that did not take it over never needs it again.
  */
-function finishSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, rest: readonly string[],
-  results: StepResult[], finish: (state: Ran["state"], message: string) => Ran, hold: Reservation | undefined): Ran {
+async function finishSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, rest: readonly string[],
+  results: StepResult[], finish: (state: Ran["state"], message: string) => Ran, hold: Reservation | undefined,closeBuildHold:()=>Promise<void>): Promise<Ran> {
   const rows = new Map<string, StepResult>();
   let pending = [...rest];
   for (let attempt = 1; pending.length; attempt++) {
     const dir = attempt === 1 ? options.run : join(options.run, `attempt-${attempt}`);
     const handover: Record<string, string> = attempt === 1 && hold && !hold.inherited ? { NTS_MEMORY_HANDOVER: hold.id } : {};
-    const measured = runSteps(options, node, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" "), ...handover }, dir, pending);
-    if (attempt === 1) hold?.release();
+    const measured = await runSteps(options, node, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" "), ...handover }, dir, pending);
+    if (attempt === 1) await closeBuildHold();
     if ("held" in measured) { for (const step of pending) rows.set(step, { name: step, verdict: "NOT RUN", reason: measured.held }); results.push(...rest.map(step => rows.get(step)!)); return finish("held", measured.held); }
     for (const row of measured.rows) rows.set(row.name, { ...row, ...(attempt > 1 ? { attempt } : {}) });
     const retry = measured.rows.filter(row => row.verdict === "INSTRUMENT" && instrumentPolicy(row.instrument?.kind, row.instrument?.completedFailures)?.disposition === "retry");
@@ -243,22 +258,22 @@ function finishSteps(options: RunOptions, node: string, launcher: NodeJS.Process
  * machine. The first build's log follows what the reservation said while it
  * waited.
  */
-function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
+async function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): Promise<StepResult> {
   let release:(()=>void)|undefined;
   try{
     release=new DiskCapacity({env:{...launcher,...owned}}).beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});
-    return buildCompilerAdmitted(options,node,launcher,owned,attempt);
+    return await buildCompilerAdmitted(options,node,launcher,owned,attempt);
   }catch(error){return {name:'build',verdict:'INSTRUMENT',reason:String(error),log:join(options.run,'build.log')};}
   finally{release?.();}
 }
-function buildCompilerAdmitted(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
+async function buildCompilerAdmitted(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): Promise<StepResult> {
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const slots = machineBudget(cpus().length).slots;
   const command = options.build ?? [node, join(options.tree,"tooling/gate/cargo.ts"), "build", "--profile", PROFILE, "--jobs", String(slots)];
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   const launch = gateCommand(timed[0]!, timed.slice(1));
-  const r = candidateCommand(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);
+  const r = await candidateCommandAsync(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);
   appendFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
   try {
@@ -280,10 +295,10 @@ function buildCompilerAdmitted(options: RunOptions, node: string, launcher: Node
 
 type Summary = { identities?: { commit?: string | null; nts?: { sha256?: string | null }; nts_suite?: { sha256?: string | null } };
   interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[] };
-function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): { rows: StepResult[] } | { held: string } {
+async function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): Promise<{ rows: StepResult[] } | { held: string }> {
   mkdirSync(dir, { recursive: true });
   const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")]);
-  const r = candidateCommand(node, { tree: options.tree, run: dir, owned, command: [launch.command, ...launch.args] }, launcher);
+  const r = await candidateCommandAsync(node, { tree: options.tree, run: dir, owned, command: [launch.command, ...launch.args] }, launcher);
   writeFileSync(join(dir, "gate.log"), `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let summary: Summary;
   try { summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")) as Summary; }
