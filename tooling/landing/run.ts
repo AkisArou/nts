@@ -42,6 +42,7 @@ import { gateEnvironmentError } from "../gate/environment.ts";
 import { instrumentPolicy } from "../gate/step-result.ts";
 import { TEST_PROFILE } from "../gate/test-profile.ts";
 import {DiskCapacity} from '../gate/disk-capacity.ts';
+import {hostObservations} from '../gate/host-observations.ts';
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
@@ -108,7 +109,8 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
 }
 
 export async function runLanding(options: RunOptions): Promise<Ran> {
-  const started = Date.now();
+  const clock=hostObservations({...options.env??process.env,...options.owned});
+  const started = clock.wallNow();
   const { tree, target, run } = options;
   const rustRecords=options.rustRecords===undefined?undefined:readRustRecordDecisions(options.rustRecords);
   mkdirSync(run, { recursive: true });
@@ -116,7 +118,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
   let contract: VerdictContract | undefined;
   let probeContract: (() => Promise<VerdictContract | undefined>) | undefined;
   const finish = (state: Ran["state"], message: string): Ran => {
-    const ran: Ran = { state, message, run, steps: results, pending: pendingLines(run), wall_s: (Date.now() - started) / 1000,
+    const ran: Ran = { state, message, run, steps: results, pending: pendingLines(run), wall_s: (clock.wallNow() - started) / 1000,
       ...(rustRecords?{rustRecords}:{}),
       };
     return ran;
@@ -215,7 +217,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
     contract=undefined;
   }
   if(ran.state==='green'&&contract){ran.contract=contract;ran.binaries=results.find(row=>row.name==='build')?.binaries??results.find(row=>row.binaries)?.binaries??{};}
-  ran.pending=pendingLines(run);ran.wall_s=(Date.now()-started)/1000;
+  ran.pending=pendingLines(run);ran.wall_s=(clock.wallNow()-started)/1000;
   writeFileSync(join(run,'landing.json'),JSON.stringify(ran,null,2)+'\n');
   return ran;
 }

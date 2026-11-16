@@ -129,7 +129,8 @@ try{
 
 
 test('a memory retry joins the build sampler before the next attempt or final publication',t=>{
- const code=`import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';import {mkdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';import {join} from 'node:path';import {mock} from 'node:test';
+ const code=`import assert from 'node:assert/strict';import {EventEmitter} from 'node:events';import {mkdirSync,readFileSync,existsSync} from 'node:fs';import {join} from 'node:path';import {mock} from 'node:test';
+import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
 const ledger=${JSON.stringify(new URL('../gate/memory-ledger.ts',import.meta.url).href)},candidate=${JSON.stringify(new URL('./candidate-environment.ts',import.meta.url).href)};
 const realLedger=await import(ledger),realCandidate=await import(candidate);
 const {workerLifecycle,newWorkerTerminal}=await import(${JSON.stringify(new URL('../gate/worker-lifecycle.ts',import.meta.url).href)});
@@ -143,7 +144,7 @@ function launch(_node,request){
  const result={status:0,signal:null,stdout:'',stderr:''};
  if(request.command.includes('sh')||request.command.some(word=>word.endsWith('/all.sh'))){
   attempts++;if(attempts===2){now=90001;if(!cancelled)guard();assert.equal(closeObserved,true,'retry started before owned worker exit was joined');}
-  mkdirSync(request.run,{recursive:true});writeFileSync(join(request.run,'summary.json'),JSON.stringify({identities:{commit:request.commit??commit},environment:{canonical:true},steps:[{name:'rustfmt',verdict:attempts===1?'INSTRUMENT':'PASS',...(attempts===1?{instrument:{kind:'memory-pressure'}}:{})}]}));
+  mkdirSync(request.run,{recursive:true});durableRecord(join(request.run,'summary.json'),{identities:{commit:request.commit??commit},environment:{canonical:true},steps:[{name:'rustfmt',verdict:attempts===1?'INSTRUMENT':'PASS',...(attempts===1?{instrument:{kind:'memory-pressure'}}:{})}]});
  }else if(request.command.some(word=>word.endsWith('/verdict-contract.ts')))result.status=1;
  return result;
 }

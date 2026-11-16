@@ -141,7 +141,7 @@ test('a real held-then-green --here run prints its final PASS report and exits z
 const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)};
 const realRules=await import(rules),realRun=await import(run);
 const {landingSelection}=await import(${JSON.stringify(new URL('./selection.ts',import.meta.url).href)});
-const {gitArguments}=await import(${JSON.stringify(new URL('../gate/git-arguments/main.ts',import.meta.url).href)});
+import {gitArguments} from ${JSON.stringify(new URL('../gate/git-arguments/main.ts',import.meta.url).href)};
 const {fixture}=await import(${JSON.stringify(new URL('./run-fixture.ts',import.meta.url).href)});
 const cleanup=[],f=fixture({after(fn){cleanup.push(fn);}});f.control('rustfmt','pressure');
 const git=(...args)=>execFileSync('git',gitArguments(args),{cwd:f.tree,env:f.options([]).env,encoding:'utf8'}).trim();
