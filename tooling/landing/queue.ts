@@ -38,6 +38,10 @@ export type Entry = {
   first: boolean; submitted_at: string; by: string; note?: string;
 };
 export type Checking = Entry & { started_at: string; base?: string; tip?: string; run?: string; phase?: "checking" | "landing" };
+/** Run metadata belongs to checking/held, never to a queued arrival. */
+function entryOf(current:Checking):Entry{
+  const {started_at:_s,base:_b,tip:_t,run:_r,phase:_p,...entry}=current;return entry;
+}
 export type State = "landed" | "refused" | "withdrawn" | "held";
 export type Result = {
   version: 1; id: string; sha: string; state: State; message: string; at: string;
@@ -118,7 +122,7 @@ export class Queue {
     return this.mutate(()=>{
       const current = this.checking();
       if (!current) return null;
-      const { started_at: _s, base: _b, tip: _t, run: _r, phase: _p, ...entry } = current;
+      const entry=entryOf(current);
       const again: Entry = { ...entry, first: true };
       this.record(this.path("queue", `${this.key(again)}.json`), again);
       this.remove(this.path("checking.json"));
@@ -171,7 +175,7 @@ export class Queue {
     return this.mutate(()=>{
       const held=readJson<Checking>(this.path('held',`${id}.json`)),answer=this.result(id);
       if(!held||answer?.state!=='held'||!answer.answerNonce||answer.answerNonce!==answerNonce||!answer.retryDisk?.length||this.withdrawRequested(id))return null;
-      const {started_at:_s,base:_b,tip:_t,run:_r,phase:_p,...entry}=held;
+      const entry=entryOf(held);
       this.record(this.path('queue',`${this.key(entry)}.json`),entry);
       this.remove(this.path('held',`${id}.json`));
       return entry;
