@@ -245,3 +245,48 @@ retained failing/passing sabotage controls and the cited-revision/rebase
 receipts. All paths in this paragraph are relative to the same scratch root.
 Retained REDs and setup refusals are excluded from positive proof; each later
 green is tied to its actual source, not retroactively assigned to a newer pin.
+
+## Rebase after the main memory-adjustment fix
+
+The initial queue, 9829f0554fff-73f63757, did not land. Its tooling command
+finished while the gate parent repeatedly shrank and re-requested the same
+pending demand, oscillating between 17 and 19 GiB and starving its event loop.
+The queue was withdrawn. This was an existing main defect, fixed and landed
+as #800 at eeeb9a252cad; its record is
+[gate-memory-growth-800.md](gate-memory-growth-800.md). The bootstrap cost
+above remains separate from that livelock, and no time bound was raised.
+
+All 115 pre-rebase commits remain under refs/cited/761-pre-800. Rebase
+4c911134de94 adds exactly #800's seven paths to the previously authenticated
+9829f0554fff tree. The sole conflict joined two independent workflow Decisions.
+All 367 literal Rust embed comparisons are byte-identical, and none of the
+changed paths appears in 246 retained Cargo dependency files. The prior inner
+and 2,695-test full tooling results remain evidence at their original pins;
+no fresh inner was owed by this rebase. The changed memory and scheduling
+cohort passed 111/111 with strict, timing and host audits green. Its helper
+joined before temporary removal.
+
+The ordinary selector writer refreshed only
+results/gate-inputs/rust-runtime.json: the run.mjs file fact's size and hash,
+and the enclosing key hash. The 57-target projection hash is unchanged.
+Commit 3b65c8f442a00cebd85e7755b900bcbcf131821a carries that generated update.
+Rebased supported at 3b65c8f442a0 passed all 19 summary rows plus build.
+The ordinary tooling cases were 2,697 pass, zero failures and two existing
+Unicode TODOs. Runner wall was 859.146 s; whole CLI wall was 943.847 s.
+Native tests took 402.445 s, tooling 322.251 s against its unchanged
+900 s bound with no excluded wait, records 124.282 s and gate-inputs
+103.659 s. This run overlapped the full check's core run; it is not
+a speed comparison. Canonical environment, clean source, complete scope cleanup
+and diagnostics were confirmed. Memory recorded two growths, two withdrawn
+tickets, one shrink and no over-budget step or kill. The selector's 600 s
+estimate budget remains separate from elapsed wall time.
+
+The rebase supplement is
+/home/akisarou/.cache/nts-scratch/761/raw-post-800-evidence-v1.json,
+SHA-256 553e3c19f571bc4e5378f048c7c19f47355a339025ffea1e70f419f3cc013378.
+It authenticates 126 artifacts (8,175,765 bytes) and 27 exact Git receipts, with the prior finite manifest
+kept unchanged. The supported-v1 launcher refused a mistyped source pin before
+starting any gate step; that setup attempt is excluded. Pool 3's idle incremental
+output and the idle targets in the two historical control trees were reclaimed
+after process-user and directory-identity checks. Their branches, trees and
+retained evidence remain unchanged; the deletion receipts are in the supplement.
