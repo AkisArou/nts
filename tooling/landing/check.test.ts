@@ -10,7 +10,7 @@ import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname,join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquire } from "./lock.ts";
 import { Queue } from "./queue.ts";
@@ -141,7 +141,7 @@ test('a real held-then-green --here run prints its final PASS report and exits z
 const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)};
 const realRules=await import(rules),realRun=await import(run);
 const {landingSelection}=await import(${JSON.stringify(new URL('./selection.ts',import.meta.url).href)});
-import {gitArguments} from ${JSON.stringify(new URL('../gate/git-arguments/main.ts',import.meta.url).href)};
+import {gitArguments} from '../gate/git-arguments/main.ts';
 const {fixture}=await import(${JSON.stringify(new URL('./run-fixture.ts',import.meta.url).href)});
 const cleanup=[],f=fixture({after(fn){cleanup.push(fn);}});f.control('rustfmt','pressure');
 const git=(...args)=>execFileSync('git',gitArguments(args),{cwd:f.tree,env:f.options([]).env,encoding:'utf8'}).trim();
@@ -159,7 +159,7 @@ try{
  assert.equal(retry.steps.find(row=>row.name==='rustfmt').verdict,'PASS');
 }finally{process.chdir(before);for(const fn of cleanup.reverse())await fn();}`;
  const imports=process.execArgv.flatMap((argument,index,args)=>argument==='--import'&&args[index+1]?[argument,args[index+1]!] : []);
- const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{encoding:'utf8',env:fixtureEnvironment(t)});
+  const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{cwd:dirname(CHECK),encoding:'utf8',env:fixtureEnvironment(t)});
  const output=(result.stdout??'')+(result.stderr??'');assert.equal(result.status,0,output);
  assert.match(output,/PASS\s+build/);assert.match(output,/PASS\s+rustfmt/);assert.match(output,/landing: green in .*green/);
 });
