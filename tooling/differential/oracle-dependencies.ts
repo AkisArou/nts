@@ -20,6 +20,7 @@ import type {TemporaryDiskLease} from '../gate/disk-capacity.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import {reserveJob} from '../gate/memory-ledger.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
+import {createRunOracleImage,type RunTemporary} from '../gate/run-temporary.ts';
 import {CaseBudgetError,ToolingInstrumentError} from '../gate/step-result.ts';
 import {moduleGraph} from '../gate/module-closure.ts';
 import {installationStatusInputs} from '../gate/reader-inputs/main.ts';
@@ -29,7 +30,7 @@ export {CaseBudgetError,ToolingInstrumentError};
 
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
-export type DependencyCapability={seal?:DependencyRunSeal;parentImage?:DependencyCapability;version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
+export type DependencyCapability={seal?:DependencyRunSeal;parentImage?:DependencyCapability;temporary?:RunTemporary;version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
 import {dependencyInventory,dependencyPackageInventory,type DependencyEntry as Entry} from '../inputs/dependency-inventory.ts';
 export {dependencyInventory,dependencyPackageInventory} from '../inputs/dependency-inventory.ts';
 type InstallInputs={version:1;identity:Identity;paths:string[];selectionPaths:string[];treeRows:string[];treeSha256:string};
@@ -60,13 +61,13 @@ function producerIdentity(source:string){
     return hash(JSON.stringify(recipe.map(file=>[file,hash(readFileSync(join(source,file)))])));
   }finally{graph.close();}
 }
-export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null,env:NodeJS.ProcessEnv=process.env):DependencyCapability{
+export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null,env:NodeJS.ProcessEnv=process.env,temporary?:RunTemporary):DependencyCapability{
   source=realpathSync(source);
   // sourceRevision is the committed revision anchor. Only the async install-input
   // projection below determines the source image, never HEAD's whole tree.
   const sourceRevision=execFileSync('git',gitArguments(['rev-parse','HEAD']),{cwd:source,env,encoding:'utf8'}).trim();
   return {version:1,source,sourceRevision,lockfileSha256:hash(readFileSync(join(source,'pnpm-lock.yaml'))),
-    helperSha256:hash(readFileSync(fileURLToPath(import.meta.url))),producerSha256:producerIdentity(source),directory:resolve(directory),admission,ownerStep};
+    helperSha256:hash(readFileSync(fileURLToPath(import.meta.url))),producerSha256:producerIdentity(source),directory:resolve(directory),admission,ownerStep,...(temporary?{temporary}:{})};
 }
 export function protectDependencyImage(root:string):Entry[]{
   const entries=dependencyInventory(root);
@@ -292,7 +293,11 @@ async function build(capability:DependencyCapability,inputSha256:string){
   const inputSet:InstallInputs=JSON.parse(inputBytes.toString('utf8'));
   checked(capability);
   if(JSON.stringify(inputRows(capability,[...new Set([...inputSet.paths,...inputSet.selectionPaths])].sort()))!==JSON.stringify(inputSet.treeRows))throw Error('oracle dependency install inputs changed before archive');
-  const tree=join(capability.directory,'tree'),archive=join(capability.directory,'source.tar');mkdirSync(tree);
+  const tree=join(capability.directory,'tree'),archive=join(capability.directory,'source.tar');
+  if(capability.temporary){
+    const home=process.env.HOME;if(!home)throw Error('oracle image creation requires canonical HOME');
+    createRunOracleImage(capability.temporary,home,tree);
+  }else mkdirSync(tree);
   const present=new Set<string>();
   for(const row of inputSet.treeRows)for(let path=row.slice(row.indexOf('\t')+1);path!=='.';path=dirname(path))present.add(path);
   const paths=inputSet.paths.filter(path=>present.has(path));

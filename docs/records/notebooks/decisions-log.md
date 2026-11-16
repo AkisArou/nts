@@ -3420,3 +3420,19 @@ The token controller checks its owned-value packet before requesting capacity.
 If the packet changes and binding fails after a grant, the controller releases
 and joins the actual lease before propagating the binding error, retaining any
 cleanup error alongside it. The grant remains the marker's timing boundary.
+
+## Run-owned oracle image disposal (11-16)
+
+An image is regenerable; its ready and semantic records and call ledger are
+failure evidence. New cold preparations exclusively create and register their
+image tree under the actual run temporary, separately from disk admission.
+Failed close authenticates that acquisition and its ancestors, refuses live
+users or replacements, and removes only the registered tree. Both the close
+report and failed-retention row name the removed path and allocated bytes.
+Borrowed parent images and existing ready hits never acquire an ownership
+grant. A registered closed temporary refuses fresh acquisition, including an
+explicit reused NTS_GATE_RUN_DIR, because reopening retained evidence mixes
+lifetimes and races its own prune. Live inherited use and open-run retries are
+unchanged. Dead-owner recovery remains a separate, unimplemented deletion kind
+awaiting the user's approval.
+

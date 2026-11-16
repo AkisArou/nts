@@ -7,7 +7,7 @@ import { userInfo } from "node:os";
 import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
-import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,discardRunTemporary,removable,assertRunTemporary} from "./run-temporary.ts";
+import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,discardRunTemporary,removable,assertRunTemporary,assertRunTemporaryOpen} from "./run-temporary.ts";
 import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
@@ -173,8 +173,9 @@ export function gateEnvironment(
   }
   Object.assign(env, owned);
   if(oracle)env.NTS_ORACLE_TYPESCRIPT=oracle;else delete env.NTS_ORACLE_TYPESCRIPT;
+  assertRunTemporaryOpen(options.run,host.HOME!);
   if (!prior) pruneRunTemporaries(host.HOME!,{host:hostObservations(env)});
-  const temporary=captureRunTemporary(options.run,prior?.temporary);
+  const temporary=captureRunTemporary(options.run,prior?.temporary,host.HOME!);
   // /tmp is a small tmpfs. Neither a launcher nor an experiment owns these paths.
   const storage=ownedCacheEnvironment(launcher,{temporary:temporary.path});
   Object.assign(env,storage);
@@ -203,7 +204,7 @@ export function gateEnvironment(
   const parentImage=foreignRoot&&inheritedCapability?.seal?inheritedCapability:undefined;
   if(parentImage)assertSealedOracleRun(launcher);
   const dependencies=inheritedCapability&&!foreignRoot?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
-    JSON.stringify({...dependencyCapability(toolingRoot,capture,admission,null,env),...(parentImage?{parentImage}:{})}):undefined);
+    JSON.stringify({...dependencyCapability(toolingRoot,capture,admission,null,env,temporary),...(parentImage?{parentImage}:{})}):undefined);
   if(dependencies){env.NTS_ORACLE_DEPENDENCIES=dependencies;owned.NTS_ORACLE_DEPENDENCIES=dependencies;}
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,

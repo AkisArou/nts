@@ -6,13 +6,16 @@ import {execFileSync} from "node:child_process";
 import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from "node:fs";
 import {userInfo} from "node:os";
 import {dirname,join,resolve,relative,isAbsolute} from "node:path";
+import {assertNoProcessUsers} from '../landing/tree-users.ts';
 
 export const FAILED_TEMP_MAX_BYTES=8*2**30;
 export const TEMP_DISK_FLOOR_BYTES=40*2**30;
 export type RunTemporary={path:string;parent:string;dev:number;ino:number;uid:number;enclosing?:RunTemporary};
-type ClosedTemporary={owned:RunTemporary;closed:number;bytes?:number};
+export type DroppedOracleImage={path:string;bytes:number;state:'dropped'|'already absent'};
+type ClosedTemporary={owned:RunTemporary;closed:number;bytes?:number;oracle_images?:DroppedOracleImage[]};
 const registry=(home:string)=>join(home,".cache/nts-gate/closed-temporaries");
-const key=(owned:RunTemporary)=>createHash("sha256").update(owned.path).digest("hex")+".json";
+const pathKey=(path:string)=>createHash("sha256").update(path).digest("hex");
+const key=(owned:RunTemporary)=>pathKey(owned.path)+".json";
 const under=(root:string,path:string)=>{const part=relative(root,path);return part!==".." && !part.startsWith("../") && !isAbsolute(part);};
 const contains=(outer:RunTemporary,inner:RunTemporary)=>outer.path!==inner.path && under(outer.path,inner.path)
   && join(outer.parent,"tmp")!==join(inner.parent,"tmp") && under(join(outer.parent,"tmp"),join(inner.parent,"tmp"));
@@ -26,7 +29,17 @@ function writeClosed(file:string,entry:ClosedTemporary):void {
   writeFileSync(next,JSON.stringify(entry)+"\n");renameSync(next,file);
 }
 
-export function captureRunTemporary(run:string,previous?:RunTemporary):RunTemporary {
+/** A retained failure is evidence from one lifetime, never a new run's scratch. */
+export function assertRunTemporaryOpen(run:string,home:string):void {
+  const path=join(resolve(run),'tmp'),file=join(registry(home),pathKey(path)+'.json');
+  if(!existsSync(file))return;
+  const entry=JSON.parse(readFileSync(file,'utf8')) as ClosedTemporary;
+  if(entry.owned?.path!==path||!Number.isFinite(entry.closed))throw Error('invalid closed run temporary registration: '+file);
+  throw Error('run temporary is registered closed: '+path+'; choose a new run directory');
+}
+
+export function captureRunTemporary(run:string,previous?:RunTemporary,home=userInfo().homedir):RunTemporary {
+  assertRunTemporaryOpen(run,home);
   mkdirSync(run,{recursive:true});
   const path=join(resolve(run),"tmp");
   if (!existsSync(path)) mkdirSync(path);
@@ -63,6 +76,96 @@ export function removable(root:string):void {
     for(const name of readdirSync(path,{encoding:"buffer"}))walk(Buffer.concat([path,SLASH,name]));
   };
   walk(Buffer.from(root));
+}
+
+type DirectoryIdentity={path:string;dev:number;ino:number;uid:number};
+type OracleImageReceipt={version:1;kind:'oracle-dependency-image';temporary:RunTemporary;parent:DirectoryIdentity;image:DirectoryIdentity};
+type RegisteredImage={file:string;dropped:string;receipt:OracleImageReceipt;present:boolean;prior?:DroppedOracleImage};
+const imageRegistry=(owned:RunTemporary)=>join((owned.enclosing??owned).path,'.nts-oracle-images-v1');
+function directoryIdentity(path:string):DirectoryIdentity {
+  const info=lstatSync(path);
+  if(!info.isDirectory()||info.isSymbolicLink()||info.uid!==process.getuid?.())throw Error('oracle image ancestor is not an owned directory: '+path);
+  return {path,dev:info.dev,ino:info.ino,uid:info.uid};
+}
+function sameDirectory(expected:DirectoryIdentity):void {
+  const actual=directoryIdentity(expected.path);
+  if(actual.dev!==expected.dev||actual.ino!==expected.ino||actual.uid!==expected.uid)throw Error('registered oracle image directory was replaced: '+expected.path);
+}
+function imageParents(owned:RunTemporary,path:string,home:string):void {
+  assertRunTemporary(owned,home);
+  if(path!==resolve(path)||path===owned.path||!under(owned.path,path))throw Error('oracle image is outside its run temporary: '+path);
+  let current=owned.path;
+  for(const part of relative(owned.path,dirname(path)).split('/').filter(Boolean)){
+    current=join(current,part);directoryIdentity(current);
+  }
+}
+function checkedImageRegistry(owned:RunTemporary,home:string,create:boolean):string {
+  const outer=owned.enclosing??owned;assertRunTemporary(outer,home);
+  if(owned.enclosing&&!contains(outer,owned))throw Error('oracle image temporary is outside its enclosing run');
+  const path=imageRegistry(owned);
+  if(create&&!existsSync(path))mkdirSync(path,{mode:0o700});
+  if(existsSync(path))directoryIdentity(path);
+  return path;
+}
+/** The producer acquires an empty directory, never adopts an existing image.
+ * Immutable receipts survive a red close alongside the image's identity files.
+ * No registry is scanned for dead owners and no interrupted run is recovered. */
+export function createRunOracleImage(owned:RunTemporary,home:string,path:string):string {
+  imageParents(owned,path,home);
+  if(path!==join(dirname(path),'tree'))throw Error('oracle image root must be its producer tree: '+path);
+  const parent=directoryIdentity(dirname(path));
+  mkdirSync(path);
+  const image=directoryIdentity(path),directory=checkedImageRegistry(owned,home,true);
+  const receipt:OracleImageReceipt={version:1,kind:'oracle-dependency-image',temporary:owned,parent,image};
+  writeFileSync(join(directory,pathKey(path)+'.image.json'),JSON.stringify(receipt)+'\n',{flag:'wx',mode:0o400});
+  return path;
+}
+function imageFact(file:string):unknown {
+  const info=lstatSync(file);
+  if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.()||info.nlink!==1)throw Error('oracle image receipt is not an owned regular file: '+file);
+  return JSON.parse(readFileSync(file,'utf8')) as unknown;
+}
+function registeredImages(owned:RunTemporary,home:string):RegisteredImage[] {
+  const directory=checkedImageRegistry(owned,home,false);if(!existsSync(directory))return [];
+  const entries:RegisteredImage[]=[];
+  for(const name of readdirSync(directory).filter(name=>name.endsWith('.image.json')).sort()){
+    const file=join(directory,name),receipt=imageFact(file) as OracleImageReceipt;
+    if(!receipt||receipt.version!==1||receipt.kind!=='oracle-dependency-image'||!receipt.temporary||typeof receipt.temporary.path!=='string')throw Error('invalid oracle image registration: '+file);
+    if(!under((owned.enclosing??owned).path,receipt.temporary.path))throw Error('oracle image registration is outside its enclosing run: '+file);
+    if(!under(owned.path,receipt.temporary.path))continue;
+    assertRunTemporary(receipt.temporary,home);
+    const path=receipt.image?.path;
+    if(typeof path!=='string'||path!==join(receipt.parent?.path??'','tree')||name!==pathKey(path)+'.image.json')throw Error('invalid oracle image registration path: '+file);
+    imageParents(receipt.temporary,path,home);sameDirectory(receipt.parent);
+    const info=lstatSync(path,{throwIfNoEntry:false});if(info)sameDirectory(receipt.image);
+    const dropped=join(directory,pathKey(path)+'.dropped.json');let prior:DroppedOracleImage|undefined;
+    if(existsSync(dropped)){
+      prior=imageFact(dropped) as DroppedOracleImage;
+      if(!prior||prior.path!==path||!Number.isSafeInteger(prior.bytes)||prior.bytes<0||!['dropped','already absent'].includes(prior.state))throw Error('invalid oracle image disposal receipt: '+dropped);
+      if(info)throw Error('disposed oracle image is present again: '+path);
+    }
+    entries.push({file,dropped,receipt,present:Boolean(info),...(prior?{prior}:{})});
+  }
+  const live=entries.filter(entry=>entry.present).map(entry=>entry.receipt.image.path);
+  if(live.length)assertNoProcessUsers(live,{self:process.pid});
+  return entries;
+}
+function dropOracleImages(owned:RunTemporary,home:string):DroppedOracleImage[] {
+  const entries=registeredImages(owned,home),dropped:DroppedOracleImage[]=[];
+  for(const entry of entries){
+    if(entry.prior){dropped.push(entry.prior);continue;}
+    const path=entry.receipt.image.path;
+    let bytes=0;
+    if(entry.present){
+      bytes=Number(execFileSync('du',['-sx','-B1','--',path],{encoding:'utf8'}).split('\t')[0]);
+      if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('cannot measure registered oracle image: '+path);
+      imageParents(entry.receipt.temporary,path,home);sameDirectory(entry.receipt.parent);sameDirectory(entry.receipt.image);
+      removable(path);sameDirectory(entry.receipt.image);rmSync(path,{recursive:true});
+    }
+    const result:DroppedOracleImage={path,bytes,state:entry.present?'dropped':'already absent'};
+    writeFileSync(entry.dropped,JSON.stringify(result)+'\n',{flag:'wx',mode:0o400});dropped.push(result);
+  }
+  return dropped;
 }
 
 /** Bounds apply to closed failures, and may evict them further for admission.
@@ -118,7 +221,10 @@ export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
 /** A command which has drained may discard its temporary on any verdict. */
 export function discardRunTemporary(owned:RunTemporary,home:string):void {
   assertRunTemporary(owned,home);
+  const images=registeredImages(owned,home);
   removable(owned.path);rmSync(owned.path,{recursive:true});
+  // A nested green temporary leaves its enclosing run's index intact.
+  for(const image of images)for(const file of [image.file,image.dropped])rmSync(file,{force:true});
   rmSync(join(registry(home),key(owned)),{force:true});
 }
 
@@ -127,15 +233,16 @@ export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean,
   try {
     if (green) {discardRunTemporary(owned,home);return {path:owned.path,state:"removed after green"};}
     assertRunTemporary(owned,home);
+    const oracle_images=dropOracleImages(owned,home);
     const directory=registry(home),file=join(directory,key(owned));
     if (owned.enclosing) {
       assertRunTemporary(owned.enclosing,home);
       if (!contains(owned.enclosing,owned)) throw new Error(`run temporary is outside its enclosing run: ${owned.path}`);
-      return {path:owned.path,state:"retained after red",enclosing:owned.enclosing.path};
+      return {path:owned.path,state:"retained after red",enclosing:owned.enclosing.path,...(oracle_images.length?{oracle_images}:{})};
     }
     mkdirSync(directory,{recursive:true});
-    writeClosed(file,{owned,closed:Date.now(),bytes:measuredBytes(owned)});
+    writeClosed(file,{owned,closed:Date.now(),bytes:measuredBytes(owned),...(oracle_images.length?{oracle_images}:{})});
     const pruning=pruneRunTemporaries(home,prune);
-    return {path:owned.path,state:existsSync(owned.path)?"retained after red":"evicted by failed-temporary bound",pruning};
+    return {path:owned.path,state:existsSync(owned.path)?"retained after red":"evicted by failed-temporary bound",pruning,...(oracle_images.length?{oracle_images}:{})};
   } catch(error) {return {path:owned.path,state:"kept: cleanup guard or operation failed",error:(error as Error).message};}
 }

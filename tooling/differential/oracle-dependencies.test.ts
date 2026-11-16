@@ -16,6 +16,7 @@ import {dependencyCapability,captureDependencies,dependencyPackageInventory,depe
 import {ownMemory,useOwnMemory} from '../gate/test-memory.ts';
 import {DiskCapacity} from '../gate/disk-capacity.ts';
 import {waitFor} from '../gate/test-wait.ts';
+import {captureRunTemporary,finishRunTemporary} from '../gate/run-temporary.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {prepareChildObserver,observedSpawnSync,type ChildUsage} from '../gate/child-rusage.ts';
 import {fileInput} from '../gate/reader-inputs/main.ts';
@@ -123,6 +124,18 @@ function installFixture(t:import('node:test').TestContext){
   const cap=(name:string)=>dependencyCapability(root,join(parent,'capture-'+name,'tmp','dependencies'),admission,parentCapability.ownerStep??null);
   return {root,parent,write,git,cap};
 }
+
+test('an ordinary sealed producer image is registered to its run and a failed close retains its exact identity',async t=>{
+  const f=installFixture(t),owned=captureRunTemporary(join(f.parent,'owned-run'),undefined,f.parent),base=f.cap('owned');
+  const initial=dependencyCapability(f.root,join(owned.path,'oracle-dependencies'),base.admission,base.ownerStep,testEnvironment(),owned);
+  const sealed=await dependencyOwner.sealDependencyCapability(initial,canonicalFixture(initial));assert.ok(sealed.seal);
+  const ready=sealed.seal.record,semantic=join(dirname(ready),'semantic.json'),tree=join(dirname(ready),'tree');
+  const readyBytes=readFileSync(ready),semanticBytes=readFileSync(semantic);
+  assert.ok(existsSync(join(tree,'node_modules')));assert.equal(await captureDependencies(sealed,undefined,canonicalFixture(sealed)),ready,'a ready hit owns no second image');
+  const result=finishRunTemporary(owned,f.parent,false,{freeBytes:()=>Number.MAX_SAFE_INTEGER});
+  assert.equal(result.state,'retained after red');assert.equal(existsSync(tree),false);assert.deepEqual(readFileSync(ready),readyBytes);assert.deepEqual(readFileSync(semantic),semanticBytes);
+  assert.equal(result.oracle_images?.length,1);assert.equal(result.oracle_images[0]!.path,tree);assert.ok(result.oracle_images[0]!.bytes>0);
+});
 
 test('committing an unrelated file preserves an existing dependency image',async t=>{
   const f=installFixture(t),cap=f.cap('one'),ready=await captureDependencies(cap),before=readFileSync(join(dirname(ready),'semantic.json'));

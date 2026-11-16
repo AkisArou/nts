@@ -1259,6 +1259,18 @@ the first node task.
 
 ## Decisions
 
+- **A run closes the oracle image it creates.** Cold preparation exclusively
+  acquires an image tree and registers its directory identity with the run's
+  temporary owner. A drained failed close drops only those registered trees,
+  retaining identity files and reporting each removed path and allocated bytes.
+  Borrowed images and pre-existing unregistered images receive no ownership
+  grant. Replacements, aliases and live holders refuse disposal. A registered
+  closed temporary cannot be acquired again: `NTS_GATE_RUN_DIR` names one run
+  lifetime, and a new run needs a new directory. Live inherited handoffs and
+  retries within an open run retain their existing lifetime. Interrupted-run
+  discovery and recovery are not enabled
+  ([log](records/notebooks/decisions-log.md#run-owned-oracle-image-disposal-11-16)).
+
 - **Gate memory adjustment retains pending demand.** Shrink and growth use
   the same demand from current grants, withheld memory and running steps'
   pending wants. A completed growth re-enters scheduling on the next event-loop

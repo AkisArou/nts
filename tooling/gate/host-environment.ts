@@ -80,7 +80,7 @@ export function ownTemporary(run:string,env:NodeJS.ProcessEnv=process.env):strin
   // The context's TMPDIR is its registered temporary before this one nests in it.
   ownedCacheEnvironment(env,{temporary:env.TMPDIR!});
   const context=JSON.parse(raw) as Context;
-  const temporary=captureRunTemporary(run,context.temporary);
+  const temporary=captureRunTemporary(run,context.temporary,env.HOME!);
   if(temporary.path!==context.temporary.path&&!temporary.enclosing)
     throw new Error(`a temporary of its own: ${temporary.path} is outside its run's registered temporary ${context.temporary.path}`);
   const storage=ownedCacheEnvironment(env,{temporary:temporary.path});
