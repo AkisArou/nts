@@ -94,7 +94,7 @@ export function createRecorder(table:RecordTable,defaultRun:Runner=()=>{throw Er
  const KINDS=Object.keys(table);
  const family=(kind:string)=>{const row=table[kind];if(!row)throw new MalformedDelta('malformed records delta: no recorder is of kind '+kind);return row.family;};
  const partOf=(kind:string):Part=>{family(kind);return table[kind]!.part;};
- const findPending=(root:string,kind:string):Pending[]=>family(kind).pending(root).map(one=>({...one,kind}));
+ const findPending=(root:string,kind:string):Pending[]=>family(kind).pending(root).map(one=>({kind,name:one.name,record:one.record}));
  const recordFiles=(root:string,kind:string)=>family(kind).files(root);
  const recorderRuns=(kind:string,pending:readonly Pending[])=>family(kind).runs(pending);
  const auditRecord=(kind:string,file:string,before:string|null,after:string|null,pending:ReadonlySet<string>):string[]=>{if(before===after)return [];assert.ok(after!==null,`${file} was removed`);return family(kind).audit(file,before,after,pending);};
