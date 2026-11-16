@@ -66,15 +66,20 @@ export class WithdrawalWatch {
   private readonly entries=new Map<string,{controller:AbortController;marker?:string;generation:number;seen:number;wake?:()=>void}>();
   private failure:Error|undefined;
   private readonly watcher:ReturnType<typeof watch>;
-  constructor(private readonly queue:Queue){
+  constructor(private readonly queue:Queue,private readonly onFailure:(error:Error)=>void=()=>{}){
     try{this.watcher=watch(join(queue.home,'withdraw'),()=>{try{this.refresh();}catch(error){this.failed(error);}});}
     catch(error){throw new Error(`landing withdrawal watcher could not start in ${join(queue.home,'withdraw')}: ${String(error)}`,{cause:error});}
     this.watcher.on('error',error=>this.failed(error));
   }
   private failed(error:unknown):void{
     this.failure??=new Error(`landing withdrawal watcher failed: ${String(error)}`,{cause:error});
-    for(const entry of this.entries.values()){entry.controller.abort(this.failure);entry.wake?.();}
+    // Watch failure grants no cancellation authority over healthy work.
+    // Existing cancellation recovery may wake and report the failed watch;
+    // ordinary checks retain their own verdict and the publication fence.
+    for(const entry of this.entries.values())entry.wake?.();
+    this.onFailure(this.failure);
   }
+  get error():Error|undefined{return this.failure;}
   assertHealthy():void{if(this.failure)throw this.failure;}
   private refresh():void{
     for(const [id,entry] of this.entries){

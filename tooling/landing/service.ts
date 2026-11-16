@@ -59,7 +59,7 @@ const short = (sha: string) => sha.slice(0, 12);
 /** A change to the landing check or the gate it drives: the service restarts to run the new code. */
 export const ownCode = (paths: readonly string[]) => paths.some(path => /^tooling\/(landing|gate)\//.test(path));
 
-export type Drained = { state: "drained" | "busy" | "restart"; answered: Result[] };
+export type Drained = { state: "drained" | "busy" | "restart" | "held"; answered: Result[] };
 export async function drain(config: Config): Promise<Drained> {
   mkdirSync(config.home, { recursive: true });
   const lock = acquire(join(config.home, "serve.lock"));
@@ -69,12 +69,19 @@ export async function drain(config: Config): Promise<Drained> {
   let withdrawals:WithdrawalWatch|undefined;
   try {
     // A broken watch refuses service startup before any queued entry is taken.
-    withdrawals=new WithdrawalWatch(queue);
+    const watcherFailed=(error:Error)=>{
+      const current=queue.checking();
+      const message=`service held: withdrawal watcher failed: ${error.message}; restart nts-landing-check`;
+      queue.setStatus({state:'held',...(current?{id:current.id,sha:current.sha,...(current.run?{run:current.run}:{})}:{}),message});config.log(message);
+    };
+    try{withdrawals=new WithdrawalWatch(queue,watcherFailed);}
+    catch(error){watcherFailed(error as Error);throw error;}
     const recovered = await recover(config, queue,withdrawals);
     if (recovered) answered.push(recovered);
     pushIfBehind(config);
-    const take=()=>{withdrawals!.assertHealthy();return queue.take();};
-    for (let entry = take(); entry; entry = take()) {
+    for (;;) {
+      if(withdrawals.error){watcherFailed(withdrawals.error);return {state:'held',answered};}
+      const entry=queue.take();if(!entry)break;
       const cancellation=withdrawals.entry(entry.id);
       let result: Result;
       try { result = await landOne(config, queue, entry,cancellation); }
@@ -150,6 +157,7 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
   if (queue.withdrawRequested(entry.id)) return queue.answer(entry, { state: "withdrawn", message: "withdrawn before its check started" });
   if (!hasCommit(g, entry.sha)) return queue.answer(entry, { state: "refused", message: `${short(entry.sha)} is not a commit in ${config.root}` });
   for (let round = 1; round <= 3; round++) {
+    if(queue.withdrawRequested(entry.id))return queue.answer(entry,{state:'withdrawn',message:'withdrawn before another check started'});
     const base = revParse(g, "refs/heads/main");
     queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, message: `rebasing onto main ${short(base)}` });
     const rebased = rebaseOnto(g, base, entry.sha);
@@ -183,6 +191,7 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
     let ran: Ran;
     if (!steps.length) ran = { state: "green", message: "nothing to run", run, steps: [], pending: [], wall_s: 0 };
     else {
+      if(queue.withdrawRequested(entry.id))return queue.answer(entry,{state:'withdrawn',base,tip,run,message:'withdrawn before the landing tree was prepared'});
       try { config.prepare(tip); }
       catch (error) { return queue.answer(entry, { state: "held", base, tip, run, message: `the landing tree could not be prepared at ${short(tip)}: ${(error as Error).message}` }); }
       ran = await config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,

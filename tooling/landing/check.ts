@@ -121,6 +121,7 @@ async function serve(root: string): Promise<number> {
   };
   const drained = await drain(machineConfig(root, ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET), log));
   if (drained.state === "busy") { log("another service is draining the queue"); return 0; }
+  if(drained.state==='held'){log('service held: withdrawal watcher failed; restart nts-landing-check');return 3;}
   // The code that just landed runs from here on: a fresh process loads it.
   if (drained.state === "restart") return spawnSync(process.execPath, [process.argv[1]!, "serve"], { cwd: root, stdio: "inherit" }).status ?? 1;
   return 0;

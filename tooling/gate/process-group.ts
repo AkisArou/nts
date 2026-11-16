@@ -47,11 +47,12 @@ export function ownedProcessGroup(child:ChildProcess){
   const pid=child.pid;
   if(pid===undefined)return;
   if(!Number.isSafeInteger(pid)||pid<=1)throw Error('spawned command has no owned process group');
-  let birth:ProcessGroupIdentity;
+  let birth:ProcessGroupIdentity,observation:ProcessGroupBirth;
   try{
     const observed=identityAt(pid);
     if(!observed||observed.group!==pid||observed.session!==pid)throw Error('spawned command has no owned process group');
     birth=observed;
+    observation=Object.freeze({version:1,pid,started:birth.started,boot:bootIdentity()});
   }catch(error){
     // Ownership acquisition failed. Kill only the child handle we just
     // spawned; there is no authority to signal a negative group here.
@@ -59,7 +60,6 @@ export function ownedProcessGroup(child:ChildProcess){
     catch(cleanup){throw new AggregateError([error,cleanup],'process-group acquisition and spawned-child cleanup failed');}
     throw error;
   }
-  const observation:ProcessGroupBirth=Object.freeze({version:1,pid,started:birth.started,boot:bootIdentity()});
   return {pid,started:birth.started,observation,assertEmpty():void{assertObservedGroupEmpty(observation);},signal(signal:NodeJS.Signals):void{
     assertProcessGroupIdentity(pid,birth,identityAt(pid));
     try{process.kill(-pid,signal);}

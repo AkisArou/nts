@@ -32,6 +32,10 @@ import {landingStatus,statusText} from './status.ts';
 import {assertObservedGroupEmpty,ownedProcessGroup} from '../gate/process-group.ts';
 import {durableRecord} from '../gate/durable-record.ts';
 import {randomUUID} from 'node:crypto';
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {testScratch} from '../gate/test-scratch.ts';
+import {pathToFileURL} from 'node:url';
+import {waitFor} from '../gate/test-wait.ts';
 
 function selection(steps: string[]): Selection {
   return landingSelection({ owed: { steps: [...steps, "integrity"] }, paths: [], catalogue: [...steps, "integrity"],
@@ -259,6 +263,36 @@ test('a restarted service certifies a persisted held entry whose group is gone a
   assert.equal(f.queue.result(ea.id)?.state,'withdrawn');assert.equal(f.queue.result(eb.id)?.state,'landed');
   assert.deepEqual(prepared,[b.sha],'the cancelled tree was never prepared or replayed');
   assert.equal(f.queue.held().length,0);assert.equal(f.queue.status().state,'idle');
+});
+
+test('a watcher fault leaves the current verdict intact, fences a later marker, and takes no next entry',async t=>{
+  const stage=testScratch(t,'landing-watch-fault');copyModuleClosure(['tooling/landing/service.ts'],stage);
+  const file=join(stage,'tooling/landing/queue.ts'),source=readFileSync(file,'utf8');
+  const anchor="this.watcher.on('error',error=>this.failed(error));";
+  assert.equal(source.split(anchor).length,2);
+  writeFileSync(file,source.replace(anchor,anchor+"\nthis.watcher.on('change',()=>{if(existsSync(join(queue.home,'withdraw','watch-error')))this.watcher.emit('error',Error('controlled inotify failure'));});"));
+  const {drain:stagedDrain}:typeof import('./service.ts')=await import(pathToFileURL(join(stage,'tooling/landing/service.ts')).href);
+  for(const arm of ['green','red','marker'] as const){
+    const f=service(t),a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
+    const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main();
+    let entered!:()=>void,release!:()=>void,signal:AbortSignal|undefined;
+    const started=new Promise<void>(resolve=>{entered=resolve;}),closed=new Promise<void>(resolve=>{release=resolve;});
+    f.config.runSteps=async options=>{
+      signal=options.signal;entered();await closed;
+      return {state:arm==='red'?'red':'green',message:'own verdict '+arm,run:options.run,steps:[],pending:[],wall_s:1};
+    };
+    const pending=stagedDrain(f.config);t.after(async()=>{release();await pending;});await started;
+    writeFileSync(join(f.config.home,'withdraw','watch-error'),'fault');
+    await waitFor('the recorded withdrawal watcher error',()=>f.queue.status().message?.includes('controlled inotify failure')===true);
+    assert.equal(signal?.aborted,false,'a watch fault has no authority to cancel healthy work');
+    if(arm==='marker')assert.equal(f.queue.withdraw(ea.id),'requested');
+    release();const result=await pending;
+    assert.equal(result.state,'held');assert.equal(result.answered.length,1);
+    assert.equal(result.answered[0]!.state,arm==='red'?'refused':arm==='marker'?'withdrawn':'landed');
+    assert.deepEqual(f.queue.waiting().map(entry=>entry.id),[eb.id]);
+    assert.match(f.queue.status().message!,/service held: withdrawal watcher failed:.*controlled inotify failure.*restart nts-landing-check/);
+    if(arm!=='green')assert.equal(f.main(),base);
+  }
 });
 
 test("a change already on main lands as nothing, and its branch and tree are still cleaned up", async t => {
