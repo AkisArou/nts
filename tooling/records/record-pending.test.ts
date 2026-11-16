@@ -7,8 +7,11 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
-import {acceptedIn,applyCommand,applyDelta,auditRecord,KIND_STEPS,KINDS,oracleRefreshes,partOf,recordPending,sourceDigests,type BenchmarkDigests,type Kind,type Runner} from "./record-pending.ts";
-import {findPending} from "./record-population.ts";
+import {acceptedIn,applyCommand,applyDelta,auditRecord,KIND_STEPS,KINDS,partOf,recordPending,sourceDigests,type Kind} from "./record-pending.ts";
+import {findPending} from './record-pending.ts';
+import {oracleRefreshes} from '../differential/oracle-record-family.ts';
+import type {BenchmarkDigests} from '../bench/compile-record-family.ts';
+import type {Runner} from './recorder-core.ts';
 import { appliedIn, DELTA_FILE, parseDelta, serializeDelta, type Delta } from "./delta.ts";
 import { improvedLine, pendingLine, refusesDifferentlyLine } from "./pending.ts";
 import { mergeTest262Record } from "../census/test262-record.ts";
@@ -383,7 +386,7 @@ function recordedBeside(t: { after(fn: () => void): void }, kinds: Kind[] = CORE
 }
 async function applied(main: string, delta: Delta, benchmarks = asRecorded) {
   const lines: string[] = [];
-  return { counts: await applyDelta(main, delta, { say: line => lines.push(line), benchmarks }), lines };
+  return { counts: await applyDelta(main, delta, { say: line => lines.push(line), identities:benchmarks }), lines };
 }
 
 test("the recorder writes the delta of what it recorded: each case's row before and after, and a digest of its sources", t => {

@@ -5,7 +5,9 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {readStepInstrument,ToolingInstrumentError} from "../gate/step-result.ts";
 import {testScratch} from "../gate/test-scratch.ts";
 import type {DecodedCheck} from "../differential/check-report-types.ts";
-import {auditRecord} from "../records/record-pending.ts";
+import {createRecorder} from '../records/recorder-core.ts';
+import {runFamily} from './run-record-family.ts';
+const {auditRecord}=createRecorder({'benchmark-runs':{family:runFamily,steps:[],part:'core'}});
 import {finishBenchmarks,type RunPlan} from "./run-recording.ts";
 import {parseRunRecord,serializeRunRecord,type BenchmarkRun} from "./run-outcomes.ts";
 

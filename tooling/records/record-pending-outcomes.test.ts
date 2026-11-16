@@ -8,7 +8,7 @@ import {testEnvironment} from "../gate/test-environment.ts";
 // manager holds TMPDIR to the context's registered temporary.
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
-import {copyFileSync,cpSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync} from "node:fs";
+import {copyFileSync,renameSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync} from "node:fs";
 import {homedir} from "node:os";
 import {dirname,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -22,7 +22,9 @@ import {spawnTest} from "../gate/test-wait.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {provenanceOf,publishPin} from "../conformance/pin.ts";
 import {recordPending as fullCheckRecordPending,RECORDER_LOG} from '../full-check/service.ts';
-import {partOf} from './record-pending.ts';
+import {createRecorder} from './recorder-core.ts';
+import {outcomesFamily} from '../conformance/outcomes-record-family.ts';
+const {partOf}=createRecorder({outcomes:{family:outcomesFamily,steps:['outcomes'],part:'core'}});
 import {writeFileSync} from 'node:fs';
 
 const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
@@ -38,20 +40,19 @@ function git(root:string,...args:string[]):string{
 
 /** Stage exactly the same private tree for the setup control and compiler proof. */
 function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
-  // The whole tooling tree, as the records run has it: the oracle compiles the
-  // outcomes preload, and what it imports, inside the tooling projects that
-  // own them, and checks each of those projects whole.
-  cpSync(join(SOURCE,"tooling"),join(root,"tooling"),{recursive:true});
+  // Stage the real command factory and this family alone. The oracle fixture
+  // below supplies its own project and installation inputs.
   mkdirSync(join(root,'tests/typescript'),{recursive:true});
   mkdirSync(join(root,'tests/outcomes'),{recursive:true});
   mkdirSync(join(root,'tests/programs'),{recursive:true});
   mkdirSync(join(root,'benchmarks/cases'),{recursive:true});
   const otherData=['runtime/node','runtime/web-platform','tests/compile-time'];
   for(const area of otherData)mkdirSync(join(root,area),{recursive:true});
-  copyModuleClosure(['tooling/records/record-pending.ts'],root,{dataNamespaces:{
+  copyModuleClosure(['tooling/records/outcomes-recorder-fixture.ts'],root,{dataNamespaces:{
     'tests/typescript':'pending-outcome records fixture','tests/outcomes':'one pending outcome fixture',
     'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture',
     ...Object.fromEntries(otherData.map(area=>[area,'pending-outcome records fixture']))}});
+  renameSync(join(root,'tooling/records/outcomes-recorder-fixture.ts'),join(root,'tooling/records/record-pending.ts'));
   assert.deepEqual(readdirSync(join(root,'tests/typescript')),[],'an outcome fixture stages no production TypeScript cases');
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[],'the pending outcome starts without production records');
   for(const area of ['tests/programs','benchmarks/cases'])assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
@@ -104,15 +105,14 @@ test('the real full-check recordPending candidate route seals and removes finish
   // Keep the real production CLI through its owned preparation boundary. Its
   // private record body observes the handoff; the adjacent outcome case proves
   // actual record writing. Stage first, then mutate and commit this private tree.
-  const entry=join(root,'tooling/records/record-pending.ts'),boundary="await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BIN:'text'})});";
+  const entry=join(root,'tooling/records/record-pending.ts'),boundary='env=>createRecorderCommand(table,env).command(request)';
   const source=readFileSync(entry,'utf8');assert.equal(source.split(boundary).length,2);
-  writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\nimport {durableRecord} from '../gate/durable-record.ts';\n"+source.replace(boundary,boundary+`
+  writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\nimport {durableRecord} from '../gate/durable-record.ts';\nimport {readFileSync} from 'node:fs';\n"+source.replace(boundary,`env=>{
       assertSealedOracleRun(process.env);
       const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
       durableRecord(${JSON.stringify(observed)},{sealed:Boolean(capability.seal),canonical:context.report.canonical,tmp:process.env.TMPDIR,registered:context.temporary.path,argv:process.argv.slice(2),diskPool:JSON.parse(readFileSync(process.env.NTS_DISK_CAPACITY,'utf8')).pool});
-      process.exitCode=${status};
-      return;
-  `));
+      return ${status};
+  }`));
   git(root,'add','-f','tooling/records/record-pending.ts');git(root,'commit','-qm','observe only the sealed recorder handoff');
   const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env,owned:ownMemory(join(scratch,'full-check-memory'))});
   assert.equal(result.status,status,readFileSync(join(run,RECORDER_LOG),'utf8'));

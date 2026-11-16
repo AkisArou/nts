@@ -4,7 +4,9 @@
 //   node --test tooling/bench/run-outcomes.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { auditRecord } from "../records/record-pending.ts";
+import {createRecorder} from '../records/recorder-core.ts';
+import {runFamily} from './run-record-family.ts';
+const {auditRecord}=createRecorder({'benchmark-runs':{family:runFamily,steps:[],part:'core'}});
 import { benchmarkRun, compareBenchmarkRun, mergeRunRecord, parseBenchmarkRun, parseRunRecord, pendingRuns, serializeRunRecord, type BenchmarkRun } from "./run-outcomes.ts";
 import type { DecodedCheck } from "../differential/check-report-types.ts";
 

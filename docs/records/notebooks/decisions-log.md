@@ -3447,3 +3447,12 @@ maintenance.auto=false and gc.auto=0. The owned-value packet and generated
 handoffs carry those settings, while inherited Git configuration is discarded.
 Fixture commits therefore start no detached automatic maintenance writer;
 cleanup retains its real-directory and live-user guards.
+
+## Independent record families (11-16)
+
+The full-check recorder has a parser-free transaction core and independent
+family handlers, composed once by its thin production entry. A family fixture
+stages its own handler and the shared command owner, retaining explicit entry
+preparation and the normal supervisor. Pure delta application prepares no
+oracle. This avoids pulling every family's inputs into a consumer of one
+family, while retaining the existing record formats, row rules and order.

@@ -1275,6 +1275,16 @@ the first node task.
   discovery and recovery are not enabled
   ([log](records/notebooks/decisions-log.md#run-owned-oracle-image-disposal-11-16)).
 
+- **Recorders compose independent families.** `record-pending.ts` is the one
+  production table of record families, their check steps and recording order.
+  `recorder-core.ts` owns generic audit transactions and delta transport without
+  importing a family or compiler parser. Each `*-record-family.ts` owns its
+  population, format rules and source identity. Command entries prepare their
+  oracle explicitly, then pass the sealed environment to `recorder-command.ts`
+  for supervised execution. A fixture composes the core and its own family;
+  composition controls retain the complete production table
+  ([log](records/notebooks/decisions-log.md#independent-record-families-11-16)).
+
 - **Gate memory adjustment retains pending demand.** Shrink and growth use
   the same demand from current grants, withheld memory and running steps'
   pending wants. A completed growth re-enters scheduling on the next event-loop
