@@ -33,7 +33,9 @@ export function ownedProcessGroup(child:ChildProcess){
   }catch(error){
     // Ownership acquisition failed. Kill only the child handle we just
     // spawned; there is no authority to signal a negative group here.
-    child.kill('SIGKILL');throw error;
+    try{child.kill('SIGKILL');}
+    catch(cleanup){throw new AggregateError([error,cleanup],'process-group acquisition and spawned-child cleanup failed');}
+    throw error;
   }
   return {pid,started:birth.started,signal(signal:NodeJS.Signals):void{
     assertProcessGroupIdentity(pid,birth,identityAt(pid));
