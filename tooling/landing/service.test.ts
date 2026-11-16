@@ -28,6 +28,10 @@ import { drain, prepareTree, prune, recordCosts, type Config } from "./service.t
 import {holder} from './lock.ts';
 import {lockChild} from './lock-fixture.ts';
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
+import {landingStatus,statusText} from './status.ts';
+import {assertObservedGroupEmpty,ownedProcessGroup} from '../gate/process-group.ts';
+import {durableRecord} from '../gate/durable-record.ts';
+import {randomUUID} from 'node:crypto';
 
 function selection(steps: string[]): Selection {
   return landingSelection({ owed: { steps: [...steps, "integrity"] }, paths: [], catalogue: [...steps, "integrity"],
@@ -181,6 +185,80 @@ test("a withdrawal asked during the check is answered, and the change does not l
   await drain(f.config);
   assert.equal(f.queue.result(ea.id)!.state, "withdrawn");
   assert.equal(f.main(), before);
+});
+
+test('an unproved cancellation holds the service and resumes only when its retained closer certifies the drain',async t=>{
+  const f=service(t),green=f.config.runSteps;
+  const a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
+  const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main();
+  let entered!:()=>void,held!:()=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;}),retained=new Promise<void>(resolve=>{held=resolve;});
+  f.config.runSteps=async options=>{
+    if(options.commit!==a.sha)return green(options);
+    assert.ok(options.signal);assert.ok(options.drainRetry);assert.ok(options.cancellationHold);
+    const aborted=new Promise<void>(resolve=>options.signal!.addEventListener('abort',()=>resolve(),{once:true}));
+    entered();await aborted;
+    options.cancellationHold('owned closer still has a populated scope');
+    const retry=options.drainRetry();held();await retry;
+    assert.equal(f.queue.checking()?.id,ea.id,'the same check still owns recovery');
+    assert.equal(f.main(),base);
+    return {state:'cancelled',message:'scope certified empty',run:options.run,wall_s:1,steps:[],pending:[]};
+  };
+  const pending=drain(f.config);await started;f.queue.withdraw(ea.id);await retained;
+  const model=landingStatus(f.s.root,f.config.home,f.pool.home,Date.parse('2026-11-16T00:00:00Z'),{statusTrees:()=>[]});
+  assert.equal(model.service.state,'held');assert.equal(model.service.running,true);
+  assert.equal(model.service.run,f.queue.checking()?.run);
+  assert.match(model.service.message!,new RegExp(`service held: cancellation of ${ea.id} could not prove its drain: owned closer`));
+  assert.match(statusText(model),/retry certification with node tooling\/landing\/check.ts withdraw/);
+  assert.equal(f.queue.result(ea.id)?.state,'held');assert.equal(f.queue.withdrawRequested(ea.id),true);
+  assert.deepEqual(f.queue.waiting().map(entry=>entry.id),[eb.id],'no later entry starts while the drain is unproved');
+  assert.equal(f.queue.withdraw(ea.id),'requested');
+  const done=await pending;
+  assert.deepEqual(done.answered.map(row=>row.state),['withdrawn','landed']);
+  assert.equal(f.queue.withdrawRequested(ea.id),false);assert.equal(f.queue.held().length,0);
+  assert.equal(f.queue.result(eb.id)?.state,'landed');
+});
+
+test('a retained closer with no proof stays held across service activity without answering withdrawn or starting another check',async t=>{
+  const f=service(t),a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
+  const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main();
+  let entered!:()=>void,held!:()=>void,release!:()=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;}),retained=new Promise<void>(resolve=>{held=resolve;}),closed=new Promise<void>(resolve=>{release=resolve;});
+  f.config.runSteps=async options=>{
+    const aborted=new Promise<void>(resolve=>options.signal!.addEventListener('abort',()=>resolve(),{once:true}));entered();await aborted;
+    options.cancellationHold!('the real child has not exited');held();await closed;
+    return {state:'cancelled',message:'fixture cleanup finally drained',run:options.run,wall_s:1,steps:[],pending:[]};
+  };
+  let answered=false;
+  const pending=drain(f.config);pending.then(()=>{answered=true;});
+  t.after(async()=>{release();await pending;});
+  await started;f.queue.withdraw(ea.id);await retained;
+  assert.equal(f.queue.withdraw(eb.id),'withdrawn','the queue remains responsive while its owned drain waits');
+  await new Promise<void>(resolve=>setImmediate(resolve));
+  assert.equal(answered,false);assert.equal(f.main(),base);
+  assert.equal(f.queue.result(ea.id)?.state,'held');assert.equal(f.queue.checking()?.id,ea.id);
+  assert.equal(f.queue.status().state,'held');assert.equal(f.queue.withdrawRequested(ea.id),true);
+  release();assert.deepEqual((await pending).answered.map(row=>row.state),['withdrawn']);
+});
+
+test('a restarted service certifies a persisted held entry whose group is gone and resumes without a human',async t=>{
+  const f=service(t),a=f.task('fix/a',{'src/a.txt':'a\n'}),b=f.task('fix/b',{'src/b.txt':'b\n'});
+  const ea=f.submit('fix/a',a.sha),eb=f.submit('fix/b',b.sha),base=f.main(),entry=f.queue.take()!;
+  const run=join(f.config.home,'runs','interrupted'),groups=join(run,'candidate-groups');mkdirSync(groups,{recursive:true});
+  const child=spawn(process.execPath,['-e','process.stdin.resume()'],{detached:true,env:fixtureEnvironment(t),stdio:['pipe','ignore','ignore']});
+  const closed=once(child,'close'),group=ownedProcessGroup(child);assert.ok(group);
+  t.after(async()=>{child.stdin!.end();await closed;});
+  durableRecord(join(groups,randomUUID()+'.json'),group.observation);
+  assert.throws(()=>assertObservedGroupEmpty(group.observation),/has not drained: live member/);
+  child.stdin!.end();assert.deepEqual(await closed,[0,null]);
+  f.queue.update({base,tip:a.sha,run});f.queue.withdraw(ea.id);
+  f.queue.answer(entry,{state:'held',run,message:'service interrupted with cancellation pending'},{retainChecking:true});
+  const prepared:string[]=[],prepare=f.config.prepare;f.config.prepare=tip=>{prepared.push(tip);prepare(tip);};
+  const result=await drain(f.config);
+  assert.deepEqual(result.answered.map(row=>row.state),['withdrawn','landed']);
+  assert.equal(f.queue.result(ea.id)?.state,'withdrawn');assert.equal(f.queue.result(eb.id)?.state,'landed');
+  assert.deepEqual(prepared,[b.sha],'the cancelled tree was never prepared or replayed');
+  assert.equal(f.queue.held().length,0);assert.equal(f.queue.status().state,'idle');
 });
 
 test("a change already on main lands as nothing, and its branch and tree are still cleaned up", async t => {

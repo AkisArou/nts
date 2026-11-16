@@ -3,21 +3,39 @@ import {registerCommandCloser,runAsCommand} from "../differential/command-entry/
 // exports gateEnvironment. No other version creates its environment or grants.
 // Keep this process alive while the command runs: it owns resolutionOwner.
 import {spawn,spawnSync,type StdioOptions} from "node:child_process";
-import {readFileSync,writeFileSync} from "node:fs";
+import {lstatSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {isAbsolute,join} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {finishRunTemporary} from '../gate/run-temporary.ts';
-import {ownedProcessGroup} from '../gate/process-group.ts';
+import {assertObservedGroupEmpty,ownedProcessGroup} from '../gate/process-group.ts';
+import {randomUUID} from 'node:crypto';
+import {durableRecord} from '../gate/durable-record.ts';
 
 export type CandidateCommand = {tree:string;run:string;owned:Record<string,string>;command:readonly string[];standalone?:boolean;discardTemporary?:boolean};
 type LaunchRequest=CandidateCommand&{treeLock?:boolean;node?:string};
 class CandidateEnvironmentContractError extends Error {}
 type CandidateOptions={output?:number;treeLock?:number;supervisor?:readonly [string,...string[]]};
-type AsyncCandidateOptions=CandidateOptions&{signal?:AbortSignal;cancelled?:()=>void};
+type AsyncCandidateOptions=CandidateOptions&{signal?:AbortSignal;cancelled?:()=>void;groupDirectory?:string;retainDrain?:true};
 export type CandidateResult={status:number|null;signal:NodeJS.Signals|null;stdout:string|null;stderr:string|null;error?:Error;cancelled?:boolean;
   /** Retained after cancellation until the directly acquired group is empty. */
   certifyDrain?:()=>void};
 const MAX_OUTPUT=1<<30;
+
+/** Spawn facts are retained with the run for read-only restart certification.
+ * Nothing in this reader can signal a process reconstructed from a receipt. */
+export function certifyCandidateGroups(directory:string):void{
+  let names:string[];
+  try{
+    if(!lstatSync(directory).isDirectory())throw Error(`candidate group receipts are not an owned directory: ${directory}`);
+    names=readdirSync(directory);
+  }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+  for(const name of names){
+    if(!/^[0-9a-f-]{36}\.json$/.test(name))throw Error(`unrecognized candidate group receipt ${join(directory,name)}`);
+    const file=join(directory,name);
+    if(!lstatSync(file).isFile())throw Error(`candidate group receipt is not a regular file: ${file}`);
+    assertObservedGroupEmpty(JSON.parse(readFileSync(file,'utf8')));
+  }
+}
 
 function candidateLaunch(node:string,request:CandidateCommand,env:NodeJS.ProcessEnv,options:CandidateOptions){
   const output=options.output??'pipe',stdio:StdioOptions=['pipe',output,output,'pipe'];
@@ -50,8 +68,8 @@ export function candidateCommand(node:string,request:CandidateCommand,env:NodeJS
 export function candidateCommandAsync(node:string,request:CandidateCommand,env:NodeJS.ProcessEnv,options:AsyncCandidateOptions={}):Promise<CandidateResult>{
   options.signal?.throwIfAborted();
   const launch=candidateLaunch(node,request,env,options);
-  let stop=()=>{},certify=()=>{};
-  const completed=new Promise<CandidateResult>((resolve,reject)=>{
+  let stop=()=>{},certify=()=>{},receipt:string|undefined,drained=false;
+  const completed=new Promise<CandidateResult>(resolve=>{
     const child=spawn(launch.program,launch.args,{...launch.options,detached:true});
     const captured:(Buffer[]|null)[]=child.stdio.map(stream=>stream?[]:null),sizes:number[]=[];
     let error:Error|undefined,overflow=false,cancelled=false,group:ReturnType<typeof ownedProcessGroup>;
@@ -60,7 +78,7 @@ export function candidateCommandAsync(node:string,request:CandidateCommand,env:N
       try{group?.signal('SIGTERM');}catch(cause){error??=cause as Error;}
       try{options.cancelled?.();}catch(cause){error??=cause as Error;}
     };
-    certify=()=>{if(cancelled)group?.assertEmpty();};
+    certify=()=>{if(drained)return;group?.assertEmpty();if(receipt)rmSync(receipt);drained=true;};
     child.on('error',cause=>{error??=cause;});
     for(const index of [1,2,3]){
       const stream=child.stdio[index];
@@ -79,9 +97,20 @@ export function candidateCommandAsync(node:string,request:CandidateCommand,env:N
       options.signal?.removeEventListener('abort',stop);
       const output=captured.map(parts=>parts?Buffer.concat(parts).toString('utf8'):null);
       try{resolve(candidateReceipt({status,signal,stdout:output[1]??null,stderr:output[2]??null,...(error?{error}:{}),...(cancelled?{cancelled:true}:{}),output}));}
-      catch(cause){reject(cause);}
+      catch(cause){resolve({status,signal,stdout:output[1]??null,stderr:output[2]??null,error:cause as Error,...(cancelled?{cancelled:true}:{})});}
     });
-    try{group=ownedProcessGroup(child);}catch(cause){error??=cause as Error;}
+    try{
+      group=ownedProcessGroup(child);
+      if(group){
+        const directory=options.groupDirectory??join(request.run,'candidate-groups');mkdirSync(directory,{recursive:true});
+        receipt=join(directory,randomUUID()+'.json');durableRecord(receipt,group.observation);
+      }
+    }catch(cause){
+      error??=cause as Error;
+      // No request has reached the entry yet. A failed receipt publication
+      // cannot leave an unrecorded payload running across a service restart.
+      try{child.kill('SIGKILL');}catch(cleanup){error=new AggregateError([error,cleanup],'candidate group receipt and entry cleanup failed');}
+    }
     options.signal?.addEventListener('abort',stop,{once:true});
     if(options.signal?.aborted)stop();
     child.stdin!.on('error',cause=>{error??=cause;});
@@ -89,8 +118,8 @@ export function candidateCommandAsync(node:string,request:CandidateCommand,env:N
   });
   const unregister=registerCommandCloser('candidate command '+request.command[0],{cancel:()=>stop(),close:async()=>{await completed;certify();}});
   return completed.then(result=>{
-    if(result.cancelled)return {...result,certifyDrain:()=>{certify();unregister();}};
-    unregister();return result;
+    if(!options.retainDrain){certify();unregister();return result;}
+    return {...result,certifyDrain:()=>{certify();unregister();}};
   });
 }
 

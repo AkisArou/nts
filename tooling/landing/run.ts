@@ -33,7 +33,7 @@ import type {StepDiagnostics} from '../gate/step-result.ts';
 // information: the full check writes those rows.
 import { removable } from "../gate/run-temporary.ts";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
 import {ENVIRONMENT_EXPERIMENT} from '../gate/canonical-environment.ts';
@@ -48,7 +48,7 @@ import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
 import { nodePin } from "../bootstrap/node.ts";
 import { nodeToolchain } from "../gate/toolchain.ts";
-import { candidateCommandAsync } from "./candidate-environment.ts";
+import { candidateCommandAsync,certifyCandidateGroups } from "./candidate-environment.ts";
 import { STEPS } from "../gate/step-table.mjs";
 import { isListedLine } from "../records/pending.ts";
 import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
@@ -138,25 +138,42 @@ async function certifyDrain(options:RunOptions,check:()=>void|Promise<void>):Pro
 
 async function runCandidate(options:RunOptions,node:string,request:Parameters<typeof candidateCommandAsync>[1],launcher:NodeJS.ProcessEnv,gate=false,log?:string){
   options.signal?.throwIfAborted();
-  const result=await candidateCommandAsync(node,request,launcher,{signal:options.signal,cancelled:()=>options.cancellationHold?.('waiting for the owned candidate command and its children to close')});
+  const result=await candidateCommandAsync(node,request,launcher,{signal:options.signal,retainDrain:true,groupDirectory:join(options.run,'candidate-groups'),cancelled:()=>options.cancellationHold?.('waiting for the owned candidate command and its children to close')});
+  await certifyDrain(options,()=>result.certifyDrain?.());
   if(result.cancelled){
     if(log)appendFileSync(log,`${result.stdout??''}${result.stderr??''}`);
-    await certifyDrain(options,()=>result.certifyDrain?.());
-    if(gate)await certifyDrain(options,async()=>{
-      const owner=join(options.tree,'target/gate-scope-owner.json');
-      try{
-        const summary:Summary=JSON.parse(readFileSync(join(request.run,'summary.json'),'utf8'));
-        if(summary.identities?.commit===options.commit&&summary.scope_cleanup?.state==='complete'&&summary.diagnostics?.state==='complete'&&!existsSync(owner))return;
-      }catch{/* A missing summary proves nothing; the dead-owner reaper must certify the root. */}
-      const cleanup=await candidateCommandAsync(node,{
-        tree:options.tree,run:join(request.run,'drain'),owned:request.owned,
-        command:[node,fileURLToPath(new URL('./gate-drain.ts',import.meta.url)),owner],
-      },launcher);
-      if(cleanup.error||cleanup.signal||cleanup.status!==0)throw Error(`gate scope drain could not be certified: ${cleanup.error?.message??cleanup.signal??cleanup.stderr??cleanup.status}`);
-    });
+    if(gate)await certifyGateDrain(options,node,launcher,request.run,request.owned);
     options.signal?.throwIfAborted();
   }
   return result;
+}
+
+async function certifyGateDrain(options:RunOptions,node:string,launcher:NodeJS.ProcessEnv,run:string,owned:Record<string,string>):Promise<void>{
+  await certifyDrain(options,async()=>{
+    const owner=join(options.tree,'target/gate-scope-owner.json');
+    // GateScopes claims its receipt before any scope can run and removes it
+    // only after its root drains. Unlike existsSync, a broken alias is not an
+    // absence fact. A remaining receipt needs the dead-owner reaper.
+    try{if(!lstatSync(owner).isFile())throw Error('gate scope owner receipt is not a regular file');}
+    catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+    const cleanup=await candidateCommandAsync(node,{
+      tree:options.tree,run:join(run,'drain'),owned,
+      command:[node,fileURLToPath(new URL('./gate-drain.ts',import.meta.url)),owner],
+    },launcher,{retainDrain:true,groupDirectory:join(options.run,'candidate-groups')});
+    cleanup.certifyDrain?.();
+    if(cleanup.error||cleanup.signal||cleanup.status!==0)throw Error(`gate scope drain could not be certified: ${cleanup.error?.message??cleanup.signal??cleanup.stderr??cleanup.status}`);
+  });
+}
+
+/** A restart never replays a held cancellation into its still-owned tree.
+ * Stored spawn facts grant only absence checks; the existing gate root owner
+ * alone can reap its dead runner's scopes. No signal is reconstructed here. */
+export async function recoverLandingCancellation(options:RunOptions):Promise<void>{
+  const lifetime=new RunLifetime(undefined);
+  try{
+    await certifyDrain(options,()=>certifyCandidateGroups(join(options.run,'candidate-groups')));
+    await certifyGateDrain(options,process.execPath,launcherEnvironment(options.env),options.run,options.owned??{});
+  }finally{lifetime.complete();}
 }
 
 /** The workers a landing build is sized by: the gate's build step's, its row's slots. */

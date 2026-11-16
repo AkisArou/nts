@@ -1288,6 +1288,35 @@ the first node task.
 
 ## Decisions
 
+- **Withdrawal cancels and certifies the running check.** The queue owns one
+  watch on its durable withdrawal directory, armed before taking entries and
+  re-read after each subscription. Watch setup failures refuse service startup;
+  watch failures hold rather than silently losing cancellation. The entry's
+  signal reaches admission, candidate commands and retry boundaries. One
+  spawn-captured, PID/start/session-fenced process-group capability sends
+  SIGTERM to the actual command group, including payloads behind GNU time.
+  Candidate entries join their children; the gate's existing scope owner
+  certifies its root before the landing releases and joins its reservation.
+  Only then is the entry answered withdrawn.
+
+  An unproved drain retains the run, tree, hold and reservation, publishes a
+  named held status with the run directory, and takes no further entries.
+  Later child closure resumes certification. Repeating
+  `check.ts withdraw <id>` wakes a failed certification through the same watch;
+  it neither creates replacement work nor declares live work withdrawn.
+  Persisted spawn birth facts grant only read-only empty-group certification
+  after service restart. On the same boot, emptiness excludes every live
+  process with the recorded PGID and session born at or after that birth; a
+  different boot proves the old processes gone. The existing dead-runner gate
+  root owner alone may reap its scopes. Pending cancellation is certified
+  before any warm-tree preparation, including after power loss.
+
+  The final withdrawal read and main's compare-and-swap share the queue lock.
+  A withdrawal winning that transition prevents publication; after publication
+  begins it reports too late. A failed compare-and-swap returns to the
+  cancellable phase. Existing cleanup guards remain unchanged
+  ([log](records/notebooks/decisions-log.md#withdrawal-owns-the-live-landing-drain-11-16)).
+
 - **A pooled priority yield releases idle memory before waiting.** The common
   feed joins its token cancellation, idle worker closure and one shared pause.
   In-flight cases finish; remaining cases retain their queue ownership across

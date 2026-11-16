@@ -32,7 +32,7 @@ import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
 import { Queue, WithdrawalWatch, type Checking, type Entry, type Result } from "./queue.ts";
 import {landingLayout} from './layout.ts';
-import { removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
+import { recoverLandingCancellation,removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
 import { landingCpuMeasure, costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
 import { durableRecord } from "../gate/durable-record.ts";
@@ -70,7 +70,7 @@ export async function drain(config: Config): Promise<Drained> {
   try {
     // A broken watch refuses service startup before any queued entry is taken.
     withdrawals=new WithdrawalWatch(queue);
-    const recovered = recover(config, queue);
+    const recovered = await recover(config, queue,withdrawals);
     if (recovered) answered.push(recovered);
     pushIfBehind(config);
     const take=()=>{withdrawals!.assertHealthy();return queue.take();};
@@ -97,7 +97,7 @@ export async function drain(config: Config): Promise<Drained> {
 const git = (config: Config): Git => ({ root: config.root, env: config.env });
 
 /** A change the service was checking when it stopped: landed already, or checked again from the front. */
-function recover(config: Config, queue: Queue): Result | null {
+async function recover(config: Config, queue: Queue,withdrawals:WithdrawalWatch): Promise<Result | null> {
   const checking = queue.checking();
   if (!checking) return null;
   const main = revParse(git(config), "refs/heads/main");
@@ -105,9 +105,23 @@ function recover(config: Config, queue: Queue): Result | null {
     config.log(`${short(checking.sha)} landed before the service stopped; finishing it`);
     return finishLanding(config, queue, checking, checking.base, checking.tip, null, null, null);
   }
+  if(queue.withdrawRequested(checking.id)){
+    const cancellation=withdrawals.entry(checking.id);
+    try{
+      if(checking.run)await recoverLandingCancellation({tree:config.tree,target:config.target,run:checking.run,commit:checking.tip??checking.sha,steps:[],env:config.env,
+        drainRetry:cancellation.waitForRetry,cancellationHold:reason=>retainCancellation(config,queue,checking,checking.run!,reason)});
+      return queue.answer(checking,{state:'withdrawn',message:'withdrawn after restart: its recorded groups and gate root are certified empty',...(checking.run?{run:checking.run}:{})});
+    }finally{cancellation.close();}
+  }
   config.log(`${short(checking.sha)} was being checked when the service stopped; checking it again`);
   queue.requeue();
   return null;
+}
+
+function retainCancellation(config:Config,queue:Queue,entry:Checking,run:string,reason:string):void{
+  const message=`service held: cancellation of ${entry.id} could not prove its drain: ${reason}; run ${run}; retry certification with node tooling/landing/check.ts withdraw ${entry.id}`;
+  queue.answer(queue.checking()??entry,{state:'held',...(entry.base?{base:entry.base}:{}),...(entry.tip?{tip:entry.tip}:{}),run,message},{retainChecking:true});
+  queue.setStatus({state:'held',id:entry.id,sha:entry.sha,run,message});config.log(message);
 }
 
 /**
@@ -175,11 +189,7 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
         rustRecords:selected.rustRecords,
         ceiling: landingCeiling(selected.selection.estimate.seconds),
         env: config.env,signal:cancellation?.signal,drainRetry:cancellation?.waitForRetry,
-        cancellationHold:reason=>{
-          const message=`service held: cancellation of ${entry.id} could not prove its drain: ${reason}; run ${run}; retry certification with node tooling/landing/check.ts withdraw ${entry.id}`;
-          queue.answer(queue.checking()??entry,{state:'held',base,tip,run,message},{retainChecking:true});
-          queue.setStatus({state:'held',id:entry.id,sha:entry.sha,run,message});config.log(message);
-        },
+        cancellationHold:reason=>retainCancellation(config,queue,{...entry,base,tip},run,reason),
         hold: reason => queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
       // What the steps cost is for the next estimate; it never decides this one.
       try { recordCosts(config.home, ran, selected.kind); } catch (error) { config.log(`costs not recorded: ${String(error)}`); }

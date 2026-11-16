@@ -67,19 +67,22 @@ export class WithdrawalWatch {
   private failure:Error|undefined;
   private readonly watcher:ReturnType<typeof watch>;
   constructor(private readonly queue:Queue){
-    try{this.watcher=watch(join(queue.home,'withdraw'),()=>this.refresh());}
+    try{this.watcher=watch(join(queue.home,'withdraw'),()=>{try{this.refresh();}catch(error){this.failed(error);}});}
     catch(error){throw new Error(`landing withdrawal watcher could not start in ${join(queue.home,'withdraw')}: ${String(error)}`,{cause:error});}
-    this.watcher.on('error',error=>{
-      this.failure=new Error(`landing withdrawal watcher failed: ${error.message}`,{cause:error});
-      for(const entry of this.entries.values()){entry.controller.abort(this.failure);entry.wake?.();}
-    });
+    this.watcher.on('error',error=>this.failed(error));
+  }
+  private failed(error:unknown):void{
+    this.failure??=new Error(`landing withdrawal watcher failed: ${String(error)}`,{cause:error});
+    for(const entry of this.entries.values()){entry.controller.abort(this.failure);entry.wake?.();}
   }
   assertHealthy():void{if(this.failure)throw this.failure;}
   private refresh():void{
     for(const [id,entry] of this.entries){
       const marker=this.queue.withdrawalMarker(id);
       if(marker===undefined||marker===entry.marker)continue;
-      entry.marker=marker;entry.generation++;entry.controller.abort(new WithdrawalRequested(id));entry.wake?.();
+      const first=!entry.controller.signal.aborted;
+      entry.marker=marker;entry.generation++;if(first)entry.seen=entry.generation;
+      entry.controller.abort(new WithdrawalRequested(id));entry.wake?.();
     }
   }
   entry(id:string):{signal:AbortSignal;waitForRetry:()=>Promise<void>;close:()=>void}{

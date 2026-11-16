@@ -3542,3 +3542,20 @@ extra beyond its observed charge and the existing margin. The direct benchmark
 compile feed uses the same shared pause/resume boundary. Restart measurements
 and repeated higher arrivals are reported without introducing a new policy,
 changing a bound, or making elapsed time a verdict.
+
+## Withdrawal owns the live landing drain (11-16)
+
+#807 replaces the marker-only withdrawal boundary with cancellation through
+the active entry's admission, candidate command and retry lifetimes. A directly
+captured group owns the single SIGTERM, so a GNU time wrapper cannot orphan its
+payload. The existing gate scope owner and joined reservation certify completion
+before withdrawn. Failed certification is visibly held with all live ownership,
+and stops subsequent checks. Child closure or a repeated durable withdrawal wakes
+that same lifetime; no cancellation poll timer is added.
+
+Read-only persisted birth observations let a restarted service certify a pending
+cancellation before preparing its warm tree, including when a power cut removed
+all prior processes. They cannot reconstruct a signal capability. Publication
+and the last marker read share the queue lock, giving an honest too-late answer
+after the irreversible transition. This changes no memory, timeout or verdict
+policy and retains the existing cleanup guards.

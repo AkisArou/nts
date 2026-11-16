@@ -129,6 +129,13 @@ test('an unproved cancellation remains held with its request and cannot be retri
   assert.throws(()=>q.retry(a.id),/has not drained/);
 });
 
+test('withdrawal watch setup refuses before any entry is taken if its directory is missing',t=>{
+  const q=new Queue(home(t)),a=q.submit(sha('a'));
+  rmSync(join(q.home,'withdraw'),{recursive:true});
+  assert.throws(()=>new WithdrawalWatch(q),/landing withdrawal watcher could not start.*withdraw/);
+  assert.deepEqual(q.waiting().map(entry=>entry.id),[a.id]);assert.equal(q.checking(),null);
+});
+
 test("submit, as the full check calls it, puts a revert first and starts no second service", t => {
   const s = scratchRepo(t, "landing-submit");
   const home = join(s.dir, "landing");
