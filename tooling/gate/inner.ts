@@ -54,6 +54,9 @@ import { machineMemory, parseBytes, SYSTEM_FLOOR_BYTES } from "./memory-ledger.t
 import { defaultSlots } from "./budget.ts";
 import {assertTestLayout} from './test-layout.ts';
 import {DiskCapacity} from './disk-capacity.ts';
+import {randomUUID} from 'node:crypto';
+import {assignOwnedValues} from './environment-values.ts';
+import {DiskBuildAdmissionError,readStepInstrument} from './step-result.ts';
 
 const ROOT = realpathSync(join(fileURLToPath(import.meta.url), "../../.."));
 let launchEnvironment:NodeJS.ProcessEnv=process.env;
@@ -142,8 +145,14 @@ function heavy(phase: Phase, command: string, args: readonly string[], env: Node
   const scoped = spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0
     ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${phase.memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
     : bounded;
-  return run(process.execPath, [ADMIT, "--key", phase.key, "--workers", String(phase.workers), "--at-most", String(most),
-    "--what", `inner loop: ${phase.what}`, "--", ...scoped], env);
+  const receipt=join(launchEnvironment.TMPDIR!,'inner-'+randomUUID()+'.json'),attempt=randomUUID();
+  const child={...launchEnvironment,...env};
+  assignOwnedValues(child,{NTS_GATE_STEP:phase.key,NTS_GATE_STEP_ATTEMPT:attempt,NTS_GATE_STEP_RESULT:receipt});
+  const status=run(process.execPath, [ADMIT, "--key", phase.key, "--workers", String(phase.workers), "--at-most", String(most),
+    "--what", `inner loop: ${phase.what}`, "--", ...scoped], child);
+  const instrument=readStepInstrument(receipt,phase.key,attempt);
+  if(instrument?.kind==='disk-capacity')throw new DiskBuildAdmissionError(instrument.disk!);
+  return status;
 }
 
 function changedPaths(base: string): string[] {

@@ -66,6 +66,17 @@ test("a held change waits aside until it is retried, at the front", t => {
   assert.throws(() => q.retry(a.id), /no held change/);
 });
 
+test('disk readiness restores its original key and cannot resurrect a newer answer',t=>{
+  const q=new Queue(home(t)),entry=q.submit(sha('a'));
+  const disk={root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
+  const held=q.answer(q.take()!,{state:'held',message:'disk',retryDisk:[disk]});
+  assert.equal(q.retryDiskReady(entry.id,'different answer'),null);
+  assert.deepEqual(q.retryDiskReady(entry.id,held.at),entry);
+  assert.deepEqual(q.waiting(),[entry]);assert.equal(q.retryDiskReady(entry.id,held.at),null);
+  q.answer(q.take()!,{state:'held',message:'disk again',retryDisk:[disk]});
+  assert.equal(q.withdraw(entry.id),'withdrawn');assert.equal(q.retryDiskReady(entry.id,q.result(entry.id)!.at),null);
+});
+
 test("a withdrawal answers a waiting change at once and the one being checked when its check ends", t => {
   const q = new Queue(home(t));
   const a = q.submit(sha("a")), b = q.submit(sha("b"));

@@ -3622,3 +3622,16 @@ transcripts. Their refresh revision binds runtime package content and the oracle
 recipe; installer implementation remains acquisition authority. Measured driver
 digests remain recording provenance, with complete counts checked by executions.
 Only the held jetstream row converts; measured and no-oracle rows are unchanged.
+
+## Disk build refusal is unmeasured work (11-16)
+
+A build denied by DiskCapacity emits one typed instrument result in every
+route. Its run drains and releases memory; it never waits for disk while
+holding that reservation. The full check holds without a culprit search and
+uses its existing retry. The landing service leaves disk-held entries beside
+the queue so no-build work can pass, and restores their original arrival when
+an actual capacity-changing event triggers a non-negative owner snapshot.
+Readiness has no cached projection or periodic polling. Claim releases, pool
+lease changes, upkeep and reclaim supply events; upkeep also bounds detection
+of disk freed outside those owners. The floor, promises and reclamation policy
+are unchanged.

@@ -14,8 +14,34 @@ import {newTestScratch} from './test-scratch.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {moduleClosure} from './module-closure.ts';
 import {inspectRecordPublications} from './test-readiness.ts';
+import {ownMemory} from './test-memory.ts';
+import {readStepInstrument} from './step-result.ts';
 
 const manifest=readFileSync(TEST_PROFILE_MANIFEST,'utf8');
+for(const route of [...TEST_ROUTES,'doctests-entry'] as const)test(route+' reports owned disk shortage before Cargo, through its actual command',t=>{
+  const root=newTestScratch('test-profile-disk');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const capture=join(root,'cargo-started'),bin=join(root,'bin'),receipt=join(root,'result.json');mkdirSync(bin);
+  writeFileSync(join(root,'Cargo.toml'),'[workspace]\n'+manifest.split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]')));
+  writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)},'started');process.exit(7);\n`,{mode:0o755});
+  const memory=ownMemory(join(root,'owned'),{disk:{freeBytes:45*2**30,freeInodes:100}});
+  const command=route==='doctests-entry'?['doctests.ts']:['test-profile.ts',route,...(route==='inner'?['--no-run']:[])];
+  const result=spawnSync(process.execPath,[new URL(command[0]!,import.meta.url).pathname,...command.slice(1)],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...memory,PATH:bin,CARGO_TARGET_DIR:join(root,'target'),CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,NTS_GATE_STEP:'control',NTS_GATE_STEP_ATTEMPT:'disk',NTS_GATE_STEP_RESULT:receipt}});
+  assert.equal(result.status,2,result.stdout+result.stderr);assert.match(result.stderr,/DiskBuildAdmissionError: disk build admission/);
+  assert.equal(existsSync(capture),false,'the actual Cargo owner was never invoked');
+  const row=readStepInstrument(receipt,'control','disk')!;
+  assert.equal(row.verdict,'INSTRUMENT');assert.equal(row.kind,'disk-capacity');assert.equal(row.disk?.shortBytes,2**30);
+});
+
+test('a real Rust compile error with ample owned disk stays a product failure',t=>{
+  const root=newTestScratch('test-profile-compile-error');t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'src'));
+  const profile=manifest.split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]'));
+  writeFileSync(join(root,'Cargo.toml'),'[package]\nname="disk-error-control"\nversion="0.0.0"\nedition="2024"\n[profile.release]\n'+profile);
+  writeFileSync(join(root,'src/lib.rs'),'pub fn wrong() -> u32 { "wrong type" }\n');
+  const receipt=join(root,'result.json'),memory=ownMemory(join(root,'owned'));
+  const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'workspace'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...memory,CARGO_TARGET_DIR:join(root,'target'),CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'compile',NTS_GATE_STEP_RESULT:receipt}});
+  assert.equal(ran.status,101,ran.stdout+ran.stderr);assert.match(ran.stdout+ran.stderr,/error\[E0308\]/);
+  assert.equal(readStepInstrument(receipt,'tests','compile'),undefined,'a compiler error emits no instrument authority');
+});
 test('the run seal verifier is a node-only leaf, so test entries cannot inherit launcher selection',()=>{
   assert.deepEqual(moduleClosure(['tooling/differential/oracle-seal/main.ts']),['tooling/differential/oracle-seal/main.ts']);
   const config=new OracleFilesystem().projectFor(fileURLToPath(new URL('../differential/oracle-seal/main.ts',import.meta.url)));

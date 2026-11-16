@@ -12,6 +12,7 @@ import {processIdentity} from '../landing/lock.ts';
 import {spawn} from 'node:child_process';
 import {fixtureEnvironment} from './test-environment.ts';
 import {waitFor} from './test-wait.ts';
+import {DiskBuildAdmissionError} from './step-result.ts';
 const GiB=2**30;
 
 test('the forecast is the tool-written sum of declared peaks, rounded once',()=>{
@@ -173,7 +174,13 @@ test('service builds claim only declared profiles, merge one target, and reclaim
 test('capacity refuses before a builder starts and never downgrades future claims',t=>{
   const root=testScratch(t,'build-refusal'),target=join(root,'target');
   const env=ownMemory(join(root,'observations'),{disk:{freeBytes:45*GiB,freeInodes:100}}),capacity=new DiskCapacity({env});
-  assert.throws(()=>capacity.beginBuild({root,target,outputs:['nts-dev']}),/disk build admission/);
+  assert.throws(()=>capacity.beginBuild({root,target,outputs:['nts-dev']}),error=>{
+    assert.ok(error instanceof DiskBuildAdmissionError);assert.equal(error.kind,'disk-capacity');
+    assert.deepEqual(error.disk,{root,target,outputs:['nts-dev'],shortBytes:GiB,freeBytes:45*GiB,floorBytes:40*GiB,buildReservedBytes:6*GiB,temporaryReservedBytes:0});
+    return true;
+  });
+  assert.equal(existsSync(capacity.stateFile),false,'a refused attempt publishes no build claim');
+  assert.equal(capacity.buildSnapshot({root,target,outputs:['nts-dev']}).availableBytes,-GiB);
   writeFileSync(capacity.stateFile,'{"version":2,"future":"keep"}\n');
   const before=readFileSync(capacity.stateFile,'utf8');
   assert.throws(()=>capacity.beginBuild({root,target,outputs:['clippy']}),/version/);

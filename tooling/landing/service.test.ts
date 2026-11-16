@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
 import { verdictPath, type LandingVerdict } from "./verdict.ts";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname,join } from "node:path";
 import {treeUsers,describeUsers} from "./tree-users.ts";
 import { Pool } from "./pool.ts";
 import { Queue } from "./queue.ts";
@@ -37,6 +37,8 @@ import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {pathToFileURL} from 'node:url';
 import {waitFor} from '../gate/test-wait.ts';
+import {ownMemory} from '../gate/test-memory.ts';
+import {DiskBuildAdmissionError} from '../gate/step-result.ts';
 
 function selection(steps: string[]): Selection {
   return landingSelection({ owed: { steps: [...steps, "integrity"] }, paths: [], catalogue: [...steps, "integrity"],
@@ -160,6 +162,39 @@ test("a held check waits aside, and lands once retried", async t => {
   f.queue.retry(ea.id);
   await drain(f.config);
   assert.equal(f.queue.result(ea.id)!.state, "landed");
+});
+
+test('a disk-held entry lets a no-build landing pass and returns at its original arrival after a release',async t=>{
+  const f=service(t),a=f.task('fix/disk',{'src/disk.txt':'build\n'}),b=f.task('fix/docs',{'docs/disk.md':'no build\n'});
+  f.pool.give('fix/docs');
+  ownMemory(dirname(f.s.env.NTS_HOST_OBSERVATIONS!),{disk:{freeBytes:53*2**30,freeInodes:100}});
+  const temporary=f.pool.capacity.tryTemporary(join(f.s.dir,'capture'),2**30).lease;assert.ok(temporary);
+  const ea=f.submit('fix/disk',a.sha),eb=f.submit('fix/docs',b.sha);
+  const green=f.config.runSteps;let attempts=0;
+  f.config.select=(_base,_tip,paths)=>({selection:selection(paths.every(path=>path.startsWith('docs/'))?[]:['build']),kind:'other',interop:null,doctests:null});
+  f.config.runSteps=async options=>{
+    attempts++;
+    try{const release=f.pool.capacity.beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});release();}
+    catch(error){
+      assert.ok(error instanceof DiskBuildAdmissionError);
+      return {state:'held',message:error.message,run:options.run,pending:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',reason:error.message,instrument:{kind:error.kind,disk:error.disk}}]};
+    }
+    return green(options);
+  };
+  let finished=false;const running=drain(f.config).finally(()=>{finished=true;});
+  t.after(async()=>{temporary.release();await running;});
+  await waitFor('the no-build entry lands past the disk hold',()=>f.queue.result(eb.id)?.state==='landed',{stopped:()=>finished?'service ended before the release':undefined});
+  assert.equal(f.queue.result(ea.id)?.state,'held');assert.equal(attempts,1,'no repeated build under the unchanged shortage');
+  assert.equal(f.queue.checking(),null,'the held entry owns no running check');
+  assert.equal(existsSync(f.pool.capacity.stateFile),false,'the refused build owns no claim');
+  const c=f.s.commit({'docs/after.md':'later arrival\n'},'later candidate',join(f.s.dir,'pool/2'));
+  const ec=f.queue.submit(c,{branch:null});
+  temporary.release();
+  const result=await running;
+  assert.equal(result.state,'drained');assert.equal(attempts,2);
+  assert.deepEqual(result.answered.map(row=>[row.id,row.state]),[[ea.id,'held'],[eb.id,'landed'],[ea.id,'landed'],[ec.id,'landed']]);
+  assert.equal(f.queue.result(ea.id)?.state,'landed');assert.equal(f.queue.held().length,0);
+  assert.ok(f.logs.some(line=>line.includes('returns at its original queue arrival')),f.logs.join('\n'));
 });
 
 test("main moved during a check: the change is checked again on the new main", async t => {

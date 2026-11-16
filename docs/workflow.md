@@ -945,6 +945,17 @@ the tooling strict checker owns the source's type checking.
   absent grant never discovers the account's pool.
   The configured pool outputs and admitted capture temporaries share one
   filesystem; this capacity namespace accounts for that filesystem as a whole.
+- **A denied build measures nothing.** Disk capacity refusal is a typed
+  `disk-capacity` instrument result, with the actual target, outputs, shortage,
+  floor and outstanding promises. Every build route preserves that result;
+  missing Cargo artifacts cannot replace its cause. The run drains and releases
+  its memory instead of waiting or repeating under the same reservation.
+  The full check holds and uses its normal retry, without a culprit search.
+  A disk-held landing waits beside the queue, allowing no-build changes past.
+  Claim releases, pool lease changes, upkeep and reclaim wake the service to
+  re-read the capacity owner's full snapshot. Once its equation permits the
+  request, the entry returns at its original arrival position. Readiness never
+  admits a build, caches a capacity projection, or guesses from elapsed time.
 - **Pressure reclaims rebuildable disk state.** DiskCapacity explicitly reclaims
   under its pool lock before admission and during upkeep; status reads do not
   delete. Below the floor plus live promises and one measured cold build, it

@@ -202,7 +202,9 @@ export class Pool {
     return { ok, freeBytes, treeBytes, unbuilt, reservedBytes, floorBytes, why };
   }
 
-  private locked<T>(body: () => T): T { return this.capacity.locked(body); }
+  private locked<T>(body: () => T): T {
+    return this.capacity.locked(()=>{try{return body();}finally{this.capacity.signalChange();}});
+  }
 
   /** A new tree, detached at main, with its inputs, when the disk can host it. */
   private grow(name: string): void {

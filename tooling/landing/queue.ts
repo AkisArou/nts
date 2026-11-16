@@ -27,6 +27,7 @@ import { systemdEnvironment } from "../gate/environment.ts";
 import { OOM_SCORE } from "../gate/memory-ledger.ts";
 import { revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
+import type {DiskBuildRefusal} from '../differential/command-entry/instrument.ts';
 
 export type Entry = {
   version: 1; id: string; sha: string;
@@ -46,6 +47,8 @@ export type Result = {
   base?: string; tip?: string; commits?: string[]; run?: string;
   landing?: string[]; deferred?: string[]; estimate_s?: number; wall_s?: number;
   pending?: string[]; pushed?: boolean; branch?: unknown; pool?: string | null;
+  /** Drained work that automatically returns at its original arrival once disk admits. */
+  retryDisk?:DiskBuildRefusal[];
 };
 export type Status = { version: 1; state: "idle" | "checking" | "landing" | "held"; at: string; id?: string; sha?: string; message?: string; run?: string; since?: string };
 
@@ -159,6 +162,16 @@ export class Queue {
       this.record(this.path("queue", `${this.key(again)}.json`), again);
       this.remove(this.path("held", `${id}.json`));
       return again;
+    });
+  }
+  /** A readiness observation cannot resurrect a withdrawal or a newer answer. */
+  retryDiskReady(id:string,answerAt:string):Entry|null{
+    return this.mutate(()=>{
+      const entry=readJson<Entry>(this.path('held',`${id}.json`)),answer=this.result(id);
+      if(!entry||answer?.state!=='held'||answer.at!==answerAt||!answer.retryDisk?.length||this.withdrawRequested(id))return null;
+      this.record(this.path('queue',`${this.key(entry)}.json`),entry);
+      this.remove(this.path('held',`${id}.json`));
+      return entry;
     });
   }
 

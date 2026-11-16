@@ -1,11 +1,13 @@
 // A failed instrument is evidence to wait, never evidence against a landing.
 import { readFileSync } from "node:fs";
-import {ToolingInstrumentError,publishToolingFailure,publishInstrumentResult,type InstrumentResult} from '../differential/command-entry/instrument.ts';
-export {ToolingInstrumentError,publishToolingFailure,type InstrumentResult} from '../differential/command-entry/instrument.ts';
+import {ToolingInstrumentError,publishToolingFailure,publishInstrumentResult,readDiskBuildRefusal,type InstrumentResult} from '../differential/command-entry/instrument.ts';
+export {ToolingInstrumentError,DiskBuildAdmissionError,readDiskBuildRefusal,publishToolingFailure,type DiskBuildRefusal,type InstrumentResult} from '../differential/command-entry/instrument.ts';
 export type {StepDiagnostics,DiagnosticsSummary} from './run-diagnostics.ts';
 type Disposition={verdict:InstrumentResult["verdict"];disposition:"retry"|"operator-hold"|"verdict"};
 export const INSTRUMENT_DISPOSITIONS={
   "memory-pressure":{verdict:"INSTRUMENT",disposition:"retry"},
+  // The run releases its memory; the service retries only after disk admits.
+  "disk-capacity":{verdict:"INSTRUMENT",disposition:"operator-hold"},
   "hung":{verdict:"NOT RUN",disposition:"operator-hold"},
   "runaway":{verdict:"NOT RUN",disposition:"operator-hold"},
   "tooling-setup":{verdict:"INSTRUMENT",disposition:"operator-hold"},
@@ -59,6 +61,8 @@ export function readStepInstrument(path: string, step: string, attempt: string):
       || result.step !== step || result.attempt !== attempt || typeof result.reason !== "string" || !result.reason) {
     throw new Error(`invalid instrument result for ${step}`);
   }
+  if(result.kind==='disk-capacity')readDiskBuildRefusal(result.disk);
+  else if(result.disk!==undefined)throw new Error(`unexpected disk refusal for ${step}`);
   return result;
 }
 // Monitors do not consume the exception: the command still fails. Intermediate

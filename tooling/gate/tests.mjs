@@ -41,7 +41,7 @@ import {fileObserverArguments,prepareFileObserver} from './file-input-observer.t
 import {publishInputTrace,readTestArtifactTargets,readTestBuildStatus,readDoctestCalls} from './rust-test-inputs.ts';
 import {testInvocation} from './test-profile.ts';
 import {cargoConfiguration} from './cargo.ts';
-import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
+import {ToolingInstrumentError,publishToolingFailure,readStepInstrument} from './step-result.ts';
 import {durableRecord} from './durable-record.ts';
 import {prepareRustTestExecution} from './rust-test-execution.ts';
 import {prepareObserverImageReader,observerImageSession} from './file-input-observer-session.ts';
@@ -131,6 +131,13 @@ const first = spawnSync(fileObserver?.executable??process.execPath, cargoTrace?(
 let cargoImageFailure;
 try{await cargoImageSession?.finish();}catch(error){if(isCommandExit(error))throw error;cargoImageFailure=error;}
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
+// A denied build emitted no Cargo artifact. Preserve its primary receipt
+// before a missing artifact or observer stream can replace that cause.
+const buildInstrument=process.env.NTS_GATE_STEP_RESULT&&process.env.NTS_GATE_STEP&&process.env.NTS_GATE_STEP_ATTEMPT
+  ?readStepInstrument(process.env.NTS_GATE_STEP_RESULT,process.env.NTS_GATE_STEP,process.env.NTS_GATE_STEP_ATTEMPT):undefined;
+if(buildInstrument?.kind==='disk-capacity'){
+  console.error(firstOut);exitCommand(2);
+}
 /** @type {ToolingInstrumentError|undefined} */
 let cargoTraceFailure=cargoImageFailure?traceFailure(cargoImageFailure):undefined;
 if(cargoTrace){

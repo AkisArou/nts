@@ -6,7 +6,7 @@ import {spawn} from 'node:child_process';
 import {accessSync,constants,readFileSync,realpathSync,statSync} from 'node:fs';
 import {isAbsolute,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {ToolingInstrumentError} from './step-result.ts';
+import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
 import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
 import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
@@ -153,5 +153,5 @@ export function assertPreparedInnerTests(invocation:TestInvocation):void{
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
   const args=process.argv.slice(2),artifacts=args[0]==='--artifacts'?args.splice(0,2)[1]:undefined;
   const [route,...selection]=args;
-  runTestProfile(route as TestRoute,selection,process.env,process.cwd(),artifacts?{artifacts}:undefined).then(status=>{process.exitCode=status;},error=>{console.error('NOT MEASURED: '+String(error));process.exitCode=2;});
+  runTestProfile(route as TestRoute,selection,process.env,process.cwd(),artifacts?{artifacts}:undefined).then(status=>{process.exitCode=status;},error=>{if(error instanceof ToolingInstrumentError)publishToolingFailure(error);console.error('NOT MEASURED: '+String(error));process.exitCode=2;});
 }

@@ -41,6 +41,10 @@ import { selectionInfrastructure } from "../gate/owed-range.ts";
 import { linkTree } from "../inputs/linker.ts";
 import { writeLandingVerdict } from "./verdict.ts";
 import {reportRustRecordDecisions} from '../gate/rust-selector-decision.ts';
+import {DiskCapacity} from '../gate/disk-capacity.ts';
+import {readDiskBuildRefusal,type DiskBuildRefusal} from '../gate/step-result.ts';
+import {DiskReadinessWake} from './disk-readiness.ts';
+import {isAbsolute,relative,resolve,sep} from 'node:path';
 
 export const KEEP_DAYS = 3;
 
@@ -69,6 +73,7 @@ export async function drain(config: Config): Promise<Drained> {
   const queue = new Queue(config.home);
   const answered: Result[] = [];
   let withdrawals:WithdrawalWatch|undefined;
+  let diskWake:DiskReadinessWake|undefined;
   let currentHold:string|undefined;
   try {
     // A broken watch refuses service startup before any queued entry is taken.
@@ -85,9 +90,22 @@ export async function drain(config: Config): Promise<Drained> {
     const recovered = await recover(config, queue,withdrawals,reportHold);
     if (recovered) answered.push(recovered);
     pushIfBehind(config);
+    const capacity=config.pool?.capacity??new DiskCapacity({env:config.env,pool:null});
+    diskWake=new DiskReadinessWake(config.home,capacity);
+    const diskFailed=(error:unknown):Drained=>{
+      const message='service held: disk readiness could not be observed: '+String(error)+'; restart nts-landing-check';
+      queue.setStatus({state:'held',message});config.log(message);return {state:'held',answered};
+    };
     for (;;) {
       if(withdrawals.error){watcherFailed(withdrawals.error);return {state:'held',answered};}
-      const entry=queue.take();if(!entry)break;
+      try{if(diskWake.checkpoint())retryDiskHeld(config,queue,capacity);}catch(error){return diskFailed(error);}
+      const entry=queue.take();
+      if(!entry){
+        if(queue.held().some(held=>queue.result(held.id)?.retryDisk?.length)){
+          try{await diskWake.wait();}catch(error){return diskFailed(error);}continue;
+        }
+        break;
+      }
       currentHold=undefined;
       const cancellation=withdrawals.entry(entry.id);
       let result: Result;
@@ -105,7 +123,33 @@ export async function drain(config: Config): Promise<Drained> {
     prune(join(config.home, "runs"), KEEP_DAYS);
     queue.setStatus({ state: "idle" });
     return { state: "drained", answered };
-  } finally { withdrawals?.close();lock.release(); }
+  } finally { diskWake?.close();withdrawals?.close();lock.release(); }
+}
+
+function checkedDiskRequests(config:Config,requests:readonly unknown[]):DiskBuildRefusal[]{
+  return requests.map(value=>{
+    const request=readDiskBuildRefusal(value),part=relative(resolve(config.target),request.target);
+    if(request.root!==resolve(config.tree)||isAbsolute(part)||part==='..'||part.startsWith('..'+sep))
+      throw Error('landing disk retry request escapes its build owner: '+request.target);
+    return request;
+  });
+}
+/** No candidate preparation or admission occurs while another entry can pass. */
+function retryDiskHeld(config:Config,queue:Queue,capacity:DiskCapacity):void{
+  for(const entry of queue.held()){
+    const answer=queue.result(entry.id);if(!answer?.retryDisk?.length||queue.withdrawRequested(entry.id))continue;
+    const requests=checkedDiskRequests(config,answer.retryDisk);
+    if(requests.every(request=>capacity.buildSnapshot(request).availableBytes>=0)){
+      if(queue.retryDiskReady(entry.id,answer.at))config.log(`disk room restored: ${entry.id} returns at its original queue arrival`);
+    }
+  }
+}
+
+function diskRetry(config:Config,ran:Ran):DiskBuildRefusal[]|undefined{
+  const unfinished=ran.steps.filter(row=>row.verdict!=='PASS'&&!(row.verdict==='SKIPPED'&&row.accepted));
+  const disk=unfinished.filter(row=>row.verdict==='INSTRUMENT'&&row.instrument?.kind==='disk-capacity');
+  if(!disk.length||unfinished.some(row=>!disk.includes(row)&&!(row.verdict==='NOT RUN'&&disk.some(one=>one.name==='build')&&row.reason==='needs build, which is INSTRUMENT')))return;
+  return checkedDiskRequests(config,disk.map(row=>row.instrument?.disk));
 }
 
 const git = (config: Config): Git => ({ root: config.root, env: config.env });
@@ -214,7 +258,10 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
     const facts = { base, tip, run, landing: steps, deferred: deferredSteps(selected.selection), estimate_s: Math.round(selected.selection.estimate.seconds), wall_s: Math.round(ran.wall_s), pending: ran.pending };
     if(ran.state==='cancelled')return queue.answer(entry,{state:'withdrawn',...facts,message:'withdrawn: its owned commands, scopes and reservation have drained'});
     if (ran.state === "red") return queue.answer(entry, { state: "refused", ...facts, message: `red: ${ran.message}` });
-    if (ran.state === "held") return queue.answer(entry, { state: "held", ...facts, message: `held: ${ran.message}` });
+    if (ran.state === "held") {
+      const retryDisk=diskRetry(config,ran);
+      return queue.answer(entry, { state: "held", ...facts, message: `held: ${ran.message}`,...(retryDisk?{retryDisk}:{}) });
+    }
     if (queue.withdrawRequested(entry.id)) return queue.answer(entry, { state: "withdrawn", ...facts, message: "withdrawn while it was checked: green, and not landed" });
     try {
       const receipt = writeLandingVerdict(config.home, {

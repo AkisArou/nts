@@ -5,13 +5,14 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join,resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CaseBudgetError, INSTRUMENT_DISPOSITIONS, PressureError, ToolingInstrumentError, instrumentPolicy, publishHung, publishRunaway, publishPressure, publishSelectorFailure, publishToolingFailure, readStepInstrument } from "./step-result.ts";
+import { CaseBudgetError, DiskBuildAdmissionError, INSTRUMENT_DISPOSITIONS, PressureError, ToolingInstrumentError, instrumentPolicy, publishHung, publishRunaway, publishPressure, publishSelectorFailure, publishToolingFailure, readStepInstrument } from "./step-result.ts";
 import { memoryDisposition, caseBudgetMessage } from "../census/worker-memory.ts";
 import { testScratch } from "./test-scratch.ts";
 test("one exhaustive disposition table validates every kind and decides operator holds",t=>{
   const dir=testScratch(t,"step-result-policies"),path=join(dir,"result.json");
   for(const [kind,policy] of Object.entries(INSTRUMENT_DISPOSITIONS)){
-    const instrument={version:1,kind,verdict:policy.verdict,step:"control",attempt:"one",reason:"observed result"};
+    const instrument={version:1,kind,verdict:policy.verdict,step:"control",attempt:"one",reason:"observed result",
+      ...(kind==='disk-capacity'?{disk:{root:dir,target:join(dir,'target'),outputs:['nts-dev'],shortBytes:1,freeBytes:40*2**30,floorBytes:40*2**30,buildReservedBytes:1,temporaryReservedBytes:0}}:{})};
     writeFileSync(path,JSON.stringify(instrument));assert.equal(readStepInstrument(path,"control","one")?.kind,kind);
     assert.deepEqual(instrumentPolicy(kind),policy);
     for(const verdict of ["PASS","FAIL","NOT RUN","INSTRUMENT"].filter(value=>value!==policy.verdict)){
@@ -27,13 +28,28 @@ test("the native checker rejects adding an instrument kind without its dispositi
   const dir=testScratch(t, "step-result-typed");
   const source=readFileSync(new URL("./step-result.ts",import.meta.url),"utf8");
   const protocol=readFileSync(new URL('../differential/command-entry/instrument.ts',import.meta.url),'utf8');
-  const result=protocol.slice(protocol.indexOf('export type InstrumentResult'),protocol.indexOf('export class ToolingInstrumentError'));
+  const result=protocol.slice(protocol.indexOf('export type DiskBuildRefusal'),protocol.indexOf('/** A refusal'))+protocol.slice(protocol.indexOf('export type InstrumentResult'),protocol.indexOf('export class ToolingInstrumentError'));
   const policy=result+source.slice(source.indexOf('type Disposition'),source.indexOf("export function instrumentPolicy"));
   writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{strict:true,target:"ES2022",module:"ESNext",moduleResolution:"bundler",types:[]},files:["main.ts"]}));
   const check=text=>{writeFileSync(join(dir,"main.ts"),text);return spawnTest(binary,["frontend",dir,"--checkers","1","--no-acquire"],{cwd:root,encoding:"utf8",env:fixtureEnvironment(t)});};
   const good=check(policy);assert.equal(good.status,0,good.stdout+good.stderr);
   const changed=policy.replace(/(\bkind\s*:\s*)([^;]+)(;)/,'$1$2 | "unclassified-control"$3');assert.notEqual(changed,policy);
   const bad=check(changed);assert.equal(bad.status,2,bad.stdout+bad.stderr);assert.match(bad.stdout+bad.stderr,/unclassified-control/);
+});
+
+test('a disk refusal carries the exact owner request and cannot be forged from its message',t=>{
+  const directory=testScratch(t,'disk-result'),path=join(directory,'result.json');
+  const env={NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'one'};
+  const disk={root:directory,target:join(directory,'target'),outputs:['nts-dev' as const],shortBytes:2**30,freeBytes:45*2**30,floorBytes:40*2**30,buildReservedBytes:6*2**30,temporaryReservedBytes:0};
+  const error=new DiskBuildAdmissionError(disk);
+  assert.equal(error.kind,'disk-capacity');assert.ok(error instanceof ToolingInstrumentError);
+  publishToolingFailure(error,env);
+  const row=readStepInstrument(path,'tests','one')!;
+  assert.deepEqual(row.disk,disk);assert.deepEqual(instrumentPolicy(row.kind),{verdict:'INSTRUMENT',disposition:'operator-hold'});
+  for(const value of [undefined,{...disk,shortBytes:1},{...disk,target:'relative'},{...disk,outputs:['debug']}]){
+    writeFileSync(path,JSON.stringify({...row,disk:value}));assert.throws(()=>readStepInstrument(path,'tests','one'),/disk build refusal/);
+  }
+  writeFileSync(path,JSON.stringify({...row,kind:'tooling-setup'}));assert.throws(()=>readStepInstrument(path,'tests','one'),/unexpected disk refusal/);
 });
 test("an aggregate kill is a budget verdict only when the case is exclusive", () => {
   assert.equal(memoryDisposition("aggregate-pressure", "exclusive"), "budget");

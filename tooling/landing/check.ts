@@ -94,7 +94,7 @@ async function wait(root: string, id: string): Promise<number> {
   let said = "";
   for (;;) {
     const result = queue.result(id);
-    if (result) {
+    if (result&&!(result.state==='held'&&result.retryDisk?.length)) {
       say(`${result.state.toUpperCase()}: ${result.message}`);
       if (result.deferred?.length) say(`after landing, the full check runs: ${result.deferred.join(" ")}`);
       for (const line of result.pending ?? []) say(line);
@@ -103,9 +103,10 @@ async function wait(root: string, id: string): Promise<number> {
     const found = queue.find(id);
     const position = found?.where === "waiting" ? queue.waiting().findIndex(e => e.id === id) + 1 : 0;
     const s = queue.status();
-    const now = found?.where === "checking" ? `${s.state}: ${s.message ?? ""}` : position ? `waiting, ${position} in the queue` : "waiting for the service";
+    const now = found?.where === "checking" ? `${s.state}: ${s.message ?? ""}` : position ? `waiting, ${position} in the queue`
+      :result?.retryDisk?.length?`held on disk: ${result.message}; automatically queued when capacity returns`:"waiting for the service";
     if (now !== said) { say(now); said = now; }
-    if (found?.where === "waiting" && !holder(join(LANDING_HOME, "serve.lock"))) ensureService(root);
+    if ((found?.where === "waiting"||found?.where==='held'&&result?.retryDisk?.length) && !holder(join(LANDING_HOME, "serve.lock"))) ensureService(root);
     await new Promise(done => setTimeout(done, 2000));
   }
 }
@@ -121,7 +122,7 @@ async function serve(root: string): Promise<number> {
   };
   const drained = await drain(machineConfig(root, ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET), log));
   if (drained.state === "busy") { log("another service is draining the queue"); return 0; }
-  if(drained.state==='held'){log('service held: withdrawal watcher failed; restart nts-landing-check');return 3;}
+  if(drained.state==='held'){log('service held: a required service watch or observation failed; restart nts-landing-check');return 3;}
   // The code that just landed runs from here on: a fresh process loads it.
   if (drained.state === "restart") return spawnSync(process.execPath, [process.argv[1]!, "serve"], { cwd: root, stdio: "inherit" }).status ?? 1;
   return 0;

@@ -21,6 +21,7 @@ import {durableRecord} from './durable-record.ts';
 import {reclaimDisk,liveReclaimOwnership,type ReclaimReport,type ReclaimTarget,type ReclaimOwnership} from './disk-reclamation.ts';
 import {landingLayout} from '../landing/layout.ts';
 import {layout as fullCheckLayout} from '../full-check/layout.ts';
+import {DiskBuildAdmissionError} from '../differential/command-entry/instrument.ts';
 
 export const DISK_CAPACITY='NTS_DISK_CAPACITY';
 export const BUILD_FOOTPRINT_FILE=new URL('../../results/builds/cold-inner.json',import.meta.url);
@@ -78,6 +79,13 @@ export class DiskCapacity {
     // Older build owners retain their own schema and cannot overwrite a
     // temporary claim. Both files are governed by the same capacity lock.
     this.temporaryStateFile=this.stateFile+'.temporaries.json';
+  }
+  /** A wake hint only. Readiness always re-runs the complete capacity equation. */
+  get changesFile():string{return this.stateFile+'.changed.json';}
+  signalChange():void{
+    mkdirSync(dirname(this.changesFile),{recursive:true});
+    assertWritableState(this.changesFile,1);
+    durableRecord(this.changesFile,{version:1,event:randomUUID()});
   }
   /** The same lock take() holds across its capacity check and branch switch. */
   locked<T>(body:()=>T):T {
@@ -158,7 +166,7 @@ export class DiskCapacity {
       const claim:TemporaryDiskClaim={id,pid,identity,path,bytes};
       this.recordTemporaries([...snapshot.temporaries,claim]);
       let released=false;
-      const release=()=>{if(released)return;this.locked(()=>this.recordTemporaries(this.temporaryClaims().filter(row=>row.id!==id)));released=true;};
+      const release=()=>{if(released)return;this.locked(()=>{this.recordTemporaries(this.temporaryClaims().filter(row=>row.id!==id));this.signalChange();});released=true;};
       return {snapshot,lease:Object.freeze({...claim,release})};
     });
   }
@@ -172,27 +180,34 @@ export class DiskCapacity {
       const claims=this.claims(),next={...lease,id,pid,identity};
       this.reclaimLocked(lease.target,[...this.activeLeases(),...claims,next]);
       const snapshot=this.snapshot(lease.target,[...this.activeLeases(),...claims,next]);
-      if(snapshot.availableBytes<0)throw Error('disk build admission: '+lease.target+' needs '+(-snapshot.availableBytes)+' more bytes above the 40 GiB floor and active build promises');
+      if(snapshot.availableBytes<0)throw new DiskBuildAdmissionError({root:resolve(lease.root),target:resolve(lease.target),outputs:[...(lease.outputs??['nts-dev','clippy'])],
+        shortBytes:-snapshot.availableBytes,freeBytes:snapshot.freeBytes,floorBytes:snapshot.floorBytes,buildReservedBytes:snapshot.buildReservedBytes,temporaryReservedBytes:snapshot.temporaryReservedBytes});
       this.record([...claims,next]);
     });
     let released=false;
-    return ()=>{if(released)return;this.locked(()=>this.record(this.claims().filter(claim=>claim.id!==id)));released=true;};
+    return ()=>{if(released)return;this.locked(()=>{this.record(this.claims().filter(claim=>claim.id!==id));this.signalChange();});released=true;};
+  }
+  /** Read-only retry readiness: no build attempt, claim, or reclamation. */
+  buildSnapshot(lease:BuildLease):CapacitySnapshot{
+    return this.locked(()=>this.snapshot(lease.target,[...this.activeLeases(),...this.claims(),lease]));
   }
   /** Pool callers already own this lock and pass Git facts from that instant. */
   poolSnapshot(path:string,leases:readonly BuildLease[]):CapacitySnapshot{return this.snapshot(path,[...leases,...this.claims()]);}
   /** Explicit mutation; status/snapshot remains an observation. Admission and
    * upkeep use this same owner and lock, with a measured cold-build margin. */
   reclaim(path:string,extraReservedBytes=0):ReclaimReport|null {
-    return this.locked(()=>this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],undefined,extraReservedBytes));
+    return this.locked(()=>{try{return this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],undefined,extraReservedBytes);}finally{this.signalChange();}});
   }
   private reclaimLocked(path:string,leases:readonly BuildLease[],maintenance?:{before:number;keep:number},extraReservedBytes=0):ReclaimReport|null {
     if(!this.pool)return null;
-    return reclaimDisk({pool:this.pool,host:this.host,coldBytes:this.forecast.bytes,...this.reclamation,maintenance,
+    const report=reclaimDisk({pool:this.pool,host:this.host,coldBytes:this.forecast.bytes,...this.reclamation,maintenance,
       snapshot:()=>{const snapshot=this.snapshot(path,leases);return {...snapshot,reservedBytes:snapshot.reservedBytes+extraReservedBytes};},
       protectedRoots:()=>[...this.activeLeases(),...this.claims(),...leases]});
+    if(report.removed.length)this.signalChange();
+    return report;
   }
   /** Already inside the pool lock. The next take rereads Git after reclaim. */
   poolReclaim(path:string,maintenance?:{before:number;keep:number}):ReclaimReport|null {
-    return this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],maintenance);
+    try{return this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],maintenance);}finally{this.signalChange();}
   }
 }

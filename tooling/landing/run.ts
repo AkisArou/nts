@@ -39,7 +39,7 @@ import { gateCommand } from "../gate/affinity.ts";
 import {ENVIRONMENT_EXPERIMENT} from '../gate/canonical-environment.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import { gateEnvironmentError } from "../gate/environment.ts";
-import { instrumentPolicy } from "../gate/step-result.ts";
+import { instrumentPolicy,DiskBuildAdmissionError,type DiskBuildRefusal } from "../gate/step-result.ts";
 import { TEST_PROFILE } from "../gate/test-profile.ts";
 import {DiskCapacity} from '../gate/disk-capacity.ts';
 import {hostObservations} from '../gate/host-observations.ts';
@@ -63,7 +63,7 @@ type BinaryIdentities = Record<string, string | null>;
 export type StepResult = {
   name: string; verdict: "PASS" | "FAIL" | "INSTRUMENT" | "SKIPPED" | "NOT RUN"; reason?: string;
   cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; accepted?: boolean; attempt?: number;
-  instrument?: { kind?: string; verdict?: string; completedFailures?: number };
+  instrument?: { kind?: string; verdict?: string; completedFailures?: number;disk?:DiskBuildRefusal };
   binaries?: BinaryIdentities;
   diagnostics?:StepDiagnostics;
 };
@@ -290,7 +290,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
         for (let attempt = 1; ; attempt++) {
           options.signal?.throwIfAborted();
           const built = await buildCompiler(options, selected.node, launcher, { ...owned, ...hold.env }, attempt);
-          if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
+          if (built.verdict === "INSTRUMENT" && (!built.instrument||instrumentPolicy(built.instrument.kind)?.disposition==='retry') && attempt < (options.attempts ?? 3)) continue;
           results.push(built);
           if (built.verdict === "PASS") break;
           for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: `needs build, which is ${built.verdict}` });
@@ -373,7 +373,8 @@ async function buildCompiler(options: RunOptions, node: string, launcher: NodeJS
   try{
     release=new DiskCapacity({env:{...launcher,...owned}}).beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});
     return await buildCompilerAdmitted(options,node,launcher,owned,attempt);
-  }catch(error){options.signal?.throwIfAborted();return {name:'build',verdict:'INSTRUMENT',reason:String(error),log:join(options.run,'build.log')};}
+  }catch(error){options.signal?.throwIfAborted();return {name:'build',verdict:'INSTRUMENT',reason:String(error),log:join(options.run,'build.log'),
+    ...(error instanceof DiskBuildAdmissionError?{instrument:{kind:error.kind,verdict:'INSTRUMENT',disk:error.disk}}:{})};}
   finally{release?.();}
 }
 async function buildCompilerAdmitted(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): Promise<StepResult> {
