@@ -143,7 +143,7 @@ mock.module(ledger,{namedExports:{...realLedger,reserveJob:async()=>({id:'owned-
 function launch(_node,request){
  const result={status:0,signal:null,stdout:'',stderr:''};
  if(request.command.includes('sh')||request.command.some(word=>word.endsWith('/all.sh'))){
-  attempts++;if(attempts===2){now=90001;if(!cancelled)guard();assert.equal(closeObserved,true,'retry started before owned worker exit was joined');}
+  attempts++;if(attempts===2){assert.equal(closeObserved,true,'retry started before owned worker exit was joined');now=90001;if(!cancelled)guard();}
   mkdirSync(request.run,{recursive:true});durableRecord(join(request.run,'summary.json'),{identities:{commit:request.commit??commit},environment:{canonical:true},steps:[{name:'rustfmt',verdict:attempts===1?'INSTRUMENT':'PASS',...(attempts===1?{instrument:{kind:'memory-pressure'}}:{})}]});
  }else if(request.command.some(word=>word.endsWith('/verdict-contract.ts')))result.status=1;
  return result;
@@ -154,7 +154,7 @@ const {runLanding}=await import(${JSON.stringify(new URL('./run.ts',import.meta.
 const cleanup=[],f=fixture({after(fn){cleanup.push(fn);}}),commit=f.options([]).commit;
 const pending=runLanding(f.options(['build','rustfmt']));let returned=false;pending.then(()=>{returned=true;},()=>{returned=true;});
 try{
- await releasedEvent;await Promise.resolve();assert.equal(attempts,1);assert.equal(returned,false);assert.equal(existsSync(join(f.run,'landing.json')),false,'verdict appeared before sampler drain');
+ await releasedEvent;await Promise.resolve();assert.equal(attempts,1,'retry started before owned worker exit was joined');assert.equal(returned,false);assert.equal(existsSync(join(f.run,'landing.json')),false,'verdict appeared before sampler drain');
  now=19;worker.emit('message',{kind:'stopped',peak:0});Atomics.store(terminal,0,23n);now=29;worker.emit('exit',0);
  const ran=await pending;assert.equal(ran.state,'green',ran.message);assert.equal(attempts,2);assert.equal(ran.steps.find(row=>row.name==='rustfmt').attempt,2);
  assert.equal(JSON.parse(readFileSync(join(f.run,'landing.json'),'utf8')).state,'green');assert.ok(diagnostics.some(line=>line.includes('"workerTerminalHookAt":23')&&line.includes('"exitObservedAt":29')));console.log('retry and publication follow joined sampler');
