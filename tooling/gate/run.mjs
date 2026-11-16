@@ -1076,7 +1076,7 @@ function outranked() {
   if (answer && !outrankedNow) {
     outrankedSince = now;
     memoryRecord.outranked++;
-    process.stdout.write("  memory: a request of higher priority than the run's waits in the ledger: the run starts nothing new and gives back what it does not use\n");
+    process.stdout.write("  memory: a request of higher priority than the run's waits in the ledger: the run starts no new steps and gives back what it does not use\n");
   } else if (!answer && outrankedNow) {
     memoryRecord.outranked_s += (now - outrankedSince) / 1000;
     process.stdout.write(`  memory: no request of higher priority waits any more: the run goes on after ${Math.round((now - outrankedSince) / 1000)} s\n`);

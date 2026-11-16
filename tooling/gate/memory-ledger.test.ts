@@ -222,6 +222,7 @@ test('marked growth admitted through the normal prefix remains ordinary capacity
   const f=fixture(t),held=await f.ask({bytes:4*GiB,what:'ordinary owner'});
   await held.grow(2*GiB,{draining:true});
   assert.equal(held.bytes,6*GiB);assert.equal(held.drained,0);
+  assert.equal(JSON.parse(readFileSync(join(f.dir,'admitted',held.id+'.json'),'utf8')).version,2);
   assert.equal(f.of('ordinary owner').at(-1)!.backfilled,false);
   assert.equal(readLedger(f.dir).admitted.find(row=>row.id===held.id)!.drained,undefined);
   held.release();await held.closed;
@@ -238,6 +239,7 @@ test('drained promises survive ordinary growth and consumption, and shrink retur
   assert.equal(f.of('draining owner').at(-1)!.backfilled,true);
   head.release();await withdrawn;await head.closed;f.used.set('draining owner',0);f.memory(10);
   assert.equal(lower.drained,2*GiB);
+  assert.equal(JSON.parse(readFileSync(join(f.dir,'admitted',lower.id+'.json'),'utf8')).version,3);
   const probe=async(what:string,pending:number)=>{
     const held=await f.ask({bytes:GiB,what,priority:'agent'});
     assert.equal(f.of(what).at(-1)!.pendingBytes,pending);
@@ -254,6 +256,7 @@ test('drained promises survive ordinary growth and consumption, and shrink retur
   await lower.shrink(2*GiB);
   assert.equal(readLedger(f.dir).admitted.find(row=>row.id===lower.id)!.drained,undefined);
   assert.equal(lower.drained,0);
+  assert.equal(JSON.parse(readFileSync(join(f.dir,'admitted',lower.id+'.json'),'utf8')).version,2);
   await probe('returned grant restores the ordinary discount',Math.min(5*GiB,margin));
   await assert.rejects(lower.grow(GiB,{draining:'yes' as never}),/draining growth option must be boolean/);
   lower.release();await lower.closed;
@@ -1369,12 +1372,12 @@ test("borrowers inherit rank and admission order across multiple ancestors",asyn
 test("future ledger entries refuse reads, updates and release without changing their bytes",async t=>{
   const f=fixture(t),held=await f.ask({bytes:GiB,what:"future owner"});
   const path=join(f.dir,"admitted",held.id+".json"),original=readFileSync(path,"utf8");
-  const future=JSON.stringify({...JSON.parse(original),version:3,extra:"unknown"})+"\n";
+  const future=JSON.stringify({...JSON.parse(original),version:4,extra:"unknown"})+"\n";
   writeFileSync(path,future);
-  assert.throws(()=>readLedger(f.dir),/unsupported future state version 3/);
-  await assert.rejects(held.noteOver("future-key"),/unsupported future state version 3/);
+  assert.throws(()=>readLedger(f.dir),/unsupported future state version 4/);
+  await assert.rejects(held.noteOver("future-key"),/unsupported future state version 4/);
   held.release();
-  assert.match(f.lines.join("\n"),/release cleanup failed.*future state version 3/);
+  assert.match(f.lines.join("\n"),/release cleanup failed.*future state version 4/);
   assert.equal(readFileSync(path,"utf8"),future);
 });
 

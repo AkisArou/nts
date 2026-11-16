@@ -1317,7 +1317,11 @@ the first node task.
   before its drain-only replacement. Drained bytes are protected from the
   priority discount and new ancestor draws until shrink returns them; observed
   consumption is still counted once. The head retains its place, and every
-  completed growth reschedules on the next event-loop turn
+  completed growth reschedules on the next event-loop turn. An entry uses
+  version 3 only while protected drained bytes remain, then returns to
+  version 2. Older admission readers fail closed during that interval and
+  continue normally afterward; operators rebase or restart onto this protocol
+  rather than bypassing its future-state refusal
   ([log](records/notebooks/decisions-log.md#started-work-may-drain-past-a-non-fitting-head-11-16)).
 
 - **Gate memory adjustment retains pending demand.** Shrink and growth use

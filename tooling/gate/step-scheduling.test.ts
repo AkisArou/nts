@@ -574,16 +574,16 @@ writeFileSync(join(own, "landing-admitted"), lines.join("\\n") + "\\n");
 held.release();
 `;
 
-test("a run outranked by a request of higher priority starts nothing new and gives back what it does not use, then goes on", async t => {
+test("an outranked run starts no new steps and its started cohort drains after the higher admission", async t => {
   // A full-check run whose eight integrity workers take a 1 GiB token the
   // moment one comes back fills its reservation: 4 GiB, all the reading's
   // 6.5 allow beside the 2 kept for the system. Another landing job's 3.5 are
   // admitted beside them all the same, since the run promises a request that
   // outranks it only what it uses and a margin (memory-ledger.ts); the
   // landing check's 2 do not fit beside that job, and wait. Outranked, the
-  // run grants no token as its cases end and gives their memory back; once
-  // it has, the other job ends, the landing check is admitted, and integrity
-  // goes on, each worker taking one more token before it ends.
+  // run starts no new step and returns unused memory; its finite started
+  // cohort may finish cases. Each worker proves its final case starts after
+  // the landing admission, without requiring a later cached resume message.
   let landing: ReturnType<typeof spawn> | undefined, fixture = "";
   t.after(() => { if (landing && landing.exitCode === null && landing.signalCode === null) landing.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
@@ -598,10 +598,10 @@ case $1 in
       until [ -e "$own/landing-admitted" ]; do
         bash "$gate/token.sh" --step -- node -e 0 || exit 1
       done
-      bash "$gate/token.sh" --step -- node -e 0
+      bash "$gate/token.sh" --step -- node -e 'const fs=require("node:fs"),path=require("node:path"),[own,worker]=process.argv.slice(1);if(!fs.existsSync(path.join(own,"landing-admitted")))throw Error("final case preceded landing admission");fs.writeFileSync(path.join(own,"final-"+worker),"after landing");' "$own" "$1"
     }
     pids=
-    for worker in 1 2 3 4 5 6 7 8; do work & pids="$pids $!"; done
+    for worker in 1 2 3 4 5 6 7 8; do work "$worker" & pids="$pids $!"; done
     for pid in $pids; do wait "$pid" || exit 1; done ;;
 esac
 `,
@@ -624,8 +624,8 @@ esac
   const told = readFileSync(join(fixture, "landing-admitted"), "utf8");
   assert.match(told, /^memory: landing waits for 2\.0 GiB \(landing\): /m);
   assert.match(told, /^memory: landing admitted with 2\.0 GiB after \d+ s$/m);
-  assert.match(output, /memory: a request of higher priority than the run's waits in the ledger: the run starts nothing new and gives back what it does not use/);
-  assert.match(output, /memory: no request of higher priority waits any more: the run goes on after \d+ s/);
+  assert.match(output, /memory: a request of higher priority than the run's waits in the ledger: the run starts no new steps and gives back what it does not use/);
+  for(let worker=1;worker<=8;worker++)assert.equal(readFileSync(join(fixture,'final-'+worker),'utf8'),'after landing','every final child observes the actual higher admission');
   assert.ok(summary.memory.outranked >= 1 && summary.memory.shrinks >= 1, JSON.stringify(summary.memory));
   assert.equal(summary.memory.priority, "full-check");
 });

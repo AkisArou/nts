@@ -3488,3 +3488,11 @@ The draining ticket marker grants eligibility, not automatic protection. The
 queue plan distinguishes an ordinary prefix grant from one that actually
 backfills a blocked head. Only the latter adds protected drained bytes; normal
 growth remains ordinary capacity and preserves any earlier drain debt.
+
+Outstanding protected promises publish ledger entry version 3; the owner
+returns to the compatible version 2 when its drained amount reaches zero.
+Readers predating #804 refuse a version-3 entry by FutureStateVersionError
+rather than silently discounting it. The main reader is measured through a
+separate proof-only module URL against a private 2-to-3-to-2 transition.
+The old resume-log control is replaced by eight final-case receipts after
+physical higher admission, retaining the outcome, yield and shrink assertions.

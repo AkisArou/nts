@@ -443,7 +443,7 @@ export type CgroupRef = { path: string; inode: string };
 /** What counts as the job's memory: its owner's process tree, a cgroup, or both (the cgroup, and the tree's processes outside it). */
 export type Measure = { tree: boolean; cgroup: CgroupRef | null };
 export type LedgerEntry = {
-  version: 2; id: string; seq: number; bytes: number; what: string; priority: Priority;
+  version: 2 | 3; id: string; seq: number; bytes: number; what: string; priority: Priority;
   owner: ProcessIdentity; waiter: ProcessIdentity; measure: Measure; since: string;
   /** For a waiting request to grow an admitted reservation, that reservation's id; null for one of its own. */
   grows: string | null;
@@ -473,6 +473,7 @@ export type LedgerEntry = {
   fits?: boolean;
 };
 type State = "waiting" | "admitted";
+const LEDGER_READER_VERSION=3;
 
 const entryPath = (dir: string, state: State, id: string) => join(dir, state, `${id}.json`);
 
@@ -484,14 +485,15 @@ function identity(value: unknown): value is ProcessIdentity {
 const keyList = (value: unknown) => value === undefined || (Array.isArray(value) && value.every(key => typeof key === "string" && KEY.test(key)));
 
 function parseEntry(text: string, file: string): LedgerEntry {
-  const parsed = JSON.parse(text) as Omit<LedgerEntry, "version" | "grows"> & { version: 1 | 2; grows?: string | null };
-  assertStateVersion(parsed,2,file);
+  const parsed = JSON.parse(text) as Omit<LedgerEntry, "version" | "grows"> & { version: 1 | 2 | 3; grows?: string | null };
+  assertStateVersion(parsed,LEDGER_READER_VERSION,file);
   // Version 1 has the same fields and no growth: an admit.ts from before
   // reservations could grow may still write one, so it reads as a request of
   // its own rather than one that stops every decision.
   const entry = (parsed?.version === 1 && !("grows" in parsed) ? { ...parsed, version: 2, grows: null } : parsed) as LedgerEntry;
   const measure = entry?.measure, cgroup = measure?.cgroup;
-  if (entry?.version !== 2 || typeof entry.id !== "string" || !ID.test(entry.id) || !Number.isSafeInteger(entry.seq)
+  if ((entry?.version !== 2 && entry?.version !== 3) || (entry.version===3)!==((entry.drained??0)>0)
+      || typeof entry.id !== "string" || !ID.test(entry.id) || !Number.isSafeInteger(entry.seq)
       || !Number.isSafeInteger(entry.bytes) || entry.bytes <= 0 || typeof entry.what !== "string" || !PRIORITIES.includes(entry.priority)
       || !identity(entry.owner) || !identity(entry.waiter) || typeof entry.since !== "string" || typeof measure?.tree !== "boolean"
       || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))
@@ -527,14 +529,17 @@ function readEntries(dir: string, state: State): LedgerEntry[] {
 
 function writeEntry(dir: string, state: State, entry: LedgerEntry): void {
   const temporary = join(dir, `.tmp-${entry.id}`);
-  assertWritableState(entryPath(dir,state,entry.id),2);
-  assertWritableState(temporary,2);
-  writeFileSync(temporary, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+  assertWritableState(entryPath(dir,state,entry.id),LEDGER_READER_VERSION);
+  assertWritableState(temporary,LEDGER_READER_VERSION);
+  // The protected promise changes admission meaning. Old readers must fail
+  // closed while it exists, and may read the compatible state once returned.
+  const wire={...entry,version:(entry.drained??0)>0?3:2};
+  writeFileSync(temporary, `${JSON.stringify(wire)}\n`, { mode: 0o600 });
   renameSync(temporary, entryPath(dir, state, entry.id));
 }
 
 function removeQuietly(path: string): void {
-  assertWritableState(path,2);
+  assertWritableState(path,LEDGER_READER_VERSION);
   try { unlinkSync(path); }
   catch (error) { if (!gone(error)) throw error; }
 }
@@ -604,7 +609,7 @@ export function releaseLedgerEntries(dir:string,ids:readonly {id:string;state:St
     try{
       if(!lock){report(`memory: ${what} release could not lock ${dir} within its cleanup bound; entries left for dead-owner reclamation`);return;}
       const paths=ids.map(entry=>entryPath(dir,entry.state,entry.id));
-      for(const path of paths)assertWritableState(path,2);
+      for(const path of paths)assertWritableState(path,LEDGER_READER_VERSION);
       for(const path of paths)removeQuietly(path);
     }catch(error){failed(error);}finally{lock?.release();}
   };
