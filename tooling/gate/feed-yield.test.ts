@@ -58,3 +58,50 @@ test('dispatch failure returns its offer without counting a case or losing the p
  const offer=await feed.reserve({exited:()=>false,end:()=>assert.fail('failed dispatch lost its case')});
  assert.equal(offer?.path,'one');await offer!.return();assert.equal(releases,2);
 });
+test('a worker whose idle close outlasts its flight joins that flight\'s one resume instead of pausing a cleared yield',async()=>{
+ let outranked=false,pauses=0,resumes=0;
+ const slowClose=Promise.withResolvers<void>(),closing=Promise.withResolvers<void>(),started=Promise.withResolvers<void>(),hold=Promise.withResolvers<void>();
+ const written:string[]=[];
+ const feed=createFeed(['one','two','three','four'],{everyMs:1,outranked:()=>outranked,
+  pause:async()=>{pauses++;},resume:async()=>{resumes++;},
+ });
+ const worker=(close:()=>Promise<void>)=>{
+  let ended=false;const endpoint={exited:()=>false,end:()=>{ended=true;},yield:close,
+   write:async(path:string,release:()=>void)=>{written.push(path);if(path==='one'){started.resolve();await hold.promise;}release();}};
+  return (async()=>{while(!ended)await feed.feed(endpoint);})();
+ };
+ const fast=worker(async()=>{});
+ await started.promise;outranked=true;
+ const slow=worker(async()=>{closing.resolve();await slowClose.promise;});
+ await closing.promise;hold.resolve();
+ await waitFor('slow worker closing inside the flight',()=>pauses>0);
+ outranked=false;
+ await waitFor('fast worker resumed and cleared the flight',()=>resumes===1&&written.length>1);
+ slowClose.resolve();
+ await Promise.all([fast,slow]);
+ assert.deepEqual([...written].sort(),['four','one','three','two']);
+ assert.equal(resumes,1,'one resume per flight');assert.equal(pauses,1,'a worker paused a flight already resumed');
+});
+test('a worker that enters while its flight is mid-resume joins that resume without closing again',async()=>{
+ let outranked=true,pauses=0,resumes=0,lateCloses=0;
+ const resuming=Promise.withResolvers<void>(),resumeStarted=Promise.withResolvers<void>();
+ const written:string[]=[];
+ const feed=createFeed(['one','two','three'],{everyMs:1,outranked:()=>outranked,
+  pause:async()=>{pauses++;},resume:async()=>{resumes++;resumeStarted.resolve();await resuming.promise;},
+ });
+ const worker=(close:()=>Promise<void>)=>{
+  let ended=false;const endpoint={exited:()=>false,end:()=>{ended=true;},yield:close,
+   write:(path:string,release:()=>void)=>{assert.equal(resumes,1,'a case started before its flight resumed');written.push(path);release();}};
+  return (async()=>{while(!ended)await feed.feed(endpoint);})();
+ };
+ const first=worker(async()=>{});
+ await waitFor('first worker paused its flight',()=>pauses>0);
+ outranked=false;await resumeStarted.promise;
+ const late=worker(async()=>{lateCloses++;});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(written.length,0,'a case started while its flight was resuming');
+ resuming.resolve();await Promise.all([first,late]);
+ assert.deepEqual([...written].sort(),['one','three','two']);
+ assert.equal(lateCloses,0,'a worker entering a resuming flight closed again');
+ assert.equal(pauses,1);assert.equal(resumes,1);
+});

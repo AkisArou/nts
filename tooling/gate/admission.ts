@@ -133,11 +133,22 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
   let returnedOffers=0;
   const returned: number[] = [];
   const remaining = () => returned.length > 0 || next < paths.length;
-  let yielding:{resume?:Promise<void>}|undefined;
-  const idle=async(worker:FeedEndpoint)=>{
+  // The feed's one priority yield in flight. A worker keeps the flight it
+  // entered: the flight pauses once, after its first idle close, and never
+  // once its resume has started; it resumes once, and every worker that
+  // entered it joins that resume. Only then is it cleared.
+  type Flight={pause?:Promise<void>;resume?:Promise<void>};
+  let yielding:Flight|undefined;
+  const idle=async(worker:FeedEndpoint):Promise<Flight>=>{
     if(!pauseOwner||!resumeOwner)throw Error('case feed priority yield requires its owned pause and resume');
-    yielding??={};
-    await worker.yield?.();await pauseOwner();
+    const flight=yielding??={};
+    if(!flight.resume)await worker.yield?.();
+    if(!flight.resume)await(flight.pause??=pauseOwner());
+    return flight;
+  };
+  const resumed=async(flight:Flight)=>{
+    await(flight.resume??=resumeOwner!());
+    if(yielding===flight)yielding=undefined;
   };
   const waitingToken=async(path:string,worker:FeedEndpoint)=>{
     const withdraw=new AbortController(),watch=new AbortController();let failure:unknown;
@@ -158,12 +169,10 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
         if (worker.exited()||worker.signal?.aborted) return;
         if (!remaining()) {worker.end();return;}
         if (outranked()||yielding) {
-          await idle(worker);
+          const flight=await idle(worker);
           if(worker.exited()||worker.signal?.aborted)return;
-          if(!outranked()){
-            const flight=yielding!;await(flight.resume??=resumeOwner!());
-            if(yielding===flight)yielding=undefined;
-          }else await pause(everyMs, undefined, { signal: worker.signal }).catch(() => {});
+          if(flight.resume||!outranked())await resumed(flight);
+          else await pause(everyMs, undefined, { signal: worker.signal }).catch(() => {});
           continue;
         }
         const reserved = returned.pop() ?? next++;
