@@ -1,5 +1,5 @@
 // Build-only material retains exact source answers until publication. The
-// committed wire format and its Node-only reader live in rust-selector-record.ts.
+// committed wire format and its key reader live in rust-selector-record.ts.
 import {createHash} from 'node:crypto';
 import {lstatSync,readFileSync,readlinkSync} from 'node:fs';
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';

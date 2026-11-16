@@ -1,4 +1,5 @@
-// Key validation acquires byte capabilities, never a compiler API or Program.
+// These key inputs acquire byte capabilities. Native matching replay has its
+// own lazy parse-only session and never constructs a Program.
 import {createRequire} from 'node:module';
 import {dirname} from 'node:path';
 import {gitArguments} from './git-arguments/main.ts';

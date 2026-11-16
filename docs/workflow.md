@@ -867,7 +867,11 @@ Missing or stale accepted records log their kind/path, remain pending and
 use a live projection. The full check refreshes pending records after landing.
 New record bytes require an actual rebuild comparison before gaining future
 authority; malformed payloads and unverified stale candidates refuse by name.
-The byte-bounded Node-only reader acquires no compiler API.
+The byte-bounded reader decodes untrusted material without acquiring a compiler.
+Key validation replays project discovery through one lazy, closed native
+parse-only session; it constructs no Program. Its identity hashes only the
+path bindings referenced by the key, in canonical order. The complete path
+table and raw claim roles remain bound by the payload hash and accepted blob.
 
 Interned paths, roles and ordered blocks use content-derived routing IDs, so a
 new input cannot renumber existing references. Every ID is checked against its

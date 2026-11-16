@@ -119,6 +119,8 @@ test('routing IDs retain unaffected paths and rows after an earlier insertion an
   f.material.targets[0]!.roles.files.unshift('aaa/new.ts');
   f.material.targets[0]!.roles.typedDependencies.unshift({reader:'aaa/reader.ts',protocol:'filesystem',dependency:{path:'aaa/new.ts',kind:'runtimeKind',bytes:false,directoryStat:false,context:{entry:'<entry>',dataNamespaces:{}}}});
   const after=encodeRustSelectorRecord(f.material);
+  assert.equal(after.keySha256,before.keySha256,'unrelated role paths never enter the key binding hash');
+  assert.notEqual(after.targetsSha256,before.targetsSha256,'the complete raw role/path payload remains authenticated');
   for(const name of ['paths','contexts','dependencies','directories','optional','memberships','byteInputs'] as const){
     const rows=new Map(after[name].map(row=>[row[0],row]));for(const row of before[name])assert.deepEqual(rows.get(row[0]),row,name);
   }

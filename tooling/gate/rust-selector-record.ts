@@ -23,7 +23,7 @@ const KINDS=['file','fileExists','directoryExists','entries','realpath','readlin
 const ROOTS=['source','sdk','sdk-native','source-parent'] as const;
 const DIRECTORY_KINDS=['module','data','inspection','conservative'] as const;
 const SCHEMA=selectorHash({version:2,roots:ROOTS,kinds:KINDS,directoryKinds:DIRECTORY_KINDS,protocols:READER_PROTOCOLS,
-  format:'parent/name path nodes; collision-checked 48-bit SHA256 routing IDs; context/role pools; ordered reference blocks split at 64 or routing hash nibble zero; base64url SHA256 key rows; exact typed-answer parent-scope digests; native config matches; observation-only dependency bit; acquired main blob required'});
+  format:'parent/name path nodes; collision-checked 48-bit SHA256 routing IDs; key-referenced path bindings; context/role pools; ordered reference blocks split at 64 or routing hash nibble zero; base64url SHA256 key rows; exact typed-answer parent-scope digests; native config matches; observation-only dependency bit; acquired main blob required'});
 export const MAX_RUST_SELECTOR_RECORD_BYTES=6*1024*1024;
 type Row=unknown[];
 type WireTarget={target:string;files:string[];moduleFiles:string[];placingFiles:string[];directories:string[];optionalFiles:string[];memberships:string[];byteInputs:string[];typedDependencies:string[]};
@@ -75,7 +75,33 @@ class Paths extends Pool{
 }
 const payload=(record:RustSelectorRecord)=>({paths:record.paths,contexts:record.contexts,dependencies:record.dependencies,directories:record.directories,
   optional:record.optional,memberships:record.memberships,byteInputs:record.byteInputs,lists:record.lists,targets:record.targets});
-export const rustSelectorRecordHashes=(record:RustSelectorRecord)=>({keySha256:selectorHash({paths:record.paths,key:record.key}),targetsSha256:selectorHash(payload(record))});
+/** Hash bindings belong to their consuming key. The complete path table also
+ * carries raw claim roles, whose new names must not change selection identity.
+ * This is a projection, not validation: the decoder checks all references and
+ * paths independently, including paths outside this key's reachable set. */
+function keyProjection(record:RustSelectorRecord){
+  const wanted=new Set<string>(),pending:string[]=[];
+  const path=(value:unknown)=>{if(typeof value==='string'&&!wanted.has(value)){wanted.add(value);pending.push(value);}};
+  const file=(row:Row)=>{
+    path(row[0]);const identity=row[4] as {physical?:unknown;aliases?:unknown}|undefined;
+    if(identity&&typeof identity==='object'){
+      path(identity.physical);if(Array.isArray(identity.aliases))for(const alias of identity.aliases)if(Array.isArray(alias))path(alias[0]);
+    }
+  };
+  const key=record.key;
+  for(const row of [...key.engine,key.declarations,...key.cargo.inputs,...key.files])file(row);
+  for(const row of key.cargo.targets)path(row[0]);
+  for(const row of key.facts){path(row[1]);if(Array.isArray(row[2]))for(const query of row[2])path(query);}
+  for(const row of key.projects){path(row[1]);if(row[0]===1)path(row[2]);}
+  for(const row of key.candidates){path(row[0]);if(Array.isArray(row[1]))for(const query of row[1])path(query);}
+  for(const row of key.populations)path(row[0]);
+  const nodes=new Map(record.paths.map(row=>[row[0],row]));
+  for(let index=0;index<pending.length;index++){
+    const node=nodes.get(pending[index]!);if(node&&!ROOTS.includes(node[1] as typeof ROOTS[number]))path(node[1]);
+  }
+  return {key,paths:record.paths.filter(row=>wanted.has(String(row[0]))).sort((a,b)=>String(a[0])<String(b[0])?-1:String(a[0])>String(b[0])?1:0)};
+}
+export const rustSelectorRecordHashes=(record:RustSelectorRecord)=>({keySha256:selectorHash(keyProjection(record)),targetsSha256:selectorHash(payload(record))});
 
 /** The writer calls this only after checking the complete live material. */
 export function encodeRustSelectorRecord(material:RustSelectorMaterial):RustSelectorRecord{
@@ -220,7 +246,8 @@ export function parseRustSelectorRecord(value:unknown):RustSelectorRecord{
   for(const name of ['rootPackageSha256','packageSha256','nativeSha256','nativePackageSha256'])digest(sdk[name],'SDK '+name);
   for(const target of array(root.targets,'targets'))object(target,['target','files','moduleFiles','placingFiles','directories','optionalFiles','memberships','byteInputs','typedDependencies'],'target roles');
   const record=value as RustSelectorRecord;
-  if(selectorHash({paths:record.paths,key:record.key})!==digest(root.keySha256,'key hash')||selectorHash(payload(record))!==digest(root.targetsSha256,'payload hash'))fail('payload hash mismatch');
+  const hashes=rustSelectorRecordHashes(record);
+  if(hashes.keySha256!==digest(root.keySha256,'key hash')||hashes.targetsSha256!==digest(root.targetsSha256,'payload hash'))fail('payload hash mismatch');
   const decoded=decoder(record,false);for(const row of [...record.key.engine,record.key.declarations,...record.key.cargo.inputs,...record.key.files])decoded.file(row);
   const seen=new Set<string>();
   for(const value of record.key.facts){const row=tuple(value,4,'fact group'),kind=integer(row[0],'fact kind',KINDS.length-1),scope=decoded.path(row[1],true);if(KINDS[kind]==='stat')fail('nonportable stat group');
