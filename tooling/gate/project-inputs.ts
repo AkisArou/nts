@@ -12,7 +12,14 @@ import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 export type ProjectInputs={configs:string[];roots:string[];modules:{path:string;imports:string[]}[];observations:HostObservation[];installedObservations:{observation:HostObservation;capability:InstalledTypeScript}[];
   hostObservations:{observation:HostObservation;environment:ProjectEnvironmentAbsence}[];
   dependencyObservations:{observation:HostObservation;dependency:InstalledProjectDependency}[];pinObservations:HostObservation[];
-  generatedObservations:{observation:HostObservation;capability:GeneratedProjectCapability}[]};
+  generatedObservations:{observation:HostObservation;capability:GeneratedProjectCapability}[];
+  /** Present only while the installation catalog is pending: the installed
+   * packages this Program itself classifies as external libraries. Their reads
+   * stay ordinary observations; a materializing consumer owes the catalog. */
+  installationReach?:InstallationReach};
+/** The Program's own external-library classification, named by its resolved
+ * package identity where an import supplies one, else its package directory. */
+export type InstallationReach={reason:string;packages:{package:string;file:string}[]};
 export type ProjectRequest={kind:'config';path:string}|{kind:'generated';path:string;directory:string;include:GeneratedInclude};
 /** One graph owns one lazy SDK process. Every read still constructs a fresh
  * Program and filesystem transaction; no result or observation is cached. */
@@ -52,6 +59,7 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
       contexts.add(programContext);hostContexts.set(key,contexts);
     }),configs:new Set<string>(),readingConfig:false,generated:[] as ReturnType<typeof prepareGeneratedProject>[]};active=transaction;
     const {filesystem,configs}=transaction,roots=new Set<string>(),modules=new Map<string,Set<string>>();
+    const externalFiles=new Map<string,string>(),externalPackages=new Map<string,string>();
     let captured:Capture|undefined;
     const toolchain=()=>captured??=installed?.()??captureToolchain(dirname(require.resolve('typescript/package.json')));
     let failure:{error:unknown}|undefined;
@@ -80,15 +88,22 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
             if(byteFact&&dependencies.state==='current'&&dependencies.match(byteFact))continue;
             const name=owned(file),sourceFile=program.getSourceFile(file);
             if(!sourceFile)throw Error('compiled Program source disappeared: '+file);
+            if(dependencies.state==='pending'&&!externalFiles.has(name)){
+              const metadata=program.getSourceFileMetadata(file);
+              if(metadata?.isFromExternalLibrary)externalFiles.set(name,metadata.packageJsonDirectory?owned(metadata.packageJsonDirectory):name);
+            }
             const edges=modules.get(name)??new Set<string>();modules.set(name,edges);
             for(const usage of sourceFile.imports){
               if(!ast.isStringLiteralLikeNode(usage))throw Error('compiled project import is not literal: '+file);
-              const target=program.getResolvedModuleFromModuleSpecifier(usage,file)?.resolvedFileName;
+              const resolved=program.getResolvedModuleFromModuleSpecifier(usage,file),target=resolved?.resolvedFileName;
               if(!target){provenance.imports.push({source:name,specifier:usage.text});continue;}
               const fact=byteFacts.get(target);
               if(fact&&toolchainFact(captured,fact))continue;
               if(fact&&dependencies.state==='current'&&dependencies.match(fact))continue;
-              edges.add(owned(target));
+              const edge=owned(target);
+              if(dependencies.state==='pending'&&resolved.isExternalLibraryImport&&resolved.packageId?.name)
+                externalPackages.set(edge,resolved.packageId.version?resolved.packageId.name+'@'+resolved.packageId.version:resolved.packageId.name);
+              edges.add(edge);
             }
             for(const reference of sourceFile.referencedFiles){
               const target=resolve(dirname(file),reference.fileName);
@@ -137,7 +152,16 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
       }
       const pinFilesystem=new OracleFilesystem();
       if(dependencyObservations.length&&dependencies.state==='current')for(const path of dependencies.pins)pinFilesystem.readFile(resolve(source,path));
-      return {configs:[...configs],roots:[...roots],modules:[...modules].map(([path,imports])=>({path,imports:[...imports]})),observations,installedObservations,generatedObservations,hostObservations,dependencyObservations,pinObservations:pinFilesystem.captured()};
+      // A package is named by an import's resolved identity when any of its
+      // files has one; types and triple-slash reach keep the package directory.
+      const labels=new Map<string,string>(),reached=new Map<string,string>();
+      const external=[...externalFiles].sort(([a],[b])=>a.localeCompare(b));
+      for(const [file,directory]of external){const label=externalPackages.get(file);if(label&&!labels.has(directory))labels.set(directory,label);}
+      for(const [file,directory]of external){const label=labels.get(directory)??directory;if(!reached.has(label))reached.set(label,file);}
+      const installationReach:InstallationReach|undefined=dependencies.state==='pending'&&reached.size
+        ?{reason:dependencies.reason,packages:[...reached].map(([name,file])=>({package:name,file}))}:undefined;
+      return {configs:[...configs],roots:[...roots],modules:[...modules].map(([path,imports])=>({path,imports:[...imports]})),observations,installedObservations,generatedObservations,hostObservations,dependencyObservations,pinObservations:pinFilesystem.captured(),
+        ...(installationReach?{installationReach}:{})};
     }catch(error){failure={error};throw error;}
     finally{active=undefined;const failures:unknown[]=[];for(const generated of transaction.generated)try{generated.close();}catch(error){failures.push(error);}if(failures.length)throw new AggregateError(failure?[failure.error,...failures]:failures,'generated project cleanup failed',failure?{cause:failure.error}:undefined);}
   },close(){

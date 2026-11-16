@@ -4,7 +4,7 @@ import {copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathS
 import {dirname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
-import {moduleGraph, type ModuleClosureOptions,type InputSnapshot} from "./module-closure.ts";
+import {moduleGraph, type ModuleClosureOptions,type InputSnapshot,type InstallationObligation} from "./module-closure.ts";
 import {outsideSource} from "./source-containment.ts";
 import {canonicalNamespace as canonical,fixtureNamespaces,fixtureInput,fileInput,type FixtureInput,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
@@ -15,7 +15,7 @@ import type {HostObservation} from '../differential/oracle-runtime.ts';
 import {projectInputOwner} from './project-inputs.ts';
 import {SourceFacts} from './source-facts.ts';
 import {validateReaderSourceObservations,replayFixtureReaderObservations} from './reader-observations.ts';
-import {installationCatalogTrust} from '../inputs/dependency-inputs.ts';
+import {installationCatalogPublication,installationCatalogTrust} from '../inputs/dependency-inputs.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {gitArguments} from './git-arguments/main.ts';
 export {moduleClosure} from "./module-closure.ts";
@@ -26,13 +26,26 @@ const info = (path: string) => {
   catch (error) {if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error;}
 };
 
+/** The shared checkout whose cache holds the default source's catalog. */
+function sourceShared(source:string):string|null{
+  if(source!==realpathSync(SOURCE)||!info(join(source,'.git')))return null;
+  return dirname(infrastructureProbe({purpose:'fixture source installation owner',command:'git',
+    args:gitArguments(['rev-parse','--path-format=absolute','--git-common-dir']),cwd:source}).stdout.trim());
+}
 /** This copier owns its default source's acquisition. Foreign sources supply
  * their own trust explicitly; a missing catalog never triggers installation. */
 function sourceCatalog(source:string){
-  if(source!==realpathSync(SOURCE)||!info(join(source,'.git')))return null;
-  const common=infrastructureProbe({purpose:'fixture source installation owner',command:'git',
-    args:gitArguments(['rev-parse','--path-format=absolute','--git-common-dir']),cwd:source}).stdout.trim();
-  return installationCatalogTrust(dirname(common),source);
+  const shared=sourceShared(source);
+  return shared===null?null:installationCatalogTrust(shared,source);
+}
+/** A declared Program that reaches an installed package owes the catalog that
+ * authenticates it. Refuse by that missing authority before any source-parent
+ * check; closures with no installed reach need no catalog. */
+export function refuseInstallationReach(rows:readonly Pick<InstallationObligation,'project'|'reader'|'package'|'reason'>[],source:string,supplied:boolean):void{
+  const row=rows[0];if(!row)return;
+  const shared=supplied?null:sourceShared(source);
+  throw Error('fixture closure needs the installation catalog: declared Program '+row.project+' ('+row.reader+') reaches installed package '+row.package+'; '+row.reason+'; '
+    +(shared===null?'supply a current dependencyCatalog for source '+source:'publish it with '+installationCatalogPublication(shared,source)));
 }
 
 export type FixtureClosureOptions = ModuleClosureOptions & {link?: boolean;
@@ -199,6 +212,7 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   try {snapshot=graph.describe(entries);}
   catch(error){throw Error('fixture closure '+JSON.stringify(entries)+' from '+source+': '+String(error),{cause:error});}
   finally {graph.close();}
+  refuseInstallationReach(snapshot.installationObligations??[],source,options.dependencyCatalog!==undefined);
   validateReaderSourceObservations(snapshot,source);
   const staged=fixtureStagingSnapshot(snapshot);
   const data=fixtureData(staged,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;
@@ -297,7 +311,8 @@ export function copyFixtureProject(project:FixtureInput,root:string,options:Fixt
       if(!owners.has(owner)){
         owners.add(owner);bytes(owner);parents(owner,decoded(owner));
         projects??=projectInputOwner(source,undefined,options.generatedTemporaryParent,options.dependencyCatalog===undefined?sourceCatalog(source):options.dependencyCatalog);
-        const inputs=projects.read([{kind:'config',path:relative(source,owner).split(sep).join('/')}]);
+        const ownerConfig=relative(source,owner).split(sep).join('/'),inputs=projects.read([{kind:'config',path:ownerConfig}]);
+        if(inputs.installationReach)refuseInstallationReach(inputs.installationReach.packages.map(reach=>({project:ownerConfig,reader:'fixture oracle entry '+name,package:reach.package,reason:inputs.installationReach!.reason})),source,options.dependencyCatalog!==undefined);
         for(const config of inputs.configs){const file=resolve(source,config);bytes(file);parents(file,decoded(file));}
         for(const {path:file}of inputs.modules){
           if(file.split('/').includes('node_modules'))throw Error('fixture oracle Program has an unowned installed source: '+file);

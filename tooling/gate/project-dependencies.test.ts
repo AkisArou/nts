@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdirSync,readFileSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
-import {dirname,join} from 'node:path';
+import {readFileSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {testScratch} from './test-scratch.ts';
-import {durableRecord} from './durable-record.ts';
-import {installationCatalog,dependencyHash,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
-import type {Identity} from '../inputs/dependency-identity.ts';
+import {installedCatalogFixture} from './installed-catalog-fixture.ts';
 import {projectDependencies} from './project-dependencies.ts';
 import {projectInputOwner} from './project-inputs.ts';
 import {moduleGraph} from './module-closure.ts';
@@ -16,26 +13,7 @@ import {validateReaderSourceObservations,readerObservationDependency,replayFixtu
 import {runtimeRepositoryClaims} from './rust-input-claims.ts';
 import {runtimeInstalledInputClassifier} from './rust-input-provenance.ts';
 
-function fixture(t:Parameters<typeof testScratch>[0]){
-  const scratch=testScratch(t,'project-installed-catalog'),root=join(scratch,'source');
-  const put=(path:string,text:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),text);};
-  put('package.json','{"name":"catalog-control","private":true}');put('pnpm-lock.yaml','supplied lock input\n');put('recipe.ts','// supplied producer input\n');
-  put('tsconfig.json','{"compilerOptions":{"module":"preserve","moduleResolution":"bundler","types":[]},"files":["main.ts"]}');
-  put('main.ts',"import type {Value} from 'fixture-package';export const value:Value=1;");
-  const packagePath='node_modules/.pnpm/fixture-package@1.0.0/node_modules/fixture-package';
-  put(packagePath+'/package.json','{"name":"fixture-package","version":"1.0.0","types":"index.d.ts"}');
-  put(packagePath+'/index.d.ts','export type Value=number;');
-  symlinkSync('.pnpm/fixture-package@1.0.0/node_modules/fixture-package',join(root,'node_modules/fixture-package'));
-  const input={version:2 as const,pnpm:'10.15.0',manager:'supplied manager',node:process.versions.node,platform:process.platform,arch:process.arch,
-    inputs:['package.json','pnpm-lock.yaml'].map(path=>({path,sha256:dependencyHash(readFileSync(join(root,path)))})),importers:['.']};
-  const identity:Identity={...input,key:dependencyHash(JSON.stringify(input))};
-  // The supplied install identity is separate from the actual finite inventory
-  // algorithm under test; the verified install/publication has its own controls.
-  const catalog=installationCatalog(root,identity,[{path:'recipe.ts',sha256:dependencyHash(readFileSync(join(root,'recipe.ts')))}]);
-  const path=join(scratch,'catalog.json');durableRecord(path,catalog);
-  const trust:DependencyCatalogTrust={catalogPath:path,catalogSha256:dependencyHash(readFileSync(path))};
-  return {root,packagePath,trust};
-}
+const fixture=installedCatalogFixture;
 
 test('declared Program package reads retain finite identity and only repository pin reach',t=>{
   const f=fixture(t),owner=moduleGraph({sourceRoot:f.root,dependencyCatalog:f.trust});
@@ -99,4 +77,18 @@ test('a catalog failure drains the Program transaction and permits a fresh read 
     const next=owner.read([{kind:'config',path:'tsconfig.json'}]);assert.ok(next.dependencyObservations.length);
   }finally{owner.close();}
   assert.throws(()=>owner.read([{kind:'config',path:'tsconfig.json'}]),/owner is closed/);
+});
+
+test('a pending catalog names the installed packages the Program itself classifies as external',t=>{
+  const f=fixture(t);
+  f.put('local/tsconfig.json','{"compilerOptions":{"types":[]},"files":["local.ts"]}');f.put('local/local.ts','export const local=1;');
+  for(const trust of [f.trust,null]){
+    const owner=projectInputOwner(f.root,undefined,undefined,trust);
+    try{
+      const reached=owner.read([{kind:'config',path:'tsconfig.json'}]).installationReach;
+      if(trust)assert.equal(reached,undefined,'a current catalog owes nothing');
+      else assert.deepEqual(reached,{reason:'installation catalog is missing',packages:[{package:'fixture-package@1.0.0',file:f.packagePath+'/index.d.ts'}]});
+      assert.equal(owner.read([{kind:'config',path:'local/tsconfig.json'}]).installationReach,undefined,'a Program with no installed reach owes nothing');
+    }finally{owner.close();}
+  }
 });

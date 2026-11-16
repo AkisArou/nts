@@ -32,10 +32,14 @@ export type ReaderObservation={reader:string;context:ReaderContext;protocol:Read
 /** The canonical graph owns derived facts; the declaration leaf has no parser
  * or oracle dependency in either import direction. */
 export type UnavailableInput={kind:'installation-inputs';reader:string;context:ReaderContext;reason:string};
+/** A declared Program reaches an installed package while the installation
+ * catalog is pending. Selection keeps those reads as ordinary observations;
+ * a materializing consumer refuses it by name before checking any source. */
+export type InstallationObligation={reader:string;context:ReaderContext;project:string;package:string;file:string;reason:string};
 /** files selects committed changes; runtimeFiles also claims reads made only
  * by superset race guards. Placement and fixture reproduction are independent. */
 export type InputSnapshot={files:string[];runtimeFiles?:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];stagingFiles:string[];directories:DirectoryDeclaration[];
-  unavailableInputs?:UnavailableInput[];
+  unavailableInputs?:UnavailableInput[];installationObligations?:InstallationObligation[];
   optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[];observations:ReaderObservation[]};
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -162,7 +166,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),hostFiles=new Set<string>(),placing=new Set<string>(),staging=new Set<string>(),directories:DirectoryDeclaration[]=[];
     const optionalFiles:OptionalFileDeclaration[]=[],memberships:MembershipDeclaration[]=[];
     const observations:ReaderObservation[]=[];
-    const unavailableInputs:UnavailableInput[]=[];
+    const unavailableInputs:UnavailableInput[]=[],installationObligations:InstallationObligation[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
       localTypes?:true;projectRole?:import('./reader-inputs/main.ts').ProjectRole;compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
@@ -349,6 +353,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         if(kind!=='generated-project'||request.kind==='generated')visit(context,path,false,true,false);
         const project=projectRead(request,{entry:context.entry,dataNamespaces:context.namespaces});
         observe(context,reader,'project',project.observations);
+        if(project.installationReach)for(const row of project.installationReach.packages)installationObligations.push({reader,context:{entry:context.entry,dataNamespaces:{...context.namespaces}},
+          project:request.path,package:row.package,file:row.file,reason:project.installationReach.reason});
         for(const fact of project.dependencyObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
           observation:structuredClone(fact.observation),dependency:structuredClone(fact.dependency),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
         for(const fact of captureReaderObservations(root,project.pinObservations)){
@@ -462,7 +468,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         visit(types,resolve(root,entry),true,true,false,true);
       }
     }
-    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,...(unavailableInputs.length?{unavailableInputs}:{})};
+    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,...(unavailableInputs.length?{unavailableInputs}:{}),...(installationObligations.length?{installationObligations}:{})};
   }
   /** A batch is one transaction, not a graph-lifetime result cache. Compiler
    * requests include their complete recipe and namespace context. Each first

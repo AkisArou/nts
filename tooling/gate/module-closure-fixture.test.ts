@@ -1,11 +1,12 @@
 import {fixtureInput,moduleMembers,projectConfig} from './reader-inputs/main.ts';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
-import {existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {test, type TestContext} from "node:test";
-import {copyFixtureProject, copyModuleClosure, moduleClosure, FIXTURE_INPUT_MANIFEST} from "./module-closure-fixture.ts";
+import {copyFixtureProject, copyModuleClosure, moduleClosure, refuseInstallationReach, FIXTURE_INPUT_MANIFEST} from "./module-closure-fixture.ts";
+import {installedCatalogFixture} from './installed-catalog-fixture.ts';
 import {moduleGraph} from './module-closure.ts';
 import {spawnTest} from "./test-wait.ts";
 import {testScratch} from "./test-scratch.ts";
@@ -1051,4 +1052,59 @@ test('fixture oracle entries use original nearest owners and their unchanged imp
   assert.ok(files.includes('owner/extra.ts'));assert.ok(files.includes('owner/tsconfig.json'));
   assert.equal(existsSync(join(f.destination,'owner/unread.bin')),false,'a source selected only by its owner Program grants no runtime assets');
   for(const config of ['project/tsconfig.json','owner/tsconfig.json'])assert.deepEqual(readFileSync(join(f.destination,config)),readFileSync(join(f.source,config)));
+});
+
+
+function installedReachFixture(t:TestContext){
+  const f=installedCatalogFixture(t);
+  f.put('tooling/gate/reader-inputs/main.ts',"export const projectConfig=(url,role)=>({kind:'project-config',role,url});export const fixtureInput=(url,options)=>({kind:'fixture',url,...options});");
+  f.put('child.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./tsconfig.json',import.meta.url),'compiled-program');");
+  f.put('nested.ts',"import {fixtureInput} from './tooling/gate/reader-inputs/main.ts';fixtureInput(new URL('./child.ts',import.meta.url),{dataNamespaces:{}});");
+  return {...f,destination:join(f.root,'..','destination')};
+}
+const catalogRefusal=/fixture closure needs the installation catalog: declared Program tsconfig\.json \(child\.ts\) reaches installed package fixture-package@1\.0\.0; installation catalog is missing; supply a current dependencyCatalog for source /;
+
+test('a nested declared Program reaching an installed package names the missing catalog before any source-parent check',t=>{
+  const f=installedReachFixture(t);
+  for(const dependencyCatalog of [undefined,null]){
+    assert.throws(()=>copyModuleClosure(['nested.ts'],f.destination,{sourceRoot:f.root,...(dependencyCatalog===null?{dependencyCatalog}:{})}),error=>{
+      assert.match(String(error),catalogRefusal);assert.doesNotMatch(String(error),/ancestor/);return true;
+    });
+    assert.equal(existsSync(f.destination),false,'nothing is staged');
+  }
+  const files=copyModuleClosure(['nested.ts'],f.destination,{sourceRoot:f.root,dependencyCatalog:f.trust});
+  // The Program reads its own package goal; the catalog's pins are its selection reach.
+  assert.deepEqual(files,['child.ts','main.ts','nested.ts','package.json','pnpm-lock.yaml','recipe.ts','tooling/gate/reader-inputs/main.ts','tsconfig.json']);
+  assert.equal(existsSync(join(f.destination,'node_modules')),false,'the installation stays with its own catalog');
+});
+
+test('closures with no installed-package reach stage unchanged without a catalog',t=>{
+  const f=installedReachFixture(t);
+  f.put('local/tsconfig.json','{"compilerOptions":{"types":[]},"files":["local.ts"]}');f.put('local/local.ts','export const local=1;');
+  f.put('local/reader.ts',"import {projectConfig} from '../tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./tsconfig.json',import.meta.url),'compiled-program');");
+  f.put('plain.ts',"import './local/local.ts';");
+  const graph=moduleGraph({sourceRoot:f.root,dependencyCatalog:null});
+  try{assert.equal(graph.describe(['local/reader.ts','plain.ts']).installationObligations,undefined);}finally{graph.close();}
+  const files=copyModuleClosure(['local/reader.ts','plain.ts'],f.destination,{sourceRoot:f.root,dependencyCatalog:null});
+  assert.deepEqual(files,['local/local.ts','local/reader.ts','local/tsconfig.json','package.json','plain.ts','tooling/gate/reader-inputs/main.ts']);
+  for(const file of files)assert.deepEqual(readFileSync(join(f.destination,file)),readFileSync(join(f.root,file)));
+});
+
+test('a fixture oracle owner reaching an installed package names the missing catalog',t=>{
+  const f=installedReachFixture(t);
+  f.put('project/tsconfig.json',JSON.stringify({compilerOptions:{types:[]},files:['entry.ts'],include:[]}));f.put('project/entry.ts','export const entry=1;');
+  const project=fixtureInput(pathToFileURL(join(f.root,'project/tsconfig.json')),{dataNamespaces:{}});
+  assert.throws(()=>copyFixtureProject(project,f.destination,{sourceRoot:f.root,oracleEntries:['main.ts']}),
+    /fixture closure needs the installation catalog: declared Program tsconfig\.json \(fixture oracle entry main\.ts\) reaches installed package fixture-package@1\.0\.0; installation catalog is missing/);
+  assert.equal(existsSync(f.destination),false);
+});
+
+test('the default source names the command that publishes its own catalog',()=>{
+  const source=realpathSync(fileURLToPath(new URL('../..',import.meta.url)));
+  const common=spawnTest('git',gitArguments(['rev-parse','--path-format=absolute','--git-common-dir']),{cwd:source,encoding:'utf8'});assert.equal(common.status,0,common.stderr);
+  const row={project:'tsconfig.json',reader:'child.ts',package:'fixture-package@1.0.0',reason:'installation catalog is missing'};
+  assert.throws(()=>refuseInstallationReach([row],source,false),{message:'fixture closure needs the installation catalog: declared Program tsconfig.json (child.ts) reaches installed package fixture-package@1.0.0; installation catalog is missing; publish it with node tooling/inputs/linker.ts work '
+    +JSON.stringify(dirname(common.stdout.trim()))+' '+JSON.stringify(source)});
+  assert.throws(()=>refuseInstallationReach([row],source,true),/supply a current dependencyCatalog for source /,'a caller-supplied catalog is the caller\'s to publish');
+  refuseInstallationReach([],source,false);
 });

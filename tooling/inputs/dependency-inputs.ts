@@ -39,11 +39,15 @@ export function installationCatalogTrust(root:string,tree:string):DependencyCata
   try{return {catalogPath,catalogSha256:dependencyHash(installationCatalogBytes(catalogPath))};}
   catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
 }
+/** The one command that publishes a tree's installation catalog. */
+export function installationCatalogPublication(root:string,tree:string):string{
+  return `node tooling/inputs/linker.ts work ${JSON.stringify(root)} ${JSON.stringify(tree)}`;
+}
 /** Acquisition pins authenticate the catalog; only runtime bytes identify behavior. */
 export function installationRuntimeContent(tree:string):string{
   const shared=dirname(git(tree,'rev-parse','--path-format=absolute','--git-common-dir'));
   const result=readDependencyCatalog(installationCatalogTrust(shared,tree),tree);
-  if(result.state!=='current')throw failure(`${result.reason}; publish with node tooling/inputs/linker.ts work ${JSON.stringify(shared)} ${JSON.stringify(tree)}`);
+  if(result.state!=='current')throw failure(`${result.reason}; publish with ${installationCatalogPublication(shared,tree)}`);
   return dependencyPackageContent(result.catalog.entries);
 }
 const failure=(message:string)=>new ToolingInstrumentError("tooling-setup",`dependency inputs: ${message}`);
