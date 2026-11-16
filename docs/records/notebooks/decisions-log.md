@@ -3456,3 +3456,23 @@ stages its own handler and the shared command owner, retaining explicit entry
 preparation and the normal supervisor. Pure delta application prepares no
 oracle. This avoids pulling every family's inputs into a consumer of one
 family, while retaining the existing record formats, row rules and order.
+## Started work may drain past a non-fitting higher request (11-16)
+
+#804's supplied state has a non-fitting agent growth ahead of a fitting full-
+check growth. Both retain started work, so strict prefix admission and global
+yield prevent either from completing. Returning idle surplus alone preserves
+the exact deficit; ticket age also misses the reverse arrival order.
+
+The runner owns the finite cohort: steps already started when it yields may
+finish their case lists, but pending steps cannot start. Only that cohort's
+growth is marked draining, with pending-step reservations and withhold excluded.
+The ledger may backfill fitting draining growth of admitted lower owners while
+the head does not fit. New admissions and ordinary growth retain the strict
+priority/FIFO rule. Mixed tickets are joined before drain-only replacement.
+
+The reservation tracks outstanding drained bytes separately. They retain a
+full promise for higher decisions, ordinary growth cannot downgrade them, and
+shrink returns them first. They cannot be lent to fresh fixed or live borrowers;
+inherited work measured in the same reservation may use them. Observed physical
+use still subtracts once. The marker clears at zero. No capacity, floor, step
+bound or width changes, and #800's next-turn scheduling remains.

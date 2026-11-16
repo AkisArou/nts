@@ -732,7 +732,10 @@ const tok = createTokenPool({
   // fixed step has withheld; when it does not fit, the run may ask the ledger
   // for more.
   eligible: (step, bytes) => {
-    if (outranked()) return false;
+    // A yielding run starts no new step, but its already-started finite case
+    // lists must finish before their reservation can drain.
+    const active = running.get(step);
+    if (outranked() && (!active || active.draining)) return false;
     const row = BY_NAME.get(step);
     if (!row) return true;
     const u = used();
@@ -939,7 +942,7 @@ function limitOf(name, r) {
   const step = BY_NAME.get(name);
   return r.elastic ? Math.max(heldBytes(name, r), tokenBytes(step)) + r.extra : grantOf(name, r);
 }
-let growth = null; // { bytes, controller, withdrawn } while a growth waits
+let growth = null; // { bytes, draining, controller, withdrawn } while a growth waits
 // What the run must hold for the first step that waits only for memory to
 // start beside what runs (schedule); 0 when none waits.
 let memoryWanted = 0;
@@ -955,18 +958,21 @@ const reserved = () => reservation?.bytes ?? 0;
 // waiting step has claimed: the most among the steps whose workers wait while
 // a slot is free for them, each for its oldest request -- its size, else its
 // step's token share.
-function tokenShort(u) {
-  if (!tokenAddr || SLOTS - u.slots - withhold <= 0) return 0;
-  let short = 0;
+function tokenDemand(u, withheld = withholdBytes, withheldSlots = withhold) {
+  if (!tokenAddr || SLOTS - u.slots - withheldSlots <= 0) return u.bytes;
+  let target = u.bytes;
   const oldest = new Map();
   for (const w of tok.waiting) if (!oldest.has(w.step)) oldest.set(w.step, w);
   for (const [step, w] of oldest) {
+    const active = running.get(step);
+    if (!active || active.draining) continue;
     const row = BY_NAME.get(step);
     if (!row || (row.fe && u.fe >= FRONTENDS)) continue;
-    short = Math.max(short, u.bytes + withholdBytes + (w.bytes ?? tokenBytes(row)) - reserved());
+    target = Math.max(target, u.bytes + withheld + (w.bytes ?? tokenBytes(row)));
   }
-  return short;
+  return target;
 }
+const tokenShort = u => Math.max(0, tokenDemand(u) - reserved());
 
 // The run's memory as the case costs record it: a token waits for memory
 // while `token_short_bytes` is above zero.
@@ -995,7 +1001,8 @@ function sampleStep(r) {
 // beyond what it is over by -- which the reservation's slack gives at once,
 // or else the run's growth; and each slice's runaway bound follows its grant.
 // The charge leaves out file pages and reclaimable slab, as the ledger's
-// does. Outranked, the run grows no step's grant; nothing holds the step.
+// does. Yielding keeps this already-started cohort able to finish; pending
+// steps remain forbidden by schedule's start check.
 const memoryClock = setInterval(watchMemory, SAMPLE_MS);
 memoryClock.unref();
 function watchMemory() {
@@ -1005,17 +1012,17 @@ function watchMemory() {
     return;
   }
   account();
-  const yielding = reservation !== null && outranked();
+  if (reservation) outranked();
   for (const [name, r] of running) {
     if (r.draining) continue;
     sampleStep(r);
     const grant = limitOf(name, r);
-    if (yielding || stopping) { r.want = 0; continue; }
+    if (stopping) { r.want = 0; continue; }
     if (r.charge >= grant - nearGrant(grant)) r.want = Math.max(r.want, Math.ceil((Math.max(0, r.charge - grant) + growthOf(grant)) / MIB) * MIB);
   }
   feedSteps();
   for (const [name, r] of running) if (!r.draining) applyBound(name, r);
-  if (!yielding && [...running.values()].some(r => r.want > 0)) adjustMemory();
+  if ([...running.values()].some(r => r.want > 0)) adjustMemory();
 }
 // What running steps want beyond their grants, from the reservation's slack.
 function feedSteps() {
@@ -1117,44 +1124,45 @@ async function reserveMemory() {
 }
 
 // After every scheduling pass: grow by what waits, withdraw a growth nothing
-// needs any more, give back slack beyond two blocks -- or, outranked, give
-// back everything beyond what runs and grow by nothing.
+// needs any more, give back slack beyond two blocks. Yielding retains only
+// the already-started cohort's demand and may grow only to let it drain.
 function adjustMemory() {
   if (stopping || summaryWritten || !reservation) return;
   const u = used(), yielding = outranked();
   const wanted = [...running.values()].reduce((sum, r) => sum + (r.draining ? 0 : r.want), 0);
+  const drainTarget = Math.max(u.bytes + wanted, tokenDemand(u, 0, 0));
   // Keep pending step wants until sampling feeds them into grants, and the
   // next step's known need until its growth ticket is published.
   // Releasing first lets a later neighbour decide inside the handoff gap,
   // before the ledger can give this admitted run's growth its existing place.
-  const back = yielding ? reserved() - Math.max(1, u.bytes)
-    : Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + Math.max(2 * BLOCK, wanted))) / BLOCK) * BLOCK;
+  const back = yielding ? reserved() - Math.max(1, drainTarget)
+    : Math.floor((reserved() - Math.max(memoryWanted, drainTarget + withholdBytes, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK;
   if (back > 0) {
     memoryRecord.shrinks++;
     reservation.shrink(back).catch(error => process.stderr.write(`run.mjs: the memory ledger kept the ${gib(back)} the run gave back: ${error.message}\n`));
   }
-  let need = Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());
+  let need = yielding ? drainTarget - reserved()
+    : Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());
   // Past what the machine could ever give, what waits fits only once running
   // work ends: a growth toward it would be slack the next pass gives back, and
   // asking again would spin.
   if (need > capacity - reserved()) need = 0;
   // What running steps want beyond their grants: as much as the machine
   // could give.
-  if (wanted) need = Math.max(need, Math.min(u.bytes + withholdBytes + wanted - reserved(), capacity - reserved()));
+  if (wanted) need = Math.max(need, Math.min(u.bytes + (yielding ? 0 : withholdBytes) + wanted - reserved(), capacity - reserved()));
   const bytes = Math.min(Math.ceil(need / BLOCK) * BLOCK, capacity - reserved());
-  // A growth that waits stays queued while the run yields: the request that
-  // outranks the run is ahead of it, so it cannot be admitted before that one.
+  const draining = bytes > 0 && bytes <= Math.ceil(Math.max(0, drainTarget - reserved()) / BLOCK) * BLOCK;
   if (growth) {
     // Running work can drain while this ticket waits. Keep a useful partial
     // grant, but withdraw an excess before its stale size blocks a fitting job.
     // Its finally schedules the replacement only after cancellation settles.
-    if (bytes < growth.bytes && !growth.withdrawn) { growth.withdrawn = true; growth.controller.abort(); }
+    if ((bytes < growth.bytes || yielding && !growth.draining) && !growth.withdrawn) { growth.withdrawn = true; growth.controller.abort(); }
     return;
   }
-  if (bytes <= 0 || yielding) return;
+  if (bytes <= 0 || yielding && !draining) return;
   const controller = new AbortController(), asked = Date.now();
-  growth = { bytes, controller, withdrawn: false };
-  reservation.grow(bytes, { signal: controller.signal }).then(() => {
+  growth = { bytes, draining, controller, withdrawn: false };
+  reservation.grow(bytes, { signal: controller.signal, draining }).then(() => {
     memoryRecord.growths++;
     noteSize();
   }, error => {
