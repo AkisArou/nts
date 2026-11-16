@@ -31,7 +31,11 @@ import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSes
 import {hostEnvironment} from '../gate/host-environment.ts';
 import {nodeInstallation} from '../gate/toolchain-fixture.ts';
 import {removable as makeRemovable} from '../gate/run-temporary.ts';
-import {ToolingInstrumentError} from '../gate/step-result.ts';
+import {ToolingInstrumentError,DiskBuildAdmissionError,publishToolingFailure,readStepInstrument} from '../gate/step-result.ts';
+import {DiskCapacity} from '../gate/disk-capacity.ts';
+import {ownMemory} from '../gate/test-memory.ts';
+import {readSummary,verdictOf} from './measure.ts';
+import {durableRecord} from '../gate/durable-record.ts';
 import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
 import { recordLandingFixture } from "../landing/verdict-fixture.ts";
 import { measureWithLanding } from "./landing-verdict.ts";
@@ -78,6 +82,35 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     told,
   };
 }
+
+test('disk-short core results hold without a culprit and retry normally after owned room returns',async t=>{
+  const repo=repository(t),commit=repo.commit({'a.txt':'unchanged product'},'records only'),gate=fakeGate(repo),now=new Date('2026-11-06T12:00:00Z');
+  const observed=join(repo.root,'owned-disk'),env={...fixtureEnvironment(t),...ownMemory(observed,{disk:{freeBytes:45*2**30,freeInodes:100}})};
+  const capacity=new DiskCapacity({env,pool:null}),ordinary=gate.run.bind(gate);
+  gate.steps=()=>({all:['tests','doctests'],wide:[]});
+  gate.run=(...args)=>{
+    const measurement=ordinary(...args);
+    try{const release=capacity.beginBuild({root:repo.root,target:join(repo.root,'target'),outputs:['nts-dev']});release();return measurement;}
+    catch(error){
+      assert.ok(error instanceof DiskBuildAdmissionError);
+      const steps=args[1].map(name=>{
+        const file=join(measurement.run,name+'.instrument.json');
+        publishToolingFailure(error,{NTS_GATE_STEP:name,NTS_GATE_STEP_ATTEMPT:'core',NTS_GATE_STEP_RESULT:file});
+        return {name,verdict:'INSTRUMENT',reason:error.message,instrument:readStepInstrument(file,name,'core')};
+      });
+      durableRecord(join(measurement.run,'summary.json'),{identities:{commit:args[0]},environment:{canonical:true},steps});
+      const read=readSummary(measurement.run,args[0],args[1]);return {...measurement,...read,verdict:verdictOf(read.steps)};
+    }
+  };
+  const fx=harness(repo,gate,{now});await cycle(fx);
+  const held=readState(repo.layout.state);
+  assert.equal(held.core.last_run?.verdict,'held');assert.deepEqual(held.culprits,[]);assert.deepEqual(fx.submitted,[]);assert.deepEqual(fx.told,[]);
+  assert.ok(fx.lines.some(line=>line.includes('disk build admission')));assert.ok(!fx.lines.some(line=>line.includes('culprit search')));
+  ownMemory(observed,{disk:{freeBytes:100*2**30,freeInodes:100}});now.setMinutes(now.getMinutes()+31);
+  await cycle(fx);
+  assert.equal(readState(repo.layout.state).core.last_run?.verdict,'green');assert.equal(repo.git.commit('refs/heads/verified'),commit);
+  assert.deepEqual(gate.measured.map(row=>row.label),['core','core']);assert.deepEqual(fx.submitted,[]);
+});
 
 /**
  * The part's records unit ends, having done what its command line says: the

@@ -93,6 +93,16 @@ async function worker(requestPath:string,env:NodeJS.ProcessEnv):Promise<number>{
   return report.status;
 }
 
+/** The experiment's real build owner, also callable with an owned fixture root. */
+export function buildToolingLoadCompiler(root:string,env:NodeJS.ProcessEnv,log:string):void{
+  const release=new DiskCapacity({env}).beginBuild({root,target:join(root,'target'),outputs:['nts-dev']});
+  try{
+    const fd=openSync(log,'wx');
+    try{const build=spawnSync(process.execPath,[CARGO_OWNER,'build','--profile','nts-dev','-p','nts-cli'],{cwd:root,env,stdio:['ignore',fd,fd]});if(build.error||build.signal||build.status!==0)fail('fresh compiler build failed; see build.log');}
+    finally{closeSync(fd);}
+  }finally{release();}
+}
+
 async function round(directory:string):Promise<number>{
   assertLandingEnvironment(process.env);const owner=requireOwnUnit();
   if(inside(ROOT,directory)||directory==='/tmp'||directory.startsWith('/tmp/'))fail('output must be outside the source tree and tmpfs');
@@ -112,12 +122,7 @@ async function round(directory:string):Promise<number>{
     const sealed=await sealOracleRun(planned),env:NodeJS.ProcessEnv={...sealed.env,NTS_BIN:join(ROOT,'target/nts-dev/nts')};
     const host=hostObservations(env),selection=discoverToolingTests(ROOT),files=[...selection.files,...selection.exclusions.map(row=>row.path)].sort();
     const workers=defaultSlots(host.machineWidth());
-    const release=new DiskCapacity({env}).beginBuild({root:ROOT,target:join(ROOT,'target'),outputs:['nts-dev']});
-    try{
-      const fd=openSync(join(directory,'build.log'),'wx');
-      try{const build=spawnSync(process.execPath,[CARGO_OWNER,'build','--profile','nts-dev','-p','nts-cli'],{cwd:ROOT,env,stdio:['ignore',fd,fd]});if(build.error||build.signal||build.status!==0)fail('fresh compiler build failed; see build.log');}
-      finally{closeSync(fd);}
-    }finally{release();}
+    buildToolingLoadCompiler(ROOT,env,join(directory,'build.log'));
     const artifactsPath=join(directory,'cargo-artifacts.json');
     if(await runTestProfile('inner',['-p','nts-cli','--test','integration','--no-run'],env,ROOT,{artifacts:artifactsPath})!==0)fail('CLI test build failed');
     const artifacts=json<{version:number;status:number;buildFinished:boolean;artifacts:{manifest_path:string;target:{name:string};executable:string|null}[]}>(artifactsPath);

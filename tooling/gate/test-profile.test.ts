@@ -9,7 +9,7 @@ import {dirname,join} from 'node:path';
 import {createRequire} from 'node:module';
 import {assertTestArtifact,assertTestInvocation,assertTestProfileManifest,assertPreparedInnerTests,testInvocation,TEST_PROFILE_MANIFEST,TEST_ROUTES} from './test-profile.ts';
 import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
-import {fixtureEnvironment} from './test-environment.ts';
+import {fixtureEnvironment,assignTestValues} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {moduleClosure} from './module-closure.ts';
@@ -41,6 +41,19 @@ test('a real Rust compile error with ample owned disk stays a product failure',t
   const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'workspace'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...memory,CARGO_TARGET_DIR:join(root,'target'),CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'compile',NTS_GATE_STEP_RESULT:receipt}});
   assert.equal(ran.status,101,ran.stdout+ran.stderr);assert.match(ran.stdout+ran.stderr,/error\[E0308\]/);
   assert.equal(readStepInstrument(receipt,'tests','compile'),undefined,'a compiler error emits no instrument authority');
+});
+
+test('the actual workspace replay keeps its primary disk receipt when no traced Cargo artifact exists',async t=>{
+  await setupOracleTestEnvironment();
+  const root=newTestScratch('tests-replay-disk');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=oracleTestEnvironment(t),receipt=join(root,'disk.json');
+  ownMemory(dirname(env.NTS_HOST_OBSERVATIONS!),{disk:{freeBytes:45*2**30,freeInodes:100}});
+  assignTestValues(env,{CARGO_TARGET_DIR:join(root,'target'),CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
+    NTS_RUST_INPUT_TRACE:join(root,'trace'),NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'disk',NTS_GATE_STEP_RESULT:receipt});
+  const ran=spawnSync(process.execPath,[new URL('./tests.mjs',import.meta.url).pathname],{cwd:fileURLToPath(new URL('../..',import.meta.url)),env,encoding:'utf8',maxBuffer:16*2**20});
+  assert.equal(ran.status,2,ran.stdout+ran.stderr);
+  const row=readStepInstrument(receipt,'tests','disk');assert.equal(row?.kind,'disk-capacity',ran.stdout+ran.stderr);
+  assert.equal(row?.disk?.shortBytes,2**30);assert.equal(existsSync(join(root,'trace/artifacts.json')),false);
 });
 test('the run seal verifier is a node-only leaf, so test entries cannot inherit launcher selection',()=>{
   assert.deepEqual(moduleClosure(['tooling/differential/oracle-seal/main.ts']),['tooling/differential/oracle-seal/main.ts']);

@@ -26,6 +26,7 @@ import { ownMemory } from "./test-memory.ts";
 import { newTestScratch } from "./test-scratch.ts";
 import { removable } from "./run-temporary.ts";
 import { newToolingSlice, stopToolingSlice, toolingSliceArgs } from "./tooling-slice.ts";
+import {readStepInstrument} from './step-result.ts';
 
 const PACKAGES = [
   { name: "alpha", dir: "compiler/sample-alpha" },
@@ -73,8 +74,8 @@ test("runtime C is formatted at the top level and in tests/, never in a vendored
   );
 });
 
-for (const [initial, fails, keepGoing] of [["stale", false, false], ["fresh", false, false], ["stale", true, false], ["stale", true, true]] as const) {
-  test(`--no-agree builds before tests: ${initial}, build fails=${fails}, keep-going=${keepGoing}`, t => {
+for (const [initial, fails, keepGoing,diskPhase] of [["stale", false, false,undefined], ["fresh", false, false,undefined], ["stale", true, false,undefined], ["stale", true, true,undefined],['fresh',false,false,'clippy'],['fresh',false,false,'build']] as const) {
+  test(`--no-agree builds before tests: ${initial}, build fails=${fails}, keep-going=${keepGoing}, disk=${diskPhase??'ample'}`, t => {
     const root = newTestScratch("inner-compiler"), tree = join(root, "tree"), bin = join(root, "bin");
     const unit = `nts-test-inner-compiler-${randomUUID()}`, slice = newToolingSlice(true);
     t.after(() => {
@@ -130,17 +131,24 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
     for (const args of [["init", "-q", "-b", "main"], ["add", "."], ["-c", "user.name=inner-test", "-c", "user.email=inner@example.invalid", "commit", "-qm", "fixture"]]) {
       const ran = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
     }
-    const memory = ownMemory(join(root, "memory"));
+    const memory = ownMemory(join(root, "memory"),diskPhase?{disk:{freeBytes:(diskPhase==='clippy'?41:45)*2**30,freeInodes:100}}:{});
+    const receipt=join(root,'disk-result.json');
     const env = gateEnvironment(hostEnvironment(process.env),
-      { run: join(root, "run"), owned: { ...memory, NTS_TOOLING_SLICE: slice, PATH: bin + ":" + process.env.PATH }, standalone: true }).env;
+      { run: join(root, "run"), owned: { ...memory, NTS_TOOLING_SLICE: slice, PATH: bin + ":" + process.env.PATH,NTS_GATE_STEP:'inner',NTS_GATE_STEP_ATTEMPT:'disk',NTS_GATE_STEP_RESULT:receipt }, standalone: true }).env;
     const setenv = Object.entries(env).filter((entry): entry is [string,string] => entry[1] !== undefined).map(([key,value]) => `--setenv=${key}=${value}`);
     const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(env), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
       "--property=RuntimeMaxSec=300s", "--property=Nice=19", "--property=LimitCORE=0", "--property=CPUAffinity=0-3 6-31",
       ...setenv, process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])], {env:fixtureEnvironment(t), encoding: "utf8" });
-    assert.equal(ran.status, fails ? 1 : 0, ran.stdout + ran.stderr);
+    assert.equal(ran.status, fails||diskPhase ? 1 : 0, ran.stdout + ran.stderr);
     assert.ok(existsSync(calls), ran.stdout + ran.stderr);
     assert.equal(readFileSync(calls+'.metadata-environment','utf8'),'canonical inner environment');
     const phases = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);
+    if(diskPhase){
+      const result=readStepInstrument(receipt,'inner','disk');assert.equal(result?.kind,'disk-capacity',ran.stdout+ran.stderr);
+      assert.match(result!.reason,/disk build admission/);assert.equal(phases.some(args=>args[0]===diskPhase),false,'the refused Cargo phase never started');
+      assert.doesNotMatch(ran.stdout,/red: fix it|FAIL\s+(?:clippy|build)/,'a capacity instrument is not reported as a product red');
+      return;
+    }
     assert.equal(readFileSync(calls+".clippy-target","utf8"),join(tree,"target/clippy"));
     const build = phases.findIndex(args => args[0] === "build"), tests = phases.findIndex(args => args[0] === "test");
     assert.ok(build >= 0, ran.stdout + ran.stderr);
