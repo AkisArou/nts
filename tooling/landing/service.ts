@@ -109,7 +109,7 @@ export async function drain(config: Config): Promise<Drained> {
         const diskHeld=queue.held().filter(held=>queue.result(held.id)?.retryDisk?.length&&!queue.withdrawRequested(held.id));
         if(diskHeld.length){
           const details=diskHeld.map(held=>`${held.id} needs ${diskShortages.get(held.id)??Math.max(...queue.result(held.id)!.retryDisk!.map(row=>row.shortBytes))} more bytes`);
-          queue.setStatus({state:'held',id:diskHeld[0]!.id,sha:diskHeld[0]!.sha,message:'waiting for disk: '+details.join('; ')+' (last measured capacity shortfall); no run reservation is held'});
+          queue.setStatus({state:'held',id:diskHeld[0]!.id,sha:diskHeld[0]!.sha,message:'waiting for disk: '+details.join('; ')+' (last measured capacity shortfall); automatic retry at original arrival; no run reservation is held'});
           try{await diskWake.wait();}catch(error){return diskFailed(error);}continue;
         }
         break;
@@ -147,10 +147,11 @@ function retryDiskHeld(config:Config,queue:Queue,capacity:DiskCapacity):Map<stri
   const shortages=new Map<string,number>();
   for(const entry of queue.held()){
     const answer=queue.result(entry.id);if(!answer?.retryDisk?.length||queue.withdrawRequested(entry.id))continue;
+    if(typeof answer.answerNonce!=='string'||!answer.answerNonce)throw Error('disk-held answer has no unique identity: '+entry.id);
     const requests=checkedDiskRequests(config,answer.retryDisk);
     const short=Math.max(0,...requests.map(request=>-capacity.buildSnapshot(request).availableBytes));shortages.set(entry.id,short);
     if(short===0){
-      if(queue.retryDiskReady(entry.id,answer.at))config.log(`disk room restored: ${entry.id} returns at its original queue arrival`);
+      if(queue.retryDiskReady(entry.id,answer.answerNonce))config.log(`disk room restored: ${entry.id} returns at its original queue arrival`);
     }
   }
   return shortages;

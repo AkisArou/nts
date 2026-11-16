@@ -183,10 +183,15 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   };
   let finished=false;const running=drain(f.config).finally(()=>{finished=true;});
   t.after(async()=>{temporary.release();await running;});
-  await waitFor('the no-build entry lands past the disk hold',()=>f.queue.result(eb.id)?.state==='landed',{stopped:()=>finished?'service ended before the release':undefined});
+  await waitFor('the no-build entry lands past the disk hold',()=>f.queue.result(eb.id)?.state==='landed'&&f.queue.status().message?.startsWith('waiting for disk:'),{stopped:()=>finished?'service ended before the release':undefined});
   assert.equal(f.queue.result(ea.id)?.state,'held');assert.equal(attempts,1,'no repeated build under the unchanged shortage');
   assert.equal(f.queue.checking(),null,'the held entry owns no running check');
   assert.equal(existsSync(f.pool.capacity.stateFile),false,'the refused build owns no claim');
+  const status=landingStatus(f.s.root,f.config.home,f.pool.dir,0,f.pool);
+  assert.equal(status.service.running,true);assert.equal(status.service.state,'held');assert.equal(status.checking,null);
+  assert.match(status.service.message!,new RegExp(`waiting for disk: ${ea.id} needs 1073741824 more bytes`));
+  assert.match(status.service.message!,/automatic retry/);assert.equal(status.held[0]?.retryWhen,'disk-capacity');
+  assert.match(statusText(status),new RegExp(`waiting for disk: ${ea.id}`));assert.match(statusText(status),/automatic retry when disk permits/);
   const c=f.s.commit({'docs/after.md':'later arrival\n'},'later candidate',join(f.s.dir,'pool/2'));
   const ec=f.queue.submit(c,{branch:null});
   temporary.release();

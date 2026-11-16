@@ -71,13 +71,28 @@ test('disk readiness restores its original key and cannot resurrect a newer answ
   const disk={root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
   const held=q.answer(q.take()!,{state:'held',message:'disk',retryDisk:[disk]});
   assert.equal(q.retryDiskReady(entry.id,'different answer'),null);
-  assert.deepEqual(q.retryDiskReady(entry.id,held.at),entry);
-  assert.deepEqual(q.waiting(),[entry]);assert.equal(q.retryDiskReady(entry.id,held.at),null);
+  assert.deepEqual(q.retryDiskReady(entry.id,held.answerNonce!),entry);
+  assert.deepEqual(q.waiting(),[entry]);assert.equal(q.retryDiskReady(entry.id,held.answerNonce!),null);
   q.answer(q.take()!,{state:'held',message:'disk again',retryDisk:[disk]});
   // A durable request can arrive just before the drained result is published.
   writeFileSync(join(q.home,'withdraw',entry.id),JSON.stringify({version:1,at:'fixture',request:'before-held'}));
-  assert.equal(q.withdraw(entry.id),'withdrawn');assert.equal(q.retryDiskReady(entry.id,q.result(entry.id)!.at),null);
+  assert.equal(q.withdraw(entry.id),'withdrawn');assert.equal(q.retryDiskReady(entry.id,q.result(entry.id)!.answerNonce!),null);
   assert.equal(q.withdrawRequested(entry.id),false);assert.deepEqual(q.held(),[]);
+});
+
+test('a same-timestamp newer disk answer cannot reuse an old readiness observation',t=>{
+  const original=Date.prototype.toISOString;Date.prototype.toISOString=()=> '2026-11-16T00:00:00.000Z';
+  try{
+    const q=new Queue(home(t)),entry=q.submit(sha('a'));
+    const disk={root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
+    const old=q.answer(q.take()!,{state:'held',message:'first shortage',retryDisk:[disk]});
+    q.retry(entry.id);
+    const newer=q.answer(q.take()!,{state:'held',message:'new shortage',retryDisk:[{...disk,shortBytes:2,buildReservedBytes:2}]});
+    assert.equal(newer.at,old.at);assert.notEqual(newer.answerNonce,old.answerNonce);
+    assert.equal(q.retryDiskReady(entry.id,old.answerNonce!),null);
+    assert.equal(q.result(entry.id)?.message,'new shortage');assert.equal(q.held().length,1);assert.deepEqual(q.waiting(),[]);
+    assert.ok(q.retryDiskReady(entry.id,newer.answerNonce!));assert.equal(q.held().length,0);
+  }finally{Date.prototype.toISOString=original;}
 });
 
 test("a withdrawal answers a waiting change at once and the one being checked when its check ends", t => {

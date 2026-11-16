@@ -29,7 +29,7 @@ export type LandingStatus = {
   service: { running: boolean; pid: number | null; unit: string; state: Status["state"]; since: string; message: string | null;run:string|null };
   checking: (Change & { phase: Checking["phase"] | null; base: string | null; tip: string | null; run: string | null; started_at: string; seconds: number }) | null;
   waiting: Change[];
-  held: (Change & { message: string })[];
+  held: (Change & { message: string;retryWhen?:'disk-capacity' })[];
   /** The answers of the last 24 hours by state, and how long the landed ones' checks took. */
   day: { landed: number; refused: number; held: number; withdrawn: number; median_wall_s: number | null; max_wall_s: number | null };
   /** The newest answers, oldest first. */
@@ -58,7 +58,7 @@ export function landingStatus(root: string, home:string, pool:string, now:number
     checking: checking && { ...change(checking), phase: checking.phase ?? null, base: checking.base ?? null, tip: checking.tip ?? null, run: checking.run ?? null,
       started_at: checking.started_at, seconds: Math.round((now - Date.parse(checking.started_at)) / 1000) },
     waiting: queue.waiting().map(change),
-    held: queue.held().map(e => ({ ...change(e), message: queue.result(e.id)?.message ?? "" })),
+    held: queue.held().map(e => {const answer=queue.result(e.id);return { ...change(e), message: answer?.message ?? "",...(answer?.retryDisk?.length?{retryWhen:'disk-capacity' as const}:{}) };}),
     day: { landed: count("landed"), refused: count("refused"), held: count("held"), withdrawn: count("withdrawn"),
       median_wall_s: walls.length ? walls[Math.floor((walls.length - 1) / 2)]! : null, max_wall_s: walls.at(-1) ?? null },
     recent: results.slice(-RECENT).map(r => ({
@@ -80,7 +80,7 @@ export function statusText(m: LandingStatus): string {
   if (c) lines.push(`checking: ${c.id} ${c.branch ?? "(no branch)"} ${c.phase ?? ""}${c.tip ? ` as ${short(c.tip)}` : ""}${c.run ? `, logs ${c.run}` : ""}`);
   lines.push(`waiting (${m.waiting.length}):${m.waiting.length ? "" : " none"}`);
   m.waiting.forEach((e, i) => lines.push(`  ${i + 1}. ${e.id} ${e.branch ?? "(no branch)"} by ${e.by}${e.first ? ", first" : ""}${e.note ? ` -- ${e.note}` : ""}`));
-  if (m.held.length) { lines.push(`held (${m.held.length}): retry with \`check.ts retry <id>\` or withdraw`); for (const e of m.held) lines.push(`  ${e.id} ${e.branch ?? ""}: ${e.message}`); }
+  if (m.held.length) { lines.push(`held (${m.held.length}): ${m.held.every(e=>e.retryWhen==='disk-capacity')?'automatic retry when disk permits; or withdraw':'retry with `check.ts retry <id>` or withdraw'}`); for (const e of m.held) lines.push(`  ${e.id} ${e.branch ?? ""}: ${e.message}${e.retryWhen==='disk-capacity'?' (automatic retry when disk permits)':''}`); }
   const recent = m.recent.slice(-8);
   lines.push(`recent (${recent.length}):`);
   for (const r of recent) lines.push(`  ${r.at.slice(0, 16).replace("T", " ")} ${r.state.padEnd(9)} ${short(r.sha)} ${r.message}`);
