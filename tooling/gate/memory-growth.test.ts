@@ -6,6 +6,7 @@ import {test} from 'node:test';
 import {createContext,runInContext} from 'node:vm';
 import {SourceFacts} from './source-facts.ts';
 import {testEnvironment} from './test-environment.ts';
+import {peakReservation} from './step-scheduling.ts';
 
 const GiB=2**30;
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
@@ -245,4 +246,22 @@ for(const yielding of [false,true])test(`sampling and child close run while a fo
   assert.equal(run.reschedules(),2);assert.equal(run.maximumActive(),1);
   assert.equal(run.allocated(),22*GiB);assert.deepEqual(run.reports,[]);
   assert.deepEqual(run.kinds,[yielding,yielding]);
+});
+
+test('yielding sampling returns only idle elastic history and keeps live case grants',()=>{
+ const idle={draining:false,elastic:true,extra:3*GiB,want:GiB,charge:128*2**20};
+ const active={draining:false,elastic:true,extra:3*GiB,want:0,charge:128*2**20};
+ const fixed={draining:false,elastic:false,extra:3*GiB,want:0,charge:128*2**20};
+ let adjustments=0,samples=0;const bounds:string[]=[];
+ const state={stopping:false,summaryWritten:false,reservation:{active:()=>true},account:()=>{},outranked:()=>true,outrankedNow:true,
+  running:new Map([['idle',idle],['active',active],['fixed',fixed]]),sampleStep:()=>{samples++;},
+  tokensOf:(name:string)=>name==='active'?1:0,peakReservation,limitOf:()=>4*GiB,nearGrant:()=>GiB/16,growthOf:()=>GiB,MIB:2**20,
+  feedSteps:()=>{},applyBound:(name:string)=>bounds.push(name),adjustMemory:()=>{adjustments++;},stop:()=>assert.fail('active reservation rejected'),
+ };
+ const sample=runInContext('('+policy('watchMemory')+')',createContext(state)) as ()=>void;
+ sample();assert.equal(idle.extra,peakReservation([128*2**20]));assert.equal(idle.want,0);
+ assert.equal(active.extra,3*GiB);assert.equal(fixed.extra,3*GiB);assert.equal(adjustments,1);assert.equal(samples,3);
+ assert.deepEqual(bounds,['idle','active','fixed']);
+ idle.charge=0;sample();assert.equal(idle.extra,peakReservation([1]));
+ state.outrankedNow=false;idle.extra=3*GiB;sample();assert.equal(idle.extra,3*GiB,'ordinary sampling retains the existing grant policy');
 });

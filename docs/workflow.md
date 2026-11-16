@@ -1288,6 +1288,18 @@ the first node task.
 
 ## Decisions
 
+- **A pooled priority yield releases idle memory before waiting.** The common
+  feed joins its token cancellation, idle worker closure and one shared pause.
+  In-flight cases finish; remaining cases retain their queue ownership across
+  worker generations. A token-backed offer is counted only at actual dispatch,
+  and an unused offer returns only after its token drains. Initial and resumed
+  workers are created lazily after a case token is granted. A standalone job
+  returns its own idle forecast and restores it through ordinary admission
+  before restarting; an inherited job never shrinks its parent. The gate owner
+  returns idle elastic history beyond observed charge and the existing margin,
+  preserving live case grants. Census and compile feeds use this same boundary
+  ([log](records/notebooks/decisions-log.md#pooled-priority-yield-releases-idle-memory-11-16)).
+
 ### Landing attempts keep worker lifetimes asynchronous
 
 A landing's compiler build, step attempts and contract probes use the candidate

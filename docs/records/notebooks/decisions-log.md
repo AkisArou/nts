@@ -3525,3 +3525,20 @@ parent-observed exit times are diagnostic facts with distinct labels, not a clai
 of exact kernel thread-death time. The synchronous full-check measurement,
 record/apply and benchmark publication contracts are retained rather than making
 the controller's transaction APIs asynchronous in this correction.
+## Pooled priority yield releases idle memory (11-16)
+
+The #808 stalemate retained warm census workers while a non-fitting higher
+landing growth waited. Pausing dispatch did not release their memory; the
+started census still had hundreds of seconds of cases remaining. The common
+feed therefore closes and joins idle worker generations before its priority
+wait, then lazily reconstructs them after normal memory admission and a case
+lease. Active cases finish normally. Exact reserved offers survive startup
+pressure without becoming dispatched cases or losing their queue positions.
+
+Only the reservation's real owner returns promises: standalone jobs trim their
+own idle forecast and retain a restore obligation, inherited handles do not
+mutate their parent, and the gate returns an idle elastic step's historical
+extra beyond its observed charge and the existing margin. The direct benchmark
+compile feed uses the same shared pause/resume boundary. Restart measurements
+and repeated higher arrivals are reported without introducing a new policy,
+changing a bound, or making elapsed time a verdict.

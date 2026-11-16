@@ -379,11 +379,14 @@ test("a worker lost while it waits for a token cancels the wait, and the failed 
   const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "token-wait-loss-control" });
   const gate = await gatePool(1);
   t.after(gate.close);
-  // One token, two workers, two cases that hold it: one worker runs its case
-  // and the other waits for the token with its case reserved.
-  const run = runMemoryWorkers({ paths: ["hold-a", "hold-b"], jobs: 2, memory, workerBytes: 96 * 2 ** 20,
+  // Lazy startup needs a token. Warm the first worker before the second
+  // takes the only token; the first then waits with its next case reserved.
+  const completed:string[]=[];
+  const run = runMemoryWorkers({ paths: ["gate-a", "hold-b", "hold-c"], jobs: 2, memory, workerBytes: 96 * 2 ** 20,
     token: gate.token,
-    args: index => [fixture, directory, String(index)], onRow: () => {} });
+    args: index => [fixture, directory, String(index)], onRow: row => {completed.push(row.path);} });
+  await waitFor('first worker warm with its initial case',()=>existsSync(join(directory,'ready-gate-a')));
+  writeFileSync(join(directory,'go-gate-a'),'go');
   const busy = () => readdirSync(directory).filter(name => name.startsWith("busy-"));
   await waitFor("one worker holding the token and one waiting for it", () => busy().length === 1 && gate.waiting() === 1);
   const waiter = busy()[0] === "busy-0" ? 1 : 0;
@@ -391,7 +394,8 @@ test("a worker lost while it waits for a token cancels the wait, and the failed 
   await assert.rejects(run, new RegExp(`worker ${waiter} exited 19 without an in-flight case; no OOM kill recorded`));
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
   await gate.settled();
-  assert.deepEqual({ request: gate.seen.request, grant: gate.seen.grant, cancel: gate.seen.cancel }, { request: 2, grant: 1, cancel: 1 });
+  assert.deepEqual(completed,['gate-a']);
+  assert.deepEqual({ request: gate.seen.request, grant: gate.seen.grant, release:gate.seen.release,cancel: gate.seen.cancel }, { request: 3, grant: 2,release:2,cancel: 1 });
 });
 
 test("no worker asks for a token once every case is taken", { timeout: TEST_HANG_MS }, async t => {
@@ -704,17 +708,20 @@ compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024*
   assert.match(record.reason, /named-budget-case.*exceeds the outcomes step's 134217728 byte budget/);
 });
 
-test('a yielding resident pool closes its idle cohort, admits the higher growth without withdrawal and resumes exactly once',async t=>{
+test('a yielding resident pool releases successive heads and resumes each remaining case once',async t=>{
  const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
  writeOwnMemory(memoryDirectory,{availableKiB:21.75*2**20,totalKiB:32*2**20});
  t.after(()=>writeOwnMemory(memoryDirectory,{availableKiB:8*2**20,totalKiB:32*2**20}));
  const key='priority-idle-worker',memory=new MemoryRun({budgetBytes:4*2**30,id:key}),gate=await gatePool(1),rows:{path:string;pid:number;waitingInLedger?:number}[]=[],reports:string[]=[];
+ const tick=()=>performance.now();
+ const restarts:number[]=[];let readmittedAt=0;
  assert.equal(writeCostHistory(historyFile(process.env),{jobs:[{key,peak:3*2**30,basis:'worker',width:1}]}),undefined);
  const independent={...fixtureEnvironment(t),...ownMemory};delete independent.NTS_MEMORY_RESERVATION;
  let higher:Awaited<ReturnType<typeof reserve>>|undefined;
- const pool=runMemoryWorkers({paths:['gate-a','probe-ledger'],jobs:1,memory,workerBytes:64*2**20,key,
-  token:gate.token,args:index=>[fixture,directory,String(index)],onRow:row=>rows.push(row),report:line=>{
+ const pool=runMemoryWorkers({paths:['gate-a','gate-b','probe-ledger'],jobs:1,memory,workerBytes:64*2**20,key,
+  token:gate.token,args:index=>[fixture,directory,String(index)],onRow:row=>{rows.push(row);if(row.path==='probe-ledger')restarts.push(tick()-readmittedAt);},report:line=>{
    reports.push(line);
+   if(line.startsWith('case cohort resumed'))readmittedAt=tick();
    if(line.startsWith('case cohort yielded:')){
     const children=readdirSync(join(CGROUP,memory.group),{withFileTypes:true}).filter(entry=>entry.isDirectory());
     assert.deepEqual(children,[],'idle worker slices must be joined before the model returns their physical memory');
@@ -724,21 +731,27 @@ test('a yielding resident pool closes its idle cohort, admits the higher growth 
    }
   }});
  try{
-  await waitFor('first resident case ready',()=>existsSync(join(directory,'ready-gate-a')));
-  higher=await reserve({bytes:12*2**30,what:'higher landing',priority:'landing'},{env:independent});
-  const grown=higher.grow(8*2**30);void grown.catch(()=>{});
-  await waitFor('higher growth waiting behind the resident cohort',()=>readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.grows===higher!.id));
-  writeFileSync(join(directory,'go-gate-a'),'go');
-  await grown;assert.equal(higher.bytes,20*2**30,'the higher request was admitted, not withdrawn');
-  await waitFor('lower job ordinary readmission after idle close',()=>readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.grows&&entry.grows!==higher!.id));
-  assert.equal(rows.length,1,'a new worker cannot boot before normal memory readmission');
-  assert.ok(reports.some(line=>line.startsWith('case cohort yielded:')));
-  higher.release();await higher.closed;
+  for(const [index,path] of ['gate-a','gate-b'].entries()){
+   await waitFor('resident case ready: '+path,()=>existsSync(join(directory,'ready-'+path)));
+   if(index>0)restarts.push(tick()-readmittedAt);
+   writeOwnMemory(memoryDirectory,{availableKiB:21.75*2**20,totalKiB:32*2**20});
+   higher=await reserve({bytes:12*2**30,what:'higher landing '+index,priority:'landing'},{env:independent});
+   const grown=higher.grow(8*2**30);void grown.catch(()=>{});
+   await waitFor('higher growth waiting behind the resident cohort',()=>readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.grows===higher!.id));
+   writeFileSync(join(directory,'go-'+path),'go');
+   await grown;assert.equal(higher.bytes,20*2**30,'the higher request was admitted, not withdrawn');
+   await waitFor('lower job ordinary readmission after idle close',()=>readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.grows&&entry.grows!==higher!.id));
+   assert.equal(rows.length,index+1,'a new worker cannot boot before normal memory readmission');
+   higher.release();await higher.closed;
+  }
   const summary=await pool;await gate.settled();
-  assert.deepEqual(rows.map(row=>row.path),['gate-a','probe-ledger']);assert.notEqual(rows[0]!.pid,rows[1]!.pid,'the remaining case uses a fresh cohort');
-  assert.equal(rows[1]!.waitingInLedger,0);
+  assert.deepEqual(rows.map(row=>row.path),['gate-a','gate-b','probe-ledger']);assert.equal(new Set(rows.map(row=>row.pid)).size,3,'each admitted cohort uses a fresh worker');
+  assert.equal(rows[2]!.waitingInLedger,0);
   assert.equal(summary.pressureRequeues,0);assert.equal(summary.idlePressureRestarts,0);assert.equal(summary.isolatedReplays,0);
-  assert.equal(gate.seen.grant,2);assert.equal(gate.seen.release,2);assert.equal(existsSync(join(CGROUP,memory.group)),false);
+  assert.equal(reports.filter(line=>line.startsWith('case cohort yielded:')).length,2);
+  assert.equal(reports.filter(line=>line.startsWith('case cohort resumed')).length,2);
+  assert.equal(gate.seen.grant,3);assert.equal(gate.seen.release,3);assert.equal(existsSync(join(CGROUP,memory.group)),false);
+  t.diagnostic('lightweight worker restart after ordinary readmission: '+JSON.stringify({wallMs:restarts,cumulativeWallMs:restarts.reduce((a,b)=>a+b,0),scope:'real private worker; no SDK startup; readings do not decide the verdict'}));
  }finally{higher?.release();await higher?.closed;memory.close();await memory.closed;await pool.catch(()=>{});await gate.close();}
 });
 
