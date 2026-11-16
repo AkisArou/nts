@@ -14,6 +14,7 @@
         "tooling/bench/build-records.ts",
         "tooling/bench/comparator-pins.test.ts",
         "tooling/bench/comparator-pins.ts",
+        "tooling/bench/compile-feed-yield.test.ts",
         "tooling/bench/compile-outcome.ts",
         "tooling/bench/compile-producer.test.ts",
         "tooling/bench/compile-producer.ts",
@@ -570,6 +571,8 @@
         "tooling/gate/case-admission.test.ts",
         "tooling/gate/case-bound.test.ts",
         "tooling/gate/case-bound.ts",
+        "tooling/gate/case-cohort.test.ts",
+        "tooling/gate/case-cohort.ts",
         "tooling/gate/case-context.ts",
         "tooling/gate/case-costs.test.ts",
         "tooling/gate/case-costs.ts",
@@ -635,6 +638,7 @@
         "tooling/gate/environment.test.ts",
         "tooling/gate/environment.ts",
         "tooling/gate/exit.test.ts",
+        "tooling/gate/feed-yield.test.ts",
         "tooling/gate/file-input-observer-session.ts",
         "tooling/gate/file-input-observer.test.ts",
         "tooling/gate/file-input-observer.ts",
@@ -667,6 +671,7 @@
         "tooling/gate/integrity.test.mjs",
         "tooling/gate/job-basis.test.ts",
         "tooling/gate/job-live-memory.test.ts",
+        "tooling/gate/job-yield.test.ts",
         "tooling/gate/jvm-flags.test.ts",
         "tooling/gate/jvm-launcher-audit.test.ts",
         "tooling/gate/legacy-oracle-root.test.ts",
@@ -712,6 +717,8 @@
         "tooling/gate/population-inputs.test.ts",
         "tooling/gate/precise-changes.test.ts",
         "tooling/gate/precise-changes.ts",
+        "tooling/gate/process-group.test.ts",
+        "tooling/gate/process-group.ts",
         "tooling/gate/project-dependencies.test.ts",
         "tooling/gate/project-dependencies.ts",
         "tooling/gate/project-environment.ts",
@@ -929,6 +936,7 @@
         "tooling/landing/candidate-environment.ts",
         "tooling/landing/check.test.ts",
         "tooling/landing/check.ts",
+        "tooling/landing/gate-drain.ts",
         "tooling/landing/git.test.ts",
         "tooling/landing/git.ts",
         "tooling/landing/layout.ts",
@@ -944,6 +952,7 @@
         "tooling/landing/run-fixture.ts",
         "tooling/landing/run-holds.test.ts",
         "tooling/landing/run-steps.test.ts",
+        "tooling/landing/run-withdrawal.test.ts",
         "tooling/landing/run.ts",
         "tooling/landing/scratch-repo.ts",
         "tooling/landing/selection.test.ts",
@@ -957,6 +966,7 @@
         "tooling/landing/verdict-fixture.ts",
         "tooling/landing/verdict.test.ts",
         "tooling/landing/verdict.ts",
+        "tooling/landing/withdrawal-watch.ts",
         "tooling/licenses/benchmark-inputs.ts",
         "tooling/licenses/licenses.ts",
         "tooling/migrate/corpora.ts",
@@ -1280,7 +1290,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:61c0654b6ae0bbe917bbe71b5a738e30945d54fab60d50fee5500e312aa59ce9"
+      "source": "sha256:6ea2911a0cd209b95d2866e8facdb1a3a6a7202f8487caf8eb61f357a2b29f01"
     }
   }
 }
