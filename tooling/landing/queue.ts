@@ -56,7 +56,8 @@ const files = (dir: string) => { try { return readdirSync(dir).filter(name => na
 /** Only this reason means a requested withdrawal; a broken watcher is an
  * instrument failure and must never authorize a withdrawn answer. */
 export class WithdrawalRequested extends Error {
-  constructor(readonly id:string){super(`withdrawal requested for ${id}`);}
+  readonly id:string;
+  constructor(id:string){super(`withdrawal requested for ${id}`);this.id=id;}
 }
 
 /** One service-owned watch, armed before taking any entry. Subscribing then
@@ -66,7 +67,10 @@ export class WithdrawalWatch {
   private readonly entries=new Map<string,{controller:AbortController;marker?:string;generation:number;seen:number;wake?:()=>void}>();
   private failure:Error|undefined;
   private readonly watcher:ReturnType<typeof watch>;
-  constructor(private readonly queue:Queue,private readonly onFailure:(error:Error)=>void=()=>{}){
+  private readonly queue:Queue;
+  private readonly onFailure:(error:Error)=>void;
+  constructor(queue:Queue,onFailure:(error:Error)=>void=()=>{}){
+    this.queue=queue;this.onFailure=onFailure;
     try{this.watcher=watch(join(queue.home,'withdraw'),()=>{try{this.refresh();}catch(error){this.failed(error);}});}
     catch(error){throw new Error(`landing withdrawal watcher could not start in ${join(queue.home,'withdraw')}: ${String(error)}`,{cause:error});}
     this.watcher.on('error',error=>this.failed(error));

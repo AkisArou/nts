@@ -209,7 +209,7 @@ test('an unproved cancellation holds the service and resumes only when its retai
     return {state:'cancelled',message:'scope certified empty',run:options.run,wall_s:1,steps:[],pending:[]};
   };
   const pending=drain(f.config);await started;f.queue.withdraw(ea.id);await retained;
-  const model=landingStatus(f.s.root,f.config.home,f.pool.home,Date.parse('2026-11-16T00:00:00Z'),{statusTrees:()=>[]});
+  const model=landingStatus(f.s.root,f.config.home,join(f.s.dir,'pool'),Date.parse('2026-11-16T00:00:00Z'),{statusTrees:()=>[]});
   assert.equal(model.service.state,'held');assert.equal(model.service.running,true);
   assert.equal(model.service.run,f.queue.checking()?.run);
   assert.match(model.service.message!,new RegExp(`service held: cancellation of ${ea.id} could not prove its drain: owned closer`));

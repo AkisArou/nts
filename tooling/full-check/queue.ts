@@ -7,8 +7,8 @@
 import { LANDING_HOME, Queue, submit, type State } from "../landing/queue.ts";
 
 export type SubmitOptions = { first?: boolean };
-/** What withdrawing did: answered at once while waiting or held, asked of the check running it, or nothing queued. */
-export type Withdrawal = "withdrawn" | "requested" | "unknown";
+/** The landing owner's result, including publication already past withdrawal. */
+export type Withdrawal = ReturnType<Queue['withdraw']>;
 /** The landing check's answer to a commit: what came of it, when, its message, and main's tip once it landed. */
 export type LandingAnswer = { state: State; at: string; message: string; tip?: string };
 export type LandingQueue = {
