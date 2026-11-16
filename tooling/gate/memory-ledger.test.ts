@@ -82,6 +82,33 @@ test("the landing check outranks agents' work, which outranks the full check, wh
   assert.deepEqual(fits(7, [full, agent, landing]), ["agent", "full", "landing"]);
 });
 
+// #804's supplied ledger state: the full check was already waiting to grow
+// when the agent's higher-priority growth arrived. Both retained live work.
+const growthStalemate = {
+  room: 2_513_064_512,
+  higher: { ...q("higher-growth", 3, 4), grows: "higher-owner" },
+  lower: { ...q("lower-growth", 2, 3, "full-check"), grows: "lower-owner" },
+  higherReserved: 18_253_611_008, higherUsed: 1_540_480,
+  lowerReserved: 4_218_421_248,
+};
+
+test("the recorded lower growth fits alone, and idle release preserves the higher growth's deficit", () => {
+  const { room, higher, lower, higherReserved, higherUsed } = growthStalemate;
+  assert.deepEqual([...admissible(room, [lower])], [lower.id]);
+  const released = higherReserved - higherUsed;
+  assert.equal(higher.bytes - room, 708_160_960);
+  assert.equal(higher.bytes + released - (room + released), higher.bytes - room);
+  assert.deepEqual([...admissible(room + released, [{ ...higher, bytes: higher.bytes + released }])], [],
+    "giving back idle bytes asks for the same bytes again and does not admit the higher waiter");
+});
+
+test("an unfittable higher growth lets the recorded in-flight lower growth finish, then takes its turn", () => {
+  const { room, higher, lower, lowerReserved } = growthStalemate;
+  assert.deepEqual([...admissible(room, [higher, lower])], [lower.id],
+    "the current prefix rule blocks both owners while each waits for the other to drain");
+  assert.deepEqual([...admissible(room + lowerReserved, [higher])], [higher.id]);
+});
+
 type Fixture = {
   dir: string; meminfo: string; env: NodeJS.ProcessEnv;
   /** The fixture's own scheduling history, where its jobs' peaks go. */
