@@ -3477,3 +3477,9 @@ shrink returns them first. They cannot be lent to fresh fixed or live borrowers;
 inherited work measured in the same reservation may use them. Observed physical
 use still subtracts once. The marker clears at zero. No capacity, floor, step
 bound or width changes, and #800's next-turn scheduling remains.
+
+The runner also excludes outstanding drained bytes from capacity offered to new
+starts, independently of a priority-yield signal. Otherwise an equal-rank owner
+could spend a drain grant on a pending step before its running want or token
+consumed it. Running wants and tokens retain the full reservation; an empty
+cohort returns its drain grant before scheduling a successor on the next turn.

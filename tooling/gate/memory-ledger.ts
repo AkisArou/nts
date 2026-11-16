@@ -706,6 +706,8 @@ export type Reservation = {
   env: Readonly<Record<string, string>>;
   /** Its fixed forecast, or an unmeasured job's live use and margin. */
   readonly bytes: number;
+  /** Outstanding grant protected for already-started work, returned first by shrink. */
+  readonly drained: number;
   /**
    * Waits until `bytes` more may start, ordinarily as a new request of `bytes`
    * at this reservation's priority and admission order would, then holds them in this
@@ -861,6 +863,7 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
     id: entry.id, ledger: dir, inherited: true, closed:Promise.resolve(), env: reservationEnv(entry.id, dir, priority),
     active: () => admittedEntry(dir, entry.id) !== null,
     get bytes() { return held; },
+    get drained() { return Math.min(held, admittedEntry(dir, entry.id)?.drained ?? 0); },
     grow: async more => { amount(more, what, "grows by"); held += more; },
     shrink: async less => {
       amount(less, what, "gives back");
@@ -1175,6 +1178,7 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
 function holding(self: LedgerEntry, context: Context): Reservation {
   const { dir } = context;
   let bytes = self.bytes;
+  let drained = self.drained ?? 0;
   let released = false;
   let closed=Promise.resolve();
   let growing: { id: string; withdraw: AbortController } | null = null;
@@ -1182,7 +1186,6 @@ function holding(self: LedgerEntry, context: Context): Reservation {
   // own part first, then what it drew on another reservation.
   const rewrite = () => rewriteEntry(dir, self.id, entry => {
     if(released)return null;
-    const drained = Math.max(0, (entry.drained ?? 0) - Math.max(0, entry.bytes - bytes));
     return { ...entry, bytes, drained: drained || undefined,
       ...(entry.drawn === undefined ? {} : { drawn: Math.min(entry.drawn, bytes) }) };
   }, context.every);
@@ -1190,6 +1193,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
     id: self.id, ledger: dir, inherited: false, get closed(){return closed;}, env: reservationEnv(self.id, dir, reservationOrder(self, liveReservations(dir)).priority),
     active: () => !released && admittedEntry(dir, self.id) !== null,
     get bytes() { return self.liveUse ? peakReservation([Math.max(1, context.used(self, processTable, NONE))]) : bytes; },
+    get drained() { return drained; },
     async grow(more, { signal, draining = false }: { signal?: AbortSignal; draining?: boolean } = {}) {
       amount(more, self.what, "grows by");
       if (typeof draining !== 'boolean') throw new TypeError(`memory: ${self.what}'s draining growth option must be boolean`);
@@ -1212,7 +1216,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
           () => `waits to grow by ${gib(more)} to ${gib(bytes + more)}`,
           // With the entry's own write, so no shrink in between can write the
           // entry without these bytes.
-          () => { bytes += more; });
+          () => { bytes += more; if(draining)drained += more; });
       } catch (error) {
         throw withdraw.signal.aborted ? withdraw.signal.reason : error;
       } finally { growing = null; }
@@ -1226,9 +1230,10 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       if (released) return;
       if (self.liveUse) return;
       if (less >= bytes) throw new RangeError(`memory: ${self.what} holds ${gib(bytes)}, so it cannot give back ${gib(less)}; release it instead`);
-      bytes -= less;
+      const returned = Math.min(drained, less);
+      bytes -= less; drained -= returned;
       try { await rewrite(); }
-      catch (error) { bytes += less; throw error; }
+      catch (error) { bytes += less; drained += returned; throw error; }
     },
     release() {
       if (released) return;
@@ -1489,6 +1494,7 @@ export async function reserveJob(request: JobRequest,
     id: held.id, ledger: held.ledger, inherited: false, env: held.env,
     active: () => held.active(),
     get bytes() { return held.bytes; },
+    get drained() { return held.drained; },
     grow: (bytes, growOptions) => held.grow(bytes, growOptions),
     shrink: bytes => held.shrink(bytes),
     outranked: () => held.outranked(),

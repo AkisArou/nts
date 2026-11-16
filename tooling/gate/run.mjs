@@ -653,7 +653,7 @@ function admit(step, u) {
   if (slots === 0) return { slots: 0 };
   // Memory is granted before slots are used, rider or not: the step's whole
   // reservation within the run's.
-  const bytes = stepBytes(step, slots), short = u.bytes + bytes - reserved();
+  const bytes = stepBytes(step, slots), short = u.bytes + bytes - reservedForStarts();
   return short > 0 ? { slots: 0, short, bytes } : { slots, rider };
 }
 
@@ -953,6 +953,9 @@ const memoryRecord = { peak_bytes: 0, waited_s: 0, growths: 0, withdrawn: 0, shr
 // The ledger's last answer to `outranked`, when it was read, and since when it has been yes.
 let outrankedNow = false, outrankedRead = 0, outrankedSince = 0, outrankedLook = null;
 const reserved = () => reservation?.bytes ?? 0;
+// Draining grants belong to running work, even when an equal-rank waiter
+// makes no priority-yield signal. New starts use only the ordinary promise.
+const reservedForStarts = () => Math.max(0, reserved() - (reservation?.drained ?? 0));
 
 // What a waiting token lacks in the reservation, beside what runs and what a
 // waiting step has claimed: the most among the steps whose workers wait while
@@ -1128,6 +1131,13 @@ async function reserveMemory() {
 // the already-started cohort's demand and may grow only to let it drain.
 function adjustMemory() {
   if (stopping || summaryWritten || !reservation) return;
+  if (running.size === 0 && reservation.drained > 0) {
+    // Nothing in the finishing cohort remains. Return its protected grant
+    // before a pending step can become new draining work; re-enter next turn.
+    memoryRecord.shrinks++;
+    reservation.shrink(reservation.drained).then(() => setImmediate(schedule), error => stop(`memory: cannot return drained grant: ${error.message}`));
+    return;
+  }
   const u = used(), yielding = outranked();
   const wanted = [...running.values()].reduce((sum, r) => sum + (r.draining ? 0 : r.want), 0);
   const drainTarget = Math.max(u.bytes + wanted, tokenDemand(u, 0, 0));
@@ -1182,6 +1192,7 @@ function schedule() {
   // A priority recheck can fire while the oracle seal is being captured.
   // The empty queue during startup does not mean that every step has drained.
   if (preparing || stopping || summaryWritten) return;
+  if (running.size === 0 && (reservation?.drained ?? 0) > 0) { adjustMemory(); return; }
   const yielding = outranked();
   let progressed = true;
   while (progressed) {
@@ -1212,7 +1223,7 @@ function schedule() {
       const u = used();
       const granted = admit(step, u);
       if (granted.slots === 0) {
-        if (granted.short > 0 && !memoryWanted) memoryWanted = u.bytes + granted.bytes;
+        if (granted.short > 0 && !memoryWanted) memoryWanted = reserved() + granted.short;
         // The first step in order that waits for slots or memory has tokens
         // kept for it as elastic workers give them back, or elastic steps --
         // which ask again the moment a case ends -- would take each one as it
@@ -1224,7 +1235,7 @@ function schedule() {
         if (!step.elastic && !withhold && !(step.lock && u.locks.has(step.lock))) {
           const fixed = used(false), bytes = stepBytes(step);
           withhold = fixedReservation(step, bytes, fixed, { slots: SLOTS, bytes: capacity, fe: FRONTENDS });
-          withholdBytes = withhold && fixed.bytes + bytes <= reserved() ? bytes : 0;
+          withholdBytes = withhold && fixed.bytes + bytes <= reservedForStarts() ? bytes : 0;
         }
         continue;
       }

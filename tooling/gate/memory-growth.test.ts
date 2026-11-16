@@ -19,16 +19,18 @@ function policy(name='adjustMemory'){
     const facts=new SourceFacts('tooling/gate/run.mjs',source,lease.sourceFile);
     const node=facts.ofKind(facts.ast.SyntaxKind.FunctionDeclaration).find(node=>facts.ast.isFunctionDeclaration(node)&&node.name?.text===name);
     if(node)return facts.code(node);
+    const value=facts.ofKind(facts.ast.SyntaxKind.VariableDeclaration).find(node=>facts.ast.isVariableDeclaration(node)&&facts.ast.isIdentifier(node.name)&&node.name.text===name);
+    if(value&&facts.ast.isVariableDeclaration(value)&&value.initializer)return facts.code(value.initializer);
     const field=facts.ofKind(facts.ast.SyntaxKind.PropertyAssignment).find(node=>facts.ast.isPropertyAssignment(node)&&facts.ast.isIdentifier(node.name)&&node.name.text===name);
     assert.ok(field&&facts.ast.isPropertyAssignment(field));return facts.code(field.initializer);
   }finally{lease.dispose();api.close();}
 }
 
 function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,deferAll=false}={}){
-  let allocated=initial,active=0,maximumActive=0,reschedules=0;
+  let allocated=initial,drained=0,active=0,maximumActive=0,reschedules=0;
   const calls:number[]=[],kinds:boolean[]=[],cancelled:number[]=[],reports:string[]=[];
   const closed=Promise.withResolvers<void>();
-  const pending:{bytes:number;answer:ReturnType<typeof Promise.withResolvers<void>>;done:boolean}[]=[];
+  const pending:{bytes:number;draining:boolean;answer:ReturnType<typeof Promise.withResolvers<void>>;done:boolean}[]=[];
   void closed.promise.catch(()=>{});
   const state={
     stopping:false,summaryWritten:false,yielding:false,withholdBytes:0,memoryWanted:21*GiB,
@@ -41,20 +43,21 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
     stop:(message:string):void=>{state.stopping=true;closed.reject(Error(message));},noteSize:()=>{},schedule:():void=>{},
     setImmediate:(callback:()=>void):NodeJS.Immediate=>{reschedules++;return setImmediate(callback);},
     reservation:{
-      shrink:async(bytes:number)=>{allocated-=bytes;},
+      get drained(){return drained;},
+      shrink:async(bytes:number)=>{allocated-=bytes;drained=Math.max(0,drained-bytes);},
       grow:(bytes:number,{signal,draining}:{signal:AbortSignal;draining:boolean}):Promise<void>=>{
         if(calls.length>=8)return Promise.reject(Error('controlled ledger operation loop'));
         assert.equal(active,0,'the old request settles before replacement');active++;maximumActive=Math.max(maximumActive,active);calls.push(bytes);kinds.push(draining);
         const answer=Promise.withResolvers<void>();
         if(calls.length===1||deferAll){
-          const flight={bytes,answer,done:false};pending.push(flight);
+          const flight={bytes,draining,answer,done:false};pending.push(flight);
           signal.addEventListener('abort',()=>{
             if(flight.done)return;flight.done=true;
             cancelled.push(bytes);active--;
-            if(grantAtCancellation){allocated+=bytes;answer.resolve();}
+            if(grantAtCancellation){allocated+=bytes;if(draining)drained+=bytes;answer.resolve();}
             else answer.reject(Error('controlled cancellation'));
           },{once:true});
-        }else{allocated+=bytes;active--;answer.resolve();}
+        }else{allocated+=bytes;if(draining)drained+=bytes;active--;answer.resolve();}
         return answer.promise;
       },
     },
@@ -63,7 +66,7 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
   state.schedule=()=>{if(state.stopping)return;adjust();if(!state.growth)closed.resolve();};
   return {state,adjust,closed:closed.promise,calls,kinds,cancelled,reports,
     allocated:()=>allocated,maximumActive:()=>maximumActive,reschedules:()=>reschedules,
-    grantFirst(){const first=pending.find(flight=>!flight.done);assert.ok(first);first.done=true;allocated+=first.bytes;active--;first.answer.resolve();}};
+    grantFirst(){const first=pending.find(flight=>!flight.done);assert.ok(first);first.done=true;allocated+=first.bytes;if(first.draining)drained+=first.bytes;active--;first.answer.resolve();}};
 }
 
 test('an excessive ticket settles before its replacement can request the current gap',async()=>{
@@ -135,7 +138,7 @@ test('yielding joins a mixed ticket before replacing it with a drain-only growth
 test('yielding forbids a new step while keeping the started cohort eligible for case leases',()=>{
   const running=new Map([['started',{draining:false}]]),calls:string[]=[];
   const row={name:'new',fe:false};
-  const state={preparing:false,stopping:false,summaryWritten:false,outranked:()=>true,outrankedNow:true,
+  const state={preparing:false,stopping:false,summaryWritten:false,reservation:{drained:0},outranked:()=>true,outrankedNow:true,
     pending:['new'],running,BY_NAME:new Map([['new',row],['started',{name:'started',fe:false}]]),
     withhold:0,withholdBytes:0,memoryWanted:0,blockedBy:()=>null,preflight:()=>null,
     used:()=>({bytes:0,slots:0,fe:0,locks:new Set()}),admit:()=>({slots:1,rider:false}),
@@ -148,6 +151,49 @@ test('yielding forbids a new step while keeping the started cohort eligible for 
   assert.equal(eligible('new'),false);assert.equal(eligible('started'),true);
   running.get('started')!.draining=true;assert.equal(eligible('started'),false);
   state.outranked=()=>false;schedule();assert.deepEqual(calls,['new']);
+});
+
+async function equalRankDrain(){
+  const run=controlledGrowth({allocated:4*GiB});
+  run.state.memoryWanted=0;run.state.used=()=>({bytes:4*GiB});
+  run.state.running.set('started',{draining:false,want:2*GiB});
+  run.adjust();run.grantFirst();await run.closed;
+  assert.deepEqual(run.kinds,[true]);assert.equal(run.state.reservation.drained,2*GiB);
+  let usedBytes=4*GiB;
+  const starts:string[]=[],row={name:'pending',slots:1,min:1,fe:false,elastic:false};
+  const state={...run.state,preparing:false,pending:['pending'],withhold:0,
+    BY_NAME:new Map([['pending',row]]),SLOTS:24,FRONTENDS:4,ELASTIC_CAP:6,tokenAddr:null,
+    used:()=>({bytes:usedBytes,slots:1,fe:0,locks:new Set(),elastic:0,riding:0}),
+    admit:(_step:typeof row,_u:unknown):{slots:number;short?:number;bytes?:number;rider?:boolean}=>({slots:0}),
+    reservedForStarts:()=>0,stepBytes:()=>2*GiB,tiny:()=>false,
+    blockedBy:()=>null,preflight:()=>null,fixedReservation:()=>0,
+    start:(step:typeof row):void=>{starts.push(step.name);state.running.set(step.name,{draining:false,want:0});},
+    grant:()=>{},adjustMemory:()=>{},done:()=>{},lookAgain:()=>{},
+  };
+  const context=createContext(state);
+  state.admit=runInContext('('+policy('admit')+')',context) as typeof state.admit;
+  state.reservedForStarts=runInContext('('+policy('reservedForStarts')+')',context) as typeof state.reservedForStarts;
+  const schedule=runInContext('('+policy('schedule')+')',context) as ()=>void;
+  return {run,state,starts,schedule,clearCohort(){state.running.clear();usedBytes=0;}};
+}
+
+test('an equal-rank drain grant cannot fund a new pending step before its running want consumes it',async()=>{
+  const {run,state,starts,schedule}=await equalRankDrain();
+  assert.equal(state.outranked(),false,'equal-rank work has no higher-priority yield');
+  schedule();assert.deepEqual(starts,[]);assert.deepEqual(state.pending,['pending']);
+  assert.equal(state.memoryWanted,8*GiB,'new work must ask for ordinary capacity beyond the protected grant');
+  assert.equal(run.allocated(),6*GiB);assert.equal(state.reservedForStarts(),4*GiB);
+});
+
+test('an empty cohort returns its drain grant before scheduling a new cohort on the next turn',async()=>{
+  const {run,state,starts,schedule,clearCohort}=await equalRankDrain(),resumed=Promise.withResolvers<void>();
+  clearCohort();state.adjustMemory=run.adjust;
+  run.state.schedule=()=>{schedule();resumed.resolve();};
+  schedule();assert.deepEqual(starts,[],'return completion cannot launch a new cohort synchronously');
+  assert.equal(run.state.reservation.drained,0);assert.equal(run.allocated(),4*GiB);
+  await resumed.promise;
+  assert.deepEqual(starts,['pending']);assert.equal(run.reschedules(),2);
+  assert.deepEqual(run.reports,[]);
 });
 
 test('token demand comes only from live started steps and excludes pending-step withhold when draining',()=>{

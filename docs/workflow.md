@@ -1027,7 +1027,10 @@ the tooling strict checker owns the source's type checking.
   margin remain promised to that landing. Independent new jobs retain FIFO.
   A non-fitting head permits fitting draining growth of admitted owners
   at equal or lower priority. The runner declares only its already-started finite step cohort;
-  it starts no new steps while yielding. Draining demand excludes pending-step
+  it starts no new steps while yielding. New starts use reserved bytes minus
+  the outstanding drained amount, including at equal priority. Running wants
+  and tokens retain full capacity. An empty cohort returns its drain grant
+  before pending work can start on the next event-loop turn. Draining demand excludes pending-step
   reservations and withheld resources. Outstanding drained bytes remain a
   full promise for higher decisions, survive ordinary growth, and return first
   on shrink. New borrowers cannot draw those protected bytes.
@@ -1304,7 +1307,10 @@ the first node task.
   backfills only explicitly draining growth of admitted owners at equal or lower priority, in its
   existing order and room. New admissions and ordinary growth stay queued.
   Yielding runners keep only their live started cohort eligible for case
-  leases and growth, with no pending-step demand. A mixed ticket is joined
+  leases and growth, with no pending-step demand. New starts cannot spend
+  outstanding drained bytes even without a higher-priority yield; an empty
+  cohort returns them before scheduling its successor on the next turn.
+  A mixed ticket is joined
   before its drain-only replacement. Drained bytes are protected from the
   priority discount and new ancestor draws until shrink returns them; observed
   consumption is still counted once. The head retains its place, and every
