@@ -943,6 +943,8 @@ function limitOf(name, r) {
   return r.elastic ? Math.max(heldBytes(name, r), tokenBytes(step)) + r.extra : grantOf(name, r);
 }
 let growth = null; // { bytes, draining, controller, withdrawn } while a growth waits
+/** @type {Promise<void> | null} */
+let drainReturn = null;
 // What the run must hold for the first step that waits only for memory to
 // start beside what runs (schedule); 0 when none waits.
 let memoryWanted = 0;
@@ -961,6 +963,7 @@ const reservedForStarts = () => Math.max(0, reserved() - (reservation?.drained ?
 // waiting step has claimed: the most among the steps whose workers wait while
 // a slot is free for them, each for its oldest request -- its size, else its
 // step's token share.
+/** @param {ReturnType<typeof used>} u */
 function tokenDemand(u, withheld = withholdBytes, withheldSlots = withhold) {
   if (!tokenAddr || SLOTS - u.slots - withheldSlots <= 0) return u.bytes;
   let target = u.bytes;
@@ -975,6 +978,7 @@ function tokenDemand(u, withheld = withholdBytes, withheldSlots = withhold) {
   }
   return target;
 }
+/** @param {ReturnType<typeof used>} u */
 const tokenShort = u => Math.max(0, tokenDemand(u) - reserved());
 
 // The run's memory as the case costs record it: a token waits for memory
@@ -1130,12 +1134,18 @@ async function reserveMemory() {
 // needs any more, give back slack beyond two blocks. Yielding retains only
 // the already-started cohort's demand and may grow only to let it drain.
 function adjustMemory() {
-  if (stopping || summaryWritten || !reservation) return;
+  if (stopping || summaryWritten || !reservation || drainReturn) return;
   if (running.size === 0 && reservation.drained > 0) {
     // Nothing in the finishing cohort remains. Return its protected grant
     // before a pending step can become new draining work; re-enter next turn.
     memoryRecord.shrinks++;
-    reservation.shrink(reservation.drained).then(() => setImmediate(schedule), error => stop(`memory: cannot return drained grant: ${error.message}`));
+    const owner = reservation, bytes = owner.drained;
+    // Publish the flight before shrink can change the local amount. Every
+    // competing scheduler joins it until the locked rewrite and next turn.
+    drainReturn = Promise.resolve().then(() => owner.shrink(bytes));
+    drainReturn.then(() => setImmediate(() => { drainReturn = null; schedule(); }), error => {
+      drainReturn = null; stop(`memory: cannot return drained grant: ${String(error)}`);
+    });
     return;
   }
   const u = used(), yielding = outranked();
@@ -1191,7 +1201,7 @@ function adjustMemory() {
 function schedule() {
   // A priority recheck can fire while the oracle seal is being captured.
   // The empty queue during startup does not mean that every step has drained.
-  if (preparing || stopping || summaryWritten) return;
+  if (preparing || stopping || summaryWritten || drainReturn) return;
   if (running.size === 0 && (reservation?.drained ?? 0) > 0) { adjustMemory(); return; }
   const yielding = outranked();
   let progressed = true;
@@ -1223,7 +1233,8 @@ function schedule() {
       const u = used();
       const granted = admit(step, u);
       if (granted.slots === 0) {
-        if (granted.short > 0 && !memoryWanted) memoryWanted = reserved() + granted.short;
+        const short = granted.short ?? 0;
+        if (short > 0 && !memoryWanted) memoryWanted = reserved() + short;
         // The first step in order that waits for slots or memory has tokens
         // kept for it as elastic workers give them back, or elastic steps --
         // which ask again the moment a case ends -- would take each one as it

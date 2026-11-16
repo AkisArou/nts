@@ -33,7 +33,7 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
   const pending:{bytes:number;draining:boolean;answer:ReturnType<typeof Promise.withResolvers<void>>;done:boolean}[]=[];
   void closed.promise.catch(()=>{});
   const state={
-    stopping:false,summaryWritten:false,yielding:false,withholdBytes:0,memoryWanted:21*GiB,
+    stopping:false,summaryWritten:false,yielding:false,drainReturn:null as Promise<void>|null,withholdBytes:0,memoryWanted:21*GiB,
     capacity:32*GiB,BLOCK:GiB,running:new Map<string,{draining:boolean;want:number}>(),growth:null as null|{bytes:number;draining:boolean;controller:AbortController;withdrawn:boolean},
     memoryRecord:{shrinks:0,growths:0,withdrawn:0,waited_s:0},
     used:()=>({bytes:0}),outranked:():boolean=>state.yielding,reserved:()=>allocated,tokenShort:()=>0,
@@ -138,7 +138,7 @@ test('yielding joins a mixed ticket before replacing it with a drain-only growth
 test('yielding forbids a new step while keeping the started cohort eligible for case leases',()=>{
   const running=new Map([['started',{draining:false}]]),calls:string[]=[];
   const row={name:'new',fe:false};
-  const state={preparing:false,stopping:false,summaryWritten:false,reservation:{drained:0},outranked:()=>true,outrankedNow:true,
+  const state={preparing:false,stopping:false,summaryWritten:false,drainReturn:null,reservation:{drained:0},outranked:()=>true,outrankedNow:true,
     pending:['new'],running,BY_NAME:new Map([['new',row],['started',{name:'started',fe:false}]]),
     withhold:0,withholdBytes:0,memoryWanted:0,blockedBy:()=>null,preflight:()=>null,
     used:()=>({bytes:0,slots:0,fe:0,locks:new Set()}),admit:()=>({slots:1,rider:false}),
@@ -162,6 +162,7 @@ async function equalRankDrain(){
   let usedBytes=4*GiB;
   const starts:string[]=[],row={name:'pending',slots:1,min:1,fe:false,elastic:false};
   const state={...run.state,preparing:false,pending:['pending'],withhold:0,
+    get drainReturn(){return run.state.drainReturn;},set drainReturn(value:Promise<void>|null){run.state.drainReturn=value;},
     BY_NAME:new Map([['pending',row]]),SLOTS:24,FRONTENDS:4,ELASTIC_CAP:6,tokenAddr:null,
     used:()=>({bytes:usedBytes,slots:1,fe:0,locks:new Set(),elastic:0,riding:0}),
     admit:(_step:typeof row,_u:unknown):{slots:number;short?:number;bytes?:number;rider?:boolean}=>({slots:0}),
@@ -185,14 +186,25 @@ test('an equal-rank drain grant cannot fund a new pending step before its runnin
   assert.equal(run.allocated(),6*GiB);assert.equal(state.reservedForStarts(),4*GiB);
 });
 
-test('an empty cohort returns its drain grant before scheduling a new cohort on the next turn',async()=>{
+test('an unresolved cohort return owns repeated scheduling until its rewrite and the next turn complete',async()=>{
   const {run,state,starts,schedule,clearCohort}=await equalRankDrain(),resumed=Promise.withResolvers<void>();
+  const writing=Promise.withResolvers<void>(),persisted=Promise.withResolvers<void>();
+  const shrink=run.state.reservation.shrink;let returns=0;
+  run.state.reservation.shrink=(bytes:number)=>{
+    returns++;const changed=shrink(bytes);writing.resolve();return changed.then(()=>persisted.promise);
+  };
   clearCohort();state.adjustMemory=run.adjust;
   run.state.schedule=()=>{schedule();resumed.resolve();};
   schedule();assert.deepEqual(starts,[],'return completion cannot launch a new cohort synchronously');
+  assert.ok(state.drainReturn);await writing.promise;
   assert.equal(run.state.reservation.drained,0);assert.equal(run.allocated(),4*GiB);
+  schedule();run.adjust();
+  assert.equal(returns,1,'all competing schedule and adjustment calls join the existing return');
+  assert.deepEqual(starts,[],'a local zero marker does not prove the locked rewrite settled');
+  persisted.resolve();
   await resumed.promise;
   assert.deepEqual(starts,['pending']);assert.equal(run.reschedules(),2);
+  assert.equal(state.drainReturn,null);
   assert.deepEqual(run.reports,[]);
 });
 
