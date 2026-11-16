@@ -1,5 +1,6 @@
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {fixtureInput} from '../gate/reader-inputs/main.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 // The records run records tests/outcomes through record-pending.ts in a
 // canonical environment of its own, as the full check's records unit runs it.
@@ -48,10 +49,12 @@ function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
   mkdirSync(join(root,'benchmarks/cases'),{recursive:true});
   const otherData=['runtime/node','runtime/web-platform','tests/compile-time'];
   for(const area of otherData)mkdirSync(join(root,area),{recursive:true});
-  copyModuleClosure(['tooling/records/outcomes-recorder-fixture.ts'],root,{dataNamespaces:{
+  copyModuleClosure(['tooling/records/outcomes-recorder-fixture.ts','tooling/gate/oracle-entry.ts',
+    fixtureInput(new URL('../tsconfig.json',import.meta.url),{dataNamespaces:{}})],root,{dataNamespaces:{
     'tests/outcomes':'one pending outcome fixture',
     'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture',
     ...Object.fromEntries(otherData.map(area=>[area,'pending-outcome records fixture']))}});
+  assert.deepEqual(readFileSync(join(root,'tooling/tsconfig.json')),readFileSync(join(SOURCE,'tooling/tsconfig.json')),'the fixture uses unchanged project options over its staged modules');
   renameSync(join(root,'tooling/records/outcomes-recorder-fixture.ts'),join(root,'tooling/records/record-pending.ts'));
   const stagedFamilies=readdirSync(join(root,'tooling'),{recursive:true,withFileTypes:true}).filter(entry=>entry.isFile()&&entry.name.endsWith('-record-family.ts')).map(entry=>join(entry.parentPath,entry.name).slice(root.length+1)).sort();
   assert.deepEqual(stagedFamilies,['tooling/conformance/outcomes-record-family.ts'],'the outcome fixture stages only its own family');
