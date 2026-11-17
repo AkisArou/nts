@@ -253,3 +253,45 @@ fn dynamic_import_calls_the_import_keyword() {
         "an `import(\"./lazy.ts\")` is typed Promise<namespace of `lazy`>"
     );
 }
+
+/// An implementation behind overloads declares its own signature, and the snapshot
+/// says what it is: its type is the overload set, whose first signature is the
+/// first overload's, so reading the implementation through its type gave it the
+/// generic overload's type parameters.
+#[test]
+fn an_overloads_implementation_keeps_its_own_signature() {
+    use nts_semantic_schema::{NodeKind, syntax};
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/programs/a-plain-implementation-behind-a-generic-overload/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("the fixture is checked in");
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+    let methods: Vec<NodeId> = (0..snapshot.nodes.len())
+        .map(|at| NodeId(u32::try_from(at).unwrap()))
+        .filter(|id| {
+            let node = &snapshot.nodes[id.0 as usize];
+            node.kind == NodeKind::Syntax(syntax::METHOD_DECLARATION)
+                && node.children.iter().any(|child| {
+                    let child = &snapshot.nodes[child.0 as usize];
+                    child.kind == NodeKind::Syntax(syntax::IDENTIFIER)
+                        && child.text.as_ref().and_then(|text| text.as_utf8()) == Some("from")
+                })
+        })
+        .collect();
+    assert_eq!(methods.len(), 3, "two overloads and the implementation");
+    let declared: Vec<usize> = methods
+        .iter()
+        .filter_map(|id| snapshot.declared_signatures.get(id))
+        .map(|signature| {
+            snapshot.signatures[signature.0 as usize]
+                .type_parameters
+                .len()
+        })
+        .collect();
+    // `from`'s second overload and its implementation, neither generic; the first
+    // overload's own signature is the one its type already gives.
+    assert_eq!(declared, [0, 0], "own signatures of the later declarations");
+}

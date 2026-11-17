@@ -71,7 +71,7 @@ use crate::origin::Origin;
 /// 52: checker-proved membership in the global value and type binding tables.
 /// 53: tuple element kinds, initial fixed prefix and readonly metadata.
 /// 55: `SourceFile::root`, the program's root files.
-pub const SCHEMA_VERSION: u32 = 55;
+pub const SCHEMA_VERSION: u32 = 56;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -251,6 +251,19 @@ pub struct SemanticSnapshot {
     /// queried, which is what keeps the frontend's round-trip count bounded by
     /// file count rather than node count.
     pub node_types: FxHashMap<NodeId, TypeId>,
+    /// The signature a function-like declaration declares, where it is not the
+    /// one its type's first call signature gives.
+    ///
+    /// A declaration's type is its *symbol's*: for an overloaded function or
+    /// method that is the overload set, whose first signature is the first
+    /// overload's. So an implementation `from(value: unknown)` behind a generic
+    /// first overload `from<T>(value: T)` read as generic, with the overload's
+    /// type parameters, which its body never names. The checker's own
+    /// signature of the declaration says what the body binds; it is recorded
+    /// only where the two differ, which is every declaration of an overload set
+    /// but the first.
+    #[serde(default)]
+    pub declared_signatures: FxHashMap<NodeId, SignatureId>,
     /// Each type a program does not own but uses, mapped to the type that
     /// implements it: lib.dom.d.ts's `Element` to `nts:dom`'s `Element`
     /// handle, where an overlay says `/** @ntsBoundBy "nts:dom" Element */
@@ -1667,6 +1680,7 @@ impl SemanticSnapshot {
             call_targets,
             diagnostics,
             node_types,
+            declared_signatures,
             bound_types,
         } = self;
         let mut bytes = Vec::new();
@@ -1689,6 +1703,7 @@ impl SemanticSnapshot {
         encode(&mut bytes, &by_key(constants))?;
         encode(&mut bytes, &by_key(call_targets))?;
         encode(&mut bytes, &by_key(node_types))?;
+        encode(&mut bytes, &by_key(declared_signatures))?;
         encode(&mut bytes, &by_key(bound_types))?;
         Ok(xxhash_rust::xxh3::xxh3_128(&bytes).to_le_bytes())
     }

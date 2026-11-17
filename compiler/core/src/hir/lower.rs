@@ -218,6 +218,7 @@ use super::{
 };
 use closure_context::SharedClosures;
 use implementations::LoweringSnapshot;
+pub(in crate::hir) use implementations::implementation_in;
 use layout_collection::{BuilderLayouts, LayoutCollector};
 use made_instance::{CollectedConstructor, MadeBy, ThisPaths};
 use numeric_arguments::Builtin as NumericBuiltin;

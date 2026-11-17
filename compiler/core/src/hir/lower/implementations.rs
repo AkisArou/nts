@@ -116,6 +116,40 @@ impl Deref for LoweringSnapshot<'_> {
     }
 }
 
+/// The declaration whose body a call to `declaration` runs: itself where it has
+/// a body, else the first sibling with one under the same name -- the overload
+/// signature's implementation. One question of [`ImplementationIndex`], for a
+/// pass that runs before any [`LoweringSnapshot`] exists
+/// (`generics::function_instantiations`), answered by the same predicates.
+pub(in crate::hir) fn implementation_in(
+    snapshot: &SemanticSnapshot,
+    declaration: NodeId,
+) -> NodeId {
+    if has_a_body(snapshot, declaration) {
+        return declaration;
+    }
+    let Some(name) = named(snapshot, declaration) else {
+        return declaration;
+    };
+    let mut parent = snapshot.nodes[declaration.0 as usize].parent;
+    while let Some(at) = parent
+        && snapshot.nodes[at.0 as usize].kind == NodeKind::List
+    {
+        parent = snapshot.nodes[at.0 as usize].parent;
+    }
+    let Some(parent) = parent else {
+        return declaration;
+    };
+    children(snapshot, parent)
+        .find(|child| has_a_body(snapshot, *child) && named(snapshot, *child) == Some(name))
+        .unwrap_or(declaration)
+}
+
+fn has_a_body(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
+    children(snapshot, id)
+        .any(|child| snapshot.nodes[child.0 as usize].kind == NodeKind::Syntax(syntax::BLOCK))
+}
+
 /// An answer per node, including identity for native declarations with no body.
 struct ImplementationIndex(Vec<NodeId>);
 
@@ -124,14 +158,7 @@ impl ImplementationIndex {
         let ids: Vec<_> = (0..snapshot.nodes.len())
             .map(|at| NodeId(u32::try_from(at).unwrap_or(u32::MAX)))
             .collect();
-        let has_body: Vec<_> = ids
-            .iter()
-            .map(|id| {
-                children(snapshot, *id).any(|child| {
-                    snapshot.nodes[child.0 as usize].kind == NodeKind::Syntax(syntax::BLOCK)
-                })
-            })
-            .collect();
+        let has_body: Vec<_> = ids.iter().map(|id| has_a_body(snapshot, *id)).collect();
         let parents = syntactic_parents(snapshot);
         let mut first = FxHashMap::default();
         for parent in &ids {

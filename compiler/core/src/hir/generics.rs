@@ -627,7 +627,18 @@ fn copies_made(found: &GenericFunctions) -> usize {
 /// pushed only if no copy of that name is there.
 fn one_pass(snapshot: &SemanticSnapshot, templates: &Templates, found: &mut GenericFunctions) {
     for (call, target) in &snapshot.call_targets {
-        let Some(declaration) = target.callee else {
+        // **The body a call runs is the implementation's, so its instances are of
+        // the implementation's type parameters.** The checker resolves a call to
+        // the overload signature it selected, and that signature's type
+        // parameters are the overload's own: a non-generic implementation behind
+        // a generic overload has one body and nothing to instantiate, and a
+        // generic one binds its own parameters, which are what its body names.
+        // Keyed by the overload, the copies were asked for by nothing and the
+        // call named a suffix no body carried.
+        let Some(declaration) = target
+            .callee
+            .map(|callee| crate::hir::lower::implementation_in(snapshot, callee))
+        else {
             continue;
         };
         let Some(generic) = declared_signature(snapshot, declaration) else {
@@ -734,6 +745,14 @@ pub(super) fn declared_signature(
     snapshot: &SemanticSnapshot,
     declaration: nts_semantic_schema::NodeId,
 ) -> Option<&nts_semantic_schema::SignatureRecord> {
+    // **The declaration's own signature first**, where the checker's type for it
+    // is an overload set that begins with somebody else's: an implementation
+    // behind a generic first overload declares no type parameters, and read
+    // through its type it had the overload's. See
+    // `SemanticSnapshot::declared_signatures`.
+    if let Some(signature) = snapshot.declared_signatures.get(&declaration) {
+        return snapshot.signatures.get(signature.0 as usize);
+    }
     // The declaration's own type, which the checker records per node. Reading
     // it off the *name*'s symbol also works for a plain function and does not
     // for a generic one, whose symbol carries the declaration's type while the

@@ -158,6 +158,26 @@ impl<'p> Node<'p> {
             file,
         }
     }
+    /// The signature this function-like declaration itself declares -- for an
+    /// overload's implementation, its own parameters and type parameters rather
+    /// than the overload set's first signature, which is what [`Self::ty`]'s
+    /// call signatures begin with.
+    #[must_use]
+    pub fn declared_signature(self) -> Option<Signature<'p>> {
+        if !matches!(
+            self.native.kind(),
+            tsrs_ast::Kind::FunctionDeclaration
+                | tsrs_ast::Kind::MethodDeclaration
+                | tsrs_ast::Kind::MethodSignature
+        ) {
+            return None;
+        }
+        let file = self.source_file();
+        Some(Signature {
+            native: file.with_checker(|c| c.get_signature_from_declaration_exported(self.native)),
+            file,
+        })
+    }
     #[must_use]
     pub fn resolved_signature(self) -> Option<Signature<'p>> {
         if !matches!(

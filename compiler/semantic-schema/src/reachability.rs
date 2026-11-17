@@ -308,6 +308,9 @@ pub fn from_roots_with(
         if let Some(&ty) = snapshot.node_types.get(&node) {
             result.types.insert(ty);
         }
+        if let Some(&signature) = snapshot.declared_signatures.get(&node) {
+            reach_signature(snapshot, signature, &mut result.types);
+        }
 
         // A node's subtree is part of its declaration -- except a class,
         // interface, enum or module a declaration file declares, whose

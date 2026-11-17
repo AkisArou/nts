@@ -65,6 +65,20 @@ impl<'p> Capture<'p, '_> {
             };
             let id = NodeId(arena_index(index)?);
             let kind = self.snapshot.nodes[index].kind;
+            // Only where it differs from what the declaration's type already
+            // says, which is every declaration of an overload set but the first:
+            // see `SemanticSnapshot::declared_signatures`.
+            if self.queries[index].types
+                && let Some(declared) = node.declared_signature()
+                && node
+                    .ty()
+                    .signatures(native::SignatureKind::Call)
+                    .first()
+                    .is_some_and(|first| *first != declared)
+            {
+                let signature = self.intern_signature(declared, false)?;
+                self.snapshot.declared_signatures.insert(id, signature);
+            }
             if matches!(
                 kind,
                 NodeKind::Syntax(
