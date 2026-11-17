@@ -35,7 +35,7 @@ runAsCommand(import.meta.url,async()=>{
   const run=process.env.NTS_GATE_RUN_DIR,raw=process.env[ENVIRONMENT_CONTEXT];
   if(!run||!raw)throw new ToolingInstrumentError('tooling-setup','rust-inputs runs inside a gate run (NTS_GATE_RUN_DIR and its environment context)');
   const context=JSON.parse(raw) as Context,capture=join(context.temporary.path,'rust-inputs');
-  const admission=new TemporaryAdmission({path:capture,context:{kind:'gate',temporary:context.temporary},reservedBytes:RUST_INPUT_CAPTURE_BYTES,env:process.env});
+  const admission=new TemporaryAdmission({path:capture,context:{kind:'gate',temporary:context.temporary},reservedBytes:RUST_INPUT_CAPTURE_BYTES});
   let attempt=admission.tryAcquire();
   while(!attempt.lease){
     console.log(`  waiting for disk: ${JSON.stringify(attempt.snapshot)}`);
@@ -45,7 +45,9 @@ runAsCommand(import.meta.url,async()=>{
   const lease=attempt.lease;
   registerCommandCloser('rust-inputs capture and disk claim',{close:()=>{try{rmSync(capture,{recursive:true,force:true});}finally{lease.release();}}});
   const trace=join(capture,'trace'),reports=join(capture,'reports');mkdirSync(trace,{recursive:true});
-  const tests=spawnSync(process.execPath,[TESTS],{env:{...process.env,NTS_RUST_INPUT_TRACE:trace},stdio:'inherit'});
+  // The traced run is this step's own tests.mjs, in this step's environment.
+  process.env.NTS_RUST_INPUT_TRACE=trace;
+  const tests=spawnSync(process.execPath,[TESTS],{stdio:'inherit'});
   if(tests.error||tests.signal)throw new ToolingInstrumentError('tooling-setup','rust-inputs: traced tests '+(tests.signal?'killed by '+tests.signal:'not started: '+tests.error?.message));
   if(tests.status!==0){console.log(`  the traced tests exited ${tests.status}; their own step reports why`);exitCommand(tests.status??1);}
   const root=infrastructureProbe({purpose:'rust-inputs tree',command:'git',args:gitArguments(['rev-parse','--show-toplevel']),cwd:process.cwd()}).stdout.trim();

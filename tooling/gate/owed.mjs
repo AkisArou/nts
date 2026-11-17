@@ -559,7 +559,7 @@ export const RULES = [
     // Cargo and the tests' scratch owner (compiler/test-support/scratch.rs)
     // walk up from a crate reading each Cargo.toml for a `[workspace]`: a new
     // one between a crate and the root changes what every test reads.
-    when: (/** @type {string} */ p, /** @type {boolean} */ added) => added && /(^|\/)Cargo\.toml$/.test(p) && p !== "Cargo.toml" && !crates().has(dirname(p)),
+    when: (/** @type {string} */ p, added = false) => added && /(^|\/)Cargo\.toml$/.test(p) && p !== "Cargo.toml" && !crates().has(dirname(p)),
     full: true,
     steps: [],
     arms: [],
@@ -2306,7 +2306,7 @@ export function owed(changes,options) {
  * @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options]
  */
 export function owingByReach(changes, step, options) {
-  const rules = owed(changes, options);
+  const rules = /** @type {{name:string,full?:boolean,steps:readonly string[]}[]} */ (owed(changes, options));
   if (rules.some(rule => rule.name === ALL_RUST_TARGETS)) throw new SelectionInfrastructureError('reach is unknown while the installation catalog owes every Rust target; publish the tree installation first');
   return rules.filter(rule => rule.name !== ALWAYS.name && !rule.name.startsWith('installation inputs unknown') && (rule.full || rule.steps.includes(step))).map(rule => rule.name);
 }
