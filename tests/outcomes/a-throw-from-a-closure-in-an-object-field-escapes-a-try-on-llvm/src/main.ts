@@ -1,7 +1,8 @@
 // run: check
 // backend: llvm
 
-// L15: the throw escapes the try when the closure is called through h.f().
+// L15: the throw from a closure called through h.f() reaches the enclosing
+// try's handler, as a field callee is asked whether it can raise (#478).
 // The control passes the same closure to a parameter callee with the same
 // try/catch. Each entry has one case so both arms are reached.
 

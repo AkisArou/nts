@@ -1,12 +1,12 @@
 // **Ours, not upstream's: a closure held in a class field, called inside a
-// `try`, throws past the handler.** `call` reads `h.f` and calls it inside its
-// own `try`; the closure throws, and the compiled program ends with an uncaught
-// error where node catches it. No refusal, so this is a silent wrong answer.
+// `try`, throws to its handler.** `call` reads `h.f` and calls it inside its
+// own `try`; the closure throws and the `catch` answers, as node's does. A
+// field callee is asked whether it can raise as a parameter callee is (#478);
+// before, only a parameter was, and this ended the program with an uncaught
+// error and no refusal.
 //
-// The control differs in one thing and agrees: the same field read in the
-// caller and passed to `guard` as a parameter, whose `try` calls it. A
-// parameter callee is carried; a field callee is not, and reading the field
-// into a local inside the `try`'s function first does not help either.
+// The control differs in one thing: the same field read in the caller and
+// passed to `guard` as a parameter, whose `try` calls it.
 //
 // React reaches this in `getComponentNameFromType`'s lazy arm,
 // `try { return getComponentNameFromType(lazy._init(lazy._payload)); } catch

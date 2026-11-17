@@ -81,18 +81,17 @@ stack exhaustion costs is register
 
 A raising copy exists only where the compiler can see which function a call
 reaches. Where it cannot, the throw is not carried to the handler: it ends the
-program as an uncaught error, where node would catch it. These are silent wrong
-answers, recorded as outcomes; the first is confirmed on C, LLVM and
-the JVM:
+program as an uncaught error, where node would catch it. This is a silent wrong
+answer, recorded as an outcome on C, LLVM and the JVM:
 
 | The call inside the `try` | Recorded as |
 |---|---|
-| a closure held in a class field (`h.f()`) | `tests/outcomes/a-throw-from-a-closure-held-in-a-field-escapes-a-try` |
-| a function made at run time or bound (`const g = make(); g()`, `f.bind(...)`) | `tests/outcomes/a-throw-from-a-function-made-at-run-time` |
-| an override reached through a base method that cannot throw | `tests/outcomes/a-throwing-override-escapes-a-try-through-a-base-that-cannot-throw` |
 | a generator made by another function, stepped here | `tests/outcomes/a-generator-passed-in-and-stepped-inside-a-try-ends-the-program` |
 
-A call through a parameter is carried. Where a function's raising copy cannot
+A call through a value is carried: a callee held in a parameter, a variable
+(`const g = make(); g()`, `f.bind(...)`), a class field (`h.f()`), an object's
+field or an optional field is asked whether it can raise, and a `try` around
+it keeps its handler. Where a function's raising copy cannot
 be built at all, a `try` that would need it is refused at compile time
 instead, as ``a function that itself calls something whose `throw` cannot be
 carried``.
