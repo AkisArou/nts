@@ -73,6 +73,11 @@ new missing JSDoc annotations in the selector glue were corrected, and strict
 types again passed all 1,155 modules without a diagnostic increase. The owning
 writer regenerated the projection after those source commits.
 
+The final seven-owner review run then passed all 193 tests with no skips or
+cancellations. It includes the deleted-match and rename controls, committed-base
+endpoint transport, native exclusions, and the unchanged source-root and
+records-run fence assertions.
+
 After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
 after revision remains reachable at its `refs/cited/` ref.
@@ -100,6 +105,7 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `nts-798-review-focused.log` | `a61437191ad4f637bd5f31a6988a477abb932e1d3d4a1b9c5674e0a191014d33` |
 | `nts-798-review-pair.log` | `7da42888f37025a43c7fa0787e7d4662c05a3fedbe313d8caf8543bf8362dfd5` |
 | `nts-798-review-projection.log` | `6d84ea9222ef7897dc024f4a337cf7895a671dd04afa8c69eff3305e4c6bec3f` |
+| `nts-798-review-final-focused.log` | `af93b80cda62d4c4369eb5a34d7bd0a3828ac98d084d56b6b05dac963539d4c6` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
