@@ -236,6 +236,7 @@ export const WIDE = new Set([
   "test262-census-c",
   "test262-census-llvm",
   "test262-census-jvm",
+  "rust-inputs",
 ]);
 
 /**
@@ -308,6 +309,7 @@ export const LANDING = {
   "test262-census-c": { form: "after" },
   "test262-census-llvm": { form: "after" },
   "test262-census-jvm": { form: "after" },
+  "rust-inputs": { form: "after" },
   integrity: { form: "after" },
   "integrity-runtime": { form: "after" },
   definitions: { form: "after" },
@@ -364,6 +366,7 @@ export const ASKS = {
   build: ["hygiene", "does it build"],
   clippy: ["hygiene", "does it lint clean"],
   tests: ["answers", "do the unit tests pass, including the runtime tables"],
+  "rust-inputs": ["valid", "is every tracked file a Rust test opens a declared input"],
   doctests: ["answers", "do the doc examples of the touched Rust crates pass"],
   audit: ["valid", "do feature and exclusion classifications cite existing authorities and suite entries"],
   format: ["hygiene", "is runtime/c formatted"],
@@ -549,6 +552,16 @@ export const RULES = [
     // Preserve the full core gate these shared inputs already owed.
     full: true,
     steps: ["frontend-tsrs"],
+    arms: [],
+  },
+  {
+    name: "a new Cargo manifest outside the workspace's crates",
+    // Cargo and the tests' scratch owner (compiler/test-support/scratch.rs)
+    // walk up from a crate reading each Cargo.toml for a `[workspace]`: a new
+    // one between a crate and the root changes what every test reads.
+    when: (/** @type {string} */ p, /** @type {boolean} */ added) => added && /(^|\/)Cargo\.toml$/.test(p) && p !== "Cargo.toml" && !crates().has(dirname(p)),
+    full: true,
+    steps: [],
     arms: [],
   },
   {
@@ -1371,6 +1384,7 @@ function nodeHarness(path) {
 }
 
 /** Ordinary changes retain the compiled checks and cheap tree invariants. */
+const ALL_RUST_TARGETS = 'Rust installation catalog requires all targets';
 const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths", "test-host", "tooling-types", "gate-inputs"], arms: [] };
 
 /**
@@ -2153,7 +2167,7 @@ export function owed(changes,options) {
   }
   if(changes.length)for(const row of metadataGraph.unavailableInputs.values())
     add('installation inputs unknown: '+row.reason+' (read by '+row.reader+')',changes[0].path,[...row.steps],{precise:false,wide:true});
-  if(changes.length&&metadataGraph.allRustSteps.size)add('Rust installation catalog requires all targets',changes[0].path,[...metadataGraph.allRustSteps],{precise:false,wide:true});
+  if(changes.length&&metadataGraph.allRustSteps.size)add(ALL_RUST_TARGETS,changes[0].path,[...metadataGraph.allRustSteps],{precise:false,wide:true});
   for(const [row,subjects]of metadataGraph.observationIndex?.affected(changes)??[])
     for(const path of subjects)add(row.observation.kind+' read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
   for(const [row,subjects]of metadataGraph.projectedIndex?.affected(changes)??[])
@@ -2280,6 +2294,21 @@ export function owed(changes,options) {
   }
   if (ordinary) out.push({ ...ALWAYS, paths: [] });
   return out;
+}
+
+/**
+ * The rules that owe `step` for these changes by what reaches it: every rule
+ * but the every-change policy. A rule owing the full gate counts, since it owes
+ * every step. A stale installation catalog owes every Rust target whatever
+ * changed, so it answers nothing about reach and is refused by name.
+ * @param {{path:string,added?:boolean}[]} changes
+ * @param {string} step
+ * @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options]
+ */
+export function owingByReach(changes, step, options) {
+  const rules = owed(changes, options);
+  if (rules.some(rule => rule.name === ALL_RUST_TARGETS)) throw new SelectionInfrastructureError('reach is unknown while the installation catalog owes every Rust target; publish the tree installation first');
+  return rules.filter(rule => rule.name !== ALWAYS.name && !rule.name.startsWith('installation inputs unknown') && (rule.full || rule.steps.includes(step))).map(rule => rule.name);
 }
 
 /**

@@ -2588,6 +2588,10 @@ step "jvm-verifies" jvm_verifies
 # `tooling/primitives/check.py <log>`.
 step "primitives" tooling/primitives/check.py
 step "tests"   tests
+# The same tests under the file observer: every tracked file one opens must be
+# a declared runtime input (tooling/gate/rust-runtime-inputs.json), since the
+# landing check owes the tests only for what those declarations reach.
+step "rust-inputs" node tooling/gate/rust-inputs.ts
 step "corpus"  corpus
 # Check source/driver freshness before landing without a compiler or workload.
 step "benchmark-identities" node tooling/bench/build-records.ts --check-identities

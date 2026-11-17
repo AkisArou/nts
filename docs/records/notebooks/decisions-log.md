@@ -3699,6 +3699,25 @@ unledgered and named. They are standing processes that cannot yield, and
 MemAvailable already excludes them. Whether a landing may stop or cap
 lower-rank steps that are already running is a separate, design-first
 question.
+## Undeclared Rust test reads are red (11-17)
+
+Issue #761, slice 1. Removing `clippy` and `tests` from the steps every change
+owes is safe only if the declared runtime inputs are complete, and until now
+nothing failed when a test opened an undeclared file: the post-run validator
+was called only by scratch scripts. The wide `rust-inputs` step now runs the
+workspace tests under the file observer and fails on any path a test opened
+that a commit could change without owing the tests. The validator's claims are
+per operation (a readlink needs a link claim, a stat a metadata claim); at
+1e421fac88 it left 3,950 tracked candidates, all but one of which selection
+already reaches as a path (the record is
+[rust-input-coverage-761](rust-input-coverage-761.md)). So the decision is selection's, asked as a change:
+an edit for a file, an added child for a listed directory, an addition for an
+absent lookup. It runs in the
+full check's wide part rather than in the core because tracing took the tests
+from about 300 s to 900 s at 1e421fac88; a red there bisects to the commit that
+added the read, which is the culprit whenever the trace runs. The switch of
+`ALWAYS` itself is the issue's second slice, submitted once this step is green
+on main.
 
 
 ## Tooling files own their memory admission (11-18)

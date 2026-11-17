@@ -1,0 +1,229 @@
+// Whether a traced workspace test run opened a tracked file that a change could
+// alter without owing the Rust tests (#761). Selection owes the tests only for
+// what their declared runtime inputs reach, so a test that reads a tracked path
+// no rule reaches is a missed obligation: a change to that path would land
+// without the test that reads it. This is that check, over the capture
+// `tests.mjs` writes when NTS_RUST_INPUT_TRACE names a directory.
+//
+//   node tooling/gate/rust-input-coverage.ts <trace directory> <report directory>
+//   node tooling/gate/rust-input-coverage.ts --reports <report directory>
+//
+// The validator (rust-input-validation.ts) names each attempt its target's
+// declarations do not claim, operation by operation. A candidate on a tracked
+// path is then asked of selection, as a change: a file owes the tests when it is
+// edited, a listed directory when a child is added to it, and any other
+// directory when some tracked file beneath it does, and the lookup of an absent
+// path when a commit adds it. Exit 0: every candidate is reached. Exit 1: the
+// missed paths are named. Present untracked bytes (installed packages, output
+// the validator could not attribute) and absent paths in an ignored namespace
+// are reported beside them: no commit changes them, so they cannot be owed.
+// The second form decides again from the validation reports of an earlier run.
+import {readFileSync,readdirSync,existsSync,mkdirSync,lstatSync} from 'node:fs';
+import {dirname,join,relative,isAbsolute,sep} from 'node:path';
+import {runAsCommand,exitCommand} from '../differential/command-entry/main.ts';
+import {infrastructureProbe} from './infrastructure-probe.ts';
+import {gitArguments} from './git-arguments/main.ts';
+import {rustRuntimeInputGraph} from './rust-runtime-inputs.ts';
+import {readRustRuntimeManifest} from './rust-runtime-declarations.ts';
+import {RUST_RUNTIME_DECLARATIONS} from './rust-selector-selection.ts';
+import {cargoRuntimeTargets} from './cargo-inputs.ts';
+import {readDoctestCalls,testArtifactTargets,type RustTarget} from './rust-test-inputs.ts';
+import {retainedFileObserverReceipt} from './file-input-observer.ts';
+import {validateRustInputCapture,type RuntimeTargetInputs} from './rust-input-validation.ts';
+import type {RustInputCapture} from './rust-input-authentication.ts';
+import {readRustInputValidation,decodeRustInputSubject} from './rust-input-report.ts';
+import {readRustTestExecution} from './rust-test-execution.ts';
+import {installationCatalogTrust} from '../inputs/dependency-inputs.ts';
+import {durableRecord} from './durable-record.ts';
+import {owingByReach} from './owed.mjs';
+
+/** One repository path a test opened without a claim of its target. */
+export type CoverageCandidate={path:string;tracked:'file'|'directory'|null;kind:'endpoint'|'component';source:string;phase:string;requirements:string[];reason:string|null};
+/** A tracked candidate and the rule that reaches it, or null when none does. */
+export type CoverageDecision=CoverageCandidate&{reachedBy:string|null;via:string|null};
+export type CaptureReport={file:string;target:string|null;repositoryCoverage:string;counts:Record<string,number>};
+/** An untracked candidate: generated or stray bytes in the tree, a lookup of
+ * an absent path inside an ignored namespace, or an absent directory crossed
+ * on the way to another path. None is a commit's input. */
+export type UntrackedCandidate=CoverageCandidate&{state:'ignored'|'untracked'|'absent-ignored'|'absent-component'};
+export type CoverageResult={missed:CoverageDecision[];reached:CoverageDecision[];untracked:UntrackedCandidate[];captures:CaptureReport[]};
+/** The rules a change owes the Rust tests by: owed.mjs's reach, in production. */
+export type TestReach=(change:{path:string;added:boolean})=>readonly string[];
+export type TrackedPaths={kind(path:string):'file'|'directory'|null;beneath(directory:string):readonly string[];
+  /** Whether an untracked path is present in the working tree now. */
+  present(path:string):boolean;
+  /** Which of these untracked paths Git ignores. */
+  ignored(paths:readonly string[]):ReadonlySet<string>};
+
+const git=(root:string,args:string[])=>infrastructureProbe({purpose:'Rust input coverage '+args[0],command:'git',args:gitArguments(args),cwd:root,maxBuffer:1<<28}).stdout;
+const inside=(root:string,path:string)=>{const part=relative(root,path);return part!==''&&part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);};
+/** A name no tracked directory holds: adding it is the membership question. */
+export const MEMBERSHIP_PROBE='nts-rust-input-coverage-probe';
+
+/** Tracked files, and the directories that hold one: a commit's inputs. */
+export function trackedPaths(root:string):TrackedPaths{
+  return trackedFrom(git(root,['ls-files','-z']).split('\0').filter(Boolean),{
+    present:path=>{try{lstatSync(join(root,path));return true;}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT'||(error as NodeJS.ErrnoException).code==='ENOTDIR')return false;throw error;}},
+    ignored:paths=>{
+      if(!paths.length)return new Set();
+      // check-ignore exits 1 when no path is ignored; that is an answer.
+      const result=infrastructureProbe({purpose:'Rust input coverage check-ignore',command:'git',args:gitArguments(['check-ignore','--no-index','-z','--stdin']),cwd:root,
+        input:paths.join('\0')+'\0',maxBuffer:1<<28,exits:'classify'});
+      if(result.status!==0&&result.status!==1)throw Error('Rust input coverage: git check-ignore exited '+result.status+': '+result.stderr);
+      return new Set(result.stdout.split('\0').filter(Boolean));
+    }});
+}
+export function trackedFrom(list:readonly string[],untracked:Pick<TrackedPaths,'present'|'ignored'>):TrackedPaths{
+  const files=new Set(list),directories=new Map<string,string[]>();
+  for(const file of files)for(let at=file.lastIndexOf('/');at>0;at=file.lastIndexOf('/',at-1)){
+    const directory=file.slice(0,at),members=directories.get(directory);
+    if(members)members.push(file);else directories.set(directory,[file]);
+  }
+  return {kind:path=>files.has(path)?'file':directories.has(path)?'directory':null,beneath:directory=>directories.get(directory)??[],...untracked};
+}
+
+/** The candidates of one validation report, by path and target. */
+async function candidates(root:string,report:string,tracked:TrackedPaths,into:Map<string,CoverageCandidate>):Promise<void>{
+  await readRustInputValidation(report,(value,resolve)=>{
+    if(value.kind!=='runtime-subject')return;
+    const row=decodeRustInputSubject(value,resolve) as {source:string;phase:string;requirement:{kind:string;query?:string};
+      scope:{endpoint?:{scope:string;path:string;state:string}};components:{observation:{path:string};answer:{kind:string;reason?:string}}[];reason?:string};
+    const requirement=row.requirement.kind+(row.requirement.query?':'+row.requirement.query:'');
+    const note=(path:string,kind:CoverageCandidate['kind'],reason:string|null)=>{
+      if(!inside(root,path))return;
+      // A final component is its endpoint; one path is one candidate per target.
+      const relativePath=relative(root,path),key=JSON.stringify([relativePath,row.source]),seen=into.get(key);
+      // A path traversed only as a component of another records that; its own
+      // operations, once seen, replace it.
+      const requirements=kind==='endpoint'?[requirement]:['component'];
+      if(!seen){into.set(key,{path:relativePath,tracked:tracked.kind(relativePath),kind,source:row.source,phase:row.phase,requirements,reason});return;}
+      if(kind==='component')return;
+      if(seen.kind!=='endpoint'){seen.kind='endpoint';seen.requirements=requirements;seen.reason=reason??seen.reason;return;}
+      seen.requirements=[...new Set([...seen.requirements,requirement])].sort();
+    };
+    const endpoint=row.scope.endpoint;
+    if(endpoint&&endpoint.scope==='repository'&&endpoint.state!=='claimed')note(endpoint.path,'endpoint',row.reason??null);
+    for(const component of row.components)if(component.answer.kind!=='claimed')note(component.observation.path,'component',component.answer.reason??null);
+  });
+}
+
+/** Ask selection whether a change to each tracked candidate owes the tests. */
+export function decide(candidates:readonly CoverageCandidate[],tracked:TrackedPaths,reach:TestReach):Omit<CoverageResult,'captures'>{
+  const memo=new Map<string,string|null>();
+  const owes=(path:string,added:boolean)=>{
+    const key=(added?'+':'')+path;
+    if(!memo.has(key))memo.set(key,reach({path,added})[0]??null);
+    return memo.get(key)!;
+  };
+  const missed:CoverageDecision[]=[],reached:CoverageDecision[]=[],untracked:UntrackedCandidate[]=[];
+  const outside=candidates.filter(candidate=>!candidate.tracked),ignored=tracked.ignored([...new Set(outside.map(candidate=>candidate.path))]);
+  for(const candidate of candidates){
+    let reachedBy:string|null=null,via:string|null=null;
+    if(!candidate.tracked){
+      const present=tracked.present(candidate.path);
+      if(present||ignored.has(candidate.path)){untracked.push({...candidate,state:present?(ignored.has(candidate.path)?'ignored':'untracked'):'absent-ignored'});continue;}
+      // An absent directory traversed toward another path changes no answer
+      // until that path itself is added, and every such lookup is its own candidate.
+      if(candidate.kind==='component'){untracked.push({...candidate,state:'absent-component'});continue;}
+      // A lookup of an absent path a commit could add: adding it must owe the tests.
+      via=candidate.path;reachedBy=owes(candidate.path,true);
+    }
+    else if(candidate.tracked==='file'){reachedBy=owes(candidate.path,false);via=candidate.path;}
+    else if(candidate.requirements.includes('enumeration')){via=candidate.path+'/'+MEMBERSHIP_PROBE;reachedBy=owes(via,true);}
+    else for(const file of tracked.beneath(candidate.path)){reachedBy=owes(file,false);if(reachedBy){via=file;break;}}
+    (reachedBy?reached:missed).push({...candidate,reachedBy,via:reachedBy?via:null});
+  }
+  return {missed,reached,untracked};
+}
+
+export type CoverageCapture={file:string;capture:RustInputCapture;execution?:{path:string;sha256:string;bytes:number}};
+/** Validate each capture against its target's declarations, then decide. */
+export async function coverageOfCaptures(options:{root:string;captures:readonly CoverageCapture[];reports:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;tracked:TrackedPaths;reach:TestReach}):Promise<CoverageResult>{
+  mkdirSync(options.reports,{recursive:true});
+  const found=new Map<string,CoverageCandidate>(),captures:CaptureReport[]=[];
+  for(const {file,capture,execution} of options.captures){
+    const output=join(options.reports,file.replace(/\.raw\.gz$/,'')+'.validation.jsonl.gz');
+    const checked=await validateRustInputCapture({capture,output,targets:options.targets,...(execution?{execution}:{})});
+    captures.push({file,target:capture.target?.source??null,repositoryCoverage:checked.repositoryCoverage,counts:{...checked.counts}});
+    await candidates(options.root,output,options.tracked,found);
+  }
+  durableRecord(join(options.reports,'candidates.json'),{version:1,captures,candidates:sorted(found)});
+  return {...decide(sorted(found),options.tracked,options.reach),captures};
+}
+const sorted=(found:Map<string,CoverageCandidate>)=>[...found.values()].sort((a,b)=>a.path.localeCompare(b.path)||a.source.localeCompare(b.source));
+
+/** Decide again from an earlier run's validation reports. */
+export async function coverageOfReports(options:{root:string;reports:string;tracked:TrackedPaths;reach:TestReach}):Promise<CoverageResult>{
+  const found=new Map<string,CoverageCandidate>();
+  const files=readdirSync(options.reports).filter(name=>name.endsWith('.validation.jsonl.gz')).sort();
+  if(!files.length)throw Error('Rust input coverage: no validation reports in '+options.reports);
+  for(const file of files)await candidates(options.root,join(options.reports,file),options.tracked,found);
+  const prior=existsSync(join(options.reports,'candidates.json'))?(JSON.parse(readFileSync(join(options.reports,'candidates.json'),'utf8')) as {captures:CaptureReport[]}).captures:[];
+  return {...decide(sorted(found),options.tracked,options.reach),captures:prior};
+}
+
+/** Every capture of one traced run, bound to its Cargo target by its receipt. */
+export function traceCaptures(root:string,trace:string):CoverageCapture[]{
+  const observer=retainedFileObserverReceipt(JSON.parse(readFileSync(join(trace,'observer-receipt.json'),'utf8')));
+  const calls=readDoctestCalls(join(trace,'doctest-calls'));
+  const artifacts=testArtifactTargets(JSON.parse(readFileSync(join(trace,'artifacts.json'),'utf8')) as unknown,root);
+  const manifest=JSON.parse(readFileSync(join(trace,'executions.json'),'utf8')) as {version:number;executions:{path:string;sha256:string;bytes:number}[]};
+  if(manifest.version!==1||!Array.isArray(manifest.executions))throw Error('Rust input coverage: unreadable execution manifest');
+  const byRaw=new Map<string,{reference:{path:string;sha256:string;bytes:number};target:RustTarget}>();
+  for(const reference of manifest.executions){
+    const receipt=readRustTestExecution(reference),raw=receipt.raw.path;
+    if(dirname(raw)!==trace)throw Error('Rust input coverage: execution receipt outside its trace: '+raw);
+    if(JSON.stringify(artifacts.get(receipt.executable.path))!==JSON.stringify(receipt.target))throw Error('Rust input coverage: receipt target differs from Cargo artifact: '+raw);
+    byRaw.set(raw,{reference,target:receipt.target});
+  }
+  const raws=readdirSync(trace).filter(name=>/^(cargo|binary-\d+)\.raw\.gz$/.test(name)).sort();
+  if(raws.length!==byRaw.size+1||!raws.includes('cargo.raw.gz'))throw Error(`Rust input coverage: ${raws.length} captures for ${byRaw.size} replayed binaries and Cargo`);
+  return raws.map(file=>{
+    const raw=join(trace,file),execution=byRaw.get(raw);
+    if(file!=='cargo.raw.gz'&&!execution)throw Error('Rust input coverage: capture has no execution receipt: '+file);
+    return {file,capture:{raw,index:raw.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:root,root,observer,
+      ...(execution?{target:execution.target}:{doctestCalls:calls})},...(execution?{execution:execution.reference}:{})};
+  });
+}
+
+/** The declared runtime inputs of every Cargo target in this tree: the same
+ * canonical graph selection reads. */
+export function declaredRustInputs(root:string):Map<string,RuntimeTargetInputs>{
+  const shared=dirname(git(root,['rev-parse','--path-format=absolute','--git-common-dir']).trim());
+  const graph=rustRuntimeInputGraph({sourceRoot:root,dependencyCatalog:installationCatalogTrust(shared,root),inventory:cargoRuntimeTargets(root),
+    manifest:readRustRuntimeManifest(join(root,RUST_RUNTIME_DECLARATIONS)),nodeMajor:26});
+  const targets=new Map<string,RuntimeTargetInputs>();
+  try{for(const row of graph.describeAll())targets.set(row.target.source,{target:row.target,snapshot:row.snapshot});graph.assertComplete();}
+  finally{graph.close();}
+  return targets;
+}
+
+/** Selection's own answer: the rules other than the every-change policy. */
+export const testReach:TestReach=change=>owingByReach([change],'tests');
+
+export function describeCoverage(result:CoverageResult,limit=40):string[]{
+  const line=(gap:CoverageDecision)=>`    ${gap.path} (${gap.tracked??'absent'}, ${gap.requirements.join('+')}, ${gap.phase} of ${gap.source}${gap.reason?': '+gap.reason:''})`;
+  const states=new Map<string,number>();for(const row of result.untracked)states.set(row.state,(states.get(row.state)??0)+1);
+  const lines=[`  ${result.captures.length} captures; ${result.reached.length+result.missed.length} candidate(s) a commit can change: ${result.reached.length} reached by selection, ${result.missed.length} missed;`
+    +` ${result.untracked.length} outside every commit (${[...states].map(([state,count])=>count+' '+state).join(', ')||'none'})`];
+  if(result.missed.length){
+    lines.push('  paths a Rust test opened that a commit can change without owing the tests (declare them in '+RUST_RUNTIME_DECLARATIONS+'):');
+    for(const gap of result.missed.slice(0,limit))lines.push(line(gap));
+    if(result.missed.length>limit)lines.push(`    ... and ${result.missed.length-limit} more`);
+  }
+  return lines;
+}
+
+runAsCommand(import.meta.url,async()=>{
+  const argv=process.argv.slice(2),again=argv[0]==='--reports';
+  const [trace,reports]=again?[undefined,argv[1]]:argv;
+  if(!reports||!isAbsolute(reports)||!again&&(!trace||!isAbsolute(trace)||!existsSync(trace))||argv.length!==2){
+    console.error('usage: rust-input-coverage.ts <absolute trace directory> <absolute report directory> | --reports <absolute report directory>');exitCommand(2);return;
+  }
+  const root=git(process.cwd(),['rev-parse','--show-toplevel']).trim(),tracked=trackedPaths(root);
+  const result=again?await coverageOfReports({root,reports,tracked,reach:testReach})
+    :await coverageOfCaptures({root,captures:traceCaptures(root,trace!),reports,targets:declaredRustInputs(root),tracked,reach:testReach});
+  durableRecord(join(reports,'coverage.json'),{version:2,...result});
+  for(const line of describeCoverage(result))console.log(line);
+  exitCommand(result.missed.length?1:0);
+});

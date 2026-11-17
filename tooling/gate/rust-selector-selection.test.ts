@@ -98,7 +98,7 @@ mkdirSync('results/gate-inputs',{recursive:true});durableRecord('results/gate-in
   const prepared=spawnTest(process.execPath,['--input-type=module','-e',prepare],{cwd:root,env,encoding:'utf8'});assert.equal(prepared.status,0,prepared.stderr);
   for(const args of [['add','.'],['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','accepted supplied roles']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   const acceptedBlob=spawnTest('git',gitArguments(['rev-parse','HEAD:results/gate-inputs/rust-runtime.json']),{cwd:root,env,encoding:'utf8'});assert.equal(acceptedBlob.status,0,acceptedBlob.stderr);
-  const select=`import {owed,gateSteps,inputMetadataDeclarations,inputDirectoryDeclarations,rustRecordDecision} from ${url('./owed.mjs')};
+  const select=`import {owed,gateSteps,inputMetadataDeclarations,inputDirectoryDeclarations,rustRecordDecision,owingByReach} from ${url('./owed.mjs')};
 import {installationCatalogTrust} from ${url('../inputs/dependency-inputs.ts')};
 const dependencyCatalog=installationCatalogTrust(process.cwd(),process.cwd());
 const choose=(path,trust)=>gateSteps(owed([{path,before:'// old\\nconstant\\n',after:'// new\\nconstant\\n',sameMode:true}],trust?{...trust,dependencyCatalog}:undefined));
@@ -106,12 +106,15 @@ const blob=${JSON.stringify(acceptedBlob.stdout.trim())};
 const trustedStat=choose('docs/stat.ts',{acceptedRustRecordBlob:blob}),absentStat=choose('docs/stat.ts',{acceptedRustRecordBlob:null}),trustedAgain=choose('docs/stat.ts',{acceptedRustRecordBlob:blob});
 console.log(JSON.stringify({trustedStat,absentStat,trustedAgain,file:choose('docs/bytes.ts'),stat:choose('docs/stat.ts'),unread:choose('docs/unread.md'),
 conservative:choose('docs/broad/input.md'),added:gateSteps(owed([{path:'docs/broad/new.md',added:true}])),deleted:gateSteps(owed([{path:'docs/broad/input.md',deleted:true}])),
-unplaced:owed([{path:'tooling/unowned/input.ts',sameMode:true}]).some(row=>row.full&&row.fallback),directories:inputDirectoryDeclarations(),metadata:inputMetadataDeclarations()}));`;
+unplaced:owed([{path:'tooling/unowned/input.ts',sameMode:true}]).some(row=>row.full&&row.fallback),directories:inputDirectoryDeclarations(),metadata:inputMetadataDeclarations(),
+reach:{bytes:owingByReach([{path:'docs/bytes.ts',added:false}],'tests'),unread:owingByReach([{path:'docs/unread.md',added:false}],'tests')}}));`;
   const selected=spawnTest(process.execPath,['--input-type=module','-e',select],{cwd:root,env,encoding:'utf8'});assert.equal(selected.status,0,selected.stdout+selected.stderr);
-  const result=JSON.parse(selected.stdout) as {trustedStat:string[];absentStat:string[];trustedAgain:string[];file:string[];stat:string[];unread:string[];conservative:string[];added:string[];deleted:string[];unplaced:boolean;directories:{kind:string;directory:string;steps:string[];context?:{entry:string}}[];metadata:{dependencies:{dependency:{path:string;kind:string};steps:string[]}[]}};
+  const result=JSON.parse(selected.stdout) as {reach:{bytes:string[];unread:string[]};trustedStat:string[];absentStat:string[];trustedAgain:string[];file:string[];stat:string[];unread:string[];conservative:string[];added:string[];deleted:string[];unplaced:boolean;directories:{kind:string;directory:string;steps:string[];context?:{entry:string}}[];metadata:{dependencies:{dependency:{path:string;kind:string};steps:string[]}[]}};
   for(const step of ['tests','doctests','addons']){assert.ok(result.trustedStat.includes(step));assert.ok(!result.absentStat.includes(step),'explicit null takes live after a trusted decision: '+step);assert.ok(result.trustedAgain.includes(step));}
   for(const name of ['file','stat'] as const)for(const step of ['tests','doctests','addons'])assert.ok(result[name].includes(step),name+' retains '+step);
   for(const step of ['tests','doctests','addons'])assert.ok(!result.unread.includes(step),'unread prose keeps precision: '+step);
+  assert.ok(result.reach.bytes.length>0,'a declared byte input reaches the tests without the every-change policy');
+  assert.deepEqual(result.reach.unread,[],'unread prose reaches no test');
   for(const name of ['conservative','added','deleted'] as const)for(const step of ['tests','doctests','addons'])assert.ok(result[name].includes(step),name+' retains '+step);
   assert.equal(result.unplaced,true,'conservative bytes do not supply executable placement');
   assert.ok(result.directories.some(row=>row.kind==='conservative'&&row.directory==='docs/broad'&&row.context?.entry==='<entry>'&&row.steps.includes('addons')));
@@ -134,15 +137,18 @@ registerHooks({resolve(specifier,context,next){return installed.has(specifier)?{
   const mutant=spawnTest(process.execPath,['--import',pathToFileURL(loader).href,'--input-type=module','-e',select.replace(url('./owed.mjs'),JSON.stringify(pathToFileURL(entry).href))],{cwd:root,env,encoding:'utf8'});
   assert.equal(mutant.status,0,mutant.stdout+mutant.stderr);const missing=JSON.parse(mutant.stdout) as typeof result;
   for(const step of ['tests','doctests','addons']){assert.ok(missing.file.includes(step),'independent exact bytes survive');assert.ok(!missing.stat.includes(step),'removing typed composition loses '+step);}
-  const fallback=`import {owed,gateSteps,rustRecordDecision} from ${url('./owed.mjs')};
+  const fallback=`import {owed,gateSteps,rustRecordDecision,owingByReach} from ${url('./owed.mjs')};
 import {installationCatalogTrust} from ${url('../inputs/dependency-inputs.ts')};
 const trust={acceptedRustRecordBlob:${JSON.stringify(acceptedBlob.stdout.trim())},dependencyCatalog:${'installationCatalogTrust(process.cwd(),process.cwd())'}};
 const rules=owed([{path:'docs/unread.md',before:'old prose',after:'new prose',sameMode:true}],trust);
-console.log(JSON.stringify({steps:gateSteps(rules),decision:rustRecordDecision(trust),all:rules.some(row=>row.name==='Rust installation catalog requires all targets')}));`;
+let refused=null;try{owingByReach([{path:'docs/unread.md',added:false}],'tests',trust);}catch(error){refused=String(error);}
+console.log(JSON.stringify({steps:gateSteps(rules),decision:rustRecordDecision(trust),all:rules.some(row=>row.name==='Rust installation catalog requires all targets'),refused}));`;
   const checkFallback=(code:string,reason:RegExp)=>{
     const response=spawnTest(process.execPath,['--input-type=module','-e',code],{cwd:root,env,encoding:'utf8'});assert.equal(response.status,0,response.stdout+response.stderr);
     const result=JSON.parse(response.stdout);assert.equal(result.all,true);assert.match(result.decision.reason,reason);
     for(const step of ['tests','doctests','addons'])assert.ok(result.steps.includes(step),step);
+    // Owing every target says nothing about reach: the coverage owner refuses it.
+    assert.match(result.refused,/reach is unknown while the installation catalog owes every Rust target/);
   };
   checkFallback(fallback.replace('installationCatalogTrust(process.cwd(),process.cwd())','null'),/catalog-stale-live: .*missing/);
   writeFileSync(join(root,'pnpm-lock.yaml'),'changed lock input\n');

@@ -2149,6 +2149,14 @@
           {
             "kind": "conservative",
             "path": "../../../../runtime/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/chromium/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/chromium/dom/package.json"
           }
         ]
       }
@@ -13315,6 +13323,11 @@
             "kind": "directory-candidates",
             "path": "../../../benchmarks/cases/",
             "candidates": []
+          },
+          {
+            "kind": "directory-candidates",
+            "path": "../../../benchmarks/",
+            "candidates": []
           }
         ]
       }
@@ -14014,6 +14027,26 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/programs/invalid/tsconfig.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/programs/container-content-facts/pnpm-workspace.yaml"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/programs/container-content-facts/.git"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/programs/container-content-facts/nts.config.ts"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/programs/pnpm-workspace.yaml"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/programs/.git"
           }
         ]
       }
@@ -14517,7 +14550,24 @@
       "source": "tooling/differential/src/oracle_coverage.rs",
       "declarations": {
         "imports": [],
-        "assets": []
+        "assets": [
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/programs/tsconfig.fixtures.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/tsconfig.fixtures.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/cases/tsconfig.fixtures.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/tsconfig.fixtures.json"
+          }
+        ]
       }
     },
     {

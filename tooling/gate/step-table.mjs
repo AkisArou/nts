@@ -109,6 +109,10 @@ export const STEPS = [
   { name: "tests", slots: 8, min: 4, lock: "cargo", after: ["build"], doc: "cargo test --workspace",
     capabilities: ["jvm"],
   },
+  // The same tests under the file observer: wide, so its bound is its own.
+  { name: "rust-inputs", slots: 8, min: 4, lock: "cargo", after: ["build"], bound: 5400, doc: "every tracked file a Rust test opens is a declared input",
+    capabilities: ["jvm"],
+  },
   { name: "corpus", slots: 8, min: 4, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0",
     capabilities: ["jvm"],
   },

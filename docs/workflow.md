@@ -1038,6 +1038,27 @@ literal path attributes; every traversed reader needs a row. Compile-source
 edges alone grant no runtime-byte authority. Unit and library-doctest routes
 remain independent, including doctest-only libraries.
 
+The wide `rust-inputs` step checks those declarations against what the tests
+actually open. It runs the workspace tests once more under the file observer,
+through `tests.mjs` and `test-profile.ts` like the `tests` step, and validates
+every capture against the canonical graph (`rust-input-coverage.ts`). Each
+attempt the validator cannot claim is then asked of selection as a change,
+through `owingByReach`, which counts every rule but the every-change policy: a
+tracked file must owe the tests when edited, a listed directory when a child is
+added, any other tracked directory through a tracked file beneath it, and an
+absent path a commit could add when it is added. A path that fails this is
+named and fails the step. Present untracked bytes (installed packages, output
+the validator could not attribute), absent paths in ignored namespaces and
+absent directories crossed toward another lookup are reported, never owed. A
+stale installation catalog owes every Rust target whatever changed, so it
+answers nothing about reach and is refused by name. The step is wide, never a
+landing's: its capture (about 6 GB at the workspace's size) lives in the run's
+registered temporary under ~/.cache with a 12 GiB disk claim, and is removed
+when the step ends whatever its verdict; `rust-inputs.coverage.json` in the run
+keeps the decision. A local capture from `check.ts --here --trace-rust-inputs`
+is checked with `node tooling/gate/rust-input-coverage.ts <trace> <reports>`,
+and decided again from its reports with `--reports <reports>`.
+
 Selection consumes the same canonical graph as explicit post-run validation.
 Its writer, mandatory derivation, delta source-key check and gate-inputs Rust arm
 use the selector's clean committed-source owner and verified endpoint installation.
@@ -2175,6 +2196,14 @@ the first node task.
 
 ## Decisions
 
+- **A Rust test read that selection does not reach is a red.** Selection owes
+  the Rust tests only for what their declarations reach, so the wide
+  `rust-inputs` step traces the complete tests and fails on any path a test
+  opened that a commit could change without owing the tests. Coverage is asked
+  of selection per path; the validator's per-operation claims only propose
+  candidates. Untracked paths are reported, never owed. It is wide because tracing roughly doubles the tests' time; a red
+  bisects to the commit that added the read
+  ([log](records/notebooks/decisions-log.md#undeclared-rust-test-reads-are-red-11-17)).
 - **A worker detach is a durable request.** Pending detach releases only the
   unused pool promise; ownership guards still protect live claims and output.
   Upkeep completes the same branch- and tree-bound request after owners drain.
