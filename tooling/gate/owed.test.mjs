@@ -10,7 +10,7 @@ import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -257,7 +257,7 @@ console.log(JSON.stringify({steps:gateSteps(owed([{path:'docs/data/new.md',added
   }
 });
 
-test('fixed-config type checks retain matched precision, metadata fallback and runner handover without nearest discovery',t=>{
+test('fixed-config type checks retain matched precision, metadata fallback and runner handover without nearest discovery',async t=>{
   const root=mkdtempSync(join(tmpdir(),'owed-project-facts-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
   put('Cargo.toml','[package]\nname="project-facts"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
@@ -278,6 +278,9 @@ step "tooling" node tooling/empty.test.ts
     put(prefix+'/src/notes.md','old prose');put(prefix+'/src/unexecuted.mjs','export const value=1;');
   }
   put('docs/data/src/gone.ts','interface RemovedGlobal { value: number }');
+  put('docs/data/src/before-name.ts','interface RenamedGlobal { value: number }');
+  put('docs/data/src/removed/child.ts','interface RemovedDirectoryGlobal { value: number }');
+  put('docs/data/src/ignored.tsv','ignored compiler input');
   put('docs/data/target.md','target prose');put('docs/data/directory/child.md','child');
   symlinkSync('target.md',join(root,'docs/data/relay'));
   symlinkSync('../relay',join(root,'docs/data/src/alias'));
@@ -286,8 +289,10 @@ step "tooling" node tooling/empty.test.ts
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet'],['add','.'],['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','committed Program roots']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   rmSync(join(root,'docs/data/src/gone.ts'));put('docs/data/src/gone.md','interface RemovedGlobal { value: number }');
+  renameSync(join(root,'docs/data/src/before-name.ts'),join(root,'docs/data/src/after-name.ts'));
+  rmSync(join(root,'docs/data/src/removed'),{recursive:true});rmSync(join(root,'docs/data/src/ignored.tsv'));
   const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
-const select=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),fallback:rules.some(row=>row.fallback),facts:rules.filter(row=>row.name.includes(' read by ')).map(row=>row.name)};};
+const select=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),fallback:rules.some(row=>row.fallback),facts:rules.filter(row=>row.name.includes(' read by ')).map(row=>row.name),programRules:rules.filter(row=>row.name.includes(' read by ')||row.name==='an input to what a gate step runs').map(row=>({name:row.name,paths:row.paths,steps:row.steps}))};};
 const first=inputMetadataDeclarations();for(const row of first.observations){row.steps.length=0;row.context.entry='mutated';if(row.observation.value&&typeof row.observation.value==='object'&&'files' in row.observation.value)row.observation.value.files.length=0;}
 console.log(JSON.stringify({edit:select([{path:'docs/data/src/notes.md',before:'old prose',after:'new prose',sameMode:true}]),
 targetEdit:select([{path:'docs/data/target.md',before:'target prose',after:'new prose',sameMode:true}]),
@@ -299,7 +304,9 @@ configAlias:select([{path:'docs/data/configs',before:'real-configs',after:'direc
 includeChange:select([{path:'docs/data/tsconfig.json',before:'{"include":["src/main.ts"]}',after:'{"include":["src/**/*.ts"]}',sameMode:true}]),
 matching:select([{path:'docs/data/src/new.ts',added:true}]),
 deletedMatch:select([{path:'docs/data/src/gone.ts',deleted:true}]),
-renamedMatch:select([{path:'docs/data/src/gone.ts',deleted:true},{path:'docs/data/src/gone.md',added:true}]),
+renamedMatch:select([{path:'docs/data/src/before-name.ts',deleted:true},{path:'docs/data/src/after-name.ts',added:true}]),
+deletedIgnored:select([{path:'docs/data/src/ignored.tsv',deleted:true}]),
+deletedDirectory:select([{path:'docs/data/src/removed',deleted:true}]),
 add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
 renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
 nearer:select([{path:'docs/data/src/tsconfig.json',added:true}]),
@@ -310,17 +317,30 @@ unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),
   for(const step of ['profile','addons']){
     assert.ok(!value.edit.steps.includes(step),'prose bytes do not change a directory answer');
     assert.ok(!value.targetEdit.steps.includes(step),'followed target prose does not change an entries answer');
-    for(const key of ['config','includeChange','physicalConfig','configAlias','matching','deletedMatch','renamedMatch'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+    for(const key of ['config','includeChange','physicalConfig','configAlias','matching'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
     for(const key of ['add','removed','renamed','nearer','retarget','relay','targetRemoved'])assert.ok(!value[key].steps.includes(step),key+' is outside the fixed Program match: '+step);
     assert.ok(value.metadata.observations.every((/** @type {{steps:string[]}} */ row)=>row.steps.includes(step)),step+' survives in typed provenance');
-  }
-  for(const key of ['deletedMatch','renamedMatch']){
-    assert.ok(!value[key].fallback,key+' has a known Program consumer');
-    assert.ok(value[key].facts.includes('project matches read by tooling/private/reader.ts'),key+' uses the native match comparison');
   }
   assert.ok(value.unknown.fallback,'enumeration never supplies placement for an unexecuted utility');
   assert.ok(value.metadata.observations.some((/** @type {import('./module-closure.ts').ReaderObservation} */ row)=>row.observation.kind==='fileExists'&&row.observation.value===false));
   assert.ok(value.metadata.observations.some((/** @type {import('./module-closure.ts').ReaderObservation} */ row)=>row.observation.kind==='readlink'&&row.observation.path===join(root,'docs/data/relay')&&row.causes.some(cause=>cause.kind==='entries'&&cause.path===join(root,'docs/data/src'))));
+  await t.test('deleted matched TypeScript roots retain their consumers',()=>{
+    for(const step of ['profile','addons'])assert.ok(value.deletedMatch.steps.includes(step),'deletedMatch retains '+step);
+    assert.ok(!value.deletedMatch.fallback);assert.ok(value.deletedMatch.facts.includes('project matches read by tooling/private/reader.ts'));
+  });
+  await t.test('renamed matched TypeScript roots retain both paths',()=>{
+    for(const path of ['docs/data/src/before-name.ts','docs/data/src/after-name.ts'])for(const step of ['profile','addons'])
+      assert.ok(value.renamedMatch.programRules.some((/** @type {{paths:string[],steps:string[]}} */ row)=>row.paths.includes(path)&&row.steps.includes(step)),path+' retains '+step);
+    assert.ok(!value.renamedMatch.fallback);
+  });
+  await t.test('deleted ignored TSVs add no Program consumers',()=>{
+    for(const step of ['profile','addons'])assert.ok(!value.deletedIgnored.steps.includes(step));
+    assert.ok(!value.deletedIgnored.fallback);
+  });
+  await t.test('deleted matched directories retain their consumers',()=>{
+    for(const step of ['profile','addons'])assert.ok(value.deletedDirectory.steps.includes(step),'deletedDirectory retains '+step);
+    assert.ok(!value.deletedDirectory.fallback);assert.ok(value.deletedDirectory.facts.includes('project matches read by tooling/private/reader.ts'));
+  });
 });
 
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
