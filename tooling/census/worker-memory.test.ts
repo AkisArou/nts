@@ -1,7 +1,7 @@
 import {testEnvironment,testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
-import { spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
+import { hangDeadline, type HangDeadline, spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
-import { constants, closeSync, openSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { constants, closeSync, openSync, writeSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { after, afterEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -280,44 +280,124 @@ test("only a worker-subtree OOM establishes a memory-cap verdict", () => {
   assert.throws(() => memoryCause(before, { oom: 2, kills: 5 }, 7, 7), /counters went backwards/);
 });
 
-test("aggregate pressure restarts an idle worker without losing or replaying its completed case", { timeout: TEST_HANG_MS }, async t => {
+// The idle-pressure handshake's hang guards, both inside node's test timeout:
+// its stages share IDLE_PRESSURE_HANG_MS, and releasing every party and the
+// pool's settling share what remains of the case's bound, which leaves a
+// margin for cleanup. A stage that never arrives fails by its name first.
+const IDLE_PRESSURE_HANG_MS = TEST_HANG_MS / 2;
+const IDLE_PRESSURE_CASE_MS = TEST_HANG_MS - 30_000;
+// The own-limit control's pool settles in about a second; this bounds a pool
+// that never stops its worker, well inside the test's own timeout.
+const OWN_LIMIT_SETTLE_MS = 20_000;
+
+/**
+ * The idle-pressure case and the one owner of every wait in it. The idle
+ * holder's completed row lets the test take the released token as its hold,
+ * so its worker stays idle with 200 MiB retained; the hold's grant
+ * ('idle-reported') starts the trigger's allocation, which only fits once the
+ * aggregate kills the idle worker; the pool's idle-worker pressure report
+ * returns the hold and releases the trigger. The owner awaits each stage by
+ * name within their shared hang guard (`reportHangMs` bounds the report alone,
+ * for the control). On expiry it
+ * releases every party (both FIFOs, the hold, the memory run), waits for the
+ * pool to settle and fails naming the stage. Its cleanup returns the hold
+ * before the token pool closes, whose close waits for every held token.
+ * `withholdReport` keeps the pool's report from the handshake: the control
+ * that a missing report fails by name.
+ */
+async function idlePressureCase(t: { after: (fn: () => unknown) => void }, { reportHangMs, withholdReport = false }: { reportHangMs?: number; withholdReport?: boolean } = {}) {
+  const caseGuard = hangDeadline(IDLE_PRESSURE_CASE_MS), stages = hangDeadline(IDLE_PRESSURE_HANG_MS);
+  const gate = await gatePool(2);
   const directory = scratch();
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const cleanup: { returnHold?: () => Promise<void> } = {};
+  t.after(async () => {
+    try { await cleanup.returnHold?.(); } finally {
+      await gate.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
+  return { memory, gate, outcome: idlePressureRun(directory, memory, gate, cleanup, { caseGuard, stages, reportHangMs }, withholdReport) };
+}
+
+type IdlePressureGuards = { caseGuard: HangDeadline; stages: HangDeadline; reportHangMs: number | undefined };
+async function idlePressureRun(directory: string, memory: MemoryRun, gate: Awaited<ReturnType<typeof gatePool>>, cleanup: { returnHold?: () => Promise<void> }, { caseGuard, stages, reportHangMs }: IdlePressureGuards, withholdReport: boolean) {
+  const holdStop = new AbortController();
+  let hold: Promise<(() => void) | null> | undefined, returning: Promise<void> | undefined;
+  let holdGranted = false, holdClosed = false, idleReported = false;
+  const returnHold = () => returning ??= (async () => {
+    holdStop.abort();
+    const release = await hold;
+    if (release) await releaseToken(release);
+    holdClosed = true;
+  })();
+  cleanup.returnHold = returnHold;
+  const releaseFifo = (name: string) => {
+    // A party already gone (the trigger may be collateral damage) has no reader.
+    let fifo: number;
+    try { fifo = openSync(join(directory, `release-${name}`), constants.O_WRONLY | constants.O_NONBLOCK); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENXIO") return; throw error; }
+    try { writeSync(fifo, "x"); } finally { closeSync(fifo); }
+  };
   for (const name of ["idle", "trigger"]) {
     const result = spawnTest("mkfifo", [join(directory, `release-${name}`)], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
   }
   const rows: any[] = [];
   const reports: string[] = [];
-  const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
-  const gate = await gatePool(2);
-  t.after(gate.close);
-  const holdStop=new AbortController();let hold:Promise<(()=>void)|null>|undefined,returning:Promise<void>|undefined,holdClosed=false;
-  const returnHold=()=>returning??=Promise.resolve().then(async()=>{const release=await hold;if(release)await releaseToken(release);holdClosed=true;});
-  t.after(async()=>{holdStop.abort();await returnHold();});
-  const summary = await runMemoryWorkers({
+  let settled: { summary: Awaited<ReturnType<typeof runMemoryWorkers>> } | { error: unknown } | undefined;
+  const run = runMemoryWorkers({
     paths: ["idle-holder", "idle-trigger", "after"], jobs: 2, memory, workerBytes: 768 * 2 ** 20,
     args: index => [fixture, directory, String(index)],
-    token: async(path,signal)=>{if(path==='after')await hold;return gate.token(path,signal);},
+    token: async (path, signal) => { if (path === "after") await hold; return gate.token(path, signal); },
     onRow: row => {
       rows.push(row);
-      if (row.path === "idle-holder") {
+      if (row.path === "idle-holder" && hold === undefined) {
         // Hold the released token explicitly. A priority waiter would now
         // close this idle worker, removing the intended aggregate victim.
-        hold=gate.token('fixture idle hold',holdStop.signal).then(release=>{
-          assert.ok(release);writeFileSync(join(directory,'idle-reported'),'idle');return release;
+        hold = gate.token("fixture idle hold", holdStop.signal).then(release => {
+          if (!release) return null;
+          writeFileSync(join(directory, "idle-reported"), "idle");
+          holdGranted = true;
+          return release;
         });
       }
     },
     report: message => {
       reports.push(message);
-      if (message.startsWith("resident pressure: idle worker ")) {
+      if (!withholdReport && message.startsWith("resident pressure: idle worker ")) {
+        idleReported = true;
         void returnHold();
-        try { writeFileSync(join(directory, "release-trigger"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK }); }
-        catch (error) { if (error.code !== "ENXIO") throw error; } // The trigger may also be collateral damage.
+        releaseFifo("trigger");
       }
     },
-  });
+  }).then(summary => { settled = { summary }; }, error => { settled = { error }; });
+  const outcome = () => settled === undefined ? undefined : "error" in settled ? `the pool failed: ${(settled.error as Error)?.stack ?? settled.error}` : "the pool finished without it";
+  try {
+    await waitFor("the idle holder's completed row and the test's hold token", () => holdGranted, { deadline: stages, stopped: outcome });
+    await waitFor("the resident pool's idle-worker pressure report", () => idleReported, reportHangMs === undefined ? { deadline: stages, stopped: outcome } : { timeoutMs: Math.min(reportHangMs, stages.remaining()), stopped: outcome });
+  } catch (missing) {
+    // Release every party, so none of them outlives this named failure.
+    releaseFifo("idle");
+    releaseFifo("trigger");
+    await returnHold();
+    memory.close();
+    // Its own expiry is reported beside the stage's name, never instead of it.
+    let unsettled: unknown;
+    try { await waitFor("the released resident pool to settle", () => settled !== undefined, { deadline: caseGuard }); }
+    catch (error) { unsettled = error; }
+    throw new Error(`${(missing as Error).message}\nreports:\n${reports.join("\n")}\npool: ${unsettled === undefined ? outcome() : (unsettled as Error).message}`, { cause: missing });
+  }
+  await run;
+  const done = settled as { summary: Awaited<ReturnType<typeof runMemoryWorkers>> } | { error: unknown };
+  if ("error" in done) throw done.error;
+  await returnHold();
+  return { summary: done.summary, rows, reports, holdClosed };
+}
+
+test("aggregate pressure restarts an idle worker without losing or replaying its completed case", { timeout: TEST_HANG_MS }, async t => {
+  const { memory, gate, outcome } = await idlePressureCase(t);
+  const { summary, rows, reports, holdClosed } = await outcome;
   assert.deepEqual(rows.map(row => [row.path, row.bucket]).sort(), [["after", "strict-pass"], ["idle-holder", "strict-pass"], ["idle-trigger", "strict-pass"]]);
   assert.equal(summary.idlePressureRestarts, 1, reports.join("\n"));
   assert.ok(summary.pressureRequeues <= 1, JSON.stringify(summary));
@@ -326,12 +406,22 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   assert.ok(summary.aggregatePressureKills >= 1);
   assert.equal(summary.systemPressureKills, 0);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
-  await returnHold();await gate.settled();
+  await gate.settled();
   const accounting=JSON.stringify({seen:gate.seen,summary,history:gate.history});
   assert.ok(summary.returnedOffers===0||summary.returnedOffers===1,accounting);
   assert.equal(gate.seen.grant, 4 + summary.isolatedReplays + summary.returnedOffers,accounting);
   assert.equal(gate.seen.release,gate.seen.grant,accounting);
   assert.equal(holdClosed,true,"the fixture idle hold returned and joined its real token");
+});
+
+test("a withheld idle-worker pressure report fails the aggregate-pressure case by its name, holding nothing", { timeout: TEST_HANG_MS }, async t => {
+  // The report's stage is bounded short: its expiry, or the pool finishing
+  // without the report reaching the handshake, is this control's answer.
+  const { memory, gate, outcome } = await idlePressureCase(t, { reportHangMs: 10_000, withholdReport: true });
+  await assert.rejects(outcome, /(?:test hung waiting for|test fixture stopped while waiting for) the resident pool's idle-worker pressure report/);
+  assert.equal(existsSync(join(CGROUP, memory.group)), false, "every party was released and the pool's cgroups removed");
+  await gate.settled();
+  assert.equal(gate.seen.release, gate.seen.grant, JSON.stringify(gate.seen));
 });
 
 test("a worker death without any OOM evidence is an instrument failure", async t => {
@@ -896,6 +986,85 @@ test('a warm offer returned after scope attachment is counted once before its re
  assert.equal(generations,2);assert.equal(summary.returnedOffers,1,JSON.stringify({summary,history:gate.history}));
  assert.equal(summary.pressureRequeues,0);assert.equal(summary.idlePressureRestarts,1);assert.equal(summary.isolatedReplays,0);
  await gate.settled();assert.deepEqual(gate.seen,{request:3,grant:3,release:3,cancel:0});
+ for(const group of groups)assert.equal(existsSync(join(CGROUP,group)),false);
+ assert.equal(existsSync(join(CGROUP,actual.group)),false);
+});
+
+test('a case offered to a worker OOM-killed while idle, before its close is observed, returns to the feed instead of being lost',async t=>{
+ const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const actual=new MemoryRun({budgetBytes:192*2**20,id:'idle-kill-offer'}),rows:any[]=[],reports:string[]=[],groups:string[]=[];
+ let generations=0,attachments=0,killed=false;
+ let captured:{worker:ReturnType<MemoryRun['worker']>;scope:ReturnType<ReturnType<MemoryRun['worker']>['scope']>}|undefined;
+ const forward=(target:object,key:string|symbol)=>{const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;};
+ // The kill's counters are supplied and its scope is really stopped, as an
+ // aggregate OOM leaves an idle worker: counted, dying, its close not yet
+ // seen when the next case's token arrives (the trigger's in the idle
+ // pressure case). No scheduling delay decides it.
+ const memory=new Proxy(actual,{get(run,key){
+  if(key==='aggregateOoms')return()=>run.aggregateOoms()+Number(killed);
+  if(key!=='worker')return forward(run,key);
+  return(index:string|number,bytes:number)=>{
+   const worker=run.worker(index,bytes),first=generations++===0;groups.push(worker.group);
+   return new Proxy(worker,{get(inner,name){
+    if(name==='counters')return()=>{const counters=inner.counters();return {...counters,kills:counters.kills+Number(first&&killed)};};
+    if(name==='scope')return(...args:Parameters<typeof inner.scope>)=>{const scope=inner.scope(...args);if(first)captured={worker:inner,scope};return scope;};
+    return forward(inner,name);
+   }});
+  };
+ }});
+ const gate=await gatePool(1,async()=>{
+  if(++attachments!==2)return;
+  assert.deepEqual(rows.map(row=>row.path),['quiet-first']);assert.ok(captured);
+  killed=true;captured.worker.stop(captured.scope);
+ });t.after(gate.close);
+ const summary=await runMemoryWorkers({paths:['quiet-first','quiet-second'],jobs:1,memory,workerBytes:96*2**20,token:gate.token,
+  args:index=>[fixture,directory,String(index)],onRow:row=>rows.push(row),report:line=>reports.push(line)});
+ assert.deepEqual(rows.map(row=>[row.path,row.bucket]),[['quiet-first','strict-pass'],['quiet-second','strict-pass']]);
+ assert.notEqual(rows[1].pid,rows[0].pid,'the returned case ran in a fresh generation, never in the killed one');
+ assert.ok(reports.some(line=>line.includes('idle worker 0 killed by aggregate-pressure')),reports.join('\n'));
+ assert.equal(generations,2);assert.equal(summary.returnedOffers,1,JSON.stringify({summary,history:gate.history}));
+ assert.equal(summary.pressureRequeues,0);assert.equal(summary.idlePressureRestarts,1);assert.equal(summary.isolatedReplays,0);
+ await gate.settled();assert.deepEqual(gate.seen,{request:3,grant:3,release:3,cancel:0});
+ for(const group of groups)assert.equal(existsSync(join(CGROUP,group)),false);
+ assert.equal(existsSync(join(CGROUP,actual.group)),false);
+});
+
+test('an idle own-limit OOM counted without a kill stops its worker before a case is offered, and fails by name',{timeout:TEST_HANG_MS},async t=>{
+ const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const actual=new MemoryRun({budgetBytes:192*2**20,id:'idle-oom-offer'}),rows:any[]=[],groups:string[]=[];
+ let generations=0,attachments=0,moved=false;
+ const forward=(target:object,key:string|symbol)=>{const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;};
+ // The kernel counts MEMCG_OOM before it chooses a victim, and may choose
+ // none: the worker's own `oom` moves, its kills do not, and its process
+ // lives on with stdin open. Only the pool stopping it can bring its close.
+ const memory=new Proxy(actual,{get(run,key){
+  if(key!=='worker')return forward(run,key);
+  return(index:string|number,bytes:number)=>{
+   const worker=run.worker(index,bytes),first=generations++===0;groups.push(worker.group);
+   return new Proxy(worker,{get(inner,name){
+    if(name==='counters')return()=>{const counters=inner.counters();return {...counters,oom:counters.oom+Number(first&&moved)};};
+    return forward(inner,name);
+   }});
+  };
+ }});
+ const gate=await gatePool(1,async()=>{if(++attachments===2){assert.deepEqual(rows.map(row=>row.path),['quiet-first']);moved=true;}});t.after(gate.close);
+ let failure:unknown,settled=false;
+ void runMemoryWorkers({paths:['quiet-first','quiet-second'],jobs:1,memory,workerBytes:96*2**20,token:gate.token,
+  args:index=>[fixture,directory,String(index)],onRow:row=>rows.push(row)}).then(()=>{settled=true;},error=>{failure=error;settled=true;});
+ // The pool settles within a second once it stops the worker; a pool that
+ // leaves it alive waits for a close that never comes. Fail that by name,
+ // then close the run, whose stopped scopes bring the close, so the
+ // failure holds no worker, token or slice past its bound.
+ try{await waitFor('the pool to settle after its idle worker\'s own-limit OOM',()=>settled,{timeoutMs:OWN_LIMIT_SETTLE_MS});}
+ catch(missing){
+  actual.close();let unsettled:unknown;
+  try{await waitFor('the pool to settle after the test closed its run',()=>settled,{timeoutMs:OWN_LIMIT_SETTLE_MS});}catch(error){unsettled=error;}
+  throw new Error(`${(missing as Error).message}${unsettled===undefined?'':`\n${(unsettled as Error).message}`}`,{cause:missing});
+ }
+ assert.match(String((failure as Error)?.message),/resident instrument failure: idle worker 0 reached its own limit without an in-flight case/);
+ assert.deepEqual(rows.map(row=>row.path),['quiet-first'],'the offered case never ran in the worker that hit its own limit');
+ assert.equal(generations,1);
+ await gate.settled();assert.equal(gate.seen.release,gate.seen.grant,JSON.stringify(gate.seen));
  for(const group of groups)assert.equal(existsSync(join(CGROUP,group)),false);
  assert.equal(existsSync(join(CGROUP,actual.group)),false);
 });

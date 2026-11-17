@@ -31,7 +31,9 @@ for await (const path of createInterface({ input: process.stdin })) {
     await deadlineWait(join(directory, "trigger-ready"));
     process.stdout.write(`${JSON.stringify({ path, bucket: "strict-pass", pid: process.pid })}\n`);
     // Its completed row makes this worker idle. The FIFO keeps it alive
-    // without allocations until the aggregate chooses it as the victim.
+    // without allocations until the aggregate chooses it as the victim. The
+    // test's handshake owner writes it only to release a victim the aggregate
+    // never chose, which then fails by name below.
     readSync(release, released, 0, 1, null);
     closeSync(release);
     throw new Error(`idle victim retained ${held.length} bytes but was released instead of killed`);
@@ -46,6 +48,8 @@ for await (const path of createInterface({ input: process.stdin })) {
     }
     // Fits alone, but not beside the completed worker's retained 200 MiB.
     held = Buffer.alloc(650 * 2 ** 20, 1);
+    // Released by the pool's idle-worker pressure report, or by the test's
+    // handshake owner when that report never arrives.
     if (release !== undefined) {
       readSync(release, released, 0, 1, null);
       closeSync(release);

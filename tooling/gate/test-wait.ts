@@ -6,17 +6,30 @@ import {testEnvironment} from './test-environment.ts';
 
 export const TEST_HANG_MS = 5 * 60_000;
 
+/**
+ * One hang guard shared by successive waits: each wait under it gets only what
+ * remains of `limitMs`, so a sequence of named waits ends, by its name, inside
+ * an enclosing bound such as node's test timeout.
+ */
+export type HangDeadline = { readonly limitMs: number; remaining(): number };
+export function hangDeadline(limitMs: number): HangDeadline {
+  const started = performance.now();
+  return { limitMs, remaining: () => Math.max(0, limitMs - (performance.now() - started)) };
+}
+
 export async function waitFor(
   what: string,
   ready: () => boolean,
-  options: { timeoutMs?: number; stopped?: () => string | undefined } = {},
+  options: { timeoutMs?: number; deadline?: HangDeadline; stopped?: () => string | undefined } = {},
 ): Promise<void> {
-  const limit = options.timeoutMs ?? TEST_HANG_MS;
+  if (options.deadline && options.timeoutMs !== undefined) throw new Error(`waitFor ${what}: give a timeout or a shared deadline, not both`);
+  const limit = options.deadline?.remaining() ?? options.timeoutMs ?? TEST_HANG_MS;
+  const guard = options.deadline ? `${options.deadline.limitMs} ms shared hang guard` : `${limit} ms hang guard`;
   const started = performance.now();
   while (!ready()) {
     const stopped = options.stopped?.();
     if (stopped) throw new Error(`test fixture stopped while waiting for ${what}: ${stopped}`);
-    if (performance.now() - started >= limit) throw new Error(`test hung waiting for ${what} (${limit} ms hang guard)`);
+    if (performance.now() - started >= limit) throw new Error(`test hung waiting for ${what} (${guard})`);
     await poll(10);
   }
 }

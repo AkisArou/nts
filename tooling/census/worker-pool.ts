@@ -158,7 +158,18 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             const group=readFileSync(scope.ready,'utf8').trim().replace(/^0::/,'');
             await registerCaseScope((granted as TokenRelease).case,current.group,current.bytes,group);
             if(exited||restarting){returnToken();await offer.return();return;}
-            before = current.counters();
+            // An OOM counted in this worker's own slice since its idle
+            // baseline: the case never runs there. Stop the scope, so its
+            // close always arrives (an `oom` the kernel counted without
+            // choosing a victim leaves the process alive), and return the
+            // case. That close classifies the move against the kept
+            // baseline: an idle pressure restart for a kill, an instrument
+            // failure for its own limit. A fresh baseline here would erase
+            // the kill and report the case lost. Another worker's
+            // aggregate OOM leaves these counters unchanged.
+            const idle = current.counters();
+            if(idle.oom!==before.oom||idle.kills!==before.kills){current.stop(scope);returnToken();await offer.return();return;}
+            before = idle;
             aggregateBefore = memory.aggregateOoms();
             active = work[Number(entry)]!;
             child.stdin.write(`${active.path}\n`);
