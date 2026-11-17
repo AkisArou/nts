@@ -7,7 +7,7 @@ import { registerHooks } from "node:module";
 import {infrastructureProbe,type InfrastructureProbe,type ProbeRequest} from './infrastructure-probe.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import {basename,dirname,join,relative} from "node:path";
+import {basename,dirname,isAbsolute,join,relative,resolve} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
@@ -215,6 +215,13 @@ export function withSelectorSources<T>(repo:string,revisions:readonly string[],o
 /** The writer and its consumers assess one immutable HEAD source and its
  * ordinary verified installation, independently from the candidate body. */
 export type CommittedSelectorSource={tree:string;revision:string;dependencyCatalog:ReturnType<typeof installationCatalogTrust>};
+type EndpointTrust=RustSelectorTrust&{projectBase?:Pick<CommittedSelectorSource,'tree'|'revision'>};
+function projectBaseSource(value:unknown):EndpointTrust['projectBase']{
+  if(value===undefined)return;
+  if(!value||typeof value!=='object'||!('tree'in value)||typeof value.tree!=='string'||!isAbsolute(value.tree)||resolve(value.tree)!==value.tree
+      ||!('revision'in value)||typeof value.revision!=='string'||!/^([a-f0-9]{40}|[a-f0-9]{64})$/.test(value.revision))throw Error('invalid committed project base source');
+  return {tree:value.tree,revision:value.revision};
+}
 export function withCommittedSelectorSource<T>(repo:string,operation:(source:CommittedSelectorSource)=>T):T{
   const revision=git(repo,'rev-parse','--verify','--end-of-options','HEAD^{commit}');
   return withSelectorSources(repo,[revision],sources=>{
@@ -228,11 +235,11 @@ export function selectRange(repo:string,range:string):RangeSelection{
   const acceptedRustRecord=infrastructure('selector accepted record identity',()=>acceptedRustSelectorIdentity(repo));
   const changes=infrastructure('selector committed paths',()=>committedChanges(repo,base,tip));
   return withSelectorSources(repo,[base,tip],sources=>{
-    const views:RuleView[]=[];let dependencyCatalog:RustSelectorTrust['dependencyCatalog']=null;
+    const views:RuleView[]=[];let dependencyCatalog:RustSelectorTrust['dependencyCatalog']=null,projectBase:EndpointTrust['projectBase'];
     for(const [index,revision]of [base,tip].entries()){
       const tree=sources.prepare(index);
-      if(index===0)dependencyCatalog=infrastructure('selector base installation catalog identity',()=>installationCatalogTrust(sources.shared,tree));
-      const trust:RustSelectorTrust={acceptedRustRecordBlob:acceptedRustRecord?.blob??null,dependencyCatalog};
+      if(index===0){dependencyCatalog=infrastructure('selector base installation catalog identity',()=>installationCatalogTrust(sources.shared,tree));projectBase={tree,revision};}
+      const trust:EndpointTrust={acceptedRustRecordBlob:acceptedRustRecord?.blob??null,dependencyCatalog,projectBase};
       try {
         const env=process.env;
         const text=withCargoConfigurationSync([tree,...(env.NTS_TEST_SCRATCH_ROOT?[env.NTS_TEST_SCRATCH_ROOT]:[])],env,()=>
@@ -258,7 +265,7 @@ export function selectRange(repo:string,range:string):RangeSelection{
   });
 }
 
-async function endpoint(tree: string, revision: string, changes:PathChange[],trust:RustSelectorTrust): Promise<RuleView> {
+async function endpoint(tree: string, revision: string, changes:PathChange[],trust:EndpointTrust): Promise<RuleView> {
   const loaded=new Map<string,string>();let complete=true;
   const hooks=registerHooks({load(url,context,next){
     const result=next(url,context);
@@ -321,14 +328,15 @@ runAsCommand(import.meta.url,async()=>{
     const input:unknown=JSON.parse(readFileSync(0,"utf8"));
     // A historical request has no accepted-record capability. Absence stays
     // explicit; the private endpoint never consults its own main or shell.
-    let changes:PathChange[],trust:RustSelectorTrust;
+    let changes:PathChange[],trust:EndpointTrust;
     if(Array.isArray(input)){changes=input;trust={acceptedRustRecordBlob:null,dependencyCatalog:null};}
     else{
       if(!input||typeof input!=='object'||!('version'in input)||input.version!==1||!('changes'in input)||!Array.isArray(input.changes)
         ||!('acceptedRustRecordBlob'in input)||input.acceptedRustRecordBlob!==null&&(typeof input.acceptedRustRecordBlob!=='string'
         ||!/^([a-f0-9]{40}|[a-f0-9]{64})$/.test(input.acceptedRustRecordBlob)))throw Error('invalid owed endpoint trust input');
       changes=input.changes;trust={acceptedRustRecordBlob:input.acceptedRustRecordBlob,
-        dependencyCatalog:readDependencyCatalogTrust('dependencyCatalog'in input?input.dependencyCatalog:null)};
+        dependencyCatalog:readDependencyCatalogTrust('dependencyCatalog'in input?input.dependencyCatalog:null),
+        projectBase:projectBaseSource('projectBase'in input?input.projectBase:undefined)};
     }
     process.stdout.write(JSON.stringify(await endpoint(tree, revision,changes,trust)));
   } catch (error) { console.error(String(error)); process.exitCode = selectionInfrastructure(error) ? INFRASTRUCTURE_EXIT : 1; }

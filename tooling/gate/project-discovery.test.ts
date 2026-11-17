@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdirSync,readdirSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {projectDiscoveryOwner,projectRequest,type ProjectRequest} from './project-discovery.ts';
+import {projectDiscoveryOwner,projectRequest,removedProjectMatches,type ProjectRequest} from './project-discovery.ts';
 import {projectInputs} from './project-inputs.ts';
 import {testScratch} from './test-scratch.ts';
 
@@ -47,6 +47,20 @@ test('each referenced project retains its own native matching query',t=>{
     assert.deepEqual(owner.read(input.matches[0]!.request),input.matches[0]);
     assert.notDeepEqual(owner.read(input.matches[1]!.request),input.matches[1]);
   }finally{owner.close();}
+});
+
+test('committed native matches retain deleted roots without selecting unrelated or excluded deletions',t=>{
+  const before=fixture(t),current=fixture(t);
+  before.write('src/gone.ts','interface RemovedGlobal { value: number }');
+  before.write('src/excluded.ts','export {};');before.write('src/notes.tsv','ignored');
+  const owner=projectDiscoveryOwner(current.root);
+  try{for(const request of [{kind:'config',path:'tsconfig.json'},{kind:'generated',path:'base.json',directory:'src',include:'typescript-tree'}] as const){
+    const row=owner.read(request),changes=[{path:'src/gone.ts',deleted:true},{path:'src/notes.tsv',deleted:true}];
+    assert.deepEqual([...removedProjectMatches(before.root,[row],changes).values()],[['src/gone.ts']]);
+    assert.deepEqual([...removedProjectMatches(before.root,[row],[{path:'src',deleted:true}]).values()],[['src']]);
+    assert.equal(removedProjectMatches(before.root,[row],[{path:'src/notes.tsv',deleted:true}]).size,0,'unrelated dirty matches do not widen another question');
+    if(request.kind==='config')assert.equal(removedProjectMatches(before.root,[row],[{path:'src/excluded.ts',deleted:true}]).size,0,'the compiler owns exclusions');
+  }}finally{owner.close();}
 });
 
 test('generated matching reuses the literal recipe owner and removes every private config',t=>{

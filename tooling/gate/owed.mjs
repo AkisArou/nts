@@ -83,12 +83,13 @@ import { dirname, join, normalize, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
-import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem } from "./owed-range.ts";
+import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem, withCommittedSelectorSource } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
 import { moduleGraph } from "./module-closure.ts";
 import {readerObservationDependency,readerObservationIndex,readerDependencyIndex} from './reader-observations.ts';
+import {removedProjectMatches} from './project-discovery.ts';
 import {rustSelectorInputs,rustSelectorTrust} from './rust-selector-selection.ts';
 import {withRustSelectorSource} from './rust-selector-write.ts';
 import {reportRustRecordDecisions} from './rust-selector-decision.ts';
@@ -96,6 +97,7 @@ import {sameOracleObservation} from '../differential/oracle-runtime.ts';
 import {matchesModuleMember,selectionInput} from "./reader-inputs/main.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
+/** @typedef {import('./rust-selector-selection.ts').RustSelectorOptions&{readonly projectBase?:Pick<import('./owed-range.ts').CommittedSelectorSource,'tree'|'revision'>}} StepSelectorOptions */
 
 const USAGE = `usage: node tooling/gate/owed.mjs [--since <rev> | --range <base>..<tip>] [--run]
        node tooling/gate/owed.mjs --commit <rev>
@@ -1710,6 +1712,8 @@ function stepInputGraph(options) {
     const memberships=new Map();
     /** @type {Map<string,import('./module-closure.ts').ReaderObservation&{steps:Set<string>}>} */
     const observations=new Map();
+    /** @type {Map<string,import('./module-closure.ts').InputSnapshot['projectMatches'][number]&{steps:Set<string>}>} */
+    const projectMatches=new Map();
     /** @type {Map<string,import('./rust-selector-record.ts').RustSelectorRoles['typedDependencies'][number]&{steps:Set<string>}>} */
     const projectedDependencies=new Map();
     /** @type {Map<string,import('./module-closure.ts').UnavailableInput&{steps:Set<string>}>} */
@@ -1725,7 +1729,7 @@ function stepInputGraph(options) {
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    const metadata=(/** @type {Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'>} */ snapshot,/** @type {string} */ step)=>{
+    const metadata=(/** @type {Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'>&Partial<Pick<import('./module-closure.ts').InputSnapshot,'projectMatches'>>} */ snapshot,/** @type {string} */ step)=>{
       for(const row of snapshot.unavailableInputs??[]){
         const key=JSON.stringify(row),fact=unavailableInputs.get(key)??{...structuredClone(row),steps:new Set()};
         fact.steps.add(step);unavailableInputs.set(key,fact);
@@ -1738,6 +1742,12 @@ function stepInputGraph(options) {
       for(const row of snapshot.memberships){
         const key=JSON.stringify([row.reader,row.directory,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
         const fact=memberships.get(key)??{...row,steps:new Set()};fact.steps.add(step);memberships.set(key,fact);
+      }
+      for(const row of snapshot.projectMatches??[]){
+        const key=JSON.stringify([row.reader,row.context.entry,Object.entries(row.context.dataNamespaces).sort(),row.request]);
+        const previous=projectMatches.get(key);
+        if(previous&&!sameOracleObservation(previous.files,row.files))throw Error('project matches changed during selection: '+row.request.path);
+        const fact=previous??{...structuredClone(row),steps:new Set()};fact.steps.add(step);projectMatches.set(key,fact);
       }
       for(const row of snapshot.observations){
         const key=JSON.stringify([row.reader,row.protocol,row.observation.kind,row.observation.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort(),row.capability??null]);
@@ -1753,7 +1763,7 @@ function stepInputGraph(options) {
         if(!row.observationOnly&&dependency?.bytes){map.add(dependency.path,step);byteReaders.add(dependency.path,step);}
       }
     };
-    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'>}>} */
+    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'|'projectMatches'>}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1898,9 +1908,9 @@ function stepInputGraph(options) {
       const [, taker, giver] = m;
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
-      for(const facts of [directories,optionalFiles,memberships,observations,projectedDependencies,unavailableInputs])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
+      for(const facts of [directories,optionalFiles,memberships,observations,projectMatches,projectedDependencies,unavailableInputs])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
     }
-    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,observations,projectedDependencies,unavailableInputs,rustRecord,allRustSteps,
+    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,observations,projectMatches,projectedDependencies,unavailableInputs,rustRecord,allRustSteps,
       observationIndex:observations.size?readerObservationIndex(TREE,observations.values(),trackedFiles(),modules.membershipIndex()):undefined,
       projectedIndex:projectedDependencies.size?readerDependencyIndex(projectedDependencies.values(),row=>row.dependency,trackedFiles(),modules.membershipIndex()):undefined,
       membershipIndex:memberships.size?modules.membershipIndex():undefined,tracked:new Set(trackedFiles()) };
@@ -2081,7 +2091,7 @@ function rulesFor(/** @type {string} */ path,/** @type {boolean} */ added) {
   return matches.get(path);
 }
 
-/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+/** @param {StepSelectorOptions} [options] */
 export function owed(changes,options) {
   const trust=rustSelectorTrust(TREE,options);
   const out = [];
@@ -2110,6 +2120,14 @@ export function owed(changes,options) {
   // Structural reads precede prose and record precision: a new Markdown child
   // can change an enumeration even though editing its prose cannot.
   const metadataGraph=stepInputGraph(trust);
+  if(metadataGraph.projectMatches.size&&changes.some(change=>change.deleted)){
+    const compare=(/** @type {Pick<import('./owed-range.ts').CommittedSelectorSource,'tree'|'revision'>} */ source)=>{
+      for(const [row,paths]of removedProjectMatches(source.tree,metadataGraph.projectMatches.values(),changes))
+        for(const path of paths)add('project matches read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
+    };
+    const base=options?.projectBase??trust.committedSource;
+    if(base)compare(base);else withCommittedSelectorSource(TREE,compare);
+  }
   if(changes.length)for(const row of metadataGraph.unavailableInputs.values())
     add('installation inputs unknown: '+row.reason+' (read by '+row.reader+')',changes[0].path,[...row.steps],{precise:false,wide:true});
   if(changes.length&&metadataGraph.allRustSteps.size)add('Rust installation catalog requires all targets',changes[0].path,[...metadataGraph.allRustSteps],{precise:false,wide:true});

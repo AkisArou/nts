@@ -151,6 +151,28 @@ if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\
   assert.deepEqual(got.checks.steps,["tests","tooling"]);
 });
 
+test('the tip receives the committed base source for removed Program matches, independently of working dirt',t=>{
+  const repo=mkdtempSync(join(tmpdir(),'owed-project-base-'));t.after(()=>rmSync(repo,{recursive:true,force:true}));
+  const env={...fixtureEnvironment(t),GIT_AUTHOR_NAME:'test',GIT_AUTHOR_EMAIL:'test@example.invalid',GIT_COMMITTER_NAME:'test',GIT_COMMITTER_EMAIL:'test@example.invalid'};
+  const git=(...args:string[])=>execFileSync('git',gitArguments(args),{cwd:repo,env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+  mkdirSync(join(repo,'tooling/gate'),{recursive:true});
+  writeFileSync(join(repo,'tooling/gate/owed.mjs'),`import {existsSync,readFileSync} from 'node:fs';import {join} from 'node:path';
+export const selfTest=()=>null;export const allSteps=()=>['profile'];export const SELECTOR_POLICY_DATA=[];
+export const owed=(changes,options)=>{
+  const source=options.projectBase;if(!source)throw Error('missing committed project base');
+  const before=readFileSync(join(source.tree,'gone.ts'),'utf8');if(before!=='committed base')throw Error('wrong base source');
+  const after=existsSync('gone.ts')?readFileSync('gone.ts','utf8'):null;
+  return before===after?[]:[{name:'project base control',paths:changes.map(row=>row.path),steps:['profile'],arms:[]}];
+};export const gateSteps=rules=>rules.flatMap(row=>row.steps);`);
+  writeFileSync(join(repo,'gone.ts'),'committed base');git('init','-qb','main');git('add','.');git('commit','-qm','base project');
+  const base=git('rev-parse','HEAD');git('rm','gone.ts');git('commit','-qm','remove a matched root');const tip=git('rev-parse','HEAD');
+  const selected=selectRange(repo,`${base}..${tip}`);
+  assert.deepEqual(selected.views[0]!.checks.steps,[]);
+  assert.deepEqual(selected.views[1]!.checks.steps,['profile'],'the tip itself compares against the base, rather than relying on union');
+  writeFileSync(join(repo,'gone.ts'),'uncommitted caller bytes');
+  assert.deepEqual(selectRange(repo,`${base}..${tip}`).checks,selected.checks);
+});
+
 test('the current endpoint parent refuses historical Cargo configuration before entry and after drain',t=>{
   const root=mkdtempSync(join(tmpdir(),'owed-historical-cargo-')),tree=join(root,'repo'),bin=join(root,'bin'),home=join(root,'cargo-home');
   t.after(()=>rmSync(root,{recursive:true,force:true}));

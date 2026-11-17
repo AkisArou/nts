@@ -1981,7 +1981,9 @@ death; an absent timestamp remains explicit after forced termination.
   operation keeps its selection obligation, in either acquisition order.
   Compact accepted records retain this role distinction explicitly. Ignored,
   nonmatching build output leaves the key unchanged; matching source changes
-  invalidate it. Config bytes, negative resolution and alias facts retain
+  invalidate it. Step selection replays each current request at the committed
+  base to retain consumers of removed matched roots; unrelated and excluded
+  deletions add no reach. Config bytes, negative resolution and alias facts retain
   their independent obligations. Compiled programs also retain the emitter's
   actual nearest-config lookups for local non-declaration modules as ordinary
   selection facts, including absent nearer configs. Queried Program modules

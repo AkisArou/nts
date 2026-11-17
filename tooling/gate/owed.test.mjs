@@ -277,13 +277,15 @@ step "tooling" node tooling/empty.test.ts
     put(prefix+'/tsconfig.json','{"include":["src/**/*.ts"]}');put(prefix+'/src/main.ts','export const value=1;');put(prefix+'/src/new.ts','export const added=1;');
     put(prefix+'/src/notes.md','old prose');put(prefix+'/src/unexecuted.mjs','export const value=1;');
   }
+  put('docs/data/src/gone.ts','interface RemovedGlobal { value: number }');
   put('docs/data/target.md','target prose');put('docs/data/directory/child.md','child');
   symlinkSync('target.md',join(root,'docs/data/relay'));
   symlinkSync('../relay',join(root,'docs/data/src/alias'));
   put('docs/data/real-configs/base.json','{}');symlinkSync('real-configs',join(root,'docs/data/configs'));
   put('docs/data/tsconfig.json','{"extends":"./configs/base.json","include":["src/**/*.ts"]}');
   const env=fixtureEnvironment(t);
-  for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  for(const args of [['init','--quiet'],['add','.'],['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','committed Program roots']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  rmSync(join(root,'docs/data/src/gone.ts'));put('docs/data/src/gone.md','interface RemovedGlobal { value: number }');
   const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
 const select=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),fallback:rules.some(row=>row.fallback),facts:rules.filter(row=>row.name.includes(' read by ')).map(row=>row.name)};};
 const first=inputMetadataDeclarations();for(const row of first.observations){row.steps.length=0;row.context.entry='mutated';if(row.observation.value&&typeof row.observation.value==='object'&&'files' in row.observation.value)row.observation.value.files.length=0;}
@@ -296,6 +298,8 @@ physicalConfig:select([{path:'docs/data/real-configs/base.json',before:'// old\\
 configAlias:select([{path:'docs/data/configs',before:'real-configs',after:'directory',sameMode:true}]),
 includeChange:select([{path:'docs/data/tsconfig.json',before:'{"include":["src/main.ts"]}',after:'{"include":["src/**/*.ts"]}',sameMode:true}]),
 matching:select([{path:'docs/data/src/new.ts',added:true}]),
+deletedMatch:select([{path:'docs/data/src/gone.ts',deleted:true}]),
+renamedMatch:select([{path:'docs/data/src/gone.ts',deleted:true},{path:'docs/data/src/gone.md',added:true}]),
 add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
 renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
 nearer:select([{path:'docs/data/src/tsconfig.json',added:true}]),
@@ -306,9 +310,13 @@ unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),
   for(const step of ['profile','addons']){
     assert.ok(!value.edit.steps.includes(step),'prose bytes do not change a directory answer');
     assert.ok(!value.targetEdit.steps.includes(step),'followed target prose does not change an entries answer');
-    for(const key of ['config','includeChange','physicalConfig','configAlias','matching'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+    for(const key of ['config','includeChange','physicalConfig','configAlias','matching','deletedMatch','renamedMatch'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
     for(const key of ['add','removed','renamed','nearer','retarget','relay','targetRemoved'])assert.ok(!value[key].steps.includes(step),key+' is outside the fixed Program match: '+step);
     assert.ok(value.metadata.observations.every((/** @type {{steps:string[]}} */ row)=>row.steps.includes(step)),step+' survives in typed provenance');
+  }
+  for(const key of ['deletedMatch','renamedMatch']){
+    assert.ok(!value[key].fallback,key+' has a known Program consumer');
+    assert.ok(value[key].facts.includes('project matches read by tooling/private/reader.ts'),key+' uses the native match comparison');
   }
   assert.ok(value.unknown.fallback,'enumeration never supplies placement for an unexecuted utility');
   assert.ok(value.metadata.observations.some((/** @type {import('./module-closure.ts').ReaderObservation} */ row)=>row.observation.kind==='fileExists'&&row.observation.value===false));
