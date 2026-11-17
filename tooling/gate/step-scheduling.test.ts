@@ -389,14 +389,19 @@ test('an observed run uses ordinary measured ledger sizing and leaves ordinary h
   assert.deepEqual(readFileSync(source),before,'even observer-inflated samples cannot change ordinary sizing');
 });
 
+// The terminal drain closes one owner at a time, the last registered first,
+// so the report order is fixed by registration, never by elapsed time. The
+// step's bound is only a hang guard: its own verdict is asserted first, so the
+// verdicts below are about cleanup and report order alone.
 for(const lateCleanup of ['broker','ledger','diagnostics'] as const)test(`a late ${lateCleanup} cleanup failure is in the published summary before the tree lock ends`,t=>{
-  const fixture:MemoryFixture={steps:'clippy',rows:{clippy:{slots:1,reserve:1,bound:2}},times:'clippy\t1\t1\t1\n',payload:':',availableKiB:24*2**20,lateCleanup};
+  const fixture:MemoryFixture={steps:'clippy',rows:{clippy:{slots:1,reserve:1,bound:60}},times:'clippy\t1\t1\t1\n',payload:':',availableKiB:24*2**20,lateCleanup};
   const before=memoryRun(t,{...fixture,reportOrder:'before'});
-  assert.equal(before.result.status,2,before.output);
+  assert.equal(before.result.status,2,before.output);assert.equal(before.step('clippy').verdict,'PASS',before.output);
   assert.equal(before.summary.verdict,'green','publishing before cleanup hides its failure');
   assert.equal(before.summary.scope_cleanup.state,'complete');
   const after=memoryRun(t,{...fixture,reportOrder:'after'});
-  assert.equal(after.result.status,2,after.output);assert.equal(after.summary.verdict,'red');
+  assert.equal(after.result.status,2,after.output);assert.equal(after.step('clippy').verdict,'PASS',after.output);
+  assert.equal(after.summary.verdict,'red');
   assert.equal(after.summary.scope_cleanup.state,'error');assert.match(after.summary.scope_cleanup.reason!,new RegExp('late '+lateCleanup+' cleanup control'));
   assert.deepEqual(readLedger(after.ledger),{waiting:[],admitted:[]},'the error does not bypass physical ledger cleanup');
 });
