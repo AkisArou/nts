@@ -223,6 +223,8 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
     )
     .unwrap();
 
+    std::fs::copy(root.join("runtime/jvm/jdk.txt"), runtime.join("jdk.txt")).unwrap();
+
     std::fs::copy(
         root.join("runtime/jvm/test-vm-flags.txt"),
         runtime.join("test-vm-flags.txt"),

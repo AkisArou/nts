@@ -277,8 +277,10 @@ process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??Stri
 
 test("different launcher ambients produce identical step environments",t=>{
   const {run,base}=fixture(t);
-  const a=gateEnvironment({...base,LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",JAVA_TOOL_OPTIONS:"-Xmx4g",DISPLAY:":99",LD_LIBRARY_PATH:"/one",PRIVATE_TOKEN:"secret one"},{run});
-  const b=gateEnvironment({...base,LANG:"C",NODE_OPTIONS:"--no-warnings",JAVA_TOOL_OPTIONS:"-Xmx1g",WAYLAND_DISPLAY:"wayland-0",LD_PRELOAD:"/two",OTHER_SECRET:"secret two"},{run});
+  // No declared JDK is installed here (jdk.test.ts covers one that is), so
+  // the launcher's JAVA_HOME is the host capability that passes through.
+  const a=gateEnvironment({...base,LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",JAVA_TOOL_OPTIONS:"-Xmx4g",DISPLAY:":99",LD_LIBRARY_PATH:"/one",PRIVATE_TOKEN:"secret one"},{run,jdkInstallations:[]});
+  const b=gateEnvironment({...base,LANG:"C",NODE_OPTIONS:"--no-warnings",JAVA_TOOL_OPTIONS:"-Xmx1g",WAYLAND_DISPLAY:"wayland-0",LD_PRELOAD:"/two",OTHER_SECRET:"secret two"},{run,jdkInstallations:[]});
   const withoutReport=(env:NodeJS.ProcessEnv)=>Object.fromEntries(Object.entries(env).filter(([name])=>name!==ENVIRONMENT_CONTEXT));
   assert.deepEqual(withoutReport(a.env),withoutReport(b.env));
   assert.equal(a.report.canonical,true);assert.equal(b.report.canonical,true);
@@ -428,7 +430,7 @@ fi
     const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:root,env:planned.env,encoding:"utf8"});
     assert.equal(actual.status,code===0?0:1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,"summary.json"),"utf8"));
-    assert.equal(summary.environment.canonical,true);assert.equal(summary.environment.host.JAVA_HOME,base.JAVA_HOME);
+    assert.equal(summary.environment.canonical,true);assert.equal(summary.environment.host.JAVA_HOME,planned.report.host.JAVA_HOME);
     assert.equal(summary.diagnostics.state,'complete');assert.equal(summary.diagnostics.sourceRun,directory);
     assert.deepEqual(summary.diagnostics.loopDelay,{count:0,maxMs:null,p99Ms:null});
     assert.equal(summary.diagnostics.pressureExposure.machine.stallUsec.cpu.some,0);

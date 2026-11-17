@@ -1,0 +1,8 @@
+# The JDK this tree builds runtime/jvm/nts-runtime.jar with and runs its JVM
+# tests under, named by the two lines of that JDK's own `release` file that
+# decide the jar's bytes: javac's version moves stack-map frames and line
+# tables, and the vendor is written into the manifest's Created-By. build.sh
+# refuses any other JDK by name; tooling/gate/jdk.ts finds this one for a gate.
+# Install: asdf install java corretto-21.0.5.11.1
+IMPLEMENTOR="Amazon.com Inc."
+JAVA_RUNTIME_VERSION="21.0.5+11-LTS"

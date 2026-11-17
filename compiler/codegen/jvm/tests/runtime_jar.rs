@@ -52,8 +52,13 @@ fn tool(name: &str) -> Option<PathBuf> {
 /// Rebuilding the sources reproduces the jar byte for byte.
 ///
 /// `--date` pins the archive's timestamps and `--release 8` pins the class file
-/// version, so the only thing that can move the bytes is the source. Regenerate
-/// with `NTS_REGENERATE=1 cargo test -p nts-codegen-jvm --test integration
+/// version, but neither pins the bytes: javac 21 and javac 27 infer different
+/// stack-map frame types and line tables for the same source, and the manifest
+/// names the JDK's vendor. So `runtime/jvm/jdk.txt` declares the one JDK that
+/// builds the jar, by its `release` identity, and `build.sh` refuses any other
+/// `JAVA_HOME` by name; the gate's canonical environment gives every run that
+/// JDK (`tooling/gate/jdk.ts`). With the JDK fixed, the only thing that can
+/// move the bytes is the source. Regenerate with `NTS_REGENERATE=1 cargo test -p nts-codegen-jvm --test integration
 /// runtime_jar::the_jar_matches_the_sources_it_was_built_from -- --exact`.
 #[test]
 fn the_jar_matches_the_sources_it_was_built_from() {

@@ -21,6 +21,7 @@ import type {Context,EnvironmentReport,GateEnvironment} from './environment-type
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-environment.ts';
 import {assignOwnedValues} from './environment-values.ts';
 import {toolchainDirectories} from './toolchain.ts';
+import {chooseJdk} from './jdk.ts';
 
 const SYSTEM_TOOL_DIRECTORIES = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"];
 // A step's handoff from its run, not capabilities forwarded to programs under
@@ -111,7 +112,7 @@ function strings(values: NodeJS.ProcessEnv): Record<string, string> {
 /** `owned` is supplied by the runner's code, never copied wholesale from a launcher. */
 export function gateEnvironment(
   launcher: NodeJS.ProcessEnv,
-  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string; oracleAdmissionContext?: "gate" | "standalone"; oracleRoot?: string; node?: string },
+  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string; oracleAdmissionContext?: "gate" | "standalone"; oracleRoot?: string; node?: string; jdkInstallations?: string[] },
 ): GateEnvironment {
   const inherited = launcher[ENVIRONMENT_CONTEXT];
   let prior: Context | undefined;
@@ -137,6 +138,10 @@ export function gateEnvironment(
   }
   const legacy = selected === "today" || prior?.report.experiments.some(e => e.name === ENVIRONMENT_EXPERIMENT && e.value === "today");
   const host = hostEnvironment(launcher);
+  const toolingRoot=realpathSync(options.oracleRoot??resolve(dirname(fileURLToPath(import.meta.url)),"../.."));
+  // The tree's declared JDK, not the launcher's JAVA_HOME (jdk.ts): the
+  // runtime jar's bytes depend on which javac builds it.
+  const jdk = legacy ? prior?.report.jdk : chooseJdk(host, launcher, toolingRoot, options.jdkInstallations) ?? prior?.report.jdk;
   // The enclosing context retains its resolved tools and source-owned fixture
   // overrides. A fresh canonical run resolves its selected Node and declared
   // toolchains ahead of the fixed system directories.
@@ -144,7 +149,6 @@ export function gateEnvironment(
     owned.PATH = [...new Set([...toolchainDirectories(options.node ?? process.execPath, host), ...SYSTEM_TOOL_DIRECTORIES])].join(delimiter);
   }
   delete host.NTS_ORACLE_DEPENDENCIES;delete owned.NTS_ORACLE_DEPENDENCIES;
-  const toolingRoot=realpathSync(options.oracleRoot??resolve(dirname(fileURLToPath(import.meta.url)),"../.."));
   const inheritedDependencies=prior?.owned.NTS_ORACLE_DEPENDENCIES;
   if(inheritedDependencies&&prior!.report.host.NTS_ORACLE_DEPENDENCIES!==inheritedDependencies)throw new Error("invalid owned oracle dependency handoff");
   const inheritedCapability=inheritedDependencies?JSON.parse(inheritedDependencies):undefined;
@@ -212,7 +216,7 @@ export function gateEnvironment(
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,
     host: Object.fromEntries(HOST_CAPABILITIES.map(name => [name, env[name] ?? null])),
-    ambient, dropped, experiments,
+    ambient, dropped, experiments, ...(jdk ? { jdk } : {}),
   };
   // A sealed child borrows the exact live parent session. An unsealed command
   // owns fresh mutable state even when it reuses the parent's dependency image.
@@ -341,6 +345,9 @@ export async function withPreparedOracle(
 
 export function reportEnvironment(report: EnvironmentReport, write: (text: string) => void = text => process.stderr.write(text)): void {
   if (report.dropped.length) write(`gate: discarded launcher variable names: ${report.dropped.join(", ")}\n`);
+  if (report.jdk) write(report.jdk.declared
+    ? `gate: JDK ${report.jdk.home} (${report.jdk.identity}, runtime/jvm/jdk.txt)\n`
+    : `gate: no installed JDK is ${report.jdk.identity} (runtime/jvm/jdk.txt); JAVA_HOME stays ${report.jdk.home ?? "unset"}, and the runtime jar will not build\n`);
   if (!report.canonical) write(`gate: NON-CANONICAL experiment; not landing evidence (${report.experiments.map(e => e.name).join(", ")})\n`);
 }
 

@@ -4140,6 +4140,10 @@
           },
           {
             "kind": "file",
+            "path": "../../../../runtime/jvm/jdk.txt"
+          },
+          {
+            "kind": "file",
             "path": "../../../../runtime/jvm/test-vm-flags.txt"
           }
         ]
@@ -14040,6 +14044,10 @@
           {
             "kind": "file",
             "path": "../../../runtime/jvm/jar-date.txt"
+          },
+          {
+            "kind": "file",
+            "path": "../../../runtime/jvm/jdk.txt"
           },
           {
             "kind": "file",

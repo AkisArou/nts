@@ -83,8 +83,9 @@ test("different launcher paths produce the same canonical PATH and verdict contr
   const first = gateEnvironment({ ...base, PATH: agent + delimiter + "/usr/bin" }, { run: join(run, "first"), owned });
   const second = gateEnvironment({ ...base, PATH: "/bin" + delimiter + join(run, "other-agent") }, { run: join(run, "second"), owned });
   assert.equal(first.env.PATH, second.env.PATH);
-  assert.deepEqual(first.env.PATH!.split(delimiter).slice(0, toolchainDirectories(process.execPath, base).length),
-    toolchainDirectories(process.execPath, base));
+  // The resolved toolchains lead, including the declared JDK (jdk.ts) in place of the launcher's.
+  assert.deepEqual(first.env.PATH!.split(delimiter).slice(0, toolchainDirectories(process.execPath, first.env).length),
+    toolchainDirectories(process.execPath, first.env));
   assert.equal(first.env.PATH!.split(delimiter).includes(agent), false);
   const facts = fixtureContract().environment;
   assert.deepEqual(verdictContract(first.report, facts), verdictContract(second.report, facts));

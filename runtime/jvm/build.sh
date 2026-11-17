@@ -10,6 +10,13 @@
 # `--date` makes the archive reproducible: without it every rebuild differs in
 # its timestamps and the drift test could never pass.
 #
+# **One JDK builds it: the one `jdk.txt` declares.** `--release 8` fixes the
+# class version, not the bytes: javac 21 and 27 infer different stack-map frame
+# types and line tables for the same source, and the manifest names the JDK's
+# vendor. So the tools come from `$JAVA_HOME` only, never from PATH, and a
+# JAVA_HOME whose `release` file lacks either declared line is refused by name
+# rather than producing a different jar.
+#
 # `$1` is where the jar goes, defaulting to beside the sources. A test passes a
 # temporary path so it can rebuild and compare without touching the checked-in
 # artifact -- which is the whole point of a drift check.
@@ -23,6 +30,19 @@ nts_jvm_flags=$(cat "$root/test-vm-flags.txt")
 nts_jdk_flags=$(sed 's/^/-J/' "$root/test-vm-flags.txt")
 jar_date=$(cat "$root/jar-date.txt")
 jar_path=${1:-$root/nts-runtime.jar}
+declared=$(awk '!/^#/ && NF' "$root/jdk.txt")
+declared_name=$(printf '%s\n' "$declared" | awk -F= '{gsub(/"/,"",$2); printf "%s%s", (NR>1?" ":""), $2}')
+refuse() {
+  echo "runtime/jvm/build.sh: the runtime jar is built by $declared_name (runtime/jvm/jdk.txt); $1" >&2
+  exit 1
+}
+[ -n "${JAVA_HOME:-}" ] || refuse "JAVA_HOME is unset"
+[ -f "$JAVA_HOME/release" ] || refuse "JAVA_HOME=$JAVA_HOME has no release file"
+found_name=$(awk -F= '$1=="IMPLEMENTOR"||$1=="JAVA_RUNTIME_VERSION"{gsub(/"/,"",$2); v[$1]=$2} END{printf "%s %s", v["IMPLEMENTOR"], v["JAVA_RUNTIME_VERSION"]}' "$JAVA_HOME/release")
+printf '%s\n' "$declared" | awk 'NR==FNR{have[$0]=1; next} !($0 in have){exit 1}' "$JAVA_HOME/release" - \
+  || refuse "JAVA_HOME=$JAVA_HOME is $found_name"
+javac=$JAVA_HOME/bin/javac
+jar=$JAVA_HOME/bin/jar
 # **The classes go to a directory of this run's own.** They went to
 # `$root/classes`, removed first and last: two builds at once -- the drift test
 # (runtime_jar.rs) and the sabotage test (jvm_sabotage.rs), which the gate now
@@ -31,12 +51,12 @@ jar_path=${1:-$root/nts-runtime.jar}
 out=$(mktemp -d "${TMPDIR:-/tmp}/nts-jvm-classes.XXXXXX")
 trap 'rm -rf "$out" "$out.list"' EXIT
 find "$root/src" -name '*.java' | sort > "$out/sources.txt"
-javac $nts_jdk_flags --release 8 -encoding UTF-8 -Xlint:-options -d "$out" @"$out/sources.txt"
+"$javac" $nts_jdk_flags --release 8 -encoding UTF-8 -Xlint:-options -d "$out" @"$out/sources.txt"
 rm -f "$out/sources.txt"
 (
   cd "$out"
   find . -name '*.class' | sed 's|^\./||' | sort > "$out.list"
-  jar $nts_jdk_flags --create --file "$jar_path" \
+  "$jar" $nts_jdk_flags --create --file "$jar_path" \
       --date="$jar_date" \
       $(cat "$out.list")
   rm -f "$out.list"
