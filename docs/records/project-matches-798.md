@@ -47,6 +47,32 @@ directory. It separately allows a staged TSV addition and a TSV content edit,
 and refuses a staged matching TypeScript addition. The root remains bound by
 device, inode and physical path throughout assessment.
 
+Review found a separate deletion gap in the TypeScript step-selection route:
+the post-change graph retained `projectMatches` but never consumed them. A
+removed matched root had no remaining callback naming it. The graph now keeps
+the native queries with their readers, contexts and steps, including runner
+handovers. Direct working-tree questions replay at committed HEAD; range
+endpoints receive the already prepared committed base. Only deleted paths that
+account for removed native matches owe the reader. Raw entries remain
+acquisition-only, and unrelated or excluded deletions add no reach.
+
+The amended fixed-config control commits a global declaration, removes it from
+the current tree, and asks both deletion and rename-to-Markdown questions. Both
+retain `profile` and its `addons` handover. Nonmatching deletion and rename
+controls retain neither consumer. The same control fails specifically at
+`deletedMatch retains profile` with the reviewed `977cb63af5` owner, and passes
+with `d2b74ecb00831f7dadd63da0ae366290be8504e3`. Both counterfactual arms use
+identical test bytes and modules from the latter archive; only `owed.mjs` is
+replaced with the reviewed owner's exact bytes in the before arm.
+
+The initial three-owner review run passed 138 of 139 tests, including the new
+native and endpoint controls. The other fixture had no commit to supply its
+base and stopped before assertions. Its setup now commits the starting state;
+its unchanged assertions and the fixed-config control then both passed. Three
+new missing JSDoc annotations in the selector glue were corrected, and strict
+types again passed all 1,155 modules without a diagnostic increase. The owning
+writer regenerated the projection after those source commits.
+
 After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
 after revision remains reachable at its `refs/cited/` ref.
@@ -67,6 +93,13 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `nts-798-exclude-controls.log` | `3c8364dc22b1321de4db1f4e4b90e999dbd4664ea2a41ceb6bfc0cc2adf95b14` |
 | `nts-798-root-controls.log` | `91890dc6ded0eb51ff8700a425dd50896cf5711fa2cd6204c2f6bac40e551f57` |
 | `nts-798-inner2.log` | `7f17412678d6c63eee4b0c11ed7f09081db28ec62a560162125c6803934378cd` |
+| `review-counterfactual.json` | `52c47f4a31305f57273d377c8433c50b2b35ba153191a4233f26dec00f62f944` |
+| `review-counterfactual.py` | `45cc6e38efbf90d6aa4fd1eaf5e31cf778eee16c30507aeacaa3a7b3fda51b4c` |
+| `review-before-owner.log` | `9602dd7bb5850f400e4404c0971b11df1538ba3dd820873d150836c9608a4997` |
+| `review-after-owner.log` | `88e7025b8eb2c230ed3275d592de0e0ea4b272c279dd06de7781813dbdb11387` |
+| `nts-798-review-focused.log` | `a61437191ad4f637bd5f31a6988a477abb932e1d3d4a1b9c5674e0a191014d33` |
+| `nts-798-review-pair.log` | `7da42888f37025a43c7fa0787e7d4662c05a3fedbe313d8caf8543bf8362dfd5` |
+| `nts-798-review-projection.log` | `6d84ea9222ef7897dc024f4a337cf7895a671dd04afa8c69eff3305e4c6bec3f` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
