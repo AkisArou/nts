@@ -116,6 +116,9 @@ function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(so
       // A stale candidate can name an old match. The fence compares the same
       // query at committed and working sources, never against stale answers.
       for(const request of inputs.projects){
+        // A removed committed config makes the candidate stale; it no longer
+        // supplies a discovery operation to fence. Its exact path stays keyed.
+        if(!existsSync(join(source.tree,request.path)))continue;
         const key=JSON.stringify(request);
         if(!projects.has(key))projects.set(key,{request,files:selectorHash(discovery.read(request).files)});
       }

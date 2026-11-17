@@ -103,6 +103,8 @@ test('the keyed source fence replays compiler matches for dirty additions and pr
   assert.throws(certify,/requires committed source inputs/,'matched source bytes retain the exact path fence');
   writeFileSync(join(f.root,'src/main.ts'),original);
   assert.equal(certify(),true);
+  f.git(['rm','tsconfig.json']);f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','remove the formerly declared project']);
+  assert.equal(certify(),true,'a stale candidate cannot invent a removed committed config');
 });
 
 test('selection assesses committed inputs while retaining the independent working record body',t=>{
