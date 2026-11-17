@@ -34,9 +34,10 @@ open are in [`open-questions.md`](open-questions.md).
 
 ## Now
 
-**The workflow settles before development resumes:** the records, the memory
-admission and signalbox running nts (the Tooling and Signalbox streams).
-Development starts on the user's word.
+**Development has resumed** (user, 2026-11-17): the foundations, in the order
+below, starting with their instruments, and correctness beside them on the
+compiler side. The workflow's remaining tooling (the Tooling and Signalbox
+streams) finishes alongside.
 
 Branches the count names from here, besides each open issue's own:
 
