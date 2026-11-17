@@ -849,6 +849,25 @@ pub(super) fn a_copy_can_contain(
     {
         return value_held_is_carried;
     }
+    // **A read or write through an access family runs whichever supplier's accessor
+    // the receiver has**, dispatched at the family's raising slot, which
+    // `fill_raising_member_slots` fills with the ordinary entry for a supplier that
+    // cannot raise. So only the suppliers that *can* raise need a copy -- the
+    // condition `raising_member_slots` withholds the slot on. Asked of every
+    // supplier, the quiet `Duplex#get writable` (no copy, nothing to copy) cost
+    // `writableWebTarget` its copy through `value.writable` on a
+    // `TransformWebStreamLike`, and a closure in `pipeline` held the raising gate off
+    // in six `runtime/node` modules.
+    if probe.reads_an_accessor(call) && probe.hierarchy.access_families.at(call).next().is_some() {
+        return probe
+            .hierarchy
+            .access_families
+            .at(call)
+            .flat_map(access_families::Family::accessor_records)
+            .all(|accessor| {
+                !throwing.any.contains(&accessor.symbol) || eligible.contains(&accessor.declaration)
+            });
+    }
     // [`raising_callees_of`], because `eligible` holds implementations: asking with the
     // resolved node would answer "no copy" for every call to an overloaded function and
     // take its caller out of the fixpoint. **Non-empty and all of them**, since an

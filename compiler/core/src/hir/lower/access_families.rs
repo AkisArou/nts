@@ -120,6 +120,20 @@ impl Family {
             })
             .collect()
     }
+    /// Every accessor a read or write through this family may run, with the symbol
+    /// [`Throwing`](super::Throwing) answers for it -- for asking which of them a
+    /// raising body needs a copy of: only those that can raise.
+    pub(super) fn accessor_records(&self) -> impl Iterator<Item = Accessor> + '_ {
+        self.supplies.iter().flat_map(|supply| {
+            let getter = if let Reader::Getter(accessor) = supply.reader {
+                Some(accessor)
+            } else {
+                None
+            };
+            getter.into_iter().chain(supply.setter)
+        })
+    }
+
     /// Naming and lowering consult the same concrete accessor declarations.
     /// Stored-field helpers cannot raise into a TypeScript handler.
     pub(super) fn accessors(&self) -> Vec<NodeId> {

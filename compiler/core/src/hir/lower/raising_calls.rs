@@ -134,8 +134,8 @@ impl FuncBuilder<'_> {
                 // **A fifth answer, and it names a fifth piece of work.** The entry
                 // exists and this program may not dispatch at it, because some body
                 // it would lower with `raises` set cannot carry what *it* calls --
-                // almost always a method or an accessor, which have no raising
-                // copies. Its own sentence rather than the one above, because the
+                // the holder `what_holds_the_gate_off` names. Its own sentence
+                // rather than the one above, because the
                 // two are cleared by different work and a census matching on text
                 // has to pick one. See `what_holds_the_gate_off` for why the
                 // question is asked of the whole program.

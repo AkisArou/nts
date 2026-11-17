@@ -870,10 +870,13 @@ pub(super) fn raising_copies(
 /// precedent says at 0. With the gate, no site dispatches where any body cannot
 /// carry, so those entries are unreachable by construction and the refusal stands.
 ///
-/// What makes a body unable to carry today is almost always a **method** or an
-/// **accessor**, which have no raising copies: 1,060 and 631 occurrences of exactly
-/// that refusal across the corpora. Covering those is what turns this gate on for
-/// `runtime/node`, and it is the next piece of the same work.
+/// **What can hold it off is a closure calling something no copy can be made of**,
+/// since methods, accessors, constructors and generic methods' instances all have
+/// copies: a method with type parameters inside a generic class or function, an
+/// overridden generic method, or a callee read through a shape the copyability
+/// fixpoint cannot follow. Each is named by [`describe_gate_holder`], with
+/// [`the_cause_below_the_gate`] beneath it, so the refusal that the gate causes
+/// says which closure to fix.
 pub(super) fn what_holds_the_gate_off(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
