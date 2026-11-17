@@ -12,7 +12,7 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import type {RustRuntimeManifest,RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {testScratch} from './test-scratch.ts';
 import {rustSelectorRoles} from './rust-selector-roles.ts';
-import {encodeRustSelectorRecord,parseRustSelectorRecord,rustSelectorRecordHashes,validateRustSelectorKey} from './rust-selector-record.ts';
+import {encodeRustSelectorRecord,parseRustSelectorRecord,rustSelectorRecordHashes,rustSelectorKeyInputs,validateRustSelectorKey} from './rust-selector-record.ts';
 import {readerDependencyIndex,readerObservationIndex,validateReaderSourceObservations} from './reader-observations.ts';
 import {projectConfig} from './reader-inputs/main.ts';
 import {pathToFileURL} from 'node:url';
@@ -69,6 +69,25 @@ test('native matching leaves warm outputs outside both selector keys and retains
     const next=f.build();assert.ok(next.targets[0]!.roles.files.includes('src/new.ts'));
     assert.notEqual(next.keySha256,material.keySha256);
   }finally{graph.close();}
+});
+
+test('excluding a matched source changes the native query digest carried by the source fence',t=>{
+  const f=fixture(t);mkdirSync(join(f.root,'src'));
+  writeFileSync(join(f.root,'package.json'),'{}');
+  writeFileSync(join(f.root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"]}');
+  for(const file of ['main','excluded'])writeFileSync(join(f.root,'src/'+file+'.ts'),'export {};');
+  f.manifest.targets[0]!.declarations.assets=[{kind:'project-config',path:'../tsconfig.json',role:'type-check'}];
+  writeFileSync(join(f.root,'declarations.json'),JSON.stringify(f.manifest));
+  const before=f.build(),beforeQuery=rustSelectorKeyInputs(encodeRustSelectorRecord(before)).projects[0]!;
+  assert.deepEqual(before.key.projects[0]!.files,['src/excluded.ts','src/main.ts']);
+  assert.equal(beforeQuery.sha256,selectorHash(before.key.projects[0]!.files));
+  writeFileSync(join(f.root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"],"exclude":["src/excluded.ts"]}');
+  const after=f.build(),afterQuery=rustSelectorKeyInputs(encodeRustSelectorRecord(after)).projects[0]!;
+  assert.deepEqual(afterQuery.request,beforeQuery.request,'the query still names the same config');
+  assert.deepEqual(after.key.projects[0]!.files,['src/main.ts']);
+  assert.equal(afterQuery.sha256,selectorHash(after.key.projects[0]!.files));
+  assert.notEqual(afterQuery.sha256,beforeQuery.sha256,'native exclusion removes the matched source from the digest');
+  assert.ok(!after.targets[0]!.roles.files.includes('src/excluded.ts'));
 });
 
 test('compact project queries authenticate their native recipe and reject malformed routing before replay',t=>{

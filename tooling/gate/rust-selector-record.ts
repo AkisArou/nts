@@ -313,7 +313,7 @@ export function validateRustSelectorKey(record:RustSelectorRecord,options:{roots
  * `populations` for their child names (immediate and recursive); Cargo input
  * names are observed across the whole tracked population. */
 export type RustSelectorKeyInputs={paths:ReadonlySet<string>;members:ReadonlySet<string>;populations:ReadonlySet<string>;subtrees:ReadonlySet<string>;
-  facts:{kind:typeof KINDS[number];path:string}[];projects:ProjectRequest[]};
+  facts:{kind:typeof KINDS[number];path:string}[];projects:{request:ProjectRequest;sha256:string}[]};
 export function rustSelectorKeyInputs(record:RustSelectorRecord):RustSelectorKeyInputs{
   const decoded=decoder(record,false),paths=new Set<string>(),members=new Set<string>(),populations=new Set<string>(),subtrees=new Set<string>();
   const facts:RustSelectorKeyInputs['facts']=[];
@@ -327,7 +327,7 @@ export function rustSelectorKeyInputs(record:RustSelectorRecord):RustSelectorKey
       if(kind==='entries'||kind==='runtimeEntries')add(path,members);}}
   for(const value of record.key.candidates)for(const query of array(tuple(value,3,'candidate group')[1],'candidate queries'))paths.add(decoded.source(query));
   for(const value of record.key.populations)populations.add(decoded.source(tuple(value,3,'population')[0],true));
-  return {paths,members,populations,subtrees,facts,projects:record.key.projects.map(value=>decoded.project(value).request)};
+  return {paths,members,populations,subtrees,facts,projects:record.key.projects.map(value=>decoded.project(value))};
 }
 
 function boundedRecordBytes(path:string):Buffer{
