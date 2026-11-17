@@ -34,6 +34,12 @@ compares native matches at fresh committed and working sources, retaining exact
 bytes, aliases, typed metadata, memberships, Cargo names and the run's own-write
 ledger independently.
 
+The follow-up source-fence controls passed all 51 tests in their four owners.
+They check that a staged matching TypeScript addition is refused, a staged TSV
+addition is allowed, and excluding a previously matched source changes the
+native digest while retaining the same config request. The decoded key inputs
+carry that request and digest together.
+
 After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
 after revision remains reachable at its `refs/cited/` ref.
@@ -51,6 +57,7 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `focused2.log` | `47f1aef75cbc7eafcc0e37537234dcdedc60b2c46907a61ebf10a3ab5f8b4b3f` |
 | `nts-798-focused3.log` | `8a0f280d459966ac03e4836dcf96debca689d596c451a34508604687e2776d57` |
 | `nts-798-inner.log` | `e1a4fd9c5a99614c99f04e0a5f3f1767c515ac6835fde1802508da2ab0b176f3` |
+| `nts-798-exclude-controls.log` | `3c8364dc22b1321de4db1f4e4b90e999dbd4664ea2a41ceb6bfc0cc2adf95b14` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
