@@ -1,9 +1,15 @@
-class Picker {
+// A generic method of a generic class: its instances are not copied per instance of
+// the class, so its body is the one unavailable callee here.
+class Picker<K> {
+  key: K;
+  constructor(key: K) {
+    this.key = key;
+  }
   pick<T>(value: T, fails: boolean): T { if (fails) throw 22; return value; }
 }
 class Unavailable {
   marker = 1;
-  toString(): string { return new Picker().pick("unavailable", false); }
+  toString(): string { return new Picker(0).pick("unavailable", false); }
 }
 class Quiet {
   marker = "quiet";

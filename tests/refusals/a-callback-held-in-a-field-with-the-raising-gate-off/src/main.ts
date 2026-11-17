@@ -12,9 +12,9 @@
 // and a file holding both would have it off for all of it.
 //
 // What turns it off here is the closure's own body: it calls `Picker.pick`, a
-// **generic method** that can throw, and `a_copy_can_be_made_of` excludes a method with
-// type parameters of its own -- they have no instantiations to name a copy by. One such
-// closure is enough.
+// **generic method of a generic class** that can throw, and `a_copy_can_be_made_of`
+// excludes one -- its instances are not copied per instance of the class around it, so
+// there is no copy to name. One such closure is enough.
 //
 // **The trigger is the perishable part of this file, and it has already expired once.** It
 // was `new Thing(n)` on the argument that a `new` resolves to a `Constructor`, which was
@@ -29,6 +29,11 @@
 // now a generic *method*, which #42 left excluded on purpose. The working generic-function
 // shape is guarded in `outcomes/` once #42 lands.
 //
+// **And a third time with #843**, which copies a generic method per instance of its own
+// type parameters (`tests/programs/a-closure-calling-a-throwing-generic-method-inside-a-
+// try`). The trigger is now a generic method inside a generic class, which #843 left
+// with its one body on purpose.
+//
 // **Why this file exists at all.** Without the gate, this program was a *silent* wrong
 // answer -- `nts: uncaught RangeError` on 8 of 29 cases where node answers `-1` -- and the
 // refusal that replaced it is the only thing standing between the gate being off and a
@@ -40,7 +45,11 @@
 // `try` is refused when the gate is off": a callee that is a **declaration** has a copy to
 // name, gate or no gate.
 
-class Picker {
+class Picker<K> {
+  key: K;
+  constructor(key: K) {
+    this.key = key;
+  }
   pick<T>(value: T, deep: boolean): T {
     if (deep) {
       throw new RangeError("generic");
@@ -48,7 +57,7 @@ class Picker {
     return value;
   }
 }
-const picker = new Picker();
+const picker = new Picker(0);
 
 class Holder {
   cb: ((n: number) => number) | null = null;
