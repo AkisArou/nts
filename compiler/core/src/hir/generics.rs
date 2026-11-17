@@ -461,7 +461,21 @@ pub(super) fn add_value_fallbacks(
         let Some(signature) = declared_signature(snapshot, declaration) else {
             continue;
         };
-        if signature.type_parameters.is_empty() || found.value_fallbacks.contains_key(&declaration)
+        // **Only where the body the value runs is generic.** A function used as a
+        // value runs its implementation, and an overload signature's type
+        // parameters are not the implementation's: `events.on<T>(…)` above a plain
+        // `on(…)` has one body and nothing to erase, and a fallback keyed by the
+        // overload named `on<value-erased>`, which no copy of that body is.
+        let generic_body = |declaration: NodeId| {
+            declared_signature(
+                snapshot,
+                crate::hir::lower::implementation_in(snapshot, declaration),
+            )
+            .is_some_and(|body| !body.type_parameters.is_empty())
+        };
+        if signature.type_parameters.is_empty()
+            || !generic_body(declaration)
+            || found.value_fallbacks.contains_key(&declaration)
         {
             continue;
         }

@@ -305,12 +305,7 @@ pub fn from_roots_with(
             continue;
         };
 
-        if let Some(&ty) = snapshot.node_types.get(&node) {
-            result.types.insert(ty);
-        }
-        if let Some(&signature) = snapshot.declared_signatures.get(&node) {
-            reach_signature(snapshot, signature, &mut result.types);
-        }
+        reach_node_facts(snapshot, node, &mut result.types);
 
         // A node's subtree is part of its declaration -- except a class,
         // interface, enum or module a declaration file declares, whose
@@ -405,6 +400,17 @@ pub fn from_roots_with(
     }
 
     result
+}
+
+/// The types a node's own facts name: its type, and the signature it declares
+/// where that is not its type's ([`SemanticSnapshot::declared_signatures`]).
+fn reach_node_facts(snapshot: &SemanticSnapshot, node: NodeId, types: &mut FxHashSet<TypeId>) {
+    if let Some(&ty) = snapshot.node_types.get(&node) {
+        types.insert(ty);
+    }
+    if let Some(&signature) = snapshot.declared_signatures.get(&node) {
+        reach_signature(snapshot, signature, types);
+    }
 }
 
 fn reach_signature(
