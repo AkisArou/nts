@@ -2,10 +2,10 @@
 
 use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, FuncBuilder, HirType, NodeId, NodeKind, SemanticSnapshot,
-    a_parameter_pattern_can_throw, a_value_held_call, access_families, calls_in_the_body_of,
-    children_in_the_body_of, children_that_run, const_function_aliases, copyable_symbols,
-    declared_base_class, declares_a_class, iterator_close, parameters_of, parse_bigint,
-    raising_callees_of, syntax, taken_as_a_closure, the_constructor_declared_by,
+    a_parameter_pattern_can_throw, a_value_held_call, access_families, an_inlined_construction,
+    calls_in_the_body_of, children_in_the_body_of, children_that_run, const_function_aliases,
+    copyable_symbols, declared_base_class, declares_a_class, iterator_close, parameters_of,
+    parse_bigint, raising_callees_of, syntax, taken_as_a_closure, the_constructor_declared_by,
 };
 
 /// Every symbol whose function can raise a `throw`.
@@ -805,6 +805,13 @@ pub(super) fn a_copy_can_contain(
         // by name. Missing candidates cannot disqualify this caller: there is
         // no ordinary throwing-entry fallback. Its children are checked by
         // the same call walk independently.
+        return true;
+    }
+    // **A `new` with no constructor to call is no call at all**: its class's field
+    // initializers run inline here, and the walk that asks this question yields
+    // their calls beside it ([`an_inlined_construction`]), so each is answered for
+    // itself.
+    if an_inlined_construction(probe, call).is_some() {
         return true;
     }
     if probe.iterators.closes_at(call).is_some() {

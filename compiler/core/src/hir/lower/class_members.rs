@@ -42,6 +42,60 @@ pub(super) fn the_constructor_declared_by(probe: &FuncBuilder, class: NodeId) ->
         .map(|at| probe.implementation_of(at))
 }
 
+/// The classes whose instance initializers a `new` runs **at its own site**: a
+/// program class that declares no constructor, extending nothing or a program class
+/// that declares none either, all the way up.
+///
+/// `lower_new` has no function to call for one -- `hierarchy.constructor` answers
+/// nothing -- so it emits the chain's field initializers inline, in the body that
+/// writes the `new`. Their calls are therefore that body's calls, and every walk
+/// asking what a body calls has to see them there: `calls_under` yields them beside
+/// the `new`, and a `try` walks them as its own. Without that, `new Resolver()`
+/// with a throwing `v = check(seed)` had nothing to name -- no constructor, so no
+/// raising copy -- and every `try` around it refused, and a closure constructing
+/// one held the program's raising gate off (`runtime/node/dns`'s
+/// `getDefaultResolver`).
+///
+/// Nearest class first. `None` where any class in the chain writes a constructor
+/// (then a constructor runs, and is named), is ambient, or extends something that is
+/// not a program class (a provided error is built inline by other rules).
+pub(super) fn an_inlined_construction(probe: &FuncBuilder, call: NodeId) -> Option<Vec<NodeId>> {
+    if probe.kind_of(call) != Some(syntax::NEW_EXPRESSION) {
+        return None;
+    }
+    let callee = *probe.children(call).first()?;
+    let reference = probe.referenced_value(callee)?;
+    the_inlined_chain(probe, probe.referenced_declaration(reference.symbol)?)
+}
+
+/// [`an_inlined_construction`]'s chain, asked of the class: `Some` exactly where
+/// constructing `class` calls no constructor and runs these classes' initializers
+/// where the `new` is written.
+pub(super) fn the_inlined_chain(probe: &FuncBuilder, mut class: NodeId) -> Option<Vec<NodeId>> {
+    let mut chain = Vec::new();
+    loop {
+        if !probe.kind_of(class).is_some_and(declares_a_class)
+            || chain.contains(&class)
+            || probe
+                .node(class)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::DECLARE)
+            || the_constructor_declared_by(probe, class).is_some()
+        {
+            return None;
+        }
+        chain.push(class);
+        let extends = instance_type_of(probe.snapshot, class)
+            .and_then(|ty| probe.snapshot.base_types.get(&ty))
+            .is_some_and(|bases| !bases.is_empty());
+        if !extends {
+            return Some(chain);
+        }
+        let base = super::declared_base_class(probe.snapshot, probe, class)?;
+        class = probe.referenced_declaration(nts_semantic_schema::SymbolId(base))?;
+    }
+}
+
 /// A class body's entry is construction, not definition. Static elements and
 /// computed names execute during definition; instance initializers and constructor
 /// parameters/body execute during construction. Keep that distinction shared by

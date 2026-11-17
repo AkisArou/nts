@@ -25,9 +25,9 @@ use self::capture_discovery::{
 #[cfg(test)]
 use self::class_members::ConstructorTargets;
 use self::class_members::{
-    LoweredMember, children_in_the_body_of, constructor_targets, instance_initializer,
-    lower_members_of, member_copy, members_of, target_suffix, the_constructor_declared_by,
-    via_callee,
+    LoweredMember, an_inlined_construction, children_in_the_body_of, constructor_targets,
+    instance_initializer, lower_members_of, member_copy, members_of, target_suffix,
+    the_constructor_declared_by, the_inlined_chain, via_callee,
 };
 use self::closure_bodies::{
     ClosureEntry, closure_body_name, closure_names, closure_type, erased_call_name,

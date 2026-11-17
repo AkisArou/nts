@@ -4,9 +4,9 @@ use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, BinOp, Diagnostic, Edge, Exit, FuncBuilder, HirType, MemberKey,
     NodeId, OpKind, Origin, RAISING_SUFFIX, THROUGH_A_FUNCTION_VALUE, Terminator, TypeId, TypeKind,
     ValueId, a_copy_can_be_made_of, a_declaration_that_can_raise, a_value_held_call,
-    access_families, calls_in_the_body_of, children_that_run, erased_calls, interface_member_of,
-    is_generic_function, literal_methods, members_filling, planned_callee, raising_callees_of,
-    syntax,
+    access_families, an_inlined_construction, calls_in_the_body_of, children_in_the_body_of,
+    children_that_run, erased_calls, interface_member_of, is_generic_function, literal_methods,
+    members_filling, planned_callee, raising_callees_of, syntax,
 };
 
 impl FuncBuilder<'_> {
@@ -49,6 +49,22 @@ impl FuncBuilder<'_> {
         if !self.printers.at(node).is_empty() {
             return children_that_run(self, node)
                 .into_iter()
+                .find_map(|child| self.call_within(child, handled));
+        }
+        // **A `new` with no constructor to call runs its class's field initializers
+        // inline, in this `try`** ([`an_inlined_construction`]): there is no callee to
+        // name a copy of, and nothing to refuse for want of one. What can throw is
+        // what those initializers call, lowered here, so this `try` handles them as
+        // its own -- after the arguments, which run first.
+        if let Some(chain) = an_inlined_construction(self, node) {
+            return children_that_run(self, node)
+                .into_iter()
+                .chain(
+                    chain
+                        .into_iter()
+                        .rev()
+                        .flat_map(|class| children_in_the_body_of(self, class)),
+                )
                 .find_map(|child| self.call_within(child, handled));
         }
         if matches!(

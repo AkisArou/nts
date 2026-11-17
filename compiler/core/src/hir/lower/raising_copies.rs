@@ -7,7 +7,7 @@ use super::{
     close_over_callees, closure_bodies_that_can_raise, declared_base_class, function_behind_const,
     functions_used_as_values, instance_type_of, interface_member_of, is_generic_function,
     literal_methods, member_copy, member_dispatch_key, members_filling, names_a_body,
-    raising_body_calls, syntax, the_constructor_declared_by, the_function_of,
+    raising_body_calls, syntax, the_constructor_declared_by, the_function_of, the_inlined_chain,
 };
 
 /// A dispatch slot for the raising copy of an **overridden** member, and a copy for
@@ -378,6 +378,11 @@ fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) 
         a_copy_can_be_made_of(snapshot, probe, declaration)
             || the_constructor_declared_by(probe, declaration)
                 .is_some_and(|ctor| a_copy_can_be_made_of(snapshot, probe, ctor))
+            // A class constructed inline needs no copy: what it runs is its
+            // initializers, which are the constructing body's own calls and are
+            // copied or not as that body's. The fixpoint still asks of them, through
+            // the class's entry in `calls`.
+            || the_inlined_chain(probe, declaration).is_some()
     })
 }
 

@@ -2,8 +2,8 @@
 
 use super::{
     FuncBuilder, Hierarchy, HirType, LoweringSnapshot, ManagedType, NodeId, Settled, TypeId,
-    TypeKind, admits_absence, children_in_the_body_of, children_that_run, declares_a_class,
-    erased_calls, is_generic_function, literal_methods, syntax,
+    TypeKind, admits_absence, an_inlined_construction, children_in_the_body_of, children_that_run,
+    declares_a_class, erased_calls, is_generic_function, literal_methods, syntax,
 };
 
 /// Copies of ordinary functions specialised to the concrete type an argument
@@ -793,6 +793,39 @@ pub(super) fn calls_in_a_default(probe: &FuncBuilder, default: NodeId) -> Vec<No
 /// One walk, shared, because two spellings of "which calls does this subtree make"
 /// is how the set a `try` handles and the set a copy is built from come apart.
 fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
+    calls_under_constructing(probe, id, into, &mut Vec::new());
+}
+
+/// [`calls_under`], with the classes whose inlined construction the walk is inside:
+/// a field initializer may construct its own class, which runs without end at run
+/// time and must not here.
+fn calls_under_constructing(
+    probe: &FuncBuilder,
+    id: NodeId,
+    into: &mut Vec<NodeId>,
+    constructing: &mut Vec<NodeId>,
+) {
+    // **A `new` with no constructor to call runs its class's field initializers
+    // here**, in the body that writes it ([`an_inlined_construction`]), so their
+    // calls are this body's calls -- after the `new` itself, whose arguments run
+    // first and which the walk still yields for the readers that ask about it.
+    if let Some(chain) = an_inlined_construction(probe, id) {
+        into.push(id);
+        for child in children_that_run(probe, id) {
+            calls_under_constructing(probe, child, into, constructing);
+        }
+        for class in chain.into_iter().rev() {
+            if constructing.contains(&class) {
+                continue;
+            }
+            constructing.push(class);
+            for initializer in children_in_the_body_of(probe, class) {
+                calls_under_constructing(probe, initializer, into, constructing);
+            }
+            constructing.pop();
+        }
+        return;
+    }
     match probe.kind_of(id) {
         Some(
             syntax::FUNCTION_DECLARATION
@@ -832,7 +865,7 @@ fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
         _ => {}
     }
     for child in children_that_run(probe, id) {
-        calls_under(probe, child, into);
+        calls_under_constructing(probe, child, into, constructing);
     }
 }
 
