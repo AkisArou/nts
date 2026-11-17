@@ -316,14 +316,20 @@ pub(super) fn member_copy(
 }
 
 /// Whether `member` is a method lowered **once per instance of its own type
-/// parameters** ([`copies_of_the_member`]): a method declaring type parameters, in
-/// a class no generic declaration encloses -- neither the class itself nor a
+/// parameters** ([`copies_of_the_member`]): a class's method declaring type
+/// parameters, in a class no generic declaration encloses -- neither the class itself nor a
 /// function or class around it, whose copies would bind parameters the method's
 /// body can name too. One predicate for the four places that must agree: which
 /// copies are lowered, what they are named, what a call names, and whether a
 /// raising copy can be made of one.
 pub(super) fn a_method_with_its_own_instances(probe: &FuncBuilder, member: NodeId) -> bool {
     probe.kind_of(member) == Some(syntax::METHOD_DECLARATION)
+        // A **class's** method: an object literal's members are lowered by
+        // `lower_object_literal_members`, which makes no copy per instance.
+        && probe
+            .syntactic_parent(member)
+            .and_then(|parent| probe.kind_of(parent))
+            .is_some_and(declares_a_class)
         && super::is_generic_function(probe.snapshot, member)
         && std::iter::successors(probe.node(member).parent, |at| probe.node(*at).parent).all(
             |enclosing| {
