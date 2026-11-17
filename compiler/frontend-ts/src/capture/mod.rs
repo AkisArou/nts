@@ -85,21 +85,10 @@ impl<'p, 'r> Capture<'p, 'r> {
                     always_strict: semantics.always_strict,
                     no_unchecked_indexed_access: semantics.no_unchecked_indexed_access,
                     exact_optional_property_types: semantics.exact_optional_property_types,
-                    disabled_strict_sources: semantics
-                        .disabled_strict_sources
-                        .into_iter()
-                        .map(|source| {
-                            Ok(nts_semantic_schema::StrictOptionSource {
-                                name: source.name.to_owned(),
-                                configuration: workspace_uri(
-                                    project_root,
-                                    &source.configuration,
-                                    PathRole::File,
-                                )?,
-                                setting: source.setting.to_owned(),
-                            })
-                        })
-                        .collect::<Result<_, SnapshotError>>()?,
+                    disabled_strict_sources: strict_option_sources(
+                        project_root,
+                        semantics.disabled_strict_sources,
+                    )?,
                 },
                 ..SemanticSnapshot::default()
             },
@@ -206,6 +195,23 @@ impl<'p, 'r> Capture<'p, 'r> {
             ),
         }
     }
+}
+
+/// Each configuration that disabled a strict option, as a workspace URI.
+fn strict_option_sources(
+    project_root: &Utf8Path,
+    sources: Vec<nts_frontend_tsrs::StrictOptionSource>,
+) -> Result<Vec<nts_semantic_schema::StrictOptionSource>, SnapshotError> {
+    sources
+        .into_iter()
+        .map(|source| {
+            Ok(nts_semantic_schema::StrictOptionSource {
+                name: source.name.to_owned(),
+                configuration: workspace_uri(project_root, &source.configuration, PathRole::File)?,
+                setting: source.setting.to_owned(),
+            })
+        })
+        .collect()
 }
 
 fn arena_index(length: usize) -> Result<u32, SnapshotError> {
