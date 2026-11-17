@@ -98,6 +98,7 @@ import {matchesModuleMember,selectionInput} from "./reader-inputs/main.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
 /** @typedef {import('./rust-selector-selection.ts').RustSelectorOptions&{readonly projectBase?:Pick<import('./owed-range.ts').CommittedSelectorSource,'tree'|'revision'>}} StepSelectorOptions */
+/** @typedef {import('./module-closure.ts').InputSnapshot['projectMatches'][number]&{steps:Set<string>}} StepProjectMatch */
 
 const USAGE = `usage: node tooling/gate/owed.mjs [--since <rev> | --range <base>..<tip>] [--run]
        node tooling/gate/owed.mjs --commit <rev>
@@ -1712,7 +1713,7 @@ function stepInputGraph(options) {
     const memberships=new Map();
     /** @type {Map<string,import('./module-closure.ts').ReaderObservation&{steps:Set<string>}>} */
     const observations=new Map();
-    /** @type {Map<string,import('./module-closure.ts').InputSnapshot['projectMatches'][number]&{steps:Set<string>}>} */
+    /** @type {Map<string,StepProjectMatch>} */
     const projectMatches=new Map();
     /** @type {Map<string,import('./rust-selector-record.ts').RustSelectorRoles['typedDependencies'][number]&{steps:Set<string>}>} */
     const projectedDependencies=new Map();
@@ -2120,9 +2121,11 @@ export function owed(changes,options) {
   // Structural reads precede prose and record precision: a new Markdown child
   // can change an enumeration even though editing its prose cannot.
   const metadataGraph=stepInputGraph(trust);
-  if(metadataGraph.projectMatches.size&&changes.some(change=>change.deleted)){
+  if(metadataGraph.projectMatches.size&&changes.some((/** @type {import('./reader-metadata.ts').MetadataChange} */ change)=>change.deleted)){
+    /** @type {Iterable<StepProjectMatch>} */
+    const matches=metadataGraph.projectMatches.values();
     const compare=(/** @type {Pick<import('./owed-range.ts').CommittedSelectorSource,'tree'|'revision'>} */ source)=>{
-      for(const [row,paths]of removedProjectMatches(source.tree,metadataGraph.projectMatches.values(),changes))
+      for(const [row,paths]of removedProjectMatches(source.tree,matches,changes))
         for(const path of paths)add('project matches read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
     };
     const base=options?.projectBase??trust.committedSource;
