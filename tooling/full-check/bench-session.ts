@@ -38,7 +38,7 @@ export async function runSession(tree: string, run: string, binary: string, hist
   const sealed = await sealOracleRun(planned);
   const handoff = join(run, `${unit}.command.json`);
   writeFileSync(handoff, JSON.stringify({ cwd: tree, env: sealed.env, command: ["sh", join(tree, "tooling/gate/with-lock.sh"), "--key", "bench-session", binary, "--root", tree, "--journal", journal] }));
-  const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
+  const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(process.env, "full-check"), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
     ...lowPriority().map(setting => `--property=${setting}`), "--property=TimeoutStopSec=5s",
     `--property=BindsTo=${ownerUnit}.service`, `--property=After=${ownerUnit}.service`,
     `--working-directory=${tree}`, ...systemdEnvironment(), "--setenv=NTS_MEMORY_PRIORITY=full-check", `--setenv=NTS_GATE_COSTS_DIR=${history}`,

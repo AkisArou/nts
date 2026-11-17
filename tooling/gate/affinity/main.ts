@@ -1,10 +1,14 @@
 // The shell command is independent of the library imported by runner scopes.
 import {spawnSync} from 'node:child_process';
 import {runAsCommand} from '../../differential/command-entry/main.ts';
-import {cpuList,defaultCpus,gateCpus,gateScope,inheritedCpus,scopeArgs,verifyCeiling} from '../affinity.ts';
+import {cpuList,defaultCpus,gateCpus,gateScope,inheritedCpus,scopeArgs,verifyCeiling,type Placement} from '../affinity.ts';
+import {priorityOf} from '../ranks.ts';
 // pinned.sh changes its own mask before starting any build, so every child
 // inherits the reservation, including a hand-started full run.
 runAsCommand(import.meta.url,()=>{
+  // pinned.sh's launcher names the run's rank (NTS_MEMORY_PRIORITY): the full
+  // check's measurement names its own; a hand-started run is an agent's.
+  const placement:Placement={rank:priorityOf(process.env),env:process.env};
   const argument = (index: number): string => {
     const value = process.argv[index];
     if (value === undefined || value === "") throw new Error(`affinity: missing argument ${index - 2}`);
@@ -16,7 +20,7 @@ runAsCommand(import.meta.url,()=>{
     const preferred = argument(3);
     console.log(process.platform === "linux" ? defaultCpus(preferred, inheritedCpus(Number(argument(4)))) : preferred);
   } else if (process.argv[2] === "--scope-mechanism") {
-    const scope = gateScope(argument(3), Number(argument(4)));
+    const scope = gateScope(argument(3), placement, Number(argument(4)));
     console.log(`${scope.kind}:${scope.reason}`);
   } else if (process.argv[2] === "--verify-ceiling") {
     if (!verifyCeiling(argument(3), Number(argument(4)))) {
@@ -28,7 +32,7 @@ runAsCommand(import.meta.url,()=>{
     cpuList(cpus);
     // A caller can hold pinned.sh's tree lock across setup and execution.
     // Preserve that open description when entering the cpuset scope.
-    const child = spawnSync("systemd-run", [...scopeArgs(cpus), "taskset", "-c", cpus, ...process.argv.slice(4)], {
+    const child = spawnSync("systemd-run", [...scopeArgs(cpus, placement), "taskset", "-c", cpus, ...process.argv.slice(4)], {
       stdio: process.env.NTS_GATE_LOCK_FD === "8" ? ["inherit","inherit","inherit",null,null,null,null,null,8] : "inherit",
     });
     // This is the actual command, not a capability probe. Never retry it.

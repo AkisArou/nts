@@ -4,7 +4,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { OOM_SCORE } from "../gate/memory-ledger.ts";
+import { CPU_WEIGHT, OOM_SCORE } from "../gate/ranks.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
 import { ownMemoryEnv } from "../gate/test-memory.ts";
 import { spawnTest, waitFor } from "../gate/test-wait.ts";
@@ -38,6 +38,7 @@ test("start names its own collected unit, off the measurement CPUs, at an agent'
   assert.ok(args.includes("Nice=19"), joined);
   assert.ok(args.includes(`OOMScoreAdjust=${OOM_SCORE.agent}`), joined);
   assert.equal(OOM_SCORE.agent, 300);
+  assert.ok(args.includes(`CPUWeight=${CPU_WEIGHT.agent}`), joined);
   assert.ok(args.includes(`CPUAffinity=${AGENT_CPUS}`), joined);
   assert.equal(AGENT_CPUS, "0-3 6-31", "CPUs 4-5 stay reserved for measurement");
   assert.ok(args.includes("--working-directory=/work"), joined);
@@ -78,6 +79,7 @@ test("an agent starts in its own unit, lists, and stops by name", async t => {
 
   assert.equal(show("Nice"), "19");
   assert.equal(show("OOMScoreAdjust"), String(OOM_SCORE.agent));
+  assert.equal(show("CPUWeight"), String(CPU_WEIGHT.agent));
   assert.equal(show("LimitCORE"), "0");
   const pid = show("MainPID");
   assert.match(readFileSync(`/proc/${pid}/status`, "utf8"), /^Cpus_allowed_list:\t0-3,6-31$/m);

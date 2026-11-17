@@ -29,7 +29,7 @@ function fixture(t: TestContext,resident:HostObservationFixture["resident"]={kin
   const root = newTestScratch("job-live-memory"), units: string[] = [];
   const memory = ownMemory(join(root, "memory"), { availableKiB: 2.5 * 2 ** 20, totalKiB: 32 * 2 ** 20,resident });
   const env = gateEnvironment(fixtureEnvironment(t,{NTS_MEMORY_RESERVATION:undefined}), { run: join(root, "canonical"), standalone: true, owned: memory }).env;
-  const scopes=new GateScopes(env);assignTestValues(env,{NTS_TOOLING_SLICE:scopes.slice});
+  const scopes=new GateScopes(env,{rank:"agent"});assignTestValues(env,{NTS_TOOLING_SLICE:scopes.slice});
   t.after(() => {
     for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], {env:fixtureEnvironment(t), stdio: "ignore" });
     stopToolingSlice(scopes.slice);
@@ -38,7 +38,7 @@ function fixture(t: TestContext,resident:HostObservationFixture["resident"]={kin
   const start = (body: string, args: string[] = [],options:{properties?:string[];owned?:NodeJS.ProcessEnv}={}) => {
     const unit = `nts-test-live-job-${randomUUID()}`; units.push(unit);
     const setenv = Object.entries({...env,...options.owned}).filter((pair): pair is [string, string] => pair[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
-    const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(env), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
+    const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(env,"agent"), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
       "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=TimeoutStopSec=5s", "--property=RuntimeMaxSec=300s",
       ...(options.properties??[]),...setenv, process.execPath, ADMIT, "--key", "perf-count", "--", process.execPath, "-e", body, ...args], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
     let out = "", err = "";

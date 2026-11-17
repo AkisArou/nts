@@ -9,6 +9,7 @@ import { checkedUnitName, childSlice, newToolingSlice, unitComponent } from "../
 import { gateCpus, gateScope, inheritedCpus } from "../affinity.ts";
 import { readStepEntry, type StepEntry } from "./step-entry.ts";
 import { requireOwnUnit, startBoundSlice, stepWorkersSlice } from "./bound-slice.ts";
+import type { Priority } from "../ranks.ts";
 import { claimRunOwner, reapRunOwner, type RunOwner, type RootIdentity } from "./run-owner.ts";
 
 import {CgroupDeparted,HostObservationError,hostObservations,type HostObservations,type CgroupCpu,type PressureReading} from '../host-observations.ts';
@@ -123,6 +124,8 @@ export class StepScope {
   private peak: number | null = null;
   private cpu: CgroupCpu | null = null;
   private readonly host: HostObservations;
+  /** Its run's rank, which the run's root slice carries. */
+  private readonly rank: Priority;
   private events: MemoryEvents | null = null;
   private limiting: Promise<void> | null = null;
   private wanted: StepLimits;
@@ -132,6 +135,7 @@ export class StepScope {
   constructor(root: GateScopes, limits: StepLimits) {
     this.workerMax=limits.max;
     this.host=root.host;
+    this.rank=root.rank;
     this.slice = newToolingSlice(false, { NTS_TOOLING_SLICE: root.slice });
     this.unit = checkedUnitName(`nts-${unitComponent("s")}.scope`);
     this.supervisorSlice = childSlice(this.slice, "s");
@@ -208,7 +212,8 @@ export class StepScope {
   command(command: string, args: string[]): { command: string; args: string[] } {
     if (this.launched) throw new Error("step scope launched twice");
     this.launched = true;
-    const cpus = gateCpus(inheritedCpus()), affinity = gateScope(cpus);
+    // The probe runs inside this step's own slice, at its run's rank.
+    const cpus = gateCpus(inheritedCpus()), affinity = gateScope(cpus, { rank: this.rank, env: { NTS_TOOLING_SLICE: this.slice } });
     // Apply a delegated ceiling in this scope. A second systemd scope would
     // move the command outside the subtree whose drain we prove.
     return { command: "systemd-run", args: ["--user", "--scope", "--quiet", "--collect", `--unit=${this.unit}`, `--slice=${this.supervisorSlice}`,
@@ -250,7 +255,12 @@ export class GateScopes {
   private readonly owner: ReturnType<typeof claimRunOwner> | undefined;
   private readonly identity:RootIdentity;
   private closed=false;
-  constructor(env: NodeJS.ProcessEnv, ownerFile?: string) {
+  /** The run's place among every rank's work (ranks.ts), which its root slice's CPU weight gives it. */
+  readonly rank: Priority;
+  /** `rank` is the run's own, named by its launcher's code: the gate runner's PRIORITY. */
+  constructor(env: NodeJS.ProcessEnv, options: { rank: Priority; ownerFile?: string }) {
+    const { rank, ownerFile } = options;
+    this.rank = rank;
     this.host=hostObservations(env);
     for (const name of ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]) if (!env[name]) throw new Error(`step scopes require host capability ${name}; launch with the canonical host environment`);
     this.temporary = !env.NTS_GATE_RUN_DIR;
@@ -261,7 +271,7 @@ export class GateScopes {
     this.slice = newToolingSlice(false, env);
     this.owner = ownerFile ? claimRunOwner(ownerFile, this.slice, reapPreviousRoot) : undefined;
     const owner = requireOwnUnit();
-    this.group = startBoundSlice(this.slice, owner);
+    this.group = startBoundSlice(this.slice, owner, { rank });
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
     this.identity={group:this.group,device:String(identity.dev),inode:String(identity.ino)};
     this.owner?.complete(this.identity);

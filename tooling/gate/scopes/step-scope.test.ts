@@ -19,7 +19,7 @@ test('a changed sibling bound produces one manager write and equal requests prod
   }});
   try{
     const monitor=await import(monitorURL),{GateScopes}=await import(query);
-    const owner=new GateScopes(process.env),step=owner.step({max:128*2**20});
+    const owner=new GateScopes(process.env,{rank:"agent"}),step=owner.step({max:128*2**20});
     try{
       await step.caseLimit(256*2**20);
       assert.deepEqual(monitor.writes,[['systemctl',['--user','set-property','--runtime',step.workerSlice,'MemoryMax='+256*2**20]]]);
@@ -75,7 +75,7 @@ test("a delegated cpuset is applied to the owned scope without creating a siblin
   } });
   try {
     const { GateScopes } = await import(new URL("./step-scope.ts?ceiling-control", import.meta.url).href);
-    const owner = new GateScopes(process.env), step = owner.step({ max: 2 ** 31 });
+    const owner = new GateScopes(process.env,{rank:"agent"}), step = owner.step({ max: 2 ** 31 });
     try {
       const launch = step.command("/bin/true", []);
       assert.equal(launch.command, "systemd-run");

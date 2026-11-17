@@ -21,6 +21,7 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertLandingEnvironment } from "../gate/canonical-environment.ts";
+import { rankedScopeArgs } from "../gate/scopes/bound-slice.ts";
 import { gateEnvironmentError } from "../gate/environment.ts";
 import { changedPaths, isAncestor, revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
@@ -64,7 +65,30 @@ function dryRun(root: string, sha: string, argv: string[]): number {
   return 0;
 }
 
+/**
+ * Run this `--here` check among every rank's work at an agent's CPU rank
+ * (gate/ranks.ts): from an agent's shell or unit outside `nts.slice`, become
+ * this same command in a scope there, bound to that unit
+ * (scopes/bound-slice.ts's `rankedScopeArgs`). Its build and its runner
+ * then share a contended machine at the weight a landing outranks, not as
+ * one more equal in the user manager's `app.slice`. Returns only when it
+ * already runs there, or with the status of a refusal.
+ */
+function rankHere(): number | undefined {
+  let scope: string[] | null;
+  try { scope = rankedScopeArgs("agent"); } catch (error) { say((error as Error).message); return 2; }
+  if (scope === null) return undefined;
+  const execve = process.execve?.bind(process);
+  if (execve === undefined) { say(`node ${process.version} cannot become another program (process.execve)`); return 2; }
+  const systemdRun = spawnSync("sh", ["-c", "command -v systemd-run"], { encoding: "utf8" }).stdout.trim();
+  if (!systemdRun) { say("--here runs in a scope at an agent's rank, and systemd-run is not on PATH"); return 2; }
+  execve(systemdRun, ["systemd-run", ...scope, process.execPath, ...process.execArgv, ...process.argv.slice(1)], process.env);
+  return 2;
+}
+
 async function here(root: string, sha: string,traceRustInputs=false): Promise<number> {
+  const ranked = rankHere();
+  if (ranked !== undefined) return ranked;
   const tree = toplevel();
   if (spawnSync("git",gitArguments( ["rev-parse", "HEAD"]), { cwd: tree, encoding: "utf8" }).stdout.trim() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
   const dirty = spawnSync("git",gitArguments( ["status", "--porcelain", "--untracked-files=no"]), { cwd: tree, encoding: "utf8" }).stdout.trim();

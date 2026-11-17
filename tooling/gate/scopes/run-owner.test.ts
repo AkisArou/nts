@@ -36,7 +36,7 @@ for (const beforeCheckout of [false, true]) test(`the next runner reaps a dead r
   });
   const code = `import {spawn} from 'node:child_process';import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
 import{GateScopes}from${JSON.stringify(new URL("./step-scope.ts", import.meta.url).href)};
-const owner=new GateScopes(process.env,${JSON.stringify(receipt)}),step=owner.step({max:2**31});
+const owner=new GateScopes(process.env,{rank:"agent",ownerFile:${JSON.stringify(receipt)}}),step=owner.step({max:2**31});
 const command=step.command(process.execPath,['-e',${JSON.stringify(`const fs=require('node:fs');fs.watch(${JSON.stringify(own)},()=>{});fs.writeFileSync(${JSON.stringify(ready)},'ready');`)}]);
 spawn(command.command,command.args,{detached:true,stdio:'ignore',env:{...${testEnvironmentHandoff()},NTS_TOOLING_SLICE:step.slice}}).unref();
 durableRecord(${JSON.stringify(info)},{slice:owner.slice,group:owner.group});`;
@@ -51,7 +51,7 @@ durableRecord(${JSON.stringify(info)},{slice:owner.slice,group:owner.group});`;
     reapGateRoot(receipt);
     assert.equal(existsSync(`/sys/fs/cgroup${previous.group}`), false, "the old subtree is gone before any checkout runs");
   }
-  const replacement = new GateScopes(process.env, receipt);
+  const replacement = new GateScopes(process.env,{rank:"agent",ownerFile:receipt});
   try {
     assert.equal(existsSync(`/sys/fs/cgroup${previous.group}`), false, "no stale descendant survives into the replacement run");
   } finally { replacement.close(); }
@@ -60,10 +60,10 @@ durableRecord(${JSON.stringify(info)},{slice:owner.slice,group:owner.group});`;
 
 test("a live runner's root cannot be reaped by another runner in its tree", () => {
   const own = newTestScratch("run-owner-live"), receipt = join(own, "owner.json");
-  const owner = new GateScopes(process.env, receipt);
+  const owner = new GateScopes(process.env,{rank:"agent",ownerFile:receipt});
   let unexpected: GateScopes | undefined;
   try {
-    assert.throws(() => { unexpected = new GateScopes(process.env, receipt); }, /live gate runner/);
+    assert.throws(() => { unexpected = new GateScopes(process.env,{rank:"agent",ownerFile:receipt}); }, /live gate runner/);
     assert.match(readFileSync(`/sys/fs/cgroup${owner.group}/cgroup.events`, "utf8"), /^populated 0$/m);
   } finally { unexpected?.close(); owner.close(); rmSync(own, { recursive: true, force: true }); }
 });

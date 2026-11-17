@@ -140,13 +140,14 @@ function shown(text: string): Record<string, string> {
  * The user manager's units. Each is started with `properties` (unit.ts's
  * lowPriority), the gate's host capabilities from `env` and its working
  * directory, as Type=exec, so a command that cannot start fails its start.
- * Inside a tooling run it joins that run's slice, which stops it with the run.
+ * Inside a tooling run it joins that run's slice, which stops it with the run;
+ * otherwise it competes among every rank's work at the full check's rank.
  */
 export function systemdUnits(properties: readonly string[], env: NodeJS.ProcessEnv = process.env): Units {
   return {
     start(spec) {
       const r = spawnSync("systemd-run", [
-        "--user", `--unit=${spec.name}`, "--collect", "--quiet", ...toolingSliceArgs(env),
+        "--user", `--unit=${spec.name}`, "--collect", "--quiet", ...toolingSliceArgs(env, "full-check"),
         "--property=Type=exec", ...[...properties, ...spec.properties ?? []].map(property => `--property=${property}`),
         `--property=StandardOutput=append:${spec.log}`, `--property=StandardError=append:${spec.log}`,
         `--working-directory=${spec.cwd}`, ...systemdEnvironment(env), "--", ...spec.command,

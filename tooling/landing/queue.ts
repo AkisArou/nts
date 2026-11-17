@@ -24,7 +24,7 @@ import {LANDING_HOME} from './layout.ts';
 export {LANDING_HOME} from './layout.ts';
 import { join } from "node:path";
 import { systemdEnvironment } from "../gate/environment.ts";
-import { OOM_SCORE } from "../gate/memory-ledger.ts";
+import { CPU_WEIGHT, OOM_SCORE, RANK_SLICE } from "../gate/ranks.ts";
 import { revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
 import type {DiskBuildRefusal} from '../differential/command-entry/instrument.ts';
@@ -264,13 +264,23 @@ export function serviceRunning(home = LANDING_HOME): boolean {
  * steps need, and outlives the process that asked. Without systemd it is a
  * detached process logging to the landing home.
  */
+/**
+ * The systemd-run arguments of the service's unit. Its work is the last a
+ * machine out of memory kills (OOM_SCORE), and the first a contended CPU
+ * serves: among every rank's work, at the landing's CPU weight (CPU_WEIGHT),
+ * its build and runner with it.
+ */
+export function serviceArgs(root: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  return ["--user", `--unit=${SERVICE_UNIT}`, "--collect", "--quiet", "-p", "LimitCORE=0", "-p", `OOMScoreAdjust=${OOM_SCORE.landing}`,
+    `--slice=${RANK_SLICE}`, "-p", `CPUWeight=${CPU_WEIGHT.landing}`,
+    `--working-directory=${root}`, ...systemdEnvironment(env), process.execPath, join(root, "tooling/landing/check.ts"), "serve"];
+}
+
 export function ensureService(root: string, home = LANDING_HOME, env: NodeJS.ProcessEnv = process.env): string {
   if (serviceRunning(home)) return "running";
   const script = join(root, "tooling/landing/check.ts");
   if (spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0) {
-    // Its work is the last a machine out of memory kills (OOM_SCORE).
-    const r = spawnSync("systemd-run", ["--user", `--unit=${SERVICE_UNIT}`, "--collect", "--quiet", "-p", "LimitCORE=0", "-p", `OOMScoreAdjust=${OOM_SCORE.landing}`,
-      `--working-directory=${root}`, ...systemdEnvironment(env), process.execPath, script, "serve"], { encoding: "utf8" });
+    const r = spawnSync("systemd-run", serviceArgs(root, env), { encoding: "utf8" });
     // A unit that exists already is one starting or draining: the lock says which soon.
     return r.status === 0 ? `started ${SERVICE_UNIT}` : /already (exists|loaded)/.test(r.stderr ?? "") ? "starting" : `could not start ${SERVICE_UNIT}: ${(r.stderr ?? "").trim()}`;
   }

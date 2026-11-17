@@ -111,7 +111,7 @@ if('module.exports' in exports)exports['module.exports']=facade;
 mock.module('node:fs',{exports});
 const {durableRecord}=await import(${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)});
 durableRecord(target,{ready:true,payload:'complete bytes'});`;
-  const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--quiet',...toolingSliceArgs(),'--unit='+unit,'-p','LimitCORE=0','-p','RuntimeMaxSec=300s',
+  const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--quiet',...toolingSliceArgs(process.env,"agent"),'--unit='+unit,'-p','LimitCORE=0','-p','RuntimeMaxSec=300s',
     ...Object.entries(env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
     process.execPath,'--experimental-test-module-mocks','--input-type=module','-e',source,target,ready],{env,stdio:['pipe','pipe','pipe']});
   let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);

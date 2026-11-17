@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { randomInt } from "node:crypto";
 import { ToolingInstrumentError } from "./step-result.ts";
+import { CPU_WEIGHT, RANK_SLICE, type Priority } from "./ranks.ts";
 
 export function newToolingSlice(fixture = false, env: NodeJS.ProcessEnv = process.env): string {
   return childSlice(toolingSlice(env), unitComponent(fixture ? "t" : "r"));
@@ -31,10 +32,16 @@ export function toolingSlice(env: NodeJS.ProcessEnv = process.env): string | und
   return slice === undefined ? undefined : checkedUnitName(slice);
 }
 
-/** Every external test service uses the same explicit parent. */
-export function toolingSliceArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+/**
+ * Where a unit that systemd-run starts for nts work goes. Inside a tooling
+ * run, that run's slice, which already carries the run's rank. Otherwise
+ * beside every other rank's work under `nts.slice`, with its rank's CPU
+ * weight (ranks.ts), never in the user manager's default `app.slice`, where
+ * it would split the machine with all of `nts.slice` whatever its rank.
+ */
+export function toolingSliceArgs(env: NodeJS.ProcessEnv, priority: Priority): string[] {
   const slice = toolingSlice(env);
-  return slice ? [`--slice=${slice}`] : [];
+  return slice ? [`--slice=${slice}`] : [`--slice=${RANK_SLICE}`, `--property=CPUWeight=${CPU_WEIGHT[priority]}`];
 }
 
 /** Slice ancestry is encoded in names; preserve the resident run's own suffix. */

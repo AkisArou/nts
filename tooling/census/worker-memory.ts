@@ -11,7 +11,8 @@ import { basename, join } from "node:path";
 import { PressureError, CaseBudgetError, ToolingInstrumentError,publishToolingFailure } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gate/tooling-slice.ts";
-import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
+import { bindsToProperties, ownUnit, rankProperties, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
+import { priorityOf } from "../gate/ranks.ts";
 import { activeCommand, CommandNotMeasuredError, COMMAND_STARTUP_BOUND_MS } from "../gate/active-process.ts";
 import {caseEnvironment,caseReceipt,ownCaseWorker,retireCaseScope,type CaseReceipt} from '../gate/case-context.ts';
 import {assignOwnedValues} from '../gate/environment-values.ts';
@@ -276,8 +277,8 @@ export class MemoryRun {
   #slice(unit: string, bytes: number | null, boundTo: string | undefined, parent?: string) {
     try {
       const cap = bytes === null ? [] : ["MemoryMax", "t", String(bytes)];
-      const binds = bindsToProperties(boundTo);
-      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3 + binds.length / 4), "Description", "s", this.#description, ...cap, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, "0");
+      const binds = bindsToProperties(boundTo), cpu = rankProperties(unit, priorityOf());
+      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3 + cpu.length / 3 + binds.length / 4), "Description", "s", this.#description, ...cap, ...cpu, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, "0");
       // StartTransientUnit returns a queued job, not an active slice. Join
       // that job before reading ControlGroup or any kernel memory controls.
       systemctl("start", unit);

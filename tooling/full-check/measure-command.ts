@@ -41,7 +41,8 @@ async function measure(seconds: number, run: string, slice: string, command: str
   let cleanupFailed = false;
   try {
     const owner = requireOwnUnit();
-    startBoundSlice(slice,owner);acquired=true;
+    // The full check's measurement competes for CPU at the full check's rank (ranks.ts).
+    startBoundSlice(slice,owner,{rank:"full-check"});acquired=true;
     const child = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", "--expand-environment=no",
       `--unit=${unit}`, `--slice=${slice}`, `--property=RuntimeMaxSec=${seconds}s`, "--property=TimeoutStopSec=5s",
       `--property=BindsTo=${owner}`, `--property=After=${owner}`,

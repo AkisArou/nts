@@ -65,7 +65,7 @@ test("a full-check wall ceiling stops an older command and holds even a green su
     identities:{commit:COMMIT},environment:{canonical:true},steps:[{name:"program-oracles",verdict:"PASS"}],
   }));
   const measure=fileURLToPath(new URL("./measure-command.ts",import.meta.url));
-  const result=spawnTest("systemd-run",["--user",`--unit=${unit}`,...toolingSliceArgs(),"--collect","--quiet","--pipe","--wait",
+  const result=spawnTest("systemd-run",["--user",`--unit=${unit}`,...toolingSliceArgs(process.env,"agent"),"--collect","--quiet","--pipe","--wait",
     "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=30s",
     process.execPath,measure,"3",run,slice,"tail","-f","/dev/null"],{encoding:"utf8"});
   assert.equal(result.status,124,result.stdout+result.stderr);

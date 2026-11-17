@@ -105,7 +105,7 @@ test("scope selection proves a ceiling before work and labels unavailable or fai
 test("the real host scope is verified, or the absence is reported before launching any work", { skip: process.platform !== "linux" }, (t) => {
   const cpus = gateCpus(inheritedCpus());
   const online = readFileSync("/sys/devices/system/cpu/online", "utf8").trim();
-  const launch = gateCommand("taskset", ["-c", online, "sh", "-c", "awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status"]);
+  const launch = gateCommand("taskset", ["-c", online, "sh", "-c", "awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status"], { rank: "agent", env: fixtureEnvironment(t) });
   if (launch.mechanism.startsWith("best-effort")) {
     assert.equal(launch.command, "taskset");
     assert.match(launch.mechanism, /best-effort; .+/);

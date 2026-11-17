@@ -173,7 +173,7 @@ test("a live memory.high and busy-state observation releases its kernel control"
       if(high>0&&state==='D'&&busy){control('set-property','--runtime',`${unit}.scope`,'MemoryHigh=infinity');lifted=true;}
     }catch(error){if(!String(error).includes('No such file'))throw error;}
   }})};
-  const result=await activeCommand('systemd-run',['--user','--scope','--quiet','--collect',`--unit=${unit}`,...toolingSliceArgs(),
+  const result=await activeCommand('systemd-run',['--user','--scope','--quiet','--collect',`--unit=${unit}`,...toolingSliceArgs(process.env,"agent"),
     '-p','MemoryHigh=64M','-p','MemoryMax=1G','-p','MemorySwapMax=0','--',
     process.execPath,'-e',"const held=[];for(let i=0;i<16;i++)held.push(Buffer.alloc(16*2**20,1));process.stdout.write('complete\\n');"],{cwd:root,env,pollMs:50,observations});
   assert.equal(lifted,true,`no memory.high/D-state readiness observed (${high} high events)`);

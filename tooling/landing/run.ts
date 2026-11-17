@@ -193,6 +193,9 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
   return own;
 }
 
+/** The run's rank, for memory and CPU alike (gate/ranks.ts): the service's landings', or the caller's (`check.ts --here` names an agent's). */
+const runRank = (options: Pick<RunOptions, "priority">): Priority => options.priority ?? "landing";
+
 export async function runLanding(options: RunOptions): Promise<Ran> {
   const lifetime=new RunLifetime(options.signal);
   try{return await runLandingOwned({...options,signal:lifetime.signal},lifetime);}
@@ -223,7 +226,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
       NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
       NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
       ...STANDING_GATE_POLICY,
-      NTS_MEMORY_PRIORITY: options.priority ?? "landing",
+      NTS_MEMORY_PRIORITY: runRank(options),
       // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
       ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),
       ...(options.interop && options.steps.includes("interop") ? { NTS_INTEROP_PROJECTS: options.interop } : {}),
@@ -383,7 +386,7 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
   const slots = machineBudget(cpus().length).slots;
   const command = options.build ?? [node, join(options.tree,"tooling/gate/cargo.ts"), "build", "--profile", PROFILE, "--jobs", String(slots)];
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
-  const launch = gateCommand(timed[0]!, timed.slice(1));
+  const launch = gateCommand(timed[0]!, timed.slice(1), { rank: runRank(options), env: launcher });
   const r = await runCandidate(options,node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher,false,log);
   appendFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
@@ -408,7 +411,7 @@ type Summary = { identities?: { commit?: string | null; nts?: { sha256?: string 
   interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[];scope_cleanup?:{state:string};diagnostics?:{state:string} };
 async function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): Promise<{ rows: StepResult[] } | { held: string }> {
   mkdirSync(dir, { recursive: true });
-  const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")]);
+  const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")], { rank: runRank(options), env: launcher });
   const r = await runCandidate(options,node, { tree: options.tree, run: dir, owned, command: [launch.command, ...launch.args] }, launcher,true,join(dir,'gate.log'));
   writeFileSync(join(dir, "gate.log"), `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let summary: Summary;

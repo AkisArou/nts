@@ -24,7 +24,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {FIXED_AMBIENT,hostEnvironment} from '../gate/host-environment.ts';
-import { OOM_SCORE } from "../gate/memory-ledger.ts";
+import { CPU_WEIGHT, OOM_SCORE } from "../gate/ranks.ts";
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs } from "../landing/pool.ts";
 import { DEFAULT_SCHEDULE, parseTimes, type Schedule } from "./schedule.ts";
@@ -40,12 +40,13 @@ export const BENCH_UNIT = `${UNIT}-bench`;
 
 /**
  * How every unit of the full check runs: landing checks and agents come first,
- * so the lowest priority and a small CPU and IO weight; the measurement CPUs
+ * so the lowest priority, the full check's CPU weight (ranks.ts) and a small
+ * IO weight; the measurement CPUs
  * 4-5 excluded; the first to go when the machine runs out of memory; and no
  * core dumps of the gate's deliberate crashes stored.
  */
 export function lowPriority(cpus = "0-3 6-31"): string[] {
-  return ["Nice=19", "CPUWeight=20", "IOWeight=20", `CPUAffinity=${cpus}`, `OOMScoreAdjust=${OOM_SCORE["full-check"]}`, "LimitCORE=0"];
+  return ["Nice=19", `CPUWeight=${CPU_WEIGHT["full-check"]}`, "IOWeight=20", `CPUAffinity=${cpus}`, `OOMScoreAdjust=${OOM_SCORE["full-check"]}`, "LimitCORE=0"];
 }
 
 export type UnitOptions = { node: string; layout: Layout; schedule: Schedule; env: NodeJS.ProcessEnv };

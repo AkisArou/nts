@@ -129,7 +129,7 @@ async function round(directory:string):Promise<number>{
     const tests=artifacts.artifacts.filter(row=>row.manifest_path===join(ROOT,'tooling/cli/Cargo.toml')&&row.target.name==='integration'&&row.executable);
     if(artifacts.version!==1||artifacts.status!==0||!artifacts.buildFinished||tests.length!==1)fail('CLI test profile did not emit exactly one integration harness');
     const binary={path:tests[0]!.executable!,sha256:hash(tests[0]!.executable!)};
-    const group=startBoundSlice(slice,owner);acquired=true;
+    const group=startBoundSlice(slice,owner,{rank:'agent'});acquired=true;
     probe('experiment CPU quota','systemctl',['--user','set-property',slice,'CPUQuota='+QUOTA+'%'],env);
     const cpu=cpuControls(group),initial=cpu.read();
     if(initial.quotaUsec!==initial.periodUsec*QUOTA/100)fail('kernel did not apply experiment CPU quota');
@@ -141,7 +141,7 @@ async function round(directory:string):Promise<number>{
     // The current parent also guards the complete executable lifetime, not
     // only its Cargo build. The fresh per-binary scratch is below this root.
     configuration=cargoConfiguration([ROOT,env.TMPDIR!],env);
-    const command=gateCommand(process.execPath,[SELF,'--worker',join(directory,'request.json')]);
+    const command=gateCommand(process.execPath,[SELF,'--worker',join(directory,'request.json')],{rank:'agent',env:{NTS_TOOLING_SLICE:slice}});
     scopeLog=openSync(join(directory,'worker.log'),'wx');
     const child=spawn('systemd-run',['--user','--scope','--collect','--quiet','--unit='+unit,'--slice='+slice,
       '--property=BindsTo='+owner,'--property=After='+owner,command.command,...command.args],{cwd:ROOT,env:childEnv,stdio:['ignore',scopeLog,scopeLog]});

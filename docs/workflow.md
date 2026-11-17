@@ -1314,6 +1314,27 @@ the tooling strict checker owns the source's type checking.
   fixture's private HOME. A fixture testing cache behavior declares its own
   cache capability. A generated shim declares any additional protocol fields
   or descriptors it forwards.
+- **A contended CPU serves the ranks in the memory ledger's order.** The
+  landing check's work comes first, agents' second, the full check's last:
+  `tooling/gate/ranks.ts` holds one table of what each rank gets from the
+  kernel, its memory admission order, its OOM score and its CPU weight
+  (landing 1000, agent 100, full check 10). The rank travels in
+  `NTS_MEMORY_PRIORITY`. Every rank's work runs under `nts.slice`, where
+  siblings share a saturated machine by weight: each run's root slice
+  carries its rank's `CPUWeight` (`startBoundSlice`, which refuses a root
+  whose launcher names no rank), and so does a unit or gate command scope
+  started outside a run (`toolingSliceArgs`, `gateCommand`), at the rank its
+  launcher's code names. Work started outside `nts.slice` enters a scope of
+  its own there at its rank, bound to the unit it was started in
+  (`rankedScopeArgs`): every job `admit.ts` admits, which includes
+  `with-lock.sh`'s and `inner.ts`'s (`--memory-max` caps that scope), and
+  `check.ts --here`. The landing service's unit and an agent's unit
+  (`tooling/agents`) run under `nts.slice` at their rank's weight; the full
+  check's units carry the full check's. A unit another launcher starts
+  outside `nts.slice` (a Signalbox worker's) is ranked only through those
+  entries; its other processes stay where it put them. Nice values still
+  order the processes inside one run. A weight shares contended time only: it never
+  caps a run on an idle machine, and no gate's parallelism is capped.
 - **CPUs 4 and 5 stay reserved for measurement;** heavy work runs at low
   priority; a process is stopped by its systemd unit, never by a PID found
   in `ps`.
@@ -2110,6 +2131,13 @@ death; an absent timestamp remains explicit after forced termination.
   If the machine itself runs out, the kernel kills the full
   check's work first, then agents', and a landing's last
   ([log](records/notebooks/decisions-log.md#memory-limits-guard-against-runaways-only-11-10)).
+- **CPU ranks follow the memory ranks** (11-17): the CPU scheduler shares a
+  contended machine by the ledger's ranks, as cgroup CPU weights from one
+  table, because every run's steps share `nts.slice` and nice alone, set by
+  whoever launched a run, left an agent's run equal to a landing's. All of a
+  rank's work, including jobs started from agents' shells, runs under
+  `nts.slice` at its rank's weight
+  ([log](records/notebooks/decisions-log.md#cpu-ranks-follow-the-memory-ranks-11-17)).
 - **Worker pressure preserves its supervisor.** The retained step root accounts
   for both sibling subtrees. A worker group has `memory.oom.group` enabled,
   so its process family is killed together. The supervisor stays outside

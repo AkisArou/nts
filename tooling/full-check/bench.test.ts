@@ -45,7 +45,7 @@ function inUnit(t: TestContext, root: string, body: (unit: string) => string) {
   const env = gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: memory }).env;
   const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
   t.after(() => { spawnSync("systemctl", ["--user", "stop", unit], {env:fixtureEnvironment(t), stdio: "ignore" }); });
-  const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
+  const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
     "--property=RuntimeMaxSec=300s", "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31",
     ...setenv, process.execPath, script], {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);

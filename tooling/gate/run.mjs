@@ -261,6 +261,7 @@ const RECORD_TIMES = (env.NTS_GATE_RECORD_TIMES ?? "") === "1";
 const STEP_CEILING = intEnv("NTS_GATE_STEP_CEILING_S", undefined);
 const TIMES_FILE = join(HERE, "times.tsv");
 
+/** @param {string} message @returns {never} */
 function usage(message) {
   process.stderr.write(`${color(31, "FAILED")}: ${message}\n`);
   exitCommand(2);
@@ -1813,7 +1814,7 @@ function settings() {
 // ledger is measured as that slice, and the capture below runs inside the
 // reservation. Without either, no step can run.
 let setupFailure, dependencySealFailure;
-try { scopes = new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); }
+try { scopes = new GateScopes(env, { rank: PRIORITY, ownerFile: join(ROOT, "target/gate-scope-owner.json") }); }
 catch (error) {if(isCommandExit(error))throw error; setupFailure = `step scope setup failed: ${error.message}`; }
 if(diagnosticsFailure)setupFailure=`host observation setup failed: ${diagnosticsFailure}`;
 if(!setupFailure&&scopes){

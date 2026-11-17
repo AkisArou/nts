@@ -827,7 +827,7 @@ for (const family of [false, true]) test(`inside a gate step's bounded worker su
   // own runaway bound, so even a second OOM while victim pages drain stays
   // inside the workers. An oracle worker and its SDK child die as one group.
   const { GateScopes } = await import("../gate/scopes/step-scope.ts");
-  const owner = new GateScopes(process.env), slice = owner.step({ max: 256 * 2 ** 20 });
+  const owner = new GateScopes(process.env,{rank:"agent"}), slice = owner.step({ max: 256 * 2 ** 20 });
   t.after(async () => { await slice.drain(); owner.close(); });
   const allocation = "const held = Buffer.alloc(400 * 2 ** 20, 1); console.log(held.length)";
   const census = `import { readFileSync } from "node:fs";
@@ -899,7 +899,7 @@ durableRecord(${JSON.stringify(ready)}, { slice: run.slice, worker: worker.slice
 setInterval(() => {}, 60_000);`;
   // The enclosing test slice stops this service if its test process aborts.
   // The runtime bound also covers a plain node --test without a slice owner.
-  const started = spawnTest("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet",
+  const started = spawnTest("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--quiet",
     "-p", "RuntimeMaxSec=300s", "-p", "LimitCORE=0", process.execPath, "--input-type=module", "-e", census], { encoding: "utf8" }, "the killed census's unit");
   assert.equal(started.status, 0, started.stderr);
   const parentSlice=toolingSlice();

@@ -98,7 +98,7 @@ runAsCommand(import.meta.url,async()=>{
  passed=true;
 });
 `));
- const result=spawnTest('systemd-run',['--user','--unit='+unit,'--collect','--wait','--pipe','-p','LimitCORE=0',...toolingSliceArgs(env),...systemdEnvironment(env),'--',process.execPath,controller],{env,encoding:'utf8',maxBuffer:16*1024**2});
+ const result=spawnTest('systemd-run',['--user','--unit='+unit,'--collect','--wait','--pipe','-p','LimitCORE=0',...toolingSliceArgs(env,"agent"),...systemdEnvironment(env),'--',process.execPath,controller],{env,encoding:'utf8',maxBuffer:16*1024**2});
  assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.signal,null);
  const receipt=JSON.parse(readFileSync(join(root,'drained.json'),'utf8'));
  assert.equal(receipt.drained,true);assert.equal(receipt.sealed,sealed);assert.equal(receipt.sessions.length,2);

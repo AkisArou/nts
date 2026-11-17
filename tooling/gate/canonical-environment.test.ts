@@ -567,7 +567,7 @@ child.release();
     ...(oracle==='priority'?{NTS_MEMORY_PRIORITY:'full-check'}:{}),
   }});
   const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
-  const child=spawn('systemd-run',['--user',...toolingSliceArgs(),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','Nice=19','-p','RuntimeMaxSec=120s','-p','TimeoutStopSec=2',
+  const child=spawn('systemd-run',['--user',...toolingSliceArgs(process.env,"agent"),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','Nice=19','-p','RuntimeMaxSec=120s','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
     '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});

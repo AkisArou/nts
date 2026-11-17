@@ -38,7 +38,7 @@ else owner.cleanup();
   if(mode==='SIGTERM'){
     const unit=toolingSlicePrefix('census-cleanup-'+randomUUID());
     t.after(()=>spawnSync('systemctl',['--user','stop',unit],{env:fixtureEnvironment(t),stdio:'ignore'}));
-    const child=spawn('systemd-run',['--user','--wait','--pipe','--collect',...toolingSliceArgs(),'--unit='+unit,'-p','LimitCORE=0',
+    const child=spawn('systemd-run',['--user','--wait','--pipe','--collect',...toolingSliceArgs(process.env,"agent"),'--unit='+unit,'-p','LimitCORE=0',
       '--setenv=TMPDIR='+temporary,'taskset','-c','0-3,6-31',process.execPath,helper],{env:fixtureEnvironment(t),stdio:['pipe','pipe','pipe']});
     let output='';child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>output+=bytes);
     const ended=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});

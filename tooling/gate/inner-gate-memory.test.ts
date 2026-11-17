@@ -93,7 +93,7 @@ test("an inner gate run whose reading has no room for it waits in its own ledger
   // seconds rather than its default ninety.
   // In the tooling run's slice, so a test stopped before its own cleanup
   // stops the run with it.
-  const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
+  const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
     `--working-directory=${f.root}`, ...setenv, process.execPath, join(f.gate, "run.mjs")], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
   // The event, not a timer: the run says it waits, or it ends.
   const waiting = await new Promise<boolean>(resolve => {
@@ -130,7 +130,7 @@ test("a holder at an agent's priority starts a gate run that needs more than the
     const unit = `nts-test-inner-gate-holder-${randomUUID().slice(0, 8)}`;
     t.after(() => { spawnSync("systemctl", ["--user", "stop", `${unit}.service`], {env:fixtureEnvironment(t), stdio: "ignore" }); });
     const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `--setenv=${name}=${value}`);
-    const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
+    const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
       `--working-directory=${f.root}`, ...setenv, process.execPath, ADMIT, "--bytes", "12G", "--what", "holder", "--",
       "sh", "-c", command, process.execPath, join(f.gate, "run.mjs")], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
     let output = "";

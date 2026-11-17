@@ -1,8 +1,8 @@
 // Run a command once the machine's memory ledger admits it, or say what the
 // ledger holds:
 //
-//   node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--priority ...] [--what <label>] -- <command> [args...]
-//   node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]
+//   node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority ...] [--what <label>] -- <command> [args...]
+//   node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]
 //   node tooling/gate/admit.ts --status [--json]
 //
 // With `--key`, the command reserves what its earlier runs under that key
@@ -31,6 +31,15 @@
 // handle of whoever reserved), it runs at once inside that one. Without
 // --priority, its priority is NTS_MEMORY_PRIORITY's, else an agent's.
 //
+// The command competes for CPU at its priority, as for memory (ranks.ts):
+// started outside `nts.slice` (an agent's shell or unit), it becomes the
+// command through systemd-run, in a scope of its own among every rank's work
+// at its rank's CPU weight, bound to the unit it was started in, so that
+// stopping that unit stops it as before (scopes/bound-slice.ts's
+// `rankedScopeArgs`). Inside `nts.slice` it already runs in a run of its rank
+// and stays where it is. `--memory-max` caps that scope's memory, without
+// swap, wherever it runs.
+//
 // Exit status: the command's; 125 when admit itself fails (usage, the
 // ledger, a size that can never fit), 126 when the command cannot be run, 127
 // when it is not found. A SIGINT, SIGTERM or SIGHUP while it waits withdraws
@@ -47,9 +56,10 @@ import {prepareCommandExec,registerCommandCloser,runAsCommand} from '../differen
 import { resolve } from "node:path";
 import { gib, jobSizing, ledgerStatus, parseBytes, PRIORITIES, priorityOf, rankForOom, reserve, watchPeak, type JobSizing, type LedgerStatus, type Priority } from "./memory-ledger.ts";
 import { measurementAdmission, MeasurementBusy } from "./measurement-admission.ts";
+import { rankedScopeArgs } from "./scopes/bound-slice.ts";
 
-const USAGE = "usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
-  + "       node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
+const USAGE = "usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
+  + "       node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
   + "       node tooling/gate/admit.ts --status [--json]";
 
 class Refusal extends Error {
@@ -68,11 +78,11 @@ function say(line: string): void {
   try { writeSync(2, `${line}\n`); } catch { /* there is nowhere left to say it */ }
 }
 
-type Options = { bytes: number; job: (JobSizing & { key: string }) | null; priority: Priority; what: string; command: string; args: string[];
+type Options = { bytes: number; job: (JobSizing & { key: string }) | null; priority: Priority; what: string; command: string; args: string[]; memoryMax?: number;
   measurement?: { lock: string; wait: boolean; quiet: boolean } };
 
 function parse(argv: readonly string[]): Options {
-  let bytes: number | undefined, what: string | undefined, key: string | undefined, workers: number | undefined, atMost: number | undefined;
+  let bytes: number | undefined, what: string | undefined, key: string | undefined, workers: number | undefined, atMost: number | undefined, memoryMax: number | undefined;
   let priority: Priority | undefined;
   let measurementLock: string | undefined, measurementWait = false, measurementQuiet = true;
   let at = 0;
@@ -88,6 +98,8 @@ function parse(argv: readonly string[]): Options {
       try { bytes = parseBytes(value()); } catch (error) { throw new Refusal((error as Error).message, 125, true); }
     } else if (flag === "--at-most") {
       try { atMost = parseBytes(value()); } catch (error) { throw new Refusal((error as Error).message, 125, true); }
+    } else if (flag === "--memory-max") {
+      try { memoryMax = parseBytes(value()); } catch (error) { throw new Refusal((error as Error).message, 125, true); }
     } else if (flag === "--measurement-lock") measurementLock = resolve(value());
     else if (flag === "--measurement-wait") measurementWait = true;
     else if (flag === "--measurement-no-quiet") measurementQuiet = false;
@@ -113,7 +125,7 @@ function parse(argv: readonly string[]): Options {
     try { job = { key, ...jobSizing({ key, units: workers, atMostBytes: atMost }) }; }
     catch (error) { throw new Refusal((error as Error).message, 125, error instanceof TypeError); }
   }
-  return { bytes: job?.bytes ?? bytes!, job, priority, what: what ?? [command, ...args].join(" "), command, args,
+  return { bytes: job?.bytes ?? bytes!, job, priority, what: what ?? [command, ...args].join(" "), command, args, ...(memoryMax === undefined ? {} : { memoryMax }),
     ...(measurementLock === undefined ? {} : { measurement: { lock: measurementLock, wait: measurementWait, quiet: measurementQuiet } }) };
 }
 
@@ -192,6 +204,13 @@ async function main(argv: readonly string[]): Promise<void> {
   if (argv[0] === "--status") return status(argv);
   const options = parse(argv);
   const file = locate(options.command);
+  // Where the command will run, settled before it waits: a shell outside any
+  // user-manager unit is refused now, not after its turn came.
+  const placement = (priority: Priority, env: NodeJS.ProcessEnv) => {
+    try { return rankedScopeArgs(priority, env, options.memoryMax === undefined ? {} : { memoryMax: String(options.memoryMax) }); }
+    catch (error) { throw new Refusal(`cannot place the command among the ranks' work: ${(error as Error).message}`, 125); }
+  };
+  const launcher = placement(options.priority, process.env) === null ? null : locate("systemd-run");
   const execve = process.execve?.bind(process);
   if (execve === undefined) throw new Refusal(`node ${process.version} cannot become another program (process.execve)`, 125);
   // Node ignores SIGPIPE and SIGXFSZ, and execve keeps a signal ignored while
@@ -226,12 +245,15 @@ async function main(argv: readonly string[]): Promise<void> {
   if (options.job && !reservation.inherited) watchPeak(reservation, options.job);
   rankForOom(priorityOf(reservation.env), say);
   const env = { ...process.env, ...reservation.env };
+  // At the reservation's own priority: an inherited one's is its ancestor's.
+  const scope = launcher === null ? null : placement(priorityOf(reservation.env), env);
   let failure: unknown;
   // The shell keeps this pid, validates the lock's owner and owns its EXIT trap.
   // On success no JS callback survives; on exec failure cleanup remains ours.
-  try { execve(file, [options.command, ...options.args], env); }
+  // systemd-run keeps this pid too: it moves itself into the scope and execs.
+  try { if (scope !== null) execve(launcher!, ["systemd-run", ...scope, file, ...options.args], env); else execve(file, [options.command, ...options.args], env); }
   catch (error) { failure = error; }
-  if ((failure as NodeJS.ErrnoException).code === "ENOEXEC") {
+  if (scope === null && (failure as NodeJS.ErrnoException).code === "ENOEXEC") {
     // A script without an interpreter line: what execvp does, the shell runs it.
     try { execve("/bin/sh", ["sh", file, ...options.args], env); }
     catch (error) { failure = error; }

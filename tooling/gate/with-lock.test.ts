@@ -50,7 +50,7 @@ function fixture(t: TestContext, availableKiB = 20 * GiB_KIB) {
     const unit = `nts-test-with-lock-${randomUUID()}`;
     units.push(unit);
     const setenv = Object.entries({ ...env, ...extra }).filter((pair): pair is [string, string] => pair[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
-    return ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
+    return ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
       "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=TimeoutStopSec=5s", "--property=RuntimeMaxSec=300s", ...setenv, ...command];
   };
   const withLock = (args: string[], extra: NodeJS.ProcessEnv = {}) =>

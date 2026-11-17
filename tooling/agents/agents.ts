@@ -8,8 +8,10 @@
 //   node tooling/agents/agents.ts list [--json]
 //
 // Each unit runs with `--collect` (gone once it ends), off the measurement
-// CPUs 4-5, at Nice=19, with no core dumps and the agent OOM score
-// (memory-ledger.ts's OOM_SCORE: the kernel kills an agent's work after
+// CPUs 4-5, under nts.slice at Nice=19 and an agent's CPU weight beside every
+// rank's runs (so even its unadmitted work is ranked), with no core dumps and the
+// agent OOM score (ranks.ts's CPU_WEIGHT and OOM_SCORE: a contended CPU
+// serves an agent after a landing, and the kernel kills an agent's work after
 // the full check's, before a landing's). It runs in the caller's working
 // directory with the host capabilities every detached unit here is given
 // (gate/environment.ts's systemdEnvironment, as the landing service gets
@@ -19,7 +21,7 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { systemdEnvironment } from "../gate/environment.ts";
-import { OOM_SCORE } from "../gate/memory-ledger.ts";
+import { CPU_WEIGHT, OOM_SCORE, RANK_SLICE } from "../gate/ranks.ts";
 
 export const AGENT_PREFIX = "nts-agent-";
 /** An agent's CPUs: every CPU but the measurement pair 4-5 (AGENTS.md). */
@@ -70,8 +72,8 @@ export function parseCommand(argv: readonly string[]): AgentCommand {
 
 /** The systemd-run argv that starts an agent: as the landing service starts (queue.ts), with an agent's priority. */
 export function startArgs(name: string, argv: readonly string[], env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd()): string[] {
-  return ["--user", `--unit=${agentUnit(name)}`, "--collect", "--quiet",
-    "-p", "LimitCORE=0", "-p", "Nice=19", "-p", `OOMScoreAdjust=${OOM_SCORE.agent}`, "-p", `CPUAffinity=${AGENT_CPUS}`,
+  return ["--user", `--unit=${agentUnit(name)}`, "--collect", "--quiet", `--slice=${RANK_SLICE}`,
+    "-p", "LimitCORE=0", "-p", "Nice=19", "-p", `CPUWeight=${CPU_WEIGHT.agent}`, "-p", `OOMScoreAdjust=${OOM_SCORE.agent}`, "-p", `CPUAffinity=${AGENT_CPUS}`,
     `--working-directory=${cwd}`, ...systemdEnvironment(env), "--", ...argv];
 }
 

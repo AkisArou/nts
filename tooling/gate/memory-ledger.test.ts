@@ -1442,7 +1442,7 @@ console.log('release finished');
 `));
   const env=fixtureEnvironment(t,f.env);env.PATH=bin+':'+env.PATH;
   const unit='nts-test-ledger-release-'+randomUUID()+'.service';
-  const child=spawn('systemd-run',['--user',...toolingSliceArgs(env),'--unit='+unit,'--collect','--quiet','--wait','--pipe',
+  const child=spawn('systemd-run',['--user',...toolingSliceArgs(env,"agent"),'--unit='+unit,'--collect','--quiet','--wait','--pipe',
     '-p','LimitCORE=0','-p','Nice=19','-p','CPUAffinity=0-3 6-31','-p','RuntimeMaxSec=120s',
     ...Object.entries(env).filter((row):row is [string,string]=>row[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
     process.execPath,script],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});

@@ -1,17 +1,18 @@
-// Read only the CPU controls of one acquired experiment cgroup. This is
+// Read only the CPU controls of one acquired cgroup: an experiment's quota and
+// counters, or the CPU weight its rank gives it (ranks.ts). This is
 // observation, never admission or a gate verdict policy.
 import {readFileSync,statSync} from 'node:fs';
 import {ToolingInstrumentError} from '../step-result.ts';
 
 type Identity={dev:string;ino:string};
-export type CpuControlEffects={identity():Identity;read(file:'cpu.max'|'cpu.stat'):string};
+export type CpuControlEffects={identity():Identity;read(file:'cpu.max'|'cpu.stat'|'cpu.weight'):string};
 export function cpuControls(group:string,supplied?:CpuControlEffects){
   const fail=(why:string,cause?:unknown):never=>{throw new ToolingInstrumentError('tooling-setup','experiment CPU controls '+group+': '+why,{cause});};
   if(!group.startsWith('/')||group.split('/').includes('..')||/[\0\n]/.test(group))fail('invalid cgroup path');
   const root='/sys/fs/cgroup'+group;
   const effects=supplied===undefined?{
     identity:()=>{const s=statSync(root,{bigint:true});return {dev:String(s.dev),ino:String(s.ino)};},
-    read:(name:'cpu.max'|'cpu.stat')=>readFileSync(root+'/'+name,'utf8'),
+    read:(name:'cpu.max'|'cpu.stat'|'cpu.weight')=>readFileSync(root+'/'+name,'utf8'),
   }:supplied;
   if(typeof effects.identity!=='function'||typeof effects.read!=='function')fail('incomplete observation capability');
   let identity:Identity;
@@ -21,7 +22,8 @@ export function cpuControls(group:string,supplied?:CpuControlEffects){
   return {read(){
     try{
       if(!same(effects.identity()))fail('cgroup identity changed');
-      const maximum=effects.read('cpu.max').trim().split(/\s+/),text=effects.read('cpu.stat');
+      const maximum=effects.read('cpu.max').trim().split(/\s+/),text=effects.read('cpu.stat'),weight=Number(effects.read('cpu.weight').trim());
+      if(!Number.isSafeInteger(weight)||weight<1||weight>10000)fail('malformed cpu.weight');
       if(maximum.length!==2||!/^\d+$/.test(maximum[1]!)||Number(maximum[1])<=0
         ||maximum[0]!=='max'&&!/^\d+$/.test(maximum[0]!))fail('malformed cpu.max');
       const quotaUsec=maximum[0]==='max'?null:Number(maximum[0]),periodUsec=Number(maximum[1]);
@@ -36,7 +38,7 @@ export function cpuControls(group:string,supplied?:CpuControlEffects){
       for(const key of ['usage_usec','user_usec','system_usec','nr_periods','nr_throttled','throttled_usec'])
         if(counters[key]===undefined)fail('missing '+key);
       if(!same(effects.identity()))fail('cgroup identity changed during observation');
-      return {identity:{...identity},quotaUsec,periodUsec,counters};
+      return {identity:{...identity},quotaUsec,periodUsec,weight,counters};
     }catch(error){if(error instanceof ToolingInstrumentError)throw error;return fail(String(error),error);}
   }};
 }

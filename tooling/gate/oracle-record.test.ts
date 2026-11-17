@@ -446,7 +446,7 @@ finally{closeMemoryRun();}
   const planned=gateEnvironment(hostEnvironment(process.env),{run:join(root,'run'),owned:{...frame,...ownMemory(join(root,'memory')),
     ...(inherited?{NTS_TOOLING_SLICE:inherited}:{}),
   }});
-  const actual=spawnTest('systemd-run',['--user',...toolingSliceArgs(),`--unit=${unit}`,'--collect','--quiet','--wait','--pipe',
+  const actual=spawnTest('systemd-run',['--user',...toolingSliceArgs(process.env,"agent"),`--unit=${unit}`,'--collect','--quiet','--wait','--pipe',
     '-p','LimitCORE=0','-p','Nice=19','-p','CPUAffinity=0-3 6-31','-p','RuntimeMaxSec=180s','-p','TimeoutStopSec=5s',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
     process.execPath,'--experimental-test-module-mocks',control],{encoding:'utf8'});

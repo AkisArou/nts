@@ -3657,3 +3657,24 @@ as an offer. The feed's existing returned-offer transition counts it; the
 assertion `grant = 4 + isolated replays + returned offers` is unchanged. The
 pool reads every buffered line of a connection, so a request and its
 withdrawal in one write are both read.
+## CPU ranks follow the memory ranks (11-17)
+
+On 2026-11-17 the landing check refused three changes on timing-sensitive
+tooling tests while two agents' `check.ts --here` runs and the full check ran
+beside it (#823). Every gate run's steps live in a root slice under
+`nts.slice`, where the CPU controller was off: all runs formed one flat group,
+ordered only by each process's inherited nice, which the landing service left
+at 0 and an agent's launcher at 0 unless it remembered 19. Builds and admitted
+jobs ran in the launcher's unit under `app.slice`, which splits the machine
+with all of `nts.slice` whatever the rank.
+
+Decision: the memory ledger's ranks also rank CPU, from one table
+(`tooling/gate/ranks.ts`: landing 1000, agent 100, full check 10). Every root
+under `nts.slice` carries its rank's `CPUWeight`; a unit started outside a run
+goes under `nts.slice` at its rank; a job started outside `nts.slice`
+(`admit.ts`, `check.ts --here`) enters a scope of its own there, bound to its
+launcher's unit; the landing service runs under `nts.slice` at the landing's
+weight. Weights share contended time only, so an idle machine's runs and the
+gate's parallelism are unchanged. Wall-clock bounds that the full check's work
+runs under can be stretched by its low weight; each such bound is its own
+task, not a reason to raise the weight.

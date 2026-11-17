@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BENCH_UNIT, COUNT_UNIT, countServiceText, countTimerText, lowPriority, parseUnitOptions, recordsUnitName, UNIT, unitText } from "./unit.ts";
 import { layout } from "./state.ts";
+import { CPU_WEIGHT } from "../gate/ranks.ts";
 
 const ENV = { PATH: "/usr/bin:/home/u/.cargo/bin", HOME: "/home/u", SSH_AUTH_SOCK: "/run/user/1000/ssh-%agent", NODE_OPTIONS: "--inspect", SECRET_TOKEN: "x" };
 
@@ -16,7 +17,7 @@ test("the unit runs the service from its controller at low priority, off the mea
   const line = (pattern: RegExp) => assert.match(text, pattern);
   line(/^ExecStart="\/opt\/node 24\/bin\/node" "\/home\/u\/\.cache\/nts-full-check\/controller\/tooling\/full-check\/service\.ts" "--nightly-at=03:00"$/m);
   line(/^WorkingDirectory=\/home\/u\/\.cache\/nts-full-check\/controller$/m);
-  for (const setting of ["Restart=always", "Nice=19", "CPUWeight=20", "IOWeight=20", "CPUAffinity=0-3 6-31", "OOMScoreAdjust=500", "LimitCORE=0", "KillMode=control-group"]) {
+  for (const setting of ["Restart=always", "Nice=19", "CPUWeight=10", "IOWeight=20", "CPUAffinity=0-3 6-31", "OOMScoreAdjust=500", "LimitCORE=0", "KillMode=control-group"]) {
     assert.ok(text.split("\n").includes(setting), setting);
   }
   assert.doesNotMatch(text, /^MemoryHigh=/m, "the ledger and OOM ranking must not be preempted by a stalling soft limit");
@@ -39,7 +40,8 @@ test("the hourly count is a service its own timer starts: once from the controll
 
 test("each part's records unit and the nightly benchmarks' unit have one name, so a second cannot start while one runs, and every unit runs at the controller's priority", () => {
   assert.deepEqual([recordsUnitName("core"), recordsUnitName("wide"), BENCH_UNIT], ["nts-full-check-records-core", "nts-full-check-records-wide", "nts-full-check-bench"]);
-  assert.deepEqual(lowPriority("0-3,6-31"), ["Nice=19", "CPUWeight=20", "IOWeight=20", "CPUAffinity=0-3,6-31", "OOMScoreAdjust=500", "LimitCORE=0"]);
+  assert.deepEqual(lowPriority("0-3,6-31"), ["Nice=19", `CPUWeight=${CPU_WEIGHT["full-check"]}`, "IOWeight=20", "CPUAffinity=0-3,6-31", "OOMScoreAdjust=500", "LimitCORE=0"]);
+  assert.equal(CPU_WEIGHT["full-check"], 10, "the full check's units carry the lowest rank's CPU weight");
 });
 
 test("the unit's options", () => {

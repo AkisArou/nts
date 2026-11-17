@@ -74,7 +74,7 @@ test("tooling slice names preserve nesting and cannot name unrelated units",()=>
   const child=newToolingSlice(true,env);
   assert.ok(child.startsWith(parent.slice(0,-6)+"-t"));
   assert.equal(toolingSlice({NTS_TOOLING_SLICE:child}),child);
-  assert.deepEqual(toolingSliceArgs(env),[`--slice=${parent}`]);
+  assert.deepEqual(toolingSliceArgs(env,"agent"),[`--slice=${parent}`]);
   assert.equal(toolingSlicePrefix("ntscensuscontrol",env),parent.slice(0,-6)+"-ntscensuscontrol");
   assert.equal(toolingSlicePrefix("ntscensuscontrol",{}),"ntscensuscontrol");
   assert.throws(()=>stopToolingSlice("app.slice"),/invalid tooling slice/);
@@ -127,7 +127,7 @@ test("a hung fixture's service and census scopes leave with its slice while a si
   const systemctl=(...args:string[])=>spawnSync("systemctl",["--user",...args],{env:fixtureEnvironment(t),encoding:"utf8"});
   const fifo=join(directory,"hold"),state=join(directory,"ready.json"),file=join(directory,"subject.test.mjs");
   const made=spawnSync("mkfifo",[fifo],{env:fixtureEnvironment(t),encoding:"utf8"});assert.equal(made.status,0,made.stderr);
-  const started=spawnSync("systemd-run",["--user","--quiet","--collect",...toolingSliceArgs({NTS_TOOLING_SLICE:sibling}),`--unit=${siblingUnit}`,"--property=LimitCORE=0","/usr/bin/taskset","-c","0-3,6-31","/usr/bin/cat",fifo],{env:fixtureEnvironment(t),encoding:"utf8"});
+  const started=spawnSync("systemd-run",["--user","--quiet","--collect",...toolingSliceArgs({NTS_TOOLING_SLICE:sibling},"agent"),`--unit=${siblingUnit}`,"--property=LimitCORE=0","/usr/bin/taskset","-c","0-3,6-31","/usr/bin/cat",fifo],{env:fixtureEnvironment(t),encoding:"utf8"});
   assert.equal(started.status,0,started.stderr);
   const helper=new URL("./tooling-slice.ts",import.meta.url).href,memory=new URL("../census/worker-memory.ts",import.meta.url).href,waiting=new URL("./test-wait.ts",import.meta.url).href;
   const service=`nts-test-tooling-subject-${randomUUID().slice(0,8)}`;
@@ -139,7 +139,7 @@ import {toolingSliceArgs} from ${JSON.stringify(helper)};
 import {MemoryRun} from ${JSON.stringify(memory)};
 import {waitFor} from ${JSON.stringify(waiting)};
 const unit=${JSON.stringify(service)},fifo=${JSON.stringify(fifo)};
-const started=spawnSync('systemd-run',['--user','--quiet','--collect',...toolingSliceArgs(),'--unit='+unit,'--property=LimitCORE=0','/usr/bin/taskset','-c','0-3,6-31','/usr/bin/cat',fifo],{encoding:'utf8'});
+const started=spawnSync('systemd-run',['--user','--quiet','--collect',...toolingSliceArgs(process.env,"agent"),'--unit='+unit,'--property=LimitCORE=0','/usr/bin/taskset','-c','0-3,6-31','/usr/bin/cat',fifo],{encoding:'utf8'});
 if(started.status)throw new Error(started.stderr);
 const run=new MemoryRun({budgetBytes:128*2**20,id:'tooling-containment'}),worker=run.worker(0,64*2**20),scope=worker.scope('/usr/bin/cat',[fifo]);
 spawn('systemd-run',scope.argv,{env:scope.env,stdio:'ignore'});

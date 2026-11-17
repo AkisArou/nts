@@ -55,7 +55,7 @@ test('a real jvm-verifies case reaches verification through a case lease without
   const bin=process.env.NTS_BIN??join(ROOT,'target/nts-dev/nts');
   const planned=gateEnvironment(source,{run,oracleRoot:ROOT,owned:{...memory,NTS_BIN:bin}});
   const env=(await sealOracleRun(planned)).env;
-  const scopes=new GateScopes(env),step=scopes.step({max:2**30});let drained=false;
+  const scopes=new GateScopes(env,{rank:"agent"}),step=scopes.step({max:2**30});let drained=false;
   const broker=new CaseMemoryBroker({root:ROOT,env,host:hostObservations(env),boundary:()=>({group:step.workerGroup,raise:bytes=>step.caseLimit(bytes)}),report:()=>{}});
   const attached=new Map<string,number>(),completed:string[]=[];
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,

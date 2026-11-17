@@ -15,7 +15,7 @@ import {gateCpus,inheritedCpus} from '../affinity.ts';
 test('a live retained scope counts a CPU-burning descendant killed without being reaped',async t=>{
   const root=testScratch(t,'scope-cpu'),ready=join(root,'ready'),release=join(root,'release');
   const memory=ownMemory(join(root,'host'),{cpu:{kind:'live'},clock:{kind:'live'}});
-  const scopes=new GateScopes({...fixtureEnvironment(t),...memory,NTS_GATE_RUN_DIR:root});
+  const scopes=new GateScopes({...fixtureEnvironment(t),...memory,NTS_GATE_RUN_DIR:root},{rank:"agent"});
   const scope=scopes.step({max:2**30});let drained=false;
   t.after(async()=>{if(!drained)await scope.drain();scopes.close();});
   const parent=join(root,'parent.ts'),burner=join(root,'burner.ts'),time=join(root,'gnu.time');
@@ -42,7 +42,7 @@ child.stdout.once('data',()=>{writeFileSync(ready,'');const stop=()=>{if(existsS
 test('the retained parent counts CPU burned in its sibling worker slice',async t=>{
   const root=testScratch(t,'worker-cpu'),ready=join(root,'ready'),release=join(root,'release');
   const memory=ownMemory(join(root,'host'),{cpu:{kind:'live'},clock:{kind:'live'}});
-  const scopes=new GateScopes({...fixtureEnvironment(t),...memory,NTS_GATE_RUN_DIR:root});
+  const scopes=new GateScopes({...fixtureEnvironment(t),...memory,NTS_GATE_RUN_DIR:root},{rank:"agent"});
   const scope=scopes.step({max:2**30});let drained=false;
   t.after(async()=>{if(!drained)await scope.drain();scopes.close();});
   const burner=join(root,'burner.ts');
@@ -63,7 +63,7 @@ test('the retained parent counts CPU burned in its sibling worker slice',async t
 
 test('a missing final CPU counter cannot produce a scope drain proof',async t=>{
   const root=testScratch(t,'scope-cpu-missing'),memory=ownMemory(join(root,'host'));
-  const scopes=new GateScopes({...fixtureEnvironment(t),...memory,NTS_GATE_RUN_DIR:root});
+  const scopes=new GateScopes({...fixtureEnvironment(t),...memory,NTS_GATE_RUN_DIR:root},{rank:"agent"});
   t.after(()=>scopes.close());const scope=scopes.step({max:2**30});
   const packet=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));delete packet.cpu.default.systemUsec;
   writeFileSync(memory.NTS_HOST_OBSERVATIONS,JSON.stringify(packet));

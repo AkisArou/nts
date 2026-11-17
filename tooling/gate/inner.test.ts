@@ -136,7 +136,7 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
     const env = gateEnvironment(hostEnvironment(process.env),
       { run: join(root, "run"), owned: { ...memory, NTS_TOOLING_SLICE: slice, PATH: bin + ":" + process.env.PATH,NTS_GATE_STEP:'inner',NTS_GATE_STEP_ATTEMPT:'disk',NTS_GATE_STEP_RESULT:receipt }, standalone: true }).env;
     const setenv = Object.entries(env).filter((entry): entry is [string,string] => entry[1] !== undefined).map(([key,value]) => `--setenv=${key}=${value}`);
-    const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(env), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
+    const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(env,"agent"), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
       "--property=RuntimeMaxSec=300s", "--property=Nice=19", "--property=LimitCORE=0", "--property=CPUAffinity=0-3 6-31",
       ...setenv, process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])], {env:fixtureEnvironment(t), encoding: "utf8" });
     assert.equal(ran.status, fails||diskPhase ? 1 : 0, ran.stdout + ran.stderr);

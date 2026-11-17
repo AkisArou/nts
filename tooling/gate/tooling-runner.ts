@@ -12,6 +12,7 @@ import {join,relative} from "node:path";
 import {randomUUID} from "node:crypto";
 import {publishHung,publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
 import {checkedUnitName,newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
+import {priorityOf} from "./ranks.ts";
 import {requireOwnUnit,startBoundSlice} from './scopes/bound-slice.ts';
 import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
@@ -292,12 +293,14 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   const temporary=process.env.TMPDIR??join(homedir(),".cache/nts-tooling");mkdirSync(temporary,{recursive:true});
   const directory=mkdtempSync(join(temporary,"tooling-report-")),complete=join(directory,"complete.json"),nonce=randomUUID();
   const request=readToolingRequest({files,idleMs:options.idleMs,execArgv:options.execArgv,complete,nonce});
-  const command=gateCommand(process.execPath,[fileURLToPath(import.meta.url),"--worker",JSON.stringify(request)]);
+  // A by-hand run is its launcher's rank (NTS_MEMORY_PRIORITY); inside a run it is nested and shares that run's.
+  const rank=priorityOf(process.env);
+  const command=gateCommand(process.execPath,[fileURLToPath(import.meta.url),"--worker",JSON.stringify(request)],{rank,env:{NTS_TOOLING_SLICE:slice}});
   const env:NodeJS.ProcessEnv={...process.env,NTS_TOOLING_SLICE:slice};
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
   let acquired=false,closed:Promise<number>|undefined,unregister:(()=>void)|undefined,failed=false,primary:unknown;
   try {
-  startBoundSlice(slice,owner);acquired=true;
+  startBoundSlice(slice,owner,{rank});acquired=true;
   const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",command.command,...command.args],{
     env,stdio:["ignore","pipe","pipe"],
   });

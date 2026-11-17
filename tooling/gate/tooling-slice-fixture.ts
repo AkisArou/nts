@@ -18,7 +18,7 @@ test('owned running file',async()=>{const watcher=watch(${JSON.stringify(root)},
 import {runAsCommand} from ${JSON.stringify(ENTRY.href)};import {durableRecord} from ${JSON.stringify(PUBLISH.href)};
 runAsCommand(import.meta.url,async()=>{await runScopedTooling([${JSON.stringify(subject)}],{fixture:true,onScope:(slice,unit)=>{durableRecord(${JSON.stringify(scope)},{slice,unit});}});});`));
   let output='',ended=false,receipt:{slice:string;unit:string}|undefined;
-  const child=spawn('systemd-run',['--user','--scope','--collect','--quiet','--unit='+owner,...toolingSliceArgs(env),'--',process.execPath,helper],{env,stdio:['ignore','pipe','pipe']});
+  const child=spawn('systemd-run',['--user','--scope','--collect','--quiet','--unit='+owner,...toolingSliceArgs(env,"agent"),'--',process.execPath,helper],{env,stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>output+=bytes);
   const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',code=>{ended=true;resolve(code);});});
   try{

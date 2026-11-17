@@ -3,7 +3,6 @@ import {gitArguments} from "./git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {hostObservations} from "./host-observations.ts";
 import {clippyTarget} from "./build-targets.ts";
-import {toolingSliceArgs} from "./tooling-slice.ts";
 // The inner loop: what a change owes before it is queued, run as fast as this
 // machine allows -- the gate's own core commands, not look-alikes.
 //
@@ -137,19 +136,17 @@ const CARGO_WORKERS = defaultSlots(hostObservations().availableWidth());
 /**
  * A heavy command: admitted by the memory ledger for what this phase held
  * before in this tree, never more than its scope's MemoryMax or what the
- * machine could hold; niced, off CPUs 4-5, in that capped scope.
+ * machine could hold; niced, off CPUs 4-5, in the scope admit.ts gives it,
+ * capped at that MemoryMax and at an agent's CPU rank.
  */
 function heavy(phase: Phase, command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
   const most = Math.min(parseBytes(phase.memoryMax), machineMemory().totalBytes - SYSTEM_FLOOR_BYTES);
   const invocation=command==="cargo"?[process.execPath,CARGO_OWNER,...args]:[command,...args];
   const bounded = ["nice", "-n", "19", "taskset", "-c", cpusOffMeasurement(), ...invocation];
-  const scoped = spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0
-    ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${phase.memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
-    : bounded;
   const receipt=join(launchEnvironment.TMPDIR!,'inner-'+randomUUID()+'.json'),attempt=randomUUID();
   const child={...env,NTS_GATE_STEP:phase.key,NTS_GATE_STEP_ATTEMPT:attempt,NTS_GATE_STEP_RESULT:receipt};
   const status=run(process.execPath, [ADMIT, "--key", phase.key, "--workers", String(phase.workers), "--at-most", String(most),
-    "--what", `inner loop: ${phase.what}`, "--", ...scoped], child);
+    "--memory-max", phase.memoryMax, "--what", `inner loop: ${phase.what}`, "--", ...bounded], child);
   const instrument=readStepInstrument(receipt,phase.key,attempt);
   if(instrument?.kind==='disk-capacity')throw new DiskBuildAdmissionError(instrument.disk!);
   return status;

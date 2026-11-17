@@ -20,7 +20,7 @@ for(const route of ['active','compile','failed'] as const)test(`bounded ${route}
   // decide how startup and execution inactivity interact, without a real window.
   const memory=ownMemory(join(root,'host'),{clock:{kind:'live'},resident:{kind:'live'},cpu:{kind:'live'}});
   const env=fixtureEnvironment(t,{...memory,NTS_GATE_RUN_DIR:root,NTS_GATE_STEP_MEMORY_BYTES:String(2**30)});
-  const scopes=new GateScopes(env),step=scopes.step({max:2**30});let drained=false;
+  const scopes=new GateScopes(env,{rank:"agent"}),step=scopes.step({max:2**30});let drained=false;
   assignTestValues(env,{NTS_TOOLING_SLICE:step.slice});
   t.after(async()=>{if(!drained)await step.drain();scopes.close();});
   writeFileSync(join(bin,'systemd-run'),`#!${process.execPath}

@@ -146,6 +146,7 @@ import {hostInfrastructure} from "./host-infrastructure.ts";
 import {peakWatcherScope} from "./memory-watch-scope.ts";
 import {toolingSliceArgs,toolingSlice} from "./tooling-slice.ts";
 import {ToolingInstrumentError} from "./step-result.ts";
+import {CPU_WEIGHT,OOM_SCORE,PRIORITIES,PRIORITY_ENV,priorityOf,type Priority} from "./ranks.ts";
 import { historyFile, KEY, peakReservation, bindJobBasis, jobReservation, writeCostHistory, type JobBasis, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
@@ -155,21 +156,8 @@ export const LEDGER_DIR = join(homedir(), ".cache/nts-gate/admission");
 export const RESERVATION_ENV = "NTS_MEMORY_RESERVATION";
 /** Another ledger directory, for tests; `Reservation.env` passes it on. */
 export const LEDGER_ENV = "NTS_MEMORY_LEDGER";
-/** The priority a launcher's code gives the job it starts (`priorityOf`). */
-export const PRIORITY_ENV = "NTS_MEMORY_PRIORITY";
-/** Highest first. */
-export const PRIORITIES = ["landing", "agent", "full-check"] as const;
-export type Priority = (typeof PRIORITIES)[number];
-
-/**
- * The kernel's OOM score adjustment of each priority's work, lowest first to
- * keep: if the machine itself runs out of memory, its OOM killer takes the
- * full check's work first, then agents', and a landing's last. A user unit
- * cannot go below the user manager's own 100 (it asks 0 and is given 100), so
- * the landing check's unit asks 100; an agent's shell, started outside the
- * manager, sits at 0, so agents' work raises itself (`rankForOom`).
- */
-export const OOM_SCORE: Readonly<Record<Priority, number>> = { landing: 100, agent: 300, "full-check": 500 };
+// The ranks themselves, and what each gets from the kernel, are ranks.ts's.
+export {CPU_WEIGHT,OOM_SCORE,PRIORITIES,PRIORITY_ENV,priorityOf,type Priority};
 
 /**
  * Raises this process's OOM score adjustment, which its children inherit, to
@@ -181,14 +169,6 @@ export function rankForOom(priority: Priority, report: (line: string) => void = 
   try {
     if (Number(readFileSync(path, "utf8")) < wanted) writeFileSync(path, String(wanted));
   } catch (error) { report(`memory: cannot raise this process's OOM score to its ${priority} priority's ${wanted}: ${(error as Error).message}`); }
-}
-
-/** The priority `env` names (PRIORITY_ENV), else an agent's. */
-export function priorityOf(env: NodeJS.ProcessEnv = process.env): Priority {
-  const named = env[PRIORITY_ENV];
-  if (named === undefined || named === "") return "agent";
-  if (!(PRIORITIES as readonly string[]).includes(named)) throw new RangeError(`${PRIORITY_ENV}=${named} is not a priority; one of ${PRIORITIES.join(", ")}`);
-  return named as Priority;
 }
 
 const CGROUP_ROOT = "/sys/fs/cgroup";
@@ -1388,11 +1368,11 @@ export const WATCH_MS = POLL_MS;
  * write. After the command ends, only its flush has a bounded lifetime.
  * A scope that cannot start refuses before the command executes.
  */
-export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: Pick<JobSizing, "history" | "units" | "sampleBasis"> & { key: string },
+export function watchPeak(reservation: Pick<Reservation, "id" | "ledger" | "env">, job: Pick<JobSizing, "history" | "units" | "sampleBasis"> & { key: string },
   env:NodeJS.ProcessEnv=process.env): void {
   const scope=peakWatcherScope(reservation.id),slice=toolingSlice(env);
   const started = spawnSync("systemd-run", ["--user","--scope","--quiet","--collect",`--unit=${scope}`,
-    ...toolingSliceArgs(env),`--description=memory peak watcher for ${job.key}`,"--","setsid","-f",process.execPath,
+    ...toolingSliceArgs(env, priorityOf(reservation.env)),`--description=memory peak watcher for ${job.key}`,"--","setsid","-f",process.execPath,
     fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, job.sampleBasis, String(job.units),scope],
     { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: env.PATH ?? "/usr/bin:/bin",...hostInfrastructure(env),...hostObservationEnvironment(env),...(slice?{NTS_TOOLING_SLICE:slice}:{}) } });
   if (started.error||started.status !== 0) throw new ToolingInstrumentError('tooling-setup',

@@ -19,7 +19,7 @@ test("nested census scopes belong to one step and another run remains live when 
   const entries: { scope: StepScope; ready: string; release: string; metadata: string; done: Promise<Exit>; stopped: () => string | undefined; drained: boolean }[] = [];
   try {
     for (const label of ["a", "b"]) {
-      const owner = new GateScopes(process.env); owners.push(owner);
+      const owner = new GateScopes(process.env,{rank:"agent"}); owners.push(owner);
       const scope = owner.step({ max: 2 ** 31 }), ready = join(own, `${label}.json`), release = join(own, `${label}.release`), workerReady = join(own, `${label}.worker.json`), metadata = join(own, `${label}.owner.json`);
       const publish=JSON.stringify(new URL("../durable-record.ts",import.meta.url).href);
       const childSource = `import {readFileSync,watch,existsSync} from 'node:fs';import {durableRecord} from ${publish};
@@ -80,7 +80,7 @@ await until(${JSON.stringify(release)});
 });
 
 test("active, compiled, shell-case and counted commands enter sibling group-OOM worker scopes", async t => {
-  const own = newTestScratch("worker-shape-layout"), owner = new GateScopes(process.env);
+  const own = newTestScratch("worker-shape-layout"), owner = new GateScopes(process.env,{rank:"agent"});
   const step = owner.step({ max: 2 ** 30 });
   const probe = 'const fs=require("node:fs"); const group=fs.readFileSync("/proc/self/cgroup","utf8").trim().replace(/^0::/,""); console.log(JSON.stringify({group,oom:fs.readFileSync("/sys/fs/cgroup"+group+"/memory.oom.group","utf8").trim()}));';
   const script = `
@@ -162,7 +162,7 @@ console.log(JSON.stringify({supervisor:readFileSync("/proc/self/cgroup","utf8").
 });
 
 test("a tooling collector survives its workers exhausting their step boundary and records pressure", async t => {
-  const own = newTestScratch("collector-worker-pressure"), owner = new GateScopes(process.env);
+  const own = newTestScratch("collector-worker-pressure"), owner = new GateScopes(process.env,{rank:"agent"});
   const step = owner.step({ max: 256 * 2 ** 20 }), subject = join(own, "pressure.test.mjs");
   t.after(async () => { step.kill(); await step.drain(); owner.close(); rmSync(own, { recursive: true, force: true }); });
   writeFileSync(subject, 'import {test} from "node:test"; test("pressure",()=>{const held=[];for(;;)held.push(Buffer.alloc(16*2**20,1));});');

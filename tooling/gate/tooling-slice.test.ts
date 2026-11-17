@@ -40,7 +40,7 @@ import {durableRecord} from ${JSON.stringify(PUBLISH.href)};
 const root=${JSON.stringify(root)},slice=newToolingSlice(true),nested=newToolingSlice(true,{NTS_TOOLING_SLICE:slice}),owner=requireOwnUnit(),member=slice.slice(0,-6)+'-member.service',child=nested.slice(0,-6)+'-member.service';
 const wait=name=>new Promise(resolve=>{const file=join(root,name),watcher=watch(root,()=>{if(existsSync(file)){watcher.close();resolve();}});if(existsSync(file)){watcher.close();resolve();}});
 runAsCommand(import.meta.url,async()=>{
- startBoundSlice(slice,owner);
+ startBoundSlice(slice,owner,{rank:'agent'});
  registerCommandCloser('owned probe slice',{close:()=>{stopToolingSlice(slice);writeFileSync(join(root,'closed'),'closed');}});
  durableRecord(join(root,'created.json'),{slice,nested,member,child,owner});await wait('attach');
  for(const [unit,parent]of [[member,slice],[child,nested]]){
@@ -49,7 +49,7 @@ runAsCommand(import.meta.url,async()=>{
  writeFileSync(join(root,'ready'),'ready');await wait('finish');
 });`));
     let output='',ended=false,receipt:{slice:string;nested:string;member:string;child:string;owner:string}|undefined;
-    const args=['--user','--collect','--quiet','--unit='+unit,...toolingSliceArgs(env),...(ownerKind==='scope'?['--scope']:['--wait','--pipe','--service-type=exec','--property=LimitCORE=0']),'--',process.execPath,helper];
+    const args=['--user','--collect','--quiet','--unit='+unit,...toolingSliceArgs(env,"agent"),...(ownerKind==='scope'?['--scope']:['--wait','--pipe','--service-type=exec','--property=LimitCORE=0']),'--',process.execPath,helper];
     const child=spawn('systemd-run',args,{env,stdio:['ignore','pipe','pipe']});
     child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>output+=bytes);
     const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',code=>{ended=true;resolve(code);});});

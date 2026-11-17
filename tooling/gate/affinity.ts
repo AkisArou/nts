@@ -1,4 +1,5 @@
 import {toolingSliceArgs} from "./tooling-slice.ts";
+import type {Priority} from "./ranks.ts";
 // CPUs 4 and 5 are the two threads of the physical P-core reserved for
 // measurement. Restrict a gate's inherited set; never broaden an E-core job.
 import { readFileSync } from "node:fs";
@@ -91,8 +92,15 @@ function cpusetDelegated(pid: number): boolean {
   return readFileSync(`/sys/fs/cgroup${manager}/cgroup.controllers`, "utf8").trim().split(/\s+/).includes("cpuset");
 }
 
-export function scopeArgs(cpus: string): string[] {
-  return ["--user", "--scope", ...toolingSliceArgs(), "--quiet", "--collect", "--no-ask-password", "--expand-environment=no", `--property=AllowedCPUs=${cpus}`, "--"];
+/**
+ * Where a gate command's scope goes, and at which rank (ranks.ts): inside
+ * `env`'s tooling slice when it names one, else among every rank's work at
+ * `rank`'s CPU weight. The launcher's code names both; nothing defaults.
+ */
+export type Placement = { rank: Priority; env: NodeJS.ProcessEnv };
+
+export function scopeArgs(cpus: string, placement: Placement): string[] {
+  return ["--user", "--scope", ...toolingSliceArgs(placement.env, placement.rank), "--quiet", "--collect", "--no-ask-password", "--expand-environment=no", `--property=AllowedCPUs=${cpus}`, "--"];
 }
 
 import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
@@ -108,13 +116,13 @@ export function selectScope(cpus: string, ceiling: string | undefined, delegated
   return { kind: checked.ok ? "scope" : "best-effort", reason: checked.reason };
 }
 
-export function gateScope(cpus: string, pid: number = process.pid, probe:InfrastructureProbe=infrastructureProbe): Scope {
+export function gateScope(cpus: string, placement: Placement, pid: number = process.pid, probe:InfrastructureProbe=infrastructureProbe): Scope {
   try {
     return selectScope(cpus, effectiveCeiling(pid), cpusetDelegated(pid), () => {
       const online = readFileSync("/sys/devices/system/cpu/online", "utf8").trim();
       // Deliberately widen inside the proposed scope. Only a kernel ceiling
       // can keep this grandchild inside cpus. It runs no gate work.
-      const result = probe({purpose:"verify the cpuset ceiling by widening",command:"systemd-run",args:[...scopeArgs(cpus), "taskset", "-c", online, process.execPath, "-e",
+      const result = probe({purpose:"verify the cpuset ceiling by widening",command:"systemd-run",args:[...scopeArgs(cpus, placement), "taskset", "-c", online, process.execPath, "-e",
         'process.stdout.write(require("node:fs").readFileSync("/proc/self/status","utf8").match(/^Cpus_allowed_list:\\s*(.+)$/m)[1])'],exits:'classify'});
       const mask = result.stdout?.trim();
       const ok = result.status === 0 && !!mask && cpuSubset(mask, cpus);
@@ -127,13 +135,14 @@ export function gateScope(cpus: string, pid: number = process.pid, probe:Infrast
   }
 }
 
-export function gateCommand(command: string, args: string[]): { command: string; args: string[]; cpus: string | null; mechanism: string } {
+/** A gate command off CPUs 4-5: in a cpuset scope placed by `placement` where cpuset is delegated, else under taskset. */
+export function gateCommand(command: string, args: string[], placement: Placement): { command: string; args: string[]; cpus: string | null; mechanism: string } {
   if (process.platform !== "linux") return { command, args, cpus: null, mechanism: "host affinity (not Linux)" };
   const cpus = gateCpus(inheritedCpus());
-  const scope = gateScope(cpus);
+  const scope = gateScope(cpus, placement);
   const pinned = ["-c", cpus, command, ...args];
   return scope.kind === "scope"
-    ? { command: "systemd-run", args: [...scopeArgs(cpus), "taskset", ...pinned], cpus, mechanism: `cpuset scope; ${scope.reason}` }
+    ? { command: "systemd-run", args: [...scopeArgs(cpus, placement), "taskset", ...pinned], cpus, mechanism: `cpuset scope; ${scope.reason}` }
     : { command: "taskset", args: pinned, cpus, mechanism: `${scope.kind}; ${scope.reason}` };
 }
 
