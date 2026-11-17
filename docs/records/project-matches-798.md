@@ -56,7 +56,7 @@ endpoints receive the already prepared committed base. Only deleted paths that
 account for removed native matches owe the reader. Raw entries remain
 acquisition-only, and unrelated or excluded deletions add no reach.
 
-The amended fixed-config control commits a global declaration, removes it from
+The first amended fixed-config control commits a global declaration, removes it from
 the current tree, and asks both deletion and rename-to-Markdown questions. Both
 retain `profile` and its `addons` handover. Nonmatching deletion and rename
 controls retain neither consumer. The same control fails specifically at
@@ -77,6 +77,25 @@ The final seven-owner review run then passed all 193 tests with no skips or
 cancellations. It includes the deleted-match and rename controls, committed-base
 endpoint transport, native exclusions, and the unchanged source-root and
 records-run fence assertions.
+
+The strengthened guard fixture also physically renames a matched `.ts` to a new
+`.ts` name, removes an ignored TSV, and removes a directory containing a matched
+file. Each guard runs as an independent subtest in both counterfactual arms, so
+one old-owner failure cannot prevent the other assertions from running. The
+rename checks each path's obligations separately, and all cases check both the
+`profile` consumer and its `addons` handover.
+
+| Guard | Reviewed owner | Fixed owner |
+| --- | --- | --- |
+| Delete a matched `.ts` | misses consumers | retains both consumers |
+| Rename a matched `.ts` | misses the old path's obligation | retains both consumers under both names |
+| Delete an ignored `.tsv` | no Program consumers | no Program consumers |
+| Delete a directory holding a match | misses consumers | retains both consumers |
+
+These arms use the same `be414720eb6221a150ccb3e6c22f31f6b53c8edd` archive and
+identical tests; the before arm replaces only `owed.mjs` with the reviewed
+`977cb63af5` bytes. Every guard executed with no skips. Strict types passed, and
+the owning projection writer reported no change after these test-only edits.
 
 After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
@@ -106,6 +125,11 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `nts-798-review-pair.log` | `7da42888f37025a43c7fa0787e7d4662c05a3fedbe313d8caf8543bf8362dfd5` |
 | `nts-798-review-projection.log` | `6d84ea9222ef7897dc024f4a337cf7895a671dd04afa8c69eff3305e4c6bec3f` |
 | `nts-798-review-final-focused.log` | `af93b80cda62d4c4369eb5a34d7bd0a3828ac98d084d56b6b05dac963539d4c6` |
+| `guards-counterfactual.json` | `a161b1403bdcb1d441608f07f52deaa57b8574033fc18a14bc6775f3a85fbb77` |
+| `guards-counterfactual.py` | `cc6c95896070ba9d6258c82c461a38be2e00bffbf938af4ab674ec55932720d2` |
+| `guards-before-owner.log` | `e258274adedb36e8d602f49e9f59834334a5fd6427c3c4593da7a7ca381ae57e` |
+| `guards-after-owner.log` | `d08095835961a1ad7e14dbd8587c29b17255e801bfd98db11985b3c7803f023a` |
+| `nts-798-guards-proof.log` | `cb5f1fe49f31e424832bc0f6521664a0412f51c86a962d30a48bbf19500c010a` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
