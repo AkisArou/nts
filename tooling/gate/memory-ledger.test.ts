@@ -895,7 +895,7 @@ test("admit.ts --status: the reservations admitted, with what each uses, and the
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /^memory ledger .* at \S+\n  machine: 64\.0 GiB, 9\.0 GiB available; /);
   assert.match(text.stdout, /\n  admitted \(1\):\n    full-check +12\.0 GiB, using .*  pid \d+  since \d\d:\d\d:\d\d  held job\n/);
-  assert.match(text.stdout, /\n  waiting \(2\):\n     1\. landing +7\.0 GiB  waited \d+ s  pid \d+  landing job\n     2\. agent +7\.0 GiB  waited \d+ s  pid \d+  agent job\n$/);
+  assert.match(text.stdout, /\n  waiting \(2\):\n     1\. landing +7\.0 GiB  waited \d+ s  pid \d+  landing job\n     2\. agent +7\.0 GiB  waited \d+ s  pid \d+  agent job\n  held now: unavailable: memory holders: own cgroup \/fixture-runner is under no user's systemd manager\n$/);
   // It ends, and what it used is available again: room for both.
   held.release();
   f.memory(20);
@@ -1460,4 +1460,109 @@ console.log('release finished');
   assert.deepEqual(readLedger(f.dir),{waiting:[],admitted:[]});
   assert.match(f.lines.join('\n'),/dropped signal release control's reservation.*has exited/);
   t.diagnostic(JSON.stringify({freeAtBarrier:free!==null,abandoned:abandoned.length,output,reclamation:f.lines.filter(line=>line.includes('signal release control'))}));
+});
+
+// The holders census, as a waiting request states it: supplied cgroups and
+// the ledger's own measured parts, read on the run's monotonic clock.
+const USER_MANAGER = "/user.slice/user-1000.slice/user@1000.service";
+const managed = (path: string) => `${USER_MANAGER}/${path}`;
+function holdersView(f: Fixture, clock: string, cgroups: Record<string, number>): void {
+  const file = f.env.NTS_HOST_OBSERVATIONS!, value = JSON.parse(readFileSync(file, "utf8"));
+  value.clock = { kind: "file", file: clock };
+  value.resident = { kind: "fixed", defaultBytes: 0, cgroups };
+  value.pressure.ownGroup = managed("app.slice/nts-824-check.service");
+  writeFileSync(`${file}.next`, `${JSON.stringify(value)}\n`); renameSync(`${file}.next`, file);
+}
+
+test("a wait names who holds the shortfall, ledgered or not, and names them again every 300 s by the run's clock", async t => {
+  const f = fixture(t), clock = join(testScratch(t, "holders-clock"), "now");
+  writeFileSync(clock, "1000\n");
+  holdersView(f, clock, {
+    [managed("nts.slice/nts-r1.slice")]: 7.5 * GiB, [managed("nts.slice/nts-r1.slice/nts-r1-r2.slice")]: 7.5 * GiB,
+    [managed("app.slice/tmux-spawn-agent.scope")]: 1.2 * GiB, [managed("app.slice/nts-824-check.service")]: 0.2 * GiB,
+  });
+  f.memory(12, 32);
+  const parts: Record<string, ReturnType<NonNullable<ReserveOptions["used"]>>> = {
+    lower: [{ group: managed("nts.slice/nts-r1.slice/nts-r1-r2.slice"), bytes: 7 * GiB }],
+  };
+  const used = (entry: LedgerEntry) => parts[entry.what] ?? 0;
+  const lower = await f.ask({ bytes: 10 * GiB, what: "lower", priority: "full-check" }, { used });
+  const landing = f.ask({ bytes: 10 * GiB, what: "landing", priority: "landing" }, { used });
+  await waitFor("the landing to wait", () => f.of("landing").length >= 3, { stopped: f.stopped });
+  const wait = f.lines.findIndex(line => line.startsWith("memory: landing waits for 10.0 GiB (landing): 12.0 GiB available"));
+  assert.ok(wait >= 0, f.lines.join("\n"));
+  assert.equal(f.lines[wait + 1], "memory: held now, of 20.0 GiB not available: "
+    + "nts.slice/nts-r1.slice 7.5 GiB: ledgered 7.0 GiB full-check lower; 512.0 MiB unledgered"
+    + " | app.slice/tmux-spawn-agent.scope 1.2 GiB unledgered | app.slice/nts-824-check.service 204.8 MiB unledgered"
+    + "; 11.1 GiB outside these cgroups (system, kernel, caches)");
+  assert.equal(f.lines.filter(line => line.includes("still waits")).length, 0, "no repeat before 300 s on the run's clock");
+  writeFileSync(clock, String(1000 + 300_000) + "\n");
+  await waitFor("the census to repeat", () => f.lines.some(line => line.startsWith("memory: landing still waits for 10.0 GiB after 300 s (landing)")), { stopped: f.stopped });
+  const again = f.lines.findIndex(line => line.includes("still waits"));
+  assert.match(f.lines[again + 1] ?? "", /^memory: held now, of 20\.0 GiB not available: nts\.slice\/nts-r1\.slice 7\.5 GiB: ledgered 7\.0 GiB full-check lower/);
+  lower.release(); await lower.closed;
+  f.memory(20, 32);
+  const admitted = await landing;
+  admitted.release(); await admitted.closed;
+});
+
+test("a census the wait cannot read names its missing observation, and the wait goes on", async t => {
+  const f = fixture(t);
+  f.memory(12, 32);
+  const first = await f.ask({ bytes: 9 * GiB, what: "first" }, { used: () => 0 });
+  const second = f.ask({ bytes: 9 * GiB, what: "second" }, { used: () => 0 });
+  await waitFor("the second to wait", () => f.of("second").length >= 2, { stopped: f.stopped });
+  assert.ok(f.lines.includes("memory: holders unavailable: memory holders: own cgroup /fixture-runner is under no user's systemd manager"), f.lines.join("\n"));
+  first.release(); await first.closed;
+  const admitted = await second;
+  admitted.release(); await admitted.closed;
+});
+
+test("kernel wiring: a run's measure counts its owner tree outside its cgroup once, and a real scope's charge and listing are read live", async t => {
+  const root = testScratch(t, "holders-kernel"), env = { ...fixtureEnvironment(t), ...ownMemory(root, { resident: { kind: "live" }, pressure: { kind: "live" } }) };
+  const script = join(root, "measure.ts"), unit = `nts-test-holders-${randomUUID()}.service`, scope = `nts-test-holders-alloc-${randomUUID()}.scope`;
+  writeFileSync(script, generatedJavaScript(`
+import {reserve,readLedger,entryParts} from ${JSON.stringify(LEDGER)};
+import {hostObservations} from ${JSON.stringify(new URL("./host-observations.ts", import.meta.url).href)};
+import {userManager} from ${JSON.stringify(new URL("./memory-holders.ts", import.meta.url).href)};
+import {spawn} from 'node:child_process';
+const host=hostObservations(),own=host.ownCgroup(),parent=userManager(own).manager+'/app.slice';
+// An allocation in a transient scope of its own, bound to this unit, inside this
+// process's tree. It lives while its stdin stays open.
+const alloc=spawn('systemd-run',['--user','--scope','--quiet','--collect','--unit=${scope}','-p','BindsTo=${unit}','-p','RuntimeMaxSec=120s',
+  process.execPath,'-e','const b=Buffer.alloc(64*2**20,1);console.log("ready");process.stdin.on("data",()=>{b[0]++;})'],{stdio:['pipe','pipe','inherit']});
+await new Promise(ready=>alloc.stdout.once('data',ready));
+// The live listing finds the scope by its unit name: the observation under test.
+const scope=host.cgroupChildren(parent).find(group=>group.endsWith('/${scope}'));
+const out={own,scope:scope??null,listed:scope!==undefined,charge:scope===undefined?0:host.cgroupCharge(scope)};
+for(const [name,cgroup] of [['inside',own],['outside',scope]]){
+  const held=await reserve({bytes:2**30,what:'tree '+name,owner:{cgroup,tree:true}});
+  out[name]=entryParts(readLedger().admitted.find(entry=>entry.id===held.id));
+  held.release();await held.closed;
+}
+alloc.kill('SIGKILL');
+console.log('RESULT '+JSON.stringify(out));
+process.exit(0);
+`));
+  const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(env, "agent"), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
+    "-p", "LimitCORE=0", "-p", "Nice=19", "-p", "CPUAffinity=0-3 6-31", "-p", "RuntimeMaxSec=120s",
+    ...Object.entries(env).filter((row): row is [string, string] => row[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`),
+    process.execPath, script], { env: fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
+  t.after(() => { for (const name of [unit, scope]) spawnTest("systemctl", ["--user", "stop", name], { encoding: "utf8" }); });
+  let output = "";
+  child.stdout!.on("data", bytes => { output += bytes; }); child.stderr!.on("data", bytes => { output += bytes; });
+  assert.deepEqual(await once(child, "close"), [0, null], output);
+  const result = JSON.parse(/^RESULT (.*)$/m.exec(output)?.[1] ?? "null") as
+    { own: string; scope: string; listed: boolean; charge: number; inside: { group: string | null; bytes: number }[]; outside: { group: string | null; bytes: number }[] };
+  assert.ok(result, output);
+  assert.equal(result.listed, true, "the live listing names the real scope beneath its parent");
+  assert.ok(result.charge >= 64 * 2 ** 20, `the scope's live charge holds its 64 MiB: ${result.charge}`);
+  // Owner inside its measured cgroup: its own bytes are in the charge alone.
+  assert.equal(result.inside.filter(part => part.group === result.own).length, 1, JSON.stringify(result.inside));
+  assert.ok(result.inside.some(part => part.group === result.scope && part.bytes >= 32 * 2 ** 20), "its tree's process outside the cgroup is counted where it lives");
+  // Owner outside its measured cgroup: the cgroup's charge, and the owner once beside it.
+  assert.equal(result.outside.filter(part => part.group === result.scope).length, 1, "the allocation inside the measured scope is not counted again");
+  assert.ok(result.outside.find(part => part.group === result.scope)!.bytes >= 64 * 2 ** 20, JSON.stringify(result.outside));
+  assert.ok(result.outside.some(part => part.group === result.own && part.bytes > 0), "the owner outside its measured cgroup is counted: a gate run's runner");
+  t.diagnostic(JSON.stringify(result));
 });

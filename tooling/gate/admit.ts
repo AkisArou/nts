@@ -49,7 +49,9 @@
 // priority, what it reserved and uses now, its owner and since when, the steps
 // or jobs it sized without a measurement of their own, and those that held
 // more than they reserved) and the queue in its order (what each request
-// asks, and how long it has waited); `--json`, the same as `check.ts status
+// asks, and how long it has waited), then who holds the machine's memory by
+// cgroup, each marked ledgered (with its jobs) or unledgered
+// (memory-holders.ts); `--json`, the same as `check.ts status
 // --json`'s envelope: version, kind ("memory") and at, numbers as numbers.
 import { accessSync, constants, existsSync, statSync, writeSync } from "node:fs";
 import {prepareCommandExec,registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
@@ -57,6 +59,7 @@ import { resolve } from "node:path";
 import { gib, jobSizing, ledgerStatus, parseBytes, PRIORITIES, priorityOf, rankForOom, reserve, watchPeak, type JobSizing, type LedgerStatus, type Priority } from "./memory-ledger.ts";
 import { measurementAdmission, MeasurementBusy } from "./measurement-admission.ts";
 import { rankedScopeArgs } from "./scopes/bound-slice.ts";
+import { describeHolderRows } from "./memory-holders.ts";
 
 const USAGE = "usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
   + "       node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
@@ -188,6 +191,7 @@ function describeStatus(status: LedgerStatus): string {
     `  waiting (${status.waiting.length})${status.waiting.length ? ":" : ": none"}`,
     ...status.waiting.map((entry, at) => `    ${String(at + 1).padStart(2)}. ${entry.priority.padEnd(10)} ${entry.grows === null ? "" : "grows by "}${gib(entry.bytes)}  `
       + `waited ${Math.round(entry.waited_s)} s  pid ${entry.waiter_pid}${entry.live ? "" : "  (gone)"}  ${entry.what}`),
+    ...("unavailable" in status.holders ? [`  held now: unavailable: ${status.holders.unavailable}`] : describeHolderRows(status.holders)),
   ];
   return lines.join("\n") + "\n";
 }

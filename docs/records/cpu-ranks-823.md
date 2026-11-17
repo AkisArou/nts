@@ -1,6 +1,9 @@
 # CPU ranks under contention: a landing beside two agents and the full check
 
-Issue: #823. Before: main `9da4f58a26`. After: `898e2750f9` (this change).
+Issue: #823. Before: main `9da4f58a26`. After: `898e2750f9`, the commit the
+batch measured. It landed as `06b28dbb8d`. The only change after `898e2750f9`
+made the rank a required argument of `toolingSliceArgs`, `gateCommand` and
+`startBoundSlice`. Nothing the batch measured moved.
 Date: 2026-11-17.
 
 ## Cause

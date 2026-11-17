@@ -1133,7 +1133,10 @@ async function reserveMemory() {
   const own = { ...env };
   delete own[RESERVATION_ENV];
   const asked = Date.now();
-  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group }, unmeasured: unmeasured(), replaces,
+  // Its measure is the steps' slice and this runner's own process tree outside
+  // it: the runner holds its broker, samplers and reports where no step's
+  // cgroup counts them.
+  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group, tree: true }, unmeasured: unmeasured(), replaces,
     drawsOn: LAUNCHER_RESERVATION },
     { env: own, signal: startupAbort.signal, report: (line) => process.stdout.write(`  ${line}\n`) });
   memoryRecord.waited_s += (Date.now() - asked) / 1000;

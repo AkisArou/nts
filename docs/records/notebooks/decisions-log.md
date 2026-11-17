@@ -3678,3 +3678,25 @@ weight. Weights share contended time only, so an idle machine's runs and the
 gate's parallelism are unchanged. Wall-clock bounds that the full check's work
 runs under can be stretched by its low weight; each such bound is its own
 task, not a reason to raise the weight.
+
+## A memory wait names its holders (11-17)
+
+#823's landing waited 1775 s for 19 GiB. Its line printed 14.3 GiB available
+and 3.1 GiB promised to running jobs, and was read as about 17 GiB held outside
+the ledger. The census (#824, `docs/records/memory-holders-824.md`) showed
+otherwise. Lower-rank ledgered work held the bulk: #822's `check.ts --here`
+`tests` step, 8.9 GiB until its step bound, and the full check's core run.
+Both yielded, but steps already running keep their memory. The line omitted
+their live use, which MemAvailable already excludes.
+
+Decision: a waiting request's line is followed by a census of the user's
+cgroups, by resident charge, split into ledgered jobs and unledgered processes,
+repeated every 300 s while it waits. `admit.ts --status` shows the same table.
+The one ledger gap the census found, a gate run's runner outside its own
+measure, is closed at its owner: `OwnerSpec` takes `tree: true` beside
+`cgroup`, and `run.mjs` uses it. Agent sessions and controllers stay
+unledgered and named. They are standing processes that cannot yield, and
+MemAvailable already excludes them. Whether a landing may stop or cap
+lower-rank steps that are already running is a separate, design-first
+question.
+

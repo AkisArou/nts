@@ -1335,6 +1335,22 @@ the tooling strict checker owns the source's type checking.
   entries; its other processes stay where it put them. Nice values still
   order the processes inside one run. A weight shares contended time only: it never
   caps a run on an idle machine, and no gate's parallelism is capped.
+- **A memory wait names who holds the memory.** When a request waits, its
+  line is followed by a census (`tooling/gate/memory-holders.ts`) of the user's
+  cgroups to a bounded depth: the user manager's children, with each slice among
+  them (`app.slice`, `nts.slice`) expanded one level, and the manager's siblings
+  in its user slice. Each row gives its resident charge, split into the
+  admitted jobs whose measured use it holds (by rank and what) and the
+  unledgered rest. A last figure is what is not available outside every row.
+  A job's measure arrives as parts, each in the cgroup that holds it, and each
+  part counts once, in the deepest row that contains it. The census is read
+  after the decision releases the lock. It repeats every 300 s of the run's
+  monotonic clock while the wait lasts, and `admit.ts --status` (and `--json`)
+  shows the same table. Charges and the one-level listing come through
+  `HostObservations` (`cgroupCharge`, `cgroupChildren`). A missing observation
+  is printed by name in place of the census, and the wait goes on. A gate
+  run's measure is its steps' slice and its runner's process tree outside it
+  (`OwnerSpec.tree`), so the runner is no longer outside the ledger.
 - **CPUs 4 and 5 stay reserved for measurement;** heavy work runs at low
   priority; a process is stopped by its systemd unit, never by a PID found
   in `ps`.
@@ -2299,3 +2315,11 @@ death; an absent timestamp remains explicit after forced termination.
   view keeps that image by name and still registers the closed root. A close
   reports each complete image disposition before a fixture checks whether the
   image still exists.
+
+- **A gate run's measure includes its runner.** `OwnerSpec` takes `tree: true`
+  beside `cgroup`: the measure is the cgroup's charge plus each process of the
+  owner's tree outside it, counted by what it maps. A tree process inside the
+  cgroup is in its charge already and is not counted again. `run.mjs` reserves
+  with its steps' slice and its own tree, because its runner (broker, samplers,
+  reports) runs in its launcher's unit, where no reservation counted it
+  ([log](records/notebooks/decisions-log.md#a-memory-wait-names-its-holders-11-17)).

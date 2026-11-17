@@ -1,6 +1,6 @@
 // Resource observations are a capability of a run. Tests provide a complete
 // owned view, including observations made by dependencies and child processes.
-import {closeSync,existsSync,openSync,readFileSync,readSync,statSync,statfsSync,writeSync} from 'node:fs';
+import {closeSync,existsSync,openSync,readFileSync,readSync,readdirSync,statSync,statfsSync,writeSync} from 'node:fs';
 import {monitorEventLoopDelay} from 'node:perf_hooks';
 import {HostObservationError} from './host-observation-error.ts';
 export {HostObservationError} from './host-observation-error.ts';
@@ -53,6 +53,9 @@ export interface HostObservations {
   allocatedBytes(path:string):number;
   processCharge(pid:number):number;
   cgroupCharge(path:string):number;
+  /** The child cgroups directly beneath `path`, as absolute cgroup paths.
+   * A fixture's cgroups are the keys of its fixed `resident.cgroups`. */
+  cgroupChildren(path:string):string[];
   cgroupCpu(path:string):CgroupCpu;
   ownCpu():OwnCpu;
   ownScopeMemoryPeak():ScopeMemoryPeak;
@@ -276,6 +279,11 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       allocatedBytes:path=>{const value=read().allocated;return value.kind==='live'?liveAllocatedBytes(path,env):number(value.paths?.[path]??value.defaultBytes,'allocated.paths.'+path);},
       processCharge:pid=>charge('processes',String(pid)),
       cgroupCharge:path=>charge('cgroups',path),
+      cgroupChildren:path=>{
+        checkedGroup(path);const resident=read().resident;
+        if(resident.kind==='live')return liveCgroupChildren(path);
+        return fixtureCgroupChildren(Object.keys(resident.cgroups??{}),path);
+      },
       cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
       ownCpu:()=>{const value=read().selfCpu;return value.kind==='live'?liveOwnCpu():ownCpu(value.value);},
       ownScopeMemoryPeak:()=>scopePeak(),
@@ -307,6 +315,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     allocatedBytes:path=>liveAllocatedBytes(path,env),
     processCharge:liveProcessCharge,
     cgroupCharge:liveCgroupCharge,
+    cgroupChildren:path=>liveCgroupChildren(checkedGroup(path)),
     cgroupCpu:liveCgroupCpu,
     ownCpu:liveOwnCpu,
     ownScopeMemoryPeak:liveScopeMemoryPeak,
@@ -323,6 +332,29 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
 }
 
 function liveProcessCharge(pid:number):number { return parseProcessCharge(readFileSync(`/proc/${pid}/status`,'utf8')); }
+/** One level only: the caller bounds its own depth. A group that ends
+ * between its parent's listing and its own is departed, never an empty one. */
+function liveCgroupChildren(path:string):string[]{
+  const root=`/sys/fs/cgroup${path==='/'?'':path}`;
+  try{return readdirSync(root,{withFileTypes:true}).filter(entry=>entry.isDirectory()).map(entry=>`${path==='/'?'':path}/${entry.name}`).sort();}
+  catch(error){
+    if(['ENOENT','ENODEV'].includes((error as NodeJS.ErrnoException).code??''))throw new CgroupDeparted(path,error);
+    throw new HostObservationError(`host observation cgroupChildren ${path} failed: ${String(error)}`);
+  }
+}
+/** A fixture names every cgroup it has as a key; a parent exists through its
+ * descendants' keys, and an unknown parent is a missing observation. */
+export function fixtureCgroupChildren(keys:readonly string[],path:string):string[]{
+  const prefix=path==='/'?'/':`${path}/`;let known=path==='/'||keys.includes(path);const children=new Set<string>();
+  for(const key of keys){
+    if(!key.startsWith(prefix))continue;
+    known=true;
+    const rest=key.slice(prefix.length);if(!rest)continue;
+    children.add(prefix+rest.split('/')[0]);
+  }
+  if(!known)throw new HostObservationError(`host observation resident.cgroups has no cgroup ${path}`);
+  return [...children].sort();
+}
 function liveCgroupCharge(path:string):number {
   try{return parseCgroupCharge(readFileSync(`/sys/fs/cgroup${path}/memory.current`,'utf8'),readFileSync(`/sys/fs/cgroup${path}/memory.stat`,'utf8'));}
   catch(error){if(['ENOENT','ENODEV'].includes((error as NodeJS.ErrnoException).code??''))throw new CgroupDeparted(path,error);throw error;}
