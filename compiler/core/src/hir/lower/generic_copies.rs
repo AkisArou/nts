@@ -264,7 +264,19 @@ pub(super) struct Copy {
 }
 
 /// Whether a function declaration has type parameters of its own.
+///
+/// A method is asked its [own signature](crate::hir::generics::own_signature), since
+/// it is lowered per instance of the parameters its body binds; a function keeps
+/// its type's reading, which the result-overload planner is built on.
 pub(super) fn is_generic_function(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
+    if snapshot
+        .nodes
+        .get(id.0 as usize)
+        .is_some_and(|node| node.kind == NodeKind::Syntax(syntax::METHOD_DECLARATION))
+    {
+        return crate::hir::generics::own_signature(snapshot, id)
+            .is_some_and(|signature| !signature.type_parameters.is_empty());
+    }
     crate::hir::generics::declared_type_parameters(snapshot, id) > 0
 }
 

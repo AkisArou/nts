@@ -461,21 +461,7 @@ pub(super) fn add_value_fallbacks(
         let Some(signature) = declared_signature(snapshot, declaration) else {
             continue;
         };
-        // **Only where the body the value runs is generic.** A function used as a
-        // value runs its implementation, and an overload signature's type
-        // parameters are not the implementation's: `events.on<T>(…)` above a plain
-        // `on(…)` has one body and nothing to erase, and a fallback keyed by the
-        // overload named `on<value-erased>`, which no copy of that body is.
-        let generic_body = |declaration: NodeId| {
-            declared_signature(
-                snapshot,
-                crate::hir::lower::implementation_in(snapshot, declaration),
-            )
-            .is_some_and(|body| !body.type_parameters.is_empty())
-        };
-        if signature.type_parameters.is_empty()
-            || !generic_body(declaration)
-            || found.value_fallbacks.contains_key(&declaration)
+        if signature.type_parameters.is_empty() || found.value_fallbacks.contains_key(&declaration)
         {
             continue;
         }
@@ -641,21 +627,16 @@ fn copies_made(found: &GenericFunctions) -> usize {
 /// pushed only if no copy of that name is there.
 fn one_pass(snapshot: &SemanticSnapshot, templates: &Templates, found: &mut GenericFunctions) {
     for (call, target) in &snapshot.call_targets {
-        // **The body a call runs is the implementation's, so its instances are of
-        // the implementation's type parameters.** The checker resolves a call to
-        // the overload signature it selected, and that signature's type
-        // parameters are the overload's own: a non-generic implementation behind
-        // a generic overload has one body and nothing to instantiate, and a
-        // generic one binds its own parameters, which are what its body names.
-        // Keyed by the overload, the copies were asked for by nothing and the
-        // call named a suffix no body carried.
-        let Some(declaration) = target
+        // **A method's instances are of the implementation the call runs**, and of
+        // its own type parameters: the checker resolves a call to the overload
+        // signature it selected, whose parameters are the overload's, and a
+        // generic method's body binds its own. A plain implementation behind a
+        // generic overload has one body and nothing to instantiate. See
+        // [`instantiated`] for functions.
+        let Some((declaration, generic)) = target
             .callee
-            .map(|callee| crate::hir::lower::implementation_in(snapshot, callee))
+            .and_then(|callee| instantiated(snapshot, callee))
         else {
-            continue;
-        };
-        let Some(generic) = declared_signature(snapshot, declaration) else {
             continue;
         };
         let Some(actual) = snapshot.signatures.get(target.signature.0 as usize) else {
@@ -754,19 +735,51 @@ fn one_pass(snapshot: &SemanticSnapshot, templates: &Templates, found: &mut Gene
     }
 }
 
+/// The signature a declaration **itself** declares: for an overload's
+/// implementation its own parameters and type parameters, which its body binds,
+/// rather than the overload set's first signature that [`declared_signature`]
+/// reads off its type. See `SemanticSnapshot::declared_signatures`.
+///
+/// **Asked of methods**, which are lowered once per instance of their own type
+/// parameters (`copies_of_the_member`). A function's overloads keep the type's
+/// reading, because the result-overload planner (`lower::overload_results`) is
+/// built on it: it pairs the copy a call's overload pins with the
+/// implementation's, under that overload's parameters.
+pub(super) fn own_signature(
+    snapshot: &SemanticSnapshot,
+    declaration: nts_semantic_schema::NodeId,
+) -> Option<&nts_semantic_schema::SignatureRecord> {
+    match snapshot.declared_signatures.get(&declaration) {
+        Some(signature) => snapshot.signatures.get(signature.0 as usize),
+        None => declared_signature(snapshot, declaration),
+    }
+}
+
+/// The declaration a call's generic instances are keyed by, and the signature
+/// whose type parameters they bind: for a method, the implementation the call
+/// runs and its [`own_signature`]; for a function, the callee and its type's
+/// signature (see [`own_signature`] for why the two differ).
+fn instantiated(
+    snapshot: &SemanticSnapshot,
+    callee: nts_semantic_schema::NodeId,
+) -> Option<(
+    nts_semantic_schema::NodeId,
+    &nts_semantic_schema::SignatureRecord,
+)> {
+    let implementation = crate::hir::lower::implementation_in(snapshot, callee);
+    if snapshot.nodes.get(implementation.0 as usize)?.kind
+        == nts_semantic_schema::NodeKind::Syntax(nts_semantic_schema::syntax::METHOD_DECLARATION)
+    {
+        return Some((implementation, own_signature(snapshot, implementation)?));
+    }
+    Some((callee, declared_signature(snapshot, callee)?))
+}
+
 /// The signature a function declaration declares, if it is one.
 pub(super) fn declared_signature(
     snapshot: &SemanticSnapshot,
     declaration: nts_semantic_schema::NodeId,
 ) -> Option<&nts_semantic_schema::SignatureRecord> {
-    // **The declaration's own signature first**, where the checker's type for it
-    // is an overload set that begins with somebody else's: an implementation
-    // behind a generic first overload declares no type parameters, and read
-    // through its type it had the overload's. See
-    // `SemanticSnapshot::declared_signatures`.
-    if let Some(signature) = snapshot.declared_signatures.get(&declaration) {
-        return snapshot.signatures.get(signature.0 as usize);
-    }
     // The declaration's own type, which the checker records per node. Reading
     // it off the *name*'s symbol also works for a plain function and does not
     // for a generic one, whose symbol carries the declaration's type while the
