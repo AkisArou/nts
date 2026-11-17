@@ -101,6 +101,41 @@ After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
 after revision remains reachable at its `refs/cited/` ref.
 
+The selection-cost comparison uses private Git fixture clones at main
+`39f4978a723067b4f99b6639aa8967551a4827bc`, reviewed
+`977cb63af5791ce18b5285a626083c66d5f2e61b`, and fixed
+`8fc50d67abf1e45ba8916b97b4f571c3eabdf505`. Each arm owns its endpoint code;
+pinning only the launcher would not compare the selectors. The tooling probe
+deletes `tooling/windows/vm.md`; the compiler probe edits
+`compiler/core/src/lib.rs`. Each probe changes exactly one path, with identical
+input bytes across the three arms. Installation catalogs are refreshed before
+measurement, and every invocation uses the same scheduling-cost snapshot and
+canonical environment.
+
+For each probe the order is main, reviewed, main, fixed, main. Main's values
+below are medians of its three samples; the other arms have one sample each.
+Every real `check.ts <probe> --dry-run` completed successfully. The
+`perf-count` owner admits memory and the CPU lock together, then runs `perf
+stat` on CPU 4. GNU time inside that payload measures wall and user-plus-system
+CPU seconds, excluding the outer admission and CPU-lock waits. The production
+instruction-count parser validates the pinned PMU's counters. Orchestration
+stays off CPUs 4–5.
+
+| Probe | Selector | Instructions (trillion) | Wall seconds | CPU seconds | Instructions vs main | Wall vs main | CPU vs main |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tooling deletion | main | 3.170744 | 281.68 | 266.93 | baseline | baseline | baseline |
+| Tooling deletion | reviewed | 1.077894 | 105.43 | 97.84 | −66.01% | −62.57% | −63.35% |
+| Tooling deletion | fixed | 1.068212 | 102.79 | 101.20 | −66.31% | −63.51% | −62.09% |
+| Compiler edit | main | 3.169843 | 291.94 | 282.51 | baseline | baseline | baseline |
+| Compiler edit | reviewed | 2.337143 | 226.64 | 220.07 | −26.27% | −22.37% | −22.10% |
+| Compiler edit | fixed | 2.337170 | 224.81 | 212.58 | −26.27% | −22.99% | −24.75% |
+
+Neither probe increases any measured quantity against main. The deletion
+repair's compiler instruction count differs from the reviewed owner by
++0.0011%; its tooling instruction count falls by 0.90%. These are selection
+costs for the two probes, not gate execution times. Earlier partial two-arm
+timings and fixture setup failures are excluded from this comparison.
+
 Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 
 | File | SHA-256 |
@@ -130,6 +165,11 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `guards-before-owner.log` | `e258274adedb36e8d602f49e9f59834334a5fd6427c3c4593da7a7ca381ae57e` |
 | `guards-after-owner.log` | `d08095835961a1ad7e14dbd8587c29b17255e801bfd98db11985b3c7803f023a` |
 | `nts-798-guards-proof.log` | `cb5f1fe49f31e424832bc0f6521664a0412f51c86a962d30a48bbf19500c010a` |
+| `selection-three-setup.py` | `da6df6b68ae3c2b0f697ec8b41491eda16e69dfe2263650e057f6128637acc56` |
+| `selection-three-count.py` | `71b2b2041a2a3de82f7115a4b4499eea0cb401b3e204722934663ef26b606b7a` |
+| `selection-three-e4yjvv6w/manifest.json` | `1ea08190e1705cf4254fa34f5ecbe4f757b4b46fe2d0439f952b38bf36165661` |
+| `selection-three-e4yjvv6w/count-results.json` | `8ce743d3cc32080c9ab7b7cc2fd91783c016d4ae4a5b0087c2454e279d9ae1e5` |
+| `nts-798-three-count.log` | `7a0bd6e1382247622827cb44d9ced14a7e71e1d643ddc5d180bcb87a01ced971` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
