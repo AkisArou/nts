@@ -847,6 +847,7 @@
         "tooling/gate/inner-gate-memory.test.ts",
         "tooling/gate/inner.test.ts",
         "tooling/gate/inner.ts",
+        "tooling/gate/installed-catalog-fixture.ts",
         "tooling/gate/integrity-case-identity.test.ts",
         "tooling/gate/integrity-supervision.test.ts",
         "tooling/gate/integrity.test.mjs",
@@ -1475,7 +1476,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:510eb45c51c17eabea4025a35b7d73c76b8eca75adafd20d9fdce7febfb5ce76"
+      "source": "sha256:ab3e5f2bc5bfe2efada2332c22b66d0ee9ebbca33e79e11bc441192cfeca0678"
     }
   }
 }
