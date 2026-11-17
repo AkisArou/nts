@@ -953,11 +953,22 @@ pub(super) fn a_call_that_can_raise(
     // copy of `thrower` was offered, and the closure's raising variant -- which does
     // resolve the call, through `call_targets` -- could not be built. Every `try`
     // dispatching that closure aborted by name at run time.
-    match probe
+    //
+    // **And a method under a computed key by the method's own symbol.**
+    // `this.source[kCancel](n)` reads through an element access, which carries no
+    // symbol, so the call read as unresolved and able to raise whatever the checker
+    // resolved it to -- an `async` method, which never raises, or an interface's
+    // signature, asked like any other. The copy of the function writing it was then
+    // lost to a call it could always contain, and a closure calling that function
+    // held the program's raising gate off: `runtime/web-platform`'s
+    // `PipeState#abort`, through `this.#source[kStreamCancelInternal](reason)`, and
+    // the four `runtime/node` modules that link it. The declaration's name carries
+    // the member's symbol, as an identifier's does.
+    let symbol = probe
         .node(callee)
         .symbol
-        .map(|it| probe.denoted_symbol(it).0)
-    {
+        .or_else(|| a_method_under_a_computed_key(probe, call, callee));
+    match symbol.map(|it| probe.denoted_symbol(it).0) {
         Some(symbol) if constructs || a_callee_with_a_body(snapshot, probe, symbol) => {
             throwing.any.contains(&symbol)
         }
@@ -965,6 +976,29 @@ pub(super) fn a_call_that_can_raise(
         Some(_) => false,
         None => true,
     }
+}
+
+/// The member symbol of the method a call through an element access resolves to,
+/// read off the declaration's name -- for `receiver[key](…)`, whose access carries
+/// no symbol of its own. `None` for any other callee, and for an element read
+/// whose callee the checker resolves to something other than a method: a function
+/// held in an array or a field is a value, asked as one by [`a_value_held_call`].
+pub(super) fn a_method_under_a_computed_key(
+    probe: &FuncBuilder,
+    call: NodeId,
+    callee: NodeId,
+) -> Option<nts_semantic_schema::SymbolId> {
+    if probe.kind_of(callee) != Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+        return None;
+    }
+    let declaration = probe.snapshot.call_targets.get(&call)?.callee?;
+    if !matches!(
+        probe.kind_of(declaration),
+        Some(syntax::METHOD_DECLARATION | syntax::METHOD_SIGNATURE)
+    ) {
+        return None;
+    }
+    probe.node(probe.name_node(declaration)?).symbol
 }
 
 /// Whether a callee's symbol names a **value** that holds a function rather than a

@@ -3,10 +3,11 @@
 use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, BinOp, Diagnostic, Edge, Exit, FuncBuilder, HirType, MemberKey,
     NodeId, OpKind, Origin, RAISING_SUFFIX, THROUGH_A_FUNCTION_VALUE, Terminator, TypeId, TypeKind,
-    ValueId, a_copy_can_be_made_of, a_declaration_that_can_raise, a_value_held_call,
-    access_families, an_inlined_construction, calls_in_the_body_of, children_in_the_body_of,
-    children_that_run, erased_calls, interface_member_of, is_generic_function, literal_methods,
-    members_filling, planned_callee, raising_callees_of, syntax,
+    ValueId, a_copy_can_be_made_of, a_declaration_that_can_raise, a_method_under_a_computed_key,
+    a_value_held_call, access_families, an_inlined_construction, calls_in_the_body_of,
+    children_in_the_body_of, children_that_run, erased_calls, interface_member_of,
+    is_generic_function, literal_methods, members_filling, planned_callee, raising_callees_of,
+    syntax,
 };
 
 impl FuncBuilder<'_> {
@@ -1004,7 +1005,14 @@ impl FuncBuilder<'_> {
         // ask, and what it reaches is exactly what cannot be known here. Treated
         // as compiled, because the alternative is to assume the one thing this
         // refusal exists because the compiler cannot establish.
-        let Some(symbol) = self.node(callee).symbol else {
+        // A method under a computed key is asked by its own symbol, as
+        // `a_call_that_can_raise` asks it: the prediction and this verifier have to
+        // give one answer ([`a_method_under_a_computed_key`]).
+        let Some(symbol) = self
+            .node(callee)
+            .symbol
+            .or_else(|| a_method_under_a_computed_key(self, call, callee))
+        else {
             return true;
         };
         let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
