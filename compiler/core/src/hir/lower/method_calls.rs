@@ -3,8 +3,8 @@
 use super::{
     Branch, Callee, Diagnostic, FuncBuilder, HirType, ManagedType, MemberKey, MethodAccessor,
     MethodsOf, NodeId, NodeKind, NumericBuiltin, OpKind, Place, RAISING_SUFFIX, Terminator, TypeId,
-    TypeKind, ValueId, access, callable_fields, is_static_member, member_dispatch_key,
-    named_representation, syntax,
+    TypeKind, ValueId, a_method_with_its_own_instances, access, callable_fields, is_static_member,
+    member_dispatch_key, named_representation, syntax,
 };
 
 impl FuncBuilder<'_> {
@@ -684,9 +684,12 @@ impl FuncBuilder<'_> {
                 self.unsupported(member, "a static method whose name the program computes")
             })?
             .emitted_name();
+        let instantiated = self.generic_method_suffix(id)?;
         let callee = match bound {
             Some(key) => Callee::External(key),
-            None => Callee::Direct(format!("{class_name}.{emitted_member}{suffix}")),
+            None => Callee::Direct(format!(
+                "{class_name}.{emitted_member}{instantiated}{suffix}"
+            )),
         };
         // The declaration also identifies a generator's concrete frame. The
         // shared call path marks it before a for-of asks how to resume it.
@@ -1148,6 +1151,20 @@ impl FuncBuilder<'_> {
             Some(name) => name.clone(),
             None => self.layout_of(id, declaring)?.name,
         };
+        // A method lowered once per instance of its own type parameters is named
+        // by the instance this call pins, and has no slot per instance to
+        // dispatch at: an override of it is refused here, by name.
+        let instantiated = self.generic_method_suffix(id)?;
+        if !instantiated.is_empty() && self.hierarchy.overridden(type_id, member) {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "a call to the generic method `{member_name}`, which a subclass overrides: \
+                     a dispatch slot is one entry, and its instances are one copy per type \
+                     it is called at"
+                ),
+            ));
+        }
         // **The raising copy of a method is reached by naming it** where the dispatch is
         // direct: a member no subclass overrides is already a `Callee::Direct` here, and
         // the copy is that name with the suffix -- which is why a method needed no table
@@ -1195,6 +1212,46 @@ impl FuncBuilder<'_> {
                 declared: format!("{owner}#{emitted}"),
             });
         }
-        Ok(Callee::Direct(format!("{owner}#{emitted}{suffix}")))
+        Ok(Callee::Direct(format!(
+            "{owner}#{emitted}{instantiated}{suffix}"
+        )))
+    }
+
+    /// The instance a call to a method lowered **once per instance of its own type
+    /// parameters** names ([`a_method_with_its_own_instances`]): the suffix the call's
+    /// pin gave it ([`crate::hir::generics::GenericFunctions::at_call`]), which is the
+    /// suffix its copy was lowered under. Empty for any other callee.
+    ///
+    /// `site` is the call, or the method's own declaration where a wrapper closure
+    /// forwards to a method read as a value -- which names no instance, so it is
+    /// refused by name: one closure object cannot be every copy.
+    pub(super) fn generic_method_suffix(&self, site: NodeId) -> Result<String, Diagnostic> {
+        let declaration = if self.kind_of(site) == Some(syntax::METHOD_DECLARATION) {
+            Some(site)
+        } else {
+            self.snapshot
+                .call_targets
+                .get(&site)
+                .and_then(|target| target.callee)
+                .map(|callee| self.implementation_of(callee))
+        };
+        let Some(declaration) = declaration.filter(|at| a_method_with_its_own_instances(self, *at))
+        else {
+            return Ok(String::new());
+        };
+        if declaration == site {
+            return Err(self.unsupported(
+                site,
+                "a generic method used as a value, which is one copy per type it is called at \
+                 and so no one function to hold",
+            ));
+        }
+        self.calls.suffix(site).cloned().ok_or_else(|| {
+            self.unsupported(
+                site,
+                "a call to a generic method whose type parameters this call does not pin down, \
+                 so it names no copy",
+            )
+        })
     }
 }

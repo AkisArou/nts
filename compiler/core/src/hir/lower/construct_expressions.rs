@@ -1102,7 +1102,7 @@ impl FuncBuilder<'_> {
         let copy = if member == "constructor" {
             self.constructed_copy(id)
         } else {
-            String::new()
+            self.generic_method_suffix(id)?
         };
         let call = self.push(
             OpKind::Call {

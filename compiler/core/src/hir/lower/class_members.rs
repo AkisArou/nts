@@ -315,6 +315,67 @@ pub(super) fn member_copy(
     }
 }
 
+/// Whether `member` is a method lowered **once per instance of its own type
+/// parameters** ([`copies_of_the_member`]): a method declaring type parameters, in
+/// a class no generic declaration encloses -- neither the class itself nor a
+/// function or class around it, whose copies would bind parameters the method's
+/// body can name too. One predicate for the four places that must agree: which
+/// copies are lowered, what they are named, what a call names, and whether a
+/// raising copy can be made of one.
+pub(super) fn a_method_with_its_own_instances(probe: &FuncBuilder, member: NodeId) -> bool {
+    probe.kind_of(member) == Some(syntax::METHOD_DECLARATION)
+        && super::is_generic_function(probe.snapshot, member)
+        && std::iter::successors(probe.node(member).parent, |at| probe.node(*at).parent).all(
+            |enclosing| {
+                !probe
+                    .children(enclosing)
+                    .into_iter()
+                    .any(|child| probe.kind_of(child) == Some(syntax::TYPE_PARAMETER))
+            },
+        )
+}
+
+/// The copies of one class member to lower in one copy of its class: `class_copy`
+/// itself, or -- for a method with **type parameters of its own** -- one per
+/// instance of them that a call pins down
+/// ([`crate::hir::generics::function_instantiations`]), each binding the method's
+/// parameters on top of the class copy's and carrying the instance's suffix,
+/// exactly as a generic function's copies do. A generic method nothing calls has
+/// no copy, as a generic function has none.
+///
+/// **Only in a class with no type parameters of its own.** A generic class's copy
+/// binds its parameters per instantiation, and which of a method's instances a copy
+/// owes depends on the receiver each call names; that keying is not built, so such
+/// a method keeps its one body, which refuses by name where it needs a type its own
+/// parameters stand for ([`a_copy_can_be_made_of`](super::a_copy_can_be_made_of)
+/// draws the same line).
+pub(super) fn copies_of_the_member(
+    probe: &FuncBuilder,
+    shared: &Shared,
+    member: NodeId,
+    class_copy: Copy,
+) -> Vec<Copy> {
+    if !a_method_with_its_own_instances(probe, member) {
+        return vec![class_copy];
+    }
+    shared
+        .generics
+        .copies
+        .get(&member)
+        .into_iter()
+        .flatten()
+        // The class copy binds nothing here -- it is a class with no parameters --
+        // so the instance's bindings are the whole substitution.
+        .map(|instance| Copy {
+            substitution: instance.substitution.clone(),
+            sources: instance.sources.clone(),
+            suffix: instance.suffix.clone(),
+            declaration: Some(member),
+            ..class_copy.clone()
+        })
+        .collect()
+}
+
 /// The name a constructor's copy keyed on `target` carries after the
 /// constructor's own ([`FuncBuilder::construct_target`]).
 pub(super) fn target_suffix(target: TypeId) -> String {
@@ -558,6 +619,7 @@ fn lower_class(
         return;
     }
     let mut com_methods = Vec::new();
+    let probe = FuncBuilder::probe(snapshot);
     for (copy, (instance, substitution, sources)) in
         copies_of(generic, class).into_iter().enumerate()
     {
@@ -569,195 +631,212 @@ fn lower_class(
             if copy > 0 && is_static_member(snapshot, member) {
                 continue;
             }
-            let mut builder = shared.builder(
-                snapshot,
-                foreign,
-                member_copy(snapshot, instance, &substitution, &sources, false),
-            );
-            // An overload signature declares a call shape and has no body. The
-            // implementation beside it is the one member emitted, and every
-            // call resolving to a signature is built against that one -- so
-            // there is nothing here to lower and nothing absent to report.
-            if builder.is_an_overload_signature(class, member) {
-                continue;
-            }
-            // A class the program writes over a GObject class is a GType of
-            // its own, registered the first time one is made, with each
-            // `vfunc_` method its class struct's slot. Its instances are the
-            // parent's handle, so every method takes one as `this`.
-            if gobject.is_some() && !is_static_member(snapshot, member) {
-                let lowered_member = builder.lower_gobject_member(class, member, instance);
-                let lowered_member = with_vfunc_slot(
-                    layout_collector,
-                    snapshot,
-                    foreign,
-                    shared,
-                    (lowered_member, builder.vfunc_slot.take()),
-                    lowered,
-                );
-                keep_foreign_member(
-                    snapshot,
-                    member,
-                    lowered_member,
-                    &mut gobject_methods,
-                    lowered,
-                );
-                builder.harvest(wanted, &mut lowered.arrivals);
-                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
-                continue;
-            }
-            // A class the program writes over a composable Windows Runtime
-            // class is composed by the runtime (`class App extends
-            // Application`): each method an override the runtime's table for
-            // its interface answers, and nothing else yet -- no constructor
-            // of its own, which `new` does not run, and no field.
-            if crate::hir::native::extends_com(snapshot, class)
-                && !is_static_member(snapshot, member)
-            {
-                let lowered_member = builder.lower_com_member(class, member, instance);
-                keep_foreign_member(snapshot, member, lowered_member, &mut com_methods, lowered);
-                builder.harvest(wanted, &mut lowered.arrivals);
-                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
-                continue;
-            }
-            // A class the program writes over an Objective-C class is an
-            // Objective-C class of its own, registered when the program loads
-            // with its methods as the runtime's -- not an object of ours with
-            // an Objective-C base inside it, which would put two
-            // representations on one chain.
-            if crate::hir::native::extends_objc(snapshot, class)
-                && builder.kind_of(member) == Some(syntax::CONSTRUCTOR)
-            {
-                match builder.lower_objc_constructor(class, member, instance) {
-                    Ok(func) => lowered.program.funcs.push(func),
-                    Err(diagnostic) => {
-                        note_member(&mut builder, lowered, class, member, instance, &diagnostic);
-                        lowered.diagnostics.push(diagnostic);
-                    }
-                }
-                builder.harvest(wanted, &mut lowered.arrivals);
-                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
-                continue;
-            }
-            // A `static` member is the program's alone -- a function and a
-            // global, as any class's is -- and not a class method the runtime
-            // is told of: nothing but the program calls it.
-            if crate::hir::native::extends_objc(snapshot, class)
-                && !is_static_member(snapshot, member)
-            {
-                match builder.lower_objc_method(class, member, instance) {
-                    Ok((func, method)) => {
-                        lowered.program.funcs.push(func);
-                        objc_methods.extend(method);
-                    }
-                    Err(diagnostic) => {
-                        note_member(&mut builder, lowered, class, member, instance, &diagnostic);
-                        lowered.diagnostics.push(diagnostic);
-                    }
-                }
-                builder.harvest(wanted, &mut lowered.arrivals);
-                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
-                continue;
-            }
-            if instance.is_none()
-                && builder.kind_of(member) == Some(syntax::CONSTRUCTOR)
-                && !shared.structural.lowers_as_declared(member)
-            {
-                // Reached only as its copies over union members.
-                constructor_copies(
-                    layout_collector,
-                    snapshot,
-                    foreign,
-                    shared,
-                    lowered,
-                    class,
-                    member,
-                    wanted,
-                );
-                target_constructor_copies(
-                    layout_collector,
-                    snapshot,
-                    foreign,
-                    shared,
-                    lowered,
-                    class,
-                    member,
-                    wanted,
-                );
-                builder.harvest(wanted, &mut lowered.arrivals);
-                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
-                continue;
-            }
-            // **Attempted whether or not the ordinary body compiles**, because the two
-            // are independent lowerings and the *call site* names one of them without
-            // asking: `callee_for` appends the suffix when the declaration is in
-            // `naming.raising`, which is a fact about what a `try` reaches and not
-            // about what lowered. Nested inside the `Ok` arm, a member whose ordinary
-            // body refused got no raising copy and no refusal recorded for one either,
-            // so a caller's cascade read `it calls `X@raises`, which nothing in this
-            // program defines` -- a cascade with no root, which `integrity` reports
-            // and which is the weaker of two sentences about one cause. Eight of them
-            // in `outcomes/a-teed-stream-read-back`.
-            raising_method(
-                snapshot,
-                foreign,
+            // **One body per copy of the member**: one, unless the method has type
+            // parameters of its own, whose instances are its copies -- see
+            // [`copies_of_the_member`].
+            for ordinary in copies_of_the_member(
+                &probe,
                 shared,
-                lowered,
-                class,
                 member,
-                instance,
-                &substitution,
-                &sources,
-                wanted,
-            );
-            if instance.is_none() && builder.kind_of(member) == Some(syntax::CONSTRUCTOR) {
-                constructor_copies(
-                    layout_collector,
-                    snapshot,
-                    foreign,
-                    shared,
-                    lowered,
-                    class,
-                    member,
-                    wanted,
-                );
-                target_constructor_copies(
-                    layout_collector,
-                    snapshot,
-                    foreign,
-                    shared,
-                    lowered,
-                    class,
-                    member,
-                    wanted,
-                );
-            }
-            match builder.lower_method_of(class, member, instance) {
-                Ok(func) => lowered.program.funcs.push(func),
-                // **Recorded, not only reported** -- the same omission the two
-                // sites in `super::mod` carry a note about, one layer up. A
-                // class member is lowered *here* and never through the
-                // `lower_function` arm that files a refusal under a name, so
-                // every refused method and every refused constructor in the
-                // program was reported to a person and left out of the list the
-                // next pass reads.
-                //
-                // The napi wrapper asks `program.uncompiled` for
-                // `Readable#constructor` and printed `is a class whose
-                // constructor was not compiled` -- the effect, cause unsaid --
-                // when it found nothing. It never could: on 2026-09-15
-                // `uncompiled` was **empty** for a two-class fixture whose
-                // constructor refuses with a named cause. Seven declines in
-                // `stream` said that sentence, four of them classes that do
-                // declare a constructor, and `Readable` is the single
-                // most-named export in that module's failing tests.
-                Err(diagnostic) => {
-                    note_member(&mut builder, lowered, class, member, instance, &diagnostic);
-                    lowered.diagnostics.push(diagnostic);
+                member_copy(snapshot, instance, &substitution, &sources, false),
+            ) {
+                let mut builder = shared.builder(snapshot, foreign, ordinary.clone());
+                // An overload signature declares a call shape and has no body. The
+                // implementation beside it is the one member emitted, and every
+                // call resolving to a signature is built against that one -- so
+                // there is nothing here to lower and nothing absent to report.
+                if builder.is_an_overload_signature(class, member) {
+                    continue;
                 }
+                // A class the program writes over a GObject class is a GType of
+                // its own, registered the first time one is made, with each
+                // `vfunc_` method its class struct's slot. Its instances are the
+                // parent's handle, so every method takes one as `this`.
+                if gobject.is_some() && !is_static_member(snapshot, member) {
+                    let lowered_member = builder.lower_gobject_member(class, member, instance);
+                    let lowered_member = with_vfunc_slot(
+                        layout_collector,
+                        snapshot,
+                        foreign,
+                        shared,
+                        (lowered_member, builder.vfunc_slot.take()),
+                        lowered,
+                    );
+                    keep_foreign_member(
+                        snapshot,
+                        member,
+                        lowered_member,
+                        &mut gobject_methods,
+                        lowered,
+                    );
+                    builder.harvest(wanted, &mut lowered.arrivals);
+                    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+                    continue;
+                }
+                // A class the program writes over a composable Windows Runtime
+                // class is composed by the runtime (`class App extends
+                // Application`): each method an override the runtime's table for
+                // its interface answers, and nothing else yet -- no constructor
+                // of its own, which `new` does not run, and no field.
+                if crate::hir::native::extends_com(snapshot, class)
+                    && !is_static_member(snapshot, member)
+                {
+                    let lowered_member = builder.lower_com_member(class, member, instance);
+                    keep_foreign_member(
+                        snapshot,
+                        member,
+                        lowered_member,
+                        &mut com_methods,
+                        lowered,
+                    );
+                    builder.harvest(wanted, &mut lowered.arrivals);
+                    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+                    continue;
+                }
+                // A class the program writes over an Objective-C class is an
+                // Objective-C class of its own, registered when the program loads
+                // with its methods as the runtime's -- not an object of ours with
+                // an Objective-C base inside it, which would put two
+                // representations on one chain.
+                if crate::hir::native::extends_objc(snapshot, class)
+                    && builder.kind_of(member) == Some(syntax::CONSTRUCTOR)
+                {
+                    match builder.lower_objc_constructor(class, member, instance) {
+                        Ok(func) => lowered.program.funcs.push(func),
+                        Err(diagnostic) => {
+                            note_member(
+                                &mut builder,
+                                lowered,
+                                class,
+                                member,
+                                instance,
+                                &diagnostic,
+                            );
+                            lowered.diagnostics.push(diagnostic);
+                        }
+                    }
+                    builder.harvest(wanted, &mut lowered.arrivals);
+                    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+                    continue;
+                }
+                // A `static` member is the program's alone -- a function and a
+                // global, as any class's is -- and not a class method the runtime
+                // is told of: nothing but the program calls it.
+                if crate::hir::native::extends_objc(snapshot, class)
+                    && !is_static_member(snapshot, member)
+                {
+                    match builder.lower_objc_method(class, member, instance) {
+                        Ok((func, method)) => {
+                            lowered.program.funcs.push(func);
+                            objc_methods.extend(method);
+                        }
+                        Err(diagnostic) => {
+                            note_member(
+                                &mut builder,
+                                lowered,
+                                class,
+                                member,
+                                instance,
+                                &diagnostic,
+                            );
+                            lowered.diagnostics.push(diagnostic);
+                        }
+                    }
+                    builder.harvest(wanted, &mut lowered.arrivals);
+                    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+                    continue;
+                }
+                if instance.is_none()
+                    && builder.kind_of(member) == Some(syntax::CONSTRUCTOR)
+                    && !shared.structural.lowers_as_declared(member)
+                {
+                    // Reached only as its copies over union members.
+                    constructor_copies(
+                        layout_collector,
+                        snapshot,
+                        foreign,
+                        shared,
+                        lowered,
+                        class,
+                        member,
+                        wanted,
+                    );
+                    target_constructor_copies(
+                        layout_collector,
+                        snapshot,
+                        foreign,
+                        shared,
+                        lowered,
+                        class,
+                        member,
+                        wanted,
+                    );
+                    builder.harvest(wanted, &mut lowered.arrivals);
+                    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+                    continue;
+                }
+                // **Attempted whether or not the ordinary body compiles**, because the two
+                // are independent lowerings and the *call site* names one of them without
+                // asking: `callee_for` appends the suffix when the declaration is in
+                // `naming.raising`, which is a fact about what a `try` reaches and not
+                // about what lowered. Nested inside the `Ok` arm, a member whose ordinary
+                // body refused got no raising copy and no refusal recorded for one either,
+                // so a caller's cascade read `it calls `X@raises`, which nothing in this
+                // program defines` -- a cascade with no root, which `integrity` reports
+                // and which is the weaker of two sentences about one cause. Eight of them
+                // in `outcomes/a-teed-stream-read-back`.
+                raising_method(
+                    snapshot, foreign, shared, lowered, class, member, ordinary, wanted,
+                );
+                if instance.is_none() && builder.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+                    constructor_copies(
+                        layout_collector,
+                        snapshot,
+                        foreign,
+                        shared,
+                        lowered,
+                        class,
+                        member,
+                        wanted,
+                    );
+                    target_constructor_copies(
+                        layout_collector,
+                        snapshot,
+                        foreign,
+                        shared,
+                        lowered,
+                        class,
+                        member,
+                        wanted,
+                    );
+                }
+                match builder.lower_method_of(class, member, instance) {
+                    Ok(func) => lowered.program.funcs.push(func),
+                    // **Recorded, not only reported** -- the same omission the two
+                    // sites in `super::mod` carry a note about, one layer up. A
+                    // class member is lowered *here* and never through the
+                    // `lower_function` arm that files a refusal under a name, so
+                    // every refused method and every refused constructor in the
+                    // program was reported to a person and left out of the list the
+                    // next pass reads.
+                    //
+                    // The napi wrapper asks `program.uncompiled` for
+                    // `Readable#constructor` and printed `is a class whose
+                    // constructor was not compiled` -- the effect, cause unsaid --
+                    // when it found nothing. It never could: on 2026-09-15
+                    // `uncompiled` was **empty** for a two-class fixture whose
+                    // constructor refuses with a named cause. Seven declines in
+                    // `stream` said that sentence, four of them classes that do
+                    // declare a constructor, and `Readable` is the single
+                    // most-named export in that module's failing tests.
+                    Err(diagnostic) => {
+                        note_member(&mut builder, lowered, class, member, instance, &diagnostic);
+                        lowered.diagnostics.push(diagnostic);
+                    }
+                }
+                builder.harvest(wanted, &mut lowered.arrivals);
+                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
             }
-            builder.harvest(wanted, &mut lowered.arrivals);
-            layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
         }
     }
     if crate::hir::native::extends_objc(snapshot, class) {

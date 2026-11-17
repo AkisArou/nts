@@ -4,8 +4,8 @@ use super::{
     AsyncResult, Copy, Diagnostic, Facts, Func, FuncBuilder, HirType, ImportPhase, LayoutCollector,
     Lowered, LoweringSnapshot, ManagedType, NodeId, OpKind, Over, Param, ParamShape, Shared,
     Substitution, Terminator, TypeId, ValueId, assertions, instance_type_of, is_static_member,
-    member_name_of, members_of, note_member, raising_method, receiving_function_name, spell,
-    syntax,
+    member_copy, member_name_of, members_of, note_member, raising_method, receiving_function_name,
+    spell, syntax,
 };
 
 pub(super) fn lower_object_literal_members(
@@ -42,9 +42,13 @@ pub(super) fn lower_object_literal_members(
             lowered,
             literal,
             member,
-            Some(instance),
-            &Substitution::default(),
-            &crate::hir::generics::Sources::default(),
+            member_copy(
+                snapshot,
+                Some(instance),
+                &Substitution::default(),
+                &crate::hir::generics::Sources::default(),
+                false,
+            ),
             wanted,
         );
         // A member the type lays out as storage is a closure, emitted through

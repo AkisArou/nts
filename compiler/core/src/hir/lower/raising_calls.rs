@@ -474,7 +474,10 @@ impl FuncBuilder<'_> {
             return None;
         }
         if is_generic_function(self.snapshot, declaration) {
-            return Some("a generic method, whose own type parameters have no instantiations here");
+            return Some(
+                "a generic method inside a generic class or function, whose instances are not \
+                 copied per instance of what encloses it",
+            );
         }
         if self
             .node(declaration)

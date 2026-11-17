@@ -3,7 +3,8 @@
 use super::{
     CONSTRUCTOR_KEY, Diagnostic, FuncBuilder, HirType, LoweringSnapshot, ManagedType, MemberKey,
     MethodAccessor, NodeId, NodeKind, RAISING_SUFFIX, SemanticSnapshot, SymbolId, TypeId,
-    declares_a_class, instance_type_of, is_a_generic_declaration, nominal_or_stand_in, syntax,
+    a_method_with_its_own_instances, declares_a_class, instance_type_of, is_a_generic_declaration,
+    nominal_or_stand_in, syntax,
 };
 
 /// Interfaces, which declare methods and implement none of them.
@@ -561,10 +562,20 @@ impl FuncBuilder<'_> {
         // qualified name cannot collide with a plain function's -- and the two
         // spellings keep `static foo()` and `foo()` apart, which one class is
         // allowed to declare together.
-        let emitted = if is_static {
-            format!("{class_name}.{member_name}")
+        // **And the instance, for a method with type parameters of its own**, which
+        // is lowered once per instance as a generic function is
+        // ([`copies_of_the_member`](super::copies_of_the_member)) and named the same
+        // way: the copy's suffix after the name. A call names it through the same
+        // pin ([`Self::generic_method_suffix`]).
+        let instantiated = if a_method_with_its_own_instances(self, member) {
+            self.suffix.as_str()
         } else {
-            format!("{class_name}#{member_name}")
+            ""
+        };
+        let emitted = if is_static {
+            format!("{class_name}.{member_name}{instantiated}")
+        } else {
+            format!("{class_name}#{member_name}{instantiated}")
         };
         Ok((class_name, emitted))
     }

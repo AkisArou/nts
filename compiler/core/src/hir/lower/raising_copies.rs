@@ -1,13 +1,14 @@
 //! Choose which bodies and dispatch slots get a raising copy and record the reason an eligible route is held.
 
 use super::{
-    FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, MemberKey, MethodAccessor, Naming, NodeId,
-    NodeKind, Program, Reached, SemanticSnapshot, Shared, Substitution, Throwing, TypeId,
-    a_copy_can_contain, a_value_held_callee, calls_guarded_by_a_try, calls_in_the_body_of,
-    close_over_callees, closure_bodies_that_can_raise, declared_base_class, function_behind_const,
+    Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, MemberKey, MethodAccessor, Naming,
+    NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared, Throwing, TypeId,
+    a_copy_can_contain, a_method_with_its_own_instances, a_value_held_callee,
+    calls_guarded_by_a_try, calls_in_the_body_of, close_over_callees,
+    closure_bodies_that_can_raise, declared_base_class, function_behind_const,
     functions_used_as_values, instance_type_of, interface_member_of, is_generic_function,
-    literal_methods, member_copy, member_dispatch_key, members_filling, names_a_body,
-    raising_body_calls, syntax, the_constructor_declared_by, the_function_of, the_inlined_chain,
+    literal_methods, member_dispatch_key, members_filling, names_a_body, raising_body_calls,
+    syntax, the_constructor_declared_by, the_function_of, the_inlined_chain,
 };
 
 /// A dispatch slot for the raising copy of an **overridden** member, and a copy for
@@ -296,7 +297,8 @@ fn why_it_cannot_be_copied(
         .iter()
         .any(|declaration| is_generic_function(snapshot, *declaration))
     {
-        "is a generic method, which has no copy per type it is called at"
+        "is a generic method inside a generic class or function, whose instances are not \
+         copied per instance of what encloses it"
     } else {
         "is not a function, method, accessor or constructor this compiler copies"
     }
@@ -305,9 +307,12 @@ fn why_it_cannot_be_copied(
 /// Whether a raising copy can be made of this declaration: a plain function, a
 /// **method** or an **accessor**, not `async`.
 ///
-/// A generic function has one raising form per specialization. A method with its
-/// own type parameters still has no such instantiation machinery. An `async`
-/// function rejects its promise rather than raising synchronously.
+/// A generic function has one raising form per specialization, and so does a
+/// method with type parameters of its own ([`a_method_with_its_own_instances`]):
+/// each instance is paired with its raising form as a function's is. One inside a
+/// generic class or function is not, because its instances are not yet keyed by
+/// the enclosing copy. An `async` function rejects its promise rather than raising
+/// synchronously.
 ///
 /// **How the copy is reached depends on the dispatch, and both answers exist.** A
 /// member no subclass overrides is already a `Callee::Direct`, so the copy is that
@@ -354,7 +359,9 @@ pub(super) fn a_copy_can_be_made_of(
                 | syntax::SET_ACCESSOR
                 | syntax::CONSTRUCTOR
         )
-    ) && (!is_generic_function(snapshot, declaration) || kind == Some(syntax::FUNCTION_DECLARATION))
+    ) && (!is_generic_function(snapshot, declaration)
+        || kind == Some(syntax::FUNCTION_DECLARATION)
+        || a_method_with_its_own_instances(probe, declaration))
         && (!modifiers.contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
             || modifiers.contains(nts_semantic_schema::DeclarationModifiers::GENERATOR))
 }
@@ -444,8 +451,9 @@ pub(super) const THROUGH_A_FUNCTION_VALUE: &str =
 /// `an-interface-reached-by-six-routes` records the same boundary for the other
 /// copy kinds, and it is the same line of code drawing it.
 ///
-/// Methods with their own type parameters are excluded until their instantiations
-/// can be copied, and `async` functions because a `throw` in one rejects its promise.
+/// Methods with type parameters of their own are copied per instance, except inside
+/// a generic class or function, and `async` functions are excluded because a `throw`
+/// in one rejects its promise.
 ///
 /// **Only for a callee some `try` in the program actually calls.** "Every
 /// qualifying function, and let `hir::dce` drop the rest" was the first version
@@ -1275,7 +1283,8 @@ pub(super) fn a_value_held_call(
     }
 }
 
-/// The raising copy of one class member, where a `try` can reach it.
+/// The raising copy of one copy of a class member, where a `try` can reach it: the
+/// `ordinary` copy's bindings and name, lowered with `raises` set.
 ///
 /// Its own function because it is its own step and because `lower_class` is a loop
 /// over copies and members already. See [`a_copy_can_be_made_of`] for why a method
@@ -1288,9 +1297,7 @@ pub(super) fn raising_method(
     lowered: &mut Lowered,
     class: NodeId,
     member: NodeId,
-    instance: Option<TypeId>,
-    substitution: &Substitution,
-    sources: &crate::hir::generics::Sources,
+    ordinary: Copy,
     wanted: &mut std::collections::BTreeSet<usize>,
 ) {
     // **And its raising copy, where a `try` can reach it.** Lowered a
@@ -1319,7 +1326,11 @@ pub(super) fn raising_method(
     if !shared.naming.raising.contains(&member) {
         return;
     }
-    let copy = member_copy(snapshot, instance, substitution, sources, true);
+    let instance = ordinary.instance;
+    let copy = Copy {
+        raises: true,
+        ..ordinary
+    };
     let mut second = shared.builder(snapshot, foreign, copy);
     match second.lower_method_of(class, member, instance) {
         Ok(mut raising) => {
