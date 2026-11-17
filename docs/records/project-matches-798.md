@@ -24,13 +24,19 @@ policy. The first attempt incorrectly asserted its removal from the aggregate
 list; the corrected assertions check the actual Program-derived rules and
 retain the complete aggregate rows beside them.
 
-The existing canonical focused run passed the native matching, Program,
-material, compact-record and dirty matching/nonmatching source-fence controls.
-Its three records-run failures stopped in setup at a stale installation catalog
-before reaching their assertions; the production linker subsequently refreshed
-the worktree inputs. The source fence compares native matches at fresh
-committed and working sources, retaining exact bytes, aliases, typed metadata,
-memberships, Cargo names and the run's own-write ledger independently.
+The refreshed canonical focused run passed all 266 tests across the eight
+selected owners, including matching, Program capture, compact records,
+include-change selection, ordinary-reader promotion, unavailable installed
+packages, and the source and records-run fences. An earlier run's three
+records-run failures stopped at a stale installation catalog before assertions;
+the production linker refreshed it before the successful run. The source fence
+compares native matches at fresh committed and working sources, retaining exact
+bytes, aliases, typed metadata, memberships, Cargo names and the run's own-write
+ledger independently.
+
+After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
+formatting, Clippy, the fresh compiler build and backend tests. The measured
+after revision remains reachable at its `refs/cited/` ref.
 
 Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 
@@ -43,6 +49,8 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `before.tar` | `d6358a784bc45f300c650b20f510d2d68d0c0ea53fe8746f446f26840e0297f1` |
 | `after.tar` | `0601b70b666da382583d8f04602c24fa8a09c235ad77db387fc2aa10dfeef48e` |
 | `focused2.log` | `47f1aef75cbc7eafcc0e37537234dcdedc60b2c46907a61ebf10a3ab5f8b4b3f` |
+| `nts-798-focused3.log` | `8a0f280d459966ac03e4836dcf96debca689d596c451a34508604687e2776d57` |
+| `nts-798-inner.log` | `e1a4fd9c5a99614c99f04e0a5f3f1767c515ac6835fde1802508da2ab0b176f3` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
