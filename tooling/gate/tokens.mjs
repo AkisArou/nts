@@ -34,8 +34,13 @@ const ENABLED = WHERE !== "" && !process.env.NTS_GATE_TOKEN_HELD;
  * A client of the token pool at `where` (`host:port`) asking for `step`.
  * `acquire(context, signal, bytes)` resolves to the release of one granted token:
  * calling it closes the connection, and calling it again does nothing.
- * `signal` aborting while the request waits closes the pending connection --
- * the runner counts it cancelled, never granted -- and resolves to `null`.
+ * `signal` aborting while the request waits withdraws it, and the runner,
+ * which orders the withdrawal against its grant, decides the outcome: still
+ * waiting, the request is cancelled and resolves to `null`; already granted,
+ * it resolves to that grant's release like any other, which the caller owns
+ * and returns (the census feed counts it as a returned offer). A runner that
+ * goes away before answering a withdrawal leaves no grant to hold: `null`.
+ * Aborting before the request is sent closes the connection: `null`.
  * `bytes`, when given, is the memory the case was measured to hold: the
  * runner grants the token when that fits and counts it at that size.
  */
@@ -49,17 +54,26 @@ export function tokenClient(where, step) {
     return new Promise((resolve, reject) => {
       const lease=randomUUID();
       const sock = connect(address);
-      let settled = false;
+      let settled = false, requested = false, withdrawing = false;
       let buf = "";
       const settle = () => {
         settled = true;
         signal?.removeEventListener("abort", abort);
       };
-      const abort = () => {
+      const withdrawn = () => {
         if (settled) return;
         settle();
         sock.destroy();
         resolve(null);
+      };
+      // Once sent, the request is withdrawn, never dropped: only the runner
+      // knows whether its grant is already on the way.
+      const abort = () => {
+        if (settled || withdrawing) return;
+        if (!requested) return withdrawn();
+        withdrawing = true;
+        signal?.removeEventListener("abort", abort);
+        sock.write("withdraw\n");
       };
       const fail = (why) => {
         if (settled) return;
@@ -71,12 +85,15 @@ export function tokenClient(where, step) {
       sock.setEncoding("utf8");
       sock.on("connect", () => {
         const label = context || process.env.NTS_GATE_CASE_COSTS_DIR ? ` json64:${Buffer.from(JSON.stringify(context ?? {})).toString("base64url")}` : "";
+        requested = true;
         sock.write(`want ${step} ${process.pid}${bytes === undefined ? "" : ` bytes:${bytes}`}${lease?` lease:${lease}`:''}${label}\n`);
       });
       sock.on("data", (d) => {
         buf += d;
         if (settled || !buf.includes("\n")) return;
-        if (buf.split("\n")[0] !== "go") return fail(`answered ${JSON.stringify(buf.split("\n")[0])}`);
+        const answer = buf.split("\n")[0];
+        if (withdrawing && answer === "withdrawn") return withdrawn();
+        if (answer !== "go") return fail(`answered ${JSON.stringify(answer)}`);
         settle();
         let held = true;
         let ended=false;
@@ -103,8 +120,9 @@ export function tokenClient(where, step) {
         release.closed=closed;
         resolve(release);
       });
-      sock.on("error", (e) => fail(`cannot be reached (${e.code ?? e.message})`));
-      sock.on("close", () => fail("went away before granting a token"));
+      // A runner gone while it answers a withdrawal can grant nothing more.
+      sock.on("error", (e) => withdrawing ? withdrawn() : fail(`cannot be reached (${e.code ?? e.message})`));
+      sock.on("close", () => withdrawing ? withdrawn() : fail("went away before granting a token"));
     });
   };
   return { acquire };

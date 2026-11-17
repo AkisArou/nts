@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import { createFeed, TemporaryAdmission } from "./admission.ts";
 import { captureRunTemporary } from "./run-temporary.ts";
 import { createTokenPool } from "./token-pool.ts";
+import { tokenClient } from "./tokens.mjs";
+import { releaseToken } from "./case-context.ts";
 import { waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 import {ownMemory} from './test-memory.ts';
@@ -282,4 +284,48 @@ test("census feed: no worker asks for a token while no path is left for it", asy
   gate.waiting[0].grant();
   await Promise.all([a, b]);
   assert.deepEqual(gate.asked, ["one"], "the worker with nothing to take never asked");
+});
+
+// The real token pool and client under the census feed (issue #821): a worker
+// that stops while its token's grant is in flight withdraws its wait, and the
+// pool decides which came first. A grant that won comes back to the feed and
+// is returned as an offer with its path, so every grant is a dispatch or a
+// returned offer; a withdrawal that won is one cancellation. The abort runs
+// inside the pool's token.grant observation, after the grant and before its
+// 'go' is read, or, in the control, while the request still waits.
+for (const when of ["in flight", "waiting"] as const) test(`census feed: a worker stopped while its grant is ${when} leaves every grant dispatched or returned`, async t => {
+  const seen = { request: 0, grant: 0, release: 0, cancel: 0 }, open = { n: when === "in flight" ? 1 : 0 };
+  const stopped = new AbortController();
+  let exited = false;
+  const pool = createTokenPool({
+    free: () => open.n - pool.total, claim: () => 0,
+    observe: ({ event }) => {
+      const key = event.replace(/^token\./, "") as keyof typeof seen;
+      if (key in seen) seen[key]++;
+      if (event === "token.grant" && seen.grant === 1 && when === "in flight") { exited = true; stopped.abort(); }
+    },
+  });
+  const address = await pool.start();
+  assert.ok(address, "the owned token server started");
+  t.after(async () => { pool.close(); await pool.closed; });
+  const client = tokenClient(address, "census");
+  const queue = createFeed(["only"], { token: (path, signal) => client.acquire({ project: path }, signal), everyMs: 10 });
+  const first = queue.reserve({ end: () => {}, exited: () => exited, signal: stopped.signal });
+  if (when === "waiting") {
+    await waitFor("the reserved path's token request", () => pool.waiting.length === 1);
+    exited = true; stopped.abort();
+  }
+  assert.equal(await first, undefined, "the stopped worker is offered nothing");
+  await waitFor("the stopped worker's token to settle", () => pool.total === 0 && pool.waiting.length === 0);
+  assert.equal(queue.returnedOffers, when === "in flight" ? 1 : 0, JSON.stringify(seen));
+  assert.deepEqual(seen, when === "in flight" ? { request: 1, grant: 1, release: 1, cancel: 0 } : { request: 1, grant: 0, release: 0, cancel: 1 });
+  // The path went back to the queue either way; the next worker dispatches it.
+  open.n = 1;
+  const next = await queue.reserve({ end: () => {}, exited: () => false });
+  assert.ok(next, "the returned path is offered again");
+  assert.equal(next.path, "only");
+  next.commit(); await releaseToken(next.release);
+  await waitFor("the dispatched token's release", () => pool.total === 0);
+  assert.equal(seen.grant, queue.dispatched + queue.returnedOffers, JSON.stringify({ seen, dispatched: queue.dispatched, returned: queue.returnedOffers }));
+  assert.equal(seen.release, seen.grant);
 });

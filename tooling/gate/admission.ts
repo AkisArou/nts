@@ -125,7 +125,11 @@ export type FeedOptions = {
  * a worker reserves its path and asks for the token only when the job is not
  * outranked, and looks again before it writes. A reserved path whose worker
  * stops while it waits, or that the job gives way with, goes back to the
- * queue, so no worker waits for a token while no path is left for it.
+ * queue, so no worker waits for a token while no path is left for it. Its
+ * wait is withdrawn, and the token pool decides which came first: a grant
+ * that won comes back here like any other, and is returned as an offer
+ * (`returnedOffers`) with its path, so every grant is a dispatch or a
+ * returned offer.
  */
 export function createFeed(paths: readonly string[], { token = untokened, outranked = () => false, everyMs = 1000, pause:pauseOwner,resume:resumeOwner }: FeedOptions = {}) {
   let next = 0;

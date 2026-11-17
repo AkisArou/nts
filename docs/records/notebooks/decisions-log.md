@@ -3643,3 +3643,17 @@ handoff pins the private scope root identity and actual owner birth, and the
 same Node-only locator serves preparation and emission. Sealed children borrow
 the exact parent's live scope. Completed holders remain terminal evidence;
 dead-holder and reused-holder refusals and consume-only seals remain.
+
+## The token pool decides an aborted wait's grant (11-17)
+
+Issue #821: the census pool's aggregate-pressure case counted six grants
+against five expected under a CPU hog. A worker's close aborted its feed wait
+while the pool was granting it; the client destroyed the connection and
+resolved `null`, so the pool counted a grant and a release and the feed counted
+nothing. Only the pool can order a grant against an abort, so the client now
+withdraws a sent request and the pool's answer decides: `withdrawn` (one
+cancellation) or the grant's `go`, which the caller owns and the feed returns
+as an offer. The feed's existing returned-offer transition counts it; the
+assertion `grant = 4 + isolated replays + returned offers` is unchanged. The
+pool reads every buffered line of a connection, so a request and its
+withdrawal in one write are both read.

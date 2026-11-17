@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {connect,Socket} from 'node:net';
+import {connect,createServer,Socket} from 'node:net';
+import {once} from 'node:events';
 import {createTokenPool} from './token-pool.ts';
 import {tokenClient} from './tokens.mjs';
 import {waitFor} from './test-wait.ts';
@@ -87,4 +88,110 @@ test('cancellation refuses acquisition while keeping retirement replies and fina
   sockets[0]!.end('done\n');await started;
   assert.equal(closed,false,'server shutdown cannot bypass the final case observation');
   saved();await pool.closed;assert.equal(pool.total,0);assert.equal(closed,true);
+});
+
+// A wait aborted after its request is sent is withdrawn, and the pool, which
+// orders the withdrawal against its grant, decides: a request still waiting
+// is cancelled ('withdrawn', `null`); one already granted keeps its grant,
+// which the client resolves like any other. The abort below runs inside the
+// pool's own token.grant observation: after the grant, before its 'go' is read.
+function countedPool(open:{n:number},extra:Partial<Parameters<typeof createTokenPool>[0]>={}){
+  const seen={request:0,grant:0,release:0,cancel:0},aborts:{on?:AbortController}={};
+  const pool=createTokenPool({free:()=>open.n-pool.total,claim:()=>0,...extra,
+    observe:event=>{
+      const key=event.event.replace(/^token\./,'') as keyof typeof seen;
+      if(key in seen)seen[key]++;
+      if(event.event==='token.grant')aborts.on?.abort();
+    }});
+  return {pool,seen,aborts};
+}
+
+test('a wait aborted while its grant is in flight resolves that grant, and its withdrawal is inert',async t=>{
+  let answeredAtRelease:boolean|undefined;
+  const {pool,seen,aborts}=countedPool({n:1},{completed:request=>{answeredAtRelease=request.answered;}});
+  const address=await pool.start();assert.ok(address);t.after(async()=>{pool.close();await pool.closed;});
+  const stop=new AbortController();aborts.on=stop;
+  const release=await tokenClient(address,'integrity').acquire({project:'tests/fixture/in-flight'},stop.signal);
+  assert.equal(stop.signal.aborted,true,'the wait was aborted during its grant');
+  assert.ok(release,'the grant that won the withdrawal reaches its caller');
+  assert.deepEqual(seen,{request:1,grant:1,release:0,cancel:0});
+  assert.equal(pool.total,1,'the withdrawal neither released nor cancelled the granted token');
+  release();
+  // The pool reads 'withdraw' before 'done' on the same connection; a socket
+  // the withdrawal had ended would reject this as an ended active lease.
+  await release.closed;
+  await waitFor('the released token to return',()=>pool.total===0);
+  assert.equal(answeredAtRelease,true,'released by its completion, after the inert withdrawal');
+  assert.deepEqual(seen,{request:1,grant:1,release:1,cancel:0},'one grant, released exactly once');
+});
+
+test('a wait aborted before its grant is withdrawn: null, counted once as cancelled',async t=>{
+  const open={n:0},{pool,seen}=countedPool(open);
+  const address=await pool.start();assert.ok(address);t.after(async()=>{pool.close();await pool.closed;});
+  const stop=new AbortController();
+  const waiting=tokenClient(address,'integrity').acquire({project:'tests/fixture/waiting'},stop.signal);
+  await waitFor('the request to wait',()=>pool.waiting.length===1);
+  stop.abort();
+  assert.equal(await waiting,null);
+  await waitFor('the withdrawn connection to finish',()=>seen.cancel===1);
+  open.n=1;pool.grant();
+  assert.deepEqual(seen,{request:1,grant:0,release:0,cancel:1});assert.equal(pool.waiting.length,0);assert.equal(pool.total,0);
+});
+
+test('a request and its withdrawal in one write, or split across chunks, are both read',async t=>{
+  const {pool,seen}=countedPool({n:0});
+  const address=await pool.start();assert.ok(address);
+  const port=Number(address.split(':')[1]),sockets:ReturnType<typeof connect>[]=[];
+  t.after(async()=>{for(const socket of sockets)socket.destroy();pool.close();await pool.closed;});
+  const answer=async(parts:string[])=>{
+    const socket=connect({host:'127.0.0.1',port});sockets.push(socket);socket.setEncoding('utf8');
+    let text='';const ended=new Promise<string>((resolve,reject)=>{socket.on('data',part=>{text+=part;});socket.once('end',()=>resolve(text));socket.once('error',reject);});
+    await once(socket,'connect');
+    for(const part of parts)await new Promise<void>((resolve,reject)=>socket.write(part,error=>error?reject(error):resolve()));
+    return ended;
+  };
+  assert.equal(await answer([`want integrity ${process.pid} lease:one-write json64:e30\nwithdraw\n`]),'withdrawn\n');
+  assert.equal(await answer(['want integ',`rity ${process.pid} lease:split json64:e30\nwith`,'draw','\n']),'withdrawn\n');
+  assert.deepEqual(seen,{request:2,grant:0,release:0,cancel:2});assert.equal(pool.waiting.length,0);
+});
+
+test('a runner gone between a withdrawal and its answer leaves the wait settled at null',async t=>{
+  for(const end of ['close','reset'] as const){
+    const server=createServer(socket=>{socket.setEncoding('utf8');let text='';socket.on('data',part=>{
+      text+=part;if(text.includes('withdraw\n'))end==='close'?socket.end():socket.resetAndDestroy();
+    });});
+    t.after(()=>server.close());
+    server.listen(0,'127.0.0.1');await once(server,'listening');
+    const {port}=server.address() as {port:number},stop=new AbortController();
+    let sent!:()=>void;const requested=new Promise<void>(resolve=>{sent=resolve;});
+    server.once('connection',socket=>socket.once('data',()=>sent()));
+    const waiting=tokenClient(`127.0.0.1:${port}`,'integrity').acquire({project:'tests/fixture/gone'},stop.signal);
+    await requested;stop.abort();
+    assert.equal(await waiting,null,`a runner that ${end}s its connection grants nothing more`);
+    server.close();
+  }
+});
+
+test('a sized grant pending behind its answer keeps its size until released, whichever way the answer ends',async t=>{
+  for(const outcome of ['answered','failed'] as const){
+    let answer!:{resolve:()=>void;reject:(error:Error)=>void};
+    const {pool,seen,aborts}=countedPool({n:1},{answering:()=>new Promise<void>((resolve,reject)=>{answer={resolve,reject};})});
+    const address=await pool.start();assert.ok(address);t.after(async()=>{pool.close();await pool.closed;});
+    const stop=new AbortController();aborts.on=stop;
+    const acquired=tokenClient(address,'integrity').acquire({project:'tests/fixture/sized'},stop.signal,1024).then(release=>({release}),error=>({error}));
+    await waitFor('the sized grant',()=>seen.grant===1);
+    assert.equal(stop.signal.aborted,true);
+    assert.deepEqual(pool.sized.get('integrity'),{count:1,bytes:1024},'the grant holds its size while its answer is pending');
+    if(outcome==='answered'){
+      answer.resolve();
+      const got=await acquired;assert.ok('release' in got&&got.release,'the pending grant answers the withdrawal');
+      assert.equal(pool.total,1);got.release();await got.release.closed;
+    }else{
+      answer.reject(new Error('limit not raised'));
+      const got=await acquired;assert.ok('error' in got,'the pool\'s answer stands over the withdrawal');
+    }
+    await waitFor(`the ${outcome} sized grant to return`,()=>pool.total===0);
+    assert.deepEqual(pool.sized.get('integrity'),{count:0,bytes:0},`no size outlives the ${outcome} grant`);
+    assert.deepEqual(seen,{request:1,grant:1,release:1,cancel:0});
+  }
 });

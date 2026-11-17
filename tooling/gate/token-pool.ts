@@ -90,15 +90,27 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
     const server=createServer({allowHalfOpen:true},sock=>{
       const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:now(),granted:false,gone:false};
       let buf='';sock.setEncoding('utf8');
+      // An ungranted request leaves the queue here, counted once as cancelled.
+      const cancel=()=>{w.gone=true;trace('token.cancel',w);if(w.step!=='')pool.waiting=pool.waiting.filter(x=>x!==w);};
+      // The client's request, then its later lines: 'done' (a case's
+      // completion, before its FIN) and 'withdraw' (its wait was aborted).
+      // This loop orders a withdrawal against the grant, so one owner decides
+      // the request's fate: still waiting, it is cancelled and answered
+      // 'withdrawn'; granted, the line is inert and the grant's 'go' (written,
+      // or pending behind `answering`) answers it. The client then holds that
+      // grant like any other, released by its release or its socket's close.
+      const later=(line:string)=>{
+        if(line==='done')w.answered=true;
+        else if(line==='withdraw'&&!w.granted&&!w.gone&&w.step!=='registration'){cancel();sock.end('withdrawn\n');}
+      };
       sock.on('data',(data:string)=>{
-        if(w.step!==''){
-          buf+=data;
-          const lines=buf.split('\n');buf=lines.pop()??'';
-          if(lines.includes('done'))w.answered=true;
-          return;
+        buf+=data;
+        for(let nl=buf.indexOf('\n');nl>=0&&!sock.destroyed&&!sock.writableEnded;nl=buf.indexOf('\n')){
+          const line=buf.slice(0,nl);buf=buf.slice(nl+1);
+          if(w.step==='')request(line.split(' '));else later(line);
         }
-        buf+=data;const nl=buf.indexOf('\n');if(nl<0)return;
-        const words=buf.slice(0,nl).split(' ');buf=buf.slice(nl+1);
+      });
+      const request=(words:string[])=>{
         if(words[0]==='retire'){
           w.step='registration';const [,id,group]=words;
           if(!id||!group){sock.end('error: incomplete case scope retirement\n');return;}
@@ -125,14 +137,14 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
         w.context=rest.join(' ');w.step=known(step)?step:'?';w.since=now();
         try{prepare(w);if(w.memory)w.bytes=w.memory.bytes;}catch(error){sock.end(`error: ${String(error)}\n`);return;}
         pool.waiting.push(w);trace('token.request',w);pool.grant();trace('pool.change');
-      });
+      };
       const gone=async()=>{
-        if(w.gone)return;w.gone=true;
-        if(w.granted){
+        if(w.gone)return;
+        if(w.granted){w.gone=true;
           pool.account();await completed(w);trace('token.release',w);pool.active.delete(w);pool.held.set(w.step,(pool.held.get(w.step)??0)-1);
           if(w.bytes!==undefined){const s=pool.sized.get(w.step)!;pool.sized.set(w.step,{count:s.count-1,bytes:s.bytes-w.bytes});}
           pool.total--;released();pool.grant();trace('pool.change');
-        }else if(w.step!=='registration'){trace('token.cancel',w);if(w.step!=='')pool.waiting=pool.waiting.filter(x=>x!==w);}
+        }else if(w.step!=='registration')cancel();
       };
       // FIN is the completion acknowledgement. A normal client retains its
       // readable socket until the final meter and worker drain have finished.

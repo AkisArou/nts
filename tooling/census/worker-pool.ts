@@ -4,8 +4,10 @@
 //
 // Each in-flight case holds one gate token (`token`, via the feed) from its
 // dispatch until it is answered, requeued or lost, or its worker fails; a
-// worker that stops while it waits for one cancels the wait. The workers
-// themselves never ask: what they run is already counted.
+// worker that stops while it waits for one withdraws the wait, and a grant
+// that won that race comes back as a returned offer (the summary's
+// `returnedOffers`). The workers themselves never ask: what they run is
+// already counted.
 //
 // The pool's memory is the job's reservation in the machine's memory ledger
 // (memory-ledger.ts's `reserveJob`): inside a gate step, the run's; alone, its

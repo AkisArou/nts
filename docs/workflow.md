@@ -1396,6 +1396,16 @@ the first node task.
   preserving live case grants. Census and compile feeds use this same boundary
   ([log](records/notebooks/decisions-log.md#pooled-priority-yield-releases-idle-memory-11-16)).
 
+- **The token pool decides an aborted wait's grant.** A client whose wait
+  aborts after its request is sent withdraws it rather than closing the
+  connection. The pool orders the withdrawal against its grant: a waiting
+  request is cancelled and answered `withdrawn`; a granted one, including a
+  sized grant pending behind its answer, keeps its grant and size, and its
+  `go` answers the withdrawal. The caller owns that grant, and the census feed
+  returns it as an offer with its path, so every grant is a dispatch or a
+  returned offer. A runner gone before answering grants nothing more
+  ([log](records/notebooks/decisions-log.md#the-token-pool-decides-an-aborted-waits-grant-11-17)).
+
 ### Landing attempts keep worker lifetimes asynchronous
 
 A landing's compiler build, step attempts and contract probes use the candidate
