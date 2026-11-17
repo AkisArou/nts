@@ -40,6 +40,13 @@ addition is allowed, and excluding a previously matched source changes the
 native digest while retaining the same config request. The decoded key inputs
 carry that request and digest together.
 
+The final canonical fence run passed all 54 tests across the selector, material,
+record and unchanged records-run owners. It refuses a source root replaced by a
+symlink or file before or during assessment, and a deleted or renamed source
+directory. It separately allows a staged TSV addition and a TSV content edit,
+and refuses a staged matching TypeScript addition. The root remains bound by
+device, inode and physical path throughout assessment.
+
 After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
 after revision remains reachable at its `refs/cited/` ref.
@@ -58,6 +65,8 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `nts-798-focused3.log` | `8a0f280d459966ac03e4836dcf96debca689d596c451a34508604687e2776d57` |
 | `nts-798-inner.log` | `e1a4fd9c5a99614c99f04e0a5f3f1767c515ac6835fde1802508da2ab0b176f3` |
 | `nts-798-exclude-controls.log` | `3c8364dc22b1321de4db1f4e4b90e999dbd4664ea2a41ceb6bfc0cc2adf95b14` |
+| `nts-798-root-controls.log` | `91890dc6ded0eb51ff8700a425dd50896cf5711fa2cd6204c2f6bac40e551f57` |
+| `nts-798-inner2.log` | `7f17412678d6c63eee4b0c11ed7f09081db28ec62a560162125c6803934378cd` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
