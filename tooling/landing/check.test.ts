@@ -9,14 +9,14 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname,join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquire } from "./lock.ts";
 import { Queue } from "./queue.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {landingStatus,reportLandingStatus} from './status.ts';
-import {Pool} from './pool.ts';
+import {describePool,Pool,type PoolOptions} from './pool.ts';
 import {spawnTest} from "../gate/test-wait.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {hostObservations} from '../gate/host-observations.ts';
@@ -101,7 +101,7 @@ test("status --json is the same state, versioned, with numbers as numbers and ea
   const out = c.run(["status", "--json"]);
   assert.equal(out.status, 0, out.out);
   const s = JSON.parse(out.out);
-  assert.equal(s.version, 1);
+  assert.equal(s.version, 2);
   assert.equal(s.kind, "landing");
   assert.deepEqual(s.service, { running: false, pid: null, unit: "nts-landing-check", state: "idle", since: s.service.since, message: null,run:null });
   assert.equal(s.checking, null);
@@ -112,26 +112,54 @@ test("status --json is the same state, versioned, with numbers as numbers and ea
   assert.deepEqual(r.landing, ["build", "tests"]);
   assert.deepEqual(s.day, { landed: 1, refused: 0, held: 0, withdrawn: 0, median_wall_s: 125, max_wall_s: 125 });
   assert.equal(s.main.commit, sha);
-  assert.deepEqual(s.pool.trees, []);
+  assert.equal("pool" in s, false, "the pool's trees are pool.ts status's to report");
   assert.match(c.run(["status"]).out, /^last day: 1 landed \(median 2\.1 min, longest 2\.1 min\), 0 refused, 0 held, 0 withdrawn$/m, "the text is rendered from the same model");
 });
 
-test('landing status reports an ownership failure on its tree line and returns success',t=>{
-  const c=cli(t);c.s.commit({'Cargo.toml':'[workspace]\n[profile.nts-dev]\ndebug=0\n','.gitignore':'target/\n'},'fixture build policy');
-  const home=join(c.home,'.cache/nts-pool'),failure=Error('EACCES: supplied unreadable tool process');let unreadable=false;
+/** A pool with one tree held by a task, under the CLI's HOME, as the commands find it. */
+function heldTree(c:ReturnType<typeof cli>,branch:string,users:PoolOptions['users']=()=>[]){
+  c.s.commit({'Cargo.toml':'[workspace]\n[profile.nts-dev]\ndebug=0\n','.gitignore':'target/\n'},'fixture build policy');
+  const home=join(c.home,'.cache/nts-pool');
   const host=hostObservations(ownMemory(join(c.s.dir,'observations'),{disk:{freeBytes:1000*2**30,freeInodes:2**30}}));
-  const pool=new Pool(home,{root:c.s.root,env:c.s.env},undefined,{host,remote:null,reclamation:{services:[],ownership:()=>{}},users:()=>{
-    if(unreadable)throw failure;return [{pid:42,command:'worker',where:'its working directory'}];
-  }});
-  pool.init(1);const tree=pool.take('787-status'),tip=c.s.git(['rev-parse','HEAD'],tree.path);
+  const pool=new Pool(home,{root:c.s.root,env:c.s.env},undefined,{host,remote:null,reclamation:{services:[],ownership:()=>{}},users});
+  pool.init(1);return {pool,tree:pool.take(branch)};
+}
+
+/** Every git process a command starts, by its working directory and arguments: a shim ahead of git on PATH logs each one. */
+function gitLog(c:ReturnType<typeof cli>){
+  const real=process.env.PATH!.split(':').map(dir=>join(dir,'git')).find(path=>existsSync(path));assert.ok(real,'git on PATH');
+  const bin=join(c.s.dir,'git-shim'),log=join(c.s.dir,'git.log');mkdirSync(bin,{recursive:true});
+  writeFileSync(join(bin,'git'),`#!/bin/sh\nprintf '%s\\t%s\\n' "$(pwd -P)" "$*" >> '${log}'\nexec '${real}' "$@"\n`,{mode:0o755});
+  return {run:(args:string[])=>{writeFileSync(log,'');const out=c.run(args,c.s.root,{PATH:`${bin}:${process.env.PATH!}`});
+    return {...out,calls:readFileSync(log,'utf8').split('\n').filter(Boolean).map(line=>{const [cwd,argv]=line.split('\t');return {cwd:cwd!,argv:argv!};})};}};
+}
+
+test('status --json reads the queue and main alone: no git process in any pool tree; the text form still reads and shows the trees',t=>{
+  const c=cli(t);const {pool,tree}=heldTree(c,'819-status');
+  const path=realpathSync(tree.path),inTree=(call:{cwd:string;argv:string})=>call.cwd.startsWith(path)||call.argv.includes(tree.path)||call.argv.includes(path);
+  const shim=gitLog(c);
+  const json=shim.run(['status','--json']);assert.equal(json.status,0,json.out);
+  const model=JSON.parse(json.out);assert.equal(model.version,2);assert.equal('pool' in model,false);
+  assert.deepEqual(json.calls.filter(inTree),[],'no per-tree git');
+  assert.ok(json.calls.length<=4,`a fixed handful of git processes, not one set per tree: ${JSON.stringify(json.calls)}`);
+  // Control: the same shim sees the text form's per-tree reads, so it would see the JSON form's.
+  const text=shim.run(['status']);assert.equal(text.status,0,text.out);
+  assert.ok(text.calls.some(inTree),`the text form reads the tree: ${JSON.stringify(text.calls)}`);
+  assert.ok(text.out.includes(`pool ${pool.dir}:\n${describePool(pool.statusTrees())}\n`),text.out);
+  assert.match(text.out,new RegExp(`^ {2} 1  ${tree.path}  task 819-status, idle [^,]+$`,'m'),'the tree line as before');
+});
+
+test('landing status reports an ownership failure on its tree line and returns success',t=>{
+  const c=cli(t),failure=Error('EACCES: supplied unreadable tool process');let unreadable=false;
+  const {pool,tree}=heldTree(c,'787-status',()=>{if(unreadable)throw failure;return [{pid:42,command:'worker',where:'its working directory'}];});
+  const tip=c.s.git(['rev-parse','HEAD'],tree.path);
   assert.equal(pool.release('787-status',tip).state,'kept');unreadable=true;
-  const model=landingStatus(c.s.root,c.landing,home,0,pool);
-  assert.equal(model.pool.trees[0]!.ownershipError,failure.message);
+  const model=landingStatus(c.s.root,c.landing,0);
   const output:string[]=[];t.mock.method(console,'log',(...values:unknown[])=>output.push(values.map(String).join(' ')));
-  for(const json of [false,true]){
-    assert.equal(reportLandingStatus(model,json),0);
-    const text=output.pop()!;assert.ok(text.includes(tree.path));assert.ok(text.includes(failure.message));
-  }
+  assert.equal(reportLandingStatus(model,{pool}),0);
+  const text=output.pop()!;assert.ok(text.includes(tree.path));assert.ok(text.includes(failure.message));
+  assert.equal(reportLandingStatus(model,{json:true}),0);
+  const json=output.pop()!;assert.ok(!json.includes(tree.path),'the JSON form holds no trees');
   assert.throws(()=>pool.trees(),error=>error===failure,'status diagnostics cannot certify ownership for reset');
 });
 

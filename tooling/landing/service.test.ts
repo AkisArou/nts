@@ -188,7 +188,7 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   assert.equal(f.queue.result(ea.id)?.state,'held');assert.equal(attempts,1,'no repeated build under the unchanged shortage');
   assert.equal(f.queue.checking(),null,'the held entry owns no running check');
   assert.equal(existsSync(f.pool.capacity.stateFile),false,'the refused build owns no claim');
-  const status=landingStatus(f.s.root,f.config.home,f.pool.dir,0,f.pool);
+  const status=landingStatus(f.s.root,f.config.home,0);
   assert.equal(status.service.running,true);assert.equal(status.service.state,'held');assert.equal(status.checking,null);
   assert.match(status.service.message!,new RegExp(`waiting for disk: ${ea.id} needs 1073741824 more bytes`));
   assert.match(status.service.message!,/automatic retry/);assert.equal(status.held[0]?.retryWhen,'disk-capacity');
@@ -273,7 +273,7 @@ test('an unproved cancellation holds the service and resumes only when its retai
     return {state:'cancelled',message:'scope certified empty',run:options.run,wall_s:1,steps:[],pending:[]};
   };
   const pending=drain(f.config);await started;f.queue.withdraw(ea.id);await retained;
-  const model=landingStatus(f.s.root,f.config.home,join(f.s.dir,'pool'),Date.parse('2026-11-16T00:00:00Z'),{statusTrees:()=>[]});
+  const model=landingStatus(f.s.root,f.config.home,Date.parse('2026-11-16T00:00:00Z'));
   assert.equal(model.service.state,'held');assert.equal(model.service.running,true);
   assert.equal(model.service.run,f.queue.checking()?.run);
   assert.match(model.service.message!,new RegExp(`service held: cancellation of ${ea.id} could not prove its drain: owned closer`));

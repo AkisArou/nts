@@ -26,7 +26,7 @@ import { changedPaths, isAncestor, revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
 import { ensureService, LANDING_HOME, Queue, submit, type Result } from "./queue.ts";
 import {landingStatus,reportLandingStatus} from "./status.ts";
-import {POOL_HOME} from "./pool.ts";
+import {Pool,POOL_HOME} from "./pool.ts";
 import { ruleSelect } from "./rules.ts";
 import { runLanding } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
@@ -135,7 +135,7 @@ async function main(argv: string[]): Promise<number> {
   }
   let root: string;
   try { root = sharedCheckout(); } catch (error) { say((error as Error).message); return 2; }
-  if (first === "status") return reportLandingStatus(landingStatus(root,LANDING_HOME,POOL_HOME,Date.now()),argv.includes("--json"));
+  if (first === "status") return reportLandingStatus(landingStatus(root,LANDING_HOME,Date.now()),argv.includes("--json")?{json:true}:{pool:new Pool(POOL_HOME,{root})});
   if (first === "serve") return serve(root);
   if (first === "withdraw" && second) { const done = new Queue(LANDING_HOME).withdraw(second); say(done === "unknown" ? `no queued, checked or held change is ${second}` : done === "requested" ? `${second}: cancellation requested; withdrawn only after its owned work drains, held if the drain cannot be proved` : done === "too-late" ? `${second}: too late to withdraw; publication has started` : `${second} withdrawn`); return done === "unknown" || done === "too-late" ? 1 : 0; }
   if (first === "retry" && second) { const entry = new Queue(LANDING_HOME).retry(second); say(`${entry.id} queued again, first; ${ensureService(root)}`); return 0; }
