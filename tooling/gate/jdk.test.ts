@@ -93,7 +93,7 @@ test("a canonical environment runs the declared JDK and its report names the pat
     const child=gateEnvironment(planned.env,{run:join(planned.temporary.path,"child"),jdkInstallations:[installs]});
     assert.equal(child.env.JAVA_HOME,installed);assert.deepEqual(child.report.jdk,planned.report.jdk);
   }
-  const missing=gateEnvironment({...base,JAVA_HOME:other},{run:join(root,"run-missing"),owned,jdkInstallations:[]});
+  const missing=gateEnvironment({...base,JAVA_HOME:other,JDK_HOME:other},{run:join(root,"run-missing"),owned,jdkInstallations:[]});
   assert.equal(missing.env.JAVA_HOME,other);
   assert.deepEqual(missing.report.jdk,{identity:identity.name,home:other,declared:false});
   let log="";reportEnvironment(missing.report,text=>log+=text);
