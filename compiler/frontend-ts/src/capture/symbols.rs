@@ -5,7 +5,7 @@ use nts_semantic_schema::{
     Library, PropertyKey, SnapshotError, SymbolFlags, SymbolId, SymbolRecord,
 };
 
-use super::{Capture, arena_index};
+use super::{Capture, PathRole, arena_index};
 
 impl<'p> Capture<'p, '_> {
     pub(super) fn intern_symbol(&mut self, symbol: Symbol<'p>) -> Result<SymbolId, SnapshotError> {
@@ -236,7 +236,7 @@ impl Capture<'_, '_> {
     fn normalized_name(&mut self, name: &str) -> Result<String, SnapshotError> {
         let path = camino::Utf8Path::new(name.trim_matches('"'));
         if path.is_absolute() {
-            self.workspace_uri(path)
+            self.workspace_uri(path, PathRole::ModuleName)
         } else {
             Ok(name.to_owned())
         }

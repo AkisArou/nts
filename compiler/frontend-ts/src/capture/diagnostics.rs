@@ -4,7 +4,7 @@ use nts_diagnostics::{Diagnostic, Digest, Label, Location, Severity, SourceFile,
 use nts_frontend_tsrs::{self as native, Project, SyntaxPhase};
 use nts_semantic_schema::{SemanticSnapshot, SnapshotError};
 
-use super::{arena_index, workspace_uri};
+use super::{PathRole, arena_index, workspace_uri};
 
 pub(crate) fn append(
     snapshot: &mut SemanticSnapshot,
@@ -120,7 +120,7 @@ impl Diagnostics<'_> {
             };
             let id = SourceId(arena_index(self.snapshot.sources.len())?);
             self.snapshot.sources.push(SourceFile {
-                uri: workspace_uri(self.project_root, path)?,
+                uri: workspace_uri(self.project_root, path, PathRole::File)?,
                 digest: Digest(digest.to_le_bytes()),
                 display_path: path.to_owned(),
                 rewritten_by: None,

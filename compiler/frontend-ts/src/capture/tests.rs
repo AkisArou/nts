@@ -638,14 +638,100 @@ fn repeated_module_paths_resolve_once_per_capture() {
             .path()
             .to_owned();
         let mut capture = Capture::syntax(&root, [], project.semantics()).unwrap();
-        let expected = capture.workspace_uri(&path).unwrap();
+        let expected = capture.workspace_uri(&path, PathRole::File).unwrap();
         for _ in 0..8 {
-            assert_eq!(capture.workspace_uri(&path).unwrap(), expected);
+            assert_eq!(
+                capture.workspace_uri(&path, PathRole::File).unwrap(),
+                expected
+            );
         }
         assert_eq!(capture.workspace_uri_resolutions, 1);
         // Evicting the cached identity forces a fresh filesystem resolution.
-        capture.workspace_uris.clear();
-        assert_eq!(capture.workspace_uri(&path).unwrap(), expected);
+        capture.workspace_uris[PathRole::File as usize].clear();
+        assert_eq!(
+            capture.workspace_uri(&path, PathRole::File).unwrap(),
+            expected
+        );
         assert_eq!(capture.workspace_uri_resolutions, 2);
+    });
+}
+
+/// A module whose extensionless name exists on disk as a symlink to an
+/// unrelated directory, and a symlinked directory with no generated file in it.
+fn module_name_project() -> crate::scratch::ScratchDir {
+    let dir = crate::scratch::ScratchDir::in_target("capture-module-name");
+    let root = dir.canonicalize_utf8().unwrap();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("elsewhere")).unwrap();
+    std::fs::create_dir_all(root.join("real")).unwrap();
+    std::fs::write(
+        root.join("tsconfig.json"),
+        r#"{"compilerOptions":{"strict":true,"target":"ESNext"},"files":["src/main.ts"]}"#,
+    )
+    .unwrap();
+    std::fs::write(root.join("src/main.ts"), "export const answer = 42;\n").unwrap();
+    std::os::unix::fs::symlink("../elsewhere", root.join("src/main")).unwrap();
+    std::os::unix::fs::symlink("real", root.join("link")).unwrap();
+    dir
+}
+
+#[test]
+fn a_module_name_resolves_from_its_files_directory_and_is_never_looked_up() {
+    let project = module_name_project();
+    let root = project.canonicalize_utf8().unwrap();
+    let snapshot = capture_project(root.join("tsconfig.json"), 1);
+    let modules: Vec<_> = snapshot
+        .symbols
+        .iter()
+        .filter(|symbol| {
+            symbol
+                .flags
+                .contains(nts_semantic_schema::SymbolFlags::MODULE)
+        })
+        .filter_map(|symbol| match &symbol.name {
+            nts_semantic_schema::PropertyKey::Name(name)
+                if name.starts_with("nts-workspace:///") =>
+            {
+                Some(name.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    // Resolving `src/main` itself would follow the symlink to `elsewhere`.
+    assert_eq!(modules, ["nts-workspace:///src/main"]);
+}
+
+#[test]
+fn a_source_path_still_resolves_through_itself_and_its_nearest_real_ancestor() {
+    let project = module_name_project();
+    let root = project.canonicalize_utf8().unwrap();
+    native::run(SessionOptions::new(&root), |session| {
+        let checked = session
+            .open(ProjectSpec::new(root.join("tsconfig.json")))
+            .unwrap();
+        let project = checked.projects().next().unwrap();
+        let mut capture = Capture::syntax(&root, [], project.semantics()).unwrap();
+        // The same path as a source, such as a generated file placed there,
+        // is looked up and follows its symlink.
+        assert_eq!(
+            capture
+                .workspace_uri(&root.join("src/main"), PathRole::File)
+                .unwrap(),
+            "nts-workspace:///elsewhere"
+        );
+        // A generated source with no file resolves its nearest real ancestor.
+        assert_eq!(
+            capture
+                .workspace_uri(&root.join("link/generated.ts"), PathRole::File)
+                .unwrap(),
+            "nts-workspace:///real/generated.ts"
+        );
+        // A module name keeps resolving symlinks in its directory.
+        assert_eq!(
+            capture
+                .workspace_uri(&root.join("link/generated"), PathRole::ModuleName)
+                .unwrap(),
+            "nts-workspace:///real/generated"
+        );
     });
 }

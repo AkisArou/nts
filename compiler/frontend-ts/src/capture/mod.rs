@@ -32,7 +32,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub(crate) struct Capture<'p, 'r> {
     snapshot: SemanticSnapshot,
     project_root: &'r Utf8Path,
-    workspace_uris: FxHashMap<Utf8PathBuf, String>,
+    /// One identity map per role, indexed by `PathRole as usize`.
+    workspace_uris: [FxHashMap<Utf8PathBuf, String>; 2],
     #[cfg(test)]
     workspace_uri_resolutions: usize,
     nodes: FxHashMap<Node<'p>, NodeId>,
@@ -90,7 +91,11 @@ impl<'p, 'r> Capture<'p, 'r> {
                         .map(|source| {
                             Ok(nts_semantic_schema::StrictOptionSource {
                                 name: source.name.to_owned(),
-                                configuration: workspace_uri(project_root, &source.configuration)?,
+                                configuration: workspace_uri(
+                                    project_root,
+                                    &source.configuration,
+                                    PathRole::File,
+                                )?,
                                 setting: source.setting.to_owned(),
                             })
                         })
@@ -99,7 +104,7 @@ impl<'p, 'r> Capture<'p, 'r> {
                 ..SemanticSnapshot::default()
             },
             project_root,
-            workspace_uris: FxHashMap::default(),
+            workspace_uris: Default::default(),
             #[cfg(test)]
             workspace_uri_resolutions: 0,
             nodes: FxHashMap::default(),
@@ -139,7 +144,7 @@ impl<'p, 'r> Capture<'p, 'r> {
             for (native, local) in tree.by_node {
                 capture.nodes.insert(native, NodeId(local.0 + base));
             }
-            let uri = capture.workspace_uri(file.path())?;
+            let uri = capture.workspace_uri(file.path(), PathRole::File)?;
             capture.snapshot.sources.push(SourceFile {
                 uri,
                 display_path: file.path().to_owned(),
@@ -160,16 +165,16 @@ impl<'p, 'r> Capture<'p, 'r> {
         Ok(capture)
     }
 
-    fn workspace_uri(&mut self, path: &Utf8Path) -> Result<String, SnapshotError> {
-        if let Some(uri) = self.workspace_uris.get(path) {
+    fn workspace_uri(&mut self, path: &Utf8Path, role: PathRole) -> Result<String, SnapshotError> {
+        if let Some(uri) = self.workspace_uris[role as usize].get(path) {
             return Ok(uri.clone());
         }
         #[cfg(test)]
         {
             self.workspace_uri_resolutions += 1;
         }
-        let uri = workspace_uri(self.project_root, path)?;
-        self.workspace_uris.insert(path.to_owned(), uri.clone());
+        let uri = workspace_uri(self.project_root, path, role)?;
+        self.workspace_uris[role as usize].insert(path.to_owned(), uri.clone());
         Ok(uri)
     }
 
@@ -208,12 +213,26 @@ fn arena_index(length: usize) -> Result<u32, SnapshotError> {
         .map_err(|_| SnapshotError::Project("the semantic graph exceeds nts's arena range".into()))
 }
 
-fn workspace_uri(project_root: &Utf8Path, path: &Utf8Path) -> Result<String, SnapshotError> {
+/// What an absolute path names, which decides where its resolution starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum PathRole {
+    /// A source file, read from disk or generated without a file of its own.
+    File,
+    /// A module symbol's name: its source file's path without the extension.
+    /// It is never a file, so it is never looked up on disk.
+    ModuleName,
+}
+
+fn workspace_uri(
+    project_root: &Utf8Path,
+    path: &Utf8Path,
+    role: PathRole,
+) -> Result<String, SnapshotError> {
     // Logical bundled-library names are already independent of the machine.
     if !path.is_absolute() {
         return Ok(format!("nts-workspace:///{path}"));
     }
-    let path = canonical_source_path(path)?;
+    let path = canonical_source_path(path, role)?;
     let source: Vec<_> = path.components().collect();
     let root: Vec<_> = project_root.components().collect();
     let common = source.iter().zip(&root).take_while(|(a, b)| a == b).count();
@@ -224,9 +243,17 @@ fn workspace_uri(project_root: &Utf8Path, path: &Utf8Path) -> Result<String, Sna
     Ok(format!("nts-workspace:///{relative}"))
 }
 
-fn canonical_source_path(path: &Utf8Path) -> Result<Utf8PathBuf, SnapshotError> {
-    // Generated sources and module symbol names without an extension may not
-    // exist on disk. Resolve their nearest real ancestor, including symlinks.
+fn canonical_source_path(path: &Utf8Path, role: PathRole) -> Result<Utf8PathBuf, SnapshotError> {
+    // A module name resolves from its file's directory and keeps its own last
+    // component as written: looking the name up could only find an unrelated
+    // entry (or a symlink) that happens to share it.
+    if role == PathRole::ModuleName
+        && let (Some(parent), Some(name)) = (path.parent(), path.file_name())
+    {
+        return Ok(canonical_source_path(parent, PathRole::File)?.join(name));
+    }
+    // A generated source may not exist on disk. Resolve its nearest real
+    // ancestor, including symlinks.
     for ancestor in path.ancestors() {
         if let Ok(canonical) = ancestor.canonicalize_utf8() {
             let suffix = path.strip_prefix(ancestor).map_err(|error| {

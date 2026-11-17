@@ -24,6 +24,10 @@ pub mod source;
 pub mod transform;
 mod tree;
 
+#[cfg(test)]
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
 pub use frontend::Frontend;
 pub use source::FrontendStats;
 pub use tree::SyntaxTree;
