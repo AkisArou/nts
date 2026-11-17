@@ -294,6 +294,7 @@ relay:select([{path:'docs/data/relay',before:'target.md',after:'directory',sameM
 targetRemoved:select([{path:'docs/data/target.md',deleted:true}]),
 physicalConfig:select([{path:'docs/data/real-configs/base.json',before:'// old\\n{}\\n',after:'// new\\n{}\\n',sameMode:true}]),
 configAlias:select([{path:'docs/data/configs',before:'real-configs',after:'directory',sameMode:true}]),
+includeChange:select([{path:'docs/data/tsconfig.json',before:'{"include":["src/main.ts"]}',after:'{"include":["src/**/*.ts"]}',sameMode:true}]),
 matching:select([{path:'docs/data/src/new.ts',added:true}]),
 add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
 renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
@@ -305,7 +306,7 @@ unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),
   for(const step of ['profile','addons']){
     assert.ok(!value.edit.steps.includes(step),'prose bytes do not change a directory answer');
     assert.ok(!value.targetEdit.steps.includes(step),'followed target prose does not change an entries answer');
-    for(const key of ['config','physicalConfig','configAlias','matching'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+    for(const key of ['config','includeChange','physicalConfig','configAlias','matching'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
     for(const key of ['add','removed','renamed','nearer','retarget','relay','targetRemoved'])assert.ok(!value[key].steps.includes(step),key+' is outside the fixed Program match: '+step);
     assert.ok(value.metadata.observations.every((/** @type {{steps:string[]}} */ row)=>row.steps.includes(step)),step+' survives in typed provenance');
   }

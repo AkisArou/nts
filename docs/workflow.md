@@ -845,7 +845,11 @@ Ignored working outputs never enter the Rust key; the candidate record body rema
 bounded and authenticated. The working-tree fence around a keyed assessment
 (pending, mandatory check, writer and delta source key) is bounded by the
 record's key: the declarations, content edits at paths the key observes, and
-membership changes beneath any directory it observes or of a Cargo input name.
+membership changes beneath a declared membership or byte/alias ancestor, and
+Cargo input names. Structural changes also replay the key's typed filesystem
+queries and compiler project matches against fresh committed-source answers.
+An unchanged directory kind or identity grants no recursive membership reach;
+a nonmatching addition leaves the Program query unchanged.
 A tracked edit elsewhere, such as another record, is not a source change; hand
 dirt on a declared input refuses, as does a HEAD that moves during assessment.
 Gate-inputs, which has no key on its live path, fences the whole tracked tree

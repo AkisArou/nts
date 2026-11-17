@@ -2,7 +2,7 @@
 // independently rebuilds an edited current-key candidate before accepting it.
 import {createHash} from 'node:crypto';
 import {existsSync,readFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {isAbsolute,join,relative,sep} from 'node:path';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {cargoRuntimeTargets,cargoInputPaths} from './cargo-inputs.ts';
 import {RUST_RUNTIME_DECLARATIONS} from './rust-selector-selection.ts';
@@ -14,6 +14,9 @@ import {RUST_SELECTOR_RECORD,rustSelectorKeyInputs,type RustSelectorKeyInputs,ty
 import {acceptedRustSelectorRecord,verifyRustSelectorDerivation} from './rust-selector.ts';
 import {withCommittedSelectorSource,selectorQuestion,type CommittedSelectorSource} from './owed-range.ts';
 import {gitArguments} from './git-arguments/main.ts';
+import {projectDiscoveryOwner,type ProjectRequest} from './project-discovery.ts';
+import {selectorHash} from './rust-selector-material.ts';
+import {readHostObservation} from '../differential/oracle-filesystem.ts';
 import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 
 export const RUST_SELECTOR_CASE=RUST_RUNTIME_DECLARATIONS;
@@ -56,13 +59,13 @@ function relevant(root:string,scope:Scope,entry:DirtyEntry,writes:RecordRunWrite
   return written===undefined||createHash('sha256').update(readFileSync(join(root,entry.path))).digest('hex')!==written;
 }
 /** Whether a change at a path alters what these keys observe. Membership is
- * matched through every ancestor, wider than an immediate listing: it fails
- * closed, and covers a removal that empties an observed directory. */
+ * matched through byte, alias and membership ancestors. Exact directory type
+ * and identity queries are replayed by the fence; they grant no subtree reach. */
 export function observesChange(keys:readonly RustSelectorKeyInputs[],entry:DirtyEntry):boolean{
   const observed=(path:string)=>path===RUST_RUNTIME_DECLARATIONS||keys.some(key=>key.paths.has(path));
   if(entry.content)return observed(entry.path);
   return observed(entry.path)||cargoInputNames([entry]).length>0||
-    ancestors(entry.path).some(path=>observed(path)||keys.some(key=>key.members.has(path)||key.populations.has(path)));
+    ancestors(entry.path).some(path=>keys.some(key=>key.subtrees.has(path)||key.members.has(path)||key.populations.has(path)));
 }
 /** At apply, a selector row keyed to committed sources is stale when another
  * row of the same delta changes a path its key observes. */
@@ -75,7 +78,26 @@ function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(so
   const question=(args:string[])=>selectorQuestion('git',gitArguments(args),{purpose:'Rust selector committed source fence',cwd:root,maxBuffer:64<<20});
   const state=()=>({head:question(['rev-parse','--verify','HEAD']).trim(),dirty:dirtyEntries(question(['status','--porcelain=v2','-z','--untracked-files=no']))});
   const before=state(),keys:RustSelectorKeyInputs[]=[],scope=():Scope=>tree?{tree:true}:{tree:false,keys};
-  const dirty=(entries:readonly DirtyEntry[])=>entries.some(entry=>relevant(root,scope(),entry,writes));
+  const projects=new Map<string,{request:ProjectRequest;files:string}>();
+  const facts=new Map<string,{query:RustSelectorKeyInputs['facts'][number];answer:string}>();
+  const factAnswer=(source:string,query:RustSelectorKeyInputs['facts'][number])=>{
+    let value=readHostObservation(query.kind,join(source,query.path));
+    if(query.kind==='realpath'&&typeof value==='string'){
+      const name=relative(source,value);
+      if(name!=='..'&&!name.startsWith('..'+sep)&&!isAbsolute(name))value='<source>/'+name;
+    }
+    return selectorHash(value);
+  };
+  const queryChanges=()=>{
+    for(const {query,answer} of facts.values())if(factAnswer(root,query)!==answer)return true;
+    if(!projects.size)return false;
+    const owner=projectDiscoveryOwner(root);
+    try{for(const {request,files} of projects.values())if(selectorHash(owner.read(request).files)!==files)return true;}
+    finally{owner.close();}
+    return false;
+  };
+  const dirty=(entries:readonly DirtyEntry[])=>entries.some(entry=>relevant(root,scope(),entry,writes))
+    ||entries.some(entry=>!entry.content)&&queryChanges();
   let assessed=false;
   const result=withCommittedSelectorSource(root,source=>{
     if(source.revision!==before.head)throw Error('Rust selector committed source moved before preparation');
@@ -83,7 +105,21 @@ function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(so
     // The declarations are read before any key exists; key paths after.
     if(dirty(before.dirty))throw Error('Rust selector derivation requires committed source inputs: '+root);
     assessed=true;
-    const value=operation(source,record=>{keys.push(rustSelectorKeyInputs(record));});
+    const discovery=projectDiscoveryOwner(source.tree);
+    let value:T;
+    try{value=operation(source,record=>{
+      const inputs=rustSelectorKeyInputs(record);keys.push(inputs);
+      for(const query of inputs.facts){
+        const key=JSON.stringify(query);
+        if(!facts.has(key))facts.set(key,{query,answer:factAnswer(source.tree,query)});
+      }
+      // A stale candidate can name an old match. The fence compares the same
+      // query at committed and working sources, never against stale answers.
+      for(const request of inputs.projects){
+        const key=JSON.stringify(request);
+        if(!projects.has(key))projects.set(key,{request,files:selectorHash(discovery.read(request).files)});
+      }
+    });}finally{discovery.close();}
     if(dirty(before.dirty))throw Error('Rust selector derivation requires committed source inputs: '+root);
     return value;
   });

@@ -312,17 +312,22 @@ export function validateRustSelectorKey(record:RustSelectorRecord,options:{roots
  * `paths` are observed for bytes, mode or presence; `members` and
  * `populations` for their child names (immediate and recursive); Cargo input
  * names are observed across the whole tracked population. */
-export type RustSelectorKeyInputs={paths:ReadonlySet<string>;members:ReadonlySet<string>;populations:ReadonlySet<string>};
+export type RustSelectorKeyInputs={paths:ReadonlySet<string>;members:ReadonlySet<string>;populations:ReadonlySet<string>;subtrees:ReadonlySet<string>;
+  facts:{kind:typeof KINDS[number];path:string}[];projects:ProjectRequest[]};
 export function rustSelectorKeyInputs(record:RustSelectorRecord):RustSelectorKeyInputs{
-  const decoded=decoder(record,false),paths=new Set<string>(),members=new Set<string>(),populations=new Set<string>();
+  const decoded=decoder(record,false),paths=new Set<string>(),members=new Set<string>(),populations=new Set<string>(),subtrees=new Set<string>();
+  const facts:RustSelectorKeyInputs['facts']=[];
   const add=(path:PortablePath,into:Set<string>)=>{if(path.root==='source')into.add(path.path);};
-  for(const row of [...record.key.engine,record.key.declarations,...record.key.cargo.inputs,...record.key.files]){const file=decoded.file(row);add(file.path,paths);
-    if(file.identity){add(file.identity.path,paths);for(const alias of file.identity.aliases)add(alias.path,paths);}}
+  for(const row of [...record.key.engine,record.key.declarations,...record.key.cargo.inputs,...record.key.files]){const file=decoded.file(row);add(file.path,paths);add(file.path,subtrees);
+    if(file.identity){add(file.identity.path,paths);add(file.identity.path,subtrees);for(const alias of file.identity.aliases){add(alias.path,paths);add(alias.path,subtrees);}}}
   for(const value of record.key.facts){const row=tuple(value,4,'fact group'),kind=KINDS[integer(row[0],'fact kind',KINDS.length-1)]!;
-    for(const query of array(row[2],'fact queries')){const path=decoded.path(query);add(path,paths);if(kind==='entries'||kind==='runtimeEntries')add(path,members);}}
+    for(const query of array(row[2],'fact queries')){const path=decoded.path(query);add(path,paths);
+      if(path.root==='source'&&kind!=='file'&&kind!=='stat')facts.push({kind,path:path.path});
+      if(kind==='file'||kind==='stat')add(path,subtrees);
+      if(kind==='entries'||kind==='runtimeEntries')add(path,members);}}
   for(const value of record.key.candidates)for(const query of array(tuple(value,3,'candidate group')[1],'candidate queries'))paths.add(decoded.source(query));
   for(const value of record.key.populations)populations.add(decoded.source(tuple(value,3,'population')[0],true));
-  return {paths,members,populations};
+  return {paths,members,populations,subtrees,facts,projects:record.key.projects.map(value=>decoded.project(value).request)};
 }
 
 function boundedRecordBytes(path:string):Buffer{

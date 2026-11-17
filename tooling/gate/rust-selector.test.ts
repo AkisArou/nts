@@ -20,11 +20,17 @@ import {readRustRecordDecision,reportRustRecordDecisions} from './rust-selector-
 import {installationCatalogPath,installationCatalogTrust,dependencyCache} from '../inputs/dependency-inputs.ts';
 import {durableRecord} from './durable-record.ts';
 
-function fixture(t:Parameters<typeof testScratch>[0]){
+function fixture(t:Parameters<typeof testScratch>[0],project=false){
   const root=testScratch(t,'rust-selector-trust');mkdirSync(join(root,'src'));mkdirSync(dirname(join(root,RUST_SELECTOR_RECORD)),{recursive:true});
   writeFileSync(join(root,'src/lib.rs'),'');writeFileSync(join(root,'data.txt'),'original');writeFileSync(join(root,'Cargo.toml'),'fixture');
   const target:RustRuntimeTarget={source:'src/lib.rs',name:'fixture',kind:['lib'],unitTests:true,doctests:true};
   const manifest:RustRuntimeManifest={version:1,targets:[{target,declarations:{imports:[],assets:[{kind:'file',path:'../data.txt'},{kind:'optional-file',path:'../missing.txt'}]}}]};
+  if(project){
+    writeFileSync(join(root,'package.json'),'{"type":"module"}');
+    writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/**/*.ts"]}');
+    writeFileSync(join(root,'src/main.ts'),'export {};');
+    manifest.targets[0]!.declarations.assets.push({kind:'project-config',path:'../tsconfig.json',role:'type-check'});
+  }
   writeFileSync(join(root,'declarations.json'),JSON.stringify(manifest));
   const installed=selectorInstalledSdk(),tracked=['src/lib.rs','data.txt','Cargo.toml'].map(path=>({path,mode:'100644'}));
   const build=()=>encodeRustSelectorRecord(buildRustSelectorMaterial({sourceRoot:root,manifest,inventory:()=>[target],linkage:{packages:[{directory:'',name:'supplied',targets:[target],dependencies:[]}]},declarations:'declarations.json',engine:['src/lib.rs'],cargoInputs:['Cargo.toml'],tracked:()=>tracked,installed}));
@@ -77,6 +83,26 @@ test('the keyed fence refuses a HEAD moved during assessment',t=>{
   f.git(['add',RUST_RUNTIME_DECLARATIONS]);f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','declare runtime inputs']);
   assert.equal(withKeyedRustSelectorSource(f.root,new Map(),()=>true),true);
   assert.throws(()=>withKeyedRustSelectorSource(f.root,new Map(),()=>{f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-q','--allow-empty','-m','moved during assessment']);return true;}),/changed during assessment/);
+});
+
+test('the keyed source fence replays compiler matches for dirty additions and preserves nonmatching edits',t=>{
+  const f=fixture(t,true),declaration=join(f.root,RUST_RUNTIME_DECLARATIONS);
+  mkdirSync(dirname(declaration),{recursive:true});writeFileSync(declaration,'{}');
+  writeFileSync(join(f.root,'src/notes.tsv'),'committed non-source');
+  f.git(['add','.']);f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','declare Program fence controls']);
+  const certify=()=>withKeyedRustSelectorSource(f.root,new Map(),(_source,observe)=>{observe(f.record);return true;});
+  writeFileSync(join(f.root,'src/notes.tsv'),'dirty non-source');
+  writeFileSync(join(f.root,'src/added.tsv'),'staged non-source');f.git(['add','src/added.tsv']);
+  assert.equal(certify(),true,'dirty nonmatching bytes and staged names can be certified');
+  writeFileSync(join(f.root,'src/added.ts'),'export {};');f.git(['add','src/added.ts']);
+  assert.throws(certify,/requires committed source inputs/,'a dirty matching addition cannot be certified');
+  f.git(['rm','-f','src/added.ts']);
+  assert.equal(certify(),true);
+  const original=readFileSync(join(f.root,'src/main.ts'));
+  writeFileSync(join(f.root,'src/main.ts'),'export const changed=1;');
+  assert.throws(certify,/requires committed source inputs/,'matched source bytes retain the exact path fence');
+  writeFileSync(join(f.root,'src/main.ts'),original);
+  assert.equal(certify(),true);
 });
 
 test('selection assesses committed inputs while retaining the independent working record body',t=>{

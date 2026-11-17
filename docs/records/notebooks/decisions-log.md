@@ -3870,3 +3870,14 @@ shared selector-role projection. The compact encoding shares two fixed levels
 of ordered reference blocks through the same bounded chunk and pool algorithm;
 it preserves ordinary role order and multiplicity without raising the file
 limit. Both changes have their own schema identity.
+
+## Compiler-matched source fences (11-17)
+
+Issue #798 retains native project queries in the key-scoped source fence.
+Structural working changes replay the same query against committed and working
+sources, so a stale candidate's old match cannot supply the baseline. Typed
+filesystem metadata is replayed separately: observing a directory's identity or
+kind does not observe every descendant's membership. Exact byte and alias
+paths, declared memberships, Cargo names, the run's own-write ledger and the
+HEAD fence retain their independent protections. A staged nonmatching file
+passes; a staged matching source and hand dirt on an observed source refuse.
