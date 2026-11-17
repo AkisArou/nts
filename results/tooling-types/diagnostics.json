@@ -851,6 +851,8 @@
         "tooling/gate/integrity-case-identity.test.ts",
         "tooling/gate/integrity-supervision.test.ts",
         "tooling/gate/integrity.test.mjs",
+        "tooling/gate/jdk.test.ts",
+        "tooling/gate/jdk.ts",
         "tooling/gate/job-basis.test.ts",
         "tooling/gate/job-live-memory.test.ts",
         "tooling/gate/job-yield.test.ts",
@@ -907,6 +909,8 @@
         "tooling/gate/project-environment.ts",
         "tooling/gate/project-inputs.test.ts",
         "tooling/gate/project-inputs.ts",
+        "tooling/gate/ranks.test.ts",
+        "tooling/gate/ranks.ts",
         "tooling/gate/reader-census-analysis.ts",
         "tooling/gate/reader-census-graph.ts",
         "tooling/gate/reader-census.test.ts",
@@ -1171,6 +1175,7 @@
         "tooling/records/record-composition.test.ts",
         "tooling/records/record-paths.ts",
         "tooling/records/record-pending-outcomes.test.ts",
+        "tooling/records/record-pending-selector.test.ts",
         "tooling/records/record-pending-types.test.ts",
         "tooling/records/record-pending.test.ts",
         "tooling/records/record-pending.ts",
@@ -1279,7 +1284,7 @@
         "tooling/census/typescript-record-cli.test.ts": 27,
         "tooling/census/typescript-record.test.ts": 33,
         "tooling/census/typescript-suite.test.ts": 1,
-        "tooling/census/worker-memory.test.ts": 34,
+        "tooling/census/worker-memory.test.ts": 32,
         "tooling/chromium/app.ts": 2,
         "tooling/chromium/archive.ts": 1,
         "tooling/chromium/benchmark.ts": 25,
@@ -1443,7 +1448,7 @@
         "tooling/gate/owed.test.mjs": 83,
         "tooling/gate/precise-changes.test.ts": 1,
         "tooling/gate/registry-inputs.test.ts": 1,
-        "tooling/gate/run.mjs": 221,
+        "tooling/gate/run.mjs": 212,
         "tooling/gate/step-bound.ts": 1,
         "tooling/gate/step-result.test.ts": 1,
         "tooling/gate/step-scheduling.test.ts": 1,
@@ -1476,7 +1481,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:ab3e5f2bc5bfe2efada2332c22b66d0ee9ebbca33e79e11bc441192cfeca0678"
+      "source": "sha256:9497ca5a722023449d08214f7d0ca4473df2d7aeaa6e558cbc6978694342c15b"
     }
   }
 }
