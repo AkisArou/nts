@@ -1389,7 +1389,7 @@ step "tooling" node tooling/empty.test.ts
   put('tooling/private/reader.ts',"import {projectMembers} from '../gate/reader-inputs/main.ts';projectMembers(new URL('../../docs/projects/',import.meta.url),'','compiled-program',{optional:true});");
   put('docs/projects/ordinary.md','before');put('docs/projects/present/tsconfig.json','{"compilerOptions":{"types":[]},"files":["main.ts"]}');put('docs/projects/present/main.ts','export {};');
   const env=fixtureEnvironment(t);
-  for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  for(const args of [['init','--quiet'],['add','.'],['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','committed project member choices']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
 const choose=changes=>gateSteps(owed(changes));
 console.log(JSON.stringify({edit:choose([{path:'docs/projects/ordinary.md',sameMode:true,before:'before',after:'after'}]),added:choose([{path:'docs/projects/new/tsconfig.json',added:true}]),replaced:choose([{path:'docs/projects/ordinary.md',deleted:true},{path:'docs/projects/ordinary.md/tsconfig.json',added:true}]),metadata:inputMetadataDeclarations()}));`;
