@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {gitArguments} from './git-arguments/main.ts';
-import {testEnvironment} from './test-environment.ts';
+import {fixtureEnvironment,testEnvironment} from './test-environment.ts';
 import {testScratch} from './test-scratch.ts';
 import {rustSelectorPending,checkRustSelectorRecord,recordRustSelector,withKeyedRustSelectorSource} from './rust-selector-write.ts';
 import {RUST_RUNTIME_DECLARATIONS} from './rust-selector-selection.ts';
@@ -85,15 +85,44 @@ test('the keyed fence refuses a HEAD moved during assessment',t=>{
   assert.throws(()=>withKeyedRustSelectorSource(f.root,new Map(),()=>{f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-q','--allow-empty','-m','moved during assessment']);return true;}),/changed during assessment/);
 });
 
+function declaredProgramFence(t:Parameters<typeof testScratch>[0]){
+  const f=fixture(t,true),declaration=join(f.root,RUST_RUNTIME_DECLARATIONS);
+  mkdirSync(dirname(declaration),{recursive:true});writeFileSync(declaration,'{}');
+  f.git(['add','.']);f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','declare source identity controls']);
+  return {...f,certify:()=>withKeyedRustSelectorSource(f.root,new Map(),(_source,observe)=>{observe(f.record);return true;})};
+}
+for(const replacement of ['symlink','file'] as const)test('the source fence refuses a root replaced by a '+replacement,t=>{
+  const f=declaredProgramFence(t),parent=testScratch(t,'source-root-replacement'),saved=join(parent,'saved'),elsewhere=join(parent,'elsewhere');
+  const cloned=spawnSync('git',gitArguments(['clone','--quiet','--no-hardlinks',f.root,elsewhere]),{env:fixtureEnvironment(t),encoding:'utf8'});
+  assert.equal(cloned.status,0,cloned.stderr);assert.equal(f.certify(),true);
+  const replace=()=>{renameSync(f.root,saved);if(replacement==='symlink')symlinkSync(elsewhere,f.root);else writeFileSync(f.root,'replaced root');};
+  const restore=()=>{rmSync(f.root,{force:true});renameSync(saved,f.root);};
+  replace();
+  try{assert.throws(f.certify,/source root/,'an invalid root is refused before another Git source can supply authority');}
+  finally{restore();}
+  assert.throws(()=>withKeyedRustSelectorSource(f.root,new Map(),(_source,observe)=>{
+    observe(f.record);replace();return true;
+  }),/source root/,'the root also stays bound throughout an assessment');
+  restore();assert.equal(f.certify(),true);
+});
+for(const change of ['delete','rename'] as const)test('the source fence refuses a '+change+' of a source directory',t=>{
+  const f=declaredProgramFence(t);assert.equal(f.certify(),true);
+  f.git(change==='delete'?['rm','-r','src']:['mv','src','renamed']);
+  assert.throws(f.certify,/requires committed source inputs/);
+});
+
 test('the keyed source fence replays compiler matches for dirty additions and preserves nonmatching edits',t=>{
   const f=fixture(t,true),declaration=join(f.root,RUST_RUNTIME_DECLARATIONS);
   mkdirSync(dirname(declaration),{recursive:true});writeFileSync(declaration,'{}');
   writeFileSync(join(f.root,'src/notes.tsv'),'committed non-source');
   f.git(['add','.']);f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','declare Program fence controls']);
   const certify=()=>withKeyedRustSelectorSource(f.root,new Map(),(_source,observe)=>{observe(f.record);return true;});
+  const notes=readFileSync(join(f.root,'src/notes.tsv'));
   writeFileSync(join(f.root,'src/notes.tsv'),'dirty non-source');
+  assert.equal(certify(),true,'a nonmatching content edit can be certified on its own');
+  writeFileSync(join(f.root,'src/notes.tsv'),notes);
   writeFileSync(join(f.root,'src/added.tsv'),'staged non-source');f.git(['add','src/added.tsv']);
-  assert.equal(certify(),true,'dirty nonmatching bytes and staged names can be certified');
+  assert.equal(certify(),true,'a staged nonmatching addition can be certified on its own');
   writeFileSync(join(f.root,'src/added.ts'),'export {};');f.git(['add','src/added.ts']);
   assert.throws(certify,/requires committed source inputs/,'a dirty matching addition cannot be certified');
   f.git(['rm','-f','src/added.ts']);

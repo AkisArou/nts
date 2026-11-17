@@ -1,8 +1,8 @@
 // The full check refreshes stale projections after landing. The records step
 // independently rebuilds an edited current-key candidate before accepting it.
 import {createHash} from 'node:crypto';
-import {existsSync,readFileSync} from 'node:fs';
-import {isAbsolute,join,relative,sep} from 'node:path';
+import {existsSync,lstatSync,readFileSync,realpathSync} from 'node:fs';
+import {isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {cargoRuntimeTargets,cargoInputPaths} from './cargo-inputs.ts';
 import {RUST_RUNTIME_DECLARATIONS} from './rust-selector-selection.ts';
@@ -74,9 +74,27 @@ export function rustSelectorDeltaConflict(root:string,body:string,others:readonl
   const other=others.find(row=>row.record!==RUST_SELECTOR_RECORD&&observesChange(keys,{path:row.record,content:existsSync(join(root,row.record))}));
   return other&&`its key observes ${other.record}, which another row of this delta changes`;
 }
+function sourceRootIdentity(root:string){
+  try{
+    const info=lstatSync(root,{bigint:true});
+    if(!info.isDirectory()||info.isSymbolicLink())throw Error('not a physical directory');
+    return {dev:info.dev,ino:info.ino,physical:realpathSync.native(root)};
+  }catch(error){throw Error('Rust selector source root is not an owned directory: '+root,{cause:error});}
+}
 function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(source:CommittedSelectorSource,observe:(record:RustSelectorRecord)=>void)=>T):T{
+  root=resolve(root);
+  const identity=sourceRootIdentity(root);
+  const sameRoot=()=>{
+    const current=sourceRootIdentity(root);
+    if(current.dev!==identity.dev||current.ino!==identity.ino||current.physical!==identity.physical)
+      throw Error('Rust selector source root changed during assessment: '+root);
+  };
   const question=(args:string[])=>selectorQuestion('git',gitArguments(args),{purpose:'Rust selector committed source fence',cwd:root,maxBuffer:64<<20});
-  const state=()=>({head:question(['rev-parse','--verify','HEAD']).trim(),dirty:dirtyEntries(question(['status','--porcelain=v2','-z','--untracked-files=no']))});
+  const state=()=>{
+    sameRoot();
+    const value={head:question(['rev-parse','--verify','HEAD']).trim(),dirty:dirtyEntries(question(['status','--porcelain=v2','-z','--untracked-files=no']))};
+    sameRoot();return value;
+  };
   const before=state(),keys:RustSelectorKeyInputs[]=[],scope=():Scope=>tree?{tree:true}:{tree:false,keys};
   const projects=new Map<string,{request:ProjectRequest;files:string}>();
   const facts=new Map<string,{query:RustSelectorKeyInputs['facts'][number];answer:string}>();
@@ -101,7 +119,7 @@ function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(so
   let assessed=false;
   const result=withCommittedSelectorSource(root,source=>{
     if(source.revision!==before.head)throw Error('Rust selector committed source moved before preparation');
-    if(!existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS)))return operation(source,()=>{});
+    if(!existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS))){const value=operation(source,()=>{});sameRoot();return value;}
     // The declarations are read before any key exists; key paths after.
     if(dirty(before.dirty))throw Error('Rust selector derivation requires committed source inputs: '+root);
     assessed=true;
@@ -123,6 +141,7 @@ function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(so
         if(!projects.has(key))projects.set(key,{request,files:selectorHash(discovery.read(request).files)});
       }
     });}finally{discovery.close();}
+    sameRoot();
     if(dirty(before.dirty))throw Error('Rust selector derivation requires committed source inputs: '+root);
     return value;
   });
