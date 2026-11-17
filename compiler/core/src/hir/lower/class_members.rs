@@ -342,12 +342,18 @@ pub(super) fn a_method_with_its_own_instances(probe: &FuncBuilder, member: NodeI
 }
 
 /// The copies of one class member to lower in one copy of its class: `class_copy`
-/// itself, or -- for a method with **type parameters of its own** -- one per
+/// itself and -- for a method with **type parameters of its own** -- one more per
 /// instance of them that a call pins down
 /// ([`crate::hir::generics::function_instantiations`]), each binding the method's
-/// parameters on top of the class copy's and carrying the instance's suffix,
-/// exactly as a generic function's copies do. A generic method nothing calls has
-/// no copy, as a generic function has none.
+/// parameters and carrying the instance's suffix, exactly as a generic function's
+/// copies do.
+///
+/// **The unspecialized body stays**, which is the difference from a function: a
+/// method is also reached where no call pins its parameters -- through its dispatch
+/// slot, where a subclass overrides it, and as a value read off a receiver -- and
+/// there the one body it always had answers, compiling where its parameters reach
+/// no representation and refusing by name where they do, as before. A call that
+/// pins an instance names that instance's copy instead.
 ///
 /// **Only in a class with no type parameters of its own.** A generic class's copy
 /// binds its parameters per instantiation, and which of a method's instances a copy
@@ -364,7 +370,7 @@ pub(super) fn copies_of_the_member(
     if !a_method_with_its_own_instances(probe, member) {
         return vec![class_copy];
     }
-    shared
+    let instances: Vec<Copy> = shared
         .generics
         .copies
         .get(&member)
@@ -379,7 +385,8 @@ pub(super) fn copies_of_the_member(
             declaration: Some(member),
             ..class_copy.clone()
         })
-        .collect()
+        .collect();
+    std::iter::once(class_copy).chain(instances).collect()
 }
 
 /// The name a constructor's copy keyed on `target` carries after the

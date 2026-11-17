@@ -1,11 +1,13 @@
-// expect: a call to the generic method `pick`, which a subclass overrides
+// expect: a function returning the type parameter `T`
 //
 // A method with type parameters of its own is lowered once per type a call pins
-// (`tests/programs/a-closure-calling-a-throwing-generic-method-inside-a-try`), and
-// a dispatch slot holds one entry -- so a call that dispatches, because a subclass
-// overrides the method, has no copy to reach through it. Refused by name until a
-// slot per instance exists. The control is that fixture's `Picker#pick`, which
-// nothing overrides and which compiles.
+// (`tests/programs/a-closure-calling-a-throwing-generic-method-inside-a-try`) -- where
+// the call's dispatch is direct. A dispatch slot holds one entry, so a call that
+// dispatches, because a subclass overrides the method, reaches the method's one
+// unspecialized body, as before instances existed: it refuses wherever the method's
+// parameters reach a representation, and the slot stops by name. A slot per instance
+// is what would compile this; the control is that fixture's `Picker#pick`, which
+// nothing overrides and which compiles per instance.
 
 class Picker {
   pick<T>(values: T[], at: number): T {

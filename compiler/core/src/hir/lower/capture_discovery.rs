@@ -1062,26 +1062,12 @@ fn collect_function_values(
     );
     // A method whose body reads `this` takes the call's, as a `function` does: a
     // read does not bind it ([`FuncBuilder::method_receiver`]).
-    closures.extend(bound.into_iter().map(|declaration| {
-        ClosureInfo {
-            reads_this: uses_its_receiver(probe, declaration),
-            source: ClosureSource::Method,
-            refusal: super::a_method_with_its_own_instances(
-                probe,
-                probe.implementation_of(declaration),
-            )
-            .then_some(A_GENERIC_METHOD_AS_A_VALUE),
-            ..ClosureInfo::as_written(declaration)
-        }
+    closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
+        reads_this: uses_its_receiver(probe, declaration),
+        source: ClosureSource::Method,
+        ..ClosureInfo::as_written(declaration)
     }));
 }
-
-/// Why a method with type parameters of its own is refused as a value: it is lowered
-/// once per type a call pins ([`super::copies_of_the_member`]), and one function
-/// object read off a receiver is no one of those copies. The call site's own
-/// spelling, [`FuncBuilder::generic_method_suffix`], says the same.
-const A_GENERIC_METHOD_AS_A_VALUE: &str = "a generic method used as a value, which is one copy per type it is called at and so no \
-     one function to hold";
 
 /// The closure a declared function is wrapped in where it is used as a value.
 /// One that reads its own `this` takes the call's, so its wrapper does too, and
