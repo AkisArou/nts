@@ -51,8 +51,19 @@ full check owns them.
 | extensionless module symbol names (`tests/{programs,refusals}/*/src/main`, `src/case`, `imports/vendor/helper`) canonicalized by `compiler/frontend-ts/src/capture/mod.rs` `canonical_source_path` | 35 | not declarable cleanly; #828 removes the lookup at its cause |
 
 Decided again from the same reports with the declarations and rules above, 35
-remain, all of the last kind. The `rust-inputs` step stays off `main` until #828
-lands and the step is green on a commit containing both.
+remain, all of the last kind.
+
+## The step at main with #828
+
+#828 landed as `ab0de9642d`, and this slice was rebased onto `8b26e53ad017`.
+The `rust-inputs` gate step itself, run through `runLanding` (`build`,
+`rust-inputs`) at the rebased tip `0e784e616e`, is green: 1,663 s wall and
+6,944 CPU-s, including the traced tests and the coverage decision. It saw 58
+captures and 6,197 candidates a commit can change. Selection reaches all of
+them and misses none. Outside every commit it saw 2 untracked (`.git`, from
+the declared root walk-ups), 2,729 ignored, 5,139 absent inside ignored
+namespaces and 19 absent directories crossed toward another lookup. The
+capture was removed when the step ended.
 
 ## The step's disk
 
@@ -71,3 +82,11 @@ Kept scratch, `~/.cache/nts-scratch/761/main-trace-v1/` (kept while #761 is open
 | `terminal.json` (the traced run) | `a63288407e135f52535aabe5290e13802b692a0e15fbc7040f0d96eb8d9e0a23` |
 | `reach/classified.json` (the 3,950 tracked candidates and their reaching rules) | `242c4b1cefbecc15efcc5cc9bb23da8afd6d6281c48ff39e91d6b5fc100fa8be` |
 | `coverage/coverage.json` (the decision with this slice's declarations) | `5ca31686b32f5b61c12e503c5e7944f30809229f237906b1580d81845f561b9b` |
+
+The step at the rebased tip, `~/.cache/nts-scratch/761/step-main-v1/`:
+
+| File | SHA-256 |
+|---|---|
+| `terminal.json` (the run) | `e06c220de55542a38a2a0a670d21590c7e15ed448b3014bb89f30c0f6cbe5f12` |
+| `run/rust-inputs.log` | `169672e25862294ae564367c01921afbe48aa49af2ec09e7411cd15cee7470e7` |
+| `run/rust-inputs.coverage.json` (zero missed) | `0aef8571a8def63f8b4862ff69fb429b37736b1a43e52e9165c4e01cdbbfe398` |
