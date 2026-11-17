@@ -29,7 +29,7 @@ function inputs(root:string,dependencyCatalog:DependencyCatalogTrust|null){
  * checked against their own sources when the delta is applied. */
 export type RecordRunWrites=ReadonlyMap<string,string>;
 const NO_WRITES:RecordRunWrites=new Map();
-type DirtyEntry={path:string;content:boolean};
+export type DirtyEntry={path:string;content:boolean};
 /** Porcelain v2 entries, with a rename's original path. `content` marks an
  * edit that keeps the path's presence, type and mode. */
 function dirtyEntries(text:string):DirtyEntry[]{
@@ -51,14 +51,25 @@ type Scope={tree:true}|{tree:false;keys:RustSelectorKeyInputs[]};
  * as a Cargo input name. A content edit this run itself wrote is a delta row. */
 function relevant(root:string,scope:Scope,entry:DirtyEntry,writes:RecordRunWrites):boolean{
   if(scope.tree)return entry.path!==RUST_SELECTOR_RECORD;
-  const observed=(path:string)=>path===RUST_RUNTIME_DECLARATIONS||scope.keys.some(key=>key.paths.has(path));
-  if(entry.content){
-    if(!observed(entry.path))return false;
-    const written=writes.get(entry.path);
-    return written===undefined||createHash('sha256').update(readFileSync(join(root,entry.path))).digest('hex')!==written;
-  }
-  return observed(entry.path)||cargoInputNames([entry])
-    .length>0||ancestors(entry.path).some(path=>observed(path)||scope.keys.some(key=>key.members.has(path)||key.populations.has(path)));
+  if(!observesChange(scope.keys,entry))return false;
+  const written=entry.content?writes.get(entry.path):undefined;
+  return written===undefined||createHash('sha256').update(readFileSync(join(root,entry.path))).digest('hex')!==written;
+}
+/** Whether a change at a path alters what these keys observe. Membership is
+ * matched through every ancestor, wider than an immediate listing: it fails
+ * closed, and covers a removal that empties an observed directory. */
+export function observesChange(keys:readonly RustSelectorKeyInputs[],entry:DirtyEntry):boolean{
+  const observed=(path:string)=>path===RUST_RUNTIME_DECLARATIONS||keys.some(key=>key.paths.has(path));
+  if(entry.content)return observed(entry.path);
+  return observed(entry.path)||cargoInputNames([entry]).length>0||
+    ancestors(entry.path).some(path=>observed(path)||keys.some(key=>key.members.has(path)||key.populations.has(path)));
+}
+/** At apply, a selector row keyed to committed sources is stale when another
+ * row of the same delta changes a path its key observes. */
+export function rustSelectorDeltaConflict(root:string,body:string,others:readonly {record:string}[]):string|undefined{
+  const keys=[rustSelectorKeyInputs(parseRustSelectorRecord(JSON.parse(body) as unknown))];
+  const other=others.find(row=>row.record!==RUST_SELECTOR_RECORD&&observesChange(keys,{path:row.record,content:existsSync(join(root,row.record))}));
+  return other&&`its key observes ${other.record}, which another row of this delta changes`;
 }
 function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(source:CommittedSelectorSource,observe:(record:RustSelectorRecord)=>void)=>T):T{
   const question=(args:string[])=>selectorQuestion('git',gitArguments(args),{purpose:'Rust selector committed source fence',cwd:root,maxBuffer:64<<20});

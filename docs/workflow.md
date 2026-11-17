@@ -547,6 +547,16 @@ in two ways:
   previous records commit's landing answer. A commit that landed or was
   withdrawn during the run settles in that cycle, through the same rules
   used at cycle entry.
+- **One records run is one transaction over its families.** Families record
+  in the table's order in one tree. The run keeps its own write ledger: each
+  record path it changed from its committed bytes, with the bytes it left.
+  Later families treat those content edits as rows of the same delta, not as
+  source edits; a path already dirty when the run first touched it, or changed
+  after the run wrote it, is not in the ledger. At apply, a row derived from
+  committed sources that another ready row of the same delta changes is
+  skipped with that path named, and the next records run takes it up. A family
+  whose pending, source or source-digest question fails is its own counted
+  problem: the run is red, and every other family still records and applies.
 - **An oracle past its own CPU or resident bound has a budget row,** with
   the phase, bound and observed stop, and no invented count. Checks retry it
   and print it loudly. A completed count is an improvement; replacing a count
@@ -768,7 +778,14 @@ use the selector's clean committed-source owner and verified endpoint installati
 Gate-inputs passes that source's tree and revision explicitly through its graph
 options and memo context; its non-Rust graph still observes the caller tree.
 Ignored working outputs never enter the Rust key; the candidate record body remains independently
-bounded and authenticated. Its tool-written selector record interns portable paths
+bounded and authenticated. The working-tree fence around a keyed assessment
+(pending, mandatory check, writer and delta source key) is bounded by the
+record's key: the declarations, content edits at paths the key observes, and
+membership changes beneath any directory it observes or of a Cargo input name.
+A tracked edit elsewhere, such as another record, is not a source change; hand
+dirt on a declared input refuses, as does a HEAD that moves during assessment.
+Gate-inputs, which has no key on its live path, fences the whole tracked tree
+except the selector record. Its tool-written selector record interns portable paths
 and consumed roles;
 the key validates source bytes/modes, engine, Cargo and SDK identities, exact
 typed answers, candidates, aliases and populations. Fast selection requires

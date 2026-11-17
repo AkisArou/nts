@@ -53,26 +53,41 @@ function runner(env:NodeJS.ProcessEnv,record:string,text:string,seen:string[][])
 }
 const delta=(t:Fixture)=>join(testScratch(t,'record-pending-selector-delta'),'delta.json');
 
-test('a records run writes the Rust selector rows after an earlier family records an improvement',t=>{
-  const f=repository(t),path=delta(t),lines:string[]=[],seen:string[][]=[];
+test('a records run writes the Rust selector rows after an earlier family records an improvement, and both apply',async t=>{
+  const f=repository(t),path=delta(t),lines:string[]=[],seen:string[][]=[],records=recorder(TYPES);
   assert.equal(rustSelectorPending(f.repo),true,'the committed input change makes the selector pending');
   const before=f.read(RUST_SELECTOR_RECORD);
-  assert.equal(recorder(TYPES).recordPending(f.repo,['first','rust-selector'],runner(f.env,TYPES,'{"version":2,"projects":{"improved":{}}}\n',seen),line=>lines.push(line),new Map(),path),0,lines.join('\n'));
+  assert.equal(records.recordPending(f.repo,['first','rust-selector'],runner(f.env,TYPES,'{"version":2,"projects":{"improved":{}}}\n',seen),line=>lines.push(line),new Map(),path),0,lines.join('\n'));
   assert.notEqual(f.read(RUST_SELECTOR_RECORD),before,'the selector record was rewritten');
   assert.equal(rustSelectorPending(f.repo),false,'the rewritten record is current; the dirty earlier record is not one of its inputs');
   const selector=seen.find(args=>args[0]!=='earlier')!;
   assert.ok(selector.includes('--run-written')&&selector.some(arg=>arg.endsWith(':'+TYPES)),'the writer receives the run ledger: '+selector.join(' '));
-  assert.deepEqual(parseDelta(readFileSync(path,'utf8')).rows.map(row=>row.record),[TYPES,RUST_SELECTOR_RECORD]);
+  const carried=parseDelta(readFileSync(path,'utf8'));assert.deepEqual(carried.rows.map(row=>row.record),[TYPES,RUST_SELECTOR_RECORD]);
+  const recorded=f.read(RUST_SELECTOR_RECORD);f.git('checkout','--','.');
+  const applied:string[]=[];
+  assert.deepEqual(await records.applyDelta(f.repo,carried,{say:line=>applied.push(line)}),{applied:2,already:0,skipped:0},applied.join('\n'));
+  assert.equal(f.read(RUST_SELECTOR_RECORD),recorded);assert.equal(rustSelectorPending(f.repo),false);
 });
 
-test('a declared selector input written earlier in the same run is a delta row, and the selector row stays keyed to HEAD',t=>{
-  const f=repository(t),path=delta(t),lines:string[]=[];
-  assert.equal(recorder(INPUT).recordPending(f.repo,['first','rust-selector'],runner(f.env,INPUT,'bytes the earlier family recorded\n',[]),line=>lines.push(line),new Map(),path),0,lines.join('\n'));
-  assert.deepEqual(parseDelta(readFileSync(path,'utf8')).rows.map(row=>row.record),[INPUT,RUST_SELECTOR_RECORD]);
+test('a declared selector input written earlier in the same run is a delta row; at apply the selector row beside it is skipped',async t=>{
+  const f=repository(t),path=delta(t),lines:string[]=[],records=recorder(INPUT);
+  assert.equal(records.recordPending(f.repo,['first','rust-selector'],runner(f.env,INPUT,'bytes the earlier family recorded\n',[]),line=>lines.push(line),new Map(),path),0,lines.join('\n'));
+  const carried=parseDelta(readFileSync(path,'utf8'));assert.deepEqual(carried.rows.map(row=>row.record),[INPUT,RUST_SELECTOR_RECORD]);
   // Outside the run's ledger the same bytes are a hand edit of a declared input.
   assert.throws(()=>rustSelectorPending(f.repo),/requires committed source inputs/);
   f.git('checkout','--',INPUT);
   assert.equal(rustSelectorPending(f.repo),false,'the recorded selector row is current for the committed source');
+  // Applied beside the input row it was not derived from, the selector row is stale: it is skipped by name.
+  f.git('checkout','--','.');const committed=f.read(RUST_SELECTOR_RECORD),applied:string[]=[],refused:string[]=[];
+  // A fence refusal at apply is said as that refusal.
+  f.put(INPUT,'a hand edit in the applying tree\n');
+  assert.deepEqual(await records.applyDelta(f.repo,carried,{say:line=>refused.push(line)}),{applied:0,already:0,skipped:2},refused.join('\n'));
+  assert.ok(refused.some(line=>line.startsWith('  skipped '+RUST_SELECTOR_RECORD)&&line.includes('requires committed source inputs')),refused.join('\n'));
+  f.git('checkout','--',INPUT);
+  assert.deepEqual(await records.applyDelta(f.repo,carried,{say:line=>applied.push(line)}),{applied:1,already:0,skipped:1},applied.join('\n'));
+  assert.ok(applied.some(line=>line.startsWith('  applied '+INPUT)),applied.join('\n'));
+  assert.ok(applied.some(line=>line.startsWith('  skipped '+RUST_SELECTOR_RECORD)&&line.includes('its key observes '+INPUT+', which another row of this delta changes')),applied.join('\n'));
+  assert.equal(f.read(RUST_SELECTOR_RECORD),committed,'the selector record bytes are unchanged');
 });
 
 test('hand dirt on a declared input refuses, even where the run then also writes that input',t=>{

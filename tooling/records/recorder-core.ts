@@ -31,6 +31,8 @@ export interface RecordFamily{
  merge(file:string,text:string|null,rows:readonly DeltaRow[],header:string|undefined):string;
  sourceDigests(root:string,names:readonly string[],run:RecordRun):Map<string,string|null>;
  sourceAtApply?(root:string,row:DeltaRow):string|null|undefined;
+ /** Why this ready row cannot apply beside the delta's other ready rows, if it cannot. */
+ conflict?(root:string,row:DeltaRow,others:readonly DeltaRow[]):string|undefined;
  checkSources?(root:string,rows:readonly DeltaRow[],options:ApplyOptions):Promise<Map<DeltaRow,string>>;
  validateGroup?(rows:readonly DeltaRow[],bad:(row:DeltaRow,why:string)=>never):void;
  partner?(row:DeltaRow,other:DeltaRow):boolean;
@@ -269,7 +271,9 @@ async function applyDelta(root: string, delta: Delta, options: ApplyOptions = {}
       if (pending instanceof Error) { skip(row, `the pending ${row.kind} cases cannot be listed here: ${pending.message}`); continue; }
       if (!pending.has(`${row.record}\0${row.case}`)) { skip(row, "it is not a pending case here"); continue; }
     }
-    const digest = family(row.kind).sourceAtApply ? family(row.kind).sourceAtApply!(root,row) : sources.get(`${row.kind}\0${row.case}`);
+    let digest: string | null | undefined;
+    try { digest = family(row.kind).sourceAtApply ? family(row.kind).sourceAtApply!(root,row) : sources.get(`${row.kind}\0${row.case}`); }
+    catch (error) { skip(row, `its sources cannot be named here: ${error instanceof Error ? error.message : String(error)}`); continue; }
     if (digest !== row.sources) { skip(row, digest === null ? "its sources are gone" : `its sources changed${since}`); continue; }
     ready.push(row);
   }
@@ -280,12 +284,19 @@ async function applyDelta(root: string, delta: Delta, options: ApplyOptions = {}
   ready=ready.filter(row=>!skipped.has(row));
   for(const row of ready){const handler=family(row.kind),partner=delta.rows.find(one=>one.kind===row.kind&&handler.partner?.(row,one));if(partner&&skipped.has(partner))skip(row,`its row in ${partner.record} does not apply here`);}
   ready=ready.filter(row=>!skipped.has(row));
+  // A row derived from sources another ready row changes is stale beside it.
+  const conflicts=ready.flatMap(row=>{const why=family(row.kind).conflict?.(root,row,ready.filter(one=>one!==row&&one.record!==row.record));return why===undefined?[]:[[row,why] as const];});
+  for(const [row,why]of conflicts)skip(row,why);
+  ready=ready.filter(row=>!skipped.has(row));
+  // What is pending is the tree's answer before any row is written.
+  for (const kind of new Set(ready.map(row => row.kind as string))) if (!family(kind).pendingFromDelta) pendingAt(kind);
 
   // Each record takes its rows by its own merge, and what that makes is
   // audited by the rule the recorders' writes are held to. One row the format
   // or the rule refuses keeps no other from its record: each is then taken alone.
   for (const [record, group] of Map.groupBy(ready, row => row.record)) {
     const kind = group[0]!.kind as string, was = textOf(record), pending = pendingAt(kind);
+    if (pending instanceof Error && !family(kind).pendingFromDelta) { for (const row of group) skip(row, `the pending ${kind} cases cannot be listed here: ${pending.message}`); continue; }
     // A test262 case is pending here when the delta adds it, it has no row here
     // and its file is the one measured, all of which the rows above passed.
     const names = new Set(family(kind).pendingFromDelta ? group.filter(row => row.before === null).map(row => row.case)
