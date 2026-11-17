@@ -7,7 +7,7 @@ import {dirname,join} from 'node:path';
 import {gitArguments} from './git-arguments/main.ts';
 import {testEnvironment} from './test-environment.ts';
 import {testScratch} from './test-scratch.ts';
-import {rustSelectorPending,checkRustSelectorRecord,recordRustSelector} from './rust-selector-write.ts';
+import {rustSelectorPending,checkRustSelectorRecord,recordRustSelector,withKeyedRustSelectorSource} from './rust-selector-write.ts';
 import {RUST_RUNTIME_DECLARATIONS} from './rust-selector-selection.ts';
 import {acceptedRustSelectorIdentity,acceptedRustSelectorRecord,rustSelectorRecordAtBlob,selectRustInputs,verifyRustSelectorDerivation} from './rust-selector.ts';
 import {buildRustSelectorMaterial,selectorInstalledSdk} from './rust-selector-build.ts';
@@ -70,6 +70,13 @@ test('public pending and mandatory checks use committed declaration presence and
   assert.throws(()=>checkRustSelectorRecord(f.root,line=>messages.push(line)),/requires committed source inputs/);
   assert.throws(()=>recordRustSelector(f.root),/requires committed source inputs/);
   assert.equal(messages.length,0);
+});
+
+test('the keyed fence refuses a HEAD moved during assessment',t=>{
+  const f=fixture(t),declaration=join(f.root,RUST_RUNTIME_DECLARATIONS);mkdirSync(dirname(declaration),{recursive:true});writeFileSync(declaration,'{}');
+  f.git(['add',RUST_RUNTIME_DECLARATIONS]);f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','declare runtime inputs']);
+  assert.equal(withKeyedRustSelectorSource(f.root,new Map(),()=>true),true);
+  assert.throws(()=>withKeyedRustSelectorSource(f.root,new Map(),()=>{f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-q','--allow-empty','-m','moved during assessment']);return true;}),/changed during assessment/);
 });
 
 test('selection assesses committed inputs while retaining the independent working record body',t=>{

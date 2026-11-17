@@ -1,14 +1,16 @@
 // The full check refreshes stale projections after landing. The records step
 // independently rebuilds an edited current-key candidate before accepting it.
-import {existsSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {cargoRuntimeTargets,cargoInputPaths} from './cargo-inputs.ts';
 import {RUST_RUNTIME_DECLARATIONS} from './rust-selector-selection.ts';
 import {readRustRuntimeManifest} from './rust-runtime-declarations.ts';
-import {buildRustSelectorMaterial,writeRustSelectorRecord} from './rust-selector-build.ts';
+import {buildRustSelectorMaterial,publishRustSelectorRecord} from './rust-selector-build.ts';
+import {cargoInputNames} from './cargo-input-population.ts';
 import {selectorInstalledSdk,selectorTrackedFiles} from './rust-selector-inputs.ts';
-import {RUST_SELECTOR_RECORD,encodeRustSelectorRecord,loadRustSelectorCandidate,parseRustSelectorRecord,validateRustSelectorKey,MAX_RUST_SELECTOR_RECORD_BYTES} from './rust-selector-record.ts';
+import {RUST_SELECTOR_RECORD,rustSelectorKeyInputs,type RustSelectorKeyInputs,type RustSelectorRecord,encodeRustSelectorRecord,loadRustSelectorCandidate,parseRustSelectorRecord,validateRustSelectorKey,MAX_RUST_SELECTOR_RECORD_BYTES} from './rust-selector-record.ts';
 import {acceptedRustSelectorRecord,verifyRustSelectorDerivation} from './rust-selector.ts';
 import {withCommittedSelectorSource,selectorQuestion,type CommittedSelectorSource} from './owed-range.ts';
 import {gitArguments} from './git-arguments/main.ts';
@@ -22,52 +24,122 @@ function inputs(root:string,dependencyCatalog:DependencyCatalogTrust|null){
     declarations:RUST_RUNTIME_DECLARATIONS,cargoInputs:cargoInputPaths(root),tracked:()=>selectorTrackedFiles(root),installed,dependencyCatalog});
   return {key,build};
 }
-/** Derivation observes committed sources; the candidate remains the caller's
- * independently bounded working body. Ignored outputs never enter this key. */
-export function withRustSelectorSource<T>(root:string,operation:(source:CommittedSelectorSource)=>T):T{
+/** What one records run wrote: each record path it changed from clean
+ * committed bytes, with the SHA-256 of the bytes it left there. Its rows are
+ * checked against their own sources when the delta is applied. */
+export type RecordRunWrites=ReadonlyMap<string,string>;
+const NO_WRITES:RecordRunWrites=new Map();
+type DirtyEntry={path:string;content:boolean};
+/** Porcelain v2 entries, with a rename's original path. `content` marks an
+ * edit that keeps the path's presence, type and mode. */
+function dirtyEntries(text:string):DirtyEntry[]{
+  const fields=text.split('\0'),entries:DirtyEntry[]=[];
+  for(let at=0;at<fields.length;at++){
+    const field=fields[at]!;if(!field)continue;
+    const parts=field.split(' '),kind=parts[0],name=(index:number)=>{const path=parts.slice(index).join(' ');if(!path)throw Error('Rust selector source fence: malformed status entry');return path;};
+    if(kind==='1'){const modes=parts.slice(3,6);entries.push({path:name(8),content:/^[.M]{2}$/.test(parts[1]??'')&&modes[0]===modes[1]&&modes[1]===modes[2]});}
+    else if(kind==='2'){entries.push({path:name(9),content:false});const original=fields[++at];if(!original)throw Error('Rust selector source fence: rename without its original path');entries.push({path:original,content:false});}
+    else if(kind==='u')entries.push({path:name(10),content:false});
+    else throw Error('Rust selector source fence: unknown status entry: '+field);
+  }
+  return entries;
+}
+const ancestors=(path:string)=>{const result:string[]=[];for(let at=path;;){const slash=at.lastIndexOf('/');at=slash<0?'':at.slice(0,slash);result.push(at);if(!at)return result;}};
+type Scope={tree:true}|{tree:false;keys:RustSelectorKeyInputs[]};
+/** A change is relevant when the scope observes it. Content edits matter only
+ * at an observed path; a membership change also under an observed directory or
+ * as a Cargo input name. A content edit this run itself wrote is a delta row. */
+function relevant(root:string,scope:Scope,entry:DirtyEntry,writes:RecordRunWrites):boolean{
+  if(scope.tree)return entry.path!==RUST_SELECTOR_RECORD;
+  const observed=(path:string)=>path===RUST_RUNTIME_DECLARATIONS||scope.keys.some(key=>key.paths.has(path));
+  if(entry.content){
+    if(!observed(entry.path))return false;
+    const written=writes.get(entry.path);
+    return written===undefined||createHash('sha256').update(readFileSync(join(root,entry.path))).digest('hex')!==written;
+  }
+  return observed(entry.path)||cargoInputNames([entry])
+    .length>0||ancestors(entry.path).some(path=>observed(path)||scope.keys.some(key=>key.members.has(path)||key.populations.has(path)));
+}
+function fenced<T>(root:string,tree:boolean,writes:RecordRunWrites,operation:(source:CommittedSelectorSource,observe:(record:RustSelectorRecord)=>void)=>T):T{
   const question=(args:string[])=>selectorQuestion('git',gitArguments(args),{purpose:'Rust selector committed source fence',cwd:root,maxBuffer:64<<20});
-  const state=()=>({head:question(['rev-parse','--verify','HEAD']).trim(),
-    dirty:question(['status','--porcelain=v2','-z','--untracked-files=no','--','.',':(exclude)'+RUST_SELECTOR_RECORD])});
-  const before=state();let relevant=false;
+  const state=()=>({head:question(['rev-parse','--verify','HEAD']).trim(),dirty:dirtyEntries(question(['status','--porcelain=v2','-z','--untracked-files=no']))});
+  const before=state(),keys:RustSelectorKeyInputs[]=[],scope=():Scope=>tree?{tree:true}:{tree:false,keys};
+  const dirty=(entries:readonly DirtyEntry[])=>entries.some(entry=>relevant(root,scope(),entry,writes));
+  let assessed=false;
   const result=withCommittedSelectorSource(root,source=>{
     if(source.revision!==before.head)throw Error('Rust selector committed source moved before preparation');
-    relevant=existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS));
-    if(relevant&&before.dirty)throw Error('Rust selector derivation requires committed source inputs: '+root);
-    return operation(source);
+    if(!existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS)))return operation(source,()=>{});
+    // The declarations are read before any key exists; key paths after.
+    if(dirty(before.dirty))throw Error('Rust selector derivation requires committed source inputs: '+root);
+    assessed=true;
+    const value=operation(source,record=>{keys.push(rustSelectorKeyInputs(record));});
+    if(dirty(before.dirty))throw Error('Rust selector derivation requires committed source inputs: '+root);
+    return value;
   });
-  const after=state();if(after.head!==before.head||relevant&&after.dirty)throw Error('Rust selector committed source changed during assessment');
+  const after=state();if(after.head!==before.head||assessed&&dirty(after.dirty))throw Error('Rust selector committed source changed during assessment');
   return result;
 }
-export function rustSelectorPending(root:string):boolean{
-  return withRustSelectorSource(root,source=>{
+/** Derivation observes committed sources; the candidate remains the caller's
+ * independently bounded working body. Ignored outputs never enter this key.
+ * With no key to bound it, the fence covers every tracked path but the record. */
+export function withRustSelectorSource<T>(root:string,operation:(source:CommittedSelectorSource)=>T):T{
+  return fenced(root,true,NO_WRITES,source=>operation(source));
+}
+/** The fence covers the declarations and exactly what each observed key
+ * reads, minus the content this records run wrote from clean bytes. */
+export function withKeyedRustSelectorSource<T>(root:string,writes:RecordRunWrites,operation:(source:CommittedSelectorSource,observe:(record:RustSelectorRecord)=>void)=>T):T{
+  return fenced(root,false,writes,operation);
+}
+export function rustSelectorPending(root:string,writes:RecordRunWrites=NO_WRITES):boolean{
+  return withKeyedRustSelectorSource(root,writes,(source,observe)=>{
     if(!existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS)))return false;
     if(!existsSync(join(root,RUST_SELECTOR_RECORD)))return true;
-    return loadRustSelectorCandidate(join(root,RUST_SELECTOR_RECORD),inputs(source.tree,source.dependencyCatalog).key).state==='pending';
+    const candidate=loadRustSelectorCandidate(join(root,RUST_SELECTOR_RECORD),inputs(source.tree,source.dependencyCatalog).key);
+    if(candidate.record)observe(candidate.record);
+    return candidate.state==='pending';
   });
 }
 export function checkRustSelectorRecord(root:string,report:(message:string)=>void):void{
-  const result=withRustSelectorSource(root,source=>{
+  // Reports wait for both fences: a refused assessment reports nothing.
+  const reports:string[]=[],held=(message:string)=>{reports.push(message);};
+  const result=withKeyedRustSelectorSource(root,NO_WRITES,(source,observe)=>{
+    const report=held;
     if(!existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS)))return;
     if(!existsSync(join(root,RUST_SELECTOR_RECORD))){report(`pending: ${RUST_SELECTOR_CASE} is not recorded in ${RUST_SELECTOR_RECORD} yet`);return;}
     const {key,build}=inputs(source.tree,source.dependencyCatalog);
-    return verifyRustSelectorDerivation({root:source.tree,candidatePath:join(root,RUST_SELECTOR_RECORD),key,
+    return verifyRustSelectorDerivation({root:source.tree,candidatePath:join(root,RUST_SELECTOR_RECORD),key,observe,
       accepted:()=>acceptedRustSelectorRecord(root),build:()=>encodeRustSelectorRecord(build()),report});
   });
+  for(const message of reports)report(message);
   if(result!==undefined)report('Rust selector record '+result);
 }
-export function recordRustSelector(root:string):void{
+export function recordRustSelector(root:string,writes:RecordRunWrites=NO_WRITES):void{
   // Publication follows successful source/installation drain and both fences.
-  const material=withRustSelectorSource(root,source=>inputs(source.tree,source.dependencyCatalog).build());
-  writeRustSelectorRecord(join(root,RUST_SELECTOR_RECORD),material);
+  const record=withKeyedRustSelectorSource(root,writes,(source,observe)=>{const record=encodeRustSelectorRecord(inputs(source.tree,source.dependencyCatalog).build());observe(record);return record;});
+  publishRustSelectorRecord(join(root,RUST_SELECTOR_RECORD),record);
 }
 /** Delta application observes the same committed source as the writer and
  * mandatory derivation. A candidate body supplies no source authority. */
-export function rustSelectorSourceKey(root:string,body:string):string|undefined{
+export function rustSelectorSourceKey(root:string,body:string,writes:RecordRunWrites=NO_WRITES):string|undefined{
   if(Buffer.byteLength(body)>MAX_RUST_SELECTOR_RECORD_BYTES)throw Error('Rust selector record exceeds committed size budget');
   const record=parseRustSelectorRecord(JSON.parse(body) as unknown);
-  return withRustSelectorSource(root,source=>existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS))&&validateRustSelectorKey(record,inputs(source.tree,source.dependencyCatalog).key).state==='key-current'?record.keySha256:undefined);
+  return withKeyedRustSelectorSource(root,writes,(source,observe)=>{observe(record);
+    return existsSync(join(source.tree,RUST_RUNTIME_DECLARATIONS))&&validateRustSelectorKey(record,inputs(source.tree,source.dependencyCatalog).key).state==='key-current'?record.keySha256:undefined;});
+}
+/** A records run names what it wrote as `--run-written <sha256>:<path>`. */
+export function runWritesArguments(writes:RecordRunWrites):string[]{
+  return [...writes].sort(([a],[b])=>a.localeCompare(b,'en')).flatMap(([path,sha256])=>['--run-written',sha256+':'+path]);
+}
+function parseWriteArguments(args:readonly string[]):RecordRunWrites{
+  if(args[0]!=='--write')throw Error('usage: rust-selector-write.ts --write [--run-written <sha256>:<path>]...');
+  const writes=new Map<string,string>();
+  for(let at=1;at<args.length;at+=2){
+    const value=args[at+1],match=args[at]==='--run-written'&&value?/^([a-f0-9]{64}):(.+)$/.exec(value):null;
+    if(!match||writes.has(match[2]!))throw Error('usage: rust-selector-write.ts --write [--run-written <sha256>:<path>]...');
+    writes.set(match[2]!,match[1]!);
+  }
+  return writes;
 }
 runAsCommand(import.meta.url,()=>{
-  if(process.argv.slice(2).join(' ')!=='--write')throw Error('usage: rust-selector-write.ts --write');
-  recordRustSelector(process.cwd());
+  recordRustSelector(process.cwd(),parseWriteArguments(process.argv.slice(2)));
 });

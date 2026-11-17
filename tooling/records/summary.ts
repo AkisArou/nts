@@ -158,6 +158,7 @@ import {typescriptFamily} from '../census/typescript-record-family.ts';
 import {compileFamily} from '../bench/compile-record-family.ts';
 import {runFamily} from '../bench/run-record-family.ts';
 import {dexFamily} from '../android/dex-record-family.ts';
+import {NO_RUN} from './recorder-core.ts';
 
 export const KINDS = ["benchmarks", "conformance"] as const;
 export type Kind = typeof KINDS[number];
@@ -298,7 +299,7 @@ type Pending = ReadonlyMap<string, number>;
 function pendingByRecord(root: string): Pending {
   const pending = new Map<string, number>();
   for (const family of [typescriptFamily,compileFamily,runFamily,dexFamily])
-    for (const one of family.pending(root)) pending.set(one.record, (pending.get(one.record) ?? 0) + 1);
+    for (const one of family.pending(root, NO_RUN)) pending.set(one.record, (pending.get(one.record) ?? 0) + 1);
   return pending;
 }
 

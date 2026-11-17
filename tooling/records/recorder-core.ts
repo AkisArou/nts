@@ -12,18 +12,24 @@ export type Part='core'|'wide';
 export type Pending={kind:string;name:string;record:string};
 export type RecordCase=Omit<Pending,'kind'>;
 export type Runner=(args:string[],root:string)=>number;
+/** What this records run has written so far: each record path it changed from
+ * its committed bytes, with the SHA-256 of the bytes it left there. A path
+ * already dirty when the run first touched it never enters the ledger. */
+export type RecordRun={readonly written:ReadonlyMap<string,string>};
+/** The context of a question asked outside any records run. */
+export const NO_RUN:RecordRun={written:new Map()};
 export type ApplyOptions={say?:(line:string)=>void;identities?:(root:string,paths:readonly string[])=>Promise<Map<string,{source:string;driver:string}>>};
 export interface RecordFamily{
- pending(root:string):RecordCase[];
+ pending(root:string,run:RecordRun):RecordCase[];
  files(root:string):readonly string[];
  records(row:DeltaRow):readonly string[];
- runs(pending:readonly Pending[]):string[][];
+ runs(pending:readonly Pending[],run:RecordRun):string[][];
  audit(file:string,before:string|null,after:string,pending:ReadonlySet<string>,root?:string):string[];
  rows(file:string,text:string):Map<string,RecordRow>|null;
  changes(kind:string,file:string,before:string|null,after:string):Omit<DeltaRow,'sources'>[];
  validate(row:DeltaRow,bad:(row:DeltaRow,why:string)=>never):void;
  merge(file:string,text:string|null,rows:readonly DeltaRow[],header:string|undefined):string;
- sourceDigests(root:string,names:readonly string[]):Map<string,string|null>;
+ sourceDigests(root:string,names:readonly string[],run:RecordRun):Map<string,string|null>;
  sourceAtApply?(root:string,row:DeltaRow):string|null|undefined;
  checkSources?(root:string,rows:readonly DeltaRow[],options:ApplyOptions):Promise<Map<DeltaRow,string>>;
  validateGroup?(rows:readonly DeltaRow[],bad:(row:DeltaRow,why:string)=>never):void;
@@ -75,6 +81,12 @@ export function digestSources(root:string,cases:readonly {name:string;paths:read
  const digests=new Map<string,string|null>();
  for(const [id,{paths,except}]of wanted){const present=[...new Set(paths.flatMap(path=>files.get(path)??[]))].filter(file=>file!==except&&existsSync(join(root,file))).sort();digests.set(id,present.length?sha256(JSON.stringify(present.map(file=>[file,digestOf(file)]))):null);}return digests;
 }
+/** The path's text at HEAD, or null when HEAD has no such file. */
+function committedBytes(root: string, file: string): string | null {
+  if (!inCheckout(root)) return null;
+  const shown = spawnSync("git", gitArguments(["cat-file", "blob", `HEAD:${file}`]), { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
+  return shown.status === 0 ? shown.stdout : null;
+}
 function headCommit(root: string): string | null {
   if (!inCheckout(root)) return null;
   const head = spawnSync("git", gitArguments(["rev-parse", "--verify", "HEAD"]), { cwd: root, encoding: "utf8" });
@@ -94,12 +106,12 @@ export function createRecorder(table:RecordTable,defaultRun:Runner=()=>{throw Er
  const KINDS=Object.keys(table);
  const family=(kind:string)=>{const row=table[kind];if(!row)throw new MalformedDelta('malformed records delta: no recorder is of kind '+kind);return row.family;};
  const partOf=(kind:string):Part=>{family(kind);return table[kind]!.part;};
- const findPending=(root:string,kind:string):Pending[]=>family(kind).pending(root).map(one=>({kind,name:one.name,record:one.record}));
+ const findPending=(root:string,kind:string,run:RecordRun=NO_RUN):Pending[]=>family(kind).pending(root,run).map(one=>({kind,name:one.name,record:one.record}));
  const recordFiles=(root:string,kind:string)=>family(kind).files(root);
- const recorderRuns=(kind:string,pending:readonly Pending[])=>family(kind).runs(pending);
+ const recorderRuns=(kind:string,pending:readonly Pending[],run:RecordRun=NO_RUN)=>family(kind).runs(pending,run);
  const auditRecord=(kind:string,file:string,before:string|null,after:string|null,pending:ReadonlySet<string>,root?:string):string[]=>{if(before===after)return [];assert.ok(after!==null,`${file} was removed`);return family(kind).audit(file,before,after,pending,root);};
  const changedRows=(kind:string,file:string,before:string|null,after:string)=>family(kind).changes(kind,file,before,after);
- const sourceDigests=(root:string,cases:readonly {kind:string;name:string}[]):Map<string,string|null>=>{const digests=new Map<string,string|null>();for(const [kind,group]of Map.groupBy(cases,one=>one.kind))for(const [name,digest]of family(kind).sourceDigests(root,group.map(one=>one.name)))digests.set(`${kind}\0${name}`,digest);return digests;};
+ const sourceDigests=(root:string,cases:readonly {kind:string;name:string}[],run:RecordRun=NO_RUN):Map<string,string|null>=>{const digests=new Map<string,string|null>();for(const [kind,group]of Map.groupBy(cases,one=>one.kind))for(const [name,digest]of family(kind).sourceDigests(root,group.map(one=>one.name),run))digests.set(`${kind}\0${name}`,digest);return digests;};
 function acceptedIn(root: string, run: string): { byKind: Map<string, Pending[]>; pendingByKind: Map<string, Pending[]>; unowned: string[] } {
   const owner = new Map<string, string>();
   for (const kind of KINDS) for (const file of recordFiles(root, kind)) owner.set(file, kind);
@@ -126,9 +138,17 @@ function recordPending(root: string, kinds: readonly string[], run: Runner = def
   let failed = 0, recorded = 0;
   const out: Delta = { version: 1, commit: headCommit(root), headers: {}, rows: [] };
   if (delta) keepDelta(delta, out);
+  // The run's own write ledger: whether each touched path was committed when
+  // the run first changed it, and the bytes the run last left there.
+  const committedAtStart = new Map<string, boolean>(), written = new Map<string, string>(), ledger: RecordRun = { written };
+  const problem = (kind: string, what: string, error: unknown) => { say(`  ${kind}: REFUSED ${what}: ${error instanceof Error ? error.message : String(error)}`); failed += 1; };
   for (const kind of kinds) {
-    const missing = [...findPending(root, kind), ...listed.get(kind) ?? []];
-    const refreshes = (family(kind).refresh?.(root) ?? []).map(one=>({...one,kind}));
+    let missing: Pending[], refreshes: Pending[];
+    // One family's failed question is its own problem; later families still record.
+    try {
+      missing = [...findPending(root, kind, ledger), ...listed.get(kind) ?? []];
+      refreshes = (family(kind).refresh?.(root) ?? []).map(one=>({...one,kind}));
+    } catch (error) { problem(kind, "finding its pending cases", error); continue; }
     const pending = [...missing, ...refreshes], changes = accepted.get(kind) ?? [];
     if (!pending.length && !changes.length) { say(`${kind}: nothing pending and no accepted change listed; not run`); continue; }
     say(`${kind}: ${missing.length} pending${refreshes.length ? `, ${refreshes.length} recorded budget refresh(es)` : ''}${changes.length ? `, ${changes.length} accepted change(s) listed` : ''}`);
@@ -137,7 +157,7 @@ function recordPending(root: string, kinds: readonly string[], run: Runner = def
     for (const one of changes) say(`  accepted: ${one.name} in ${one.record}`);
     // New rows only for pending cases; accepted changes rewrite rows the ratchet allows (auditRecord).
     const before = snapshot(root, kind, pending);
-    for (const args of recorderRuns(kind, [...pending, ...changes])) {
+    for (const args of recorderRuns(kind, [...pending, ...changes], ledger)) {
       say(`  running: node ${args.join(" ")}`);
       const status = run(args, root);
       if (status !== 0) { say(`  ${kind}: the recorder exited ${status}`); failed += 1; }
@@ -157,6 +177,12 @@ function recordPending(root: string, kinds: readonly string[], run: Runner = def
         failed += 1;
       }
     }
+    for (const [file, was] of before) {
+      const path = join(root, file), now = existsSync(path) ? readFileSync(path) : null;
+      if (now === null ? was === null : was !== null && now.equals(Buffer.from(was))) continue;
+      if (!committedAtStart.has(file)) committedAtStart.set(file, was !== null && committedBytes(root, file) === was);
+      if (committedAtStart.get(file) && now !== null) written.set(file, sha256(now)); else written.delete(file);
+    }
     // A record file outside the snapshot is one no recorder of this kind may write.
     for (const file of recordFiles(root, kind)) {
       if (before.has(file)) continue;
@@ -165,7 +191,9 @@ function recordPending(root: string, kinds: readonly string[], run: Runner = def
       failed += 1;
     }
     if (delta && changed.length) {
-      const sources = sourceDigests(root, changed.map(row => ({ kind, name: row.case })));
+      let sources: Map<string, string | null>;
+      try { sources = sourceDigests(root, changed.map(row => ({ kind, name: row.case })), ledger); }
+      catch (error) { problem(kind, "naming the sources of its rows; they are not in the delta", error); continue; }
       for (const row of changed) {
         const digest = sources.get(`${kind}\0${row.case}`);
         if (!digest) { say(`  REFUSED ${row.record}: ${row.case} is recorded, but none of its sources is in the tree; it is not in the delta`); failed += 1; continue; }

@@ -17,7 +17,7 @@ import {generatedProjectFact} from './generated-project.ts';
 import {selectionInput} from './reader-inputs/main.ts';
 import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 import {durableRecord} from './durable-record.ts';
-import {encodeRustSelectorRecord} from './rust-selector-record.ts';
+import {encodeRustSelectorRecord,type RustSelectorRecord} from './rust-selector-record.ts';
 import {RUST_SELECTOR_RECORD,SELECTOR_SCHEMA_SHA256,selectorHash,selectorFile,selectorFact,selectorPopulation,validateRustSelectorMaterial,parseRustSelectorMaterial,
   type RustSelectorMaterial,type RustSelectorMaterialTarget,type SelectorFact,type TrackedFile,type SelectorRoots} from './rust-selector-material.ts';
 
@@ -114,5 +114,9 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
   return record;
 }
 export function writeRustSelectorRecord(path:string,record:RustSelectorMaterial):void{
-  durableRecord(path,encodeRustSelectorRecord(parseRustSelectorMaterial(record)),{compact:true});
+  publishRustSelectorRecord(path,encodeRustSelectorRecord(parseRustSelectorMaterial(record)));
+}
+/** Publishes an already encoded record, for callers that inspect its key first. */
+export function publishRustSelectorRecord(path:string,record:RustSelectorRecord):void{
+  durableRecord(path,record,{compact:true});
 }

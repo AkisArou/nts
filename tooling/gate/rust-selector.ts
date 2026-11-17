@@ -82,8 +82,9 @@ export function selectRustInputs(options:{root:string;candidatePath?:string;key:
 /** A changed record cannot certify itself with recomputed payload hashes.
  * This mandatory check compares it with the actual producer before landing.
  * Stale input keys remain pending and are refreshed by the full check. */
-export function verifyRustSelectorDerivation(options:{root:string;candidatePath?:string;key:KeyOptions;accepted:()=>TrustedRustSelectorRecord|undefined;build:()=>RustSelectorRecord;report:(message:string)=>void}):'current'|'pending'|'derived'{
+export function verifyRustSelectorDerivation(options:{root:string;candidatePath?:string;key:KeyOptions;accepted:()=>TrustedRustSelectorRecord|undefined;build:()=>RustSelectorRecord;report:(message:string)=>void;observe?:(record:RustSelectorRecord)=>void}):'current'|'pending'|'derived'{
   const path=options.candidatePath??recordPath(options.root),candidate=loadRustSelectorCandidate(path,options.key);
+  if(candidate.record)options.observe?.(candidate.record);
   const accepted=options.accepted();
   if(candidate.state==='pending'){
     if(candidate.sha256!==undefined&&candidate.sha256!==accepted?.sha256)

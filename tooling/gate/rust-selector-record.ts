@@ -254,6 +254,23 @@ export function validateRustSelectorKey(record:RustSelectorRecord,options:{roots
   return {state:'key-current'};
 }
 
+/** The repository paths a key observes, by what a working change could alter.
+ * `paths` are observed for bytes, mode or presence; `members` and
+ * `populations` for their child names (immediate and recursive); Cargo input
+ * names are observed across the whole tracked population. */
+export type RustSelectorKeyInputs={paths:ReadonlySet<string>;members:ReadonlySet<string>;populations:ReadonlySet<string>};
+export function rustSelectorKeyInputs(record:RustSelectorRecord):RustSelectorKeyInputs{
+  const decoded=decoder(record,false),paths=new Set<string>(),members=new Set<string>(),populations=new Set<string>();
+  const add=(path:PortablePath,into:Set<string>)=>{if(path.root==='source')into.add(path.path);};
+  for(const row of [...record.key.engine,record.key.declarations,...record.key.cargo.inputs,...record.key.files]){const file=decoded.file(row);add(file.path,paths);
+    if(file.identity){add(file.identity.path,paths);for(const alias of file.identity.aliases)add(alias.path,paths);}}
+  for(const value of record.key.facts){const row=tuple(value,4,'fact group'),kind=KINDS[integer(row[0],'fact kind',KINDS.length-1)]!;
+    for(const query of array(row[2],'fact queries')){const path=decoded.path(query);add(path,paths);if(kind==='entries'||kind==='runtimeEntries')add(path,members);}}
+  for(const value of record.key.candidates)for(const query of array(tuple(value,3,'candidate group')[1],'candidate queries'))paths.add(decoded.source(query));
+  for(const value of record.key.populations)populations.add(decoded.source(tuple(value,3,'population')[0],true));
+  return {paths,members,populations};
+}
+
 function boundedRecordBytes(path:string):Buffer{
   const descriptor=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
   try{
@@ -266,13 +283,13 @@ function boundedRecordBytes(path:string):Buffer{
     return bytes.subarray(0,at);
   }finally{closeSync(descriptor);}
 }
-export type RustSelectorCandidate={state:'key-current';record:RustSelectorRecord;sha256:string}|{state:'pending';pending:SelectorPending;sha256?:string};
+export type RustSelectorCandidate={state:'key-current';record:RustSelectorRecord;sha256:string}|{state:'pending';pending:SelectorPending;sha256?:string;record?:RustSelectorRecord};
 /** One bounded body supplies both the checked key and the eventual roles. */
 export function loadRustSelectorCandidate(path:string,options:Parameters<typeof validateRustSelectorKey>[1]):RustSelectorCandidate{
   let bytes:Buffer;
   try{bytes=boundedRecordBytes(path);}catch(error){if(error instanceof MalformedRustSelectorRecord)throw error;return {state:'pending',pending:{kind:(error as NodeJS.ErrnoException).code==='ENOENT'?'missing':'record-read',path,reason:String(error)}};}
   let value:unknown;try{value=JSON.parse(bytes.toString('utf8')) as unknown;}catch{fail('invalid JSON');}
-  const record=parseRustSelectorRecord(value),checked=validateRustSelectorKey(record,options);if(checked.state==='pending')return {...checked,sha256:byteHash(bytes)};
+  const record=parseRustSelectorRecord(value),checked=validateRustSelectorKey(record,options);if(checked.state==='pending')return {...checked,sha256:byteHash(bytes),record};
   return {state:'key-current',record,sha256:byteHash(bytes)};
 }
 export function readRustSelectorRecord(path:string,options:Parameters<typeof validateRustSelectorKey>[1]&{trusted:TrustedRustSelectorRecord|undefined}):RustSelectorRead{
