@@ -4,7 +4,7 @@ import {spec} from 'node:test/reporters';
 import {finished} from 'node:stream/promises';
 import {resolve,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {availableParallelism} from 'node:os';
+import {hostObservations} from './host-observations.ts';
 import {publishHung,publishToolingFailure,PressureError,ToolingInstrumentError,type InstrumentResult} from './step-result.ts';
 import {CommandLiveness} from './command-liveness.ts';
 import {ToolingEntryActivity,type ToolingActivitySample} from './tooling-entry-activity.ts';
@@ -142,7 +142,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   if(options.activity!==undefined&&(!options.activity||typeof options.activity.acquire!=='function'))
     throw new ToolingInstrumentError('tooling-setup','tooling activity acquisition capability is incomplete');
   const timing:ToolingTiming=options.timing??{
-    now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},
+    now:hostObservations().now,scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},
   };
   const source:ToolingActivitySource=options.activity??{acquire:(files,started,broken)=>new ToolingEntryActivity(files,started,broken)};
   let activity:ToolingActivityLifetime|undefined,drained=false,primaryFailure:unknown;
@@ -253,7 +253,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
     instrumentError=instrumentError?new ToolingInstrumentError(cleanup.kind,instrumentError.message+'; '+cleanup.message,{cause:new AggregateError([instrumentError,cleanup])}):cleanup;
   }
   // node:test runs this many files at once when concurrency is true.
-  const measured:ToolingTimes={version:1,wallMs:clock()-begun,concurrency:Math.max(availableParallelism()-1,1),files:[...times.values()]};
+  const measured:ToolingTimes={version:1,wallMs:clock()-begun,concurrency:Math.max(hostObservations().availableWidth()-1,1),files:[...times.values()]};
   if(instrumentError){
     if(!priorFailures){publishToolingFailure(instrumentError,options.resultEnv);throw instrumentError;}
     // A definite assertion result survives an incomplete observer. The named

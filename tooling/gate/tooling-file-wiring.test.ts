@@ -227,17 +227,17 @@ for(const outcome of ['pass','fail','observation'] as const)test(`the pooled sel
   const marker=join(own,'selector.json'),ordinary=join(own,'ordinary-started'),entry=join(root,'tooling/ordinary.test.mjs'),ready=join(gate,'selector-ready.mjs');
   writeFileSync(ready,generatedJavaScript(`import{existsSync}from'node:fs';import{waitFor}from'./test-wait.ts';await waitFor('the ordinary file is active',()=>existsSync(${JSON.stringify(ordinary)}));`));
   const body=`
-const {readFileSync,writeFileSync,existsSync}=selectorEntryFs;
+const {readFileSync,existsSync}=selectorEntryFs;
 const count=existsSync(${JSON.stringify(marker)})?JSON.parse(readFileSync(${JSON.stringify(marker)},'utf8')).count:0;
-writeFileSync(${JSON.stringify(marker)},JSON.stringify({count:count+1}));
+durableRecord(${JSON.stringify(marker)},{count:count+1});
 if(selectorResident())throw Error('selector inherited the resident census role');
 const group=selectorHost({}).ownCgroup(),bound=selectorLimits(group).max;
 if(!Number.isSafeInteger(bound)||bound<1||bound>6*2**30)throw Error('selector has no finite file scope');
-writeFileSync(${JSON.stringify(marker)},JSON.stringify({count:count+1,group,bound}));
+durableRecord(${JSON.stringify(marker)},{count:count+1,group,bound});
 selectorSpawn(process.execPath,[${JSON.stringify(ready)}],{stdio:'inherit'});
 ${outcome==='observation'?"throw Error('supplied selector observation failure');":outcome==='fail'?"return 'supplied definite selector defect';":"const r=selectorCompile({memoryCapKb:64*1024},'python3',['-c','held=bytearray(128*1024**2)'],{encoding:'utf8'});if(!r.memoryKilled)throw Error('selector helper skipped its private budget');return null;"}
 `;
-  const imports="import * as selectorEntryFs from 'node:fs';\nimport{execFileSync as selectorSpawn}from'node:child_process';\nimport{hostObservations as selectorHost}from'./host-observations.ts';\nimport{readLimits as selectorLimits}from'./scopes/memory-limits.ts';\nimport{inResidentWorker as selectorResident,compileSync as selectorCompile}from'../census/worker-memory.ts';\n";
+  const imports="import * as selectorEntryFs from 'node:fs';\nimport{durableRecord}from'./durable-record.ts';\nimport{execFileSync as selectorSpawn}from'node:child_process';\nimport{hostObservations as selectorHost}from'./host-observations.ts';\nimport{readLimits as selectorLimits}from'./scopes/memory-limits.ts';\nimport{inResidentWorker as selectorResident,compileSync as selectorCompile}from'../census/worker-memory.ts';\n";
   writeFileSync(selector,imports+before.slice(0,begin)+'export function acceptedSourceSelfTest() {\n'+body+'\n}\n'+before.slice(end));
   writeFileSync(entry,generatedJavaScript(`import{test}from'node:test';import{existsSync,writeFileSync}from'node:fs';import{waitFor}from ${JSON.stringify(join(gate,'test-wait.ts'))};test('ordinary neighbour',async()=>{writeFileSync(${JSON.stringify(ordinary)},'active');await waitFor('the selector entry is active',()=>existsSync(${JSON.stringify(marker)}));});`));
   const driver=join(gate,'selector-driver.mjs');

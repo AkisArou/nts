@@ -14,6 +14,7 @@ import {requireOwnUnit,startBoundSlice} from './scopes/bound-slice.ts';
 import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
 import {assignOwnedValues} from './environment-values.ts';
+import {hostObservations} from './host-observations.ts';
 
 /** Shell entry and reporter fixtures share this exact collector command. */
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
@@ -90,13 +91,13 @@ function reportTimes(result:ToolingResult,root:string):number {
 async function runToolingEntries(files:string[],selectorSelfTest=false):Promise<ToolingResult>{
   if(!process.env.NTS_GATE_TOKENS||process.env.NTS_GATE_TOKEN_HELD){
     if(!selectorSelfTest)return runScopedTooling(files);
-    const started=performance.now(),replies:ToolingEntryReply[]=[],names=['@tooling-tests',TOOLING_SELF_TEST_FILE];
+    const clock=hostObservations().now,started=clock(),replies:ToolingEntryReply[]=[],names=['@tooling-tests',TOOLING_SELF_TEST_FILE];
     let failure:unknown;
     for(const [index,path] of names.entries())try{
       const result=await runScopedTooling(index===0?files:[path],index===0?{}:{selectorSelfTest:'only'});
       replies.push({path,bucket:'tooling',result});
     }catch(error){replies.push({path,bucket:'infrastructure-error',why:String(error)});failure??=error;}
-    return toolingFileResults(names,replies,{version:1,wallMs:performance.now()-started,concurrency:1,files:replies.flatMap(row=>row.result?.times?.files??[])},{},failure);
+    return toolingFileResults(names,replies,{version:1,wallMs:clock()-started,concurrency:1,files:replies.flatMap(row=>row.result?.times?.files??[])},{},failure);
   }
   const {runToolingFiles}=await import('./tooling-file-admission.ts');
   const temporary=process.env.TMPDIR??join(homedir(),'.cache/nts-tooling');mkdirSync(temporary,{recursive:true});
