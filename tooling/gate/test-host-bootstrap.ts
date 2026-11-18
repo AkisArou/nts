@@ -14,12 +14,16 @@ export function poisonedTestEnvironment(source:NodeJS.ProcessEnv=process.env):No
 }
 export function installTestHost():void {
   const environment=poisonedTestEnvironment();
-  const grants:NodeJS.ProcessEnv={NTS_MEMORY_RESERVATION:undefined,NTS_MEMORY_PRIORITY:undefined};
+  // Entry tests choose their own fixture execution roles and budgets. Their
+  // real enclosing file cap remains in the kernel after these roles leave.
+  const revoked=['NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_CENSUS_WORKER_GROUP','NTS_CENSUS_WORKER_MAX_BYTES',
+    'NTS_CENSUS_RUN_GROUP','NTS_CENSUS_RUN_MAX_BYTES','NTS_CENSUS_CASE_CONCURRENCY','NTS_CENSUS_POOL_WORKER','NTS_CENSUS_ACTIVE_CASE'];
+  const grants:NodeJS.ProcessEnv=Object.fromEntries(revoked.map(name=>[name,undefined]));
   for(const name of [...HOST_OBSERVATION_ENVIRONMENT,...CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT])grants[name]=environment[name];
   assignTestValues(process.env,grants);
   // process.env coerces assignment of undefined to the string 'undefined'.
   // The context revocation above is done; remove the native variables too.
-  delete process.env.NTS_MEMORY_RESERVATION;delete process.env.NTS_MEMORY_PRIORITY;
+  for(const name of revoked)delete process.env[name];
   // This preload is test instrumentation, never an oracle execution option.
   // Preserve every caller-supplied flag; remove only our exact import pair.
   process.execArgv=process.execArgv.filter((flag,index,all)=>{

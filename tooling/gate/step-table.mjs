@@ -98,16 +98,12 @@ export const STEPS = [
   { name: "jvm-verifies", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies",
     capabilities: ["jvm"],
   },
-  // Its runner (tooling-runner.ts) starts as many test files at once as
-  // node:test allows and reads no NTS_GATE_JOBS, so its slots say how much of
-  // the machine it keeps busy: in a landing on 2026-11-10, its slice (the
-  // units its tests start included) used 1,755 CPU s over 116 s, 15 cores. Its
-  // files averaged 18 at once, but a file spends part of its wall waiting on
-  // what it started, and a slot is a share of a budget sized in cores.
   { name: "tooling-types", slots: 1, treeOnly: true, doc: "every tooling module is strictly checked; legacy diagnostics may only fall" },
   { name: "gate-inputs", slots: 1, treeOnly: true, doc: "the inventory of full-gate inputs may only fall" },
   { name: "test-host", slots: 1, treeOnly: true, doc: "test dependencies obey host observation ownership" },
-  { name: "tooling", slots: 15, doc: "the gate's own tools pass their tests", capabilities: ["jvm", "android"] },
+  // A test entry owns one measured case lease and an independently bounded
+  // worker. Idle controllers hold no case promise; files use the shared pool.
+  { name: "tooling", elastic: true, slots: 15, min: 1, doc: "the gate's own tools pass their tests", capabilities: ["jvm", "android"] },
   { name: "primitives", slots: 1, treeOnly: true, doc: "docs/primitives.md names exist" },
   { name: "tests", slots: 8, min: 4, lock: "cargo", after: ["build"], doc: "cargo test --workspace",
     capabilities: ["jvm"],

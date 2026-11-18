@@ -5,6 +5,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import {copyModuleClosure} from './module-closure-fixture.ts';
 
 test("manual gate runs and individual steps disable cores, with an explicit debug opt-in", t => {
   const root = mkdtempSync(join(tmpdir(), "gate-core-limit-"));
@@ -18,6 +19,7 @@ test("manual gate runs and individual steps disable cores, with an explicit debu
   const upstream={...fixtureEnvironment(t),NTS_GATE_RUN_DIR:upstreamRun};
   const script = join(root, "tooling/gate/all.sh");
   writeFileSync(script, readFileSync(new URL("./all.sh", import.meta.url)));
+  copyModuleClosure(['tooling/gate/token.sh'],root);
   // Observe the limit inherited by a gate child, without running any builds.
   const node = join(root, "bin/node");
   writeFileSync(node, '#!/bin/sh\n{ ulimit -c; ulimit -Hc; } > "$CORE_LIMIT_OBSERVED"\n');

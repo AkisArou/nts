@@ -1164,6 +1164,18 @@ the tooling strict checker owns the source's type checking.
   until its final peak is retained and its workers have drained. A kill by
   an ancestor limit names that cgroup, its cap and the case cap, rather than
   claiming host-wide memory pressure.
+- **Tooling entries use the common case pool.** Each test file holds its own
+  lease before dispatch to a bounded resident controller. Its tests run in a
+  fresh Node process with the ordinary test bootstrap and activity observer.
+  The bootstrap revokes inherited census execution roles; each fixture's own
+  compiler and worker owners retain their semantics beneath the file cap.
+  The shared longest-first scheduler uses measured entry costs, with source
+  size as its fallback until an entry has been timed.
+  Completion retains the file's peak before the lease returns; a controller
+  may then accept another entry. The selector self-test also holds an explicit
+  case lease. A historical whole-tooling peak cannot size these admissions.
+  Completed assertion failures survive an unfinished neighbour or an observation
+  failure, with the separate diagnostic retained in the transcript.
 - **Case retirement has an owned lifetime.** Worker `close()` starts once;
   `closed` settles after the broker acknowledges the last peak and the owned
   worker scope is removed. The parent run stays until all its workers close.
@@ -1794,6 +1806,12 @@ death; an absent timestamp remains explicit after forced termination.
   verifies the kernel boundary before entry, and completion retains the
   token through final observation and worker drain
   ([log](records/notebooks/decisions-log.md#pooled-cases-own-memory-admission-11-12)).
+
+- **Tooling admission is per entry.** Test files and the selector self-test
+  use the common case leases and independent worker boundaries. A fresh Node
+  test process preserves file isolation; resident controllers can be reused.
+  The collector retains completed failures beside unfinished files and observer
+  errors ([log](records/notebooks/decisions-log.md#tooling-files-own-their-memory-admission-11-18)).
 
 - **Persistent scopes retain their kernel allowances across leases.** Fresh
   per-lease observations and meters remain independent of cap publication.

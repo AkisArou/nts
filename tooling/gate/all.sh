@@ -2560,7 +2560,7 @@ tooling_tests() {
     details || plain ~ /^[[:space:]]*(✖|⚠|﹣)/ || plain ~ /# SKIP/ ||
       plain ~ /^ℹ (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)/ { print "  " $0 }
   ' "$tooling_log"
-  node --import ./tooling/gate/step-result.ts tooling/gate/owed.mjs --self-test || status=1
+  "$root/tooling/gate/token.sh" --case tooling/gate/owed.mjs --backend node -- node --import ./tooling/gate/step-result.ts tooling/gate/owed.mjs --self-test || status=1
   return $status
 }
 step "tooling" tooling_tests

@@ -7,6 +7,7 @@ import test from "node:test";
 import { spawnTest } from "./test-wait.ts";
 import { TOOLING_COLLECTOR_COMMAND } from "./tooling-runner.ts";
 import { testScratch } from "./test-scratch.ts";
+import {copyModuleClosure} from './module-closure-fixture.ts';
 
 const shell = readFileSync(new URL("./all.sh", import.meta.url), "utf8");
 const wrapper = /^tooling_tests\(\) \{\n[\s\S]*?^\}/m.exec(shell)?.[0];
@@ -14,6 +15,7 @@ assert.ok(wrapper, "the test exercises all.sh's actual tooling wrapper");
 
 function run(t: { after(fn: () => void): void }, failure: boolean, runDirectory: boolean, color: boolean, command: readonly string[] = TOOLING_COLLECTOR_COMMAND) {
   const root = testScratch(t, "tooling-log-report");
+  copyModuleClosure(['tooling/gate/token.sh'],root);
   for (const dir of ["bin", "run", "tmp"]) mkdirSync(join(root, dir));
   const fixture = join(root, "fixture.test.ts");
   writeFileSync(fixture, `import test from 'node:test';
@@ -37,7 +39,7 @@ if(JSON.stringify(actual)===JSON.stringify(expected)){
 }
 `, { mode: 0o755 });
   const script = join(root, "wrapper.sh");
-  writeFileSync(script, wrapper + "\ntooling_tests\n");
+  writeFileSync(script, "root=$PWD\n" + wrapper + "\ntooling_tests\n");
   const env: NodeJS.ProcessEnv = {
     ...fixtureEnvironment(t), PATH: `${join(root, "bin")}:${process.env.PATH}`, TMPDIR: join(root, "tmp"),
     NTS_GATE_RUN_DIR: runDirectory ? join(root, "run") : "", TEST_FIXTURE: fixture,

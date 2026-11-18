@@ -22,6 +22,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DIR = process.env.NTS_GATE_COSTS_DIR ?? join(ROOT, "target", "gate-costs");
 
 function tsBytes(dir) {
+  // A tooling entry is one source file rather than a project directory.
+  try { const source = statSync(dir); if (source.isFile()) return source.size; } catch { return 0; }
   let total = 0;
   const walk = (d) => {
     let entries;
@@ -47,7 +49,7 @@ function read(tool) {
 
 /**
  * `projects`, most expensive first. A project is its own cost key; `where`
- * maps it to the directory whose TypeScript sizes it when it was never timed.
+ * maps it to a source file or the directory whose TypeScript sizes it when it was never timed.
  */
 export function longestFirst(tool, projects, where = (p) => p) {
   const seen = read(tool);

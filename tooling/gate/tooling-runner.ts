@@ -18,6 +18,7 @@ import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
 import {CommandLiveness} from './command-liveness.ts';
 import {ToolingEntryActivity,type ToolingActivitySample} from './tooling-entry-activity.ts';
+import {assignOwnedValues} from './environment-values.ts';
 
 /** Shell entry and reporter fixtures share this exact collector command. */
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
@@ -83,7 +84,7 @@ export function toolingTimesReport(times:ToolingTimes,root?:string):string[] {
   for(const row of times.files.filter(row=>row.startedMs===null||row.wallMs===null))lines.push(`tooling file  unfinished  ${name(row.file)}`);
   return lines;
 }
-type ToolingRequest={files:string[];idleMs?:number;execArgv?:string[];complete:string;nonce:string};
+export type ToolingRequest={files:string[];idleMs?:number;execArgv?:string[];complete:string;nonce:string};
 export function readToolingRequest(value:unknown):ToolingRequest {
   if(typeof value!=="object"||value===null)throw new ToolingInstrumentError("tooling-setup","invalid tooling worker request");
   const row=value as Record<string,unknown>;
@@ -284,7 +285,9 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
 }
 
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */
-export async function runScopedTooling(files:string[],options:{idleMs?:number;execArgv?:string[];fixture?:boolean;output?:NodeJS.WritableStream;onScope?:(slice:string,unit:string,stopped:()=>string|undefined)=>void|Promise<void>}={}):Promise<ToolingResult&{slice:string}> {
+export async function runScopedTooling(files:string[],options:{idleMs?:number;execArgv?:string[];fixture?:boolean;memoryMax?:number;output?:NodeJS.WritableStream;onScope?:(slice:string,unit:string,stopped:()=>string|undefined)=>void|Promise<void>}={}):Promise<ToolingResult&{slice:string}> {
+  if(options.memoryMax!==undefined&&(!Number.isSafeInteger(options.memoryMax)||options.memoryMax<1))
+    throw new ToolingInstrumentError('tooling-setup','tooling file memory bound must be a positive byte count');
   const boundary=supervisorWorkerBoundary();
   const before=boundary?memoryEvents(boundary.group,true).oom:0;
   const parent=boundary?{...process.env,NTS_TOOLING_SLICE:boundary.slice}:process.env;
@@ -296,12 +299,14 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   // A by-hand run is its launcher's rank (NTS_MEMORY_PRIORITY); inside a run it is nested and shares that run's.
   const rank=priorityOf(process.env);
   const command=gateCommand(process.execPath,[fileURLToPath(import.meta.url),"--worker",JSON.stringify(request)],{rank,env:{NTS_TOOLING_SLICE:slice}});
-  const env:NodeJS.ProcessEnv={...process.env,NTS_TOOLING_SLICE:slice};
+  const env:NodeJS.ProcessEnv={...process.env};
+  assignOwnedValues(env,{NTS_TOOLING_SLICE:slice});
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
   let acquired=false,closed:Promise<number>|undefined,unregister:(()=>void)|undefined,failed=false,primary:unknown;
   try {
-  startBoundSlice(slice,owner,{rank});acquired=true;
-  const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",command.command,...command.args],{
+  startBoundSlice(slice,owner,{rank,...(options.memoryMax===undefined?{}:{max:options.memoryMax})});acquired=true;
+  const limits=options.memoryMax===undefined?[]:[`--property=MemoryMax=${options.memoryMax}`,'--property=MemorySwapMax=0'];
+  const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",...limits,command.command,...command.args],{
     env,stdio:["ignore","pipe","pipe"],
   });
   const output=options.output??process.stdout;
@@ -341,6 +346,24 @@ function reportTimes(result:ToolingResult,root:string):number {
   if(result.times)for(const line of toolingTimesReport(result.times,root))process.stdout.write(line+"\n");
   return result.status;
 }
+
+/** A broker-backed command is already the outside supervisor. Keep the
+ * common pool directly on the step's dynamic worker boundary; wrapping the
+ * whole suite in a file scope would introduce a static aggregate ceiling. */
+async function runToolingEntries(files:string[]):Promise<ToolingResult>{
+  if(!process.env.NTS_GATE_TOKENS||process.env.NTS_GATE_TOKEN_HELD)return runScopedTooling(files);
+  const {runToolingFiles}=await import('./tooling-file-admission.ts');
+  const temporary=process.env.TMPDIR??join(homedir(),'.cache/nts-tooling');mkdirSync(temporary,{recursive:true});
+  const directory=mkdtempSync(join(temporary,'tooling-files-'));
+  const request=readToolingRequest({files,complete:join(directory,'complete.json'),nonce:randomUUID()});
+  const resultEnv={NTS_GATE_STEP_RESULT:process.env.NTS_GATE_STEP_RESULT,NTS_GATE_STEP:process.env.NTS_GATE_STEP,NTS_GATE_STEP_ATTEMPT:process.env.NTS_GATE_STEP_ATTEMPT};
+  assignOwnedValues(process.env,{NTS_GATE_STEP_RESULT:undefined,NTS_GATE_STEP_ATTEMPT:undefined});
+  try{
+    const result=await runToolingFiles(request,{resultEnv});
+    if(result.status===0)rmSync(directory,{recursive:true,force:true});
+    return result;
+  }finally{assignOwnedValues(process.env,resultEnv);}
+}
 runAsCommand(import.meta.url,async()=>{
   try {
     const args=process.argv.slice(2);
@@ -362,16 +385,16 @@ runAsCommand(import.meta.url,async()=>{
       const root=resolve(fileURLToPath(new URL("../..",import.meta.url))),selection=discoverToolingTests(root);
       process.stdout.write(`tooling tests: ${selection.files.length} collected, ${selection.exclusions.length} explicitly assigned to another step, ${selection.inventoryCount} inventoried\n`);
       for(const row of selection.exclusions)process.stdout.write(`  ${row.path}: ${row.step} (${row.reason})\n`);
-      process.exitCode=reportTimes(await runScopedTooling(selection.files.map(file=>resolve(root,file))),root);
+      process.exitCode=reportTimes(await runToolingEntries(selection.files.map(file=>resolve(root,file))),root);
     } else if(args[0]==='--step') {
       if(args.length!==2||!args[1])throw new ToolingInstrumentError('tooling-setup','the tooling step runner needs exactly one step name');
       const {toolingTestsForStep}=await import('./tooling-discovery.ts');
       const root=resolve(fileURLToPath(new URL('../..',import.meta.url))),files=toolingTestsForStep(root,args[1]);
       process.stdout.write(`tooling tests for ${args[1]}: ${files.length} assigned by the exclusions table\n`);
-      process.exitCode=reportTimes(await runScopedTooling(files.map(file=>resolve(root,file))),root);
+      process.exitCode=reportTimes(await runToolingEntries(files.map(file=>resolve(root,file))),root);
     } else {
       if(!args.length)throw new ToolingInstrumentError("tooling-setup","tooling runner needs explicit test files");
-      process.exitCode=reportTimes(await runScopedTooling(args),process.cwd());
+      process.exitCode=reportTimes(await runToolingEntries(args),process.cwd());
     }
   } catch(error) {
     if(error instanceof PressureError){publishPressure(error);process.stderr.write(error.message+"\n");}

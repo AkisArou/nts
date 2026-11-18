@@ -3700,3 +3700,21 @@ MemAvailable already excludes them. Whether a landing may stop or cap
 lower-rank steps that are already running is a separate, design-first
 question.
 
+
+## Tooling files own their memory admission (11-18)
+
+Tooling uses the common case pool for each test entry and the selector self-test,
+so admission follows each file's measured peak instead of the complete suite's
+historical peak. Each resident controller has an independent worker cap, while
+each entry still gets a fresh Node test process. Completed assertions remain
+failures beside unfinished work or observer errors. The supplied-observation
+controls cover admission beside two agent jobs, a genuinely full machine, and
+lease completion through final peak retention and worker drain.
+
+The test bootstrap revokes inherited census execution roles as it revokes the
+parent memory reservation. Fixture compiler owners keep their own budgets
+under the finite file slice and scope; the test itself is not a census worker.
+
+The common longest-first ordering owner also schedules tooling entries. It
+retains measured file costs and uses source-file size before the first timing,
+so costly entries can start before the last part of the pool empties.
