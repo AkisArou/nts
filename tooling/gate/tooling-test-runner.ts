@@ -71,7 +71,7 @@ export function toolingTimesReport(times:ToolingTimes,root?:string):string[] {
   return lines;
 }
 export const TOOLING_SELF_TEST_FILE=fileURLToPath(new URL('./owed.mjs',import.meta.url));
-export type ToolingRequest={files:string[];idleMs?:number;execArgv?:string[];complete:string;nonce:string;selectorSelfTest?:'include'|'only'};
+export type ToolingRequest={files:string[];idleMs?:number;execArgv?:string[];complete:string;nonce:string;selectorSelfTest?:'include'|'only';singleProcess?:true};
 export function toolingEntryFiles(request:ToolingRequest):string[]{
   const files=request.files.map(file=>resolve(file));
   return request.selectorSelfTest==='include'&&!files.includes(TOOLING_SELF_TEST_FILE)?[...files,TOOLING_SELF_TEST_FILE]:files;
@@ -83,10 +83,31 @@ export function readToolingRequest(value:unknown):ToolingRequest {
   if(!strings(row.files)||!row.files.length||typeof row.complete!=="string"||!row.complete||typeof row.nonce!=="string"||!row.nonce
       ||(row.execArgv!==undefined&&!strings(row.execArgv))
       ||(row.selectorSelfTest!==undefined&&row.selectorSelfTest!=='include'&&row.selectorSelfTest!=='only')
+      ||(row.singleProcess!==undefined&&(row.singleProcess!==true||row.files.length!==1||row.selectorSelfTest!==undefined))
       ||(row.selectorSelfTest==='only'&&(row.files.length!==1||resolve(row.files[0]!)!==TOOLING_SELF_TEST_FILE))
       ||(row.idleMs!==undefined&&(typeof row.idleMs!=="number"||!Number.isSafeInteger(row.idleMs)||row.idleMs<=0)))
     throw new ToolingInstrumentError("tooling-setup","invalid tooling worker request fields");
-  return {files:row.files,complete:row.complete,nonce:row.nonce,...(row.selectorSelfTest===undefined?{}:{selectorSelfTest:row.selectorSelfTest as 'include'|'only'}),...(row.idleMs===undefined?{}:{idleMs:row.idleMs as number}),...(row.execArgv===undefined?{}:{execArgv:row.execArgv as string[]})};
+  return {files:row.files,complete:row.complete,nonce:row.nonce,...(row.singleProcess===true?{singleProcess:true}:{}),...(row.selectorSelfTest===undefined?{}:{selectorSelfTest:row.selectorSelfTest as 'include'|'only'}),...(row.idleMs===undefined?{}:{idleMs:row.idleMs as number}),...(row.execArgv===undefined?{}:{execArgv:row.execArgv as string[]})};
+}
+
+/** The enclosing scope is already a fresh process for exactly this file.
+ * Its surviving controller owns activity and termination; this process owns
+ * Node's completed-test evidence and serializes it before another body runs. */
+export async function runToolingEntry(file:string,progress:(event:'start'|'complete',id:number,name:string,failed?:boolean)=>void):Promise<ToolingResult>{
+  const clock=hostObservations().now,started=clock(),owners=new ToolingTestOwners([file]);
+  let completedFailures=0,success=true,summarized=false;
+  const stream=run({files:[file],isolation:'none',setup:events=>{
+    events.on('test:dequeue',data=>{owners.file(data);progress('start',data.testId,data.name);});
+    events.on('test:complete',data=>{
+      owners.file(data);const failed=completedTestFailure(data);if(failed)completedFailures++;
+      progress('complete',data.testId,data.name,failed);
+    });
+    events.on('test:summary',data=>{summarized=true;if(!data.success)success=false;});
+  }});
+  const report=stream.compose(spec);report.pipe(process.stdout,{end:false});await finished(report);
+  if(!summarized)throw new ToolingInstrumentError('tooling-setup','tooling entry ended without a test summary');
+  const wallMs=clock()-started;
+  return {status:success?0:1,completedFailures,times:{version:1,wallMs,concurrency:1,files:[{file,startedMs:0,wallMs,passed:success}]}};
 }
 
 type TestActivity={entryFile?:string;file?:string;name?:string;testId?:number;parentId?:number};

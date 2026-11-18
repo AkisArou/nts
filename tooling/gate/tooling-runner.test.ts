@@ -150,14 +150,15 @@ createReadStream(fifo).resume();
 `);
   let observed:any;
   const transcript=new PassThrough();let output="";transcript.on("data",data=>output+=data);
-  await assert.rejects(runScopedTooling([file],{fixture:true,output:transcript,onScope:async(slice,unit,stopped)=>{
+  const terminated=await runScopedTooling([file],{fixture:true,output:transcript,onScope:async(slice,unit,stopped)=>{
     ownedSlice=slice;
     await waitFor("the subject's real service and census readiness record",()=>existsSync(state),{stopped});
     observed=JSON.parse(readFileSync(state,"utf8"));
     assert.ok(observed.serviceGroup.includes(`/${slice}/`),observed.serviceGroup);
     assert.ok(observed.censusGroup.startsWith(observed.serviceGroup.slice(0,observed.serviceGroup.lastIndexOf('/'))+"/"),observed.censusGroup);
     const stoppedUnit=systemctl("stop",unit);assert.equal(stoppedUnit.status,0,stoppedUnit.stderr);
-  }}),error=>{assert.match(String(error),/without a completed report/,output);return true;});
+  }});
+  assert.equal(terminated.status,1,output);assert.match(output,/process terminated mid-file/);
   assert.notEqual(systemctl("is-active",service).stdout.trim(),"active");
   assert.notEqual(systemctl("is-active",observed.scope).stdout.trim(),"active");
   await waitFor("the owned service and aggregate cgroups to disappear",()=>!existsSync('/sys/fs/cgroup'+observed.serviceGroup)&&!existsSync('/sys/fs/cgroup'+observed.censusGroup));

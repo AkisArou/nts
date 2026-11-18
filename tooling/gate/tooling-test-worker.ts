@@ -1,8 +1,10 @@
 // Fresh bounded execution; scope launch and admission stay in their owners.
-import {writeFileSync,renameSync} from 'node:fs';
+import {writeFileSync,renameSync,writeSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {runAsCommand} from '../differential/command-entry/main.ts';
-import {runTooling,readToolingRequest,TOOLING_SELF_TEST_FILE,type ToolingRequest,type ToolingResult} from './tooling-test-runner.ts';
+import {runTooling,runToolingEntry,readToolingRequest,TOOLING_SELF_TEST_FILE,type ToolingRequest,type ToolingResult} from './tooling-test-runner.ts';
+import {installTestHost} from './test-host-bootstrap.ts';
+import type {ToolingEntryFrame} from './tooling-entry-channel.ts';
 import {toolingSlice} from './tooling-slice.ts';
 import {publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from './step-result.ts';
 import {WORKER_ROLE_VARIABLES} from '../census/worker-identity.ts';
@@ -35,7 +37,14 @@ export async function runToolingWorker(request:ToolingRequest):Promise<void>{
     delete process.env.NTS_GATE_STEP_RESULT;delete process.env.NTS_GATE_STEP_ATTEMPT;
     if(request.selectorSelfTest==='include')throw new ToolingInstrumentError('tooling-setup','a suite must dispatch its selector entry through the case pool');
     const bootstrap=fileURLToPath(new URL('./test-host-bootstrap.ts',import.meta.url));
-    const result=request.selectorSelfTest==='only'?await selectorSelfTest():await runTooling(request.files,
+    let result:ToolingResult;
+    if(request.singleProcess){
+      let sequence=0;
+      const send=(row:Pick<ToolingEntryFrame,'event'|'id'|'name'|'failed'>)=>writeSync(3,JSON.stringify({version:1,nonce:request.nonce,
+        file:request.files[0],pid:process.pid,sequence:++sequence,...row})+'\n');
+      send({event:'ready'});installTestHost();
+      result=await runToolingEntry(request.files[0]!, (event,id,name,failed)=>{send({event,id,name,failed});});
+    }else result=request.selectorSelfTest==='only'?await selectorSelfTest():await runTooling(request.files,
       {idleMs:request.idleMs,execArgv:[...(request.execArgv??[]),'--import',bootstrap],resultEnv});
     const pending=`${request.complete}.${process.pid}`;
     writeFileSync(pending,JSON.stringify({version:2,nonce:request.nonce,...result})+'\n');renameSync(pending,request.complete);

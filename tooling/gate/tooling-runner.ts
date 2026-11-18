@@ -7,7 +7,8 @@ import {mkdirSync,mkdtempSync,readFileSync,rmSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {randomUUID} from "node:crypto";
-import {publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
+import {publishHung,publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
+import {ToolingEntrySupervisor} from './tooling-entry-supervisor.ts';
 import {checkedUnitName,newToolingSlice,stopToolingSlice} from "./tooling-slice.ts";
 import {priorityOf} from "./ranks.ts";
 import {requireOwnUnit,startBoundSlice} from './scopes/bound-slice.ts';
@@ -20,7 +21,7 @@ import {hostObservations} from './host-observations.ts';
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
 
 export * from './tooling-test-runner.ts';
-import {readToolingRequest,readToolingCompletion,toolingTimesReport,toolingFileResults,TOOLING_SELF_TEST_FILE,type ToolingResult,type ToolingEntryReply} from './tooling-test-runner.ts';
+import {readToolingRequest,readToolingCompletion,toolingTimesReport,toolingFileResults,TOOLING_IDLE_GUARD_MS,TOOLING_SELF_TEST_FILE,type ToolingResult,type ToolingEntryReply} from './tooling-test-runner.ts';
 
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */
 export async function runScopedTooling(files:string[],options:{idleMs?:number;execArgv?:string[];selectorSelfTest?:'only';fixture?:boolean;memoryMax?:number;output?:NodeJS.WritableStream;onScope?:(slice:string,unit:string,stopped:()=>string|undefined)=>void|Promise<void>}={}):Promise<ToolingResult&{slice:string}> {
@@ -33,24 +34,31 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   const owner=requireOwnUnit();
   const temporary=process.env.TMPDIR??join(homedir(),".cache/nts-tooling");mkdirSync(temporary,{recursive:true});
   const directory=mkdtempSync(join(temporary,"tooling-report-")),complete=join(directory,"complete.json"),nonce=randomUUID();
-  const request=readToolingRequest({files,idleMs:options.idleMs,execArgv:options.execArgv,selectorSelfTest:options.selectorSelfTest,complete,nonce});
+  const singleProcess=files.length===1&&!options.selectorSelfTest;
+  const request=readToolingRequest({files:files.map(file=>resolve(file)),idleMs:options.idleMs,execArgv:options.execArgv,selectorSelfTest:options.selectorSelfTest,complete,nonce,
+    ...(singleProcess?{singleProcess:true}:{})});
   // A by-hand run is its launcher's rank (NTS_MEMORY_PRIORITY); inside a run it is nested and shares that run's.
   const rank=priorityOf(process.env);
-  const command=gateCommand(process.execPath,[fileURLToPath(new URL('./tooling-test-worker.ts',import.meta.url)),JSON.stringify(request)],{rank,env:{NTS_TOOLING_SLICE:slice}});
+  const command=gateCommand(process.execPath,[...(singleProcess?options.execArgv??[]:[]),fileURLToPath(new URL('./tooling-test-worker.ts',import.meta.url)),JSON.stringify(request)],{rank,env:{NTS_TOOLING_SLICE:slice}});
   const env:NodeJS.ProcessEnv={...process.env};
   assignOwnedValues(env,{NTS_TOOLING_SLICE:slice});
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
-  let acquired=false,closed:Promise<number>|undefined,unregister:(()=>void)|undefined,failed=false,primary:unknown;
+  let acquired=false,closed:Promise<number>|undefined,unregister:(()=>void)|undefined,failed=false,primary:unknown,entry:ToolingEntrySupervisor|undefined;
+  const clock=hostObservations().now,started=clock();
   try {
   startBoundSlice(slice,owner,{rank,...(options.memoryMax===undefined?{}:{max:options.memoryMax})});acquired=true;
   const limits=options.memoryMax===undefined?[]:[`--property=MemoryMax=${options.memoryMax}`,'--property=MemorySwapMax=0'];
   const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",...limits,command.command,...command.args],{
-    env,stdio:["ignore","pipe","pipe"],
+    env,stdio:["ignore","pipe","pipe",singleProcess?'pipe':'ignore'],
   });
   const output=options.output??process.stdout;
   child.stdout.pipe(output,{end:false});child.stderr.pipe(output,{end:false});
   process.stderr.write(`tooling scope: ${unit}.scope in ${slice}\n`);
   const stop=()=>stopToolingSlice(slice);
+  if(singleProcess){
+    entry=new ToolingEntrySupervisor(child,resolve(files[0]!),nonce,options.idleMs??TOOLING_IDLE_GUARD_MS,stop);
+    child.stdout.on('data',entry.touch);child.stderr.on('data',entry.touch);
+  }
   let ended:string|undefined;
   closed=new Promise<number>((resolve,reject)=>{
     child.once("error",error=>{ended=String(error);reject(error);});
@@ -60,19 +68,37 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   // until the launcher and all output streams have actually closed.
   unregister=registerCommandCloser(`tooling workers ${slice}`,{cancel:stop,close:stop,closed:async()=>{await closed;}});
     const [status]=await Promise.all([closed,options.onScope?.(slice,`${unit}.scope`,()=>ended)]);
+    entry?.finish();
+    const partial=(status:1|2):ToolingResult&{slice:string}=>({status,completedFailures:entry!.evidence.completedFailures,slice,
+      times:{version:1,wallMs:clock()-started,concurrency:1,files:[{file:resolve(files[0]!),startedMs:0,wallMs:clock()-started,passed:false}]}});
+    if(entry?.hung){
+      publishHung(entry.hung,process.env,entry.evidence.completedFailures);process.stderr.write(entry.hung+'\n');
+      return partial(entry.evidence.completedFailures?1:2);
+    }
+    if(entry?.error){
+      if(!entry.evidence.completedFailures)throw entry.error;
+      return {...partial(1),observationFailure:{kind:entry.error.kind,reason:entry.error.message}};
+    }
     let report;
     try { report=JSON.parse(readFileSync(complete,"utf8")); }
     catch(error) {
       if(boundary&&memoryEvents(boundary.group,true).oom>before)
         throw new PressureError(`tooling workers exceeded their step's memory bound (${boundary.slice}); their supervisor survived outside it`);
+      if(entry?.evidence.ready){
+        process.stderr.write(`tooling file FAIL: ${files[0]}; process terminated mid-file (status ${status}); ${entry.evidence.completedTests} completed assertion(s), ${entry.evidence.completedFailures} failure(s) retained\n`);
+        return {...partial(1),completedFailures:Math.max(1,entry.evidence.completedFailures)};
+      }
       throw new ToolingInstrumentError("tooling-setup",`tooling worker ended without a completed report (status ${status}, ${slice})`,{cause:error});
     }
     const result=readToolingCompletion(report,nonce,status);
+    if(entry&&(!entry.evidence.ready||result.completedFailures!==entry.evidence.completedFailures))
+      throw new ToolingInstrumentError('tooling-setup','tooling completion disagrees with its authenticated child channel');
     if(status===0)rmSync(directory,{recursive:true,force:true});
     return {...result,slice};
   } catch(error){failed=true;primary=error;throw error;}
   finally {
     const errors:unknown[]=[];
+    try{entry?.finish();}catch(error){errors.push(error);}
     try{if(acquired)stopToolingSlice(slice);}catch(error){errors.push(error);}
     try{if(closed)await closed;}catch(error){errors.push(error);}
     try{unregister?.();}catch(error){errors.push(error);}
