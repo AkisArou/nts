@@ -636,6 +636,9 @@ pub(super) fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder)
             calls.insert(symbol, reached);
         }
     }
+    for (overridden, by) in overriding_methods(snapshot, probe) {
+        calls.entry(overridden).or_default().push(Reached::Body(by));
+    }
     // **Twice, over one walk.** `any` counts every unresolved callee; `bodily`
     // counts only those the body did not receive as a parameter. One walk and two
     // closures rather than two walks, so the two sets cannot disagree about what
@@ -710,6 +713,106 @@ pub(super) fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder)
         copyable,
         uncopied_for,
     }
+}
+
+/// Each class method a subclass overrides, paired with the overriding method's
+/// symbol: `(Base#m, Sub#m)` for `class Sub extends Base { override m() {} }`.
+///
+/// **A call to `m` through a `Base` dispatches to whichever body the receiver
+/// holds**, so what it can raise is what any of them can. Asked by the
+/// declaration's symbol alone, a `Base#m` that cannot throw answered "cannot
+/// raise" for `r.m()` with `r` a `Sub` whose `m` throws. The caller's raising
+/// copy then dispatched at the ordinary slot and the override's `throw` ended
+/// the program from inside a `try` that compiled
+/// (`outcomes/a-throwing-override-escapes-a-try-through-a-base-that-cannot-throw`,
+/// and its computed-key spelling `r[kRun](n)`). One edge per override, from
+/// the nearest ancestor declaring the member, joins the override into the
+/// overridden method's calls. The fixpoints then give both answers at once:
+/// `Base#m` can raise when an override can, and it has a copy only when every
+/// override has one, which is what fills its raising slot.
+///
+/// The edge is per member key, so a method under a computed key (`[kRun]`)
+/// pairs with its override by the key's symbol, not by spelling. A static
+/// method pairs only with a static one, since the two never share a slot.
+fn overriding_methods(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Vec<(u32, u32)> {
+    let is_static = |member: NodeId| a_static_member(probe, member);
+    let mut edges = Vec::new();
+    for (index, record) in snapshot.symbols.iter().enumerate() {
+        let Ok(symbol) = u32::try_from(index) else {
+            continue;
+        };
+        for method in &record.declarations {
+            if probe.kind_of(*method) != Some(syntax::METHOD_DECLARATION) {
+                continue;
+            }
+            let Some(class) = probe
+                .syntactic_parent(*method)
+                .filter(|parent| probe.kind_of(*parent).is_some_and(declares_a_class))
+            else {
+                continue;
+            };
+            let Some(key) = probe.member_key(*method) else {
+                continue;
+            };
+            let overridden = the_method_at_or_above(
+                snapshot,
+                probe,
+                declared_base_class(snapshot, probe, class),
+                &key,
+                is_static(*method),
+            );
+            if let Some(overridden) = overridden
+                .and_then(|member| probe.name_node(member))
+                .and_then(|name| probe.node(name).symbol)
+            {
+                edges.push((probe.denoted_symbol(overridden).0, symbol));
+            }
+        }
+    }
+    edges
+}
+
+fn a_static_member(probe: &FuncBuilder, member: NodeId) -> bool {
+    probe
+        .node(member)
+        .modifiers
+        .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+}
+
+/// The method a class declares under `key`, or the nearest of its program bases
+/// that does: what a call to that member on an instance of the class runs.
+/// `class` is the class's symbol, as [`declared_base_class`] answers, so a chain
+/// is followed through imports. `None` where no program class on the chain
+/// declares it -- a provided base's member is the runtime's.
+pub(super) fn the_method_at_or_above(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    class: Option<u32>,
+    key: &super::PropertyKey,
+    wanted_static: bool,
+) -> Option<NodeId> {
+    let mut seen = rustc_hash::FxHashSet::default();
+    let mut class = class;
+    while let Some(symbol) = class.take() {
+        if !seen.insert(symbol) {
+            break;
+        }
+        for declaration in &snapshot.symbols.get(symbol as usize)?.declarations {
+            if !probe.kind_of(*declaration).is_some_and(declares_a_class) {
+                continue;
+            }
+            let found = probe.children(*declaration).into_iter().find(|member| {
+                probe.kind_of(*member) == Some(syntax::METHOD_DECLARATION)
+                    && a_static_member(probe, *member) == wanted_static
+                    && probe.member_key(*member).as_ref() == Some(key)
+            });
+            if found.is_some() {
+                return found;
+            }
+            class = declared_base_class(snapshot, probe, *declaration);
+        }
+    }
+    None
 }
 
 /// Calls in exactly the bodies offered by the selected raising-copy arm.

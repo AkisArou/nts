@@ -1,12 +1,14 @@
 // run: check
 // backend: llvm
 
-// L15: a direct call through a non-throwing base loses the override's throw.
-// Making only the base declaration able to throw is an agreeing control.
-// Reading the method as a value still loses the throw even with that base;
-// calling the same method directly is its agreeing one-difference control.
-// The base-typed value call combines the two failures. Child-typed direct
-// dispatch is an additional agreeing control. n=27 gives each entry one case.
+// L15: reading an overridden method as a value through its base loses the
+// override's throw, whether or not the base method can throw itself. Calling
+// the same method directly is the agreeing one-difference control, through
+// either base: a direct call through a base that cannot throw asks every
+// override since #843, and is guarded by
+// `tests/programs/a-throwing-override-under-a-computed-key-through-a-base`.
+// Child-typed direct dispatch is an additional agreeing control. n=27 gives
+// each entry one case.
 
 class Base {
   step(n: number): number {
@@ -77,7 +79,7 @@ function viaThrowingBase(source: ThrowingBase, n: number): number {
   }
 }
 
-/** Subject: called directly through the base-typed receiver. */
+/** Control: called directly through the base-typed receiver. */
 export function throughBase(): number {
   return viaBase(new Child(), 27);
 }
