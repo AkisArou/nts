@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {toolingFileDispatch,toolingFileResults} from './tooling-file-admission.ts';
+import {orderedToolingAdmission,toolingFileDispatch,toolingFileResults} from './tooling-file-admission.ts';
+import {createTokenPool} from './token-pool.ts';
+import {tokenClient} from './tokens.mjs';
 import {discoverToolingTests} from './tooling-discovery.ts';
 import type {ToolingFileReply} from './tooling-file-worker.ts';
 import type {ToolingTimes} from './tooling-runner.ts';
@@ -20,6 +22,33 @@ import {childSlice,newToolingSlice,toolingSlice,toolingSliceArgs,unitComponent} 
 const GiB=2**30,files=['/repo/a.test.ts','/repo/b.test.ts'];
 const times:ToolingTimes={version:1,wallMs:1,concurrency:2,files:[]};
 const reply=(path:string,status:0|1|2,completedFailures=0):ToolingFileReply=>({path,bucket:'tooling',result:{status,completedFailures}});
+
+for(const ordered of [true,false])test(`tooling admissions ${ordered?'retain dispatch order without serializing execution':'overtake a waiting head without the ordering owner'}`,async t=>{
+  let headFits=false;
+  const pool=createTokenPool({now:()=>0,free:()=>4,claim:()=>1,eligible:(_step,bytes)=>headFits||bytes===1});
+  const signal=new AbortController(),held:(()=>void)[]=[],asked:string[]=[];
+  t.after(async()=>{signal.abort();for(const release of held)release();pool.close();await pool.closed;});
+  const address=await pool.start();assert.ok(address);
+  const client=tokenClient(address,'tooling');
+  const base=(path:string,stop:AbortSignal)=>{asked.push(path);return client.acquire({project:path,backend:'node'},stop,path===files[0]?2:1);};
+  const acquire=ordered?orderedToolingAdmission(base):base;
+  const first=acquire(files[0]!,signal.signal),second=acquire(files[1]!,signal.signal);
+  await waitFor('the earlier tooling lease is waiting',()=>pool.waiting.length===1);
+  if(ordered)assert.deepEqual(asked,[files[0]],'a later acquire bypassed the waiting earlier file');
+  else {const release=await second;assert.ok(release);held.push(release);assert.equal(pool.total,1,'the counterfactual grants the later small file first');}
+  headFits=true;pool.grant();
+  const head=await first;assert.ok(head);held.push(head);
+  if(ordered){const later=await second;assert.ok(later);held.push(later);}
+  assert.equal(pool.total,2,'both file leases are active before either file completes');
+});
+
+test('a refused head admission preserves its named error and does not strand the following request',async()=>{
+  const stop=new AbortController(),failure=Error('tooling/impossible.test.ts cannot fit the run maximum reservation');
+  const acquire=orderedToolingAdmission(async path=>{if(path===files[0])throw failure;return ()=>{};});
+  const head=acquire(files[0]!,stop.signal),next=acquire(files[1]!,stop.signal);
+  await assert.rejects(head,error=>error===failure);
+  assert.ok(await next);
+});
 
 test('tooling file slices retain the common resident worker ancestry',()=>{
   let parent=newToolingSlice();

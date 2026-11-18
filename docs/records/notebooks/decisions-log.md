@@ -3732,3 +3732,8 @@ A tooling controller reads the registered kernel cap at file dispatch, after
 the broker handshake, rather than retaining its startup allowance. A local
 budget incident or lost active controller drains finite neighbours before
 the pool raises it; completed results remain authoritative.
+
+Tooling admission follows dispatch order. Only one request awaits its grant
+at a time, so a smaller later file cannot overtake a waiting earlier one.
+Granted files continue concurrently under their existing leases and caps.
+The runner refuses a head forecast beyond its complete budget by name.

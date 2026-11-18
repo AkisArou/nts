@@ -1171,6 +1171,8 @@ the tooling strict checker owns the source's type checking.
   compiler and worker owners retain their semantics beneath the file cap.
   The shared longest-first scheduler uses measured entry costs; untimed
   entries go first so an unknown cannot be left in the measured tail.
+  Admission requests follow that dispatch order: a later small request
+  cannot bypass a waiting earlier file. Granted files execute concurrently.
   The pool uses each worker container's local OOM count for its own budget;
   fixture descendant budgets retain their owners' completed outcomes. A
   completed assertion report survives a later memory observation failure.
