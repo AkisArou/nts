@@ -27,6 +27,7 @@ async function selectorSelfTest():Promise<ToolingResult>{
 
 export async function runToolingWorker(request:ToolingRequest):Promise<void>{
   const resultEnv={NTS_GATE_STEP_RESULT:process.env.NTS_GATE_STEP_RESULT,NTS_GATE_STEP:process.env.NTS_GATE_STEP,NTS_GATE_STEP_ATTEMPT:process.env.NTS_GATE_STEP_ATTEMPT};
+  let send:((row:Pick<ToolingEntryFrame,'event'|'id'|'name'|'failed'|'instrument'>)=>void)|undefined;
   try{
     const slice=toolingSlice();
     // Placement is physical wiring, like the independently verified cgroup
@@ -40,16 +41,18 @@ export async function runToolingWorker(request:ToolingRequest):Promise<void>{
     let result:ToolingResult;
     if(request.singleProcess){
       let sequence=0;
-      const send=(row:Pick<ToolingEntryFrame,'event'|'id'|'name'|'failed'>)=>writeSync(3,JSON.stringify({version:1,nonce:request.nonce,
-        file:request.files[0],pid:process.pid,sequence:++sequence,...row})+'\n');
+      send=row=>{writeSync(3,JSON.stringify({version:1,nonce:request.nonce,
+        file:request.files[0],pid:process.pid,sequence:++sequence,...row})+'\n');};
       send({event:'ready'});installTestHost();
-      result=await runToolingEntry(request.files[0]!, (event,id,name,failed)=>{send({event,id,name,failed});});
+      const report=send;
+      result=await runToolingEntry(request.files[0]!, (event,id,name,failed)=>{report({event,id,name,failed});});
     }else result=request.selectorSelfTest==='only'?await selectorSelfTest():await runTooling(request.files,
       {idleMs:request.idleMs,execArgv:[...(request.execArgv??[]),'--import',bootstrap],resultEnv});
     const pending=`${request.complete}.${process.pid}`;
     writeFileSync(pending,JSON.stringify({version:2,nonce:request.nonce,...result})+'\n');renameSync(pending,request.complete);
     process.exitCode=result.status;
   }catch(error){
+    if(send)try{send({event:'instrument',instrument:{kind:error instanceof PressureError?'memory-pressure':error instanceof ToolingInstrumentError?error.kind:'tooling-setup',reason:String(error)}});}catch{}
     if(error instanceof PressureError)publishPressure(error,resultEnv);
     else publishToolingFailure(error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error),{cause:error}),resultEnv);
     process.stderr.write((error instanceof Error?error.stack:String(error))+'\n');process.exitCode=2;

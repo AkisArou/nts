@@ -70,8 +70,16 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   unregister=registerCommandCloser(`tooling workers ${slice}`,{cancel:stop,close:stop,closed:async()=>{await closed;}});
     const [status]=await Promise.all([closed,options.onScope?.(slice,`${unit}.scope`,()=>ended)]);
     entry?.finish();
-    const partial=(status:1|2):ToolingResult&{slice:string}=>({status,completedFailures:entry!.evidence.completedFailures,slice,
-      times:{version:1,wallMs:clock()-started,concurrency:1,files:[{file:resolve(files[0]!),startedMs:0,wallMs:clock()-started,passed:false}]}});
+    const partial=(status:0|1|2):ToolingResult&{slice:string}=>({status,completedFailures:entry!.evidence.completedFailures,slice,
+      times:{version:1,wallMs:clock()-started,concurrency:1,files:[{file:resolve(files[0]!),startedMs:0,wallMs:clock()-started,passed:status===0}]}});
+    if(entry?.evidence.instrument){
+      const instrument=entry.evidence.instrument;
+      if(!entry.evidence.completedFailures){
+        if(instrument.kind==='memory-pressure')throw new PressureError(instrument.reason);
+        throw new ToolingInstrumentError(instrument.kind,instrument.reason);
+      }
+      return {...partial(1),observationFailure:{kind:instrument.kind==='memory-pressure'?'tooling-setup':instrument.kind,reason:instrument.reason}};
+    }
     if(entry?.hung){
       publishHung(entry.hung,process.env,entry.evidence.completedFailures);output.write(entry.hung+'\n');
       return partial(entry.evidence.completedFailures?1:2);
@@ -96,6 +104,7 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
       result=readToolingCompletion(report,nonce,status);
       if(entry&&(!entry.evidence.ready||result.completedFailures!==entry.evidence.completedFailures))
         throw new ToolingInstrumentError('tooling-setup','tooling completion disagrees with its authenticated child channel');
+      if(entry)result={...result,times:partial(result.status).times};
     }catch(error){
       if(!entry?.evidence.completedFailures)throw error;
       return {...partial(1),observationFailure:{kind:'tooling-setup',reason:String(error)}};

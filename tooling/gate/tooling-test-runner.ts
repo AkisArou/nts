@@ -94,7 +94,7 @@ export function readToolingRequest(value:unknown):ToolingRequest {
  * Its surviving controller owns activity and termination; this process owns
  * Node's completed-test evidence and serializes it before another body runs. */
 export async function runToolingEntry(file:string,progress:(event:'start'|'complete',id:number,name:string,failed?:boolean)=>void):Promise<ToolingResult>{
-  const clock=hostObservations().now,started=clock(),owners=new ToolingTestOwners([file]);
+  const owners=new ToolingTestOwners([file]);
   let completedFailures=0,success=true,summarized=false;
   const stream=run({files:[file],isolation:'none',setup:events=>{
     events.on('test:enqueue',data=>{owners.file(data);});
@@ -107,8 +107,9 @@ export async function runToolingEntry(file:string,progress:(event:'start'|'compl
   }});
   const report=stream.compose(spec);report.pipe(process.stdout,{end:false});await finished(report);
   if(!summarized)throw new ToolingInstrumentError('tooling-setup','tooling entry ended without a test summary');
-  const wallMs=clock()-started;
-  return {status:success?0:1,completedFailures,times:{version:1,wallMs,concurrency:1,files:[{file,startedMs:0,wallMs,passed:success}]}};
+  // Fixture teardown may revoke its environment before Node ends this stream.
+  // The outside controller owns final timing as well as activity sampling.
+  return {status:success?0:1,completedFailures};
 }
 
 type TestActivity={entryFile?:string;file?:string;name?:string;testId?:number;parentId?:number};
