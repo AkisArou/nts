@@ -26,7 +26,7 @@ const reply=(path:string,status:0|1|2,completedFailures=0):ToolingFileReply=>({p
 
 test('the common broker admits a fitting tooling file while an earlier file waits for memory',async t=>{
   let headFits=false;
-  const pool=createTokenPool({now:()=>0,free:()=>4,claim:()=>1,eligible:(_step,bytes)=>headFits||bytes===1});
+  const pool=createTokenPool({width:4,now:()=>0,free:()=>4,claim:()=>1,eligible:(_step,bytes)=>headFits||bytes===1});
   const signal=new AbortController(),held:(()=>void)[]=[],asked:string[]=[];
   const requests:Promise<unknown>[]=[];
   t.after(async()=>{signal.abort();await Promise.allSettled(requests);for(const release of held)release();pool.close();await pool.closed;});
@@ -48,7 +48,7 @@ test('the common broker admits a fitting tooling file while an earlier file wait
 });
 
 test('a refused oversized head keeps its name and cannot strand a fitting request',async t=>{
-  const pool=createTokenPool({now:()=>0,free:()=>4-pool.total,claim:()=>1,
+  const pool=createTokenPool({width:4,now:()=>0,free:()=>4-pool.total,claim:()=>1,
     prepare:request=>{if(request.bytes!>4)throw Error('tooling/impossible.test.ts cannot fit the run maximum reservation');}});
   const address=await pool.start();assert.ok(address);
   t.after(async()=>{pool.close();await pool.closed;});
@@ -63,7 +63,7 @@ for(const priority of ['landing','agent'] as const)test(`a fitting backfill cann
   const root=testScratch(t,'tooling-backfill-ledger'),memory=ownMemory(root,{totalKiB:31*2**20,availableKiB:10*2**20});
   const stop=new AbortController(),holders:Reservation[]=[],leases:(()=>void)[]=[],pending:Promise<unknown>[]=[];
   let reservation:Reservation;
-  const pool=createTokenPool({now:()=>0,free:()=>4-pool.total,claim:()=>0,
+  const pool=createTokenPool({width:4,now:()=>0,free:()=>4-pool.total,claim:()=>0,
     eligible:(_step,bytes)=>(pool.sized.get('tooling')?.bytes??0)+(bytes??0)<=reservation.bytes});
   t.after(async()=>{stop.abort();await Promise.allSettled(pending);for(const release of leases)release();pool.close();await pool.closed;
     for(const holder of holders)holder.release();await Promise.all(holders.map(holder=>holder.closed));});

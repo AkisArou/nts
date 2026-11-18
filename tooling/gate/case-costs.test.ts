@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CaseCosts, distribution, recordAggregatePeak, summarizeCosts, waitingBreakdown, waitCause, type Observation } from "./case-costs.ts";
@@ -32,6 +32,26 @@ function checkFile(root: string, id: number, binary = "new", start = 1, duration
   ];
   writeFileSync(join(root, `check-${id}-0.jsonl`), rows.map(r => JSON.stringify(r)).join("\n") + (partial ? '\n{"unfinished":' : "\n"));
 }
+
+test('barrier traces retain overlapping policy lifetimes separately from admitted work',t=>{
+  const rows=[event(0,'token.request',1),event(0,'token.grant',1),
+    event(1,'token.barrier.begin',2),event(2,'token.barrier.begin',3),
+    event(5,'token.barrier.end',2,{reason:'grant'}),event(7,'token.barrier.end',3,{reason:'withdraw'}),event(10,'token.release',1)];
+  const costs=new CaseCosts(fixture(t));
+  for(const row of rows)costs.record(row);
+  const persisted=readFileSync(join(costs.root,'queue.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  assert.deepEqual(persisted.filter(row=>row.event.startsWith('token.barrier.')),rows.filter(row=>row.event.startsWith('token.barrier.')));
+  const result=waitingBreakdown(costs.events,step)!;
+  assert.deepEqual(result.backfill_barrier,{wall_s:6,request_s:9,unfinished:[]});
+  assert.equal(result.wall_s.admitted_case,10,'barrier time overlaps existing work, rather than adding to wall time');
+  const summary=costs.summary([step]);assert.ok('steps' in summary);
+  assert.deepEqual((summary.steps.examples as Record<string,any>).waiting.backfill_barrier,result.backfill_barrier);
+});
+
+test('an unfinished barrier remains visible through the end of an incomplete trace',()=>{
+  const result=waitingBreakdown([event(3,'token.barrier.begin',7)],step)!;
+  assert.deepEqual(result.backfill_barrier,{wall_s:7,request_s:7,unfinished:[7]});
+});
 
 test("disjoint wall distinguishes token and memory waits without summing overlapping workers", () => {
   const rows = [event(0, "token.request", 1, state(false)), event(2, "token.grant", 1),

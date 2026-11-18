@@ -22,7 +22,7 @@ const TOKEN = join(HERE, "token.sh");
 
 async function pool(n, opts = {}) {
   let peakTotal = 0;
-  const p = createTokenPool({
+  const p = createTokenPool({width:n,
     free: () => n - p.total,
     claim: opts.claim ?? ((step, { waitedS }) => waitedS),
     known: () => true,
@@ -268,7 +268,7 @@ test('both token endpoints refuse a request with no declared lease',async()=>{
 });
 
 test("a sized request that fits goes before an older one of its step that does not, and each token counts at its size", async () => {
-  const q = createTokenPool({
+  const q = createTokenPool({width:3,
     free: () => 3 - q.total, claim: (step, { waitedS }) => waitedS, known: () => true,
     eligible: (step, bytes) => held() + (bytes ?? UNIT) <= 1000,
   });
@@ -295,7 +295,7 @@ test("a sized request that fits goes before an older one of its step that does n
 
 test("requests of a step's unit are asked about once per step, oldest first, exactly as before sizes", async () => {
   const log = [], grants = [];
-  const q = createTokenPool({
+  const q = createTokenPool({width:3,
     free: () => 3 - q.total, claim: (step, { waitedS }) => waitedS, known: () => true,
     eligible: (step, bytes) => { log.push([step, bytes ?? null]); return q.total < 2; },
     observe: (e) => { if (e.event === "token.grant") grants.push([e.step, e.request]); },
@@ -322,7 +322,7 @@ test("a malformed size is refused without a token, and a sized token is answered
   // The server's own writes to the sized token's connection, from its grant on.
   let raise;
   const writes = [];
-  const q = createTokenPool({
+  const q = createTokenPool({width:3,
     free: () => 3 - q.total, claim: () => 1, known: () => true,
     answering: (_step, w) => {
       const write = w.sock.write.bind(w.sock);

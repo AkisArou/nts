@@ -43,7 +43,7 @@ const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(jo
 async function gatePool(n: number,attach?:Parameters<typeof createTokenPool>[0]['attach']) {
   const seen = { request: 0, grant: 0, release: 0, cancel: 0 };
   const history:{event:string;context?:unknown}[]=[];
-  const pool: any = createTokenPool({
+  const pool: any = createTokenPool({width:n,
     attach,
     free: () => n - pool.total,
     claim: (_step: string, { waitedS }: { waitedS: number }) => waitedS,

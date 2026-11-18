@@ -1149,16 +1149,19 @@ the tooling strict checker owns the source's type checking.
   not erase its measured peaks. A known case reserves its own peak with the
   ledger's margin. An unknown case is charged live use and that margin.
   Active case promises and fixed steps share the run's admitted reservation;
-  a case that needs more asks for admitted growth before starting. The
-  pool may grant a fitting later request within one step for one cohort: the
-  held plus free pool token count when the earlier request begins waiting,
-  counted in grants. This fixed allowance never replenishes. Once exhausted,
+  a case that needs more asks for admitted growth before starting. The common
+  pool selects fitting later requests within a step. Its starvation bound
+  restricts that existing backfill to one cohort: the constructor's fixed
+  token width (`SLOTS` in the gate), counted in grants. The bound is independent
+  of arrival time, fixed-step occupancy and withheld slots, and never replenishes. Once exhausted,
   that request is a barrier until admitted or withdrawn; running cases still
   finish and return their leases. This contract applies to every pool user,
   including census cases and tooling entries. It changes no machine-ledger
   order: a step's growth still queues behind higher or earlier ledger work.
-  The hard
-  case cap is separate from this forecast. The token broker publishes the
+  Barrier start and end observations identify the request and terminal reason.
+  Case-cost records retain their wall and request durations separately from
+  execution: a policy barrier may overlap running work or other admission waits.
+  The hard case cap is separate from this forecast. The token broker publishes the
   held-token transition to the step's execution clock before acknowledging
   admission, so a running case cannot still be charged as an excluded wait.
   The common worker owner retains

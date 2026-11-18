@@ -48,7 +48,7 @@ if(args[0]==='hir')process.stdout.write('func control() -> void {\\n}\\n\\n1 fun
     // history publication are the production owners. Kernel cap wiring has
     // separate controls and is not what this source-identity check measures.
     const group='/fixture/nts-test-integrity-'+randomUUID()+'.slice';
-    const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,now:()=>0,
+    const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>0,now:()=>0,
       prepare:request=>{
         broker.prepare(request);const lease=request.memory;assert.ok(lease);
         identities.push(lease.key);forecasts.push(lease.forecast);

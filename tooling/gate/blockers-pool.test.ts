@@ -74,7 +74,7 @@ test("real fixture workers hold one token each, obey admission, and report in fi
   const h=harness(t);
   let open=false;
   const observations: any[]=[];
-  const pool=createTokenPool({free:()=>open ? 2-pool.total : 0,claim:()=>1,observe:(e: any)=>observations.push(e)});
+  const pool=createTokenPool({width:2,free:()=>open ? 2-pool.total : 0,claim:()=>1,observe:(e: any)=>observations.push(e)});
   await pool.start();
   t.after(async()=>{pool.close();await pool.closed;});
   const ran=h.run(3,{ORDER_BARRIER:"1",NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers",NTS_GATE_CASE_COSTS_DIR:join(h.root,"costs")});
@@ -101,7 +101,7 @@ test("real fixture workers hold one token each, obey admission, and report in fi
 test("a missing worker import exits before token admission and never starts a compiler", async t => {
   const h=harness(t);
   rmSync(join(h.root,"tooling/conformance/node-deps.mjs"));
-  const pool=createTokenPool({free:()=>0,claim:()=>1});
+  const pool=createTokenPool({width:2,free:()=>0,claim:()=>1});
   await pool.start();t.after(async()=>{pool.close();await pool.closed;});
   const result=await h.run(3,{NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers"});
   assert.notEqual(result.status,0);
@@ -174,7 +174,7 @@ import {withToken} from '../gate/tokens.mjs';
 await withToken(async()=>{appendFileSync(process.env.TRACE,JSON.stringify({stage:'integrity'})+'\\n');},{scope:'step'});
 `);
   const observations: any[]=[];
-  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>1,observe:(e: any)=>observations.push(e)});
+  const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>1,observe:(e: any)=>observations.push(e)});
   await pool.start();t.after(async()=>{pool.close();await pool.closed;});
   const result=await h.run(3,{PATH:`${join(h.root,"bin")}:${fixtureEnvironment(t).PATH}`,
     NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers",NTS_GATE_CASE_COSTS_DIR:join(h.root,"costs")});
@@ -188,7 +188,7 @@ await withToken(async()=>{appendFileSync(process.env.TRACE,JSON.stringify({stage
 
 test("fixtures queued for a token do not start after an admitted fixture fails", async t => {
   const h=harness(t);
-  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>1});
+  const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>1});
   await pool.start();t.after(async()=>{pool.close();await pool.closed;});
   const result=await h.run(3,{FAIL_FIXTURE:"a-slow",NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers"});
   assert.notEqual(result.status,0);

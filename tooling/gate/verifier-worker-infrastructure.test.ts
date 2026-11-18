@@ -58,7 +58,7 @@ test('a real jvm-verifies case reaches verification through a case lease without
   const scopes=new GateScopes(env,{rank:"agent"}),step=scopes.step({max:2**30});let drained=false;
   const broker=new CaseMemoryBroker({root:ROOT,env,host:hostObservations(env),boundary:()=>({group:step.workerGroup,raise:bytes=>step.caseLimit(bytes)}),report:()=>{}});
   const attached=new Map<string,number>(),completed:string[]=[];
-  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,
+  const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>0,
     prepare:request=>broker.prepare(request),
     attach:async(request,scope)=>{
       await broker.attach(request,scope);

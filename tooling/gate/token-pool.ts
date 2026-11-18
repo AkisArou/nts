@@ -1,8 +1,9 @@
 // One token is one connection, retained until its case and descendants end.
 // Every request names an explicit case or step lease. The broker sizes it.
-// Within each step, fitting requests can backfill a waiting earlier request
-// for one cohort: the pool's held plus free token count when that request
-// begins waiting, counted in grants. That fixed allowance never replenishes.
+// The common pool already selects fitting later requests within a step.
+// Their starvation bound is one cohort: the constructor's fixed token width,
+// counted in grants. Availability and arrival time never size that allowance.
+// The allowance never replenishes.
 // Once spent, the request is a barrier until granted or withdrawn. This is
 // pool-local ordering; eligible() still requires an already admitted ledger
 // reservation, and cannot reorder the machine ledger's growth queue.
@@ -11,8 +12,9 @@ import type {CaseMemoryLease} from './case-memory.ts';
 import {hostObservations} from './host-observations.ts';
 
 export type TokenRequest={sock:Socket;id:number;step:string;pid:number;context:string;since:number;granted:boolean;gone:boolean;answered?:boolean;bytes?:number;lease?:string;memory?:CaseMemoryLease};
-type TokenEvent={event:string;request?:number;step?:string;pid?:number;context?:string;bytes?:number};
+type TokenEvent={event:string;request?:number;step?:string;pid?:number;context?:string;bytes?:number;reason?:'grant'|'withdraw'|'disconnect'|'shutdown'};
 type TokenOptions={
+  width:number;
   free():number;
   claim(step:string,claim:{held:number;used:number;waitedS:number}):number;
   eligible?(step:string,bytes:number|undefined,request:TokenRequest):boolean;
@@ -31,15 +33,19 @@ export type TokenPool={
   account():void;grant():void;start():Promise<string|null>;cancel():void;close():void;closed:Promise<void>;
 };
 
-export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null,known=()=>true,released=()=>{},observe=()=>{},prepare=()=>{},attach=async()=>{},completed=()=>{},retire=()=>{},failed=error=>{throw error;},now=hostObservations().now}:TokenOptions):TokenPool{
+export function createTokenPool({width,free,claim,eligible=()=>true,answering=()=>null,known=()=>true,released=()=>{},observe=()=>{},prepare=()=>{},attach=async()=>{},completed=()=>{},retire=()=>{},failed=error=>{throw error;},now=hostObservations().now}:TokenOptions):TokenPool{
+  if(!Number.isSafeInteger(width)||width<1)throw Error('token pool width must be a positive safe integer');
   let cancelled=false,closing=false,finishClose!:()=>void,rejectClose!:(error:unknown)=>void;
   const closed=new Promise<void>((resolve,reject)=>{finishClose=resolve;rejectClose=reject;});
   void closed.catch(()=>{});
   const finalizing=new Set<Promise<void>>(),failures:unknown[]=[];
   const backfills=new WeakMap<TokenRequest,number>();
+  const barriersActive=new Set<TokenRequest>();
   const pool:TokenPool={addr:null,server:null,held:new Map(),sized:new Map(),peak:new Map(),used:new Map(),total:0,waiting:[],active:new Set(),last:now(),
     account:()=>{},grant:()=>{},start:async()=>null,closed,
-    cancel:()=>{cancelled=true;for(const request of pool.waiting)request.sock.end('error: token pool is shutting down\n');},
+    cancel:()=>{if(cancelled)return;cancelled=true;for(const request of pool.waiting){
+      endBarrier(request,'shutdown');request.sock.end('error: token pool is shutting down\n');
+    }},
     close:()=>{
       if(closing)return;closing=true;pool.cancel();
       const finish=async()=>{
@@ -51,8 +57,11 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       if(pool.server)pool.server.close(error=>{if(error)failures.push(error);void finish();});else void finish();
     }};
   let requests=0;
-  const trace=(event:string,w?:TokenRequest)=>{
-    try{observe({event,request:w?.id,step:w?.step,pid:w?.pid,context:w?.context,bytes:w?.bytes});}catch{/* Telemetry cannot grant work or change its status. */}
+  const trace=(event:string,w?:TokenRequest,reason?:TokenEvent['reason'])=>{
+    try{observe({event,request:w?.id,step:w?.step,pid:w?.pid,context:w?.context,bytes:w?.bytes,...(reason?{reason}:{})});}catch{/* Telemetry cannot grant work or change its status. */}
+  };
+  const endBarrier=(request:TokenRequest,reason:NonNullable<TokenEvent['reason']>)=>{
+    if(barriersActive.delete(request))trace('token.barrier.end',request,reason);
   };
   pool.account=()=>{
     for(const w of [...pool.waiting,...pool.active])if(w.memory){w.memory.sample();w.bytes=w.memory.bytes;}
@@ -63,7 +72,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
   };
   const cohort=(request:TokenRequest)=>{
     let left=backfills.get(request);
-    if(left===undefined){left=Math.max(0,pool.total+free());backfills.set(request,left);}
+    if(left===undefined){left=width;backfills.set(request,left);}
     return left;
   };
   const candidates=()=>{
@@ -74,7 +83,10 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       const key=`${w.step}\0${w.bytes??''}`;
       if(!asked.has(key))asked.set(key,eligible(w.step,w.bytes,w));
       if(asked.get(key))chosen.set(w.step,w);
-      else if(cohort(w)===0)barriers.add(w.step);
+      else if(cohort(w)===0){
+        barriers.add(w.step);
+        if(!barriersActive.has(w)){barriersActive.add(w);trace('token.barrier.begin',w);}
+      }
     }
     return {oldest,chosen};
   };
@@ -90,6 +102,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
         if(earlier===w)break;
         if(earlier.step===w.step)backfills.set(earlier,cohort(earlier)-1);
       }
+      endBarrier(w,'grant');
       pool.waiting.splice(pool.waiting.indexOf(w),1);trace('token.grant',w);
       w.granted=true;pool.active.add(w);
       const n=(pool.held.get(w.step)??0)+1;pool.held.set(w.step,n);
@@ -109,7 +122,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:now(),granted:false,gone:false};
       let buf='';sock.setEncoding('utf8');
       // An ungranted request leaves the queue here, counted once as cancelled.
-      const cancel=()=>{w.gone=true;trace('token.cancel',w);if(w.step!==''){
+      const cancel=(reason:'withdraw'|'disconnect'='disconnect')=>{w.gone=true;endBarrier(w,reason);trace('token.cancel',w);if(w.step!==''){
         pool.waiting=pool.waiting.filter(x=>x!==w);pool.grant();trace('pool.change');
       }};
       // The client's request, then its later lines: 'done' (a case's
@@ -121,7 +134,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       // grant like any other, released by its release or its socket's close.
       const later=(line:string)=>{
         if(line==='done')w.answered=true;
-        else if(line==='withdraw'&&!w.granted&&!w.gone&&w.step!=='registration'){cancel();sock.end('withdrawn\n');}
+        else if(line==='withdraw'&&!w.granted&&!w.gone&&w.step!=='registration'){cancel('withdraw');sock.end('withdrawn\n');}
       };
       sock.on('data',(data:string)=>{
         buf+=data;

@@ -7,10 +7,70 @@ import {tokenClient} from './tokens.mjs';
 import {waitFor} from './test-wait.ts';
 import {StepBoundClock,stepBoundWait} from './step-bound.ts';
 
+test('pool width is an explicit positive integer, independent of current availability',()=>{
+  for(const width of [0,-1,.5,NaN,Infinity,Number.MAX_SAFE_INTEGER+1])
+    assert.throws(()=>createTokenPool({width,now:()=>0,free:()=>0,claim:()=>0}),/pool width must be a positive safe integer/);
+});
+
+for(const arrivalFree of [0,1])test(`a request arriving with ${arrivalFree} free slots retains the constructor's full backfill width`,async t=>{
+  let available=arrivalFree,headFits=false,requests=0;
+  const stop=new AbortController(),held:(()=>void)[]=[],pending:Promise<unknown>[]=[];
+  const pool=createTokenPool({width:3,now:()=>0,free:()=>available-pool.total,claim:()=>0,
+    eligible:(_step,bytes)=>headFits||bytes===1,observe:event=>{if(event.event==='token.request')requests++;}});
+  const address=await pool.start();assert.ok(address);
+  t.after(async()=>{stop.abort();await Promise.allSettled(pending);for(const release of held)release();pool.close();await pool.closed;});
+  const client=tokenClient(address,'census');
+  const acquire=(project:string,bytes:number)=>{
+    const promise=client.acquire({project},stop.signal,bytes).then(release=>{if(release)held.push(release);return release;});pending.push(promise);return promise;
+  };
+  const head=acquire('heavy',2);
+  await waitFor('the heavy request to arrive before light work',()=>requests===1);
+  for(let index=0;index<3;index++){
+    const next=acquire('light-'+index,1);
+    await waitFor('the next light request reaches the pool',()=>requests===index+2);
+    available=3;pool.grant();
+    assert.equal(pool.total,1,'arrival-time availability froze a zero or shrunken cohort');
+    const release=await next;assert.ok(release);release();await release.closed;
+  }
+  const tail=acquire('after-cohort',1);
+  await waitFor('the complete cohort has passed the head',()=>requests===5);
+  pool.grant();assert.equal(pool.total,0);assert.equal(pool.waiting.length,2,'the fixed width must still bound overtaking');
+  headFits=true;pool.grant();
+  const releases=await Promise.all([head,tail]);assert.ok(releases.every(Boolean));
+  for(const release of releases){release!();await release!.closed;}
+});
+
+for(const outcome of ['grant','withdraw','disconnect','shutdown'] as const)test(`barrier observations begin once and end once on ${outcome}`,async t=>{
+  let now=0,headFits=false;
+  const stop=new AbortController(),held:(()=>void)[]=[],events:{event:string;at:number;reason?:string}[]=[];
+  const pool=createTokenPool({width:1,now:()=>now,free:()=>1-pool.total,claim:()=>0,eligible:(_step,bytes)=>headFits||bytes===1,
+    observe:event=>{if(event.event.startsWith('token.barrier.')){
+      events.push({event:event.event,at:now,...(event.reason?{reason:event.reason}:{})});
+      throw Error('telemetry failure cannot change admission');
+    }}});
+  const address=await pool.start();assert.ok(address);
+  const client=tokenClient(address,'census');
+  const head=client.acquire({project:'heavy'},stop.signal,2).then(release=>{if(release)held.push(release);return {release};},error=>({error}));
+  t.after(async()=>{stop.abort();await head;for(const release of held)release();pool.close();await pool.closed;});
+  await waitFor('the observed head to queue',()=>pool.waiting.length===1);
+  const light=await client.acquire({project:'light'},undefined,1);assert.ok(light);
+  now=2000;light();await light.closed;
+  await waitFor('the exhausted head starts its barrier',()=>events.length===1);
+  now=4000;pool.grant();pool.grant();assert.equal(events.length,1,'repeated scheduling cannot restart a barrier');
+  now=7000;
+  if(outcome==='grant'){headFits=true;pool.grant();}
+  else if(outcome==='withdraw')stop.abort();
+  else if(outcome==='disconnect')pool.waiting[0]!.sock.destroy();
+  else {pool.cancel();pool.cancel();}
+  await head;
+  await waitFor('the barrier ends at its lifetime boundary',()=>events.length===2);
+  assert.deepEqual(events,[{event:'token.barrier.begin',at:2000},{event:'token.barrier.end',at:7000,reason:outcome}]);
+});
+
 test('a fitting later request uses admitted memory while the non-fitting head waits',async()=>{
   const head=new Socket(),light=new Socket(),grants:string[]=[];
   head.write=()=>{grants.push('head');return true;};light.write=()=>{grants.push('light');return true;};
-  const pool=createTokenPool({now:()=>0,free:()=>1-pool.total,claim:()=>0,eligible:(_step,bytes)=>bytes===1});
+  const pool=createTokenPool({width:1,now:()=>0,free:()=>1-pool.total,claim:()=>0,eligible:(_step,bytes)=>bytes===1});
   try{
     for(const [index,sock,bytes] of [[1,head,2],[2,light,1]] as const)
       pool.waiting.push({sock,id:index,step:'tooling',pid:1,context:'supplied queue',since:0,granted:false,gone:false,bytes});
@@ -21,10 +81,10 @@ test('a fitting later request uses admitted memory while the non-fitting head wa
 });
 
 for(const outcome of ['grant','withdraw'] as const)test(`fitting backfill has one fixed cohort against an endless light stream, then the head can ${outcome}`,async t=>{
-  let width=3,headFits=false,requests=0;
+  const width=3;let headFits=false,requests=0;
   const grants:string[]=[],stop=new AbortController(),headStop=new AbortController();
   const leases:(()=>void)[]=[],pending:Promise<unknown>[]=[];
-  const pool=createTokenPool({now:()=>0,free:()=>width-pool.total,claim:()=>0,
+  const pool=createTokenPool({width:3,now:()=>0,free:()=>width-pool.total,claim:()=>0,
     eligible:(_step,bytes)=>headFits||bytes===1,
     observe:event=>{if(event.event==='token.request')requests++;if(event.event==='token.grant')grants.push(event.context!);}});
   const address=await pool.start();assert.ok(address);
@@ -41,10 +101,11 @@ for(const outcome of ['grant','withdraw'] as const)test(`fitting backfill has on
     fitting();await fitting.closed;
     assert.equal(pool.total,0,'finished files return their leases while the head waits');
   }
-  // A larger pool and arbitrarily many later arrivals cannot replenish the
-  // head's allowance. Only its original three grants may pass it.
-  width=100;
-  const stream=Array.from({length:100},(_,index)=>acquire('stream-'+index,1));
+  // Returned slots and arbitrarily many later arrivals cannot replenish the
+  // head's allowance. Only the fixed width of three grants may pass it.
+  const stream=Array.from({length:100},(_,index)=>acquire('stream-'+index,1).then(async release=>{
+    if(release){release();await release.closed;}return release;
+  }));
   await waitFor('the light stream has reached the broker',()=>requests===104);
   assert.equal(grants.length,3,'the waiting head was starved by a replenished backfill allowance');
   assert.equal(pool.waiting.length,101);assert.equal(pool.total,0);
@@ -64,7 +125,7 @@ for(const outcome of ['grant','withdraw'] as const)test(`fitting backfill has on
 test('a backfill barrier drains running files and admits the waiting head without deadlock',async t=>{
   let headFits=false;
   const stop=new AbortController(),leases:(()=>void)[]=[],pending:Promise<unknown>[]=[];
-  const pool=createTokenPool({now:()=>0,free:()=>1-pool.total,claim:()=>0,eligible:(_step,bytes)=>headFits||bytes===1});
+  const pool=createTokenPool({width:1,now:()=>0,free:()=>1-pool.total,claim:()=>0,eligible:(_step,bytes)=>headFits||bytes===1});
   const address=await pool.start();assert.ok(address);
   t.after(async()=>{stop.abort();await Promise.allSettled(pending);for(const release of leases)release();pool.close();await pool.closed;});
   const client=tokenClient(address,'tooling');
@@ -89,7 +150,7 @@ for(const mode of ['unsized','sized-sync','sized-async'] as const)test(`${mode} 
   let now=0,entered=false;
   const clock=new StepBoundClock(3,0),socket=new Socket(),events:{event:string;now:number;held?:number}[]=[];
   clock.observe(0,'memory');
-  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,now:()=>now,
+  const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>0,now:()=>now,
     answering:()=>mode==='sized-async'?Promise.resolve():null,
     observe:event=>{if(event.event==='pool.change'){
       const held=pool.held.get('census')??0;
@@ -115,7 +176,7 @@ test('a lost case controller retains its token until its worker drain completes'
   const started=new Promise<void>(resolve=>{draining=resolve;});
   const drained=new Promise<void>(resolve=>{finishDrain=resolve;});
   let completions=0;
-  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,
+  const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>0,
     completed:async request=>{if(++completions===1){assert.equal(request.answered,undefined);draining();await drained;}}});
   const address=await pool.start();assert.ok(address);t.after(async()=>{finishDrain();first.destroy();pool.close();await pool.closed;});
   const first=connect({host:'127.0.0.1',port:Number(address.split(':')[1])});t.after(()=>first.destroy());
@@ -132,7 +193,7 @@ test('normal case completion replies only after the final observation is saved',
   let finish!:()=>void,entered!:()=>void;
   const started=new Promise<void>(resolve=>{entered=resolve;});
   const saved=new Promise<void>(resolve=>{finish=resolve;});
-  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,
+  const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>0,
     completed:async request=>{assert.equal(request.answered,true);entered();await saved;}});
   const address=await pool.start();assert.ok(address);t.after(async()=>{finish();release?.();pool.close();await pool.closed;});
   const release=await tokenClient(address,'integrity').acquire({project:'tests/fixture/final-reply'});assert.ok(release);
@@ -146,7 +207,7 @@ test('normal case completion replies only after the final observation is saved',
 test('cancellation refuses acquisition while keeping retirement replies and final cleanup alive',async t=>{
   let saved!:()=>void,entered!:()=>void,retired=false;
   const final=new Promise<void>(resolve=>{saved=resolve;}),started=new Promise<void>(resolve=>{entered=resolve;});
-  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,now:()=>0,
+  const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>0,now:()=>0,
     retire:(request,group)=>{assert.equal(request.lease,'owned-case');assert.equal(group,'/owned/worker');retired=true;},
     completed:async()=>{entered();await final;}});
   const address=await pool.start();assert.ok(address);
@@ -175,7 +236,7 @@ test('cancellation refuses acquisition while keeping retirement replies and fina
 // pool's own token.grant observation: after the grant, before its 'go' is read.
 function countedPool(open:{n:number},extra:Partial<Parameters<typeof createTokenPool>[0]>={}){
   const seen={request:0,grant:0,release:0,cancel:0},aborts:{on?:AbortController}={};
-  const pool=createTokenPool({free:()=>open.n-pool.total,claim:()=>0,...extra,
+  const pool=createTokenPool({width:1,free:()=>open.n-pool.total,claim:()=>0,...extra,
     observe:event=>{
       const key=event.event.replace(/^token\./,'') as keyof typeof seen;
       if(key in seen)seen[key]++;

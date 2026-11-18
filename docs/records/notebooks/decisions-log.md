@@ -3755,11 +3755,16 @@ This replaces a fresh API wrapper that launched a second file process.
 
 Review of the interleaved pairs showed that strict admission order clustered
 heavy leases and blocked fitting work, while the pool's token limit was not
-binding. The common token pool now permits fitting requests within the same
-step to backfill a waiting earlier request for one cohort: its held plus free
-pool token count when that request begins waiting, counted in grants. The
-allowance is fixed and never replenished. Once exhausted, the earlier request
+binding. Main's common token pool already selected fitting later requests
+without a backfill limit; tooling's wrapper hid those requests. Removing the
+wrapper exposes them, while the shared pool's starvation bound restricts that
+existing backfill to one cohort: the constructor's fixed token width (`SLOTS`
+in the gate), counted in grants. The allowance is independent of arrival-time
+availability and never replenishes. Once exhausted, the earlier request
 is a barrier until granted or withdrawn. Running cases can finish and release
 their leases. This applies to census and every other common-pool user, and
 changes no machine-ledger ordering or growth admission. Tooling sends its
 requests concurrently to this owner rather than serializing acquires itself.
+Barrier start/end observations and case-cost duration summaries make the
+restriction visible for every producer. A later review's zero-free-at-arrival
+control replaces the initial availability-based allowance with that fixed width.

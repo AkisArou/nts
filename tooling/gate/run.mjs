@@ -712,6 +712,7 @@ const caseMemory=new CaseMemoryBroker({root:ROOT,env,host,
     return {group:owned.scope.workerGroup,raise:bytes=>owned.scope.caseLimit(Math.max(bytes,Math.min(owned.scope.workerLimit,Math.ceil((owned.charge??0)*1.25))))};
   },report:message=>process.stderr.write(message+'\n')});
 const tok = createTokenPool({
+  width:SLOTS,
   now:()=>host.now(),
   prepare:request=>{
     caseMemory.prepare(request);

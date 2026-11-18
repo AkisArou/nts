@@ -79,7 +79,7 @@ test("token pool: a running case finishes through a hold, and the next waits unt
   // outranked in the memory ledger holds its tokens.
   const hold = { on: false };
   const pool = createTokenPool({
-    free: () => (hold.on ? 0 : 4 - pool.total),
+    width:4,free: () => (hold.on ? 0 : 4 - pool.total),
     claim: (_step: string, { waitedS }: { waitedS: number }) => waitedS,
     known: () => true,
   });
@@ -298,7 +298,7 @@ for (const when of ["in flight", "waiting"] as const) test(`census feed: a worke
   const stopped = new AbortController();
   let exited = false;
   const pool = createTokenPool({
-    free: () => open.n - pool.total, claim: () => 0,
+    width:1,free: () => open.n - pool.total, claim: () => 0,
     observe: ({ event }) => {
       const key = event.replace(/^token\./, "") as keyof typeof seen;
       if (key in seen) seen[key]++;

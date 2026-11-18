@@ -138,11 +138,15 @@ export function waitingBreakdown(events: Observation[], step: TimedStep, unpoole
   timeline.push({ event: "finish", epoch: end });
   timeline.sort((a, b) => a.epoch - b.epoch);
   const active = new Set<number>(), waiting = new Set<number>(), outside = new Set<number>();
+  const barriers=new Set<number>();
+  let barrierWall=0,barrierRequests=0;
   const wall: Record<string, number> = {}, workers: Record<string, number> = {};
   let cursor = start, state: Partial<Observation> = {};
   for (const e of timeline) {
     const at = Math.min(end, Math.max(start, e.epoch));
     const dt = Math.max(0, at - cursor);
+    if(barriers.size)barrierWall+=dt;
+    barrierRequests+=dt*barriers.size;
     const cause = waitCause(state);
     const bucket = active.size ? "admitted_case" : outside.size ? "unpooled_check" : waiting.size ? cause : "script_or_dispatch";
     wall[bucket] = (wall[bucket] ?? 0) + dt;
@@ -150,6 +154,8 @@ export function waitingBreakdown(events: Observation[], step: TimedStep, unpoole
     cursor = at;
     if (e.step === step.name) {
       if (e.request !== undefined) {
+        if(e.event==='token.barrier.begin')barriers.add(e.request);
+        if(e.event==='token.barrier.end')barriers.delete(e.request);
         if (e.event === "token.request") waiting.add(e.request);
         if (e.event === "token.grant") { waiting.delete(e.request); active.add(e.request); }
         if (e.event === "token.release" || e.event === "token.cancel") { active.delete(e.request); waiting.delete(e.request); }
@@ -160,7 +166,10 @@ export function waitingBreakdown(events: Observation[], step: TimedStep, unpoole
     if (e.used) state = e;
     if (e.epoch >= end) break;
   }
-  return { wall_s: wall, worker_wait_s: workers };
+  // This interval can overlap admitted work, memory waits and slot waits;
+  // it is the policy barrier's lifetime, not additional lost wall time.
+  return { wall_s: wall, worker_wait_s: workers,
+    backfill_barrier:{wall_s:barrierWall,request_s:barrierRequests,unfinished:[...barriers]} };
 }
 
 function cpu(row: Record<string, unknown>, a: string, b: string) {
