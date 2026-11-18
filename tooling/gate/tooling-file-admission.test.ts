@@ -27,12 +27,16 @@ for(const ordered of [true,false])test(`tooling admissions ${ordered?'retain dis
   let headFits=false;
   const pool=createTokenPool({now:()=>0,free:()=>4,claim:()=>1,eligible:(_step,bytes)=>headFits||bytes===1});
   const signal=new AbortController(),held:(()=>void)[]=[],asked:string[]=[];
-  t.after(async()=>{signal.abort();for(const release of held)release();pool.close();await pool.closed;});
+  const requests:Promise<unknown>[]=[];
+  t.after(async()=>{signal.abort();await Promise.allSettled(requests);for(const release of held)release();pool.close();await pool.closed;});
   const address=await pool.start();assert.ok(address);
   const client=tokenClient(address,'tooling');
   const base=(path:string,stop:AbortSignal)=>{asked.push(path);return client.acquire({project:path,backend:'node'},stop,path===files[0]?2:1);};
   const acquire=ordered?orderedToolingAdmission(base):base;
-  const track=async(promise:ReturnType<typeof acquire>)=>{const release=await promise;if(release)held.push(release);return release;};
+  const track=(promise:ReturnType<typeof acquire>)=>{
+    const tracked=promise.then(release=>{if(release)held.push(release);return release;});
+    requests.push(tracked);void tracked.catch(()=>{});return tracked;
+  };
   const first=track(acquire(files[0]!,signal.signal)),second=track(acquire(files[1]!,signal.signal));
   await waitFor('the earlier tooling lease is waiting',()=>pool.waiting.length===1);
   if(ordered)assert.deepEqual(asked,[files[0]],'a later acquire bypassed the waiting earlier file');
