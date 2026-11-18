@@ -378,12 +378,12 @@ const withIdle=process.argv[2]==='idle';
   assert.ok(transcript.includes(idle),transcript);
   // One difference: source location is used instead of entry/test ownership.
   const mutantRoot=join(directory,"mutant");copyModuleClosure(["tooling/gate/tooling-runner.ts"],mutantRoot);
-  const mutant=join(mutantRoot,"tooling/gate/tooling-runner.ts"),original=readFileSync(mutant,"utf8");
+  const mutant=join(mutantRoot,"tooling/gate/tooling-runner.ts"),engine=join(mutantRoot,"tooling/gate/tooling-test-runner.ts"),original=readFileSync(engine,"utf8");
   const expression="const fileOf=(data:TestActivity)=>owners.file(data);";
   assert.ok(original.includes(expression));
   const altered=original.replace(expression,"const fileOf=(data:TestActivity)=>typeof data.file==='string'?resolve(data.file):undefined;");
   const mutantProbe=join(directory,"mutant-probe.mjs");
-  writeFileSync(mutant,altered);writeFileSync(mutantProbe,readFileSync(probe,"utf8").replace(runner,pathToFileURL(mutant).href));
+  writeFileSync(engine,altered);writeFileSync(mutantProbe,readFileSync(probe,"utf8").replace(runner,pathToFileURL(mutant).href));
   const changed=spawnTest(process.execPath,[mutantProbe,"active"],{encoding:"utf8",env},"source-location ownership mutant");
   assert.equal(changed.status,0,changed.stderr);const observed=JSON.parse(changed.stdout.trim());
   assert.equal(observed.status,2,"old ownership rule must lose an active helper's progress");
@@ -428,11 +428,11 @@ console.log(JSON.stringify({...outcome,now,progress,shortClosed,reportWasWaiting
   assert.deepEqual(JSON.parse(actual.stdout.trim()),{status:0,completedFailures:0,now:36,progress:6,shortClosed:true,reportWasWaiting:true,reportedShort:true});
   // Ordered pass reports cannot substitute for execution-ordered completion.
   const mutantRoot=join(directory,"mutant");copyModuleClosure(["tooling/gate/tooling-runner.ts"],mutantRoot);
-  const mutant=join(mutantRoot,"tooling/gate/tooling-runner.ts"),source=readFileSync(mutant,"utf8");
+  const mutant=join(mutantRoot,"tooling/gate/tooling-runner.ts"),engine=join(mutantRoot,"tooling/gate/tooling-test-runner.ts"),source=readFileSync(engine,"utf8");
   const handler='events.on("test:complete",data=>{';assert.ok(source.includes(handler));
   const changedProbe=join(directory,"ordered-probe.mjs");
   const changed=source.replace(handler,'events.on("test:pass",data=>{');
-  writeFileSync(mutant,changed);
+  writeFileSync(engine,changed);
   writeFileSync(changedProbe,readFileSync(probe,"utf8").replace(runner,pathToFileURL(mutant).href));
   rmSync(closed);rmSync(release);
   const before=spawnTest(process.execPath,[changedProbe],{encoding:"utf8",env},"ordered-completion mutant");
