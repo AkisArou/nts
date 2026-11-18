@@ -1,11 +1,12 @@
 # Tooling file admission measurements
 
-Issue #848 measured the fixed tooling step and the first complete per-file implementation in the same pool tree. Both runs were contended by the full check and benchmark service; neither is an idle-machine comparison. The compiler body was unchanged.
+Issue #848 measured the fixed tooling step and two per-file implementations in the same pool tree. All runs were contended by the full check and benchmark service; none is an idle-machine comparison. The compiler body was unchanged.
 
 | Source | Collected files | Step wall (s) | Scope CPU (s) | Ledger peak (GiB) | Raw cgroup peak (GiB) |
 |---|---:|---:|---:|---:|---:|
 | `39f4978a723067b4f99b6639aa8967551a4827bc` | 330 | 440.819 | 5791.544 | 15.534 | 17.366 |
 | `943f6728dda53dca966156a39c0cc3ac0ff33b27` | 332 | 455.990 | 5540.523 | 15.488 | 17.590 |
+| `f48fc1a45c002d0f9328b13da1ed401b8bad7476` | 333 | 518.277 | 4925.338 | 8.131 | 12.139 |
 
 The fixed collector allowed 29 files at once and averaged 18.0; the per-file run reached 24 shared case tokens and averaged 15.1 executing files. The external sampler saw one additional nested source-test process in the fixed run. Its sampled maximum is therefore 30, rather than the collector’s configured 29.
 
@@ -45,3 +46,29 @@ No idle-machine wall-time bar or controlled ordinary-agent-job comparison is est
 - Per-file RSS samples: `/home/akisarou/.cache/nts-scratch/848/after-943f672-contended/samples.jsonl`; SHA-256 `5405cd372379453b8c9ec979413dc2045cdfd09bdb63ebb77af8dd1007b00a8b`.
 - Per-file collector output: `/home/akisarou/.cache/nts-scratch/848/after-943f672-contended/environment/tooling-tests.raw.log`; SHA-256 `6260631c031cf26a69f9c1ddb1d17344a8b6783766bdc6716113b3b9448ae657`.
 - Initial sampler source: `/home/akisarou/.cache/nts-scratch/848/before-contended/sampler.py`; SHA-256 `f45d09a7e4ee753d284324c0c64f8cc466eee910c4666ad6d98083ed3e8a5f4f`.
+
+## Run conditions captured at both endpoints
+
+The `f48fc1a45c002d0f9328b13da1ed401b8bad7476` run includes `admit.ts --status`, load, active services and process inventory at sampler start and end. The full-check benchmark reserved 7.9 GiB at both endpoints; the core full check held 1 GiB at the start and 2 GiB at the end while waiting to grow. One-minute load was 1.32 at the start and 6.35 at the end. No foreign unit was stopped.
+
+Its file collector took 425.0 seconds, averaging 10.3 executing entries and reaching 21 simultaneous entries. The whole step also includes the separately leased selector self-test. The largest sampled file trees were `owed.test.mjs` (2.558 GiB), `workspace-project.test.ts` (2.509 GiB), `member-name.test.ts` (2.467 GiB), `precise-changes.test.ts` (2.435 GiB), `landing/selection.test.ts` (2.309 GiB) and `accepted-revision-data.test.ts` (2.300 GiB).
+
+The 250 ms sampler saw 262 of 333 collected source entries; 71 short-lived entries had no sample. The coverage file names them, and no zero-RSS observation is inferred. The gate's per-file cgroup meters independently retain admission peaks. The historical diagnostic runs lack ledger snapshots at both endpoints; their recorded load and memory readings cannot reconstruct that missing inventory.
+
+The two baseline Cargo failures and seven descendant-OOM classification errors remained. This run also found a V8 heap-limit failure in `oracle-record-owed.test.ts`, with the final GC near 920 MiB; its 1.451 GiB sampled tree peak is truncated by that failure. This run therefore establishes neither a passing proof nor the idle wall-time bar.
+
+- Start conditions: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/conditions-start.json`; SHA-256 `285ca3f9fb43af6a6cc177cf819f5adc05b113456763bd0ca6eef3a2a1692db2`.
+
+- End conditions: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/conditions-end.json`; SHA-256 `308b54b61831cbbb045d6f3d0db75d55908ca2c512ed49c0414d2f765ebddb5d`.
+
+- RSS samples: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/samples.jsonl`; SHA-256 `5d82d642849f71ff5e8cfe155b8b011e65545f8d166bfe60c3497e3c79903b67`.
+
+- File RSS peaks: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/file-peaks.json`; SHA-256 `6fe1e7cefd939846efaab406d00a4f423154e3b9d7148fcfe260226ac5300603`.
+
+- Sampling coverage: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/sample-coverage.json`; SHA-256 `d8abc568b3af1f703b7f08b7dce2377ebb3436c60e93eb2ccc9e65074c46dbf8`.
+
+- Gate summary: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/environment/summary.json`; SHA-256 `a65bff39e8cd09b078959a96e3a59381466552536ec6f4e7a7d0bd6ced6c8492`.
+
+- Collector output: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/environment/tooling-tests.raw.log`; SHA-256 `bf0d8e10cff090ac54e61dc5be56d8e3f11c3e4166897468ae40f683650554f8`.
+
+- Gate output: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/run.log`; SHA-256 `3a32fbdc53a513eb43353f4a893ab0514040fec6e4749fc6b94309310ce6369d`.
