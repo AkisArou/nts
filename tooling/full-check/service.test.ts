@@ -1126,6 +1126,7 @@ test("the nightly slot makes the benchmarks due; nts-bench measures verified in 
   const measuring = readState(repo.layout.state).benchmarks_due!.measuring!;
   assert.ok(night.units.running(BENCH_UNIT));
   assert.equal(readFileSync(join(measuring.run, "nts-bench"), "utf8"), `nts-bench at ${first}\n`, "with the run's own copy of that build, which the next core run cannot build over");
+  assert.equal(readFileSync(join(measuring.run, "nts"), "utf8"), `compiler at ${first}\n`, "and the nts its launch rows build with, from the same build");
   assert.equal(new Git(repo.layout.bench, repo.git.env).commit("HEAD"), first, "in the bench tree, at verified");
   // Main moves on while it measures.
   const moved = repo.commit({ "b.txt": "2\n" }, "lands while it measures");
@@ -1134,8 +1135,8 @@ test("the nightly slot makes the benchmarks due; nts-bench measures verified in 
   assert.equal(await cycle(night), "benchmarks", "the night has its answer, and its record is published");
   const state = readState(repo.layout.state), results = state.bench!.submitted!;
   assert.equal(state.benchmarks_due, undefined);
-  assert.deepEqual([existsSync(join(measuring.run, "nts-bench")), existsSync(state.bench!.record!), existsSync(join(measuring.run, BENCH_OUTCOME))], [false, true, true],
-    "its copy of nts-bench goes once the unit ended; its record and outcome stay with its logs");
+  assert.deepEqual([existsSync(join(measuring.run, "nts-bench")), existsSync(join(measuring.run, "nts")), existsSync(state.bench!.record!), existsSync(join(measuring.run, BENCH_OUTCOME))], [false, false, true, true],
+    "its copies of nts-bench and nts go once the unit ended; its record and outcome stay with its logs");
   assert.deepEqual([state.bench?.commit, state.bench?.measured, state.bench?.outcome, state.bench?.attempts, state.bench?.base], [first, true, "submitted", 1, moved]);
   assert.deepEqual(night.submitted, [{ commit: results, first: false }]);
   assert.equal(repo.git.run(["rev-parse", `${results}^`]), moved, "published on the newest main, not on verified");

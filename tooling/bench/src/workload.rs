@@ -31,6 +31,15 @@ impl Numeric {
 }
 
 impl Workload {
+    /// A launch case's workload: the whole program, evaluated from its
+    /// module's top level, with no exported call.
+    pub(super) fn whole_program() -> Self {
+        Self {
+            roots: vec![hir::lower::MODULE_INIT.to_owned()],
+            numeric: None,
+        }
+    }
+
     pub(super) fn numeric(&self) -> Result<&Numeric> {
         self.numeric
             .as_ref()

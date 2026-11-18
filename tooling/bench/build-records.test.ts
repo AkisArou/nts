@@ -368,3 +368,20 @@ test("the records job reserves per lane: four lanes ask four times what one does
   assert.equal(writeCostHistory(historyFile(env), { jobs: [{key:"bench-compile-records",peak:7*2**30,basis:"worker",width:1}] }), undefined);
   assert.equal(jobSizing(recordsJob(4, "four lanes"), env).bytes, 4 * COMPILE_CAP_BYTES, "never more than the lanes' own caps");
 });
+
+test("a launch case is a benchmark case: its compile cells are enumerated and land pending, not measured at a check", async () => {
+  const { benchmarkCases } = await import("./build-records.ts");
+  const { benchmarkInventory, parseBenchmarkRecord } = await import("./outcomes.ts");
+  const root = fileURLToPath(new URL("../..", import.meta.url));
+  const cases = benchmarkCases(root), launches = cases.filter(path => existsSync(join(root, path, "launch.json")));
+  assert.deepEqual(launches, ["benchmarks/cases/startup-builtins", "benchmarks/cases/startup-empty", "benchmarks/cases/startup-hello"]);
+  for (const backend of ["c", "llvm", "jvm"]) {
+    const record = parseBenchmarkRecord(readFileSync(join(root, "results/benchmarks", backend, "outcomes.tsv"), "utf8"));
+    const recorded = new Set(record.rows.map(row => row.path));
+    // A case with no row is pending; the full check writes it after landing.
+    const pending = benchmarkInventory({ ...record, rows: record.rows.filter(row => row.scope === "compile") },
+      cases.map(path => ({ path, scope: "compile" as const, source: recorded.has(path) ? record.rows.find(row => row.path === path)!.source : "0".repeat(64), driver: record.rows[0]!.driver })))
+      .map(row => row.path);
+    for (const path of launches) assert.ok(recorded.has(path) || pending.includes(path), `${backend} ${path} is recorded or pending`);
+  }
+});

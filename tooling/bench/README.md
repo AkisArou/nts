@@ -33,8 +33,54 @@ projection changes types only; every call reloads the exact input bits through
 atomic storage and consumes the accumulated result after timing. Each column
 keeps five process attempts, its spread, checksum, exact commands and build cost.
 Cold process launch through the first completed workload is measured separately
-from warm throughput. Builds exclude CPUs 4–5; timed launches use CPU 4 under the
-ordinary measurement lock, with sibling counters and machine conditions retained.
+from warm throughput, by the launch timer below: one launch of the same body,
+before any warm-up, recorded in the cell's details as `coldStartup` with its
+`protocol`. Details written before the timer carry no protocol, and two
+cold-startup observations compare only under one named protocol. Builds exclude
+CPUs 4–5; timed launches use CPU 4 under the ordinary measurement lock, with
+sibling counters and machine conditions retained.
+
+# Launch rows
+
+A case directory holding `launch.json`, exactly `{"metric":"launch-to-exit"}`,
+is a launch row: its `case.ts` is a whole program with no exported workload,
+and each cell is the time from process launch to exit. Any other content of the
+marker is an error. The `startup` group's rows are launch rows.
+
+- **What is launched.** nts C and nts LLVM are the executables `nts build`
+  makes, from a generated project whose config declares one `app.cli` product
+  per backend, with the `nts` beside `nts-bench` (refused when it was linked
+  before the measured commit). Node and Bun JIT run `case.ts` itself with no
+  flags; Bun AOT and ScriptC are built from it as for throughput rows. nts JVM
+  is `NOT_RUN` and C++ and Java `NOT_PROVIDED`, each with its reason. A cell's
+  details name its recipe, command, artifact digest and argv.
+- **The timer** (`launch.c`, driven by `launcher.ts`) pins itself to CPU 4 and
+  sets its CPU and core limits once; children inherit them, so no wrapper
+  process is inside the window. Each launch is `clock_gettime(MONOTONIC)`,
+  `posix_spawn`, `wait4` on that pid, `clock_gettime`. While a child runs the
+  timer only waits. A child's stdout and stderr go to files opened before the
+  clock starts and read after the sitting, so a child never blocks on output.
+  Each launch keeps its wall time, exit status or signal, whether it passed its
+  wall bound, and wait4's user and system time and peak RSS (an observation
+  only; size and RSS rows are their own instruments).
+- **One sitting per row.** Every column, and `/bin/true` as the timer's own
+  floor, launch in rotating rounds (round r starts at column r): three warm-up
+  rounds, which only warm the page cache, then 21 timed rounds. All columns
+  share one cwd (the repository) and one environment: `HOME` and `TMPDIR`
+  empty directories of the sitting, `PATH=/usr/bin:/bin`, `LANG=C.UTF-8`,
+  `TZ=UTC`, and nothing inherited, so no comparator cache is switched on by
+  ours. The environment's digest is in every cell.
+- **The cell** (`launch-cell.ts`, `launch-to-exit-v1`): every launch exited 0
+  within its bound and printed the same stdout. The value is the median of the
+  21 timed launches, the spread the ratio of their upper to lower quartile, the
+  checksum the stdout's SHA-256 prefix. Node's output is the oracle, as for
+  throughput rows. A non-zero exit or signal is `ABORTED`, a launch past its
+  bound `TIMED_OUT`, launches of one column that print different output
+  `INVALID`. A record reader derives the value, spread and checksum again from
+  the launches; a missing, short or inconsistent launch list is refused.
+- **The row** carries `kind: "launch"`; throughput rows carry no kind, and a
+  row's own best comes only from rows of its kind. The floor and the sitting's
+  provenance are in the row's conditions. `--count` does not count launch rows.
 
 The workload inventory comes from the snapshot already captured by `case()`:
 normalized URI, the native producer's `xxh3-128-le-checked-utf8-v1` content digest

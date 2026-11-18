@@ -5,7 +5,11 @@ import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { parse } from "acorn";
 import { typedTimer } from "./typed-timer.ts";
-import { parseMeasurement, buildCommand, buildFailure } from "./host-columns.ts";
+import { parseMeasurement, buildCommand, buildFailure, coldStartup, launchCpu } from "./host-columns.ts";
+import { buildLauncher } from "./launcher.ts";
+import { LAUNCH_PROTOCOL } from "./launch-cell.ts";
+import { join } from "node:path";
+import { writeFileSync } from "node:fs";
 import {type activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {testScratch} from "../gate/test-scratch.ts";
 function receipt() {
@@ -88,4 +92,19 @@ test("an unmeasured comparator build keeps its hold instead of yielding a failur
   const supervise:typeof activeCommand=async(command,_args,options)=>scriptedCommand(command,{...options,idleMs:200},[commandSample(200)]);
   await assert.rejects(()=>buildCommand("python3",["-c","import time; time.sleep(60)"],root,
     {},supervise),/build not measured:.*hung/);
+});
+
+test("the cold-startup arm is one launch of the launch timer, under its named protocol", async t => {
+  const dir = testScratch(t, "cold-startup");
+  const script = join(dir, "cold.sh");
+  writeFileSync(script, '[ "$NTS_BENCH_STARTUP" = 1 ] || exit 7\necho "123.5 4000000000000000"\n');
+  const cold = { launcher: buildLauncher(join(dir, "bin"), String(launchCpu())), directory: join(dir, "cold"), cwd: dir };
+  const observed = await coldStartup(cold, "/bin/sh", [script], "4000000000000000", "case-node") as Record<string, unknown>;
+  assert.equal(observed.protocol, LAUNCH_PROTOCOL);
+  assert.equal(observed.status, "OK");
+  assert.ok(typeof observed.wallNanoseconds === "number" && observed.wallNanoseconds > 0);
+  assert.deepEqual(observed.argv, ["/bin/sh", script]);
+  assert.equal((await coldStartup(cold, "/bin/sh", [script], "5000000000000000", "case-bun") as Record<string, unknown>).status, "INVALID");
+  writeFileSync(script, "exit 1\n");
+  assert.equal((await coldStartup(cold, "/bin/sh", [script], "4000000000000000", "case-aot") as Record<string, unknown>).status, "ABORTED");
 });

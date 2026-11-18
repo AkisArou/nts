@@ -20,6 +20,7 @@ import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
 import { OWN_BEST_REGRESSION } from './own-best-marker.ts';
 import {readBuildDetails,describeBuilds,type BuildDetails} from './build-details.ts';
+import { LAUNCH_KIND, checkLaunchCell } from "./launch-cell.ts";
 
 export const COMPARATORS = ["node", "Bun JIT", "Bun AOT", "ScriptC"] as const;
 export const BACKENDS = ["nts C", "nts LLVM", "nts JVM"] as const;
@@ -60,6 +61,8 @@ export type Verdict = {
 };
 export type Row = {
   name: string;
+  /** Absent on throughput rows; "launch" when every cell is a launch-to-exit observation (launch-cell.ts). */
+  kind?: typeof LAUNCH_KIND;
   workloadIdentity: string | null;
   eligibleForBest: boolean;
   conditions: Json;
@@ -320,13 +323,18 @@ function decode(value: unknown, derive: boolean): RunRecord {
     const at = "row " + index,
       r = obj(
         value,
-        ["name", "workloadIdentity", "eligibleForBest", "conditions", "cells", "verdicts",...(value&&typeof value==='object'&&Object.hasOwn(value,'builds')?['builds']:[])],
+        ["name", "workloadIdentity", "eligibleForBest", "conditions", "cells", "verdicts",
+          ...(value&&typeof value==='object'&&Object.hasOwn(value,'builds')?['builds']:[]),
+          ...(value&&typeof value==='object'&&Object.hasOwn(value,'kind')?['kind']:[])],
         at,
       );
     const name = text(r.name, at + ".name");
     check(inventory.includes(name), "orphan row " + name);
+    if (Object.hasOwn(r, "kind")) check(r.kind === LAUNCH_KIND, name + ": unknown row kind");
+    const launch = r.kind === LAUNCH_KIND;
     const rawCells = obj(r.cells, columns, at + ".cells");
     const cells = Object.fromEntries(columns.map((c) => [c, cell(rawCells[c], name + "/" + c)]));
+    if (launch) for (const c of columns) checkLaunchCell(cells[c]!, name + "/" + c);
     const answers = new Set(
       Object.values(cells)
         .filter((c) => c.status === "OK" && c.verified)
@@ -355,6 +363,7 @@ function decode(value: unknown, derive: boolean): RunRecord {
     if(builds)check(builds.stages.every(stage=>columns.includes(stage.column)),name+': build stage names an unknown column');
     return {
       name,
+      ...(launch ? { kind: LAUNCH_KIND as typeof LAUNCH_KIND } : {}),
       workloadIdentity,
       eligibleForBest,
       conditions: json(r.conditions, name + ".conditions"),
@@ -481,7 +490,7 @@ function priorRows(run: RunRecord, row: Row, runs: RunRecord[]): PriorRow[] {
     if (prior.id === run.id || newestFirst(prior, run) <= 0 ||
         prior.machine.identity !== run.machine.identity || prior.harness.contract !== run.harness.contract) return [];
     const candidate = prior.rows.find((r) =>
-      r.name === row.name && r.workloadIdentity === row.workloadIdentity && r.eligibleForBest);
+      r.name === row.name && r.kind === row.kind && r.workloadIdentity === row.workloadIdentity && r.eligibleForBest);
     return candidate && prior.compiler.commit ? [{ run: prior, row: candidate }] : [];
   });
 }
@@ -731,11 +740,19 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
       ),
   );
   notes.push(...run.rows.flatMap(row=>row.builds?describeBuilds(row.builds).map(detail=>'- '+row.name+', build: '+escape(detail)):[]));
+  notes.push(...run.rows.flatMap((row) => {
+    const floor = row.kind === LAUNCH_KIND && row.conditions && typeof row.conditions === "object" && !Array.isArray(row.conditions) ? row.conditions.launchFloor : null;
+    const median = floor && typeof floor === "object" && !Array.isArray(floor) ? floor.median : null;
+    return typeof median === "number" ? ["- " + row.name + ", launch floor: " + time(median) + " (/bin/true in the same sitting)"] : [];
+  }));
   if (!groups.length) return header + "\n" + tableFor(model.rows) + "\n\n" + notes.join("\n") + "\n";
   const grouped = new Set<string>(), sections: string[] = [];
   const section = (title: string, declaredBy: string | null, rows: RowResult[]) => {
     const source = declaredBy ? `Declared by ${declaredBy}.\n\n` : "No foundation page names these rows.\n\n";
-    sections.push(`## ${title}\n\n${source}${verdictCounts(rows).join("\n")}\n\n${tableFor(rows)}`);
+    const launch = rows.some((row) => row.row.kind === LAUNCH_KIND)
+      ? "Launch rows: each time is one process from launch to exit, the median of its timed launches (launch-to-exit-v1); the launch timer's own floor in the same sitting is noted per row.\n\n"
+      : "";
+    sections.push(`## ${title}\n\n${source}${launch}${verdictCounts(rows).join("\n")}\n\n${tableFor(rows)}`);
   };
   for (const group of groups) {
     const names = new Set(group.rows), rows = model.rows.filter((row) => names.has(row.row.name));

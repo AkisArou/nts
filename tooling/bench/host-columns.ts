@@ -1,17 +1,20 @@
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { countDriver } from "./count-driver.ts";
 import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { pinnedComparators, sha256 } from "./comparator-pins.ts";
+import { pinnedComparators, sha256, type Pins } from "./comparator-pins.ts";
 import { typedTimer } from "./typed-timer.ts";
 import { absent } from "./run-producers.ts";
-import { COMPARATORS, type Cell, type Comparator, type Json } from "./run-record.ts";
+import { COLUMNS, COMPARATORS, type Cell, type Comparator, type Json } from "./run-record.ts";
+import { buildLauncher, launchEnvironment, launchSitting, type Launcher } from "./launcher.ts";
+import { LAUNCH_COUNT, LAUNCH_KIND, LAUNCH_WARMUPS, launchCell, launchSummary } from "./launch-cell.ts";
+import { gitArguments } from "../gate/git-arguments/main.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
 import { optionalFile } from "../gate/reader-inputs/main.ts";
 // Bun consults this configuration in the repository cwd used below.
@@ -183,6 +186,7 @@ async function measure(
   expected: string | null,
   build: Receipt | null,
   countedLabel = "host",
+  cold: Cold | null = null,
 ): Promise<Cell> {
   if (COUNTING) {
     try {
@@ -221,8 +225,7 @@ async function measure(
   const times = numbers.map((v) => v.ns),
     nanoseconds = Math.min(...times),
     checksum = numbers[0].checksum;
-  const cold = await execute(program, args, cwd, true, { NTS_BENCH_STARTUP: "1" });
-  const checked = parseMeasurement(cold, checksum);
+  const startup = cold ? await coldStartup(cold, program, args, checksum, countedLabel) : null;
   return {
     status: "OK",
     nanoseconds,
@@ -233,14 +236,40 @@ async function measure(
     details: {
       attempts: attempts as unknown as Json,
       build: build as unknown as Json,
-      coldStartup: {
-        kind: "process launch through first completed workload, separate from warm throughput",
-        wallNanoseconds: cold.wallNanoseconds,
-        status: "status" in checked ? checked.status : "OK",
-        receipt: cold as unknown as Json,
-      },
+      ...(startup ? { coldStartup: startup } : {}),
     },
   };
+}
+/** Where a throughput cell's cold-startup arm launches: the one launch timer, one launch, the row's cwd. */
+export type Cold = { launcher: Launcher; directory: string; cwd: string };
+/**
+ * Process launch through the first completed workload, separate from warm
+ * throughput: the same body once, before any warm-up, timed by the one
+ * launch timer. Details only; it decides no verdict, and its protocol names
+ * what it can be compared with (launch-cell.ts).
+ */
+export async function coldStartup(cold: Cold, program: string, args: string[], checksum: string, label: string): Promise<Json> {
+  const directory = join(cold.directory, label);
+  const environment = launchEnvironment(directory, { NTS_BENCH_STARTUP: "1" });
+  const sitting = await launchSitting({ launcher: cold.launcher, cpu: launchCpu(), cwd: cold.cwd, environment,
+    columns: [{ label, argv: [program, ...args] }], warmups: 0, launches: 1, out: join(directory, "sitting") });
+  const column = sitting.columns[0]!, launch = column.details.launches[0]!;
+  const printed = /^([0-9]+(?:\.[0-9]+)?)\s+([a-f0-9]{16})\s*$/.exec(column.stdout.trim());
+  return {
+    protocol: sitting.protocol,
+    kind: "process launch through first completed workload, separate from warm throughput",
+    wallNanoseconds: launch.wallNanoseconds,
+    status: launch.timedOut ? "TIMED_OUT" : launch.status !== 0 ? "ABORTED" : printed?.[2] === checksum ? "OK" : "INVALID",
+    launch: launch as unknown as Json,
+    argv: [program, ...args],
+    environmentSha256: sitting.environmentSha256,
+    launcherSha256: sitting.launcherSha256,
+  };
+}
+/** The one CPU a launch sitting pins to: 4 under the measurement lock, else the first one a build may use. */
+export function launchCpu(): number {
+  const cpus = affinity(true);
+  return Number(cpus.split(",")[0]);
 }
 export function buildFailure(receipt: Receipt): Cell {
   return absent(
@@ -252,6 +281,59 @@ export function buildFailure(receipt: Receipt): Cell {
     receipt.timeout ? `timed out building: ${receipt.timeout}` : "Comparator build failed",
     receipt,
   );
+}
+/** Bun runs from the directory that owns its declared configuration, which is the repository. */
+function bunCwd(root: string): string {
+  const bunRoot = dirname(fileURLToPath(BUN_CONFIGURATION));
+  assert.equal(resolve(root), bunRoot, "Bun's launch cwd must own its declared configuration");
+  return bunRoot;
+}
+/** `bun build --compile --aot` of one entry: the executable, or the cell its failure is. */
+async function buildBunAot(root: string, bun: string, entry: string, directory: string): Promise<{ binary: string; build: Receipt } | Cell> {
+  const binary = join(directory, "bun-aot"),
+    build = await execute(bun, ["build", "--compile", "--aot", entry, "--outfile", binary], bunCwd(root), false);
+  return build.status === 0 && !build.timeout ? { binary, build } : buildFailure(build);
+}
+/** ScriptC's native build of one entry, Node islands off: the executable, or its refusal or failure. */
+async function buildScriptC(root: string, scriptc: NonNullable<Pins["scriptc"]>, entry: string, directory: string): Promise<{ binary: string; build: Receipt } | Cell> {
+  const wrapper = join(directory, "scriptc-entry.mjs");
+  writeFileSync(wrapper, "import " + JSON.stringify(entry) + ";\n");
+  writeFileSync(
+    join(directory, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        strictNullChecks: true,
+        allowJs: true,
+        checkJs: false,
+        skipLibCheck: true,
+        target: "ES2024",
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        types: ["node"],
+        typeRoots: [join(root, "node_modules/@types")],
+        allowImportingTsExtensions: true,
+        noEmit: true,
+      },
+      files: ["scriptc-entry.mjs"],
+    }),
+  );
+  const binary = join(directory, "scriptc-native"),
+    build = await execute(
+      process.execPath,
+      [scriptc.command, "build", wrapper, "--node-islands=off", "--optimization=release", "--target-cpu=native", "--print=diagnostics", "-o", binary],
+      scriptc.root,
+      false,
+    );
+  let report: { success?: boolean; diagnostics?: { category: string; code: string; message: string }[] } | null = null;
+  try {
+    report = JSON.parse(build.stdout);
+  } catch {}
+  if (build.status === 0 && !build.timeout && report?.success === true && !report.diagnostics?.some((d) => d.code === "SC8001"))
+    return { binary, build };
+  if (report?.success === false && report.diagnostics?.length && report.diagnostics.every((d) => d.category !== "environment" && d.category !== "internal"))
+    return absent("REFUSED", report.diagnostics.map((d) => d.code + ": " + d.message).join("; "), { build: build as unknown as Json, report: report as unknown as Json });
+  return buildFailure(build);
 }
 export async function hostColumns(
   root: string,
@@ -302,95 +384,18 @@ export async function hostColumns(
   if (process.env.NTS_BENCH_LANES)
     for (const column of ["Bun JIT", "Bun AOT", "ScriptC"] as const)
       cells[column] = absent("NOT_RUN", "Filtered native run requests the node oracle only");
-  cells.node = await measure(process.execPath, [entry, ...input], root, null, null, `${name}-node`);
+  const cold: Cold = { launcher: buildLauncher(join(directory, "launcher"), affinity(false)), directory: join(directory, "cold"), cwd: root };
+  cells.node = await measure(process.execPath, [entry, ...input], root, null, null, `${name}-node`, cold);
   const expected = cells.node.status === "OK" ? cells.node.checksum : null;
   if (pins.bun && !process.env.NTS_BENCH_LANES) {
-    const bunRoot = dirname(fileURLToPath(BUN_CONFIGURATION));
-    assert.equal(resolve(root), bunRoot, "Bun's launch cwd must own its declared configuration");
-    cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], bunRoot, expected, null, `${name}-bun-jit`);
-    const binary = join(directory, "bun-aot"),
-      build = await execute(
-        pins.bun,
-        ["build", "--compile", "--aot", entry, "--outfile", binary],
-        bunRoot,
-        false,
-      );
-    cells["Bun AOT"] =
-      build.status === 0 && !build.timeout
-        ? await measure(binary, input, root, expected, build, `${name}-bun-aot`)
-        : buildFailure(build);
+    cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], root, expected, null, `${name}-bun-jit`, cold);
+    const aot = await buildBunAot(root, pins.bun, entry, directory);
+    cells["Bun AOT"] = "status" in aot ? aot : await measure(aot.binary, input, root, expected, aot.build, `${name}-bun-aot`, cold);
   }
   if (pins.scriptc && !process.env.NTS_BENCH_LANES) {
-    const wrapper = join(directory, "scriptc-entry.mjs");
-    writeFileSync(wrapper, "import " + JSON.stringify(entry) + ";\n");
-    writeFileSync(
-      join(directory, "tsconfig.json"),
-      JSON.stringify({
-        compilerOptions: {
-          strict: true,
-          strictNullChecks: true,
-          allowJs: true,
-          checkJs: false,
-          skipLibCheck: true,
-          target: "ES2024",
-          module: "NodeNext",
-          moduleResolution: "NodeNext",
-          types: ["node"],
-          typeRoots: [join(root, "node_modules/@types")],
-          allowImportingTsExtensions: true,
-          noEmit: true,
-        },
-        files: ["scriptc-entry.mjs"],
-      }),
-    );
-    const binary = join(directory, "scriptc-native"),
-      build = await execute(
-        process.execPath,
-        [
-          pins.scriptc.command,
-          "build",
-          wrapper,
-          "--node-islands=off",
-          "--optimization=release",
-          "--target-cpu=native",
-          "--print=diagnostics",
-          "-o",
-          binary,
-        ],
-        pins.scriptc.root,
-        false,
-      );
-    let report: {
-      success?: boolean;
-      diagnostics?: { category: string; code: string; message: string }[];
-    } | null = null;
-    try {
-      report = JSON.parse(build.stdout);
-    } catch {}
-    if (
-      build.status === 0 && !build.timeout &&
-      report?.success === true &&
-      !report.diagnostics?.some((d) => d.code === "SC8001")
-    )
-      cells.ScriptC = await measure(
-        binary,
-        pins.scriptc.argvPrefix ? [entry, ...input] : input,
-        root,
-        expected,
-        build,
-        `${name}-scriptc`,
-      );
-    else if (
-      report?.success === false &&
-      report.diagnostics?.length &&
-      report.diagnostics.every((d) => d.category !== "environment" && d.category !== "internal")
-    )
-      cells.ScriptC = absent(
-        "REFUSED",
-        report.diagnostics.map((d) => d.code + ": " + d.message).join("; "),
-        { build: build as unknown as Json, report: report as unknown as Json },
-      );
-    else cells.ScriptC = buildFailure(build);
+    const scriptc = await buildScriptC(root, pins.scriptc, entry, directory);
+    cells.ScriptC = "status" in scriptc ? scriptc
+      : await measure(scriptc.binary, pins.scriptc.argvPrefix ? [entry, ...input] : input, root, expected, scriptc.build, `${name}-scriptc`, cold);
   }
   const artifacts = [timer, entry, join(directory, "bun-aot"), join(directory, "scriptc-native")]
     .filter(existsSync)
@@ -407,7 +412,121 @@ export async function hostColumns(
     },
   };
 }
+/** A launch row: every column's cells, the launcher's own floor in the same sitting, and what built them. */
+export type LaunchRow = { kind: typeof LAUNCH_KIND; cells: Record<string, Cell>; floor: Json; provenance: Json };
+const NTS_TARGETS = [{ column: "nts C", backend: "c" }, { column: "nts LLVM", backend: "llvm" }] as const;
+
+/**
+ * The executable `nts build` makes of a launch case for one backend: a
+ * generated project whose config declares one `app.cli` product, built by the
+ * same `nts` the run measures, so the row times what a user would ship
+ * (tooling/bench/README.md, "Launch rows").
+ */
+async function buildNts(root: string, nts: { binary: string; sha256: string; version: string }, entry: string, directory: string,
+  backend: "c" | "llvm"): Promise<{ binary: string; recipe: Json } | Cell> {
+  const project = join(directory, `nts-${backend}`);
+  rmSync(project, { recursive: true, force: true });
+  mkdirSync(project, { recursive: true });
+  writeFileSync(join(project, "tsconfig.json"), JSON.stringify({ extends: join(root, "tsconfig.fixtures.json"), files: [entry] }));
+  writeFileSync(join(project, "nts.config.ts"), [
+    `import { defineConfig, app } from ${JSON.stringify(join(root, "tooling/config/src/index.ts"))};`,
+    `export default defineConfig({ tsconfig: "./tsconfig.json", products: { program: app.cli({ entry: ${JSON.stringify(entry)}, backend: ${JSON.stringify(backend)} }) } });`,
+    "",
+  ].join("\n"));
+  const output = join(project, "out"), command = ["build", join(project, "tsconfig.json"), "--out", output];
+  const build = await execute(nts.binary, command, project, false, { NTS_NODE: process.execPath });
+  const recipe = { tool: "nts build", backend, product: "app.cli", command: [nts.binary, ...command], ntsSha256: nts.sha256, ntsVersion: nts.version,
+    config: readFileSync(join(project, "nts.config.ts"), "utf8") };
+  if (build.status !== 0 || build.timeout) {
+    const refusal = `${build.stderr}\n${build.stdout}`.split("\n").find((line) => /(?:declined:|\bNTS\d{4}\b|\bTS\d{4,}\b)/.test(line));
+    return refusal && !build.timeout ? absent("REFUSED", refusal.trim(), { build: build as unknown as Json, recipe }) : { ...buildFailure(build), details: { build: build as unknown as Json, recipe } as Json };
+  }
+  const built = readdirSync(join(output, "program"), { withFileTypes: true }).filter((entry) => entry.isDirectory())
+    .map((entry) => join(output, "program", entry.name, "program")).filter(existsSync);
+  if (built.length !== 1) throw new ToolingInstrumentError("tooling-setup", `nts build left ${built.length} executables for ${entry} on ${backend}`);
+  return { binary: built[0]!, recipe: { ...recipe, build: build as unknown as Json, artifactSha256: sha256(built[0]!) } };
+}
+
+/** The nts that builds launch rows: beside nts-bench, and not linked before the commit it measures. */
+export function ntsIdentity(root: string, binary: string, commit: string): { binary: string; sha256: string; version: string } {
+  if (!existsSync(binary)) throw new ToolingInstrumentError("tooling-setup", `launch rows build with ${binary}, which does not exist; build the workspace with cargo build --release`);
+  const committed = Number(execFileSync("git", gitArguments(["log", "-1", "--format=%ct", commit]), { cwd: root, encoding: "utf8" }).trim());
+  const linked = Math.floor(statSync(binary).mtimeMs / 1000);
+  if (!(linked >= committed)) throw new ToolingInstrumentError("tooling-setup", `${binary} was linked before ${commit.slice(0, 12)}; rebuild it with cargo build --release`);
+  const version = spawnSync(binary, ["version"], { encoding: "utf8" });
+  if (version.status !== 0) throw new ToolingInstrumentError("tooling-setup", `${binary} version failed: ${version.stderr}`);
+  return { binary, sha256: sha256(binary), version: version.stdout.trim() };
+}
+
+/**
+ * A launch case's row: nts C and LLVM as `nts build` makes them, node and
+ * Bun JIT on the case itself, Bun AOT and ScriptC built from it, and
+ * /bin/true as the launcher's floor, all timed in one rotating sitting by the
+ * one launch timer under one environment and cwd. Columns that cannot run
+ * keep their reason; nothing here is a verdict (run-producers.ts and
+ * run-record.ts decide those).
+ */
+export async function launchColumns(root: string, name: string, out: string, ntsBinary: string, commit: string): Promise<LaunchRow> {
+  await reserveJob({ key: "bench-host-columns", what: `benchmark launch row for ${name}` });
+  const pins = pinnedComparators(root), directory = join(out, name + ".launch");
+  rmSync(directory, { recursive: true, force: true });
+  mkdirSync(directory, { recursive: true });
+  const entry = join(root, "benchmarks/cases", name, "case.ts");
+  const nts = ntsIdentity(root, ntsBinary, commit);
+  const cells: Record<string, Cell> = Object.fromEntries(COLUMNS.map((column) => [column,
+    column === "nts JVM" ? absent("NOT_RUN", "Startup rows measure native executables and the engines; the JVM's launch is not in this group")
+      : column === "C++" || column === "Java" ? absent("NOT_PROVIDED", "No hand-written reference for a launch case")
+        : absent("NOT_PROVIDED", "Pinned comparator artifact is not installed")]));
+  const columns: { column: string; argv: string[]; extra: Record<string, Json> }[] = [];
+  for (const { column, backend } of NTS_TARGETS) {
+    const built = await buildNts(root, nts, entry, directory, backend);
+    if ("status" in built) cells[column] = built;
+    else columns.push({ column, argv: [built.binary], extra: { recipe: built.recipe } });
+  }
+  columns.push({ column: "node", argv: [process.execPath, entry], extra: { flags: [] } });
+  if (pins.bun) {
+    bunCwd(root);
+    columns.push({ column: "Bun JIT", argv: [pins.bun, entry], extra: { flags: [] } });
+    const aot = await buildBunAot(root, pins.bun, entry, directory);
+    if ("status" in aot) cells["Bun AOT"] = aot;
+    else columns.push({ column: "Bun AOT", argv: [aot.binary], extra: { build: aot.build as unknown as Json, artifactSha256: sha256(aot.binary) } });
+  }
+  if (pins.scriptc) {
+    const scriptc = await buildScriptC(root, pins.scriptc, entry, directory);
+    if ("status" in scriptc) cells.ScriptC = scriptc;
+    else columns.push({ column: "ScriptC", argv: pins.scriptc.argvPrefix ? [scriptc.binary, entry] : [scriptc.binary],
+      extra: { build: scriptc.build as unknown as Json, artifactSha256: sha256(scriptc.binary) } });
+  }
+  const floor = { column: "floor", argv: ["/bin/true"], extra: {} };
+  const launcher = buildLauncher(join(directory, "launcher"), affinity(false));
+  const environment = launchEnvironment(join(directory, "environment"));
+  const sitting = await launchSitting({ launcher, cpu: launchCpu(), cwd: root, environment, warmups: LAUNCH_WARMUPS, launches: LAUNCH_COUNT,
+    columns: [...columns, floor].map(({ column, argv }) => ({ label: column, argv })), out: join(directory, "sitting") });
+  for (const [index, { column, argv, extra }] of columns.entries()) {
+    const observed = sitting.columns[index]!;
+    cells[column] = launchCell(observed.details, { ...extra, argv, cwd: root, stdout: observed.stdout }, observed.stderr);
+  }
+  const measuredFloor = sitting.columns.at(-1)!;
+  return {
+    kind: LAUNCH_KIND,
+    cells,
+    floor: { argv: floor.argv, ...launchSummary(measuredFloor.details.launches.map((launch) => launch.wallNanoseconds)),
+      launch: measuredFloor.details as unknown as Json },
+    provenance: { protocol: sitting.protocol, cwd: root, environment: sitting.environment, environmentSha256: sitting.environmentSha256,
+      launcherSha256: sitting.launcherSha256, cpu: sitting.cpu, pins: pins.declaration, builds: pins.builds as unknown as Json, nts: { sha256: nts.sha256, version: nts.version } },
+  };
+}
 runAsCommand(import.meta.url,async()=>{
+  if (process.argv[2] === "--launch") {
+    const [root, name, out, nts, commit] = process.argv.slice(3);
+    assert.ok(root && name && out && nts && commit, "host-columns.ts --launch <root> <case> <output> <nts> <commit>");
+    try { console.log(JSON.stringify(await launchColumns(root, name, out, nts, commit))); }
+    catch(error) {
+      if(!(error instanceof ToolingInstrumentError))throw error;
+      console.error(error.message);process.exitCode=2;
+    }
+    return;
+  }
   const [root, name, harness, out, ...input] = process.argv.slice(2);
   assert.ok(
     root && name && harness && out,

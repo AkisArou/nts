@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {readBuildDetails} from './build-details.ts';
+import { LAUNCH_KIND, checkLaunchCell } from "./launch-cell.ts";
 import {
   COMPARATORS,
   sealRun,
@@ -60,6 +61,19 @@ function measured(value: unknown, legacy = false): Cell {
     reason: legacy ? "Historical checksum or spread was not retained" : null,
     details: clean(o),
   };
+}
+/**
+ * A launch row's cell as host-columns.ts --launch made it: a launch cell
+ * holds its whole protocol (checked again when the run is sealed), and an
+ * absent one its reason. Anything else is an instrument error.
+ */
+function launchCell(value: unknown, at: string): Cell {
+  const o = object(value);
+  assert.deepEqual(Object.keys(o).sort(), ["checksum", "details", "nanoseconds", "reason", "spread", "status", "verified"], at + ": malformed launch cell");
+  const cell = { ...(o as unknown as Cell), details: clean(o.details) };
+  if (cell.status === "OK") checkLaunchCell(cell, at);
+  else assert.ok(cell.nanoseconds === null && cell.spread === null && !cell.verified && typeof cell.reason === "string", at + ": an absent launch cell carries a timing");
+  return cell;
 }
 export function comparatorCell(value: unknown): Cell {
   const o = object(value),
@@ -202,7 +216,15 @@ export function fromNts(
         ),
       ]),
     );
-    if (m) {
+    const launch = m?.launch === undefined || m?.launch === null ? null : object(m.launch);
+    if (launch) {
+      assert.equal(launch.kind, LAUNCH_KIND, "unknown launch row kind");
+      const launchCells = object(launch.cells);
+      for (const column of meta.columns) {
+        assert.ok(Object.hasOwn(launchCells, column), "launch row omits column " + column);
+        cells[column] = launchCell(launchCells[column], name + "/" + column);
+      }
+    } else if (m) {
       const measuredCells = values(m.results),
         absences = object(m.absences),
         outcomes = object(absences.outcomes ?? {});
@@ -258,7 +280,7 @@ export function fromNts(
       if (m.node !== null) cells.node = measured(m.node);
       if (m.bun !== null && m.bun !== undefined) cells["Bun JIT"] = measured(m.bun);
     }
-    for (const [column, value] of Object.entries(hosts[name] ?? {})) {
+    for (const [column, value] of Object.entries(launch ? {} : hosts[name] ?? {})) {
       assert.ok(
         COMPARATORS.includes(column as (typeof COMPARATORS)[number]),
         "unknown host column",
@@ -276,10 +298,12 @@ export function fromNts(
         machine: object(raw.conditions ?? {})[name] ?? null,
         sourceCapture: m?.source_capture ?? null,
         hostProvenance: object(m?.hosts ?? {}).provenance ?? null,
+        ...(launch ? { launchFloor: clean(launch.floor), launchProvenance: clean(launch.provenance) } : {}),
       },
       identities[name] ?? workloadIdentity(m?.source_capture, m?.workload),
       Boolean(identities[name] ?? m?.source_capture) && !values(raw.spoiled).includes(name),
     );
+    if (launch) result.kind = LAUNCH_KIND;
     const builds=object(raw.builds??{})[name];
     if(builds!==undefined)result.builds=readBuildDetails(builds);
     return result;

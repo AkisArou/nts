@@ -516,6 +516,10 @@ fn count_cases(
     let build_session = build::Session::new(root)?;
     for case in cases {
         let name = case.file_name().unwrap_or("?");
+        if is_launch_case(case)? {
+            println!("{name}\tlaunch row: timed under the measurement lock, never counted");
+            continue;
+        }
         let mut recorder = build::Recorder::new(&build_session);
         let computed = run_case(root, case, out, Some(counting), &mut recorder);
         let Some(measured) = accept_build(name, computed, &mut row_failures, &mut failed)? else {
@@ -578,21 +582,27 @@ fn measure_cases(
         if early.is_some() || late.is_some() {
             spoiled.push(name.to_owned());
         }
-        if let Some(measurements) = accept_build(name, computed, &mut row_failures, &mut failed)? {
-            let assembled = assemble(&measurements, lanes.is_some(), MeasurementMode::Timed);
-            if let Err(error) = &assembled {
-                row_failures.insert(
-                    name.to_owned(),
-                    RowFailure {
-                        kind: FailureKind::Invalid,
-                        reason: format!("{error:#}"),
-                    },
-                );
+        match accept_build(name, computed, &mut row_failures, &mut failed)? {
+            // A launch row's checks are its cells' own (launch-cell.ts),
+            // held when the row is printed and when the run is sealed.
+            Some(measurements) if measurements.launch.is_some() => measured.push(measurements),
+            Some(measurements) => {
+                let assembled = assemble(&measurements, lanes.is_some(), MeasurementMode::Timed);
+                if let Err(error) = &assembled {
+                    row_failures.insert(
+                        name.to_owned(),
+                        RowFailure {
+                            kind: FailureKind::Invalid,
+                            reason: format!("{error:#}"),
+                        },
+                    );
+                }
+                if let Some(row) = accept_result(&measurements.shown, assembled, &mut failed) {
+                    rows.push(row);
+                }
+                measured.push(measurements);
             }
-            if let Some(row) = accept_result(&measurements.shown, assembled, &mut failed) {
-                rows.push(row);
-            }
-            measured.push(measurements);
+            None => {}
         }
         let after = results::conditions(root)?;
         conditions.insert(
@@ -767,6 +777,7 @@ fn reaches_unicode(source: &str) -> bool {
     source.contains("nts_str_to_lower_case") || source.contains("nts_str_to_upper_case")
 }
 
+/// One case's measurements: a launch row's, or a throughput row's.
 fn run_case(
     root: &Utf8Path,
     case: &Utf8Path,
@@ -775,6 +786,24 @@ fn run_case(
     builds: &mut build::Recorder<'_>,
 ) -> Result<Measurements> {
     let name = case.file_name().context("a case needs a name")?;
+    if is_launch_case(case)? {
+        ensure!(
+            counting.is_none(),
+            "{name} is a launch row: launch rows are timed under the measurement lock, never counted"
+        );
+        return run_launch_case(root, case, out, name, builds);
+    }
+    run_workload_case(root, case, out, name, counting, builds)
+}
+
+fn run_workload_case(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
+) -> Result<Measurements> {
     let tsconfig = case_tsconfig(case, out, name)?;
 
     // A case that allocates per iteration has to say so. Under NoGC it would
@@ -890,6 +919,83 @@ fn run_case(
         lowers,
         node,
         bun,
+        launch: None,
+    })
+}
+
+/// The file that makes a case a launch row: its `case.ts` is a whole program,
+/// timed from process launch to exit (tooling/bench/README.md, "Launch rows").
+const LAUNCH_MARKER: &str = "launch.json";
+
+/// Whether `case` is a launch row. The marker's content is exact, so a stray
+/// or misspelt file is an error rather than a silently different row.
+fn is_launch_case(case: &Utf8Path) -> Result<bool> {
+    let marker = case.join(LAUNCH_MARKER);
+    if !marker.exists() {
+        return Ok(false);
+    }
+    let text = std::fs::read_to_string(&marker).with_context(|| format!("reading {marker}"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&text).with_context(|| format!("{marker} is not JSON"))?;
+    ensure!(
+        value == serde_json::json!({"metric": "launch-to-exit"}),
+        "{marker} must be exactly {{\"metric\":\"launch-to-exit\"}}"
+    );
+    Ok(true)
+}
+
+/// A launch row: the source capture that identifies its workload, then every
+/// column built and timed by `host-columns.ts --launch`, with `nts build` from
+/// the `nts` beside this executable making the nts columns.
+fn run_launch_case(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    builds: &mut build::Recorder<'_>,
+) -> Result<Measurements> {
+    let tsconfig = case_tsconfig(case, out, name)?;
+    let source_capture = builds.thread("nts C", "capture", || {
+        let snapshot = capture_snapshot(&tsconfig)?;
+        capture::Capture::of(&snapshot, root, case)
+    })?;
+    let nts = std::env::current_exe()
+        .context("benchmark executable path")?
+        .with_file_name("nts");
+    let output = std::process::Command::new("node")
+        .arg(root.join("tooling/bench/host-columns.ts"))
+        .arg("--launch")
+        .args([root.as_str(), name, out.as_str()])
+        .arg(&nts)
+        .arg(env!("NTS_BENCH_SOURCE_COMMIT"))
+        .current_dir(root)
+        .output()
+        .context("running the launch row")?;
+    if output.status.code() == Some(2) {
+        return Err(
+            build::NotMeasured(String::from_utf8_lossy(&output.stderr).into_owned()).into(),
+        );
+    }
+    ensure!(
+        output.status.success(),
+        "launch instrument failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let launch: serde_json::Value =
+        serde_json::from_slice(&output.stdout).context("invalid launch row frame")?;
+    Ok(Measurements {
+        workload: Some(workload::Workload::whole_program()),
+        source_capture: Some(source_capture),
+        hosts: None,
+        shown: name.to_owned(),
+        results: std::iter::repeat_with(|| None)
+            .take(VARIANTS.len())
+            .collect(),
+        absences: Absences::default(),
+        lowers: true,
+        node: None,
+        bun: None,
+        launch: Some(launch),
     })
 }
 
@@ -1311,6 +1417,11 @@ struct Measurements {
     lowers: bool,
     node: Option<Measured>,
     bun: Option<Measured>,
+    /// A launch case's whole row, every column timed by the one launch timer
+    /// (`host-columns.ts --launch`). Its cells are the row; `results`, `node`
+    /// and `bun` stay empty.
+    #[serde(default)]
+    launch: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -3083,11 +3194,51 @@ mod tests {
             lowers: true,
             node: Some(counted(1_000_000.0)),
             bun: Some(counted(1_000_000.0)),
+            launch: None,
         };
         assert!(assemble(&observation, false, MeasurementMode::Timed).is_err());
         assert!(assemble(&observation, false, MeasurementMode::Counted).is_ok());
         observation.results[0].as_mut().expect("counted C").checksum = "different".to_owned();
         assert!(assemble(&observation, false, MeasurementMode::Counted).is_err());
+    }
+
+    #[test]
+    fn a_launch_marker_is_exact_and_absence_means_a_throughput_case() {
+        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize_utf8()
+            .expect("workspace");
+        let dir =
+            super::scratch::ScratchDir::new(&root.join("target/bench-launch-tests"), "marker");
+        assert!(!super::is_launch_case(&dir).expect("no marker"));
+        std::fs::write(
+            dir.join("launch.json"),
+            "{\"metric\": \"launch-to-exit\"}\n",
+        )
+        .expect("marker");
+        assert!(super::is_launch_case(&dir).expect("exact marker"));
+        for wrong in [
+            "{}",
+            "{\"metric\":\"launch\"}",
+            "launch-to-exit",
+            "{\"metric\":\"launch-to-exit\",\"x\":1}",
+        ] {
+            std::fs::write(dir.join("launch.json"), wrong).expect("marker");
+            assert!(
+                super::is_launch_case(&dir).is_err(),
+                "{wrong} is refused, not read as either kind"
+            );
+        }
+        for case in ["startup-empty", "startup-hello", "startup-builtins"] {
+            assert!(
+                super::is_launch_case(&root.join("benchmarks/cases").join(case))
+                    .expect("committed marker")
+            );
+        }
+        assert!(
+            !super::is_launch_case(&root.join("benchmarks/cases/objects"))
+                .expect("throughput case")
+        );
     }
 
     #[test]
@@ -3269,6 +3420,7 @@ mod tests {
             lowers: true,
             node: Some(measured(20.0)),
             bun: Some(measured(19.0)),
+            launch: None,
         };
         // The saved run retains the typed observation and all independent work.
         let saved = serde_json::to_string(&observation)?;
@@ -3324,6 +3476,7 @@ mod tests {
             lowers: true,
             node: Some(measured(30.0)),
             bun: None,
+            launch: None,
         };
         let fresh =
             super::assemble(&measurements, false, super::MeasurementMode::Timed).expect("a row");
@@ -3365,6 +3518,7 @@ mod tests {
             lowers: true,
             node: Some(measured(1.0)),
             bun: Some(measured(1.0)),
+            launch: None,
         };
         let json = serde_json::to_string(&measurements).expect("valid missing-reference row");
         let restored = serde_json::from_str(&json).expect("valid missing-reference row");

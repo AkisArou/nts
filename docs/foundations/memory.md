@@ -546,3 +546,9 @@ systems and about 70 sources, is [in the records](../records/notebooks/studies/m
 - `release-acyclic`
 - `sort-objects`
 - `tree-teardown`
+
+### startup
+
+- `startup-empty`
+- `startup-hello`
+- `startup-builtins`

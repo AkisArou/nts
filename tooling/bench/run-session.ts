@@ -72,6 +72,9 @@ export function begin(root: string, binary: string, compilerCommit: string): Met
     new URL("./src/main.rs",import.meta.url),
     new URL("./host-columns.ts",import.meta.url),
     new URL("./typed-timer.ts",import.meta.url),
+    new URL("./launch.c",import.meta.url),
+    new URL("./launcher.ts",import.meta.url),
+    new URL("./launch-cell.ts",import.meta.url),
   ].map(input=>relative(SOURCE,fileURLToPath(input))).map((path) => ({ path, sha256: sha256(join(root, path)) }));
   const identity = createHash("sha256").update(JSON.stringify(files)).digest("hex");
   const bridge = spawnSync(

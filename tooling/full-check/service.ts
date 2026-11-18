@@ -962,8 +962,11 @@ function startBenchmarks(fx: Effects, state: State, verified: string): "waiting"
   try {
     copyFileSync(join(fx.layout.target, "release/nts-bench"), bench);
     chmodSync(bench, 0o755);
+    // Beside it, the nts its launch rows build with (`nts build`, tooling/bench/README.md "Launch rows").
+    copyFileSync(join(fx.layout.target, "release/nts"), join(run, "nts"));
+    chmodSync(join(run, "nts"), 0o755);
   } catch (error) {
-    return endNight(fx, state, { commit: verified, at, run, result: `not run: the build at verified left no nts-bench to measure with (${message(error)})`, outcome: "not-run" });
+    return endNight(fx, state, { commit: verified, at, run, result: `not run: the build at verified left no nts-bench and nts to measure with (${message(error)})`, outcome: "not-run" });
   }
   due.measuring = { commit: verified, at, run };
   startMeasuring(fx, state, due.measuring);
@@ -1024,8 +1027,9 @@ async function followBenchmarks(fx: Effects, state: State): Promise<boolean> {
       startMeasuring(fx, state, measuring, true);
       return false;
     }
-    // The run's copy of nts-bench serves no unit now; its logs, outcome and record stay.
+    // The run's copies of nts-bench and nts serve no unit now; its logs, outcome and record stay.
     rmSync(join(measuring.run, "nts-bench"), { force: true });
+    rmSync(join(measuring.run, "nts"), { force: true });
     if (seen.state === "lost") {
       endNight(fx, state, { commit: measuring.commit, at: measuring.at, run: measuring.run, outcome: "interrupted",
         result: `${seen.why}, started ${measuring.job.starts} time(s); see ${join(measuring.run, BENCH_UNIT_LOG)}` });
