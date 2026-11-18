@@ -202,15 +202,34 @@ pub(super) fn note_a_refused_function(
     id: NodeId,
     diagnostic: Diagnostic,
 ) {
-    let asking = shared.builder(snapshot, foreign, Copy::default());
-    let emitted = asking.emitted_function_name(id);
-    note_uncompiled(
-        snapshot,
-        &mut lowered.program,
-        id,
-        emitted.as_deref(),
-        &diagnostic,
-    );
+    // **And under its raising name, where a raising copy was wanted.** A caller's
+    // raising copy names `f@raises` exactly as its ordinary one names `f`, and a
+    // function refused whole -- by name, or as a generic never copied -- lowers
+    // neither. Recording only the ordinary name left the raising caller's cascade
+    // rootless: "it calls `later@raises`, which nothing in this program defines",
+    // where the ordinary caller printed the real cause.
+    let raising = shared.naming.raising.contains(&id);
+    for raises in [false, true]
+        .into_iter()
+        .filter(|raises| !raises || raising)
+    {
+        let asking = shared.builder(
+            snapshot,
+            foreign,
+            Copy {
+                raises,
+                ..Copy::default()
+            },
+        );
+        let emitted = asking.emitted_function_name(id);
+        note_uncompiled(
+            snapshot,
+            &mut lowered.program,
+            id,
+            emitted.as_deref(),
+            &diagnostic,
+        );
+    }
     lowered.diagnostics.push(diagnostic);
 }
 
