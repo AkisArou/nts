@@ -2387,9 +2387,12 @@ export function selfTest(options) {
   return null;
 }
 
+/** Accepted-source trust is acquired through one owner for preflight and selection. */
+function acceptedSourceTrust() { return rustSelectorTrust(TREE); }
+
 /** The CLI and pooled entry run this same accepted-source self-test. */
 export function acceptedSourceSelfTest() {
-  const accepted=rustSelectorTrust(TREE);
+  const accepted=acceptedSourceTrust();
   /** @param {import('./rust-selector-selection.ts').RustSelectorOptions} trust */
   const check=trust=>{
     const broken=selfTest(trust);
@@ -2449,7 +2452,7 @@ function main() {
   const currentRules=()=>{
     if(!changes.some(change=>change.deleted))return owed(changes);
     const revision=execFileSync('git',gitArguments(['rev-parse','--verify','--end-of-options',`${changeBase(argv)}^{commit}`]),{cwd:TREE,encoding:'utf8'}).trim();
-    return withSelectorSources(TREE,[revision],sources=>owed(changes,{...accepted,projectBase:{tree:sources.prepare(0),revision}}));
+    return withSelectorSources(TREE,[revision],sources=>owed(changes,{...acceptedSourceTrust(),projectBase:{tree:sources.prepare(0),revision}}));
   };
   const rules = selection ? [...new Map(selection.views.flatMap(v => v.rules).map(r => [JSON.stringify(r), r])).values()] : currentRules();
   const steps = selection ? selection.checks.steps === "all" ? selection.views[1].catalogue : selection.checks.steps : gateSteps(rules);
