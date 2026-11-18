@@ -2,13 +2,14 @@
 
 use super::{
     Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, MemberKey, MethodAccessor, Naming,
-    NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared, Throwing, TypeId,
+    NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared, Throwing, TypeId, TypeKind,
     a_copy_can_contain, a_method_with_its_own_instances, a_value_held_callee,
     calls_guarded_by_a_try, calls_in_the_body_of, close_over_callees,
     closure_bodies_that_can_raise, declared_base_class, function_behind_const,
     functions_used_as_values, instance_type_of, interface_member_of, is_generic_function,
     literal_methods, member_dispatch_key, members_filling, names_a_body, raising_body_calls,
     syntax, the_constructor_declared_by, the_function_of, the_inlined_chain,
+    the_method_at_or_above,
 };
 
 /// A dispatch slot for the raising copy of an **overridden** member, and a copy for
@@ -571,12 +572,58 @@ pub(super) fn raising_callees_of(
     }
     if let Some(callee) = a_raising_callee_of(snapshot, probe, node) {
         callees.push(callee);
+        callees.extend(the_methods_a_union_receiver_runs(snapshot, probe, node));
     } else {
         callees.extend(probe.accessors_run_by(node));
     }
     callees.sort();
     callees.dedup();
     callees
+}
+
+/// The method each arm of a union receiver runs for `receiver.m(…)`: one per class
+/// in `Small | Big`, each the declaration that class or its nearest program base
+/// holds. Empty for a receiver that is not a union of classes.
+///
+/// **The checker resolves such a call to one arm's declaration**, and the lowering
+/// dispatches it as a test per arm, each arm's call carrying the site's suffix
+/// ([`FuncBuilder::open_call`](super::FuncBuilder)). Asked about the resolved arm
+/// alone, a raising site named `Big#isDir@raises` where only `Small#isDir` had been
+/// given a copy: "it calls `Big#isDir@raises`, which nothing in this program
+/// defines", a cascade with no root -- `runtime/node/fs`'s `stats.isDirectory()` on
+/// a `Stats | BigIntStats`. Every arm is a callee of the site, so every arm gets a
+/// copy or the site has none.
+fn the_methods_a_union_receiver_runs(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    call: NodeId,
+) -> Vec<NodeId> {
+    let Some((receiver, key)) = probe
+        .children(call)
+        .first()
+        .and_then(|callee| probe.member_access_key(*callee))
+    else {
+        return Vec::new();
+    };
+    let Some(TypeKind::Union(arms)) = snapshot
+        .node_types
+        .get(&receiver)
+        .and_then(|ty| snapshot.types.get(ty.0 as usize))
+        .map(|record| &record.kind)
+    else {
+        return Vec::new();
+    };
+    arms.iter()
+        .filter_map(|arm| {
+            let class = snapshot
+                .types
+                .get(probe.class_behind(*arm).0 as usize)?
+                .symbol
+                .map(|symbol| probe.denoted_symbol(symbol).0);
+            the_method_at_or_above(snapshot, probe, class, &key, false)
+        })
+        .map(|method| probe.implementation_of(method))
+        .collect()
 }
 
 /// Every declaration a raising copy *can* be made of: the greatest fixpoint of "a copy of
