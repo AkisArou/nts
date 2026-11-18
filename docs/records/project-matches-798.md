@@ -148,6 +148,33 @@ canonical Cargo owner. The successful comparison archives the complete pinned
 commit, with no separate dependency list or production relaxation. Both
 attempts' raw output is retained separately.
 
+An alias probe found that native matching can return a logical name such as
+`alias/gone.ts` while Git reports deletion of `physical/gone.ts`. The prior
+attribution compared only logical names and lost `profile` and `addons`.
+Committed identity resolution now reads a single Git tree and its symlink
+blobs at the base revision, retaining logical, physical and intermediate alias
+ownership names. It never resolves those identities through live links or
+the host. Retargeting can retain the logical match list while replacing a
+physical input, so unchanged logical aliases are checked too. Matching remains
+entirely native; directory listings gain no selection authority.
+
+| Alias-chain control | Owner without physical attribution | Fixed owner |
+| --- | --- | --- |
+| Delete a physical matched `.ts` | misses consumers | retains `profile`, `addons` |
+| Rename a physical matched `.ts` | misses the old path | retains both consumers under both paths |
+| Delete a physical ignored `.tsv` | no Program consumers | no Program consumers |
+| Delete a physical matched directory | misses consumers | retains both consumers |
+
+Both counterfactual arms use the same complete
+`adbc4a3896141f0930cb3ab166d0c433756f096d` archive and identical tests. Only
+`project-discovery.ts` is replaced with its `3a7fe97e21` bytes in the old arm.
+All four outcomes execute independently. Thirteen Git/native controls and nine
+real-selector assertions pass, including chain and parent-relative targets,
+staged link independence, distinct base/tip revisions, alias addition and
+retargeting with deletion, and named outside/cycle refusal. One owner reads
+each Git tree and shared link blob once. Strict types pass all 1,170 modules;
+the host audit passes, and the owning tool regenerates the projection.
+
 The selection-cost comparison uses private Git fixture clones at main
 `39f4978a723067b4f99b6639aa8967551a4827bc`, reviewed
 `977cb63af5791ce18b5285a626083c66d5f2e61b`, and fixed
@@ -182,6 +209,8 @@ repair's compiler instruction count differs from the reviewed owner by
 +0.0011%; its tooling instruction count falls by 0.90%. These are selection
 costs for the two probes, not gate execution times. Earlier partial two-arm
 timings and fixture setup failures are excluded from this comparison.
+These measurements predate the later alias-identity attribution; they compare
+the pinned revisions above and make no additional timing claim for that change.
 
 Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 
@@ -227,6 +256,12 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `rebase2-cli-before-owner.log` | `c6bd91acf14f72c94104c9babbba3842e1053f75db466a69db38030f1f860430` |
 | `rebase2-cli-after-owner.log` | `1de80dd11ca235acf75fe075b31831abe82611bf74d4cfd1c417ef33a7e6cef6` |
 | `nts-798-rebase-prepare2.log` | `7239393fc1f86e54f8c908d182f4fb15063b54ed29398b6b14d3d3f82033a3a0` |
+| `alias-counterfactual.py` | `9a370a9b00964e597b8a3fc199ccdcc2daf46ab1f88ed640019c78c06eeeb4d6` |
+| `alias-counterfactual.json` | `5c46ede35b608a703e14efc4d9f649610464487b5a7302e62ce8ce323961516b` |
+| `alias-before-owner.log` | `17775d5dcec0f3cdda9fac504646982cec129d7d3d4d7eea27753108a818ca1a` |
+| `alias-after-owner.log` | `f791d61ae06091ba11a8be0fda64d42a364bbabf32550736bc7368853d59f5ed` |
+| `nts-798-alias-target.log` | `dd2cadda651f945e72b65aab877af016cafb05d511847309ac7796caf5902cdd` |
+| `nts-798-alias-prepare.log` | `7ac60bfce8709ee5099e73009ce4f996422726d1d52d5b3c1b617a0ea66eb3d4` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were

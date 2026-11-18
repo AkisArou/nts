@@ -1982,13 +1982,17 @@ death; an absent timestamp remains explicit after forced termination.
   Compact accepted records retain this role distinction explicitly. Ignored,
   nonmatching build output leaves the key unchanged; matching source changes
   invalidate it. Step selection replays each current request at the committed
-  base to retain consumers of removed matched roots; unrelated and excluded
+  base to retain consumers of removed matched roots. The base Git tree and
+  link blobs bind logical and physical ownership names, including intermediate
+  aliases, independently of working or tip links. Chains stay inside the source;
+  outside or unsupported identities refuse by name. Unrelated and excluded
   deletions add no reach. Config bytes, negative resolution and alias facts retain
   their independent obligations. Compiled programs also retain the emitter's
   actual nearest-config lookups for local non-declaration modules as ordinary
   selection facts, including absent nearer configs. Queried Program modules
   witness genuine ancestor config absences outside the source; a positive
-  external config refuses. Type-check-only inputs keep their declared config.
+  external config refuses. Type-check-only inputs keep their declared config
+  ([log](records/notebooks/decisions-log.md#matched-source-deletions-use-committed-alias-identities-11-19)).
 - **Installed Program inputs owe their repository pins:** a declared config's
   installed reads must match the verified installation's finite package catalog,
   including aliases, membership and content hashes. Selection retains package

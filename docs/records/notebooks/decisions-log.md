@@ -3881,3 +3881,14 @@ kind does not observe every descendant's membership. Exact byte and alias
 paths, declared memberships, Cargo names, the run's own-write ledger and the
 HEAD fence retain their independent protections. A staged nonmatching file
 passes; a staged matching source and hand dirt on an observed source refuse.
+
+## Matched source deletions use committed alias identities (11-19)
+
+Issue #798 extends the compiler-matched source fences (11-17) to deletion
+attribution. Native matching can name a logical alias while Git names its
+physical target. The committed base's tree and link blobs bind both names and
+intermediate aliases, without consulting live links or the host. Bounded chains
+stay within the source; unsupported or outside identities refuse by name.
+Retargeting can keep a logical match while replacing a physical source, so the
+base identity stays independent of tip aliases. Native matching retains all
+extension and pattern authority; raw directory reads remain acquisition guards.
