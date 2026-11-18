@@ -8,7 +8,7 @@
 // its implementation's own signature and compiles
 // (`tests/programs/a-plain-implementation-behind-a-generic-overload`, the
 // control); a function keeps the overload set's reading because the
-// result-overload planner depends on it.
+// result-overload planner depends on it (#861).
 
 type Bytes = ArrayBuffer | ArrayBufferView;
 type Done<T> = (error: Error | null, buf?: T) => void;

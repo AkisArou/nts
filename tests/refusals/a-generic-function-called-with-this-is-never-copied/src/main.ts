@@ -7,7 +7,7 @@
 // `nextTick` calls that do pin. The ordinary caller said so; the raising caller
 // asked for `later@raises` by its whole name, found no instance spelled that
 // way, and said "which nothing in this program defines". The wrong call is the
-// root and is older than #843. The control,
+// root and is older than #843 (#860). The control,
 // `tests/programs/a-generic-function-called-with-a-typed-binding-of-this`,
 // passes the same receiver through a binding typed as its class, which pins it.
 

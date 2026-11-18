@@ -1,7 +1,7 @@
 // Control for `tests/refusals/a-generic-function-called-with-this-is-never-copied`:
 // the same receiver passed through a binding typed as its class, which pins the
 // generic function's copy, so the call compiles and its `throw` reaches the
-// `try` around the closure once the queue is full.
+// `try` around the closure once the queue is full. The refusal is #860.
 
 let queued: Array<() => void> = [];
 
