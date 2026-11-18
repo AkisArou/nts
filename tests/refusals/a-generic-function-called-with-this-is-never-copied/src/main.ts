@@ -1,15 +1,15 @@
-// expect: it calls `later@raises`, and a generic function this program calls and never copies
+// expect: it calls `later@raises`, which this program compiles only as instantiations
 //
 // A generic function called with `this` for a rest-tuple type parameter pins
-// nothing a copy is made for, so the function is refused as one this program
-// calls and never copies -- `runtime/node/stream`'s `nextTick(readZero, this)`
-// in `Readable#afterListenerAdded`. The expect line is the raising caller's: a
-// function refused whole was recorded only under its ordinary name, so the
-// raising copy of its caller said "it calls `later@raises`, which nothing in
-// this program defines", a cascade with no root. The control,
+// no instance, so the call names the generic itself, which is lowered only as
+// the instances other calls pin -- `runtime/node/stream`'s
+// `nextTick(readZero, this)` in `Readable#afterListenerAdded`, beside the
+// `nextTick` calls that do pin. The ordinary caller said so; the raising caller
+// asked for `later@raises` by its whole name, found no instance spelled that
+// way, and said "which nothing in this program defines". The wrong call is the
+// root and is older than #843. The control,
 // `tests/programs/a-generic-function-called-with-a-typed-binding-of-this`,
-// passes the same receiver through a binding typed as its class, which pins the
-// copy.
+// passes the same receiver through a binding typed as its class, which pins it.
 
 let queued: Array<() => void> = [];
 
@@ -42,7 +42,13 @@ function attempt(run: () => number): number {
   }
 }
 
+function count(k: number): void {
+  void k;
+}
+
 export function probe(n: number): number {
+  queued = [];
+  later(count, n);
   const e = new Emitter();
   return attempt(() => e.added(n & 7));
 }

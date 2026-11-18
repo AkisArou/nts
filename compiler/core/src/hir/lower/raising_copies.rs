@@ -399,7 +399,7 @@ fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) 
 /// Spelled once. The naming site composes it the same way a generic or a
 /// structural copy's suffix is composed, through `generic_calls`, so a call
 /// that names one takes the same path every other copy naming takes.
-pub(super) const RAISING_SUFFIX: &str = "@raises";
+pub(in crate::hir) const RAISING_SUFFIX: &str = "@raises";
 
 /// A dispatch key split into the member the program declared and the suffix, if any:
 /// `("get closed", "@raises")` for `get closed@raises`, and `("read", "")` for `read`.

@@ -156,7 +156,7 @@ use self::promise_settlement::{
 use self::property_presence::{AddedKeys, Declares, PRESENCE_INDEX, added_keys, presence_keys};
 use self::provided_errors::provided_error_identities;
 use self::raising_copies::{
-    A_FUNCTION_WRITTEN_AS_A_VALUE, RAISING_SUFFIX, THROUGH_A_FUNCTION_VALUE, a_copy_can_be_made_of,
+    A_FUNCTION_WRITTEN_AS_A_VALUE, THROUGH_A_FUNCTION_VALUE, a_copy_can_be_made_of,
     a_declaration_that_can_raise, a_value_held_call, copyable_symbols, fill_raising_member_slots,
     raising_callees_of, raising_copies, raising_member_slots, raising_method,
     without_the_raising_suffix,
@@ -224,6 +224,7 @@ pub(in crate::hir) use implementations::implementation_in;
 use layout_collection::{BuilderLayouts, LayoutCollector};
 use made_instance::{CollectedConstructor, MadeBy, ThisPaths};
 use numeric_arguments::Builtin as NumericBuiltin;
+pub(in crate::hir) use raising_copies::RAISING_SUFFIX;
 
 /// Closures crossing the type they were written at, recorded where that is known.
 ///

@@ -35,7 +35,13 @@ function attempt(run: () => number): number {
   }
 }
 
+function count(k: number): void {
+  void k;
+}
+
 export function probe(n: number): number {
+  queued = [];
+  later(count, n);
   const e = new Emitter();
   const first = attempt(() => e.added(n & 7));
   return first * 10 + queued.length;
