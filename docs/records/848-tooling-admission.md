@@ -90,3 +90,88 @@ Restoring the original fixed-step classification from a saved copy made tooling 
 - `/home/akisarou/.cache/nts-scratch/848/wiring-fixed-counterfactual.ts`; SHA-256 `27c14e821d76420a75e3868a581eb2eab7ba0f6c730df52f3b37a4c56065c666`.
 
 - `/home/akisarou/.cache/nts-scratch/848/step-table-fixed-before.mjs`; SHA-256 `6c927bb75106630fcf647ef2cbc62ced7b32695f7deaee912b241179df8f15e6`.
+
+## Completed stack proof and cap handoff
+
+Commit `10beb07ceff3e681cf524e6db95d1db70f13bc9a`, stacked on the separate #842 toolchain fix, passed all 20 owed steps in its `--here` rerun. Tooling completed 334 files and the separately leased selector self-test in 785.813 seconds (4561.400 CPU seconds). Its ledger peak was 10.782 GiB; the raw cgroup peak was 13.824 GiB. This was a contended whole-gate proof, not an idle timing comparison.
+
+All 334 file completions retained their rows, including the seven deliberate descendant-OOM files. The 29 controllers' largest sampled used heap was 12.902 MiB, and the greatest first-to-last growth was 0.710 MiB. Each file used its registered 6,144,000,000-byte bound, including controllers whose bootstrap allowance had been smaller. The external sampler saw 290 of 334 source entries and at most 22 source test processes together; its coverage reduction names the 44 unsampled short entries.
+
+A separate kernel control allocated beyond the production 6,144,000,000-byte cap. It retained the named runaway budget incident and both passing neighbour results. Restoring inherited census roles, the cached bootstrap cap, and the hierarchical worker OOM verdict each failed its intended negative control; the last produced false own-budget incidents for the seven completed descendant-OOM files. Source copies were restored after each experiment.
+
+- `/home/akisarou/.cache/nts-scratch/848/here-10beb07-rerun/proof-summary.json`; SHA-256 `f382e8bdca74f22d79f2b212955a7f2f8ddc4593b153b8316e198a28b224ca72`.
+- `/home/akisarou/.cache/nts-scratch/848/here-10beb07-rerun/sha256.txt`; SHA-256 `11da75e12244506ced9f466c519c8c3705dd337c828e86515d00634c08ddf392`.
+- `/home/akisarou/.cache/nts-scratch/848/production-cap-control/final.log`; SHA-256 `644984dcf21c2dab7bfe5c7e94eadb878115fca7d147ee4452eb6d25b3a8d8fd`.
+- `/home/akisarou/.cache/nts-scratch/848/counterfactuals-10beb/results.json`; SHA-256 `1c8f51b61bc01f3cdcf03c74e01830084baa625c0b2182b233342be8610aaa0c`.
+
+## Interleaved timing and admission order
+
+These are measurement runs, not landing evidence. **Before admitted from an empty private history to bypass the whole-step reservation; execution unchanged.** After used normal warmed per-file history. Every arm ran in its own named unit, with the full check stopped by its owner for the measurement window. Start/end ledger status, load, available memory, process inventory, external RSS samples and the gate's actual summary are retained. Before's only definite failures were the two #842 Cargo-layout controls; the stacked after arms passed.
+
+The first implementation (`10beb07ceff3e681cf524e6db95d1db70f13bc9a`) regressed wall time despite reducing CPU and peak memory:
+
+| Pair | Before s | After s | Ratio | Start load B/A | Available GiB B/A | Ledger peak GiB B/A | Max reservation GiB B/A | Wait s B/A |
+|---|---:|---:|---:|---|---|---|---|---|
+| 1 | 417.922 | 477.581 | 1.1428 | 1.56/3.94 | 23.02/23.02 | 15.375/8.796 | 19.000/20.000 | 0.115/328.113 |
+| 2 | 422.173 | 506.558 | 1.1999 | 4.04/5.29 | 22.99/22.78 | 15.366/10.213 | 19.000/20.000 | 0.037/341.139 |
+
+Median ratio: 1.1713; every pair <=1.05: False.
+
+The collector alone took 333.9→390.2 seconds (ratio 1.169) and 337.6→420.5 seconds (1.246). JVM member-name requested its lease 0.013 seconds after the first request but received it at 293.160 seconds; 44 later requests were granted first. It became the final file.
+
+Ordered admission (`be8227b4dd7f3f06128fa33ee584ce5062676386`) prevented that overtaking. JVM member-name was admitted at 171.836 seconds in its first arm. The resulting pairs still missed the timing bar:
+
+| Pair | Before s | After s | Ratio | Start load B/A | Available GiB B/A | Ledger peak GiB B/A | Max reservation GiB B/A | Wait s B/A |
+|---|---:|---:|---:|---|---|---|---|---|
+| 1 | 415.929 | 451.831 | 1.0863 | 1.71/3.46 | 22.30/22.99 | 15.081/10.235 | 19.000/21.000 | 0.114/343.564 |
+| 2 | 418.418 | 449.511 | 1.0743 | 7.86/3.82 | 23.03/23.20 | 15.164/10.713 | 19.000/21.000 | 0.040/345.574 |
+
+Median ratio: 1.0803; every pair <=1.05: False.
+
+Collector-only times were 332.6→360.8 seconds (ratio 1.085) and 334.7→362.0 seconds (1.082), separately from the whole-step ratios above. The selector self-test still occupied a serial tail. Summed lease lifetimes minus reported test-file wall times were 90.921 and 86.892 seconds across 334 files; the largest individual differences were 0.615 and 0.564 seconds. These include wrapper launch, readiness, dispatch and drain, not just CPU work.
+
+The ordered request control kept the later acquire unissued while the head waited, then held both leases before either completed. Its unordered counterfactual failed on the bypass assertion. The real-runner control refused a head forecast larger than its entire budget by name and returned its reservation.
+
+- `/home/akisarou/.cache/nts-scratch/848/pairs-window-live-10beb/comparison.json`; SHA-256 `b1b62a43b568da02b8230df4eeb0035357f6679ecbabf0bd26d77d04314d1772`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-window-live-10beb/sha256.txt`; SHA-256 `57125040c5c424a6163fec718c23f1c501e82b61eb40c65bb223b79d4bfc6dee`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-ordered-be822/comparison.json`; SHA-256 `6ccf316522a7652867760fcbe61ce403bcddf734b62deb67a4a380b4a29f043c`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-ordered-be822/sha256.txt`; SHA-256 `a3f0580db6e1e6f849caade8c8c357bb0f9bedf7a8d27c99e7759436ed13d364`.
+- `/home/akisarou/.cache/nts-scratch/848/collector-ratios.json`; SHA-256 `f50ff8fb50c2bb946d413fb28635fe1076cb61478cd720c1f16b33e7167b8b2c`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-window-live-10beb/1-after/admission-tail.json`; SHA-256 `1b4b4dcaaa58714ce24bf720ea0de16eda63f29f4cd43db942ce74ef4784005a`.
+- `/home/akisarou/.cache/nts-scratch/848/ordered-be822/run.log`; SHA-256 `dbf8c743fda0c38f04b44a1a1c68cc7817d10d5f1e0653b057186f8b9de3ad0c`.
+- `/home/akisarou/.cache/nts-scratch/848/ordered-be822/unordered.log`; SHA-256 `ac082f64d933f6870beead28b05502641ab1f8039826a0cbd1b9fe19e62adbeb`.
+
+A bounded paired dispatch probe executed the same trivial file through the resident test API and the fresh scoped wrapper. All 48 executions used distinct child PIDs. After two warmup pairs, median call walls were 75.339 and 146.196 ms respectively. Both modes shared the same probe process, so its heap readings cannot independently attribute retention to either mode. This is a controller diagnostic, not a whole-step timing verdict.
+
+- `/home/akisarou/.cache/nts-scratch/848/dispatch-profile-be822/summary.json`; SHA-256 `a28241a313d4307904da234cc15abe37a4081e0b2e1fda0e7d71598d99c6bda4`.
+- `/home/akisarou/.cache/nts-scratch/848/dispatch-profile-be822/results.json`; SHA-256 `731a6b8e2d0e9b4e1e7f6be2a8f3271fb275620f7e52fc02c47b879e979e294e`.
+- `/home/akisarou/.cache/nts-scratch/848/dispatch-profile-be822/children.jsonl`; SHA-256 `9b89dbdde41b7aca6d0950dd1a7aaa1fcc6891f2645e9af7c69646a4753cf3a4`.
+
+The initial selector-fixture failure was separately traced to a network acquisition also attempted by the original runner. A fetch-denying Git wrapper on `39f4978a723067b4f99b6639aa8967551a4827bc` observed the AWFY fetch and reproduced the truncated selector-input error path. This establishes the baseline network dependency, not the exact cause of that earlier transient. The coordinator filed it as #855; linker-message truncation is #854. Neither fix is part of #848.
+
+- `/home/akisarou/.cache/nts-scratch/848/fetch-probe/before.log`; SHA-256 `541419af645ade76646106e641796e771a4c0d1086437c6385bc46906ce0cc3f`.
+- `/home/akisarou/.cache/nts-scratch/848/fetch-probe/39f4978a723067b4f99b6639aa8967551a4827bc.json`; SHA-256 `bb7839602675bbbb7244cb9c0f2c475a8268950ad87a9e4e45f7dcc845d9f852`.
+
+## Pooled selector entry and dispatch diagnostics
+
+At `2ae3b195e7450e39ac502f0931f0ec090d668e61`, the selector self-test is an explicit entry in the same case pool. Its structural overlap control requires both an ordinary file and the self-test to start before either may complete. PASS, definite assertion FAIL and observation-failure controls passed, including a descendant helper's private cap and the selector's stable case history. All affected runner tests, strict tooling types and the host-input audit passed. This is focused evidence; no new whole-step paired timing verdict is established.
+
+Splitting the test engine from the scope/admission launcher removed that launcher graph from each fresh execution worker. A 24-pair diagnostic still found a median scoped/API ratio of 1.992 after two warmup pairs (99.680/49.408 ms), with 48 distinct child PIDs. A separate 200-file API-only diagnostic grew from 7,289,472 to 14,249,552 bytes of used heap after forced GC. Consequently repeated API calls in a resident supervisor did not demonstrate bounded retention.
+
+A scratch-only prototype runs the same trivial entry in one fresh Node process, using the public `isolation: none` API within the otherwise identical finite file slice and scope. Across 22 pairs after two warmups, its median one/two-process ratio was 0.6004 (60.350/97.934 ms), and all 48 executions had distinct PIDs and fresh globals. The prototype omits production activity guards and is only a startup diagnostic, not landing evidence or satisfaction of the whole-step timing bar.
+
+- `/home/akisarou/.cache/nts-scratch/848/entry-8701/run.log`; SHA-256 `eb63475d2e27e7a257ac5c2e7af2398d537dd9375a1339c695f5294eb494d772`.
+
+- `/home/akisarou/.cache/nts-scratch/848/entry-2ae3/run.log`; SHA-256 `c329221cc9915f009583ec284f8af2aad8a93e23180b32c8eb518d45902708bc`.
+
+- `/home/akisarou/.cache/nts-scratch/848/dispatch-profile-2ae3/results.json`; SHA-256 `dac65b2a71f458e79adbde95090d79d968f4eda729b738b616aaeae285694d8c`.
+
+- `/home/akisarou/.cache/nts-scratch/848/dispatch-profile-2ae3/summary.json`; SHA-256 `9f3549bdec1654bbb565621b3558410cbc1cd0d96c2c7fb91b7abaf82ae565fa`.
+
+- `/home/akisarou/.cache/nts-scratch/848/resident-api-2ae3/results.json`; SHA-256 `de860dcb710a96bfeab22138169bc3bda85ab095f3c65e529a91e462b588496c`.
+
+- `/home/akisarou/.cache/nts-scratch/848/single-entry-2ae3/results.json`; SHA-256 `ccd2b333c8ff70091e50a4cab0559dad0711791c5c806f954539a0a4979e4983`.
+
+- `/home/akisarou/.cache/nts-scratch/848/single-entry-2ae3/summary.json`; SHA-256 `c8c8de2626a81d46d1c7a63a9358034517e7c8a601b08af9e64872348f1fab73`.
+
+- `/home/akisarou/.cache/nts-scratch/848/single-entry-2ae3/sha256.txt`; SHA-256 `2ac2a2109e76c3f6fbe756aa8950f7a6ec07cad634d02b9d9e58df9e768cc077`.
