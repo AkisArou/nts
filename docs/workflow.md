@@ -1174,6 +1174,9 @@ the tooling strict checker owns the source's type checking.
   The pool uses each worker container's local OOM count for its own budget;
   fixture descendant budgets retain their owners' completed outcomes. A
   completed assertion report survives a later memory observation failure.
+  Each file reads its registered worker cap after dispatch; a controller's
+  startup allowance never sizes later file scopes. Local budget and lost
+  controller incidents drain the finite neighbouring work before surfacing.
   Completion retains the file's peak before the lease returns; a controller
   may then accept another entry. The selector self-test also holds an explicit
   case lease. A historical whole-tooling peak cannot size these admissions.

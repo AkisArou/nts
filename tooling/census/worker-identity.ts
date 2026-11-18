@@ -19,3 +19,9 @@ export function residentWorkerComponent(index:number):string {
   if(!validWorkerComponent.test(component))throw Error('invalid resident worker component');
   return component;
 }
+
+export function isResidentWorkerComponent(value:string):boolean {
+  if(!validWorkerComponent.test(value))return false;
+  const index=Number.parseInt(value.slice(1),36);
+  return Number.isSafeInteger(index)&&residentWorkerComponent(index)===value;
+}

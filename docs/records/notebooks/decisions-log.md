@@ -3727,3 +3727,8 @@ producer. Hierarchical events remain diagnostic and pressure observations;
 a completed row survives interpretation of later incidents. Census role
 setters and tooling bootstrap revocation share the worker-identity owner,
 as do resident worker name generation and tooling ancestry validation.
+
+A tooling controller reads the registered kernel cap at file dispatch, after
+the broker handshake, rather than retaining its startup allowance. A local
+budget incident or lost active controller drains finite neighbours before
+the pool raises it; completed results remain authoritative.

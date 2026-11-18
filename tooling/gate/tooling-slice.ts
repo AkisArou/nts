@@ -4,7 +4,7 @@ import { randomInt } from "node:crypto";
 import { ToolingInstrumentError } from "./step-result.ts";
 import { CPU_WEIGHT, RANK_SLICE, type Priority } from "./ranks.ts";
 
-import {RESIDENT_WORKER_COMPONENT} from '../census/worker-identity.ts';
+import {RESIDENT_WORKER_COMPONENT,isResidentWorkerComponent} from '../census/worker-identity.ts';
 
 export function newToolingSlice(fixture = false, env: NodeJS.ProcessEnv = process.env): string {
   return childSlice(toolingSlice(env), unitComponent(fixture ? "t" : "r"));
@@ -32,6 +32,9 @@ export function toolingSlice(env: NodeJS.ProcessEnv = process.env): string | und
   // Existing run receipts and an enclosing launcher may still use UUID components.
   const valid=new RegExp('^nts-(?:(?:test-)?tooling-[a-f0-9]{32}|[rtc][a-z0-9]{8})(?:-(?:test|run)[a-f0-9]{32}|-[rtc][a-z0-9]{8}|-(?:workers|w|'+RESIDENT_WORKER_COMPONENT+'))*\\.slice$');
   if (slice !== undefined && !valid.test(slice)) throw new Error("invalid tooling slice");
+  if(slice!==undefined)for(const component of slice.slice(0,-6).split('-')){
+    if(component.startsWith('w')&&component!=='w'&&component!=='workers'&&!isResidentWorkerComponent(component))throw new Error('invalid tooling slice');
+  }
   return slice === undefined ? undefined : checkedUnitName(slice);
 }
 

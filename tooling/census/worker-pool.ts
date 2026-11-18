@@ -79,6 +79,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
     token: (entry, signal) => token(work[Number(entry)]!.path, signal), outranked: () => reservation.outranked(),pause:cohort.pause,resume:cohort.resume,
   });
   const pressure: Pressure[] = [];
+  const incidents:unknown[]=[];
   const tasks: Promise<void>[] = [];
   let idleRestarts = 0;
   const unregister=registerCommandCloser('resident case feed',{close:()=>{stop.abort();memory.close();},closed:async()=>{await Promise.allSettled(tasks);await memory.closed;}});
@@ -145,7 +146,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           before = after;
           aggregateBefore = aggregateAfter;
           if(delivered){
-            if(cause==='own-limit')throw new ToolingInstrumentError('tooling-setup',`resident worker for ${dispatch.path} exceeded its own ${current.bytes} byte cap beside its completed report`);
+            if(cause==='own-limit'){incidents.push(new ToolingInstrumentError('tooling-setup',`resident worker for ${dispatch.path} exceeded its own ${current.bytes} byte cap beside its completed report`));return true;}
             if(cause)throw new PressureError(`resident case ${dispatch.path} completed beside ${cause}; its enclosing memory observation holds the run`);
             return row.bucket==='timeout';
           }
@@ -160,7 +161,10 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             report(`resident pressure: requeued ${dispatch.path} after ${cause}; no verdict recorded`);
             return true;
           }
-          throw new Error(`worker ${index} lost ${dispatch.path}; ${lostReason??'no completed report'}; no OOM kill recorded`);
+          // This finite case is missing, but its neighbours may still return
+          // completed assertions. Drain them before raising the instrument.
+          incidents.push(new Error(`worker ${index} lost ${dispatch.path}; ${lostReason??'no completed report'}; no OOM kill recorded`));
+          return true;
         };
         const fail = (error: unknown) => {
           exited = true;
@@ -292,6 +296,8 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
   try {
     for (let index = 0; index < Math.min(jobs, work.length); index++) tasks.push(worker(index));
     await Promise.all(tasks);
+    if(incidents.length===1)throw incidents[0];
+    if(incidents.length)throw new AggregateError(incidents,incidents.map(String).join('; '));
     accounting.returnedOffers+=queue.returnedOffers;
     return pressure;
   } catch (error) {

@@ -19,7 +19,7 @@ runAsCommand(import.meta.url,async()=>{
   // Fixture-created services follow this file's boundary too, rather than
   // becoming siblings under the collector and escaping its peak and cap.
   assignOwnedValues(process.env,{NTS_TOOLING_SLICE:basename(process.env.NTS_CENSUS_WORKER_GROUP!)});
-  const memoryMax=readLimits(process.env.NTS_CENSUS_WORKER_GROUP!).max;
+  const bootstrapMemoryMax=readLimits(process.env.NTS_CENSUS_WORKER_GROUP!).max;
   const request=readToolingRequest(JSON.parse(process.argv[2]??'null')),files=new Set(request.files.map(file=>resolve(file)));
   const step=process.env.NTS_GATE_STEP;
   // Only the collector owns the public step result. Each file's diagnostic
@@ -30,8 +30,12 @@ runAsCommand(import.meta.url,async()=>{
     const directory=mkdtempSync(join(dirname(request.complete),'file-')),nonce=randomUUID(),frame=join(directory,'instrument.json');
     const resultEnv={NTS_GATE_STEP:'tooling-file',NTS_GATE_STEP_ATTEMPT:nonce,NTS_GATE_STEP_RESULT:frame};
     let reply:ToolingFileReply;
+    let memoryMax:number|undefined;
     try{
       assignOwnedValues(process.env,resultEnv);
+      // The broker finishes registering the worker cap before dispatching
+      // this path. Startup may have observed only its bootstrap allowance.
+      memoryMax=readLimits(process.env.NTS_CENSUS_WORKER_GROUP!).max;
       // The file's slice owns fixture-created services as well as its test
       // process. Join that entire drain before reporting to the case pool.
       const result=await runScopedTooling([path],{idleMs:request.idleMs,execArgv:request.execArgv,memoryMax,output:process.stderr});
@@ -46,7 +50,7 @@ runAsCommand(import.meta.url,async()=>{
       delete process.env.NTS_GATE_STEP_ATTEMPT;delete process.env.NTS_GATE_STEP_RESULT;
     }
     const heap=getHeapStatistics();
-    process.stderr.write('tooling controller heap: '+JSON.stringify({file:path,controller:process.pid,usedBytes:heap.used_heap_size,totalBytes:heap.total_heap_size,limitBytes:heap.heap_size_limit})+'\n');
+    process.stderr.write('tooling controller heap: '+JSON.stringify({file:path,controller:process.pid,usedBytes:heap.used_heap_size,totalBytes:heap.total_heap_size,limitBytes:heap.heap_size_limit,bootstrapBoundBytes:bootstrapMemoryMax,fileBoundBytes:memoryMax})+'\n');
     process.stdout.write(JSON.stringify(reply)+'\n');
   }
 });

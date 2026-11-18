@@ -30,7 +30,7 @@ test('tooling file slices retain the common resident worker ancestry',()=>{
   assert.equal(toolingSliceArgs({NTS_TOOLING_SLICE:parent},'agent')[0],'--slice='+parent);
   assert.ok(newToolingSlice(false,{NTS_TOOLING_SLICE:parent}).startsWith(parent.slice(0,-6)+'-r'));
   assert.throws(()=>toolingSlice({NTS_TOOLING_SLICE:'app.slice'}),/invalid tooling slice/);
-  for(const suffix of ['w00','w_','wA','c123','foreign'])assert.throws(()=>toolingSlice({NTS_TOOLING_SLICE:childSlice(parent,suffix)}),/invalid tooling slice/);
+  for(const suffix of ['w00','w_','wA','w'+'z'.repeat(32),'c123','foreign'])assert.throws(()=>toolingSlice({NTS_TOOLING_SLICE:childSlice(parent,suffix)}),/invalid tooling slice/);
   assert.equal(residentWorkerComponent(36),'w10');
   assert.deepEqual(Object.keys(workerRoleValues({pool:'1',workerGroup:'/worker'})).sort(),['NTS_CENSUS_POOL_WORKER','NTS_CENSUS_WORKER_GROUP']);
   assert.ok(WORKER_ROLE_VARIABLES.includes('NTS_CENSUS_POOL_WORKER'));

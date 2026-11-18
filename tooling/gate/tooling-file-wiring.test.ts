@@ -156,3 +156,56 @@ if(rows.length!==2||rows.some(row=>row.bucket!=='tooling'||row.result.status!==0
   const [a,b]=paths.map(path=>JSON.parse(readFileSync(path+'.receipt','utf8')) as {worker:string;child:number;slice:string});
   assert.equal(a!.worker,b!.worker);assert.notEqual(a!.child,b!.child);assert.notEqual(a!.slice,b!.slice);
 });
+
+test('a file reads its final registered cap after the startup handoff',async t=>{
+  const own=testScratch(t,'tooling-cap-handoff'),root=join(own,'repo'),marker=join(own,'controller-started');
+  copyModuleClosure(['tooling/gate/tooling-file-worker.ts'],root);
+  const worker=join(root,'tooling/gate/tooling-file-worker.ts'),before=readFileSync(worker,'utf8');
+  const anchor='const bootstrapMemoryMax=readLimits(process.env.NTS_CENSUS_WORKER_GROUP!).max;';
+  assert.ok(before.includes(anchor));
+  writeFileSync(worker,before.replace(anchor,anchor+`\n(await import('node:fs')).writeFileSync(${JSON.stringify(marker)},'ready');`));
+  const entry=join(own,'cap.test.mjs');
+  writeFileSync(entry,generatedJavaScript(`import{test}from'node:test';import{hostObservations}from ${JSON.stringify(join(root,'tooling/gate/host-observations.ts'))};import{readLimits}from ${JSON.stringify(join(root,'tooling/gate/scopes/memory-limits.ts'))};
+  test('final file cap',()=>{const group=hostObservations({}).ownCgroup();if(readLimits(group).max!==512*2**20)throw Error('file cached its startup cap');});`));
+  const helper=join(own,'handoff.mjs');
+  writeFileSync(helper,generatedJavaScript(`import{spawnSync}from'node:child_process';import{existsSync}from'node:fs';
+import{MemoryRun}from ${JSON.stringify(new URL('../census/worker-memory.ts',source).href)};import{runMemoryWorkers}from ${JSON.stringify(new URL('../census/worker-pool.ts',source).href)};import{runAsCommand}from ${JSON.stringify(new URL('../differential/command-entry/main.ts',source).href)};
+runAsCommand(import.meta.url,async()=>{const memory=new MemoryRun({budgetBytes:1024*2**20}),make=memory.worker.bind(memory),property=(unit,bytes)=>{const r=spawnSync('systemctl',['--user','set-property','--runtime',unit,'MemoryMax='+bytes],{encoding:'utf8'});if(r.status!==0)throw Error(r.stderr);};
+memory.worker=(...args)=>{const worker=make(...args),ready=worker.ready.bind(worker);property(worker.slice,256*2**20);let raised=false;
+worker.ready=scope=>{if(!ready(scope)||!existsSync(${JSON.stringify(marker)}))return false;if(!raised){property(worker.slice,512*2**20);property(scope.unit,512*2**20);raised=true;}return true;};return worker;};
+const rows=[];await runMemoryWorkers({paths:[${JSON.stringify(entry)}],jobs:1,memory,workerBytes:512*2**20,token:async()=>()=>{},args:()=>[${JSON.stringify(worker)},JSON.stringify({files:[${JSON.stringify(entry)}],complete:${JSON.stringify(join(own,'complete.json'))},nonce:'handoff'})],onRow:row=>rows.push(row)});
+if(rows.length!==1||rows[0].result?.status!==0)throw Error(JSON.stringify(rows));});`));
+  const planned=gateEnvironment(fixtureEnvironment(t),{run:join(own,'environment'),owned:ownMemory(join(own,'memory'))});
+  const child=start(t,own,planned.env,helper);assert.equal(await child.closed,0,child.output());
+  assert.match(child.output(),/"bootstrapBoundBytes":268435456,"fileBoundBytes":536870912/);
+});
+
+test('a runaway tooling file loses only its named budget result beside completed neighbours',async t=>{
+  const own=testScratch(t,'tooling-file-runaway'),root=join(own,'repo');
+  copyModuleClosure(['tooling/gate/tooling-file-worker.ts'],root);
+  const paths=['before','runaway','after'].map(name=>join(own,name+'.test.mjs'));
+  for(const [index,path]of paths.entries())writeFileSync(path,generatedJavaScript(`import{test}from'node:test';import{spawnSync}from'node:child_process';
+  test('entry ${index}',()=>{${index===1?"const r=spawnSync('python3',['-c','held=bytearray(512*1024**2); print(len(held))']);if(r.status!==0)throw Error('runaway child stopped');":''}});`));
+  const worker=join(root,'tooling/gate/tooling-file-worker.ts'),helper=join(own,'runaway.mjs');
+  writeFileSync(helper,generatedJavaScript(`import{MemoryRun}from ${JSON.stringify(new URL('../census/worker-memory.ts',source).href)};import{runMemoryWorkers}from ${JSON.stringify(new URL('../census/worker-pool.ts',source).href)};import{runAsCommand}from ${JSON.stringify(new URL('../differential/command-entry/main.ts',source).href)};
+runAsCommand(import.meta.url,async()=>{const rows=[];let incident;try{await runMemoryWorkers({paths:${JSON.stringify(paths)},jobs:1,memory:new MemoryRun({budgetBytes:1024*2**20}),workerBytes:256*2**20,token:async()=>()=>{},args:()=>[${JSON.stringify(worker)},JSON.stringify({files:${JSON.stringify(paths)},complete:${JSON.stringify(join(own,'complete.json'))},nonce:'runaway'})],onRow:row=>rows.push(row)});}catch(error){incident=error;}
+if(rows.length!==3||rows[0].result?.status!==0||rows[2].result?.status!==0||rows[1].path!==${JSON.stringify(paths[1])}||(rows[1].bucket!=='memory-cap'&&!String(incident).includes('exceeded its own')))throw Error(JSON.stringify({rows,incident:String(incident)}));process.stdout.write('named runaway retained both neighbours\\n');});`));
+  const planned=gateEnvironment(fixtureEnvironment(t),{run:join(own,'environment'),owned:ownMemory(join(own,'memory'))});
+  const child=start(t,own,planned.env,helper);assert.equal(await child.closed,0,child.output());assert.match(child.output(),/named runaway retained both neighbours/);
+});
+
+test('a resident controller crash retains completed neighbours and stays an instrument failure',async t=>{
+  const own=testScratch(t,'tooling-controller-loss'),root=join(own,'repo');
+  copyModuleClosure(['tooling/gate/tooling-file-worker.ts'],root);
+  const paths=['before','lost','after'].map(name=>join(own,name+'.test.mjs'));
+  for(const path of paths)writeFileSync(path,generatedJavaScript("import{test}from'node:test';test('survivor',()=>{});"));
+  const worker=join(root,'tooling/gate/tooling-file-worker.ts'),original=readFileSync(worker,'utf8');
+  const anchor="    const directory=mkdtempSync(join(dirname(request.complete),'file-'))";
+  assert.ok(original.includes(anchor));writeFileSync(worker,original.replace(anchor,`    if(path===${JSON.stringify(paths[1])})process.exit(19);\n`+anchor));
+  const helper=join(own,'loss.mjs');
+  writeFileSync(helper,generatedJavaScript(`import{MemoryRun}from ${JSON.stringify(new URL('../census/worker-memory.ts',source).href)};import{runMemoryWorkers}from ${JSON.stringify(new URL('../census/worker-pool.ts',source).href)};import{runAsCommand}from ${JSON.stringify(new URL('../differential/command-entry/main.ts',source).href)};
+runAsCommand(import.meta.url,async()=>{const rows=[];let incident;try{await runMemoryWorkers({paths:${JSON.stringify(paths)},jobs:1,memory:new MemoryRun({budgetBytes:1024*2**20}),workerBytes:512*2**20,token:async()=>()=>{},args:()=>[${JSON.stringify(worker)},JSON.stringify({files:${JSON.stringify(paths)},complete:${JSON.stringify(join(own,'complete.json'))},nonce:'loss'})],onRow:row=>rows.push(row)});}catch(error){incident=error;}
+if(rows.length!==2||rows.some(row=>row.result?.status!==0)||rows[0].path!==${JSON.stringify(paths[0])}||rows[1].path!==${JSON.stringify(paths[2])}||!String(incident).includes('lost ${paths[1]}'))throw Error(JSON.stringify({rows,incident:String(incident)}));process.stdout.write('controller loss preserved completed neighbours\\n');});`));
+  const planned=gateEnvironment(fixtureEnvironment(t),{run:join(own,'environment'),owned:ownMemory(join(own,'memory'))});
+  const child=start(t,own,planned.env,helper);assert.equal(await child.closed,0,child.output());assert.match(child.output(),/controller loss preserved completed neighbours/);
+});
