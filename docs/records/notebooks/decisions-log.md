@@ -3745,3 +3745,10 @@ observation remains INSTRUMENT. The CLI and fresh worker call one exported
 source-owner function. The self-test overlaps the other admitted entries.
 Fresh execution workers import the test engine and protocol without loading
 the scope launcher and admission controller for every file.
+
+Each tooling file now runs directly in one fresh scoped process. Its resident
+controller owns activity and inactivity outside that scope, and accepts
+completed assertions only on the child's nonce-bound descriptor before
+termination. Killing a ready entry or its finite cap yields a named file
+failure, retaining earlier assertions; malformed evidence cannot create a pass.
+This replaces a fresh API wrapper that launched a second file process.
