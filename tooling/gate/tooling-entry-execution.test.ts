@@ -31,7 +31,7 @@ assert.equal(first.status,0);assert.equal(second.status,1);assert.equal(second.c
 test('outside inactivity owner stops a hung file and retains its completed FAIL',async t=>{
   for(const failed of [false,true]){
     const f=fixture(t),file=f.write('hung',`import{test}from'node:test';test('completed',()=>{${failed?"throw Error('completed assertion');":''}});
-test('hang outside the reporter',async()=>{await new Promise(()=>setInterval(()=>{},1000));});`);
+test('hang outside the reporter',()=>{Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);});`);
     const result=await runScopedTooling([file],{fixture:true,memoryMax:512*2**20,idleMs:250,output:f.output});
     assert.equal(result.status,failed?1:2,f.text());assert.equal(result.completedFailures,failed?1:0,f.text());
     assert.match(f.text(),/NOT RUN \(hung\).*hang outside the reporter/);
