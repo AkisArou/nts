@@ -97,6 +97,35 @@ identical tests; the before arm replaces only `owed.mjs` with the reviewed
 `977cb63af5` bytes. Every guard executed with no skips. Strict types passed, and
 the owning projection writer reported no change after these test-only edits.
 
+The next review identified the committed CLI forms as a third deletion route.
+Their changes already carry a base other than HEAD, but native replay still
+defaulted to HEAD. A shared non-range base now drives both `changedPaths` and
+CLI replay: the parent for `--commit`, the named revision for `--since`, and
+HEAD for working questions. Deleted-path questions prepare that resolved base
+through the existing committed-source owner and forward it with the CLI's
+accepted selector trust. Questions without deletions acquire no extra source.
+Range endpoint selection is unchanged.
+
+The CLI fixture commits its deletion and remains clean, then invokes each
+actual command. Its private loader isolates only the unrelated full-catalogue
+self-test in the three-step fixture; argument handling, Git path discovery,
+native queries and printed obligations all run production code. Every outcome
+is a separate subtest, with no skips.
+
+| Committed deletion | Command | Reviewed `eb7c5b95ef` | Fixed `04e533eee1` |
+| --- | --- | --- | --- |
+| Matched `.ts` | `--commit HEAD` | misses consumers | retains `profile`, `addons` |
+| Matched `.ts` | `--since HEAD~1` | misses consumers | retains `profile`, `addons` |
+| Ignored `.tsv` | `--commit HEAD` | no Program consumers | no Program consumers |
+| Ignored `.tsv` | `--since HEAD~1` | no Program consumers | no Program consumers |
+
+Both arms use the fixed archive and identical test bytes, replacing only
+`owed.mjs` with the reviewed bytes in the before arm. The initial targeted run
+stopped before selection assertions because the new options omitted accepted
+trust; forwarding the existing trust corrected that wiring. The unchanged
+controls then passed. Strict types passed all six projects and 1,155 modules;
+the host audit passed; the owning projection writer completed without a diff.
+
 After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
 after revision remains reachable at its `refs/cited/` ref.
@@ -170,6 +199,11 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `selection-three-e4yjvv6w/manifest.json` | `1ea08190e1705cf4254fa34f5ecbe4f757b4b46fe2d0439f952b38bf36165661` |
 | `selection-three-e4yjvv6w/count-results.json` | `8ce743d3cc32080c9ab7b7cc2fd91783c016d4ae4a5b0087c2454e279d9ae1e5` |
 | `nts-798-three-count.log` | `7a0bd6e1382247622827cb44d9ced14a7e71e1d643ddc5d180bcb87a01ced971` |
+| `cli-counterfactual.py` | `573e767159e496bc8d6a586799ccdf3076bca474ca597b7a8fe82526d70def0e` |
+| `cli-counterfactual.json` | `9990990ac5c7c7c933ae0a56f14334e92203a154cf6e95f29fe53c5f44d66105` |
+| `cli-before-owner.log` | `4ccefc0ecf5fd271032199847e327d99cb9270151aa2a25b672085857a04052a` |
+| `cli-after-owner.log` | `87ad1e07dcfb6ecdbeb952373e95301c9d574f1605d2bc9f8de01e68b7c2e6e6` |
+| `nts-798-cli-proof.log` | `d2728c3ef99245b4ee72008f26a56f7a77ea80ec61b0e5d7b9cb1e4679e0a8b9` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
