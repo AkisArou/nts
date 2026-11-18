@@ -218,3 +218,43 @@ if(rows.length!==2||rows.some(row=>row.result?.status!==0)||rows[0].path!==${JSO
   const planned=gateEnvironment(fixtureEnvironment(t),{run:join(own,'environment'),owned:ownMemory(join(own,'memory'))});
   const child=start(t,own,planned.env,helper);assert.equal(await child.closed,0,child.output());assert.match(child.output(),/controller loss preserved completed neighbours/);
 });
+
+for(const outcome of ['pass','fail','observation'] as const)test(`the pooled selector self-test runs once and retains its ${outcome} outcome`,async t=>{
+  const own=testScratch(t,'tooling-selector-entry'),root=join(own,'repo'),gate=join(root,'tooling/gate'),run=join(own,'run'),target=join(own,'target');
+  copyModuleClosure(['tooling/gate/run.mjs','tooling/gate/tooling-file-admission.ts','tooling/gate/test-wait.ts'],root);oracleWorkspaceFixture(t,root);
+  const selector=join(gate,'owed.mjs'),before=readFileSync(selector,'utf8'),begin=before.indexOf('export function acceptedSourceSelfTest() {'),end=before.indexOf('\nfunction main()',begin);
+  assert.ok(begin>=0&&end>begin);
+  const marker=join(own,'selector.json'),ordinary=join(own,'ordinary-started'),entry=join(root,'tooling/ordinary.test.mjs'),ready=join(gate,'selector-ready.mjs');
+  writeFileSync(ready,generatedJavaScript(`import{existsSync}from'node:fs';import{waitFor}from'./test-wait.ts';await waitFor('the ordinary file is active',()=>existsSync(${JSON.stringify(ordinary)}));`));
+  const body=`
+const {readFileSync,writeFileSync,existsSync}=selectorEntryFs;
+const count=existsSync(${JSON.stringify(marker)})?JSON.parse(readFileSync(${JSON.stringify(marker)},'utf8')).count:0;
+writeFileSync(${JSON.stringify(marker)},JSON.stringify({count:count+1}));
+if(selectorResident())throw Error('selector inherited the resident census role');
+const group=selectorHost({}).ownCgroup(),bound=selectorLimits(group).max;
+if(!Number.isSafeInteger(bound)||bound<1||bound>6*2**30)throw Error('selector has no finite file scope');
+writeFileSync(${JSON.stringify(marker)},JSON.stringify({count:count+1,group,bound}));
+selectorSpawn(process.execPath,[${JSON.stringify(ready)}],{stdio:'inherit'});
+${outcome==='observation'?"throw Error('supplied selector observation failure');":outcome==='fail'?"return 'supplied definite selector defect';":"const r=selectorCompile({memoryCapKb:64*1024},'python3',['-c','held=bytearray(128*1024**2)'],{encoding:'utf8'});if(!r.memoryKilled)throw Error('selector helper skipped its private budget');return null;"}
+`;
+  const imports="import * as selectorEntryFs from 'node:fs';\nimport{execFileSync as selectorSpawn}from'node:child_process';\nimport{hostObservations as selectorHost}from'./host-observations.ts';\nimport{readLimits as selectorLimits}from'./scopes/memory-limits.ts';\nimport{inResidentWorker as selectorResident,compileSync as selectorCompile}from'../census/worker-memory.ts';\n";
+  writeFileSync(selector,imports+before.slice(0,begin)+'export function acceptedSourceSelfTest() {\n'+body+'\n}\n'+before.slice(end));
+  writeFileSync(entry,generatedJavaScript(`import{test}from'node:test';import{existsSync,writeFileSync}from'node:fs';import{waitFor}from ${JSON.stringify(join(gate,'test-wait.ts'))};test('ordinary neighbour',async()=>{writeFileSync(${JSON.stringify(ordinary)},'active');await waitFor('the selector entry is active',()=>existsSync(${JSON.stringify(marker)}));});`));
+  const driver=join(gate,'selector-driver.mjs');
+  writeFileSync(driver,generatedJavaScript(`import{runToolingFiles}from'./tooling-file-admission.ts';import{runAsCommand}from'../differential/command-entry/main.ts';
+runAsCommand(import.meta.url,async()=>{const result=await runToolingFiles({files:[${JSON.stringify(entry)}],selectorSelfTest:'include',complete:${JSON.stringify(join(own,'complete.json'))},nonce:'selector-suite'},{resultEnv:process.env});process.exitCode=result.status;});`));
+  const listed=spawnSync('sh',[new URL('./all.sh',source).pathname,'--list'],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
+  writeFileSync(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nexec node ${JSON.stringify(driver)}\nfi\n`);
+  mkdirSync(join(target,'release'),{recursive:true});writeFileSync(join(target,'release/nts'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  const memory=ownMemory(join(own,'memory'),{availableKiB:20*2**20,totalKiB:31*2**20,resident:{kind:'fixed',defaultBytes:128*2**20},scopePeak:{kind:'fixed',bytes:128*2**20,resettable:true}});
+  const observations=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));observations.width={logical:3,available:3};durableRecord(memory.NTS_HOST_OBSERVATIONS,observations);
+  const planned=gateEnvironment(fixtureEnvironment(t),{run,oracleRoot:root,owned:{...memory,CARGO_TARGET_DIR:target,NTS_CENSUS_MEMORY_CAP_KB:String(512*1024)}}),child=start(t,root,planned.env,join(gate,'run.mjs'),['tooling']);
+  const code=await child.closed,summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8')) as {steps:{verdict:string;reason?:string}[]};
+  assert.equal(summary.steps[0]?.verdict,outcome==='pass'?'PASS':outcome==='fail'?'FAIL':'INSTRUMENT',child.output());
+  assert.equal(code===0,outcome==='pass',child.output());
+  assert.equal(JSON.parse(readFileSync(marker,'utf8')).count,1,'the selector source owner ran exactly once');
+  assert.match(child.output(),/ordinary neighbour/,'other files retained their result');
+  const cases=readCaseHistory(caseHistoryFile('tooling',memory,root));
+  assert.ok(cases.has(caseMemoryKey({step:'tooling',backend:'node',path:'tooling/gate/owed.mjs'})),'the selector used its stable source case lease');
+  assert.equal(readLedger(memory.NTS_MEMORY_LEDGER).admitted.length,0,'the complete step drained both leases');
+});

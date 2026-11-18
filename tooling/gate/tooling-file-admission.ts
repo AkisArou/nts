@@ -6,8 +6,9 @@ import {MemoryRun,workerCapBytes} from '../census/worker-memory.ts';
 import {runMemoryWorkers} from '../census/worker-pool.ts';
 import {isCommandExit} from '../differential/command-entry/main.ts';
 import {tokenClient} from './tokens.mjs';
-import {publishHung,ToolingInstrumentError,PressureError} from './step-result.ts';
-import {readToolingCompletion,type ToolingFileTime,type ToolingTimes,type ToolingResult,type ToolingRequest} from './tooling-runner.ts';
+import {ToolingInstrumentError} from './step-result.ts';
+import {toolingFileResults,toolingEntryFiles,type ToolingFileTime,type ToolingTimes,type ToolingResult,type ToolingRequest} from './tooling-test-runner.ts';
+export {toolingFileResults} from './tooling-test-runner.ts';
 import type {ToolingFileReply} from './tooling-file-worker.ts';
 import {hostObservations} from './host-observations.ts';
 import {longestFirst,recordCosts} from './costs.mjs';
@@ -27,35 +28,6 @@ export function orderedToolingAdmission(acquire:CaseToken):CaseToken {
   };
 }
 
-/** Completed assertions survive unfinished neighbours and observation errors. */
-export function toolingFileResults(files:readonly string[],replies:readonly ToolingFileReply[],times:ToolingTimes,
-  resultEnv:NodeJS.ProcessEnv={},poolFailure?:unknown):ToolingResult {
-  const expected=new Set(files),seen=new Set<string>(),problems:string[]=[],hung:string[]=[];
-  let failed=false,completedFailures=0;
-  for(const row of replies){
-    if(!expected.has(row.path)||seen.has(row.path)){problems.push('duplicate or unowned tooling file result: '+row.path);continue;}
-    seen.add(row.path);
-    if(row.bucket!=='tooling'||!row.result){problems.push(row.path+': '+(row.why??row.bucket));continue;}
-    let result:ToolingResult;
-    try{result=readToolingCompletion({version:2,nonce:'file',...row.result},'file',row.result.status);}
-    catch(error){problems.push(row.path+': '+String(error));continue;}
-    failed||=result.status===1;completedFailures+=result.completedFailures;
-    if(result.observationFailure)problems.push(row.path+': '+result.observationFailure.reason);
-    if(row.instrument?.kind==='hung'||result.status===2)hung.push(row.instrument?.reason??row.path+': tooling file did not finish');
-    else if(row.instrument)problems.push(row.path+': '+row.instrument.reason);
-  }
-  for(const file of files)if(!seen.has(file))problems.push('missing tooling file result: '+file);
-  if(poolFailure!==undefined)problems.push(String(poolFailure));
-  if(hung.length)publishHung(hung.join('\n'),resultEnv,completedFailures);
-  if(problems.length){
-    const reason=problems.join('\n');
-    if(!completedFailures){if(poolFailure instanceof PressureError)throw poolFailure;throw new ToolingInstrumentError('tooling-setup',reason);}
-    process.stderr.write('tooling observation failures beside completed assertions:\n'+reason+'\n');
-    return {status:1,completedFailures,times,observationFailure:{kind:'tooling-setup',reason}};
-  }
-  return {status:failed?1:hung.length?2:0,completedFailures,times};
-}
-
 /** Ordering may change dispatch time, never the selected inventory. */
 export function toolingFileDispatch(files:readonly string[],step:string,root=ROOT):string[]{
   const entries=new Map<string,string>();
@@ -70,7 +42,7 @@ export function toolingFileDispatch(files:readonly string[],step:string,root=ROO
 export async function runToolingFiles(request:ToolingRequest,options:{resultEnv:NodeJS.ProcessEnv}):Promise<ToolingResult>{
   const where=process.env.NTS_GATE_TOKENS,step=process.env.NTS_GATE_STEP;
   if(!where||!step||process.env.NTS_GATE_TOKEN_HELD)throw new ToolingInstrumentError('tooling-setup','tooling file admission requires the enclosing gate broker');
-  const host=hostObservations(),files=request.files.map(file=>resolve(file)),jobs=Math.max(host.availableWidth()-1,1),client=tokenClient(where,step);
+  const host=hostObservations(),files=toolingEntryFiles(request),jobs=Math.max(host.availableWidth()-1,1),client=tokenClient(where,step);
   const ordered=toolingFileDispatch(files,step);
   const started=host.now(),replies:ToolingFileReply[]=[],times=new Map<string,ToolingFileTime>();
   let poolFailure:unknown;

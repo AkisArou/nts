@@ -7,12 +7,13 @@ import {basename,dirname,join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {runAsCommand,isCommandExit} from '../differential/command-entry/main.ts';
 import {inResidentWorker} from '../census/worker-memory.ts';
-import {readToolingRequest,runScopedTooling,type ToolingResult} from './tooling-runner.ts';
+import {runScopedTooling} from './tooling-runner.ts';
+import {readToolingRequest,TOOLING_SELF_TEST_FILE,type ToolingEntryReply} from './tooling-test-runner.ts';
 import {readStepInstrument,ToolingInstrumentError,type InstrumentResult} from './step-result.ts';
 import {assignOwnedValues} from './environment-values.ts';
 import {readLimits} from './scopes/memory-limits.ts';
 
-export type ToolingFileReply={path:string;bucket:string;result?:ToolingResult;instrument?:InstrumentResult;why?:string};
+export type ToolingFileReply=ToolingEntryReply;
 
 runAsCommand(import.meta.url,async()=>{
   if(!inResidentWorker())throw new ToolingInstrumentError('tooling-setup','tooling file worker requires its bounded resident scope');
@@ -38,13 +39,16 @@ runAsCommand(import.meta.url,async()=>{
       memoryMax=readLimits(process.env.NTS_CENSUS_WORKER_GROUP!).max;
       // The file's slice owns fixture-created services as well as its test
       // process. Join that entire drain before reporting to the case pool.
-      const result=await runScopedTooling([path],{idleMs:request.idleMs,execArgv:request.execArgv,memoryMax,output:process.stderr});
+      const selectorSelfTest=request.selectorSelfTest==='include'&&path===TOOLING_SELF_TEST_FILE?'only':undefined;
+      const result=await runScopedTooling([path],{idleMs:request.idleMs,execArgv:request.execArgv,selectorSelfTest,memoryMax,output:process.stderr});
       const instrument=readStepInstrument(frame,'tooling-file',nonce);
       reply={path,bucket:'tooling',result,...(instrument?{instrument}:{})};
       if(result.status===0)rmSync(directory,{recursive:true,force:true});
     }catch(error){
       if(isCommandExit(error))throw error;
       reply={path,bucket:'infrastructure-error',why:error instanceof Error?error.stack:String(error)};
+      try{const instrument=readStepInstrument(frame,'tooling-file',nonce);if(instrument)reply.instrument=instrument;}
+      catch(observation){reply.why+='; '+String(observation);}
     }finally{
       assignOwnedValues(process.env,{NTS_GATE_STEP:step,NTS_GATE_STEP_ATTEMPT:undefined,NTS_GATE_STEP_RESULT:undefined});
       delete process.env.NTS_GATE_STEP_ATTEMPT;delete process.env.NTS_GATE_STEP_RESULT;

@@ -1180,8 +1180,10 @@ the tooling strict checker owns the source's type checking.
   startup allowance never sizes later file scopes. Local budget and lost
   controller incidents drain the finite neighbouring work before surfacing.
   Completion retains the file's peak before the lease returns; a controller
-  may then accept another entry. The selector self-test also holds an explicit
-  case lease. A historical whole-tooling peak cannot size these admissions.
+  may then accept another entry. The accepted-source selector self-test is an
+  explicit entry kind in the same pool, with its own stable source case lease
+  and authenticated completion. It runs alongside test entries. A historical
+  whole-tooling peak cannot size these admissions.
   Completed assertion failures survive an unfinished neighbour or an observation
   failure, with the separate diagnostic retained in the transcript.
 - **Case retirement has an owned lifetime.** Worker `close()` starts once;

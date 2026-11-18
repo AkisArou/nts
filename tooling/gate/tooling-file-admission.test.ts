@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {orderedToolingAdmission,toolingFileDispatch,toolingFileResults} from './tooling-file-admission.ts';
+import {toolingEntryFiles,readToolingRequest,TOOLING_SELF_TEST_FILE} from './tooling-test-runner.ts';
 import {createTokenPool} from './token-pool.ts';
 import {tokenClient} from './tokens.mjs';
 import {discoverToolingTests} from './tooling-discovery.ts';
@@ -137,9 +138,24 @@ test('dispatch preserves the unchanged collector inventory on full and narrowed 
     assert.equal(dispatched.length,selected.length);
     assert.deepEqual([...dispatched].sort(),selected.map(path=>resolve(root,path)).sort());
     assert.equal(new Set(dispatched).size,selected.length);
+    const entries=toolingEntryFiles({files:dispatched,selectorSelfTest:'include',complete:'/report',nonce:'inventory'});
+    assert.deepEqual(entries.filter(path=>path!==TOOLING_SELF_TEST_FILE).sort(),[...dispatched].sort());
+    assert.equal(entries.filter(path=>path===TOOLING_SELF_TEST_FILE).length,1,'the selector command is dispatched exactly once');
+    assert.deepEqual(toolingEntryFiles({files:entries,selectorSelfTest:'include',complete:'/report',nonce:'inventory'}),entries);
   }
   assert.throws(()=>toolingFileDispatch([narrowed[0]!,resolve(root,narrowed[0]!)],'tooling',root),/duplicate tooling file dispatch/);
   assert.throws(()=>toolingFileDispatch(['../escaped.test.ts'],'tooling',root),/outside its source tree/);
+});
+
+test('selector worker requests refuse foreign command paths and preserve private pressure observations',()=>{
+  const request={files:[TOOLING_SELF_TEST_FILE],complete:'/report',nonce:'selector',selectorSelfTest:'only'};
+  assert.equal(readToolingRequest(request).selectorSelfTest,'only');
+  assert.throws(()=>readToolingRequest({...request,files:['/foreign/owed.mjs']}),/invalid tooling worker request fields/);
+  assert.throws(()=>readToolingRequest({...request,selectorSelfTest:'other'}),/invalid tooling worker request fields/);
+  const instrument={version:1 as const,verdict:'INSTRUMENT' as const,kind:'memory-pressure' as const,step:'tooling-file',attempt:'private',reason:'owned selector pressure'};
+  const row:ToolingFileReply={path:files[1]!,bucket:'infrastructure-error',why:'no selector completion',instrument};
+  assert.throws(()=>toolingFileResults(files,[reply(files[0]!,0),row],times),error=>error instanceof PressureError&&/owned selector pressure/.test(error.message));
+  assert.equal(toolingFileResults(files,[reply(files[0]!,1,1),row],times).status,1);
 });
 
 test('pressure retains its retry meaning and cannot erase a completed FAIL',()=>{

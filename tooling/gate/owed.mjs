@@ -2344,6 +2344,23 @@ export function selfTest(options) {
   return null;
 }
 
+/** The CLI and pooled entry run this same accepted-source self-test. */
+export function acceptedSourceSelfTest() {
+  const accepted=rustSelectorTrust(TREE);
+  /** @param {import('./rust-selector-selection.ts').RustSelectorOptions} trust */
+  const check=trust=>{
+    const broken=selfTest(trust);
+    if(!broken&&trust.committedSource){
+      const decision=rustRecordDecision(trust);
+      if(decision)reportRustRecordDecisions([{revision:trust.committedSource.revision,decision}],line=>console.log('  '+line));
+    }
+    return broken;
+  };
+  return readsRustInputs(allSteps())
+    ?withRustSelectorSource(TREE,source=>check({...accepted,committedSource:source}))
+    :check(accepted);
+}
+
 function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--full-census")) {
@@ -2369,19 +2386,7 @@ function main() {
     if(problems.length){console.error(problems.join("\n"));process.exitCode=1;}
     return;
   }
-  const accepted=rustSelectorTrust(TREE);
-  /** @param {import('./rust-selector-selection.ts').RustSelectorOptions} trust */
-  const check=trust=>{
-    const broken=selfTest(trust);
-    if(!broken&&trust.committedSource){
-      const decision=rustRecordDecision(trust);
-      if(decision)reportRustRecordDecisions([{revision:trust.committedSource.revision,decision}],line=>console.log('  '+line));
-    }
-    return broken;
-  };
-  const broken=readsRustInputs(allSteps())
-    ?withRustSelectorSource(TREE,source=>check({...accepted,committedSource:source}))
-    :check(accepted);
+  const broken=acceptedSourceSelfTest();
   if (broken) {
     console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
     process.exit(2);

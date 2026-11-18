@@ -3737,3 +3737,11 @@ Tooling admission follows dispatch order. Only one request awaits its grant
 at a time, so a smaller later file cannot overtake a waiting earlier one.
 Granted files continue concurrently under their existing leases and caps.
 The runner refuses a head forecast beyond its complete budget by name.
+
+The accepted-source selector self-test is an explicit entry kind in that same
+pool. Its stable source key, registered cap and nonce completion retain their
+owners; its completed check failure remains FAIL, and an incomplete or failed
+observation remains INSTRUMENT. The CLI and fresh worker call one exported
+source-owner function. The self-test overlaps the other admitted entries.
+Fresh execution workers import the test engine and protocol without loading
+the scope launcher and admission controller for every file.
