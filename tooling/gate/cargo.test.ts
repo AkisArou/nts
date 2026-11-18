@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {chmodSync,existsSync,lstatSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {delimiter,dirname,join} from 'node:path';
 import {createRequire} from 'node:module';
-import {cargoConfiguration,cargoHome,cargoOutput,withCargoConfigurationSync,CARGO_OWNER} from './cargo.ts';
+import {cargoConfiguration,cargoHome,cargoOutput,cargoSync,withCargoConfigurationSync,CARGO_OWNER} from './cargo.ts';
 import {inspectCargoCalls,inspectShellCargoCalls} from './cargo-audit.ts';
 import {inspectRustCargoCalls} from './rust-cargo.ts';
 import {inspectCargoTestCalls} from './test-profile-audit.ts';
@@ -74,6 +74,47 @@ test('Cargo receives the same complete cache root and cannot override configurat
 test('the incoming rustup environment cannot override the source toolchain',t=>{
   const {cwd,env}=privateTree(t);
   assert.throws(()=>cargoConfiguration([cwd],{...env,RUSTUP_TOOLCHAIN:'nightly'}),error=>refusal(error,'RUSTUP_TOOLCHAIN'));
+  assert.doesNotThrow(()=>cargoConfiguration([cwd],env));
+});
+test('guarded Cargo supplies the workspace toolchain even without a canonical handoff',t=>{
+  const {cwd,env}=privateTree(t);
+  const channel=/^channel\s*=\s*"([^"]+)"/m.exec(readFileSync(new URL('../../rust-toolchain.toml',import.meta.url),'utf8'))![1];
+  let calls=0;
+  const execute=((_command:string,_args:readonly string[],options:{env:NodeJS.ProcessEnv})=>{
+    calls++;assert.equal(options.env.RUSTUP_TOOLCHAIN,channel);return 'pinned';
+  }) as typeof import('node:child_process').execFileSync;
+  assert.equal(cargoOutput(['--version'],{cwd,env:{...env,RUSTUP_TOOLCHAIN:undefined},encoding:'utf8'},execute),'pinned');
+  assert.throws(()=>cargoOutput(['--version'],{cwd,env:{...env,RUSTUP_TOOLCHAIN:'nightly'},encoding:'utf8'},execute),error=>refusal(error,'RUSTUP_TOOLCHAIN'));
+  assert.equal(calls,1,'a conflicting toolchain refuses before Cargo starts');
+});
+for(const name of ['rust-toolchain.toml','rust-toolchain'])test(`Cargo discovers the working tree's ${name} instead of the controller's pin`,t=>{
+  const root=testScratch(t,'cargo-tree-toolchain'),tree=join(root,'tree'),cwd=join(tree,'nested');mkdirSync(cwd,{recursive:true});
+  const channel=/^channel\s*=\s*"([^"]+)"/m.exec(readFileSync(new URL('../../rust-toolchain.toml',import.meta.url),'utf8'))![1];
+  assert.notEqual(channel,'1.97');
+  writeFileSync(join(root,'rust-toolchain.toml'),'[toolchain]\nchannel="'+channel+'"\n');
+  writeFileSync(join(tree,name),name.endsWith('.toml')?"# The measured tree owns this channel.\n[toolchain]\nchannel = '1.97' # private tree\n":'1.97\n');
+  const env=fixtureEnvironment(t),ran=cargoSync(['--version'],{cwd,env,encoding:'utf8'});
+  assert.equal(ran.status,0,ran.stderr);assert.match(ran.stdout,/^cargo 1\.97\./);
+  const same=cargoSync(['--version'],{cwd,env:{...env,RUSTUP_TOOLCHAIN:'1.97'},encoding:'utf8'});
+  assert.equal(same.status,0,same.stderr);assert.equal(same.stdout,ran.stdout);
+  assert.throws(()=>cargoSync(['--version'],{cwd,env:{...env,RUSTUP_TOOLCHAIN:channel},encoding:'utf8'}),error=>refusal(error,'RUSTUP_TOOLCHAIN'));
+});
+test('Cargo discovers the physical working tree and rustup legacy-file precedence',t=>{
+  const root=testScratch(t,'cargo-tree-alias'),tree=join(root,'physical/tree'),cwd=join(tree,'nested'),logical=join(root,'logical');
+  mkdirSync(cwd,{recursive:true});mkdirSync(logical);
+  writeFileSync(join(root,'physical/rust-toolchain'),'1.97\n');
+  writeFileSync(join(root,'physical/rust-toolchain.toml'),'[toolchain]\nchannel="1.99"\n');
+  writeFileSync(join(logical,'rust-toolchain'),'1.99\n');
+  symlinkSync(tree,join(logical,'alias'),'dir');
+  const ran=cargoSync(['--version'],{cwd:join(logical,'alias/nested'),env:fixtureEnvironment(t),encoding:'utf8'});
+  assert.equal(ran.status,0,ran.stderr);assert.match(ran.stdout,/^cargo 1\.97\./);
+});
+test('Cargo in an external fixture with no toolchain file uses the workspace channel',t=>{
+  const root=testScratch(t,'cargo-no-toolchain'),channel=/^channel\s*=\s*"([^"]+)"/m.exec(readFileSync(new URL('../../rust-toolchain.toml',import.meta.url),'utf8'))![1]!;
+  const ran=cargoSync(['--version'],{cwd:root,env:fixtureEnvironment(t),encoding:'utf8'});
+  assert.equal(ran.status,0,ran.stderr);
+  const version=/^cargo (\d+\.\d+\.\d+)\b/.exec(ran.stdout)?.[1];assert.ok(version,ran.stdout);
+  assert.equal(version.split('.').slice(0,channel.split('.').length).join('.'),channel);
 });
 test('rustup itself parses directory overrides before and after the guarded call',t=>{
   const {root,cwd,env}=privateTree(t),home=join(root,'rustup'),settings=join(home,'settings.toml');mkdirSync(home);

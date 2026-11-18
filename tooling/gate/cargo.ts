@@ -9,6 +9,7 @@ import {runAsCommand} from '../differential/command-entry/main.ts';
 import {cacheLocation} from './cache-capabilities.ts';
 import {userInfo} from 'node:os';
 import {ToolingInstrumentError} from './step-result.ts';
+import {rustToolchain} from './toolchain.ts';
 
 export const CARGO_OWNER=fileURLToPath(new URL('./cargo.ts',import.meta.url));
 export function cargoHome(env:NodeJS.ProcessEnv=process.env):string{
@@ -43,8 +44,18 @@ function discoveryDirectories(cwds:readonly string[]):string[]{
   }
   return [...result];
 }
-function rustupOverrides(directories:ReadonlySet<string>,env:NodeJS.ProcessEnv):void{
-  if(env.RUSTUP_TOOLCHAIN!==undefined)fail('RUSTUP_TOOLCHAIN','an incoming toolchain override is not allowed');
+function selectedRustToolchain(cwd:string):string {
+  // The working tree owns its pin, including historical compiler pins. Rustup
+  // prefers the legacy spelling when both files occur in the same directory.
+  for(const directory of discoveryDirectories([physical(cwd)]))for(const name of ['rust-toolchain','rust-toolchain.toml']){
+    const path=join(directory,name);
+    try{lstatSync(path);}catch(error){if(missing(error))continue;fail(path,'cannot observe Rust toolchain file',error);}
+    try{return rustToolchain(path);}catch(error){fail(path,'cannot read Rust toolchain channel',error);}
+  }
+  return rustToolchain();
+}
+function rustupOverrides(directories:ReadonlySet<string>,env:NodeJS.ProcessEnv,cwd:string):void{
+  if(env.RUSTUP_TOOLCHAIN!==undefined&&env.RUSTUP_TOOLCHAIN!==selectedRustToolchain(cwd))fail('RUSTUP_TOOLCHAIN','an incoming toolchain override conflicts with the working directory\'s Rust toolchain');
   const home=rustupHome(env);if(!isAbsolute(home))fail(home,'the shared rustup cache must be absolute');
   const settings=join(home,'settings.toml');
   const ran=spawnSync('rustup',['override','list'],{env:{...env,RUSTUP_HOME:home},encoding:'utf8'});
@@ -70,7 +81,7 @@ export function cargoConfiguration(cwds:readonly string[],env:NodeJS.ProcessEnv=
       try{lstatSync(path);}catch(error){if(missing(error))continue;fail(path,'cannot establish absence',error);}
       fail(path,'outside configuration is not allowed; remove it from the Cargo discovery chain');
     }
-    rustupOverrides(directories,env);
+    rustupOverrides(directories,env,cwds[0]!);
   };
   verify();return {verify};
 }
@@ -100,13 +111,13 @@ function directory(cwd:string|URL|undefined):string{return cwd instanceof URL?fi
 export function cargoSync(args:readonly string[],options:SpawnSyncOptionsWithStringEncoding):SpawnSyncReturns<string>;
 export function cargoSync(args:readonly string[],options?:SpawnSyncOptions):SpawnSyncReturns<string|Buffer>;
 export function cargoSync(args:readonly string[],options:SpawnSyncOptions={}):SpawnSyncReturns<string|Buffer>{
-  assertArguments(args);const env=options.env??process.env,cwd=directory(options.cwd);
+  assertArguments(args);const source=options.env??process.env,cwd=directory(options.cwd),env={...source,RUSTUP_TOOLCHAIN:source.RUSTUP_TOOLCHAIN??selectedRustToolchain(cwd)};
   return withCargoConfigurationSync(roots(cwd,env),env,()=>spawnSync('cargo',args,{...options,env:{...env,CARGO_HOME:cargoHome(env),RUSTUP_HOME:rustupHome(env)}}));
 }
 export function cargoOutput(args:readonly string[],options:ExecFileSyncOptionsWithStringEncoding,execute?:typeof execFileSync):string;
 export function cargoOutput(args:readonly string[],options?:ExecFileSyncOptions,execute?:typeof execFileSync):string|Buffer;
 export function cargoOutput(args:readonly string[],options:ExecFileSyncOptions={},execute:typeof execFileSync=execFileSync):string|Buffer{
-  assertArguments(args);const env=options.env??process.env,cwd=directory(options.cwd);
+  assertArguments(args);const source=options.env??process.env,cwd=directory(options.cwd),env={...source,RUSTUP_TOOLCHAIN:source.RUSTUP_TOOLCHAIN??selectedRustToolchain(cwd)};
   return withCargoConfigurationSync(roots(cwd,env),env,()=>execute('cargo',args,{...options,env:{...env,CARGO_HOME:cargoHome(env),RUSTUP_HOME:rustupHome(env)}}));
 }
 runAsCommand(import.meta.url,()=>{

@@ -1,9 +1,23 @@
 // A measured tree owns its toolchain pin. The controller's executable and
 // PATH cannot select it; provisioning a missing installation is an operator action.
 import {spawnSync} from "node:child_process";
+import {readFileSync} from "node:fs";
 import {delimiter,dirname,isAbsolute,join,resolve} from "node:path";
 import {userInfo} from "node:os";
 import {ToolingInstrumentError} from "./step-result.ts";
+
+/** Read either rustup file format. The default is only for external fixtures. */
+export function rustToolchain(path:string|URL=new URL('../../rust-toolchain.toml',import.meta.url)):string {
+  const source=readFileSync(path,'utf8').trim();
+  let channel=source;
+  if(String(path).endsWith('.toml')||source.startsWith('[')||source.startsWith('#')){
+    const section=source.split(/(?=^\s*\[)/m).find(part=>/^\s*\[toolchain\]\s*(?:#.*)?(?:\r?\n|$)/.test(part));
+    const channels=[...(section??'').matchAll(/^\s*channel\s*=\s*(?:"([^"]+)"|'([^']+)')\s*(?:#.*)?$/gm)];
+    channel=channels.length===1?(channels[0]![1]??channels[0]![2]??''):'';
+  }
+  if(!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(channel))throw new ToolingInstrumentError('tooling-setup','invalid Rust toolchain channel in '+String(path));
+  return channel;
+}
 
 /** Resolved capabilities precede version-manager shims, which consult HOME.
  * Rustup's launchers live in CARGO_HOME/bin and use the declared RUSTUP_HOME.

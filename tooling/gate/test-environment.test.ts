@@ -39,6 +39,18 @@ test('explicit fixture values override the allowlist',()=>{
   assert.equal(env.NTS_GATE_SLOTS,'2');assert.equal(env.NODE_OPTIONS,'--no-warnings');assert.equal(env.FIXTURE_PROTOCOL,'owned');
 });
 
+test('fixture environments leave Rust toolchain discovery to each child working tree',t=>{
+  const standalone=testEnvironment({},{RUSTUP_TOOLCHAIN:'nightly'});
+  assert.equal(standalone.RUSTUP_TOOLCHAIN,undefined);
+  const root=testScratch(t,'environment-rust');
+  const parent=gateEnvironment(standalone,{run:join(root,'run'),owned:ownMemory(join(root,'memory'))}).env;
+  const child=testEnvironment({},parent),nested=testEnvironment({},child);
+  for(const env of [parent,child,nested]){
+    assert.equal(env.RUSTUP_TOOLCHAIN,undefined);
+    assert.equal(JSON.parse(env[ENVIRONMENT_CONTEXT]!).owned.RUSTUP_TOOLCHAIN,undefined);
+  }
+});
+
 test('fixture commit storms launch no detached automatic Git maintenance',t=>{
   const root=testScratch(t,'environment-git'),repo=join(root,'repo'),trace=join(root,'git-events.jsonl');mkdirSync(repo);
   const env=fixtureEnvironment(t,{GIT_TRACE2_EVENT:trace});

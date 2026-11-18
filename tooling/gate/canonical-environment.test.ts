@@ -137,6 +137,16 @@ test("the oracle toolchain location is supplied by the tooling tree",t=>{
   assert.equal(child.report.canonical,true);
 });
 
+test("canonical environments leave Rust toolchain discovery to the working tree",t=>{
+  const {run,base}=fixture(t);
+  const parent=gateEnvironment({...base,RUSTUP_TOOLCHAIN:'nightly'},{run});
+  assert.equal(parent.env.RUSTUP_TOOLCHAIN,undefined);
+  assert.equal(JSON.parse(parent.env[ENVIRONMENT_CONTEXT]!).owned.RUSTUP_TOOLCHAIN,undefined);
+  const child=gateEnvironment({...parent.env,RUSTUP_TOOLCHAIN:'nightly'},{run});
+  assert.equal(child.env.RUSTUP_TOOLCHAIN,undefined);
+  assert.equal(child.report.canonical,true);
+});
+
 test("only source-owned context grants gate capture policy and children retain its temporary identity",t=>{
   const {run,base}=fixture(t);
   const raw=gateEnvironment({...base,NTS_ORACLE_DEPENDENCIES:JSON.stringify({admission:{kind:"gate"}})},{run,owned:{NTS_ORACLE_DEPENDENCIES:"raw owned values grant no capability"}});
@@ -294,7 +304,7 @@ test("different launcher ambients produce identical step environments",t=>{
 });
 
 test("land refuses every verdict override by name, without its value",()=>{
-  for (const name of ["NTS_RC_NAIVE","NTS_GATE_STEPS","NTS_JOBS","NTS_GATE_SLOTS","NTS_GATE_JOBS","NTS_DEX_METHOD_FLOOR","NTS_COREDUMPS","CARGO_PROFILE_DEV_DEBUG","CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS","RUSTFLAGS",ENVIRONMENT_CONTEXT,ENVIRONMENT_EXPERIMENT,
+  for (const name of ["NTS_RC_NAIVE","NTS_GATE_STEPS","NTS_JOBS","NTS_GATE_SLOTS","NTS_GATE_JOBS","NTS_DEX_METHOD_FLOOR","NTS_COREDUMPS","CARGO_PROFILE_DEV_DEBUG","CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS","RUSTFLAGS","RUSTUP_TOOLCHAIN",ENVIRONMENT_CONTEXT,ENVIRONMENT_EXPERIMENT,
     "NTS_LAND_HOME","NTS_LAND_AUTHOR_BRANCH","NTS_LAND_AUTHOR_ADDRESS","NTS_LAND_TRAIN_MAX","NTS_LAND_LOCKED","NTS_LAND_ENTRY","NTS_LAND_FAST","NTS_LAND_SUBMISSION_UNIT","NTS_LAND_TRAIN_UNIT","NTS_LAND_TRAIN_DIRECTORY","NTS_LAND_TRAIN_TRACE"]) {
     assert.throws(()=>assertLandingEnvironment({[name]:"private-value"}),error=>{
       assert.match(String(error),new RegExp(name));assert.doesNotMatch(String(error),/private-value/);return true;

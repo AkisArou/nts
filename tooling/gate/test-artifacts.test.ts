@@ -15,6 +15,16 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { pruneTestArtifacts } from "./test-artifacts.ts";
 
+function assertFixtureToolchain(root:string):void {
+  const channel=/^channel\s*=\s*"([^"]+)"/m.exec(readFileSync(new URL('../../rust-toolchain.toml',import.meta.url),'utf8'))![1]!;
+  const info=JSON.parse(readFileSync(join(root,'target/.rustc_info.json'),'utf8')) as {outputs:Record<string,{success?:boolean;stdout?:string}>};
+  const versions=Object.values(info.outputs).filter(row=>row.success&&row.stdout?.startsWith('rustc ')).map(row=>/^rustc (\d+\.\d+\.\d+)\b/.exec(row.stdout!)?.[1]);
+  assert.equal(versions.length,1,'the fixture build recorded its compiler version');
+  const version=versions[0];assert.ok(version);
+  assert.equal(version.split('.').slice(0,channel.split('.').length).join('.'),channel,'the fixture build ran the pinned compiler');
+  process.stdout.write('fixture build rustc: '+version+'\n');
+}
+
 /** Stage the parsed module graph, then give the tree its own Git inventory. */
 function testsFixture(root: string): void {
   copyModuleClosure(["tooling/gate/tests.mjs"], root);
@@ -51,6 +61,7 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
         CARGO_INCREMENTAL: undefined, NTS_TEST_PROFILE: undefined, NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs"),NTS_RUST_INPUT_TRACE:trace },
     });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assertFixtureToolchain(root);
     assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 2 passed, 0 failed/);
     const cargo:{observations:InputIndexObservation[]}={observations:[]},binary:{observations:InputIndexObservation[]}={observations:[]};
     await readInputTraceIndex(join(trace,'cargo.index.jsonl.gz'),row=>{if(row.kind==='observation')cargo.observations.push(row);});
@@ -132,6 +143,7 @@ test("Cargo rebuilds pruned feature/incremental variants while build-script outp
         .map((event) => event.executable);
     };
     const old = build([], { CARGO_INCREMENTAL: "1" });
+    assertFixtureToolchain(root);
     const oldIncremental = build(["--features", "other"], { CARGO_INCREMENTAL: "1" });
     const current = build(["--features", "other"]);
     assert.equal(old.length, 1);
