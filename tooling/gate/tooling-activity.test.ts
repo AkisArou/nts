@@ -138,11 +138,14 @@ test('completed without identity',()=>new Promise((resolve,reject)=>{
 test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1',()=>writeFileSync(${JSON.stringify(ready)},'ready'))));\n`);
     // Supply timing at the actual runTooling call. Native acquisition,
     // activity verification and cleanup remain the production defaults.
-    const collector=join(staged,'tooling/gate/tooling-runner.ts');
+    const collector=join(staged,'tooling/gate/tooling-test-worker.ts');
     let worker=readFileSync(collector,'utf8');
-    const runAnchor="const result=await runTooling(request.files,{idleMs:request.idleMs,execArgv:[...(request.execArgv??[]),'--import',bootstrap],resultEnv});";
+    const invocation="await runTooling(request.files,\n      {idleMs:request.idleMs,execArgv:[...(request.execArgv??[]),'--import',bootstrap],resultEnv})";
+    const runAnchor="else result=request.selectorSelfTest==='only'?await selectorSelfTest():"+invocation+';';
     assert.equal(worker.split(runAnchor).length,2,'one collector invocation boundary');
-    worker=worker.replace(runAnchor,`const {watch,existsSync}=await import('node:fs');
+    worker=worker.replace("import {runAsCommand}","import {runAsCommand,registerCommandCloser}")
+      .replace('import {runTooling,','import {runTooling,TOOLING_IDLE_GUARD_MS,');
+    worker=worker.replace(runAnchor,`else {const {watch,existsSync}=await import('node:fs');
       let suppliedNow=0,armed=0,delivered=0,readyObserved=false,watcherClosed=false;
       const suppliedTimers=new Set<{callback:()=>void;cancelled:boolean}>();
       const timing={now:()=>suppliedNow,scheduleIdle:(callback:()=>void)=>{
@@ -159,16 +162,18 @@ test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1',
       const watcher=watch(${JSON.stringify(root)},advance);
       const closeWatcher=()=>{if(!watcherClosed){watcher.close();watcherClosed=true;}};
       const unregisterFixture=registerCommandCloser('supplied missing-entry clock watcher',{close:closeWatcher});
-      let result;
-      try{advance();${runAnchor.replace('const result=','result=').replace('resultEnv});','resultEnv,timing});')}}
+      try{advance();result=${invocation.replace('resultEnv})','resultEnv,timing})')};}
       finally{
         closeWatcher();unregisterFixture();
         writeFileSync(${JSON.stringify(clockReceipt)},JSON.stringify({readyObserved,now:suppliedNow,armed,delivered,pending:suppliedTimers.size,watcherClosed}));
-      }`);
+      }}`);
     writeFileSync(collector,worker);
-    const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(collector).href)};
+    // This control belongs to the direct multi-file Node API route. The
+    // per-file pool has its separate outside-supervisor acquisition controls.
+    const companion=join(root,'companion.test.mjs');writeFileSync(companion,"import{test}from'node:test';test('companion',()=>{});");
+    const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(join(staged,'tooling/gate/tooling-runner.ts')).href)};
 import{PassThrough}from'node:stream';let transcript='';const output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
-try{const report=await runScopedTooling([${JSON.stringify(file)}],{fixture:true,output});console.log(JSON.stringify({report,transcript}));}
+try{const report=await runScopedTooling([${JSON.stringify(file)},${JSON.stringify(companion)}],{fixture:true,output});console.log(JSON.stringify({report,transcript}));}
 catch(error){console.log(JSON.stringify({kind:error.kind,message:error.message,transcript}));}`;
     const actual=spawnTest(process.execPath,['--input-type=module','-e',script],{env:fixtureEnvironment(t,{NTS_GATE_STEP:'tooling',NTS_GATE_STEP_ATTEMPT:'missing',NTS_GATE_STEP_RESULT:frame}),encoding:'utf8'},'missing collector spawn result');
     assert.equal(actual.status,0,actual.stderr);const observed=JSON.parse(actual.stdout.trim());
