@@ -12,14 +12,22 @@
 //
 // Control in the same program: `control` reads a holder whose constructor
 // ran, and agrees with node.
-class Picker {
+//
+// **Its refused callee is a generic method of a generic class** since #843 copied
+// a class's generic method per instance, which made the plain `Picker#pick<T>`
+// trigger compile. The cut is the subject; the callee only has to stay refused.
+class Picker<K> {
+  key: K;
+  constructor(key: K) {
+    this.key = key;
+  }
   pick<T>(value: T): T {
     return value;
   }
 }
 
 function refused(): (n: number) => number {
-  return new Picker().pick<(n: number) => number>((n) => n + 1);
+  return new Picker(0).pick<(n: number) => number>((n) => n + 1);
 }
 
 class Holder {

@@ -1,4 +1,4 @@
-// expect: emit-c --napi -> no declaration for `Host#@symbol0@raises` to take a signature from
+// expect: emit-c --napi -> no declaration for `Host#@symbol0` to take a signature from
 //
 // One of the web-platform blocker's six backend declines, reduced
 // (2026-10-27): `ReadableStreamBYOBHost#@symbol11@raises` (reached from
@@ -8,6 +8,12 @@
 // and the backend declines that copy for want of a declaration
 // (NTS2006) instead of lowering refusing the caller. Invoking a method
 // directly is the control: a-symbol-host-method-whose-body-calls-a-method.
+//
+// **The declined entry is the ordinary one since #843**, which asks a call
+// under a computed key by its member's symbol: the implementing method is
+// `async`, so it cannot raise into the caller's `try`, and no `@raises` copy is
+// named. The backend still declines the interface member for want of a
+// declaration, now `Host#@symbol0` itself.
 // A plain extracted-function call is refused in the body too ("a call of
 // a function value in a program with no closures"), same cascade.
 

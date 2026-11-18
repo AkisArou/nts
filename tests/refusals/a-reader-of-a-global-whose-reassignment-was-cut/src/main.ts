@@ -14,6 +14,10 @@
 //
 // Controls in the same program: `intact` reads a global nothing cut, and
 // `independent` reads none; both still compile and agree with node.
+//
+// **Its refused callee is a generic method of a generic class** since #843 copied
+// a class's generic method per instance, which made the plain `Picker#pick<T>`
+// trigger compile. The cut is the subject; the callee only has to stay refused.
 export let actual = 0;
 try {
   actual = early(3);
@@ -21,14 +25,18 @@ try {
   actual = 7;
 }
 
-class Picker {
+class Picker<K> {
+  key: K;
+  constructor(key: K) {
+    this.key = key;
+  }
   pick<T>(value: T): T {
     return value;
   }
 }
 
 function early(n: number): number {
-  return new Picker().pick<number>(n);
+  return new Picker(0).pick<number>(n);
 }
 
 export function observed(n: number): number {

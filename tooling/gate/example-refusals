@@ -118,3 +118,5 @@ an-inferred-array-literal-at-its-binding 1 `passed`: an inferred array of record
 a-structural-alias-read-after-an-interface-view 1 main refuses the `S1` -> `Face` view; the fixture guards the alias read behind it
 a-class-whose-constants-are-prototype-getters 2 the readonly-tuple destructuring heading the descriptor loop after the class, and its cut statement; the loop is what the case exists to survive
 awfy-dictionary-hole-slots 13 the SOM Dictionary machinery it exercises (generic copies over K/V and the E[]|null storage) refuses around it; the three exported arms compile and agree
+a-closure-calling-a-throwing-generic-method-inside-a-try 2 the unspecialized `Picker#pick` and `Picker.first`, kept for calls that pin nothing, refuse as before; every exported arm calls a pinned instance and agrees
+a-closure-calling-a-throwing-generic-method-inside-a-try-control 2 the same two unspecialized bodies as the fixture it controls
