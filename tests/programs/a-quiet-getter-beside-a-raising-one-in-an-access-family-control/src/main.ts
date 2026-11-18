@@ -38,13 +38,9 @@ function attempt(run: () => number): number {
   }
 }
 
-function made(n: number): Leveled {
-  return new Checked(n & 7);
-}
-
-/** The family read, through a closure inside a `try`. */
-export function leveled(n: number): number {
-  const source = made(n);
+/** The family read through a closure inside a `try`, on the supplier that can raise. */
+export function checked(n: number): number {
+  const source: Leveled = new Checked(n & 7);
   return attempt(() => levelOf(source));
 }
 

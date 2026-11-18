@@ -52,13 +52,15 @@ function attempt(run: () => number): number {
   }
 }
 
-function made(n: number): Leveled {
-  return n & 8 ? new Plain(n & 7) : new Checked(n & 7);
+/** The family read through a closure inside a `try`, on the supplier that can raise. */
+export function checked(n: number): number {
+  const source: Leveled = new Checked(n & 7);
+  return attempt(() => levelOf(source));
 }
 
-/** The family read, through a closure inside a `try`. */
-export function leveled(n: number): number {
-  const source = made(n);
+/** The same read on the quiet supplier. */
+export function plain(n: number): number {
+  const source: Leveled = new Plain(n & 7);
   return attempt(() => levelOf(source));
 }
 
