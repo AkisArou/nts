@@ -2,19 +2,19 @@
 import assert from 'node:assert/strict';
 import {relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import type {RecordFamily} from './recorder-core.ts';
+import type {RecordFamily,RecordContext} from './recorder-core.ts';
 import {wholeRow,mergeWhole} from './recorder-format.ts';
 import {refreshLine} from './pending.ts';
-import {memoryPrograms,censusRecord,censusSourceKey,checkMemoryCensuses,parseCensusRecord,censusInputScope,type CensusInputScope} from './memory-census.ts';
+import {memoryPrograms,censusRecord,censusSourceKey,censusInventory,parseCensusRecord,censusInputScope,type CensusInputScope,censusCompiler,type CensusCompiler} from './memory-census.ts';
 const ROOT=fileURLToPath(new URL('../..',import.meta.url));
 /** Each transaction reads a Program once; subsequent hooks replay its facts. */
-function family(inputs?:CensusInputScope):RecordFamily{return {
- ...(inputs?{}:{scope:(root:string)=>family(censusInputScope(root))}),
- pending:root=>checkMemoryCensuses(root,()=>{},{inputs}).map(name=>({name,record:censusRecord(name)})),
+function family(inputs?:CensusInputScope,compiler:()=>CensusCompiler|null=()=>null):RecordFamily{return {
+ ...(inputs?{}:{scope:(root:string,context?:RecordContext)=>{let known=false,current:CensusCompiler|null=null;return family(censusInputScope(root),()=>{if(!known){current=censusCompiler(root,context?.environment?.NTS_BIN);known=true;}return current;});}}),
+ pending:root=>censusInventory(root,{inputs,compiler:compiler()}).pending.map(name=>({name,record:censusRecord(name)})),
  // The check's distinct refresh requests start a core records unit even when
  // every observation is current and no other family has anything pending.
- refresh:root=>{const pending=new Set(checkMemoryCensuses(root,()=>{},{inputs}));return memoryPrograms(root).filter(name=>!pending.has(name)).map(name=>({name,record:censusRecord(name)}));},
- refreshLine:one=>`  ${refreshLine(one.name,one.record)}`,
+ refresh:root=>censusInventory(root,{inputs,compiler:compiler()}).refresh.map(name=>({name,record:censusRecord(name)})),
+ refreshLine:one=>`  ${refreshLine(one.kind,one.name,one.record)}`,
  files:root=>memoryPrograms(root).map(censusRecord),records:row=>[censusRecord(row.case)],
  runs:pending=>pending.map(row=>[relative(ROOT,fileURLToPath(new URL('./memory-census.ts',import.meta.url))),'--record-pending',row.name]),
  audit:(file,before,after,pending,root)=>{

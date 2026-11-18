@@ -3,11 +3,14 @@ import {test} from 'node:test';
 import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {gitArguments} from '../gate/git-arguments/main.ts';
+import {fixtureEnvironment} from '../gate/test-environment.ts';
 import {fileURLToPath} from 'node:url';
 import {fileInput} from '../gate/reader-inputs/main.ts';
 import {refreshLine,listedIn} from './pending.ts';
 import {testScratch} from '../gate/test-scratch.ts';
-import {censusInputScope,acceptedCensusRecords,memoryPrograms,censusIdentities,censusRecord,checkMemoryCensuses,parseCensusRecord,validateCensus,censusSourceKey,CENSUS_RECORD_VERSION,CENSUS_WIRE_KINDS} from './memory-census.ts';
+import {censusCompiler,censusInventory,censusInputScope,acceptedCensusRecords,memoryPrograms,censusIdentities,censusRecord,checkMemoryCensuses,parseCensusRecord,validateCensus,censusSourceKey,CENSUS_RECORD_VERSION,CENSUS_WIRE_KINDS} from './memory-census.ts';
 import {memoryCensusFamily} from './memory-census-record-family.ts';
 import {createRecorder} from './recorder-core.ts';
 import {projectInputOwner} from '../gate/project-inputs.ts';
@@ -138,7 +141,7 @@ test('current rows request refresh, not pending, and a compiler-only change rede
  for(const name of names)put(censusRecord(name),JSON.stringify(row(name)));
  put('compiler/core/src/hir/memory/build.rs','changed homes without changing the static recipe');
  assert.deepEqual(checkMemoryCensuses(root,line=>lines.push(line)),[]);
- assert.deepEqual(lines,names.map(name=>refreshLine(name,censusRecord(name))));
+ assert.deepEqual(lines,names.map(name=>refreshLine('memory-census',name,censusRecord(name))));
  put('run/records.log',lines.join('\n'));
  const listed=listedIn(join(root,'run'));assert.deepEqual(listed.pending,[]);assert.deepEqual(listed.accepted,[]);assert.equal(listed.refresh.length,names.length);
  const recorder=createRecorder({memory:{family:memoryCensusFamily,steps:['records'],part:'core'}}),output:string[]=[];let runs=0;
@@ -181,4 +184,39 @@ test('a per-case config appearing during a transaction invalidates the generated
  const {root,put}=fixture(t),inputs=censusInputScope(root);inputs.read(['tree-teardown']);
  put('benchmarks/cases/tree-teardown/tsconfig.json',JSON.stringify({compilerOptions:{noLib:true,types:[]},files:['case.ts']}));
  assert.throws(()=>inputs.read(['tree-teardown']),/changed|mismatch/);
+});
+
+
+test('matching source, recipe and known compiler provenance requests no native refresh',t=>{
+ const {root,put,row}=fixture(t),binary='compiler-pin/nts',bytes='native compiler fixture',digest=createHash('sha256').update(bytes).digest('hex');
+ const git=(args:string[])=>execFileSync('git',gitArguments(args),{cwd:root,encoding:'utf8',env:fixtureEnvironment(t)}).trim();
+ git(['init','-q']);git(['add','.']);git(['-c','user.name=NTS fixture','-c','user.email=fixture@example.invalid','commit','-qm','source']);const commit=git(['rev-parse','HEAD']);
+ put(binary,bytes);put('compiler-pin/provenance.json',JSON.stringify({sha:commit,clean:true,applied:null,binary_sha256:digest}));
+ const names=memoryPrograms(root),measured=new Map(names.map(name=>[name,{...row(name),compiler_commit:commit,compiler_sha256:digest}]));
+ for(const [name,value]of measured)put(censusRecord(name),JSON.stringify(value));
+ const compiler=censusCompiler(root,binary);assert.ok(compiler);const lines:string[]=[];
+ assert.deepEqual(checkMemoryCensuses(root,line=>lines.push(line),{compiler}),[]);assert.deepEqual(lines,[]);
+ let runs=0;const recorder=createRecorder({memory:{family:memoryCensusFamily,steps:['records'],part:'core'}},()=>{runs++;return 0;},{environment:{NTS_BIN:join(root,binary)}});
+ assert.equal(recorder.recordPending(root,['memory'],undefined,()=>{}),0);assert.equal(runs,0);
+ const name='tree-teardown',original=measured.get(name)!;
+ for(const changed of [{compiler_commit:'d'.repeat(40)},{compiler_sha256:'b'.repeat(64)}]){
+  put(censusRecord(name),JSON.stringify({...original,...changed}));assert.deepEqual(censusInventory(root,{compiler}),{pending:[],refresh:[name]});
+ }
+ put(censusRecord(name),JSON.stringify(original));
+ const accepted=new Map([...measured].map(([name,value])=>[name,hash(value)]));
+ put('outside/value.ts','export const external=2');assert.deepEqual(censusInventory(root,{compiler,accepted}),{pending:names,refresh:[]});
+ put('outside/value.ts','export const external=1');put('tooling/records/memory-census.ts','changed recipe');assert.deepEqual(censusInventory(root,{compiler,accepted}),{pending:names,refresh:[]});
+ put('tooling/records/memory-census.ts','recipe');
+ put('compiler/core/src/hir/memory/build.rs','changed compiler');git(['add','compiler/core/src/hir/memory/build.rs']);git(['-c','user.name=NTS fixture','-c','user.email=fixture@example.invalid','commit','-qm','compiler-only change']);
+ const unknown=censusCompiler(root,binary);assert.equal(unknown,null,'an older recorded pin is not the current source revision');assert.deepEqual(censusInventory(root,{compiler:unknown}),{pending:[],refresh:names});
+});
+
+test('missing, applied or corrupted pin provenance remains an unknown producer and requests refresh',t=>{
+ const {root,put,row}=fixture(t),names=memoryPrograms(root);for(const name of names)put(censusRecord(name),JSON.stringify(row(name)));
+ const binary='pin/nts',bytes='compiler',digest=createHash('sha256').update(bytes).digest('hex');put(binary,bytes);
+ assert.equal(censusCompiler(root,binary),null);
+ const good={sha:'c'.repeat(40),clean:true,applied:null,binary_sha256:digest};
+ for(const change of [{clean:false},{applied:{source:'patch',sha256:digest,files:[]}},{binary_sha256:'f'.repeat(64)}]){
+  put('pin/provenance.json',JSON.stringify({...good,...change}));const compiler=censusCompiler(root,binary);assert.equal(compiler,null);assert.deepEqual(censusInventory(root,{compiler}),{pending:[],refresh:names});
+ }
 });

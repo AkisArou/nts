@@ -2,6 +2,8 @@
 // malformed, foreign or internally inconsistent records never become pending.
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {gitArguments} from '../gate/git-arguments/main.ts';
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
 import {isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -148,14 +150,33 @@ export function acceptedCensusRecords(data:string):Map<string,string>{
  }
  assert.ok(depth===0&&!quoted,'incomplete accepted census');return records;
 }
-export function checkMemoryCensuses(root:string,say:(line:string)=>void,options:{accepted?:ReadonlyMap<string,string>;inputs?:CensusInputScope}={}):string[]{
- const names=memoryPrograms(root),identities=(options.inputs??censusInputScope(root)).read(names),pending:string[]=[];let accepted=options.accepted;
+/** A known pin can suppress redundant native work. No pin means unknown,
+ * including a build target that the tree-only records step can reach before build. */
+export type CensusCompiler={compiler_commit:string;compiler_sha256:string};
+export function censusCompiler(root:string,binary:string|undefined):CensusCompiler|null{
+ if(!binary)return null;
+ const path=resolve(root,binary),pin=provenanceOf(path);
+ if(pin?.clean!==true||pin.applied!==null||typeof pin.sha!=='string'||!(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/).test(pin.sha)||!hex(pin.binary_sha256)||!existsSync(path))return null;
+ if(!existsSync(join(root,'.git')))return null;
+ const revision=spawnSync('git',gitArguments(['rev-parse','--verify','HEAD']),{cwd:root,encoding:'utf8'});
+ if(revision.status!==0||revision.stdout.trim()!==pin.sha)return null;
+ const digest=sha(readFileSync(path));return digest===pin.binary_sha256?{compiler_commit:pin.sha,compiler_sha256:digest}:null;
+}
+export type CensusCheckOptions={accepted?:ReadonlyMap<string,string>;inputs?:CensusInputScope;compiler?:CensusCompiler|null};
+export function censusInventory(root:string,options:CensusCheckOptions={}):{pending:string[];refresh:string[]}{
+ const names=memoryPrograms(root),identities=(options.inputs??censusInputScope(root)).read(names),pending:string[]=[],refresh:string[]=[];let accepted=options.accepted;
  const store=join(root,STORE);if(existsSync(store))for(const file of readdirSync(store))assert.ok(names.some(name=>`${name}.json`===file),`foreign memory census record: ${file}`);
- for(const name of names){const file=censusRecord(name),path=join(root,file);let stale=!existsSync(path);
-  if(!stale){const row=parseCensusRecord(JSON.parse(readFileSync(path,'utf8')),name);stale=hash(row.identity)!==hash(identities.get(name));if(stale){accepted??=acceptedCensuses(root);assert.equal(accepted.get(name),hash(row),'foreign memory census source or recipe identity: '+name);}}
-  if(stale){pending.push(name);say(pendingLine(name,file));}else say(refreshLine(name,file));
+ for(const name of names){const file=censusRecord(name),path=join(root,file);let stale=!existsSync(path),measured:CensusRecord|undefined;
+  if(!stale){const row=measured=parseCensusRecord(JSON.parse(readFileSync(path,'utf8')),name);stale=hash(row.identity)!==hash(identities.get(name));if(stale){accepted??=acceptedCensuses(root);assert.equal(accepted.get(name),hash(row),'foreign memory census source or recipe identity: '+name);}}
+  if(stale)pending.push(name);else if(!options.compiler||measured!.compiler_commit!==options.compiler.compiler_commit||measured!.compiler_sha256!==options.compiler.compiler_sha256)refresh.push(name);
  }
- return pending;
+ return {pending,refresh};
+}
+export function checkMemoryCensuses(root:string,say:(line:string)=>void,options:CensusCheckOptions={}):string[]{
+ const inventory=censusInventory(root,options);
+ for(const name of inventory.pending)say(pendingLine(name,censusRecord(name)));
+ for(const name of inventory.refresh)say(refreshLine('memory-census',name,censusRecord(name)));
+ return inventory.pending;
 }
 export function censusSourceKey(root:string,name:string,inputs=censusInputScope(root)):string{return hash(inputs.read([name]).get(name));}
 export async function writeMemoryCensuses(root:string,names:readonly string[],binary:string,env:NodeJS.ProcessEnv):Promise<void>{
@@ -179,7 +200,7 @@ export async function writeMemoryCensuses(root:string,names:readonly string[],bi
 }
 runAsCommand(import.meta.url,async()=>{
  const args=process.argv.slice(2),root=resolve(process.cwd());
- if(args[0]==='--check'){checkMemoryCensuses(root,console.log);return;}
+ if(args[0]==='--check'){checkMemoryCensuses(root,console.log,{compiler:censusCompiler(root,process.env.NTS_BIN)});return;}
  assert.equal(args[0],'--record-pending','usage: memory-census.ts --check | --record-pending <program>...');
  await writeMemoryCensuses(root,args.slice(1),resolve(process.env.NTS_BIN??'target/release/nts'),process.env);
 });

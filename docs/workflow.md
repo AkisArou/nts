@@ -605,17 +605,23 @@ SHA-256. Each canonical memory-group program owns one JSON record under
 `results/memory-census/`. The full check writes requested records independently
 through the ordinary per-case delta transaction. A landing's records check
 validates structure, identity and integrity only; it does not run the compiler.
-The records check lists a missing or stale observation as pending and a
-current observation as `refresh requested: <program> in <record>`. Refresh
-requests are distinct from missing rows and accepted outcome changes. The
-full check's green core controller starts a records unit for any of these
-three categories, including refresh-only logs with zero pending or accepted
-rows. Inside that unit the census family uses `pending` for missing/stale rows
-and `refresh`/`refreshLine` for current ones. It therefore natively rederives
-every census row after each green core even when only the compiler changes,
-and replaces differing observations. Thus a consistent edited payload
-cannot affect a verdict and is replaced by the next records run. Identical
-observations retain their bytes and original compiler provenance.
+The records check lists a missing or stale observation as pending. A current
+row whose compiler provenance is unknown or differs requests native refresh:
+`refresh requested: <family>: <program> in <record>`. The shared parser and
+full-check controller treat this line generically, separately from missing
+rows and accepted outcome changes. Refresh-only green logs start a records
+unit. The census family uses `pending` for missing/stale rows and the existing
+`refresh`/`refreshLine` hooks for current rows needing rederivation.
+A row already measured with the known current clean pin, with matching source,
+recipe, compiler commit and actual binary digest, requests no redundant refresh.
+The pin must name the tree's current source revision; an old sidecar cannot
+suppress requests while the new compiler is still waiting to build.
+An unavailable or unpinned compiler remains unknown; the tree-only records
+check never builds a compiler or trusts an earlier target binary. The recorder
+receives its known green-run pin through its prepared environment. Requested
+rows are natively rederived and differing observations replace their rows,
+without ranking homes. An observation never changes a better/worse verdict.
+Identical projections retain their bytes and original compiler provenance.
 
 Its selection identity binds the census version, the program's actual inputs
 and the instrument's own static recipe. The shared Program input owner derives
@@ -634,14 +640,17 @@ the production owner and are staged through `copyModuleClosure`.
 The census reader has no declarative benchmark Program input reach in the owed
 graph. An imported file outside the case can therefore change without selecting
 the census check at landing. Each green core still requests native rederivation
-of every census row, and census observations decide no better/worse verdict.
+where the current producer is unknown or differs, and census observations
+decide no better/worse verdict.
 Benchmark Program declarations belong to the shared `projectMembers` owner;
 recording identity reads do not provide that declarative reach.
 
-Compiler commit and exact binary SHA-256 are provenance only: neither selects
-rows nor changes the landing verdict. A writer requires a clean compiler pin
+Compiler commit and exact binary SHA-256 are provenance, outside the source
+and recipe selection identity. They suppress a redundant native refresh only
+when the current clean pin is known and matches; they decide no verdict.
+A writer requires a clean compiler pin
 whose recorded binary digest agrees with its bytes. The core records run
-rederives every census after each green core, which keeps observations true
+rederives requested censuses after a green core, which keeps observations true
 across compiler changes. An identical projection retains its original bytes
 and provenance; a differing projection replaces it without ranking homes.
 The observation also records its JSON SHA-256, source URIs and content digests.
@@ -2428,8 +2437,9 @@ death; an absent timestamp remains explicit after forced termination.
   remain errors. The full check publishes each canonical memory-group
   program's observation after landing, through the shared records transaction.
   The landing checks structure, identity and integrity; the core records run
-  natively rederives every row after each green core and replaces differing
-  observations. Current rows emit distinct refresh requests, and the controller
+  natively rederives requested rows after each green core and replaces differing
+  observations; a row whose source, recipe and known current clean-pin provenance
+  all match requests no redundant refresh. Current rows emit distinct refresh requests, and the controller
   starts records on refresh-only green logs; `pending` remains missing/stale.
   Compiler commit and binary identity are provenance only.
   Recording identity uses the shared Program reader; declarative benchmark

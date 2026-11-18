@@ -48,8 +48,18 @@ test("a run's step logs list each pending case and accepted change once, with it
 
 
 test('refresh requests are distinct from missing rows and accepted changes',t=>{
- const root=testScratch(t,'refresh-listed'),line=refreshLine('tree-teardown','results/memory-census/tree-teardown.json');
+ const root=testScratch(t,'refresh-listed'),line=refreshLine('memory-census','tree-teardown','results/memory-census/tree-teardown.json');
  writeFileSync(join(root,'records.log'),line+'\n'+line+'\n');
  assert.ok(isListedLine(line));assert.ok(!isListedLine('refresh requested: but not a complete request'));
- assert.deepEqual(listedIn(root),{pending:[],accepted:[],refresh:[{name:'tree-teardown',record:'results/memory-census/tree-teardown.json'}]});
+ assert.deepEqual(listedIn(root),{pending:[],accepted:[],refresh:[{family:'memory-census',name:'tree-teardown',record:'results/memory-census/tree-teardown.json'}]});
+});
+
+
+test('refresh requests name arbitrary families and deduplicate within each family',t=>{
+ const root=testScratch(t,'generic-refresh'),record='results/observations/sites.json',name='a program';
+ const shape=refreshLine('shapes',name,record),size=refreshLine('sizes',name,record);
+ assert.equal(shape,'refresh requested: shapes: a program in results/observations/sites.json');
+ writeFileSync(join(root,'records.log'),[shape,size,shape].join('\n'));
+ assert.deepEqual(listedIn(root),{pending:[],accepted:[],refresh:[{family:'shapes',name,record},{family:'sizes',name,record}]});
+ assert.ok(!isListedLine('refresh requested: a program in results/observations/sites.json'));
 });

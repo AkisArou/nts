@@ -43,7 +43,7 @@
 //     run, and the service submits `git revert` of it to the landing queue,
 //     first, and reopens the culprit's issue with a comment (revert.ts); a
 //     culprit that names no issue gets a task line for an issue instead;
-//   - green, with pending cases or accepted changes listed: the part's records
+//   - green, with pending, accepted or refresh requests listed: the part's records
 //     unit records them at that commit with its pin, the part's own kinds
 //     only, in the part's records tree, while the core goes on; once it ends,
 //     their delta is applied case by case on the newest main and that records

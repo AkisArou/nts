@@ -19,9 +19,10 @@ export type RecordRun={readonly written:ReadonlyMap<string,string>};
 /** The context of a question asked outside any records run. */
 export const NO_RUN:RecordRun={written:new Map()};
 export type ApplyOptions={say?:(line:string)=>void;identities?:(root:string,paths:readonly string[])=>Promise<Map<string,{source:string;driver:string}>>};
+export type RecordContext={environment?:Readonly<NodeJS.ProcessEnv>};
 export interface RecordFamily{
  /** Bind detached input observations to one record/apply transaction. */
- scope?(root:string):RecordFamily;
+ scope?(root:string,context?:RecordContext):RecordFamily;
  pending(root:string,run:RecordRun):RecordCase[];
  files(root:string):readonly string[];
  records(row:DeltaRow):readonly string[];
@@ -106,9 +107,9 @@ function keepDelta(file: string, delta: Delta): void {
 }
 
 /** Bind transport to exactly the families this consumer owns. No family is discovered implicitly. */
-export function createRecorder(table:RecordTable,defaultRun:Runner=()=>{throw Error('recorder command runner was not supplied');}){
+export function createRecorder(table:RecordTable,defaultRun:Runner=()=>{throw Error('recorder command runner was not supplied');},context:RecordContext={}){
  const KINDS=Object.keys(table);
- const scoped=(root:string)=>createRecorder(Object.fromEntries(Object.entries(table).map(([kind,row])=>[kind,{...row,family:row.family.scope?.(root)??row.family}])),defaultRun);
+ const scoped=(root:string)=>createRecorder(Object.fromEntries(Object.entries(table).map(([kind,row])=>[kind,{...row,family:row.family.scope?.(root,context)??row.family}])),defaultRun,context);
  const family=(kind:string)=>{const row=table[kind];if(!row)throw new MalformedDelta('malformed records delta: no recorder is of kind '+kind);return row.family;};
  const partOf=(kind:string):Part=>{family(kind);return table[kind]!.part;};
  const findPending=(root:string,kind:string,run:RecordRun=NO_RUN):Pending[]=>family(kind).pending(root,run).map(one=>({kind,name:one.name,record:one.record}));

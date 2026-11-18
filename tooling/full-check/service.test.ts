@@ -573,7 +573,7 @@ test("a records run that adds test262 fail rows names them in a task line, with 
 
 test("a compiler-only change starts native observation refresh with zero pending or accepted rows",async t=>{
   const repo=repository(t),record="results/memory-census/tree-teardown.json",producer="compiler/core/src/hir/memory/build.rs";
-  repo.commit({[producer]:"before\n",[record]:'{"home":"frame"}\n',"LOG/records":refreshLine("tree-teardown",record)+"\n"},"current observation");
+  repo.commit({[producer]:"before\n",[record]:'{"home":"frame"}\n',"LOG/records":refreshLine("memory-census","tree-teardown",record)+"\n"},"current observation");
   const commit=repo.commit({[producer]:"after\n"},"change only the stage-2 producer");
   assert.deepEqual(repo.git.run(["diff","--name-only",`${commit}^`,commit]).split("\n"),[producer]);
   const gate=fakeGate(repo,{all:["build","tests","records"],wide:[]});let nativeRuns=0;

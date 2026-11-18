@@ -38,8 +38,8 @@ export function pendingLine(name: string, record: string): string {
 
 /** A current observation requests native rederivation without claiming that
  * its row is missing or that a result got better. */
-export function refreshLine(name:string,record:string):string{
-  return `refresh requested: ${name} in ${record}`;
+export function refreshLine(family:string,name:string,record:string):string{
+  return `refresh requested: ${family}: ${name} in ${record}`;
 }
 
 /** The line a check prints for a recorded case that got better, in the record that holds its row. */
@@ -59,7 +59,7 @@ export function acceptedLine(transition: OutcomeTransition, name: string, record
 
 // The lines above read back, wherever a log puts them.
 const PENDING = /\bpending: (\S.*?) is not recorded in (\S+) yet\b/;
-const REFRESH = /\brefresh requested: (\S.*?) in (\S+)(?:$|\s)/;
+const REFRESH = /\brefresh requested: ([a-z][a-z0-9-]*): (\S.*?) in (\S+)(?:$|\s)/;
 const ACCEPTED = /\b(improved|refuses differently), record pending: (\S.*?) in (\S+): (.*)$/;
 
 /** Whether `line` is one a check prints for the records, by its words alone: what a landing reports, not what is recorded. */
@@ -67,23 +67,25 @@ export const isListedLine = (line: string): boolean => PENDING.test(line) || REF
 
 /** A case a check listed for the records, and the record that holds (or will hold) its row. */
 export interface ListedCase { name: string; record: string }
-/** What a run's checks listed: the cases with no row yet, and the changes the ratchet accepted. */
-export interface Listed { pending: ListedCase[]; refresh:ListedCase[]; accepted: (ListedCase & { change: string })[] }
+/** A native refresh names its owning family as well as its case and record. */
+export interface ListedRefresh extends ListedCase { family:string }
+/** Missing rows, native refresh requests and accepted outcome changes stay distinct. */
+export interface Listed { pending: ListedCase[]; refresh:ListedRefresh[]; accepted: (ListedCase & { change: string })[] }
 
 /** The lines every step log (`<step>.log`) of a run prints for the records, each case once. */
 export function listedIn(run: string): Listed {
-  const pending = new Map<string, ListedCase>(), refresh = new Map<string,ListedCase>(), accepted = new Map<string, ListedCase & { change: string }>();
+  const pending = new Map<string, ListedCase>(), refresh = new Map<string,ListedRefresh>(), accepted = new Map<string, ListedCase & { change: string }>();
   if (!existsSync(run)) return { pending: [], refresh: [], accepted: [] };
   for (const name of readdirSync(run).filter(name => name.endsWith(".log")).sort()) {
     for (const line of readFileSync(join(run, name), "utf8").split("\n")) {
       const p = PENDING.exec(line);
       if (p) pending.set(`${p[1]}\0${p[2]}`, { name: p[1]!, record: p[2]! });
       const r = REFRESH.exec(line);
-      if(r)refresh.set(`${r[1]}\0${r[2]}`,{name:r[1]!,record:r[2]!});
+      if(r)refresh.set(`${r[1]}\0${r[2]}\0${r[3]}`,{family:r[1]!,name:r[2]!,record:r[3]!});
       const a = ACCEPTED.exec(line);
       if (a) accepted.set(`${a[2]}\0${a[3]}`, { name: a[2]!, record: a[3]!, change: `${a[1]} ${a[4]!.trim()}` });
     }
   }
   const order = (x: ListedCase, y: ListedCase) => x.record.localeCompare(y.record) || x.name.localeCompare(y.name);
-  return { pending: [...pending.values()].sort(order), refresh:[...refresh.values()].sort(order), accepted: [...accepted.values()].sort(order) };
+  return { pending: [...pending.values()].sort(order), refresh:[...refresh.values()].sort((a,b)=>order(a,b)||a.family.localeCompare(b.family)), accepted: [...accepted.values()].sort(order) };
 }

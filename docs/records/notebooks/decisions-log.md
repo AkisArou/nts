@@ -3836,3 +3836,18 @@ the second slice consumes its shared `projectMembers` declaration over shallow
 `case.ts` populations, using each case's own config or the default whole-directory
 project. It adds the external-import reach control and closes #835. No second
 benchmark Program owner is introduced.
+
+
+### Native refresh requests and matching provenance (2026-11-18)
+
+#835 names the family, case and record in a shared `refresh requested` line.
+The parser and full-check controller use it without a census special case.
+Missing or stale rows remain pending; current rows use the existing family
+refresh hooks. A current row whose source, recipe, compiler commit and binary
+digest match a known clean current pin requests no redundant native run.
+Unknown or unpinned compiler provenance still requests refresh: the tree-only
+records step can run before build and does not acquire a compiler dependency.
+The native recorder receives the green-run pin through its prepared environment.
+The ready summary carries the refresh-only run's cost and the fifteen-row
+native rederivation time, and names the service/state hunks shared with #841
+and #825. This remains the first slice, `Part of #835`.

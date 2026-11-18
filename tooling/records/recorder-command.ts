@@ -42,7 +42,7 @@ export function recorderRequest(argv:readonly string[],KINDS:readonly string[],e
 /** The entry supplies a prepared context. Library construction never prepares or samples the ambient environment. */
 export function createRecorderCommand(table:RecordTable,env:NodeJS.ProcessEnv){
  assertSealedOracleRun(env);
- const run:Runner=(args,root)=>runNode(args,root,env),recorder=createRecorder(table,run);
+ const run:Runner=(args,root)=>runNode(args,root,env),recorder=createRecorder(table,run,{environment:env});
  function command(request:RecordingRequest,root=resolve(fileURLToPath(new URL('../..',import.meta.url)))):number{
   const {after,delta}=request,kinds=request.kinds.filter(kind=>!after||recorder.partOf(kind)===after.part);
   const accepted=after?recorder.acceptedIn(root,after.run):{byKind:new Map<string,Pending[]>(),pendingByKind:new Map<string,Pending[]>(),unowned:[]};
