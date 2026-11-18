@@ -7,6 +7,84 @@ import {tokenClient} from './tokens.mjs';
 import {waitFor} from './test-wait.ts';
 import {StepBoundClock,stepBoundWait} from './step-bound.ts';
 
+test('a fitting later request uses admitted memory while the non-fitting head waits',async()=>{
+  const head=new Socket(),light=new Socket(),grants:string[]=[];
+  head.write=()=>{grants.push('head');return true;};light.write=()=>{grants.push('light');return true;};
+  const pool=createTokenPool({now:()=>0,free:()=>1-pool.total,claim:()=>0,eligible:(_step,bytes)=>bytes===1});
+  try{
+    for(const [index,sock,bytes] of [[1,head,2],[2,light,1]] as const)
+      pool.waiting.push({sock,id:index,step:'tooling',pid:1,context:'supplied queue',since:0,granted:false,gone:false,bytes});
+    pool.grant();
+    assert.deepEqual(grants,['light'],'strict FIFO left admitted memory idle');
+    assert.equal(pool.waiting[0]?.sock,head);assert.equal(pool.total,1);
+  }finally{head.destroy();light.destroy();pool.close();await pool.closed;}
+});
+
+for(const outcome of ['grant','withdraw'] as const)test(`fitting backfill has one fixed cohort against an endless light stream, then the head can ${outcome}`,async t=>{
+  let width=3,headFits=false,requests=0;
+  const grants:string[]=[],stop=new AbortController(),headStop=new AbortController();
+  const leases:(()=>void)[]=[],pending:Promise<unknown>[]=[];
+  const pool=createTokenPool({now:()=>0,free:()=>width-pool.total,claim:()=>0,
+    eligible:(_step,bytes)=>headFits||bytes===1,
+    observe:event=>{if(event.event==='token.request')requests++;if(event.event==='token.grant')grants.push(event.context!);}});
+  const address=await pool.start();assert.ok(address);
+  t.after(async()=>{stop.abort();headStop.abort();await Promise.allSettled(pending);for(const release of leases)release();pool.close();await pool.closed;});
+  const client=tokenClient(address,'census');
+  const acquire=(project:string,bytes:number,signal=stop.signal)=>{
+    const promise=client.acquire({project},signal,bytes).then(release=>{if(release)leases.push(release);return release;});
+    pending.push(promise);return promise;
+  };
+  const head=acquire('member-name',4,headStop.signal);
+  await waitFor('the head begins waiting in a three-token pool',()=>requests===1);
+  for(let index=0;index<3;index++){
+    const fitting=await acquire('light-'+index,1);assert.ok(fitting);
+    fitting();await fitting.closed;
+    assert.equal(pool.total,0,'finished files return their leases while the head waits');
+  }
+  // A larger pool and arbitrarily many later arrivals cannot replenish the
+  // head's allowance. Only its original three grants may pass it.
+  width=100;
+  const stream=Array.from({length:100},(_,index)=>acquire('stream-'+index,1));
+  await waitFor('the light stream has reached the broker',()=>requests===104);
+  assert.equal(grants.length,3,'the waiting head was starved by a replenished backfill allowance');
+  assert.equal(pool.waiting.length,101);assert.equal(pool.total,0);
+  if(outcome==='withdraw'){
+    headStop.abort();assert.equal(await head,null);
+    // Withdrawal exposes the next request without requiring an unrelated
+    // release or scheduling timer to wake the pool.
+  }else{
+    headFits=true;pool.grant();
+    const release=await head;assert.ok(release);
+    assert.match(Buffer.from(grants[3]!.slice(7),'base64url').toString(),/member-name/);
+    release();await release.closed;
+  }
+  const completed=await Promise.all(stream);assert.ok(completed.every(Boolean));
+});
+
+test('a backfill barrier drains running files and admits the waiting head without deadlock',async t=>{
+  let headFits=false;
+  const stop=new AbortController(),leases:(()=>void)[]=[],pending:Promise<unknown>[]=[];
+  const pool=createTokenPool({now:()=>0,free:()=>1-pool.total,claim:()=>0,eligible:(_step,bytes)=>headFits||bytes===1});
+  const address=await pool.start();assert.ok(address);
+  t.after(async()=>{stop.abort();await Promise.allSettled(pending);for(const release of leases)release();pool.close();await pool.closed;});
+  const client=tokenClient(address,'tooling');
+  const acquire=(project:string,bytes:number)=>{
+    const promise=client.acquire({project},stop.signal,bytes).then(release=>{if(release)leases.push(release);return release;});pending.push(promise);return promise;
+  };
+  const head=acquire('heavy',2);
+  await waitFor('the heavy case waits',()=>pool.waiting.length===1);
+  const light=await acquire('light',1);assert.ok(light);
+  const tail=acquire('tail',1);
+  await waitFor('the tail queues behind the head',()=>pool.waiting.length===2);
+  headFits=true;
+  light();await light.closed;
+  const heavy=await head;assert.ok(heavy,'draining a running case wakes the barrier');
+  assert.equal(pool.total,1);assert.equal(pool.waiting.length,1);
+  heavy();await heavy.closed;
+  const last=await tail;assert.ok(last);last();await last.closed;
+  assert.equal(pool.total,0);
+});
+
 for(const mode of ['unsized','sized-sync','sized-async'] as const)test(`${mode} admission is observed before its client can spend the execution bound`,async()=>{
   let now=0,entered=false;
   const clock=new StepBoundClock(3,0),socket=new Socket(),events:{event:string;now:number;held?:number}[]=[];

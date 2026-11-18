@@ -3752,3 +3752,14 @@ completed assertions only on the child's nonce-bound descriptor before
 termination. Killing a ready entry or its finite cap yields a named file
 failure, retaining earlier assertions; malformed evidence cannot create a pass.
 This replaces a fresh API wrapper that launched a second file process.
+
+Review of the interleaved pairs showed that strict admission order clustered
+heavy leases and blocked fitting work, while the pool's token limit was not
+binding. The common token pool now permits fitting requests within the same
+step to backfill a waiting earlier request for one cohort: its held plus free
+pool token count when that request begins waiting, counted in grants. The
+allowance is fixed and never replenished. Once exhausted, the earlier request
+is a barrier until granted or withdrawn. Running cases can finish and release
+their leases. This applies to census and every other common-pool user, and
+changes no machine-ledger ordering or growth admission. Tooling sends its
+requests concurrently to this owner rather than serializing acquires itself.

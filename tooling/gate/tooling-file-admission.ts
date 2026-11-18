@@ -13,20 +13,8 @@ import type {ToolingFileReply} from './tooling-file-worker.ts';
 import {hostObservations} from './host-observations.ts';
 import {longestFirst,recordCosts} from './costs.mjs';
 import {caseIdentity} from './case-memory.ts';
-import type {CaseToken} from './admission.ts';
 
 const ROOT=fileURLToPath(new URL('../..',import.meta.url));
-
-/** Preserve dispatch order while a lease waits. Granted files execute
- * concurrently; only the next admission waits for the preceding grant. */
-export function orderedToolingAdmission(acquire:CaseToken):CaseToken {
-  let pending=Promise.resolve();
-  return (path,signal)=>{
-    const granted=pending.then(()=>acquire(path,signal));
-    pending=granted.then(()=>{},()=>{});
-    return granted;
-  };
-}
 
 /** Ordering may change dispatch time, never the selected inventory. */
 export function toolingFileDispatch(files:readonly string[],step:string,root=ROOT):string[]{
@@ -49,7 +37,7 @@ export async function runToolingFiles(request:ToolingRequest,options:{resultEnv:
   try{
     await runMemoryWorkers({paths:ordered,jobs,memory:new MemoryRun(),workerBytes:workerCapBytes(),
       key:'tooling-files',what:'tooling test files',
-      token:orderedToolingAdmission((path,signal)=>client.acquire({project:path,backend:'node'},signal)),
+      token:(path,signal)=>client.acquire({project:path,backend:'node'},signal),
       args:()=>[fileURLToPath(new URL('./tooling-file-worker.ts',import.meta.url)),JSON.stringify({...request,files})],
       report:line=>process.stderr.write(line+'\n'),
       onRow:(row:ToolingFileReply)=>{

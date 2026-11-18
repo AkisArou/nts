@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {orderedToolingAdmission,toolingFileDispatch,toolingFileResults} from './tooling-file-admission.ts';
+import {toolingFileDispatch,toolingFileResults} from './tooling-file-admission.ts';
 import {toolingEntryFiles,readToolingRequest,TOOLING_SELF_TEST_FILE} from './tooling-test-runner.ts';
 import {createTokenPool} from './token-pool.ts';
 import {tokenClient} from './tokens.mjs';
@@ -24,7 +24,7 @@ const GiB=2**30,files=['/repo/a.test.ts','/repo/b.test.ts'];
 const times:ToolingTimes={version:1,wallMs:1,concurrency:2,files:[]};
 const reply=(path:string,status:0|1|2,completedFailures=0):ToolingFileReply=>({path,bucket:'tooling',result:{status,completedFailures}});
 
-for(const ordered of [true,false])test(`tooling admissions ${ordered?'retain dispatch order without serializing execution':'overtake a waiting head without the ordering owner'}`,async t=>{
+test('the common broker admits a fitting tooling file while an earlier file waits for memory',async t=>{
   let headFits=false;
   const pool=createTokenPool({now:()=>0,free:()=>4,claim:()=>1,eligible:(_step,bytes)=>headFits||bytes===1});
   const signal=new AbortController(),held:(()=>void)[]=[],asked:string[]=[];
@@ -33,27 +33,59 @@ for(const ordered of [true,false])test(`tooling admissions ${ordered?'retain dis
   const address=await pool.start();assert.ok(address);
   const client=tokenClient(address,'tooling');
   const base=(path:string,stop:AbortSignal)=>{asked.push(path);return client.acquire({project:path,backend:'node'},stop,path===files[0]?2:1);};
-  const acquire=ordered?orderedToolingAdmission(base):base;
+  const acquire=base;
   const track=(promise:ReturnType<typeof acquire>)=>{
     const tracked=promise.then(release=>{if(release)held.push(release);return release;});
     requests.push(tracked);void tracked.catch(()=>{});return tracked;
   };
   const first=track(acquire(files[0]!,signal.signal)),second=track(acquire(files[1]!,signal.signal));
   await waitFor('the earlier tooling lease is waiting',()=>pool.waiting.length===1);
-  if(ordered)assert.deepEqual(asked,[files[0]],'a later acquire bypassed the waiting earlier file');
-  else {assert.ok(await second);assert.equal(pool.total,1,'the counterfactual grants the later small file first');}
+  assert.ok(await second);assert.equal(pool.total,1,'a fitting file runs inside the existing reservation');
+  assert.deepEqual(asked,files,'both requests reach the common admission decision');
   headFits=true;pool.grant();
   assert.ok(await first);
-  if(ordered)assert.ok(await second);
   assert.equal(pool.total,2,'both file leases are active before either file completes');
 });
 
-test('a refused head admission preserves its named error and does not strand the following request',async()=>{
-  const stop=new AbortController(),failure=Error('tooling/impossible.test.ts cannot fit the run maximum reservation');
-  const acquire=orderedToolingAdmission(async path=>{if(path===files[0])throw failure;return ()=>{};});
-  const head=acquire(files[0]!,stop.signal),next=acquire(files[1]!,stop.signal);
-  await assert.rejects(head,error=>error===failure);
-  assert.ok(await next);
+test('a refused oversized head keeps its name and cannot strand a fitting request',async t=>{
+  const pool=createTokenPool({now:()=>0,free:()=>4-pool.total,claim:()=>1,
+    prepare:request=>{if(request.bytes!>4)throw Error('tooling/impossible.test.ts cannot fit the run maximum reservation');}});
+  const address=await pool.start();assert.ok(address);
+  t.after(async()=>{pool.close();await pool.closed;});
+  const client=tokenClient(address,'tooling');
+  await assert.rejects(client.acquire({project:'tooling/impossible.test.ts'},undefined,5),/impossible[.]test[.]ts cannot fit/);
+  const next=await client.acquire({project:'tooling/fitting.test.ts'},undefined,1);assert.ok(next);
+  next();await next.closed;
+  assert.equal(pool.waiting.length,0);assert.equal(pool.total,0);
+});
+
+for(const priority of ['landing','agent'] as const)test(`a fitting backfill cannot move growth past a waiting ${priority} ledger head`,async t=>{
+  const root=testScratch(t,'tooling-backfill-ledger'),memory=ownMemory(root,{totalKiB:31*2**20,availableKiB:10*2**20});
+  const stop=new AbortController(),holders:Reservation[]=[],leases:(()=>void)[]=[],pending:Promise<unknown>[]=[];
+  let reservation:Reservation;
+  const pool=createTokenPool({now:()=>0,free:()=>4-pool.total,claim:()=>0,
+    eligible:(_step,bytes)=>(pool.sized.get('tooling')?.bytes??0)+(bytes??0)<=reservation.bytes});
+  t.after(async()=>{stop.abort();await Promise.allSettled(pending);for(const release of leases)release();pool.close();await pool.closed;
+    for(const holder of holders)holder.release();await Promise.all(holders.map(holder=>holder.closed));});
+  const options={env:memory,used:(entry:{what:string})=>entry.what==='tooling step'?4*GiB:GiB,report:()=>{},signal:stop.signal};
+  const earlier=await reserve({bytes:GiB,priority,what:'earlier ledger head'},options);holders.push(earlier);
+  reservation=await reserve({bytes:4*GiB,priority:'agent',what:'tooling step'},options);holders.push(reservation);
+  const head=earlier.grow(9*GiB,{signal:stop.signal});pending.push(head);void head.catch(()=>{});
+  await waitFor('the earlier ledger request to wait',()=>readLedger(memory.NTS_MEMORY_LEDGER).waiting.length===1);
+  const growth=reservation.grow(2*GiB,{signal:stop.signal});pending.push(growth);void growth.catch(()=>{});
+  await waitFor('tooling growth to queue behind the ledger head',()=>readLedger(memory.NTS_MEMORY_LEDGER).waiting.length===2);
+  const address=await pool.start();assert.ok(address);
+  const client=tokenClient(address,'tooling');
+  const heavy=client.acquire({project:'heavy.test.ts'},stop.signal,6*GiB);pending.push(heavy);
+  await waitFor('the heavy file to wait inside this pool',()=>pool.waiting.length===1);
+  const light=await client.acquire({project:'light.test.ts'},stop.signal,GiB);assert.ok(light);leases.push(light);
+  assert.equal(pool.total,1,'a fitting file uses the reservation already held');
+  assert.equal(reservation.bytes,4*GiB,'pool backfill cannot invent an unadmitted growth');
+  const waiting=readLedger(memory.NTS_MEMORY_LEDGER).waiting;
+  assert.deepEqual(waiting.map(row=>row.what),['earlier ledger head','tooling step']);
+  assert.equal(waiting[1]?.grows,reservation.id);
+  light();await light.closed;
+  assert.equal(pool.waiting.length,1,'the head still needs the ledger to grant growth');
 });
 
 test('tooling file slices retain the common resident worker ancestry',()=>{

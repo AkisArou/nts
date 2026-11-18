@@ -1,5 +1,11 @@
 // One token is one connection, retained until its case and descendants end.
 // Every request names an explicit case or step lease. The broker sizes it.
+// Within each step, fitting requests can backfill a waiting earlier request
+// for one cohort: the pool's held plus free token count when that request
+// begins waiting, counted in grants. That fixed allowance never replenishes.
+// Once spent, the request is a barrier until granted or withdrawn. This is
+// pool-local ordering; eligible() still requires an already admitted ledger
+// reservation, and cannot reorder the machine ledger's growth queue.
 import {createServer,type Server,type Socket} from 'node:net';
 import type {CaseMemoryLease} from './case-memory.ts';
 import {hostObservations} from './host-observations.ts';
@@ -30,6 +36,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
   const closed=new Promise<void>((resolve,reject)=>{finishClose=resolve;rejectClose=reject;});
   void closed.catch(()=>{});
   const finalizing=new Set<Promise<void>>(),failures:unknown[]=[];
+  const backfills=new WeakMap<TokenRequest,number>();
   const pool:TokenPool={addr:null,server:null,held:new Map(),sized:new Map(),peak:new Map(),used:new Map(),total:0,waiting:[],active:new Set(),last:now(),
     account:()=>{},grant:()=>{},start:async()=>null,closed,
     cancel:()=>{cancelled=true;for(const request of pool.waiting)request.sock.end('error: token pool is shutting down\n');},
@@ -54,14 +61,20 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
     const at=now(),dt=(at-pool.last)/1000;pool.last=at;
     for(const [step,n] of pool.held)pool.used.set(step,(pool.used.get(step)??0)+n*dt);
   };
+  const cohort=(request:TokenRequest)=>{
+    let left=backfills.get(request);
+    if(left===undefined){left=Math.max(0,pool.total+free());backfills.set(request,left);}
+    return left;
+  };
   const candidates=()=>{
-    const oldest=new Map<string,number>(),chosen=new Map<string,TokenRequest>(),asked=new Map<string,boolean>();
+    const oldest=new Map<string,number>(),chosen=new Map<string,TokenRequest>(),asked=new Map<string,boolean>(),barriers=new Set<string>();
     for(const w of pool.waiting){
       if(!oldest.has(w.step))oldest.set(w.step,w.since);
-      if(chosen.has(w.step))continue;
+      if(chosen.has(w.step)||barriers.has(w.step))continue;
       const key=`${w.step}\0${w.bytes??''}`;
       if(!asked.has(key))asked.set(key,eligible(w.step,w.bytes,w));
       if(asked.get(key))chosen.set(w.step,w);
+      else if(cohort(w)===0)barriers.add(w.step);
     }
     return {oldest,chosen};
   };
@@ -72,7 +85,12 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       const {oldest,chosen}=candidates();let best:{w:TokenRequest;c:number}|null=null;
       for(const [step,w] of chosen){const c=claim(step,{held:pool.held.get(step)??0,used:pool.used.get(step)??0,waitedS:(at-oldest.get(step)!)/1000});if(!best||c>best.c)best={w,c};}
       if(!best)break;
-      const w=best.w;pool.waiting.splice(pool.waiting.indexOf(w),1);trace('token.grant',w);
+      const w=best.w;
+      for(const earlier of pool.waiting){
+        if(earlier===w)break;
+        if(earlier.step===w.step)backfills.set(earlier,cohort(earlier)-1);
+      }
+      pool.waiting.splice(pool.waiting.indexOf(w),1);trace('token.grant',w);
       w.granted=true;pool.active.add(w);
       const n=(pool.held.get(w.step)??0)+1;pool.held.set(w.step,n);
       if(w.bytes!==undefined){const s=pool.sized.get(w.step)??{count:0,bytes:0};pool.sized.set(w.step,{count:s.count+1,bytes:s.bytes+w.bytes});}
@@ -91,7 +109,9 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:now(),granted:false,gone:false};
       let buf='';sock.setEncoding('utf8');
       // An ungranted request leaves the queue here, counted once as cancelled.
-      const cancel=()=>{w.gone=true;trace('token.cancel',w);if(w.step!=='')pool.waiting=pool.waiting.filter(x=>x!==w);};
+      const cancel=()=>{w.gone=true;trace('token.cancel',w);if(w.step!==''){
+        pool.waiting=pool.waiting.filter(x=>x!==w);pool.grant();trace('pool.change');
+      }};
       // The client's request, then its later lines: 'done' (a case's
       // completion, before its FIN) and 'withdraw' (its wait was aborted).
       // This loop orders a withdrawal against the grant, so one owner decides
@@ -136,7 +156,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
         if(!w.lease){sock.end('error: token request requires an explicit case or step lease\n');return;}
         w.context=rest.join(' ');w.step=known(step)?step:'?';w.since=now();
         try{prepare(w);if(w.memory)w.bytes=w.memory.bytes;}catch(error){sock.end(`error: ${String(error)}\n`);return;}
-        pool.waiting.push(w);trace('token.request',w);pool.grant();trace('pool.change');
+        cohort(w);pool.waiting.push(w);trace('token.request',w);pool.grant();trace('pool.change');
       };
       const gone=async()=>{
         if(w.gone)return;

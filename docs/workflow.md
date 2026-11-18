@@ -1149,7 +1149,15 @@ the tooling strict checker owns the source's type checking.
   not erase its measured peaks. A known case reserves its own peak with the
   ledger's margin. An unknown case is charged live use and that margin.
   Active case promises and fixed steps share the run's admitted reservation;
-  a case that needs more asks for admitted growth before starting. The hard
+  a case that needs more asks for admitted growth before starting. The
+  pool may grant a fitting later request within one step for one cohort: the
+  held plus free pool token count when the earlier request begins waiting,
+  counted in grants. This fixed allowance never replenishes. Once exhausted,
+  that request is a barrier until admitted or withdrawn; running cases still
+  finish and return their leases. This contract applies to every pool user,
+  including census cases and tooling entries. It changes no machine-ledger
+  order: a step's growth still queues behind higher or earlier ledger work.
+  The hard
   case cap is separate from this forecast. The token broker publishes the
   held-token transition to the step's execution clock before acknowledging
   admission, so a running case cannot still be charged as an excluded wait.
@@ -1171,8 +1179,9 @@ the tooling strict checker owns the source's type checking.
   compiler and worker owners retain their semantics beneath the file cap.
   The shared longest-first scheduler uses measured entry costs; untimed
   entries go first so an unknown cannot be left in the measured tail.
-  Admission requests follow that dispatch order: a later small request
-  cannot bypass a waiting earlier file. Granted files execute concurrently.
+  Admission requests follow that dispatch order and reach the shared pool
+  concurrently. Fitting files can backfill a waiting file within the common
+  cohort bound. Granted files execute concurrently.
   The pool uses each worker container's local OOM count for its own budget;
   fixture descendant budgets retain their owners' completed outcomes. A
   completed assertion report survives a later memory observation failure.
