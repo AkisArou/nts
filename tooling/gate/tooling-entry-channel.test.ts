@@ -26,3 +26,13 @@ test('entry readiness cannot be replaced by a partial or malformed test report',
   assert.throws(()=>evidence.accept(frame(2,'complete',{id:1,name:'missing verdict'})),/missing completed assertion/);
   assert.equal(evidence.completedFailures,0);
 });
+test('an authenticated observation failure stays distinct from entry death and seals the channel',()=>{
+  for(const failed of [false,true]){
+    const evidence=new ToolingEntryEvidence('/owned.test.ts','owned',42);
+    evidence.accept(frame(1,'ready'));evidence.accept(frame(2,'complete',{id:1,name:'prior assertion',failed}));
+    evidence.accept(frame(3,'instrument',{instrument:{kind:'tooling-cleanup',reason:'observer lost'}}));
+    assert.deepEqual(evidence.instrument,{kind:'tooling-cleanup',reason:'observer lost'});
+    assert.equal(evidence.completedFailures,failed?1:0);
+    assert.throws(()=>evidence.accept(frame(4,'complete',{id:2,name:'late pass',failed:false})),/after termination/);
+  }
+});

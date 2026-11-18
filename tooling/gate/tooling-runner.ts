@@ -78,7 +78,7 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
         if(instrument.kind==='memory-pressure')throw new PressureError(instrument.reason);
         throw new ToolingInstrumentError(instrument.kind,instrument.reason);
       }
-      return {...partial(1),observationFailure:{kind:instrument.kind==='memory-pressure'?'tooling-setup':instrument.kind,reason:instrument.reason}};
+      return {...partial(1),observationFailure:{kind:instrument.kind==='tooling-cleanup'?'tooling-cleanup':'tooling-setup',reason:instrument.reason}};
     }
     if(entry?.hung){
       publishHung(entry.hung,process.env,entry.evidence.completedFailures);output.write(entry.hung+'\n');

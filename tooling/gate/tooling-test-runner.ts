@@ -109,6 +109,12 @@ export async function runToolingEntry(file:string,progress:(event:'start'|'compl
   if(!summarized)throw new ToolingInstrumentError('tooling-setup','tooling entry ended without a test summary');
   // Fixture teardown may revoke its environment before Node ends this stream.
   // The outside controller owns final timing as well as activity sampling.
+  if(process.exitCode!==undefined&&Number(process.exitCode)!==0)success=false;
+  if(!success&&!completedFailures){
+    // The isolated API's file wrapper used to report a nonzero process exit
+    // even when all assertions passed. Keep that definite file failure.
+    progress('complete',Number.MAX_SAFE_INTEGER,file,true);completedFailures++;
+  }
   return {status:success?0:1,completedFailures};
 }
 

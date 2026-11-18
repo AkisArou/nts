@@ -3,7 +3,7 @@ import {ToolingInstrumentError} from './step-result.ts';
 
 export type ToolingEntryFrame={version:1;nonce:string;file:string;pid:number;sequence:number;
   event:'ready'|'start'|'complete'|'instrument';id?:number;name?:string;failed?:boolean;
-  instrument?:{kind:'tooling-setup'|'tooling-cleanup'|'memory-pressure';reason:string}};
+  instrument?:{kind:ToolingInstrumentError['kind']|'memory-pressure';reason:string}};
 export class ToolingEntryEvidence {
   private sequence=0;
   private sealed=false;
@@ -27,7 +27,7 @@ export class ToolingEntryEvidence {
       this.ready=true;
     }else if(row.event==='instrument'){
       const value=row.instrument;
-      if(!this.ready||!value||!['tooling-setup','tooling-cleanup','memory-pressure'].includes(value.kind)
+      if(!this.ready||!value||!['tooling-setup','tooling-cleanup','disk-capacity','memory-pressure'].includes(value.kind)
           ||typeof value.reason!=='string'||!value.reason)invalid('malformed observation failure');
       this.instrument=value;this.sealed=true;
     }else{

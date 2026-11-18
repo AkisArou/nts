@@ -49,6 +49,11 @@ test('a forged child frame cannot authorize a result',async t=>{
   const f=fixture(t),file=f.write('forged',`import{writeSync}from'node:fs';writeSync(3,JSON.stringify({version:1,nonce:'forged',file:import.meta.filename,pid:process.pid,sequence:2,event:'complete',id:1,name:'forged pass',failed:false})+'\\n');`);
   await assert.rejects(runScopedTooling([file],{fixture:true,memoryMax:512*2**20,output:f.output}),/foreign identity or sequence/);
 });
+test('a nonzero entry exit code cannot be replaced by passing assertions',async t=>{
+  const f=fixture(t),file=f.write('exit-code',"import{test}from'node:test';test('passing assertion',()=>{process.exitCode=7;});");
+  const result=await runScopedTooling([file],{fixture:true,memoryMax:512*2**20,output:f.output});
+  assert.equal(result.status,1,f.text());assert.equal(result.completedFailures,1,f.text());
+});
 test('a file hitting its finite scope cap fails by name without losing its neighbour',async t=>{
   const f=fixture(t),file=f.write('oom',`import{test}from'node:test';test('own cap',()=>{Buffer.alloc(768*2**20,1);});`);
   const result=await runScopedTooling([file],{fixture:true,memoryMax:512*2**20,output:f.output});
