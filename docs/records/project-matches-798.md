@@ -266,3 +266,40 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
 committed and checked with `git log -1` before either arm ran.
+
+## Census adapter integration
+
+After rebasing onto `ae4898abff477e6ddc33ca5af86a66f032c5ce88`, the census
+adapter imports its request type from the discovery owner, carries detached
+native matches with the reader context, and supplies the source root to batch
+validation. A mismatched captured native file list is refused by the pinned
+parser. The census and pending owners passed all 22 assertions, with none
+skipped. Strict checking covered six projects and 1173 modules; the host audit
+checked 2104 sources, 340 entry closures and 420 reads. The selector projection
+was regenerated with `rust-selector-write.ts --write`.
+
+Literal `memory-census.ts --check` runs on main and adapter commit
+`4d6445e1b20b9b0f38231d2837a8e8ec2ddcc6a4` produced identical pending lists
+and no refresh requests. The current memory group contains 15 programs, so the
+comparison covers all 15: array-copying-methods, awfy-towers, cyclic-churn,
+event-state, immutable-update, json-build-append, json-stringify-doc,
+map-entries-top-k, module-loop-retained, objects, pipeline, record-word-counts,
+release-acyclic, sort-objects and tree-teardown. Every source and producer
+identity is unchanged, as are both schema versions; no census record changed.
+The recipe identity changes from
+`5665bf7674da1a07e96f4a501ad3d53320443665310300136f5b067884c0f58b` to
+`ca36beaf6f9f960b2bed13e81c193c95d34c3ff84a8e503dfe9f0f5f9e7cd60b`:
+`CENSUS_RECIPE_INPUTS` explicitly hashes the edited adapter file's entire
+contents. This conservatively requests fresh observations for changed recipe
+bytes; all rows are already pending on main. The coordinator accepted this
+expected identity change. An initial scratch guard asserted the obsolete six
+program count; the completed guard compares the full canonical group.
+
+Raw files under `~/.cache/nts-scratch/798/`:
+
+| File | SHA-256 |
+| --- | --- |
+| `census-guard.json` | `9f920f1c8168e1e24058df17bada39d51d3a45acb2c747ffec609c144b405ffb` |
+| `census-main-check.log` | `e39dfb9cb9180b7191c94de610444aefa51a60fa3ae754bbe9f19b78dd435340` |
+| `census-tip-check.log` | `e39dfb9cb9180b7191c94de610444aefa51a60fa3ae754bbe9f19b78dd435340` |
+| `nts-798-census-prepare2.log` | `44ac4af9bd62ad4d446945eb62a39894a3aa41fcaa134c00d859a7589aa73e75` |
