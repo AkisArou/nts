@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {join} from 'node:path';
-import {toolingFileResults} from './tooling-file-admission.ts';
+import {join,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {toolingFileDispatch,toolingFileResults} from './tooling-file-admission.ts';
+import {discoverToolingTests} from './tooling-discovery.ts';
 import type {ToolingFileReply} from './tooling-file-worker.ts';
 import type {ToolingTimes} from './tooling-runner.ts';
 import {readStepInstrument} from './step-result.ts';
@@ -85,4 +87,18 @@ test('per-file tooling admission fits beside two ordinary jobs while the histori
   await waitFor('a genuinely full supplied machine refuses even one file',()=>readLedger(memory.NTS_MEMORY_LEDGER).waiting.some(row=>row.what==='file on full machine'));
   stopFull.abort();await fullWithdrawn;
   assert.equal(readLedger(memory.NTS_MEMORY_LEDGER).admitted.length,2,'neither wait held idle tooling memory');
+});
+
+test('dispatch preserves the unchanged collector inventory on full and narrowed selections',()=>{
+  const root=fileURLToPath(new URL('../..',import.meta.url)),collected=discoverToolingTests(root).files;
+  const narrowed=collected.filter(path=>path==='tooling/gate/tooling-file-admission.test.ts'||path==='tooling/gate/tooling-runner.test.ts');
+  assert.equal(narrowed.length,2);
+  for(const selected of [collected,narrowed]){
+    const dispatched=toolingFileDispatch(selected,'tooling',root);
+    assert.equal(dispatched.length,selected.length);
+    assert.deepEqual([...dispatched].sort(),selected.map(path=>resolve(root,path)).sort());
+    assert.equal(new Set(dispatched).size,selected.length);
+  }
+  assert.throws(()=>toolingFileDispatch([narrowed[0]!,resolve(root,narrowed[0]!)],'tooling',root),/duplicate tooling file dispatch/);
+  assert.throws(()=>toolingFileDispatch(['../escaped.test.ts'],'tooling',root),/outside its source tree/);
 });

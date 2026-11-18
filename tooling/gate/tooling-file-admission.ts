@@ -42,12 +42,22 @@ export function toolingFileResults(files:readonly string[],replies:readonly Tool
   return {status:failed?1:hung.length?2:0,completedFailures,times};
 }
 
+/** Ordering may change dispatch time, never the selected inventory. */
+export function toolingFileDispatch(files:readonly string[],step:string,root=ROOT):string[]{
+  const entries=new Map<string,string>();
+  for(const source of files){
+    const file=resolve(root,source),key=caseIdentity(step,{project:file,backend:'node'},root).path;
+    if(entries.has(key))throw new ToolingInstrumentError('tooling-setup','duplicate tooling file dispatch: '+key);
+    entries.set(key,file);
+  }
+  return longestFirst('tooling-files',[...entries.keys()],key=>resolve(root,key)).map(key=>entries.get(key)!);
+}
+
 export async function runToolingFiles(request:ToolingRequest,options:{resultEnv:NodeJS.ProcessEnv}):Promise<ToolingResult>{
   const where=process.env.NTS_GATE_TOKENS,step=process.env.NTS_GATE_STEP;
   if(!where||!step||process.env.NTS_GATE_TOKEN_HELD)throw new ToolingInstrumentError('tooling-setup','tooling file admission requires the enclosing gate broker');
   const host=hostObservations(),files=request.files.map(file=>resolve(file)),jobs=Math.max(host.availableWidth()-1,1),client=tokenClient(where,step);
-  const entries=new Map(files.map(file=>[caseIdentity(step,{project:file,backend:'node'},ROOT).path,file]));
-  const ordered=longestFirst('tooling-files',[...entries.keys()]).map(key=>entries.get(key)!);
+  const ordered=toolingFileDispatch(files,step);
   const started=host.now(),replies:ToolingFileReply[]=[],times=new Map<string,ToolingFileTime>();
   let poolFailure:unknown;
   try{

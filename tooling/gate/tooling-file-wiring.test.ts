@@ -36,14 +36,36 @@ for(const full of [false,true])test(`real tooling files ${full?'wait on full sup
   const own=testScratch(t,'tooling-file-wiring'),root=join(own,'repo'),run=join(own,'run'),target=join(own,'target'),gate=join(root,'tooling/gate');
   copyModuleClosure(['tooling/gate/run.mjs','tooling/gate/tooling-runner.ts'],root);
   oracleWorkspaceFixture(t,root);
+  const listed=spawnSync('sh',[new URL('./all.sh',source).pathname,'--list'],{env:fixtureEnvironment(t),encoding:'utf8'});
+  assert.equal(listed.status,0,listed.stderr);
+  const independent=full?undefined:{root:join(own,'nested-repo'),run:join(own,'nested-run'),target:join(own,'nested-target'),marker:join(own,'nested-marker.json'),memory:ownMemory(join(own,'nested-memory'))};
+  if(independent){
+    copyModuleClosure(['tooling/gate/run.mjs'],independent.root);oracleWorkspaceFixture(t,independent.root);
+    mkdirSync(join(independent.target,'release'),{recursive:true});writeFileSync(join(independent.target,'release/nts'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+    const observe=`const fs=require('node:fs');if(process.env.NTS_MEMORY_LEDGER!==${JSON.stringify(independent.memory.NTS_MEMORY_LEDGER)})throw Error('nested runner escaped its supplied ledger');fs.writeFileSync(${JSON.stringify(independent.marker)},JSON.stringify({ledger:process.env.NTS_MEMORY_LEDGER,reservation:process.env.NTS_MEMORY_RESERVATION}));`;
+    writeFileSync(join(independent.root,'tooling/gate/nested-marker.mjs'),generatedJavaScript(observe.replace("const fs=require('node:fs');","import fs from 'node:fs';")));
+    writeFileSync(join(independent.root,'tooling/gate/all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nnode tooling/gate/nested-marker.mjs\nfi\n`);
+  }
   const paths=['tooling/first.test.mjs','tooling/second.test.mjs'];
   // Explicit live kernel wiring; admission still uses the complete supplied
   // fixture below. The production owner alone reads the child scope's group.
   const observeCgroup='import{hostObservations}from '+JSON.stringify(join(gate,'host-observations.ts'))+';process.stdout.write(hostObservations({}).ownCgroup());';
-  for(const [index,path] of paths.entries())writeFileSync(join(root,path),generatedJavaScript(`import{test}from'node:test';import{existsSync,writeFileSync}from'node:fs';import{spawnSync}from'node:child_process';import{randomUUID}from'node:crypto';
+  const nestedControl=independent?`const own=${JSON.stringify(independent)};
+const before=readLedger(process.env.NTS_MEMORY_LEDGER).admitted.map(row=>row.id).sort();
+const env=gateEnvironment(process.env,{run:own.run,oracleRoot:own.root,owned:{...own.memory,CARGO_TARGET_DIR:own.target}}).env;
+if(env.NTS_MEMORY_LEDGER===process.env.NTS_MEMORY_LEDGER||env.NTS_MEMORY_RESERVATION)throw Error('nested runner inherited the outer file reservation');
+const unit='nts-test-file-nested-'+randomUUID();t.after(()=>spawnSync('systemctl',['--user','stop',unit],{stdio:'ignore'}));
+const child=spawnSync('systemd-run',['--user','--collect','--wait','--pipe','--quiet','--unit='+unit,...toolingSliceArgs(process.env,'agent'),'-p','Nice=19','-p','CPUWeight=20','-p','RuntimeMaxSec=120','-p','LimitCORE=0','--working-directory='+own.root,...Object.entries(env).filter(([,value])=>value!==undefined).map(([key,value])=>'--setenv='+key+'='+value),process.execPath,own.root+'/tooling/gate/run.mjs','format'],{encoding:'utf8'});
+if(child.status!==0)throw Error(child.stdout+child.stderr);
+const observed=JSON.parse(readFileSync(own.marker,'utf8'));
+if(observed.ledger!==own.memory.NTS_MEMORY_LEDGER||!observed.reservation)throw Error('nested runner did not reserve in its private ledger');
+if(readLedger(own.memory.NTS_MEMORY_LEDGER).admitted.length)throw Error('nested runner left a private reservation');
+if(JSON.stringify(readLedger(process.env.NTS_MEMORY_LEDGER).admitted.map(row=>row.id).sort())!==JSON.stringify(before))throw Error('nested runner reserved in the outer ledger');`:'';
+  for(const [index,path] of paths.entries())writeFileSync(join(root,path),generatedJavaScript(`import{test}from'node:test';import{existsSync,readFileSync,writeFileSync}from'node:fs';import{spawnSync}from'node:child_process';import{randomUUID}from'node:crypto';
 import{toolingSliceArgs}from ${JSON.stringify(join(gate,'tooling-slice.ts'))};
 import{readLimits}from ${JSON.stringify(join(gate,'scopes/memory-limits.ts'))};import{inResidentWorker}from ${JSON.stringify(join(root,'tooling/census/worker-memory.ts'))};
-test('file ${index}',()=>{if(inResidentWorker()||process.env.NTS_CENSUS_POOL_WORKER)throw Error('a tooling entry inherited census worker policy');
+import{gateEnvironment}from ${JSON.stringify(join(gate,'canonical-environment.ts'))};import{readLedger}from ${JSON.stringify(join(gate,'memory-ledger.ts'))};
+test('file ${index}',t=>{if(inResidentWorker()||process.env.NTS_CENSUS_POOL_WORKER)throw Error('a tooling entry inherited census worker policy');
 if(${index}===0&&!existsSync(${JSON.stringify(join(own,'entered-1'))}))throw Error('the measured costly file was not dispatched first');
 const nested=spawnSync('systemd-run',['--user','--scope','--collect','--quiet','--unit=nts-test-file-descendant-'+randomUUID(),...toolingSliceArgs(process.env,'agent'),process.execPath,'--input-type=module','-e',${JSON.stringify(observeCgroup)}],{encoding:'utf8'});
 const marker='/'+process.env.NTS_TOOLING_SLICE,at=nested.stdout.indexOf(marker+'/');if(nested.status!==0||at<0)throw Error('fixture scope escaped its file: '+nested.stdout+nested.stderr);
@@ -51,9 +73,8 @@ const bound=readLimits(nested.stdout.slice(0,at+marker.length)).max;if(!Number.i
 const worker=process.env.NTS_TOOLING_SLICE.replace(/-r[a-z0-9]{8}[.]slice$/,'.slice'),aggregate=worker.replace(/-w[a-z0-9]+[.]slice$/,'.slice');
 const aggregateMarker='/'+aggregate,aggregateAt=nested.stdout.indexOf(aggregateMarker+'/');
 if(aggregateAt<0||readLimits(nested.stdout.slice(0,aggregateAt+aggregateMarker.length)).max!==Infinity)throw Error('the pool retained a static whole-suite cap instead of its step boundary');
+${index===1?nestedControl:''}
 writeFileSync(${JSON.stringify(join(own,'entered-'+index))},nested.stdout);});`));
-  const listed=spawnSync('sh',[new URL('./all.sh',source).pathname,'--list'],{env:fixtureEnvironment(t),encoding:'utf8'});
-  assert.equal(listed.status,0,listed.stderr);
   const ready=join(own,'ready'),go=join(own,'go'),driver=join(gate,'fixture-driver.mjs');
   writeFileSync(driver,generatedJavaScript(`import{existsSync,watch,writeFileSync}from'node:fs';import{spawn}from'node:child_process';
 writeFileSync(${JSON.stringify(ready)},'ready');
@@ -72,7 +93,7 @@ process.exitCode=await new Promise(resolve=>child.once('close',code=>resolve(cod
   durableRecord(join(memory.NTS_GATE_COSTS_DIR,'tooling-files.json'),Object.fromEntries(paths.map((path,index)=>[path,index+1])));
   t.after(async()=>{for(const holder of holders)holder.release();await Promise.all(holders.map(holder=>holder.closed));});
   for(const what of ['ordinary one','ordinary two'])holders.push(await reserve({bytes:4*GiB,priority:'agent',what},{env:memory,used:()=>0,report:()=>{}}));
-  assert.equal(writeCostHistory(historyFile(memory),{steps:[{name:'tooling',memory:{unit:'token',peak:GiB/1.25}}],jobs:[]}),undefined);
+  assert.equal(writeCostHistory(historyFile(memory),{steps:[{name:'tooling',memory:{unit:'step',peak:16*GiB}}],jobs:[]}),undefined);
   assert.equal(writeCaseHistory(caseHistoryFile('tooling',memory,root),paths.map(path=>({key:caseMemoryKey({step:'tooling',backend:'node',path}),peak:2.5*GiB}))),undefined);
   mkdirSync(join(target,'release'),{recursive:true});writeFileSync(join(target,'release/nts'),'#!/bin/sh\nexit 0\n',{mode:0o755});
   const planned=gateEnvironment(fixtureEnvironment(t),{run,oracleRoot:root,owned:{...memory,CARGO_TARGET_DIR:target}});
