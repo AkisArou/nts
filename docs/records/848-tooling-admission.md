@@ -175,3 +175,71 @@ A scratch-only prototype runs the same trivial entry in one fresh Node process, 
 - `/home/akisarou/.cache/nts-scratch/848/single-entry-2ae3/summary.json`; SHA-256 `c8c8de2626a81d46d1c7a63a9358034517e7c8a601b08af9e64872348f1fab73`.
 
 - `/home/akisarou/.cache/nts-scratch/848/single-entry-2ae3/sha256.txt`; SHA-256 `2ac2a2109e76c3f6fbe756aa8950f7a6ec07cad634d02b9d9e58df9e768cc077`.
+
+## Final scoped-entry proof
+
+The final executable change is `52f6a45e647a1b37a6da2b8167058503aaf22b5a`, above the separate #842 prerequisite. Each source test executes in one fresh scoped process. Its resident controller observes activity outside that process and accepts completed assertions on the private nonce-bound descriptor before termination. The synchronous blocked-thread control retains an earlier completed FAIL; forged or late evidence is refused, a ready process dying mid-file cannot become a partial PASS, and a finite-cap failure retains its passing neighbour. The selector remains an explicit case in the same pool.
+
+The six affected test files passed 62 checks through the single-file route. The final timing and synchronous-block updates passed their 13 focused checks; strict tooling types and the host audit passed. The normal inner route passed formatting, Clippy, compiler build and 664 Rust/backend tests (4, 2, 1 and 299 seconds by phase). The final `--here` was green for all 20 selected steps, retaining all 337 entry rows: 336 test files and the selector self-test.
+
+Tooling took 643.930 seconds in that whole-gate proof, with ledger peak 12.006 GiB and raw cgroup peak 12.913 GiB. The external sampler observed 301 of 337 entries and at most 24 source-test processes together; the coverage reduction names every unsampled entry. This whole-gate proof is separate from the paired timing verdict.
+
+A 200-file controller probe used 200 distinct execution PIDs. Post-GC used heap was 11,636,096 bytes at file 50 and 11,881,296 at file 200; its last 50 readings spanned 73,104 bytes. Controllers were not recycled. The raw probe retains its earlier preparation label; `conditions-source.json` identifies the actual execution commit and source hash.
+
+The dispatch counterfactual restores only the two-process route in a private copy staged by the module-closure owner. The production runner is byte-identical to the saved original. After two warmup pairs, 22 paired comparisons gave a median new/old ratio of 0.6522 (66.540/104.834 ms), with 48 distinct execution PIDs. This is a dispatch diagnostic, separate from whole-step timing. Its source metadata distinguishes the repeated run from the probe's older preparation label.
+
+## Five interleaved pairs
+
+The owner stopped the full check for this window. Each arm used its own named unit on CPUs 0–3 and 6–31. **Before admitted from an empty private history to bypass the whole-step reservation; execution unchanged.** After used the normal warmed history copied after its green `--here`. These history-controlled runs are measurements, not landing evidence. Every baseline's only failing file was `test-artifacts.test.ts` (#842); all five after arms passed.
+
+Collector-only time is the last source-test completion in the production timing report, at its 0.1-second resolution. It excludes the pooled selector entry. Whole-step time includes the collector and selector on both sides. Available memory below is the ledger's start observation; raw kernel readings and complete start/end inventories are also retained.
+
+| Pair | Whole s B/A | Whole ratio | Collector s B/A | Collector ratio | Load B/A | Ledger available GiB B/A | Ledger peak GiB B/A | Max reservation GiB B/A | Wait s B/A |
+|---|---|---:|---|---:|---|---|---|---|---|
+| 1 | 432.241/383.559 | 0.8874 | 348.3/383.4 | 1.1008 | 11.42/3.94 | 23.00/22.80 | 15.552/10.429 | 19.000/21.000 | 0.046/362.059 |
+| 2 | 430.300/379.988 | 0.8831 | 346.3/379.8 | 1.0967 | 26.54/3.04 | 22.00/23.30 | 15.209/10.535 | 19.000/21.000 | 0.047/359.740 |
+| 3 | 429.129/385.569 | 0.8985 | 345.7/385.4 | 1.1148 | 27.46/3.12 | 22.20/23.10 | 15.500/10.187 | 19.000/21.000 | 0.093/362.973 |
+| 4 | 429.254/380.110 | 0.8855 | 346.0/380.0 | 1.0983 | 25.53/4.67 | 21.90/22.80 | 15.314/10.663 | 19.000/21.000 | 0.048/357.303 |
+| 5 | 427.456/404.304 | 0.9458 | 342.9/404.1 | 1.1785 | 26.07/3.47 | 22.00/22.50 | 14.768/10.202 | 19.000/20.000 | 0.087/387.967 |
+
+Whole median: 0.8874; every pair <=1.05: True.
+Collector median: 1.1008; every collector ratio <=1.05: False.
+
+The whole-step median satisfies the agreed bar of at most 1.0, and every pair is below 1.05. Collector-only time regressed: its median ratio is 1.1008, with worst pair 1.1785. This regression is retained explicitly. The old collector could start 29 files; the new files and selector share the common 24-slot broker. Admission, selector placement and dispatch all differ in this comparison, so these pairs do not isolate their individual contributions. The independent duplicate-process counterfactual above isolates that dispatch change.
+
+Median tooling ledger peak fell from 15.314 to 10.429 GiB; median scope CPU was 5636.368 versus 4929.452 seconds. Growth waits in the table overlap already executing files; they are not a whole-step wait before entry.
+
+## Paired file RSS
+
+These are maxima across the five arms on each side, including each source process's rooted descendants. Shared pages can be counted more than once, and independent services are covered by the file's cgroup meter rather than process ancestry. The sampler observed one additional nested source process in the fifth baseline (30 rather than the configured 29).
+
+| Arm | Source | Own RSS GiB | Tree RSS GiB |
+|---|---|---:|---:|
+| before | `tooling/gate/owed.test.mjs` | 2.514 | 3.145 |
+| before | `tooling/config/workspace-project.test.ts` | 0.081 | 2.614 |
+| before | `tooling/landing/selection.test.ts` | 2.447 | 2.574 |
+| before | `tooling/gate/accepted-revision-data.test.ts` | 2.437 | 2.566 |
+| before | `tooling/gate/precise-changes.test.ts` | 2.438 | 2.548 |
+| after | `tooling/gate/owed.test.mjs` | 2.384 | 2.592 |
+| after | `tooling/config/workspace-project.test.ts` | 0.102 | 2.587 |
+| after | `tooling/landing/selection.test.ts` | 2.343 | 2.504 |
+| after | `tooling/gate/accepted-revision-data.test.ts` | 2.324 | 2.501 |
+| after | `tooling/gate/precise-changes.test.ts` | 2.335 | 2.488 |
+
+## Final raw evidence
+
+- `/home/akisarou/.cache/nts-scratch/848/here-52f6-final/proof-summary.json`; SHA-256 `50e7e0a72f95e6416d3d4145effb8366696b8e0c2368c7e2d116b869363ef639`.
+- `/home/akisarou/.cache/nts-scratch/848/here-52f6-final/sha256.txt`; SHA-256 `51314055725b9f3059f485963c7d22d45c4cd9b94c69a1839c3b6dd50856bf21`.
+- `/home/akisarou/.cache/nts-scratch/848/entry-single-e204/summary.json`; SHA-256 `6b82a31e7647eccc2920ce8844064faab5f29bd7b9004e5b98efc8f4ddb7a6a8`.
+- `/home/akisarou/.cache/nts-scratch/848/entry-single-e204/sha256.txt`; SHA-256 `66ee00e7056ff5512974f8db83087b45adb791699aad92c38488aaa3baabe537`.
+- `/home/akisarou/.cache/nts-scratch/848/entry-timing-current/synchronous.log`; SHA-256 `a20907909a81bd5f705af555e75db9c10442b89fc5563ac5c9224fdc0a424ad6`.
+- `/home/akisarou/.cache/nts-scratch/848/inner-entry-e204/summary.json`; SHA-256 `8d14e006919a92b59cfa1799a807e5dd5cdfc63c8802b1b8f6813d9faab49abd`.
+- `/home/akisarou/.cache/nts-scratch/848/inner-entry-e204/sha256.txt`; SHA-256 `9831c482402882d663b4912aa6752f40cbfa5134a5b44de2c522ef0a4c6b8000`.
+- `/home/akisarou/.cache/nts-scratch/848/resident-scope-e0b9/summary.json`; SHA-256 `36017ddf4ba929b90da3db918b84373425d4de694c92cfd5d61333f0ee5a714d`.
+- `/home/akisarou/.cache/nts-scratch/848/resident-scope-e0b9/sha256.txt`; SHA-256 `ee3951c7d38301e5434efefb99f193bcfa07f2990c228b163e3cd90f26cd2114`.
+- `/home/akisarou/.cache/nts-scratch/848/dispatch-counterfactual-e204/summary.json`; SHA-256 `80dded05f70d3977aa1902eb6f17ccd3dfec2144e4c8ed6e1f9c710dc3b1f945`.
+- `/home/akisarou/.cache/nts-scratch/848/dispatch-counterfactual-e204/sha256.txt`; SHA-256 `2e047ec3a35c92cba6ef391b26fec77266e9ba4f440b8167232d48ab1782ba11`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-single-entry-52f6/comparison.json`; SHA-256 `f818608be5ebc265128cb5f844e6c2e2b56bb7617d1cdb8c983f8c4f72b4291b`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-single-entry-52f6/sha256.txt`; SHA-256 `cca4e53a856087639a4fb9f72c1cd0df95454161e89634b7a05bbd7cbbc99147`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-single-entry-52f6/accounting.json`; SHA-256 `b9042916ec2c501f0a9e460cf726ce71d18000090ad788f5cfae82e613a20e38`.
+- `/home/akisarou/.cache/nts-scratch/848/pairs-single-entry-52f6/accounting.sha256`; SHA-256 `23ad67dd46b8b9cc5515a389f05a7c8e6c7d942e02e255881de167d4c6423b7e`.
