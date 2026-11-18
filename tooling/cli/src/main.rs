@@ -951,7 +951,7 @@ fn run_command() -> Result<()> {
         // `--rc`, the one provider a region is for.
         Some("regions") => {
             let rest: Vec<String> = args.collect();
-            dump_regions(&project(&rest)?)
+            dump_regions(&project(&rest)?, rest.iter().any(|arg| arg == "--census"))
         }
         // Read-only JSON census of the same bounded content provider used by
         // cleanup and arithmetic. No written generic argument selects a layout.
@@ -3078,10 +3078,31 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
 }
 
 /// `nts regions`: see the command's comment in `main`.
-fn dump_regions(tsconfig: &Utf8Path) -> Result<()> {
+fn dump_regions(tsconfig: &Utf8Path, census: bool) -> Result<()> {
     let snapshot = typechecked_snapshot(tsconfig)?;
     let mut locations = SourceLocations::new(&snapshot.sources);
     let (header, prepared, invalid) = prepare_as(hir_preparation()?, tsconfig, &snapshot, true)?;
+    if census {
+        if let Some(invalid) = invalid {
+            bail!("the prepared program does not verify:\n{invalid}");
+        }
+        let memory = prepared.memory.as_ref().context(
+            "memory census is unavailable for the host-GC provider; select --backend c or llvm",
+        )?;
+        let sources: Vec<_> = snapshot.sources.iter().enumerate().map(|(id, source)| {
+            serde_json::json!({"id": id, "uri": source.uri, "digest": source.digest.0})
+        }).collect();
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "preparation": header,
+                "sources": sources,
+                "uncompiled_functions": prepared.program.uncompiled.len(),
+                "census": memory.census(),
+            }))?
+        );
+        return Ok(());
+    }
     println!("{header}");
     if let Some(memory) = &prepared.memory {
         print!("{}", memory.render());

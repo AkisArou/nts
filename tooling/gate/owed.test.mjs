@@ -1388,3 +1388,13 @@ test('the affinity command is placed while an undeclared neighbour remains conse
   assert.ok(command.some(rule=>rule.name==='the gate affinity command'));assert.ok(!command.some(rule=>rule.full));
   assert.ok(owed([{path:'tooling/gate/affinity/undeclared.ts',added:true}]).some(rule=>rule.full));
 });
+
+
+test('memory census modules and controls owe their tooling tests and records check',()=>{
+  for(const path of ['tooling/records/memory-census.ts','tooling/records/memory-census-record-family.ts','tooling/records/memory-census.test.ts']) {
+    const steps=gateSteps(owed([{path,added:false}]));
+    assert.ok(steps.includes('tooling'),path);assert.ok(steps.includes('records'),path);
+  }
+  const records=owed([{path:'results/memory-census/tree-teardown.json',added:true}]);
+  assert.ok(gateSteps(records).includes('records'));assert.ok(!records.some(row=>row.full));
+});

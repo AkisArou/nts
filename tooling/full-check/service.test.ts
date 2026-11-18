@@ -22,6 +22,7 @@ import type { Applier, Recorder } from "./records.ts";
 import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, controllerTarget, countOnce, cycle, rangeReaches, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
 import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts";
 import {DELTA_FILE, serializeDelta} from "../records/delta.ts";
+import {refreshLine} from "../records/pending.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
 import {readCount, readState, writeState, newTask, type CountRecord, type Part} from "./state.ts";
 import {BENCH_UNIT, recordsUnitName} from "./unit.ts";
@@ -568,6 +569,23 @@ test("a records run that adds test262 fail rows names them in a task line, with 
   assert.ok(fx.lines.includes(`TASK for an issue: ${line}`), fx.lines.join("\n"));
   assert.ok(state.tasks.some(task => task.line === line), "the task line is kept in the full check's status");
   assert.equal(readFileSync(list, "utf8"), `${record}\t${fail}\tuncaught Test262Error: #1\n`, "the full list names the one fail row, not the new pass");
+});
+
+test("a compiler-only change starts native observation refresh with zero pending or accepted rows",async t=>{
+  const repo=repository(t),record="results/memory-census/tree-teardown.json",producer="compiler/core/src/hir/memory/build.rs";
+  repo.commit({[producer]:"before\n",[record]:'{"home":"frame"}\n',"LOG/records":refreshLine("tree-teardown",record)+"\n"},"current observation");
+  const commit=repo.commit({[producer]:"after\n"},"change only the stage-2 producer");
+  assert.deepEqual(repo.git.run(["diff","--name-only",`${commit}^`,commit]).split("\n"),[producer]);
+  const gate=fakeGate(repo,{all:["build","tests","records"],wide:[]});let nativeRuns=0;
+  const recorder=recording({[record]:'{"home":"heap"}\n'},(_tree,pin)=>{nativeRuns++;assert.ok(existsSync(pin));return {status:0,output:"native observation rederived\n"};});
+  const fx=harness(repo,gate,{recorder});
+  assert.equal(await cycle(fx),"core");
+  assert.deepEqual(readState(repo.layout.state).core.last_green?.listed,{pending:0,accepted:0,refresh:1});
+  assert.ok(fx.units.running(recordsUnitName("core")),"refresh-only logs start the records unit");
+  await recordAndApply(fx);assert.equal(nativeRuns,1);
+  const submitted=readState(repo.layout.state).core.records?.submitted;assert.ok(submitted);
+  assert.equal(repo.git.run(["show",`${submitted}:${record}`]),'{"home":"heap"}');
+  assert.ok(fx.lines.some(line=>line.includes("0 pending case(s) and 0 accepted change(s) and 1 native refresh request(s)")));
 });
 
 test("a green run that listed pending cases records them, commits exactly the records on main and submits the commit", async t => {

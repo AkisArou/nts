@@ -8,6 +8,7 @@ import {dexFamily} from '../android/dex-record-family.ts';
 import {oracleFamily} from '../differential/oracle-record-family.ts';
 import {compileTimesFamily} from '../gate/compile-times-record-family.ts';
 import {typeChecksFamily} from '../gate/type-checks-record-family.ts';
+import {memoryCensusFamily} from './memory-census-record-family.ts';
 import {rustSelectorFamily} from '../gate/rust-selector-record-family.ts';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
@@ -31,6 +32,7 @@ export const RECORD_FAMILIES={
 "compile-times":member(compileTimesFamily,["compile-time", "compile-time-rc"]),
 "type-checks":member(typeChecksFamily,["tooling-types"]),
 "rust-selector":member(rustSelectorFamily,["records"]),
+"memory-census":member(memoryCensusFamily,["records"]),
 } satisfies RecordTable;
 export type Kind=keyof typeof RECORD_FAMILIES;
 export const recorder=createRecorder(RECORD_FAMILIES);

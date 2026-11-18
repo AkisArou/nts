@@ -404,6 +404,7 @@ fn reader_groups() -> BTreeMap<&'static str, BTreeSet<String>> {
         "emit-jvm",
         "facts",
         "erasure",
+        "regions",
     ] {
         consumed.insert(name, flags(arm(&main, name)));
     }
@@ -438,9 +439,10 @@ fn declarations_match_the_options_the_legacy_command_readers_consume() {
             "emit-llvm" => &["project", "roots", "provider", "shape", "emit-llvm"],
             "emit-jvm" => &["project", "roots", "provider", "shape", "emit-jvm"],
             "hir" => &["project", "roots", "provider", "shape", "listing", "hir"],
-            "stats" | "regions" | "contents-census" => {
-                &["project", "roots", "provider", "shape", "listing"]
-            }
+            "regions" => &[
+                "project", "roots", "provider", "shape", "listing", "regions",
+            ],
+            "stats" | "contents-census" => &["project", "roots", "provider", "shape", "listing"],
             "expect-ir" => &["project", "roots", "provider", "shape"],
             "facts" => &["project", "facts"],
             "erasure" => &["project", "erasure"],

@@ -84,3 +84,6 @@ mod vfunc_slot_witness;
 
 #[path = "wasm.rs"]
 mod wasm;
+
+#[path = "memory_census.rs"]
+mod memory_census;

@@ -3768,3 +3768,71 @@ requests concurrently to this owner rather than serializing acquires itself.
 Barrier start/end observations and case-cost duration summaries make the
 restriction visible for every producer. A later review's zero-free-at-arrival
 control replaces the initial availability-based allowance with that fixed width.
+### Memory census observations (2026-11-17)
+
+The static census (#835, M-1) projects the existing stage-2 Report with a
+separate versioned wire contract keyed by SiteId and source origin. Preparation
+is unchanged. Its records are observations, not an outcome ratchet: source or
+compiler changes request fresh rows after landing, while malformed, foreign
+or corrupted records remain red. The identity binds program input namespaces,
+recipe, producer and schema version; exact compiler and payload digests remain
+provenance. The current contract is in `docs/workflow.md`'s Records section
+and `docs/reference/cli.md`'s Inspecting section.
+
+The census landing check validates structure, identity and integrity only.
+The core records run natively rederives every row, including those with a
+current identity, and replaces differing observations. An unchanged accepted-main
+row with an older identity requests refresh; an edited or new row with a
+foreign source or recipe identity remains red even when its payload SHA agrees.
+
+The producer identity is the static projection and CLI recipe, distinct from
+the exact compiler binary provenance. Source inputs cover the memory group's
+benchmark, shared and ECMAScript runtime namespaces. Other compiler changes
+are covered by mandatory native rederivation of every row. This keeps unrelated
+compiler and Chromium bytes out of the landing records check's inputs.
+
+Installation and toolchain declarations are compiler provenance inputs, rather
+than source inputs of the memory group's local programs. The records check
+does not stage an installation just to validate their source identity.
+
+### Census selection and compiler provenance (2026-11-18)
+
+Supersedes the namespace-based source identity in the memory census decision
+above. #835 derives program inputs through the shared real Program owner,
+including selected roots, imports and inherited configuration. The instrument's
+static projection, CLI and records recipe are exact inputs; no hand-picked
+namespace or whole compiler/runtime tree selects an observation. Compiler
+commit and binary SHA-256 are provenance only. The landing check validates
+structure, selection identity and integrity; after each green core, the full
+check rederives every row natively, including rows with a current selection
+identity. The record envelope advances to version 2 to record compiler commit;
+the native census wire remains version 1.
+
+### Explicit native observation refresh requests (2026-11-18)
+
+Corrects the missing trigger in #835's census refresh claim: a family's
+`refresh` hook cannot start a records unit by itself. Current census rows now
+emit a shared `refresh requested` line, separate from pending and accepted
+changes. The green-core controller reads those requests and starts records
+even when no other family has pending work. Within the unit, the census uses
+the existing `refresh`/`refreshLine` hooks; `pending` means missing or stale.
+Compiler commit and binary SHA remain provenance, and a compiler-only change
+therefore rederives all rows without a compiler build in the landing records
+check. Rust projects every reason/storage/home wire kind against a shared JSON
+fixture that the TypeScript validator also checks, keeping their vocabularies
+and detail-bearing reasons in agreement.
+
+### Census publication and declarative reach (2026-11-18)
+
+#835 publishes the instrument in two slices. The first keeps the census,
+CLI, records family and workflow rule, deriving row identity through the
+existing `projectInputOwner.read()`. Its exact producer recipe includes
+`memory.rs`, `memory/report.rs`, `memory/census.rs` and the CLI path.
+It lands as `Part of #835`. The census reader does not yet declare its Program
+inputs to owed, so an imported file outside the case can miss the landing
+census check. Native rederivation after each green core still covers every
+row; a census observation decides no better/worse verdict. After #546 lands,
+the second slice consumes its shared `projectMembers` declaration over shallow
+`case.ts` populations, using each case's own config or the default whole-directory
+project. It adds the external-import reach control and closes #835. No second
+benchmark Program owner is introduced.

@@ -6,8 +6,8 @@ import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
-import {dirname,join} from "node:path";
+import {existsSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
+import {dirname,join,relative} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {COLUMNS,COMPARATORS,POLICY,publishRun,sealRun,renderFull} from "../bench/run-record.ts";
@@ -16,6 +16,7 @@ import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from "./record-numbers.ts";
 import "../bench/run-record.test.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {writeRecords} from "../differential/oracle-records.ts";
+import {CENSUS_PRODUCER_INPUTS} from "../records/memory-census.ts";
 
 test("record numbering preserves named collisions and refuses new or stale allowances",()=>{
   const names=KNOWN_DUPLICATE_RECORDS.flatMap(number=>[number+"-first.md",number+"-second.md"]);
@@ -37,6 +38,11 @@ test("the real records step validates benchmark evidence and its rendered table"
   try {
     for(const input of ["docs/records","docs/foundations","results/benchmarks/runs","tests/programs","benchmarks/cases"])mkdirSync(join(root,input),{recursive:true});
     copyModuleClosure([fixtureInput(new URL("./records.ts",import.meta.url),{dataNamespaces:{"docs/records":"records CLI control","docs/foundations":"records CLI control","results/benchmarks":"records CLI control","tests/programs":"records CLI control","benchmarks/cases":"records CLI control"}})],root);
+    assert.ok(!existsSync(join(root,'Cargo.toml')),'census provenance must not stage a Cargo workspace');
+    const source=fileURLToPath(new URL('../..',import.meta.url));
+    const compilerInputs=CENSUS_PRODUCER_INPUTS.map(url=>relative(source,fileURLToPath(url))).filter(path=>path.startsWith('compiler/')).sort();
+    const stagedCompiler=existsSync(join(root,'compiler'))?readdirSync(join(root,'compiler'),{withFileTypes:true,recursive:true}).filter(entry=>entry.isFile()).map(entry=>relative(root,join(entry.parentPath,entry.name))).sort():[];
+    assert.deepEqual(stagedCompiler,compilerInputs,'only the production-declared census projection is staged under compiler/');
     // The copied CLI includes selector assets, but this benchmark-only repository
     // declares no Rust harness. Its private mutation retains that genuine negative.
     for(const path of [RUST_RUNTIME_DECLARATIONS,RUST_SELECTOR_RECORD])rmSync(join(root,path),{force:true});

@@ -300,7 +300,7 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
   if (m.verdict === "green") {
     // Read once: the status counts them, and the records are written from them.
     const listed = listedIn(m.run);
-    record.listed = { pending: listed.pending.length, accepted: listed.accepted.length };
+    record.listed = { pending: listed.pending.length, accepted: listed.accepted.length,...(listed.refresh.length?{refresh:listed.refresh.length}:{}) };
     state[part].last_green = record;
     fx.log(`${part} green at ${short(commit)}; logs ${m.run}`);
     clearCulprits(fx, state, part, commit);
@@ -558,7 +558,7 @@ const following = (records: RecordsRun | undefined): records is RecordsRun & { d
 async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: Listed): Promise<void> {
   const previous = state[part].records;
   if (previous?.commit === commit) return;
-  if (!listed.pending.length && !listed.accepted.length) return;
+  if (!listed.pending.length && !listed.accepted.length && !listed.refresh.length) return;
   // The gate can run for hours after the cycle first followed this landing.
   // Refresh through the same owner before deciding whether its rows still wait.
   if (following(previous)) await followRecordsLanding(fx, state, part, previous);
@@ -573,7 +573,7 @@ async function writeRecords(fx: Effects, state: State, part: Part, commit: strin
     fx.log(`records: the ${part} rows recorded at ${short(previous.commit)} still wait for the landing check (${previous.result}); the ${part} run at ${short(commit)} records nothing until they land or are given up`);
     return;
   }
-  fx.log(`records: ${listed.pending.length} pending case(s) and ${listed.accepted.length} accepted change(s) listed by the ${part} run at ${short(commit)}`);
+  fx.log(`records: ${listed.pending.length} pending case(s) and ${listed.accepted.length} accepted change(s)${listed.refresh.length?` and ${listed.refresh.length} native refresh request(s)`:""} listed by the ${part} run at ${short(commit)}`);
   const at = fx.now().toISOString();
   const records: RecordsRun & { run: string } = { commit, at, run, submitted: null, result: "starting its records unit", outcome: "recording" };
   state[part].records = records;
@@ -1517,7 +1517,7 @@ const minutes = (seconds: number) => `${Math.round(seconds / 60)} min`;
 /** The status as `--status` prints it, from the same model `--json` prints. */
 export function statusText(s: FullCheckStatus): string {
   const run = (r: RunRecord | null) => r ? `${r.verdict} at ${short(r.commit)} (${r.at})${r.failed.length ? `: ${r.failed.join(", ")}` : ""}${r.reason ? `: ${r.reason}` : ""}; ${r.run}` : "none";
-  const records = (r: PartStatus["records"]) => `${r.listed ? `${r.listed.pending} pending and ${r.listed.accepted} accepted listed` : "none listed"}`
+  const records = (r: PartStatus["records"]) => `${r.listed ? `${r.listed.pending} pending and ${r.listed.accepted} accepted${r.listed.refresh?` and ${r.listed.refresh} refresh requests`:""} listed` : "none listed"}`
     + `; last ${r.last ? `${short(r.last.commit)} ${r.last.outcome ? `${r.last.outcome}: ` : ""}${r.last.result}` : "none"}`;
   const doing = s.now ? s.now.doing === "restarting" ? `restarting for verified ${s.now.commit} for ${minutes(s.now.seconds)}`
     : `${s.now.doing} at ${short(s.now.commit)} for ${minutes(s.now.seconds)}` : "between cycles";

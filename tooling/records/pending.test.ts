@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { acceptedLine, improvedLine, inventory, isListedLine, listedIn, pendingLine, refusesDifferentlyLine } from "./pending.ts";
+import { acceptedLine, improvedLine, inventory, isListedLine, listedIn, pendingLine, refreshLine, refusesDifferentlyLine } from "./pending.ts";
 import { testScratch } from "../gate/test-scratch.ts";
 
 test("a case without a row is pending and a row without a case is stale", () => {
@@ -36,11 +36,20 @@ test("a run's step logs list each pending case and accepted change once, with it
   writeFileSync(join(run, "summary.json"), `${pendingLine("tests/outcomes/z", "nowhere")}\n`);
   assert.deepEqual(listedIn(run), {
     pending: [{ name: "tests/typescript/a/b.ts", record: "results/typescript/c/cases.tsv" }, { name: "tests/outcomes/x", record: "tests/outcomes/x/outcome.json" }],
+    refresh: [],
     accepted: [
       { name: "tests/typescript/a/c.ts", record: "results/typescript/c/cases.tsv", change: 'improved {"kind":"refused"} -> {"kind":"pass"}' },
       { name: "tests/outcomes/y", record: "tests/outcomes/y/outcome.json", change: "refuses differently refused (NTS1001) -> refused (NTS1100)" },
     ],
   });
-  assert.deepEqual(listedIn(join(run, "missing")), { pending: [], accepted: [] });
+  assert.deepEqual(listedIn(join(run, "missing")), { pending: [], refresh: [], accepted: [] });
   assert.ok(isListedLine(`  ${refusesDifferentlyLine("a", "r", "b", "c")}`) && !isListedLine("improved, but not a record line"));
+});
+
+
+test('refresh requests are distinct from missing rows and accepted changes',t=>{
+ const root=testScratch(t,'refresh-listed'),line=refreshLine('tree-teardown','results/memory-census/tree-teardown.json');
+ writeFileSync(join(root,'records.log'),line+'\n'+line+'\n');
+ assert.ok(isListedLine(line));assert.ok(!isListedLine('refresh requested: but not a complete request'));
+ assert.deepEqual(listedIn(root),{pending:[],accepted:[],refresh:[{name:'tree-teardown',record:'results/memory-census/tree-teardown.json'}]});
 });

@@ -1,0 +1,626 @@
+{
+  "preparation": "preparation: backend=c provider=ReferenceCounting",
+  "sources": [
+    {
+      "id": 0,
+      "uri": "nts-workspace:///contract.ts",
+      "digest": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "uncompiled_functions": 0,
+  "census": {
+    "schema": 1,
+    "failure": {
+      "kind": "outside",
+      "detail": "detail"
+    },
+    "sites": [
+      {
+        "id": {
+          "function": "fixture",
+          "value": 0,
+          "storage": "object"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 0,
+            "end": 1
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "frame",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 1,
+          "storage": "object"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 1,
+            "end": 2
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "region",
+            "owner": "caller",
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 2,
+          "storage": "object"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 2,
+            "end": 3
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "heap",
+            "owner": null,
+            "reason": {
+              "kind": "repeated_instances",
+              "detail": null
+            },
+            "obligations": [
+              {
+                "kind": "work_budget",
+                "detail": null
+              },
+              {
+                "kind": "edge_budget",
+                "detail": null
+              },
+              {
+                "kind": "context_budget",
+                "detail": null
+              },
+              {
+                "kind": "outside",
+                "detail": "detail"
+              },
+              {
+                "kind": "returned",
+                "detail": "detail"
+              },
+              {
+                "kind": "outlives_frame",
+                "detail": "detail"
+              },
+              {
+                "kind": "repeated_instances",
+                "detail": null
+              },
+              {
+                "kind": "storage_bound_unproved",
+                "detail": null
+              },
+              {
+                "kind": "runtime_root_contract",
+                "detail": null
+              },
+              {
+                "kind": "manual_storage",
+                "detail": null
+              },
+              {
+                "kind": "producer_unproved",
+                "detail": null
+              },
+              {
+                "kind": "weak_union_budget",
+                "detail": null
+              },
+              {
+                "kind": "store_order_budget",
+                "detail": null
+              },
+              {
+                "kind": "unsealed_writer",
+                "detail": "detail"
+              },
+              {
+                "kind": "binding_identity_unproved",
+                "detail": "detail"
+              },
+              {
+                "kind": "retained_environment",
+                "detail": "detail"
+              },
+              {
+                "kind": "missing_outcome",
+                "detail": "detail"
+              },
+              {
+                "kind": "invalid_control_flow",
+                "detail": "detail"
+              },
+              {
+                "kind": "unsupported_phase",
+                "detail": "detail"
+              }
+            ],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 3,
+          "storage": "object"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 3,
+            "end": 4
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "immortal",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 4,
+          "storage": "object"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 4,
+            "end": 5
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "frame",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 5,
+          "storage": "array"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 5,
+            "end": 6
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "frame",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 6,
+          "storage": "string"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 6,
+            "end": 7
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "frame",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 7,
+          "storage": "native"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 7,
+            "end": 8
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "frame",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 8,
+          "storage": "call_result"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 8,
+            "end": 9
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "frame",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      },
+      {
+        "id": {
+          "function": "fixture",
+          "value": 9,
+          "storage": "call_storage"
+        },
+        "origin": {
+          "location": {
+            "file": 0,
+            "start": 9,
+            "end": 10
+          },
+          "scope": null,
+          "inline_chain": [],
+          "async_parent": null,
+          "generated": null
+        },
+        "contexts": [
+          {
+            "id": 0,
+            "context": "root",
+            "home": "frame",
+            "owner": null,
+            "reason": null,
+            "obligations": [],
+            "multiplicity": {
+              "kind": "one",
+              "limit": 1,
+              "witness": "single activation"
+            },
+            "retention_frontier": "frame root",
+            "bytes_held_to_frontier": {
+              "kind": "unknown",
+              "bytes": null,
+              "witness": "footprint unsealed"
+            }
+          }
+        ]
+      }
+    ],
+    "by_home": [
+      {
+        "kind": "frame",
+        "sites": 7,
+        "contexts": 7
+      },
+      {
+        "kind": "heap",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "immortal",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "region",
+        "sites": 1,
+        "contexts": 1
+      }
+    ],
+    "by_reason": [
+      {
+        "kind": "binding_identity_unproved",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "context_budget",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "edge_budget",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "invalid_control_flow",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "manual_storage",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "missing_outcome",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "outlives_frame",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "outside",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "producer_unproved",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "repeated_instances",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "retained_environment",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "returned",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "runtime_root_contract",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "storage_bound_unproved",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "store_order_budget",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "unsealed_writer",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "unsupported_phase",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "weak_union_budget",
+        "sites": 1,
+        "contexts": 1
+      },
+      {
+        "kind": "work_budget",
+        "sites": 1,
+        "contexts": 1
+      }
+    ]
+  }
+}

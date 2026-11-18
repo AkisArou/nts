@@ -9,6 +9,7 @@ import {oracleIdentityProblems,oracleIdentityScope} from "./oracle-record-identi
 import {dataDirectory,fileInput} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from './record-numbers.ts';
+import {checkMemoryCensuses} from '../records/memory-census.ts';
 import {checkRustSelectorRecord} from './rust-selector-write.ts';
 
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
@@ -101,6 +102,7 @@ export function checkRecords(root:string,report:(message:string)=>void,env:NodeJ
   if(problems.length)throw Error(problems.join("\n"));
   for(const fixture of pendingFixtures(root))report(pendingLine(fixture,recordPath(fixture)));
   checkRustSelectorRecord(root,report);
+  checkMemoryCensuses(root,report);
   report(`${numbers.count} records, ${KNOWN_DUPLICATE_RECORDS.length} numbers claimed twice and named; benchmark run records and table validated`);
 }
 

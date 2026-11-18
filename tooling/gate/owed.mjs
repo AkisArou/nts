@@ -1244,6 +1244,20 @@ export const RULES = [
     arms: [],
   },
   {
+    // Observation rows owe structural, selection-identity and integrity checks.
+    name: "static memory census records",
+    when: (/** @type {string} */ p) => /^results\/memory-census\/[a-z0-9-]+\.json$/.test(p),
+    steps: ["records"],
+    arms: [{kind:"valid",asks:"each static observation has the current census structure, identity and integrity",run:"node tooling/records/memory-census.ts --check"}],
+  },
+  {
+    // Instrument changes owe their tests and the records contract they write.
+    name: "memory census observations",
+    when: (/** @type {string} */ p) => /^tooling\/records\/memory-census(?:-record-family)?(?:\.test)?\.ts$/.test(p),
+    steps: ["tooling", "records"],
+    arms: [],
+  },
+  {
     // The record checks' shared notion of a pending case, and the recorder the
     // full check runs after landing. A check that imports a module here owes
     // its own step through `stepInputs`; the modules' tests run in tooling.

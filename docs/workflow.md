@@ -594,6 +594,61 @@ an unmeasured case stays pending, and the batch keeps its red or held result.
 The controller publishes audited delta rows even when a recorder exits with
 a problem; one recorder cannot discard another's evidence.
 
+The memory census is an observation family, not an outcome ratchet. A home
+change is neither better nor worse. A record whose source or static producer
+recipe changed is listed pending for a new observation after landing; it does
+not make the check red. Malformed, forged, internally inconsistent, corrupted or foreign
+records remain red. Only an unchanged observation from accepted main may use
+an older identity to request refresh; a new or edited row whose source or
+recipe identity disagrees with the tree is red, even with a matching payload
+SHA-256. Each canonical memory-group program owns one JSON record under
+`results/memory-census/`. The full check writes requested records independently
+through the ordinary per-case delta transaction. A landing's records check
+validates structure, identity and integrity only; it does not run the compiler.
+The records check lists a missing or stale observation as pending and a
+current observation as `refresh requested: <program> in <record>`. Refresh
+requests are distinct from missing rows and accepted outcome changes. The
+full check's green core controller starts a records unit for any of these
+three categories, including refresh-only logs with zero pending or accepted
+rows. Inside that unit the census family uses `pending` for missing/stale rows
+and `refresh`/`refreshLine` for current ones. It therefore natively rederives
+every census row after each green core even when only the compiler changes,
+and replaces differing observations. Thus a consistent edited payload
+cannot affect a verdict and is replaced by the next records run. Identical
+observations retain their bytes and original compiler provenance.
+
+Its selection identity binds the census version, the program's actual inputs
+and the instrument's own static recipe. The shared Program input owner derives
+the selected roots, resolved source and JSON imports, ambient types, package
+goals and inherited configs from the real project, using the benchmark's own
+config or the shared generated-project recipe. No compiler/runtime tree or
+hand-picked namespace approximates these inputs. Each records check or recording/apply
+transaction reads each program once through that owner. Its detached facts are
+revalidated before reuse, including failed lookups; no persistent Program cache
+is introduced. The static producer inputs
+are `compiler/core/src/hir/memory.rs`, `memory/report.rs`,
+`memory/census.rs` and the CLI's `src/main.rs` and `src/arguments.rs`; the records recipe is the census writer, its family and
+the shared benchmark project recipe. These exact inputs are declared once by
+the production owner and are staged through `copyModuleClosure`.
+
+The census reader has no declarative benchmark Program input reach in the owed
+graph. An imported file outside the case can therefore change without selecting
+the census check at landing. Each green core still requests native rederivation
+of every census row, and census observations decide no better/worse verdict.
+Benchmark Program declarations belong to the shared `projectMembers` owner;
+recording identity reads do not provide that declarative reach.
+
+Compiler commit and exact binary SHA-256 are provenance only: neither selects
+rows nor changes the landing verdict. A writer requires a clean compiler pin
+whose recorded binary digest agrees with its bytes. The core records run
+rederives every census after each green core, which keeps observations true
+across compiler changes. An identical projection retains its original bytes
+and provenance; a differing projection replaces it without ranking homes.
+The observation also records its JSON SHA-256, source URIs and content digests.
+At delta application, selection identity and canonical group membership are
+checked again. The record envelope's version is independent of the census
+wire version and changes when its fields or meaning change.
+
 ## Benchmarks
 
 Benchmarks run nightly on `verified`, on the CPUs reserved for measurement
@@ -2366,3 +2421,18 @@ death; an absent timestamp remains explicit after forced termination.
   with its steps' slice and its own tree, because its runner (broker, samplers,
   reports) runs in its launcher's unit, where no reservation counted it
   ([log](records/notebooks/decisions-log.md#a-memory-wait-names-its-holders-11-17)).
+
+- **Memory census records are observations.** Their versioned program-input
+  and static recipe identity requests fresh rows after a recipe or source change;
+  home changes have no ordering. Malformed, foreign and corrupted records
+  remain errors. The full check publishes each canonical memory-group
+  program's observation after landing, through the shared records transaction.
+  The landing checks structure, identity and integrity; the core records run
+  natively rederives every row after each green core and replaces differing
+  observations. Current rows emit distinct refresh requests, and the controller
+  starts records on refresh-only green logs; `pending` remains missing/stale.
+  Compiler commit and binary identity are provenance only.
+  Recording identity uses the shared Program reader; declarative benchmark
+  reach belongs to the shared `projectMembers` owner. Until the census reader
+  declares those inputs, an imported file outside the case can miss the landing
+  census check; green-core native refresh still covers every row.

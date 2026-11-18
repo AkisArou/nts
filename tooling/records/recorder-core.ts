@@ -20,6 +20,8 @@ export type RecordRun={readonly written:ReadonlyMap<string,string>};
 export const NO_RUN:RecordRun={written:new Map()};
 export type ApplyOptions={say?:(line:string)=>void;identities?:(root:string,paths:readonly string[])=>Promise<Map<string,{source:string;driver:string}>>};
 export interface RecordFamily{
+ /** Bind detached input observations to one record/apply transaction. */
+ scope?(root:string):RecordFamily;
  pending(root:string,run:RecordRun):RecordCase[];
  files(root:string):readonly string[];
  records(row:DeltaRow):readonly string[];
@@ -106,6 +108,7 @@ function keepDelta(file: string, delta: Delta): void {
 /** Bind transport to exactly the families this consumer owns. No family is discovered implicitly. */
 export function createRecorder(table:RecordTable,defaultRun:Runner=()=>{throw Error('recorder command runner was not supplied');}){
  const KINDS=Object.keys(table);
+ const scoped=(root:string)=>createRecorder(Object.fromEntries(Object.entries(table).map(([kind,row])=>[kind,{...row,family:row.family.scope?.(root)??row.family}])),defaultRun);
  const family=(kind:string)=>{const row=table[kind];if(!row)throw new MalformedDelta('malformed records delta: no recorder is of kind '+kind);return row.family;};
  const partOf=(kind:string):Part=>{family(kind);return table[kind]!.part;};
  const findPending=(root:string,kind:string,run:RecordRun=NO_RUN):Pending[]=>family(kind).pending(root,run).map(one=>({kind,name:one.name,record:one.record}));
@@ -137,6 +140,7 @@ function snapshot(root: string, kind: string, pending: readonly Pending[]): Map<
 }
 
 function recordPending(root: string, kinds: readonly string[], run: Runner = defaultRun, say = (line: string) => console.log(line), accepted: ReadonlyMap<string, readonly Pending[]> = new Map(), delta?: string, listed: ReadonlyMap<string, readonly Pending[]> = new Map()): number {
+  if(kinds.some(kind=>family(kind).scope))return scoped(root).recordPending(root,kinds,run,say,accepted,delta,listed);
   let failed = 0, recorded = 0;
   const out: Delta = { version: 1, commit: headCommit(root), headers: {}, rows: [] };
   if (delta) keepDelta(delta, out);
@@ -153,11 +157,12 @@ function recordPending(root: string, kinds: readonly string[], run: Runner = def
     } catch (error) { problem(kind, "finding its pending cases", error); continue; }
     const pending = [...missing, ...refreshes], changes = accepted.get(kind) ?? [];
     if (!pending.length && !changes.length) { say(`${kind}: nothing pending and no accepted change listed; not run`); continue; }
-    say(`${kind}: ${missing.length} pending${refreshes.length ? `, ${refreshes.length} recorded budget refresh(es)` : ''}${changes.length ? `, ${changes.length} accepted change(s) listed` : ''}`);
+    say(`${kind}: ${missing.length} pending${refreshes.length ? `, ${refreshes.length} recorded refresh(es)` : ''}${changes.length ? `, ${changes.length} accepted change(s) listed` : ''}`);
     for (const one of missing) say(`  ${pendingLine(one.name, one.record)}`);
     for (const one of refreshes) say(family(kind).refreshLine!(one));
     for (const one of changes) say(`  accepted: ${one.name} in ${one.record}`);
-    // New rows only for pending cases; accepted changes rewrite rows the ratchet allows (auditRecord).
+    // New rows are only for missing cases; family audits authorize current
+    // observation refreshes and accepted outcome changes.
     const before = snapshot(root, kind, pending);
     for (const args of recorderRuns(kind, [...pending, ...changes], ledger)) {
       say(`  running: node ${args.join(" ")}`);
@@ -218,6 +223,7 @@ function checkDelta(delta:Delta):void{
  for(const [kind,rows]of Map.groupBy(delta.rows,row=>row.kind))family(kind).validateGroup?.(rows,bad);
 }
 async function applyDelta(root: string, delta: Delta, options: ApplyOptions = {}): Promise<ApplyCounts> {
+  if(delta.rows.some(row=>table[row.kind]?.family.scope))return scoped(root).applyDelta(root,delta,options);
   const say = options.say ?? ((line: string) => console.log(line));
   checkDelta(delta);
   const counts: ApplyCounts = { applied: 0, already: 0, skipped: 0 };

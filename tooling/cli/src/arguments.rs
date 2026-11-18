@@ -245,7 +245,14 @@ pub(crate) const COMMANDS: &[Command] = &[
     command(
         "regions",
         " [project]",
-        &[PROJECT, ROOTS, PROVIDER, SHAPE, LISTING],
+        &[
+            PROJECT,
+            ROOTS,
+            PROVIDER,
+            SHAPE,
+            LISTING,
+            &[switch("--census")],
+        ],
     ),
     command(
         "contents-census",

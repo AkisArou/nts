@@ -153,6 +153,20 @@ Inside the counted heap, in order: counts removed by borrowing and moves
 (built); reuse of a dying unique value (strings built, arrays and objects
 next); cycle collection only for what can form cycles.
 
+### The static census
+
+`nts regions <project> --census --rc --backend c` projects the existing stage-2
+report into a versioned JSON schema. It retains each SiteId and source origin,
+every context's home and obligations, multiplicity and retention frontier.
+Unknown byte bounds and failures remain explicit. No allocator or preparation
+pass reads the census. The [CLI contract](../reference/cli.md#inspecting)
+defines its join key and summaries; the [records contract](../workflow.md#records)
+defines when observations are refreshed. Each program in the canonical memory
+group has a tool-written record under `results/memory-census/`; missing or
+changed-input observations land pending and are written by the full check.
+The static graph does not yet seal runtime footprints, so an unknown byte
+bound cannot establish the frame-limited retention bound of principle 7.
+
 ### The one memory analysis
 
 One whole-program analysis over allocation sites, run before counting, at the

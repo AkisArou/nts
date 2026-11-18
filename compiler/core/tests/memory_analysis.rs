@@ -321,3 +321,59 @@ fn host_gc_never_publishes_native_placement_facts() {
         .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
     assert!(prepared.memory.is_none());
 }
+
+#[test]
+fn census_is_the_requested_graphs_sites_and_does_not_change_prepared_hir() {
+    let snapshot = snapshot("traversal");
+    let options = hir::Options {
+        provider: Memory::ReferenceCounting,
+        ..hir::Options::default()
+    };
+    let normal = hir::prepare_unverified(&snapshot, &options);
+    let observed = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
+        .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
+    let report = observed.memory.as_ref().unwrap();
+    let before = format!("{:?}", observed.program);
+    let census = report.census();
+    assert!(!census.sites.is_empty());
+    assert_eq!(
+        census
+            .sites
+            .iter()
+            .map(|site| site.contexts.len())
+            .sum::<usize>(),
+        report.sites.len()
+    );
+    for site in &census.sites {
+        for context in &site.contexts {
+            let original = report
+                .sites
+                .iter()
+                .find(|row| {
+                    row.id.function == site.id.function
+                        && row.id.value == site.id.value
+                        && row.context_id.0 == context.id
+                })
+                .unwrap();
+            assert_eq!(site.origin.location.file, original.origin.location.file.0);
+            assert_eq!(
+                site.origin.location.start,
+                original.origin.location.span.start
+            );
+            assert_eq!(context.retention_frontier, original.retention_frontier);
+        }
+    }
+    assert_eq!(
+        serde_json::to_string(&census).unwrap(),
+        serde_json::to_string(&report.census()).unwrap()
+    );
+    assert_eq!(before, format!("{:?}", normal.program));
+    assert_eq!(before, format!("{:?}", observed.program));
+    assert!(
+        Analysis::of(&hir::Program::default())
+            .report()
+            .census()
+            .sites
+            .is_empty()
+    );
+}

@@ -7715,6 +7715,13 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/memory/census.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/core/src/hir/memory/comparison.rs",
       "declarations": {
         "imports": [],
@@ -13426,6 +13433,19 @@
       "declarations": {
         "imports": [],
         "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/memory_census.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/memory/traversal/tsconfig.json"
+          }
+        ]
       }
     },
     {

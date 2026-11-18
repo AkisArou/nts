@@ -338,7 +338,7 @@ the others report what the frontend captured either way.
 | `types` | every type the frontend resolved, as the semantic schema records it, then base types, signatures and bound DOM types |
 | `hir` | the lowered program, function by function, with each refusal as `-- <location> <code> <message>` and a summary. Raw lowering by default; **`--prepared`** shows the program a backend receives, headed `preparation: backend=<b> provider=<p>`, for `--backend` (default `c`). `--rc` implies `--prepared` |
 | `stats` | what preparation did, as `key value` lines in a fixed order: functions, layouts, ops, refusals, specialized values, removed and kept checks, calls by kind, and the counting and region figures under `--rc` |
-| `regions` | under `--rc`, which calls a region could serve and the first reason each other candidate cannot, ranked, then every site and allocation placement |
+| `regions` | under `--rc`, which calls a region could serve and the first reason each other candidate cannot, ranked, then every site and allocation placement. `--census` prints only the versioned JSON projection of the stage-2 pre-counting graph (C or LLVM); host-GC has no such graph and fails by name |
 | `expect-ir` | checks the `// expect-ir:` facts in the project's own sources against the program each named backend receives: one `PASS` line per fact that holds, `FAIL` or `UNRESOLVED` per backend where it does not. Exit 1 if any fails, or if there are none |
 | `facts` | per function, each numeric value's representation (`i32`, `i64` or `f64`), its range and flags (`whole`, `nan?`, `-0?`). `--prepared` for the prepared program; `--obligations` for every store into a written scalar type and whether it is proved (`--tsv` for tools); `--strict` for the strict check's errors and their count |
 | `refusals` | one line per refused function of the prepared program, `name<TAB>reason` |
@@ -346,6 +346,32 @@ the others report what the frontend captured either way.
 | `modules` | the module graph and its evaluation order |
 | `erasure` | what the program does with its `any` and `unknown` values, by declaration kind, beside a per-site control; `--sites` lists each site |
 | `receivers` | every field access, by what its receiver is typed as, per file; `--sites` lists each |
+
+`nts regions <project> --census --rc --backend c` observes the existing
+stage-2 report without changing preparation. Its `census.schema` versions the
+wire contract independently of the solver. A change of field meaning bumps
+that version. `sources` maps origin file indices to stable source URIs and
+content digests; origin spans are half-open UTF-16 offsets. Each site is keyed
+by `{function, value, storage}` (the graph's SiteId) together with its complete
+source origin, within one program and producer revision. All calling contexts
+remain separate under that site. This is the join key for runtime site counts;
+a context's numeric identity is local to this observation.
+
+Each context reports its stage-2 home, owner for a region, primary heap reason,
+all unsealed obligations, multiplicity and witness, retention frontier, and
+bytes held to it. Byte bounds are decimal strings, or `null` with an explicit
+unknown witness; they include backing storage and transitively held graphs.
+The analysis's failure remains explicit even when no sites exist. Refused
+functions are counted by `uncompiled_functions`: the census describes the
+remaining graph, without claiming that refused code allocates nothing.
+
+`by_home` and `by_reason` count distinct sites and context rows separately.
+Reason groups overlap: one context contributes once to every reason kind it
+has, including its primary reason. A source site with different contextual
+homes contributes to each home's group. The report supplies no additive byte
+total: shared retained graphs make a sum of per-site bounds misleading.
+Dynamic allocation counts, allocation volume, live peaks, reset retention and
+allocator reservation are separate instruments.
 
 ## Other
 

@@ -32,8 +32,8 @@ export type RunRecord = {
   reason?: string;
   /** What the culprit search made of a red run, and when; "held" is searched again. */
   search?: { result: string; at: string };
-  /** A green run's pending cases and accepted changes, as its checks listed them (tooling/records/pending.ts's listedIn). */
-  listed?: { pending: number; accepted: number };
+  /** A green run's pending cases, accepted changes and native refresh requests, as its checks listed them (tooling/records/pending.ts's listedIn). */
+  listed?: { pending: number; accepted: number; refresh?:number };
 };
 
 /** What the controller is doing now, written before it starts and removed when it ends. */

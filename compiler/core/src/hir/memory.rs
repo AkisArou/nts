@@ -8,6 +8,7 @@
 use super::{Memory, Program};
 
 mod build;
+mod census;
 mod comparison;
 mod events;
 mod graph;
@@ -17,6 +18,7 @@ mod report;
 mod summary;
 
 pub use super::regions::placement::Storage;
+pub use census::Census;
 pub use comparison::{ContextArrival, ContextId, ContextView, Variant as LegacyVariant};
 pub use events::LaterWrite;
 pub use report::{
