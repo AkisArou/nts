@@ -72,3 +72,21 @@ The two baseline Cargo failures and seven descendant-OOM classification errors r
 - Collector output: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/environment/tooling-tests.raw.log`; SHA-256 `bf0d8e10cff090ac54e61dc5be56d8e3f11c3e4166897468ae40f683650554f8`.
 
 - Gate output: `/home/akisarou/.cache/nts-scratch/848/after-f48fc1a-contended/run.log`; SHA-256 `3a32fbdc53a513eb43353f4a893ab0514040fec6e4749fc6b94309310ce6369d`.
+
+## First-run transition and fixed-step counterfactual
+
+At `68febe56d462d7df2ce3331375a2ddfc76bb5ea9`, the real landing target's scheduling history was copied into each supplied-observation runner fixture. Its tooling entry retained `unit: step` and peaks up to 17,331,140,048 bytes. The per-file runner entered beside two 4 GiB ordinary jobs, waited on genuinely full memory, and ran its nested gate against an independent supplied ledger. Neither experiment changed the real landing history or machine ledger.
+
+Restoring the original fixed-step classification from a saved copy made tooling wait for a 21,474,836,480-byte grant beside those jobs without entering its payload. The genuinely full control also waited, at the runner's initial grant. Only the controls' own named units were stopped. Both modified source files were restored byte-for-byte from their saved current copies.
+
+- `/home/akisarou/.cache/nts-scratch/848/landing-steps-v5-before.json`; SHA-256 `757d2e154f7c97ef11b29e91c3c23548b12adacba1488047f638b712c74b3702`.
+
+- `/home/akisarou/.cache/nts-scratch/848/real-history.log`; SHA-256 `96241846d15ade5c246ce920979859e9fcfbf83ecc064238774d913e658ddd48`.
+
+- `/home/akisarou/.cache/nts-scratch/848/fixed-control.log`; SHA-256 `d35f40b30d0737e78e1f92163cbcc29e058b70b0d3471e1ac66d6f74395905d0`.
+
+- `/home/akisarou/.cache/nts-scratch/848/wiring-real-history-experiment.ts`; SHA-256 `63893627269e611978a22d07fe442de610a331d58b95e0cf82012a24db3532b4`.
+
+- `/home/akisarou/.cache/nts-scratch/848/wiring-fixed-counterfactual.ts`; SHA-256 `27c14e821d76420a75e3868a581eb2eab7ba0f6c730df52f3b37a4c56065c666`.
+
+- `/home/akisarou/.cache/nts-scratch/848/step-table-fixed-before.mjs`; SHA-256 `6c927bb75106630fcf647ef2cbc62ced7b32695f7deaee912b241179df8f15e6`.

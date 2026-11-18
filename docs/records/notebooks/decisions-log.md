@@ -3718,3 +3718,12 @@ under the finite file slice and scope; the test itself is not a census worker.
 The common longest-first ordering owner also schedules tooling entries. It
 retains measured file costs and uses source-file size before the first timing,
 so costly entries can start before the last part of the pool empties.
+
+Tooling order starts untimed entries first, then uses their measured costs.
+Source size does not forecast a test entry’s wall time.
+
+The shared resident pool uses the worker’s local OOM counter for every
+producer. Hierarchical events remain diagnostic and pressure observations;
+a completed row survives interpretation of later incidents. Census role
+setters and tooling bootstrap revocation share the worker-identity owner,
+as do resident worker name generation and tooling ancestry validation.

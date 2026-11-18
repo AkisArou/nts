@@ -20,6 +20,8 @@ import {readLimits} from '../gate/scopes/memory-limits.ts';
 import {ancestorMemoryIncident,memoryAncestors,type AncestorMemory} from '../gate/memory-ancestry.ts';
 import {hostInfrastructure} from '../gate/host-infrastructure.ts';
 
+import {workerRoleValues,residentWorkerComponent} from './worker-identity.ts';
+
 const CGROUP = "/sys/fs/cgroup";
 const STOP_HANG_MS = 5 * 60_000;
 /** One census worker's own kernel cap, in KiB, unless NTS_CENSUS_MEMORY_CAP_KB says otherwise. */
@@ -312,7 +314,7 @@ export class MemoryRun {
     if (this.#closed) throw new Error("resident run is closed");
     const limit = bytes === 0 ? this.budgetBytes : Math.min(integer(bytes, "resident worker budget"), this.budgetBytes);
     if (!/^[a-zA-Z0-9]+$/.test(String(index))) throw new Error("invalid resident worker index");
-    const slice = childSlice(this.slice, `w${this.#workers.length.toString(36)}`);
+    const slice = childSlice(this.slice, residentWorkerComponent(this.#workers.length));
     // A worker slice binds to its run's aggregate, as a step slice binds
     // to its run's root: stopping the aggregate stops every worker.
     const bootstrap=Math.min(limit,this.effectiveBudgetBytes());
@@ -391,8 +393,8 @@ export class MemoryWorker {
     this.#receipt=caseReceipt(childEnvironment);
     const bootstrap=Math.min(this.bytes,this.run.effectiveBudgetBytes());
     const workerEnvironment={...childEnvironment};
-    assignOwnedValues(workerEnvironment,{...hostInfrastructure(process.env),NTS_CENSUS_WORKER_GROUP:this.group,
-      NTS_CENSUS_WORKER_MAX_BYTES:String(this.bytes),NTS_CENSUS_RUN_GROUP:this.run.group,NTS_CENSUS_RUN_MAX_BYTES:String(this.run.budgetBytes)});
+    assignOwnedValues(workerEnvironment,{...hostInfrastructure(process.env),...workerRoleValues({workerGroup:this.group,
+      workerMax:String(this.bytes),runGroup:this.run.group,runMax:String(this.run.budgetBytes)})});
     // A program's filtered environment need not carry the launcher's bus.
     // The bounded-entry scope uses only its parent's declared infrastructure.
     const scope = {
@@ -479,7 +481,7 @@ export async function serialRun(tools: CompilerTools): Promise<void> {
   const worker = run.worker("serial", Number(tools.memoryCapKb ?? WORKER_CAP_KB) * 1024);
   const scope = worker.scope(process.execPath, [...process.execArgv, ...process.argv.slice(1)]);
   const activeCase = join(run.directory, "serial-case.txt");
-  assignOwnedValues(scope.env,{NTS_CENSUS_CASE_CONCURRENCY:'exclusive',NTS_CENSUS_ACTIVE_CASE:activeCase});
+  assignOwnedValues(scope.env,workerRoleValues({concurrency:'exclusive',activeCase}));
   const before = worker.counters(), aggregateBefore = run.aggregateOoms();
   let result;
   try {

@@ -4,6 +4,7 @@
 import {assignTestValues,testEnvironment} from './test-environment.ts';
 import {HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
+import {WORKER_ROLE_VARIABLES} from '../census/worker-identity.ts';
 import {beforeEach} from 'node:test';
 import {setImmediate} from 'node:timers/promises';
 import {resolve} from 'node:path';
@@ -16,8 +17,7 @@ export function installTestHost():void {
   const environment=poisonedTestEnvironment();
   // Entry tests choose their own fixture execution roles and budgets. Their
   // real enclosing file cap remains in the kernel after these roles leave.
-  const revoked=['NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_CENSUS_WORKER_GROUP','NTS_CENSUS_WORKER_MAX_BYTES',
-    'NTS_CENSUS_RUN_GROUP','NTS_CENSUS_RUN_MAX_BYTES','NTS_CENSUS_CASE_CONCURRENCY','NTS_CENSUS_POOL_WORKER','NTS_CENSUS_ACTIVE_CASE'];
+  const revoked=['NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY',...WORKER_ROLE_VARIABLES];
   const grants:NodeJS.ProcessEnv=Object.fromEntries(revoked.map(name=>[name,undefined]));
   for(const name of [...HOST_OBSERVATION_ENVIRONMENT,...CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT])grants[name]=environment[name];
   assignTestValues(process.env,grants);

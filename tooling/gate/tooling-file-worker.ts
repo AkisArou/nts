@@ -1,5 +1,6 @@
 // The common resident pool admits one entry before sending its path. Each
 // entry still executes in a fresh node:test child; the resident owns reports.
+import {getHeapStatistics} from 'node:v8';
 import {createInterface} from 'node:readline';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {basename,dirname,join,resolve} from 'node:path';
@@ -44,6 +45,8 @@ runAsCommand(import.meta.url,async()=>{
       assignOwnedValues(process.env,{NTS_GATE_STEP:step,NTS_GATE_STEP_ATTEMPT:undefined,NTS_GATE_STEP_RESULT:undefined});
       delete process.env.NTS_GATE_STEP_ATTEMPT;delete process.env.NTS_GATE_STEP_RESULT;
     }
+    const heap=getHeapStatistics();
+    process.stderr.write('tooling controller heap: '+JSON.stringify({file:path,controller:process.pid,usedBytes:heap.used_heap_size,totalBytes:heap.total_heap_size,limitBytes:heap.heap_size_limit})+'\n');
     process.stdout.write(JSON.stringify(reply)+'\n');
   }
 });

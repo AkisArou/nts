@@ -22,8 +22,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DIR = process.env.NTS_GATE_COSTS_DIR ?? join(ROOT, "target", "gate-costs");
 
 function tsBytes(dir) {
-  // A tooling entry is one source file rather than a project directory.
-  try { const source = statSync(dir); if (source.isFile()) return source.size; } catch { return 0; }
   let total = 0;
   const walk = (d) => {
     let entries;
@@ -49,15 +47,16 @@ function read(tool) {
 
 /**
  * `projects`, most expensive first. A project is its own cost key; `where`
- * maps it to a source file or the directory whose TypeScript sizes it when it was never timed.
+ * maps it to the directory whose TypeScript sizes it when it was never timed.
+ * `untimedFirst` discovers unmeasured entries before the measured tail.
  */
-export function longestFirst(tool, projects, where = (p) => p) {
+export function longestFirst(tool, projects, where = (p) => p, {untimedFirst = false} = {}) {
   const seen = read(tool);
   const cost = new Map();
   for (const p of projects) {
     // Seconds when timed; bytes / 10,000 otherwise, which puts a 2 MB corpus
     // at 200 "seconds" -- only the ranking among the untimed matters.
-    cost.set(p, typeof seen[p] === "number" ? seen[p] : tsBytes(resolve(ROOT, where(p))) / 10_000);
+    cost.set(p, typeof seen[p] === "number" ? seen[p] : untimedFirst ? Infinity : tsBytes(resolve(ROOT, where(p))) / 10_000);
   }
   return [...projects].sort((a, b) => cost.get(b) - cost.get(a));
 }

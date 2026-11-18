@@ -6,7 +6,8 @@ import {toolingFileDispatch,toolingFileResults} from './tooling-file-admission.t
 import {discoverToolingTests} from './tooling-discovery.ts';
 import type {ToolingFileReply} from './tooling-file-worker.ts';
 import type {ToolingTimes} from './tooling-runner.ts';
-import {readStepInstrument} from './step-result.ts';
+import {WORKER_ROLE_VARIABLES,workerRoleValues,residentWorkerComponent} from '../census/worker-identity.ts';
+import {PressureError,readStepInstrument} from './step-result.ts';
 import {CaseMemoryLease} from './case-memory.ts';
 import {reserve,readLedger,type Reservation} from './memory-ledger.ts';
 import {ownMemory} from './test-memory.ts';
@@ -29,6 +30,10 @@ test('tooling file slices retain the common resident worker ancestry',()=>{
   assert.equal(toolingSliceArgs({NTS_TOOLING_SLICE:parent},'agent')[0],'--slice='+parent);
   assert.ok(newToolingSlice(false,{NTS_TOOLING_SLICE:parent}).startsWith(parent.slice(0,-6)+'-r'));
   assert.throws(()=>toolingSlice({NTS_TOOLING_SLICE:'app.slice'}),/invalid tooling slice/);
+  for(const suffix of ['w00','w_','wA','c123','foreign'])assert.throws(()=>toolingSlice({NTS_TOOLING_SLICE:childSlice(parent,suffix)}),/invalid tooling slice/);
+  assert.equal(residentWorkerComponent(36),'w10');
+  assert.deepEqual(Object.keys(workerRoleValues({pool:'1',workerGroup:'/worker'})).sort(),['NTS_CENSUS_POOL_WORKER','NTS_CENSUS_WORKER_GROUP']);
+  assert.ok(WORKER_ROLE_VARIABLES.includes('NTS_CENSUS_POOL_WORKER'));
 });
 
 test('completed assertions survive an unfinished file and retain the hang diagnostic',t=>{
@@ -101,4 +106,13 @@ test('dispatch preserves the unchanged collector inventory on full and narrowed 
   }
   assert.throws(()=>toolingFileDispatch([narrowed[0]!,resolve(root,narrowed[0]!)],'tooling',root),/duplicate tooling file dispatch/);
   assert.throws(()=>toolingFileDispatch(['../escaped.test.ts'],'tooling',root),/outside its source tree/);
+});
+
+test('pressure retains its retry meaning and cannot erase a completed FAIL',()=>{
+  const pressure=new PressureError('actual enclosing cap');
+  assert.throws(()=>toolingFileResults(files,[reply(files[0]!,0)],times,{},pressure),error=>error===pressure);
+  const failed=toolingFileResults(files,[reply(files[0]!,1,1)],times,{},pressure);
+  assert.equal(failed.status,1);assert.equal(failed.completedFailures,1);
+  const corrupt={path:files[1]!,bucket:'tooling',result:{status:0,completedFailures:-1}} as ToolingFileReply;
+  assert.equal(toolingFileResults(files,[corrupt,reply(files[0]!,1,1)],times).status,1);
 });

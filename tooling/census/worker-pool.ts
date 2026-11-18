@@ -22,10 +22,12 @@ import { createFeed, type CaseToken,type FeedOffer } from "../gate/admission.ts"
 import { cgroupCharge, reserveJob, type Reservation } from "../gate/memory-ledger.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
+import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, memoryEvents, type MemoryCounters, type MemoryCause } from "./worker-memory.ts";
 import {caseCohort} from '../gate/case-cohort.ts';
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {registerCaseScope,releaseToken,type TokenRelease} from '../gate/case-context.ts';
+
+import {workerRoleValues} from './worker-identity.ts';
 
 export type ResidentPoolOptions = {
   paths: string[];
@@ -52,6 +54,16 @@ export type ResidentPoolOptions = {
   recycleAboveBytes?: number;
   charge?: (group: string) => number;
 };
+
+/** Supplied counter decisions: a descendant's cap is not this worker's cap.
+ * Only a completed producer report can account for a descendant-only event. */
+export function workerMemoryCause(before:MemoryCounters,after:MemoryCounters,localBefore:number,localAfter:number,
+  aggregateBefore:number,aggregateAfter:number,completed:boolean):MemoryCause|undefined {
+  if(after.oom<before.oom||localAfter<localBefore)throw Error('resident cap: memory counters went backwards');
+  const cause=memoryCause({...before,oom:localBefore},{...after,oom:localAfter},aggregateBefore,aggregateAfter);
+  if(completed&&cause==='system-pressure'&&after.oom>before.oom)return undefined;
+  return cause;
+}
 
 const sliceCharge = (group: string) => cgroupCharge(readFileSync(join("/sys/fs/cgroup", group, "memory.current"), "utf8"), readFileSync(join("/sys/fs/cgroup", group, "memory.stat"), "utf8"));
 
@@ -98,10 +110,11 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         // Include startup and waits between dispatches: an idle scope can be
         // collateral damage from the same aggregate or system-wide killer.
         let before: MemoryCounters = current.counters();
+        let localBefore=memoryEvents(current.group,true).oom;
         let aggregateBefore = memory.aggregateOoms();
         const scope = current.scope(command, args(index + indexOffset));
-        assignOwnedValues(scope.env,{NTS_CENSUS_POOL_WORKER:'1',
-          NTS_CENSUS_CASE_CONCURRENCY:exclusive?'exclusive':'parallel',NTS_GATE_TOKEN_HELD:'1'});
+        assignOwnedValues(scope.env,{...workerRoleValues({pool:'1',
+          concurrency:exclusive?'exclusive':'parallel'}),NTS_GATE_TOKEN_HELD:'1'});
         const child = spawn("systemd-run", scope.argv, { stdio: ["pipe", "pipe", "inherit"], env: scope.env });
         const stopped = new AbortController();
         let exited = false;
@@ -115,17 +128,27 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           release = undefined;
           if(held){returned=releaseToken(held);void returned.catch(fail);}
         };
-        const finish = (row?: any) => {
+        const finish = (row?: any,lostReason?:string) => {
           if (!active) throw new Error(`worker ${index} answered without an in-flight case`);
           returnToken();
           const dispatch = active;
+          const delivered=row!==undefined;
+          // A later observation failure must not erase completed assertions.
+          if(delivered)onRow({...row,residentPressureRetries:Number(isolated)});
           const dispatchedBefore = before;
           const after = current.counters();
           const aggregateAfter = memory.aggregateOoms();
-          const cause = memoryCause(before, after, aggregateBefore, aggregateAfter);
+          const localAfter=memoryEvents(current.group,true).oom;
+          const cause=workerMemoryCause(before,after,localBefore,localAfter,aggregateBefore,aggregateAfter,delivered);
+          localBefore=localAfter;
           active = undefined;
           before = after;
           aggregateBefore = aggregateAfter;
+          if(delivered){
+            if(cause==='own-limit')throw new ToolingInstrumentError('tooling-setup',`resident worker for ${dispatch.path} exceeded its own ${current.bytes} byte cap beside its completed report`);
+            if(cause)throw new PressureError(`resident case ${dispatch.path} completed beside ${cause}; its enclosing memory observation holds the run`);
+            return row.bucket==='timeout';
+          }
           if (memoryDisposition(cause, exclusive ? "exclusive" : "parallel") === "budget") {
             onRow({ path: dispatch.path, bucket: "memory-cap", why: cause === "own-limit" ? "worker's own resident limit fired" : caseBudgetMessage(dispatch.path, memory.budgetBytes),
               residentWorkerBytes: current.bytes, residentRunBytes: memory.budgetBytes, residentPressureRetries: Number(isolated) });
@@ -137,10 +160,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             report(`resident pressure: requeued ${dispatch.path} after ${cause}; no verdict recorded`);
             return true;
           }
-          if (!row) throw new Error(`worker ${index} lost ${dispatch.path}; no OOM kill recorded`);
-          if (row.bucket === "memory-cap") throw new Error(`resident instrument failure: ${dispatch.path} reported memory-cap without an own-limit OOM`);
-          onRow({ ...row, residentPressureRetries: Number(isolated) });
-          return row.bucket === "timeout";
+          throw new Error(`worker ${index} lost ${dispatch.path}; ${lostReason??'no completed report'}; no OOM kill recorded`);
         };
         const fail = (error: unknown) => {
           exited = true;
@@ -172,6 +192,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             const idle = current.counters();
             if(idle.oom!==before.oom||idle.kills!==before.kills){current.stop(scope);returnToken();await offer.return();return;}
             before = idle;
+            localBefore=memoryEvents(current.group,true).oom;
             aggregateBefore = memory.aggregateOoms();
             active = work[Number(entry)]!;
             child.stdin.write(`${active.path}\n`);
@@ -228,7 +249,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             current.stop(scope);
             if(priorityYield){if(active!==undefined)throw Error('priority yield attempted to stop an active case');restarting=true;}
             else if (active !== undefined) {
-              restarting = finish();
+              restarting = finish(undefined,`controller exited ${signal??code}`);
             } else if (!restarting) {
               const after = current.counters();
               const cause = memoryCause(before, after, aggregateBefore, memory.aggregateOoms());

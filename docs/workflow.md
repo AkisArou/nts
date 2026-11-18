@@ -1169,8 +1169,11 @@ the tooling strict checker owns the source's type checking.
   fresh Node process with the ordinary test bootstrap and activity observer.
   The bootstrap revokes inherited census execution roles; each fixture's own
   compiler and worker owners retain their semantics beneath the file cap.
-  The shared longest-first scheduler uses measured entry costs, with source
-  size as its fallback until an entry has been timed.
+  The shared longest-first scheduler uses measured entry costs; untimed
+  entries go first so an unknown cannot be left in the measured tail.
+  The pool uses each worker container's local OOM count for its own budget;
+  fixture descendant budgets retain their owners' completed outcomes. A
+  completed assertion report survives a later memory observation failure.
   Completion retains the file's peak before the lease returns; a controller
   may then accept another entry. The selector self-test also holds an explicit
   case lease. A historical whole-tooling peak cannot size these admissions.
