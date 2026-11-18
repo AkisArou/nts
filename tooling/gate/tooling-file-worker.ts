@@ -9,7 +9,7 @@ import {runAsCommand,isCommandExit} from '../differential/command-entry/main.ts'
 import {inResidentWorker} from '../census/worker-memory.ts';
 import {runScopedTooling} from './tooling-runner.ts';
 import {readToolingRequest,TOOLING_SELF_TEST_FILE,type ToolingEntryReply} from './tooling-test-runner.ts';
-import {readStepInstrument,ToolingInstrumentError,type InstrumentResult} from './step-result.ts';
+import {readStepInstrument,ToolingInstrumentError} from './step-result.ts';
 import {assignOwnedValues} from './environment-values.ts';
 import {readLimits} from './scopes/memory-limits.ts';
 

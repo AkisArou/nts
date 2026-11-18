@@ -3,12 +3,12 @@ import {runAsCommand,registerCommandCloser} from "../differential/command-entry/
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawn} from "node:child_process";
-import {mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,writeFileSync} from "node:fs";
-import {availableParallelism,homedir} from "node:os";
-import {join,relative} from "node:path";
+import {mkdirSync,mkdtempSync,readFileSync,rmSync} from "node:fs";
+import {homedir} from "node:os";
+import {join} from "node:path";
 import {randomUUID} from "node:crypto";
-import {publishHung,publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
-import {checkedUnitName,newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
+import {publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
+import {checkedUnitName,newToolingSlice,stopToolingSlice} from "./tooling-slice.ts";
 import {priorityOf} from "./ranks.ts";
 import {requireOwnUnit,startBoundSlice} from './scopes/bound-slice.ts';
 import {gateCommand} from "./affinity.ts";
