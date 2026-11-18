@@ -35,6 +35,7 @@ export async function runToolingWorker(request:ToolingRequest):Promise<void>{
     // supplied resource observations.
     if(!slice||!hostObservations({}).ownCgroup().includes(`/${slice}/${slice.slice(0,-6)}-f.scope`))
       throw new ToolingInstrumentError('tooling-setup','tooling worker is outside its owned slice/scope');
+    assignOwnedValues(process.env,{NTS_GATE_STEP_RESULT:undefined,NTS_GATE_STEP_ATTEMPT:undefined});
     delete process.env.NTS_GATE_STEP_RESULT;delete process.env.NTS_GATE_STEP_ATTEMPT;
     if(request.selectorSelfTest==='include')throw new ToolingInstrumentError('tooling-setup','a suite must dispatch its selector entry through the case pool');
     const bootstrap=fileURLToPath(new URL('./test-host-bootstrap.ts',import.meta.url));
@@ -43,7 +44,7 @@ export async function runToolingWorker(request:ToolingRequest):Promise<void>{
       let sequence=0;
       send=row=>{writeSync(3,JSON.stringify({version:1,nonce:request.nonce,
         file:request.files[0],pid:process.pid,sequence:++sequence,...row})+'\n');};
-      send({event:'ready'});installTestHost();
+      send({event:'ready'});installTestHost(request.files[0]!);
       const report=send;
       result=await runToolingEntry(request.files[0]!, (event,id,name,failed)=>{report({event,id,name,failed});});
     }else result=request.selectorSelfTest==='only'?await selectorSelfTest():await runTooling(request.files,

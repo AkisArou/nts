@@ -13,7 +13,8 @@ export function poisonedTestEnvironment(source:NodeJS.ProcessEnv=process.env):No
   return testEnvironment({}, {...source,HOME:'/unowned/test-home',NODE_OPTIONS:'--nts-undeclared-test-environment',
     NODE_PATH:'/unowned/modules',NTS_UNDECLARED_TEST_ENVIRONMENT:'poison: ambient environment copied'});
 }
-export function installTestHost():void {
+export function installTestHost(entryFile?:string):void {
+  if(entryFile!==undefined)process.argv=[process.execPath,resolve(entryFile)];
   const environment=poisonedTestEnvironment();
   // Entry tests choose their own fixture execution roles and budgets. Their
   // real enclosing file cap remains in the kernel after these roles leave.

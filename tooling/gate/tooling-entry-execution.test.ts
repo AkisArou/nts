@@ -16,12 +16,12 @@ function fixture(t:import('node:test').TestContext){
 test('each leased file has a distinct process and fresh globals; reuse fails that control',async t=>{
   const f=fixture(t),pids=join(f.root,'pids.jsonl');
   const files=['first','second'].map(name=>f.write(name,`import{test}from'node:test';import assert from'node:assert/strict';import{appendFileSync}from'node:fs';
-test('fresh ${name}',()=>{appendFileSync(${JSON.stringify(pids)},JSON.stringify({pid:process.pid})+'\\n');assert.equal(globalThis.__ntsEntryFresh,undefined);globalThis.__ntsEntryFresh=true;});`));
+test('fresh ${name}',()=>{appendFileSync(${JSON.stringify(pids)},JSON.stringify({pid:process.pid})+'\\n');assert.deepEqual(process.argv,[process.execPath,import.meta.filename]);assert.equal(globalThis.__ntsEntryFresh,undefined);globalThis.__ntsEntryFresh=true;});`));
   for(const file of files)assert.equal((await runScopedTooling([file],{fixture:true,memoryMax:512*2**20,output:f.output})).status,0,f.text());
   const rows=readFileSync(pids,'utf8').trim().split('\n').map(line=>JSON.parse(line));assert.equal(new Set(rows.map(row=>row.pid)).size,2);
   const reused=join(f.root,'reused.mjs');
   writeFileSync(reused,`import assert from'node:assert/strict';import{runToolingEntry}from${JSON.stringify(new URL('./tooling-test-runner.ts',import.meta.url).href)};
-const first=await runToolingEntry(${JSON.stringify(files[0])},()=>{});const second=await runToolingEntry(${JSON.stringify(files[1])},()=>{});
+process.argv=[process.execPath,${JSON.stringify(files[0])}];const first=await runToolingEntry(${JSON.stringify(files[0])},()=>{});process.argv=[process.execPath,${JSON.stringify(files[1])}];const second=await runToolingEntry(${JSON.stringify(files[1])},()=>{});
 assert.equal(first.status,0);assert.equal(second.status,1);assert.equal(second.completedFailures,1);`);
   const control=spawnTest(process.execPath,[reused],{env:fixtureEnvironment(t),encoding:'utf8'},'reused process counterfactual');
   assert.notEqual(control.status,0,control.stdout+control.stderr);assert.match(control.stdout+control.stderr,/fresh second/);
