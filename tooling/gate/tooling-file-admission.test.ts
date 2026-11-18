@@ -32,13 +32,14 @@ for(const ordered of [true,false])test(`tooling admissions ${ordered?'retain dis
   const client=tokenClient(address,'tooling');
   const base=(path:string,stop:AbortSignal)=>{asked.push(path);return client.acquire({project:path,backend:'node'},stop,path===files[0]?2:1);};
   const acquire=ordered?orderedToolingAdmission(base):base;
-  const first=acquire(files[0]!,signal.signal),second=acquire(files[1]!,signal.signal);
+  const track=async(promise:ReturnType<typeof acquire>)=>{const release=await promise;if(release)held.push(release);return release;};
+  const first=track(acquire(files[0]!,signal.signal)),second=track(acquire(files[1]!,signal.signal));
   await waitFor('the earlier tooling lease is waiting',()=>pool.waiting.length===1);
   if(ordered)assert.deepEqual(asked,[files[0]],'a later acquire bypassed the waiting earlier file');
-  else {const release=await second;assert.ok(release);held.push(release);assert.equal(pool.total,1,'the counterfactual grants the later small file first');}
+  else {assert.ok(await second);assert.equal(pool.total,1,'the counterfactual grants the later small file first');}
   headFits=true;pool.grant();
-  const head=await first;assert.ok(head);held.push(head);
-  if(ordered){const later=await second;assert.ok(later);held.push(later);}
+  assert.ok(await first);
+  if(ordered)assert.ok(await second);
   assert.equal(pool.total,2,'both file leases are active before either file completes');
 });
 
