@@ -137,7 +137,7 @@
       "counts": {
         "runtime/web-platform/test/wpt/harness.ts": 38
       },
-      "source": "sha256:3e44f91e7facc11024b0ea0e12022852c1e316a1f0354cda0cd60d1f1a969209"
+      "source": "sha256:913234f86f58aa29efb2e8138705e3452755724dfe8d701b3f2d5b282ee1bb51"
     },
     "tooling/conformance/ecmascript/icu-compiled/tsconfig.c.json": {
       "modules": [
@@ -340,8 +340,10 @@
         "tooling/census/typescript-record.test.ts",
         "tooling/census/typescript-record.ts",
         "tooling/census/typescript-suite.test.ts",
+        "tooling/census/worker-identity.ts",
         "tooling/census/worker-memory.test.ts",
         "tooling/census/worker-memory.ts",
+        "tooling/census/worker-pool-policy.test.ts",
         "tooling/census/worker-pool.ts",
         "tooling/census/worker-readiness.test.ts",
         "tooling/chromium/app-drive.ts",
@@ -795,6 +797,7 @@
         "tooling/gate/corpus.test.ts",
         "tooling/gate/corpus.ts",
         "tooling/gate/costs.mjs",
+        "tooling/gate/costs.test.ts",
         "tooling/gate/cpu-load-failed-worker-fixture.ts",
         "tooling/gate/cpu-load-worker.ts",
         "tooling/gate/cpu-load.test.ts",
@@ -866,6 +869,8 @@
         "tooling/gate/memory-ancestry.test.ts",
         "tooling/gate/memory-ancestry.ts",
         "tooling/gate/memory-growth.test.ts",
+        "tooling/gate/memory-holders.test.ts",
+        "tooling/gate/memory-holders.ts",
         "tooling/gate/memory-ledger.test.ts",
         "tooling/gate/memory-ledger.ts",
         "tooling/gate/memory-sampler.test.ts",
@@ -1063,6 +1068,14 @@
         "tooling/gate/tooling-discovery.test.ts",
         "tooling/gate/tooling-discovery.ts",
         "tooling/gate/tooling-entry-activity.ts",
+        "tooling/gate/tooling-entry-channel.test.ts",
+        "tooling/gate/tooling-entry-channel.ts",
+        "tooling/gate/tooling-entry-execution.test.ts",
+        "tooling/gate/tooling-entry-supervisor.ts",
+        "tooling/gate/tooling-file-admission.test.ts",
+        "tooling/gate/tooling-file-admission.ts",
+        "tooling/gate/tooling-file-wiring.test.ts",
+        "tooling/gate/tooling-file-worker.ts",
         "tooling/gate/tooling-load-build.test.ts",
         "tooling/gate/tooling-load.ts",
         "tooling/gate/tooling-log.test.ts",
@@ -1072,6 +1085,8 @@
         "tooling/gate/tooling-slice-fixture.ts",
         "tooling/gate/tooling-slice.test.ts",
         "tooling/gate/tooling-slice.ts",
+        "tooling/gate/tooling-test-runner.ts",
+        "tooling/gate/tooling-test-worker.ts",
         "tooling/gate/tooling-type-projects.ts",
         "tooling/gate/tooling-type-records.ts",
         "tooling/gate/tooling-types.test.ts",
@@ -1481,7 +1496,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:9497ca5a722023449d08214f7d0ca4473df2d7aeaa6e558cbc6978694342c15b"
+      "source": "sha256:b55a8b694bb406a168246faf75284e64b14dc2c8459e6e9087dea71f61286c2d"
     }
   }
 }
