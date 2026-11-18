@@ -83,7 +83,7 @@ import { dirname, join, normalize, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
-import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem, withCommittedSelectorSource } from "./owed-range.ts";
+import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem, withCommittedSelectorSource, withSelectorSources } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
@@ -1369,11 +1369,19 @@ const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "test
  * still owes blockers) and the new one added (moving one into tests/programs/ is a
  * new example).
  */
+/** The base of a non-range question, shared by path discovery and native replay.
+ * @param {string[]} argv */
+function changeBase(argv) {
+  const at = (/** @type {string} */ flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
+  const commit = at("--commit");
+  return commit ? `${commit}^` : at("--since") ?? "HEAD";
+}
 export function changedPaths(argv) {
   const git = (...args) => execFileSync("git",gitArguments( args), { cwd: TREE, encoding: "utf8" });
   const at = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
   const commit = at("--commit");
-  if (commit) return contentChanges(TREE, parseNameStatus(git("diff", "--name-status", "-z", "-M", `${commit}^`, commit)), `${commit}^`, commit);
+  const base=changeBase(argv);
+  if (commit) return contentChanges(TREE, parseNameStatus(git("diff", "--name-status", "-z", "-M", base, commit)), base, commit);
   // Two commits and nothing else: no working tree and no untracked files. What
   // a landing gates is a commit, and a tree's uncommitted or linked files (a
   // symlinked submodule, a node_modules link) are not part of it -- read from
@@ -1384,10 +1392,9 @@ export function changedPaths(argv) {
     if (!from || !to) throw new Error(`--range wants A..B, got ${range}`);
     return contentChanges(TREE, parseNameStatus(git("diff", "--name-status", "-z", "-M", from, to)), from, to);
   }
-  const since = at("--since");
-  const tracked = parseNameStatus(git("diff", "--name-status", "-z", "-M", since ?? "HEAD"));
+  const tracked = parseNameStatus(git("diff", "--name-status", "-z", "-M", base));
   const untracked = git("ls-files", "-z", "--others", "--exclude-standard").split("\0").filter(Boolean).map((path) => ({ path, added: true, deleted: false }));
-  return [...contentChanges(TREE, tracked, since ?? "HEAD", null), ...untracked];
+  return [...contentChanges(TREE, tracked, base, null), ...untracked];
 }
 
 // ---------------------------------------------------------------------------
@@ -2439,7 +2446,12 @@ function main() {
   }
   const rangeAt = argv.indexOf("--range");
   const selection = rangeAt < 0 ? null : selectRange(TREE, argv[rangeAt + 1]);
-  const rules = selection ? [...new Map(selection.views.flatMap(v => v.rules).map(r => [JSON.stringify(r), r])).values()] : owed(changes);
+  const currentRules=()=>{
+    if(!changes.some(change=>change.deleted))return owed(changes);
+    const revision=execFileSync('git',gitArguments(['rev-parse','--verify','--end-of-options',`${changeBase(argv)}^{commit}`]),{cwd:TREE,encoding:'utf8'}).trim();
+    return withSelectorSources(TREE,[revision],sources=>owed(changes,{projectBase:{tree:sources.prepare(0),revision}}));
+  };
+  const rules = selection ? [...new Map(selection.views.flatMap(v => v.rules).map(r => [JSON.stringify(r), r])).values()] : currentRules();
   const steps = selection ? selection.checks.steps === "all" ? selection.views[1].catalogue : selection.checks.steps : gateSteps(rules);
   const projects = selection ? selection.checks.interop?.split(/\s+/) ?? null : interopOwed(rules);
   const narrowed = Array.isArray(projects) ? ` NTS_INTEROP_PROJECTS="${projects.join(" ")}"` : "";

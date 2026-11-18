@@ -343,6 +343,49 @@ unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),
   });
 });
 
+test('committed CLI questions retain native matched deletions and ignore TSV deletions',async t=>{
+  const owner=new URL('./owed.mjs',import.meta.url).href;
+  const env=fixtureEnvironment(t);
+  /** @type {[string,string][]} */
+  const variants=[['matched','gone.ts'],['ignored','ignored.tsv']];
+  for(const [kind,name]of variants){
+    const root=mkdtempSync(join(tmpdir(),'owed-committed-project-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+    const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
+    const git=(/** @type {string[]} */ args)=>{const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
+    put('Cargo.toml','[package]\nname="committed-project"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
+    put('tooling/gate/all.sh',`#!/bin/sh
+if [ "$1" = --list ]; then printf '%s\\n' profile addons tooling; exit; fi
+step "profile" node tooling/private/reader.ts
+step "addons" node tooling/private/receiver.ts
+step "tooling" node tooling/empty.test.ts
+`);
+    put('tooling/gate/run.mjs','if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = "output";');
+    put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');put('tooling/private/receiver.ts','');
+    put('tooling/gate/reader-inputs/main.ts','export const projectConfig=url=>({kind:"project-config",role:"type-check",url});');
+    put('tooling/private/reader.ts',"import {projectConfig} from '../gate/reader-inputs/main.ts';projectConfig(new URL('../../docs/data/tsconfig.json',import.meta.url),'type-check');");
+    put('docs/data/tsconfig.json','{"include":["src/**/*.ts"]}');put('docs/data/src/main.ts','export const value=1;');
+    put('docs/data/src/gone.ts','interface RemovedGlobal { value: number }');put('docs/data/src/ignored.tsv','ignored compiler input');
+    // This private fixture has only three steps. Isolate the production CLI's
+    // change selection from the unrelated full-catalogue preflight; every
+    // argument, Git read, native query and printed obligation remains real.
+    put('preflight.mjs',`import {registerHooks} from 'node:module';
+registerHooks({load(url,context,next){const loaded=next(url,context);if(url!==${JSON.stringify(owner)})return loaded;
+const text=String(loaded.source),needle='const broken=selfTest(trust);';if(!text.includes(needle))throw Error('missing fixture preflight boundary');
+return {...loaded,source:text.replace(needle,'const broken=null;')};}});`);
+    git(['init','--quiet']);git(['add','.']);git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','committed Program roots']);
+    rmSync(join(root,'docs/data/src',name));git(['add','.']);git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','removed '+name]);
+    assert.equal(git(['status','--porcelain']),'');
+    for(const args of [['--commit','HEAD'],['--since','HEAD~1']])await t.test(kind+' '+args[0],()=>{
+      const result=spawnTest(process.execPath,['--import',join(root,'preflight.mjs'),fileURLToPath(owner),...args],{cwd:root,env,encoding:'utf8'});
+      assert.equal(result.status,0,result.stdout+result.stderr);
+      const checklist=result.stdout.match(/NTS_GATE_STEPS="([^"]+)"/)?.[1];assert.ok(checklist,result.stdout);
+      const steps=checklist.split(' ');
+      for(const step of ['profile','addons'])assert.equal(steps.includes(step),kind==='matched',args[0]+' '+kind+' '+step+'\n'+result.stdout);
+      assert.equal(result.stdout.includes('project matches read by tooling/private/reader.ts'),kind==='matched',result.stdout);
+    });
+  }
+});
+
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
   for(const path of ['tooling/gate/reader-inputs/main.ts','tooling/gate/reader-inputs/tsconfig.json']){
     const rule=RULES.find(rule=>rule.name==='reader input declaration ownership');
