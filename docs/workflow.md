@@ -1820,6 +1820,9 @@ death; an absent timestamp remains explicit after forced termination.
 - **Tooling admission is per entry.** Test files and the selector self-test
   use the common case leases and independent worker boundaries. A fresh Node
   test process preserves file isolation; resident controllers can be reused.
+  The controller outside each file scope owns activity and inactivity. It
+  authenticates completed assertions on that child's private channel before
+  termination; a killed or over-budget file cannot publish a partial pass.
   The collector retains completed failures beside unfinished files and observer
   errors ([log](records/notebooks/decisions-log.md#tooling-files-own-their-memory-admission-11-18)).
 

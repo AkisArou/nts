@@ -97,6 +97,7 @@ export async function runToolingEntry(file:string,progress:(event:'start'|'compl
   const clock=hostObservations().now,started=clock(),owners=new ToolingTestOwners([file]);
   let completedFailures=0,success=true,summarized=false;
   const stream=run({files:[file],isolation:'none',setup:events=>{
+    events.on('test:enqueue',data=>{owners.file(data);});
     events.on('test:dequeue',data=>{owners.file(data);progress('start',data.testId,data.name);});
     events.on('test:complete',data=>{
       owners.file(data);const failed=completedTestFailure(data);if(failed)completedFailures++;

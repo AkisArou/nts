@@ -15,7 +15,6 @@ export class ToolingEntrySupervisor {
   private readonly clock=hostObservations().now;
   private readonly live:CommandLiveness;
   private cancelWatch=()=>{};
-  private readonly timer:ReturnType<typeof setInterval>;
   private pending='';
   private closed=false;
   private observed=false;
@@ -32,8 +31,6 @@ export class ToolingEntrySupervisor {
     this.channel=channel as Readable;this.channel.setEncoding('utf8');this.channel.on('data',this.data);this.channel.on('error',this.broken);
     this.channel.on('end',this.end);
     child.once('spawn',this.spawned);
-    const period=Math.min(COMMAND_ACTIVITY_POLL_MS,idleMs);
-    this.timer=setInterval(()=>{try{sampler.sample();}catch(error){this.broken(error);}},period);
   }
   touch=():void=>{if(!this.closed&&!this.hung&&!this.error)try{this.live.output(this.clock());}catch(error){this.broken(error);}};
   private spawned=():void=>{
@@ -75,7 +72,7 @@ export class ToolingEntrySupervisor {
     try{this.stop();}catch(cleanup){this.error=new ToolingInstrumentError('tooling-cleanup',this.error.message+'; '+String(cleanup));}
   };
   finish():void{
-    if(this.closed)return;this.closed=true;this.evidence.seal();clearInterval(this.timer);this.cancelWatch();
+    if(this.closed)return;this.closed=true;this.evidence.seal();this.cancelWatch();
     this.child.off('spawn',this.spawned);this.channel.off('data',this.data);this.channel.off('error',this.broken);this.channel.off('end',this.end);
     if(!this.observed&&!this.error)this.error=new ToolingInstrumentError('tooling-setup','missing tooling entry process observation');
   }
