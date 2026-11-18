@@ -71,6 +71,8 @@ use crate::origin::Origin;
 /// 52: checker-proved membership in the global value and type binding tables.
 /// 53: tuple element kinds, initial fixed prefix and readonly metadata.
 /// 55: `SourceFile::root`, the program's root files.
+/// 56: `declared_signatures`, an implementation's own signature where its
+/// overloads' first differs.
 pub const SCHEMA_VERSION: u32 = 56;
 
 /// A TypeScript symbol, as the checker resolved it.
