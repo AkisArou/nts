@@ -20,6 +20,77 @@ export class CgroupDeparted extends HostObservationError {
   readonly group:string;
   constructor(group:string,cause:unknown){super(`host observation cgroup has departed: ${group}`,{cause});this.group=group;}
 }
+/** All live cgroup operations share this provenance and errno boundary.
+ * A successful stat, a parent's listing, or a retained inode proves existence.
+ * Merely asking for a path does not. */
+export type CgroupFiles={inode(group:string):string;text(group:string,file:string):string;children(group:string):string[]};
+const liveCgroupFiles:CgroupFiles={
+  inode:group=>String(statSync(`/sys/fs/cgroup${group}`,{bigint:true}).ino),
+  text:(group,file)=>readFileSync(`/sys/fs/cgroup${group}/${file}`,'utf8'),
+  children:group=>readdirSync(`/sys/fs/cgroup${group}`,{withFileTypes:true}).filter(entry=>entry.isDirectory()).map(entry=>entry.name).sort(),
+};
+export class CgroupObservations {
+  #seen=new Set<string>();
+  #files:CgroupFiles;
+  constructor(files:CgroupFiles=liveCgroupFiles){this.#files=files;}
+  observe<T>(group:string,operation:string,read:()=>T):T{
+    checkedGroup(group);
+    try{return read();}catch(error){
+      if(error instanceof HostObservationError)throw error;
+      if(this.#seen.has(group)&&['ENOENT','ENODEV','ESRCH'].includes((error as NodeJS.ErrnoException).code??''))throw new CgroupDeparted(group,error);
+      throw new HostObservationError(`host observation cgroup ${group} ${operation} failed: ${String(error)}`,{cause:error});
+    }
+  }
+  inode(group:string,retained?:string):string{
+    if(retained!==undefined)this.#seen.add(group);
+    const inode=this.observe(group,'stat',()=>this.#files.inode(group));
+    this.#seen.add(group);
+    if(retained!==undefined&&inode!==retained)throw new CgroupDeparted(group,Error('retained cgroup identity was replaced'));
+    return inode;
+  }
+  text(group:string,file:string):string{return this.observe(group,file,()=>this.#files.text(group,file));}
+  children(group:string):string[]{
+    this.inode(group);
+    const children=this.observe(group,'children',()=>this.#files.children(group).map(name=>`${group==='/'?'':group}/${name}`));
+    for(const child of children)this.#seen.add(child);
+    return children;
+  }
+  charge(group:string,retained?:string):number{
+    this.inode(group,retained);
+    return this.observe(group,'resident charge',()=>parseCgroupCharge(this.text(group,'memory.current'),this.text(group,'memory.stat')));
+  }
+  members(group:string,retained?:string):number[]{
+    this.inode(group,retained);
+    const pids=this.text(group,'cgroup.procs').trim().split(/\s+/).filter(Boolean).map(Number);
+    if(pids.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw new HostObservationError(`host observation cgroup ${group} cgroup.procs is invalid`);
+    for(const child of this.children(group)){
+      try{pids.push(...this.members(child));}
+      catch(error){if(!(error instanceof CgroupDeparted)||error.group!==child)throw error;}
+    }
+    return pids;
+  }
+}
+// Native ownership acquisition is a safety observation even in a resource
+// fixture. Its reads still belong to the same cgroup observation owner.
+const ownershipCgroups=new CgroupObservations();
+export const cgroupOwnershipInode=(group:string)=>ownershipCgroups.inode(group);
+export const cgroupOwnershipMembers=(group:string)=>ownershipCgroups.members(group);
+export type RetainedCgroup={path:string;inode:string};
+export function sampleCgroup<T>(group:string,read:()=>T,departed:T):T{
+  try{return read();}catch(error){if(error instanceof CgroupDeparted&&error.group===group)return departed;throw error;}
+}
+export const retainedCgroupCharge=(host:HostObservations,ref:RetainedCgroup)=>sampleCgroup(ref.path,()=>host.cgroupCharge(ref.path,ref.inode),0);
+export const retainedCgroupMembers=(host:HostObservations,ref:RetainedCgroup)=>sampleCgroup(ref.path,()=>host.cgroupMembers(ref.path,ref.inode),[]);
+/** Keep the cause chain where the failure is reported, while the summary
+ * retains the short reason. The runner routes growth failures here. */
+export function reportMemoryFailure(error:unknown,report:(line:string)=>void,stop:(reason:string)=>void):void{
+  const seen=new Set<unknown>();let cause:unknown=error;
+  while(cause!==undefined&&!seen.has(cause)){
+    seen.add(cause);report(cause instanceof Error?cause.stack??String(cause):String(cause));
+    cause=cause instanceof Error?cause.cause:undefined;
+  }
+  stop(`memory: ${error instanceof Error?error.message:String(error)}`);
+}
 export type MachineMemory = {availableBytes:number;totalBytes:number};
 export type DiskSpace = {freeBytes:number;freeInodes:number};
 export type CgroupCpu = {usageUsec:number;userUsec:number;systemUsec:number};
@@ -33,7 +104,7 @@ export type HostObservationFixture = {
   allocated:{kind:'fixed';defaultBytes:number;paths?:Record<string,number>}|{kind:'live'};
   cpu:{kind:'fixed';default:CgroupCpu;cgroups?:Record<string,CgroupCpu>}|{kind:'live'};
   selfCpu:{kind:'fixed';value:OwnCpu}|{kind:'live'};
-  resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>}|{kind:'live'};
+  resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>;members?:Record<string,number[]>}|{kind:'live'};
   scopePeak:{kind:'fixed';bytes:number;resettable:boolean}|{kind:'live'};
   width:{logical:number;available:number};
   load:[number,number,number];
@@ -52,7 +123,8 @@ export interface HostObservations {
   disk(path:string):DiskSpace;
   allocatedBytes(path:string):number;
   processCharge(pid:number):number;
-  cgroupCharge(path:string):number;
+  cgroupCharge(path:string,inode?:string):number;
+  cgroupMembers(path:string,inode?:string):number[];
   /** The child cgroups directly beneath `path`, as absolute cgroup paths.
    * A fixture's cgroups are the keys of its fixed `resident.cgroups`. */
   cgroupChildren(path:string):string[];
@@ -80,23 +152,18 @@ function liveOwnCgroup():string{
   if(!match)throw new HostObservationError('host observation pressure.ownCgroup is missing');
   return checkedGroup(match[1]!);
 }
-function livePressure(group?:string):PressureReading{
+function livePressure(cgroups:CgroupObservations,group?:string):PressureReading{
   const root=group===undefined?'/proc/pressure':`/sys/fs/cgroup${checkedGroup(group)}`;
-  try{
+  const read=()=>{
+    if(group!==undefined)cgroups.inode(group);
     const identity=statSync(root,{bigint:true}),resources={} as PressureReading['resources'];
     for(const resource of PRESSURE_RESOURCES)resources[resource]=parsePressure(readFileSync(`${root}/${resource}${group===undefined?'':'.pressure'}`,'utf8'),`pressure.${root}.${resource}`);
     const after=statSync(root,{bigint:true});
     if(identity.dev!==after.dev||identity.ino!==after.ino)throw Error('scope identity changed during sampling');
     return {identity:`${root}:${identity.dev}:${identity.ino}`,resources};
-  }catch(error){
-    // A missing individual pressure file inside a live group is still a
-    // broken observation. Only the group's own absent path denotes departure;
-    // the acquiring owner must independently prove that it ended normally.
-    if(group!==undefined&&(error as NodeJS.ErrnoException).code==='ENOENT'){
-      try{statSync(root);}catch(missing){if((missing as NodeJS.ErrnoException).code==='ENOENT')throw new CgroupDeparted(group,error);throw missing;}
-    }
-    throw new HostObservationError(`host observation pressure ${root} failed: ${String(error)}`);
-  }
+  };
+  if(group!==undefined)return cgroups.observe(group,'pressure',read);
+  try{return read();}catch(error){throw new HostObservationError(`host observation pressure ${root} failed: ${String(error)}`,{cause:error});}
 }
 function liveLoopDelay():LoopDelayMeter{
   const histogram=monitorEventLoopDelay({resolution:20});histogram.enable();let closed=false;
@@ -155,7 +222,7 @@ export function parseCgroupCpu(text:string):CgroupCpu {
   };
   return {usageUsec:counter('usage_usec'),userUsec:counter('user_usec'),systemUsec:counter('system_usec')};
 }
-function liveCgroupCpu(path:string):CgroupCpu { return parseCgroupCpu(readFileSync(`/sys/fs/cgroup${path}/cpu.stat`,'utf8')); }
+function liveCgroupCpu(path:string,cgroups:CgroupObservations):CgroupCpu { cgroups.inode(path);return parseCgroupCpu(cgroups.text(path,'cpu.stat')); }
 
 function liveAllocatedBytes(path:string,env:NodeJS.ProcessEnv):number {
   if(!existsSync(path))return 0;
@@ -168,20 +235,23 @@ function liveAllocatedBytes(path:string,env:NodeJS.ProcessEnv):number {
 /** memory.peak resets belong to an open descriptor, not to a cgroup path.
  * Retain the descriptor for the whole case stream and discover reset support
  * before a caller can mistake a whole-scope peak for a per-case measurement. */
-function liveScopeMemoryPeak(requestedGroup?:string):ScopeMemoryPeak {
+function liveScopeMemoryPeak(cgroups:CgroupObservations,requestedGroup?:string):ScopeMemoryPeak {
   let fd:number,group:string;
   try {
     const current=requestedGroup===undefined?readFileSync('/proc/self/cgroup','utf8').trim():'';
     group=requestedGroup??(current.startsWith('0::/')?current.slice(3):'');
     if(!group||group==='/'||group.split('/').includes('..')||group.includes('\n'))throw Error('own scope identity is invalid');
-    fd=openSync(`/sys/fs/cgroup${group}/memory.peak`,'r+');
-  } catch(error) {throw new HostObservationError(`host observation scopePeak cannot open own memory.peak: ${String(error)}`);}
+    cgroups.inode(group);
+    fd=cgroups.observe(group,'scopePeak open',()=>openSync(`/sys/fs/cgroup${group}/memory.peak`,'r+'));
+  } catch(error) {if(error instanceof CgroupDeparted)throw error;throw new HostObservationError(`host observation scopePeak cannot open own memory.peak: ${String(error)}`,{cause:error});}
   let resettable=false,closed=false;
-  try{writeSync(fd,'reset\n');resettable=true;}catch{}
+  try{cgroups.observe(group,'scopePeak reset support',()=>writeSync(fd,'reset\n'));resettable=true;}catch(error){
+    if(!(error instanceof HostObservationError)||!['EINVAL','EOPNOTSUPP'].includes((error.cause as NodeJS.ErrnoException|undefined)?.code??'')){closeSync(fd);throw error;}
+  }
   const opened=()=>{if(closed)throw new HostObservationError('host observation scopePeak meter is closed');};
   return {resettable,
-    reset:()=>{opened();if(!resettable)throw new HostObservationError('host observation scopePeak meter cannot reset');try{writeSync(fd,'reset\n');}catch(error){throw new HostObservationError(`host observation scopePeak reset failed: ${String(error)}`);}},
-    read:()=>{opened();const buffer=Buffer.alloc(32);let size:number;try{size=readSync(fd,buffer,0,buffer.length,0);}catch(error){if((error as NodeJS.ErrnoException).code==='ENODEV')throw new CgroupDeparted(group,error);throw new HostObservationError(`host observation scopePeak read failed: ${String(error)}`);}const text=buffer.toString('utf8',0,size).trim();if(!/^\d+$/.test(text))throw new HostObservationError('host observation scopePeak counter is invalid');return number(Number(text),'scopePeak.bytes');},
+    reset:()=>{opened();if(!resettable)throw new HostObservationError('host observation scopePeak meter cannot reset');cgroups.observe(group,'scopePeak reset',()=>writeSync(fd,'reset\n'));},
+    read:()=>{opened();const buffer=Buffer.alloc(32);let size:number;size=cgroups.observe(group,'scopePeak read',()=>readSync(fd,buffer,0,buffer.length,0));const text=buffer.toString('utf8',0,size).trim();if(!/^\d+$/.test(text))throw new HostObservationError('host observation scopePeak counter is invalid');return number(Number(text),'scopePeak.bytes');},
     close:()=>{if(!closed){closed=true;closeSync(fd);}},
   };
 }
@@ -208,6 +278,7 @@ function paging(file:string){
 /** No fixture method falls back to a live observation. Reloading its owned
  * file lets the fixture move one resource without replacing its capability. */
 export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservations {
+  const cgroups=new CgroupObservations();
   const file=env[HOST_OBSERVATIONS];
   if(file!==undefined){
     if(!file)throw new HostObservationError('host observation capability path is missing or invalid');
@@ -254,13 +325,13 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     read();
     const charge=(kind:'processes'|'cgroups',key:string)=>{
       const resident=read().resident;
-      if(resident?.kind==='live')return kind==='processes'?liveProcessCharge(Number(key)):liveCgroupCharge(key);
+      if(resident?.kind==='live')return kind==='processes'?liveProcessCharge(Number(key)):cgroups.charge(key);
       if(resident?.kind!=='fixed')throw new HostObservationError('host observation resident is missing or invalid');
       return number(resident[kind]?.[key]??resident.defaultBytes,`resident.${kind}.${key}`);
     };
     const scopePeak=(group?:string):ScopeMemoryPeak=>{
       const initial=read().scopePeak;
-      if(initial.kind==='live')return liveScopeMemoryPeak(group);
+      if(initial.kind==='live')return liveScopeMemoryPeak(cgroups,group);
       let closed=false;
       const current=()=>{if(closed)throw new HostObservationError('host observation scopePeak meter is closed');const value=read().scopePeak;if(value.kind!=='fixed'||value.resettable!==initial.resettable)throw new HostObservationError('host observation scopePeak meter changed its kind or resettability');return value;};
       return {resettable:initial.resettable,reset:()=>{current();if(!initial.resettable)throw new HostObservationError('host observation scopePeak meter cannot reset');},read:()=>number(current().bytes,'scopePeak.bytes'),close:()=>{closed=true;}};
@@ -278,13 +349,14 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       disk:()=>{const value=read().disk;return {freeBytes:number(value?.freeBytes,'disk.freeBytes'),freeInodes:number(value?.freeInodes,'disk.freeInodes')};},
       allocatedBytes:path=>{const value=read().allocated;return value.kind==='live'?liveAllocatedBytes(path,env):number(value.paths?.[path]??value.defaultBytes,'allocated.paths.'+path);},
       processCharge:pid=>charge('processes',String(pid)),
-      cgroupCharge:path=>charge('cgroups',path),
+      cgroupCharge:(path,inode)=>read().resident.kind==='live'?cgroups.charge(path,inode):charge('cgroups',path),
+      cgroupMembers:(path,inode)=>{const resident=read().resident;return resident.kind==='live'?cgroups.members(path,inode):[...(resident.members?.[path]??[])];},
       cgroupChildren:path=>{
         checkedGroup(path);const resident=read().resident;
-        if(resident.kind==='live')return liveCgroupChildren(path);
+        if(resident.kind==='live')return cgroups.children(path);
         return fixtureCgroupChildren(Object.keys(resident.cgroups??{}),path);
       },
-      cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
+      cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path,cgroups);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
       ownCpu:()=>{const value=read().selfCpu;return value.kind==='live'?liveOwnCpu():ownCpu(value.value);},
       ownScopeMemoryPeak:()=>scopePeak(),
       scopeMemoryPeak:group=>scopePeak(group),
@@ -293,8 +365,8 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       now:()=>{const value=read().clock;if(value?.kind==='live')return performance.now();if(value?.kind==='fixed')return number(value.now,'clock.now');if(value?.kind==='file'){const text=textFile(value.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}throw new HostObservationError('host observation clock is missing or invalid');},
       wallNow:()=>{const value=read().wallClock;return value.kind==='live'?Date.now():number(value.now,'wallClock.now');},
       ownCgroup:()=>{const value=read().pressure;return value.kind==='live'?liveOwnCgroup():checkedGroup(value.ownGroup);},
-      machinePressure:()=>{const value=read().pressure;return value.kind==='live'?livePressure():pressureReading(value.machine,'pressure.machine');},
-      cgroupPressure:group=>{checkedGroup(group);const value=read().pressure;return value.kind==='live'?livePressure(group):pressureReading(value.cgroups?.[group]??{...value.default,identity:group+':'+value.default.identity},'pressure.cgroups.'+group);},
+      machinePressure:()=>{const value=read().pressure;return value.kind==='live'?livePressure(cgroups):pressureReading(value.machine,'pressure.machine');},
+      cgroupPressure:group=>{checkedGroup(group);const value=read().pressure;return value.kind==='live'?livePressure(cgroups,group):pressureReading(value.cgroups?.[group]??{...value.default,identity:group+':'+value.default.identity},'pressure.cgroups.'+group);},
       loopDelay:()=>{
         const initial=read().loopDelay;if(initial.kind==='live')return liveLoopDelay();let closed=false;
         const opened=()=>{if(closed)throw new HostObservationError('host observation loopDelay meter is closed');};
@@ -314,34 +386,25 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     disk:path=>{let existing=resolve(path);while(!existsSync(existing))existing=dirname(existing);const value=statfsSync(existing);return {freeBytes:value.bavail*value.bsize,freeInodes:value.ffree};},
     allocatedBytes:path=>liveAllocatedBytes(path,env),
     processCharge:liveProcessCharge,
-    cgroupCharge:liveCgroupCharge,
-    cgroupChildren:path=>liveCgroupChildren(checkedGroup(path)),
-    cgroupCpu:liveCgroupCpu,
+    cgroupCharge:(path,inode)=>cgroups.charge(path,inode),
+    cgroupMembers:(path,inode)=>cgroups.members(path,inode),
+    cgroupChildren:path=>cgroups.children(path),
+    cgroupCpu:path=>liveCgroupCpu(path,cgroups),
     ownCpu:liveOwnCpu,
-    ownScopeMemoryPeak:liveScopeMemoryPeak,
-    scopeMemoryPeak:liveScopeMemoryPeak,
+    ownScopeMemoryPeak:()=>liveScopeMemoryPeak(cgroups),
+    scopeMemoryPeak:group=>liveScopeMemoryPeak(cgroups,group),
     machineWidth:()=>cpus().length,
     availableWidth:()=>availableParallelism(),
     now:()=>performance.now(),
     wallNow:()=>Date.now(),
     ownCgroup:liveOwnCgroup,
-    machinePressure:()=>livePressure(),
-    cgroupPressure:livePressure,
+    machinePressure:()=>livePressure(cgroups),
+    cgroupPressure:group=>livePressure(cgroups,group),
     loopDelay:liveLoopDelay,
   };
 }
 
 function liveProcessCharge(pid:number):number { return parseProcessCharge(readFileSync(`/proc/${pid}/status`,'utf8')); }
-/** One level only: the caller bounds its own depth. A group that ends
- * between its parent's listing and its own is departed, never an empty one. */
-function liveCgroupChildren(path:string):string[]{
-  const root=`/sys/fs/cgroup${path==='/'?'':path}`;
-  try{return readdirSync(root,{withFileTypes:true}).filter(entry=>entry.isDirectory()).map(entry=>`${path==='/'?'':path}/${entry.name}`).sort();}
-  catch(error){
-    if(['ENOENT','ENODEV'].includes((error as NodeJS.ErrnoException).code??''))throw new CgroupDeparted(path,error);
-    throw new HostObservationError(`host observation cgroupChildren ${path} failed: ${String(error)}`);
-  }
-}
 /** A fixture names every cgroup it has as a key; a parent exists through its
  * descendants' keys, and an unknown parent is a missing observation. */
 export function fixtureCgroupChildren(keys:readonly string[],path:string):string[]{
@@ -355,11 +418,6 @@ export function fixtureCgroupChildren(keys:readonly string[],path:string):string
   if(!known)throw new HostObservationError(`host observation resident.cgroups has no cgroup ${path}`);
   return [...children].sort();
 }
-function liveCgroupCharge(path:string):number {
-  try{return parseCgroupCharge(readFileSync(`/sys/fs/cgroup${path}/memory.current`,'utf8'),readFileSync(`/sys/fs/cgroup${path}/memory.stat`,'utf8'));}
-  catch(error){if(['ENOENT','ENODEV'].includes((error as NodeJS.ErrnoException).code??''))throw new CgroupDeparted(path,error);throw error;}
-}
-
 /** Only this owned grant crosses a sampler boundary; its data paths live in the grant. */
 export function hostObservationEnvironment(env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
   hostObservations(env);

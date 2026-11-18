@@ -95,7 +95,8 @@ globalThis.bytes=Buffer.alloc(32*1024**2,7);watch(${JSON.stringify(root)},()=>{}
     });
     lease.sample();lease.close();assert.deepEqual(lease.groups,[]);
     assert.equal(observed.length,1);assert.ok(observed[0]!.peak>=peak);
-    assert.throws(()=>host.scopeMemoryPeak(worker.group),/cannot open own memory.peak/,'an unopened missing group is fatal');
+    assert.throws(()=>host.scopeMemoryPeak(worker.group),CgroupDeparted,'a previously observed group stays departed when reopened');
+    host.cgroupCharge(run.group);
     run.close();assert.throws(()=>host.cgroupCharge(run.group),CgroupDeparted,'a missing step boundary remains fatal');
   }finally{worker.close();run.close();await closed;lease.close(false);}
 });

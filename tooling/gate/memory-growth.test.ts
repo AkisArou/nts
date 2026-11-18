@@ -7,6 +7,7 @@ import {createContext,runInContext} from 'node:vm';
 import {SourceFacts} from './source-facts.ts';
 import {testEnvironment} from './test-environment.ts';
 import {peakReservation} from './step-scheduling.ts';
+import {reportMemoryFailure,sampleCgroup,CgroupDeparted,HostObservationError} from './host-observations.ts';
 
 const GiB=2**30;
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
@@ -39,7 +40,7 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
     memoryRecord:{shrinks:0,growths:0,withdrawn:0,waited_s:0},
     used:()=>({bytes:0}),outranked:():boolean=>state.yielding,reserved:()=>allocated,tokenShort:()=>0,
     tokenDemand:(u:{bytes:number})=>u.bytes,
-    gib:(bytes:number)=>String(bytes),AbortController,Date:{now:()=>0},
+    gib:(bytes:number)=>String(bytes),AbortController,Date:{now:()=>0},reportMemoryFailure,
     process:{stderr:{write:(message:string)=>reports.push(message)}},
     stop:(message:string):void=>{state.stopping=true;closed.reject(Error(message));},noteSize:()=>{},schedule:():void=>{},
     setImmediate:(callback:()=>void):NodeJS.Immediate=>{reschedules++;return setImmediate(callback);},
@@ -67,6 +68,7 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
   state.schedule=()=>{if(state.stopping)return;adjust();if(!state.growth)closed.resolve();};
   return {state,adjust,closed:closed.promise,calls,kinds,cancelled,reports,
     allocated:()=>allocated,maximumActive:()=>maximumActive,reschedules:()=>reschedules,
+    rejectFirst(error:Error){const first=pending.find(flight=>!flight.done);assert.ok(first);first.done=true;active--;first.answer.reject(error);},
     grantFirst(){const first=pending.find(flight=>!flight.done);assert.ok(first);first.done=true;allocated+=first.bytes;if(first.draining&&(backfill||state.yielding))drained+=first.bytes;active--;first.answer.resolve();}};
 }
 
@@ -264,4 +266,24 @@ test('yielding sampling returns only idle elastic history and keeps live case gr
  assert.deepEqual(bounds,['idle','active','fixed']);
  idle.charge=0;sample();assert.equal(idle.extra,peakReservation([1]));
  state.outrankedNow=false;idle.extra=3*GiB;sample();assert.equal(idle.extra,3*GiB,'ordinary sampling retains the existing grant policy');
+});
+
+test('a rejected growth retains the observation stack before the runner stops',async()=>{
+  const run=controlledGrowth(),error=Error('supplied memory read EIO');
+  const stopped=assert.rejects(run.closed,/memory: supplied memory read EIO/);
+  run.adjust();run.rejectFirst(error);await stopped;
+  assert.equal(run.state.stopping,true);assert.deepEqual(run.reports,[error.stack+'\n']);
+});
+
+test('the runner ends a departed scope sample while retaining its measured peak',()=>{
+  const group='/owned/step';let failure:Error|undefined;
+  const context=createContext({sampleCgroup,HostObservationError,isCommandExit:()=>false,host:{cgroupCharge:()=>{if(failure)throw failure;return 123;}}});
+  runInContext(policy('chargeOf'),context);
+  const sample=runInContext('('+policy('sampleStep')+')',context) as (step:{scope:{group:string};charge:number;peakCharge:number})=>void;
+  const step={scope:{group},charge:0,peakCharge:0};sample(step);assert.equal(step.peakCharge,123);
+  failure=new CgroupDeparted(group,Object.assign(Error('supplied departed read'),{code:'ENODEV'}));
+  sample(step);assert.equal(step.charge,0);assert.equal(step.peakCharge,123);
+  for(const error of [new CgroupDeparted('/other',Error('wrong group')),new HostObservationError('named EIO observation')]){
+    failure=error;assert.throws(()=>sample(step),value=>value===error);
+  }
 });

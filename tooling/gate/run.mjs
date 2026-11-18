@@ -96,7 +96,7 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 
 import {RunDiagnostics} from "./run-diagnostics.ts";
 import {clippyTarget} from "./build-targets.ts";
-import {HostObservationError} from "./host-observations.ts";
+import {HostObservationError,reportMemoryFailure,sampleCgroup} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
 import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
@@ -998,7 +998,7 @@ function wantMemory() {
 
 // What a step's slice holds now, on the ledger's own basis.
 function chargeOf(scope) {
-  return host.cgroupCharge(scope.group);
+  return sampleCgroup(scope.group,()=>host.cgroupCharge(scope.group),0);
 }
 function sampleStep(r) {
   try { r.charge = chargeOf(r.scope); r.peakCharge = Math.max(r.peakCharge ?? 0, r.charge); }
@@ -1201,7 +1201,7 @@ function adjustMemory() {
   }, error => {
     if (controller.signal.aborted) { memoryRecord.withdrawn++; return; }
     // The ledger failed under the run: no step can be given memory now.
-    stop(`memory: ${error.message}`);
+    reportMemoryFailure(error,line=>process.stderr.write(line+"\n"),stop);
   }).finally(() => {
     memoryRecord.waited_s += (Date.now() - asked) / 1000;
     growth = null;
