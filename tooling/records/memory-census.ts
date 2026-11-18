@@ -17,7 +17,8 @@ import {pendingLine,refreshLine} from './pending.ts';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {acceptedRevision,acceptedRevisionData} from '../gate/accepted-revision-data.ts';
 import {reserveJob} from '../gate/memory-ledger.ts';
-import {projectInputOwner,type ProjectInputs,type ProjectRequest} from '../gate/project-inputs.ts';
+import {projectInputOwner,type ProjectInputs} from '../gate/project-inputs.ts';
+import type {ProjectRequest} from '../gate/project-discovery.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {captureReaderObservations,validateReaderBatchObservations} from '../gate/reader-observations.ts';
 import type {InputSnapshot,ReaderObservation} from '../gate/module-closure.ts';
@@ -75,11 +76,12 @@ export function censusInputScope(root:string,readProject?:(requests:readonly Pro
    const rows:ReaderObservation[]=captureReaderObservations(root,[...selection.captured(),...input.observations,...input.pinObservations]).map(row=>({...row,reader:'memory census',context:{entry:'<entry>',dataNamespaces:{}},protocol:'project'}));
    for(const row of [...input.installedObservations,...input.hostObservations,...input.dependencyObservations,...input.generatedObservations])rows.push({...row,reader:'memory census',context:{entry:'<entry>',dataNamespaces:{}},protocol:'project',causes:[{kind:row.observation.kind,path:row.observation.path}]});
    const files=rows.filter(row=>!row.capability&&!row.environment&&!row.dependency&&row.observation.kind==='file'&&row.observation.value!==null).map(row=>relative(root,row.observation.path));
-   snapshots.set(name,{files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:rows});
+   snapshots.set(name,{files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:rows,
+    projectMatches:input.matches.map(match=>({...structuredClone(match),reader:'memory census',context:{entry:'<entry>',dataNamespaces:{}}}))});
    const required=(key:string)=>{const value=current.get(key);assert.ok(value,`memory census identity has no inputs: ${key}`);return value;};
    identities.set(name,{source:programIdentity(root,input,request),recipe:required('recipe'),producer:required('producer'),version:CENSUS_VERSION});
   }}finally{owner?.close();}
-  validateReaderBatchObservations(names.map(name=>snapshots.get(name)!));
+  validateReaderBatchObservations(names.map(name=>snapshots.get(name)!),root);
   return new Map(names.map(name=>[name,identities.get(name)!]));
  }};
 }

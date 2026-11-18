@@ -169,6 +169,16 @@ test('one transaction reads each real Program once and replays negative lookups 
  }finally{negative.close();}
 });
 
+test('a transaction refuses captured native matches that disagree with the pinned parser',t=>{
+ const {root}=fixture(t),owner=projectInputOwner(root);
+ const inputs=censusInputScope(root,requests=>{
+  const input=owner.read(requests);assert.ok(input.matches[0]?.files.length);
+  return {...input,matches:input.matches.map((match,index)=>index?match:{...match,files:[]})};
+ });
+ try{assert.throws(()=>inputs.read(['tree-teardown']),/project discovery matched files changed/);}
+ finally{owner.close();}
+});
+
 test('the recorder scopes hooks once and applies a native refresh when no row is pending',async t=>{
  const {root,put,row}=fixture(t),name='tree-teardown',before=JSON.stringify(row(name));
  for(const program of memoryPrograms(root))put(censusRecord(program),program===name?before:JSON.stringify(row(program)));
