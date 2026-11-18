@@ -48,7 +48,8 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   try {
   startBoundSlice(slice,owner,{rank,...(options.memoryMax===undefined?{}:{max:options.memoryMax})});acquired=true;
   const limits=options.memoryMax===undefined?[]:[`--property=MemoryMax=${options.memoryMax}`,'--property=MemorySwapMax=0'];
-  const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",...limits,command.command,...command.args],{
+  const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",
+    ...(singleProcess?['--property=KillSignal=SIGKILL']:[]),...limits,command.command,...command.args],{
     env,stdio:["ignore","pipe","pipe",singleProcess?'pipe':'ignore'],
   });
   const output=options.output??process.stdout;
@@ -72,7 +73,7 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
     const partial=(status:1|2):ToolingResult&{slice:string}=>({status,completedFailures:entry!.evidence.completedFailures,slice,
       times:{version:1,wallMs:clock()-started,concurrency:1,files:[{file:resolve(files[0]!),startedMs:0,wallMs:clock()-started,passed:false}]}});
     if(entry?.hung){
-      publishHung(entry.hung,process.env,entry.evidence.completedFailures);process.stderr.write(entry.hung+'\n');
+      publishHung(entry.hung,process.env,entry.evidence.completedFailures);output.write(entry.hung+'\n');
       return partial(entry.evidence.completedFailures?1:2);
     }
     if(entry?.error){
@@ -85,14 +86,20 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
       if(boundary&&memoryEvents(boundary.group,true).oom>before)
         throw new PressureError(`tooling workers exceeded their step's memory bound (${boundary.slice}); their supervisor survived outside it`);
       if(entry?.evidence.ready){
-        process.stderr.write(`tooling file FAIL: ${files[0]}; process terminated mid-file (status ${status}); ${entry.evidence.completedTests} completed assertion(s), ${entry.evidence.completedFailures} failure(s) retained\n`);
+        output.write(`tooling file FAIL: ${files[0]}; process terminated mid-file (status ${status}); ${entry.evidence.completedTests} completed assertion(s), ${entry.evidence.completedFailures} failure(s) retained\n`);
         return {...partial(1),completedFailures:Math.max(1,entry.evidence.completedFailures)};
       }
       throw new ToolingInstrumentError("tooling-setup",`tooling worker ended without a completed report (status ${status}, ${slice})`,{cause:error});
     }
-    const result=readToolingCompletion(report,nonce,status);
-    if(entry&&(!entry.evidence.ready||result.completedFailures!==entry.evidence.completedFailures))
-      throw new ToolingInstrumentError('tooling-setup','tooling completion disagrees with its authenticated child channel');
+    let result:ToolingResult;
+    try{
+      result=readToolingCompletion(report,nonce,status);
+      if(entry&&(!entry.evidence.ready||result.completedFailures!==entry.evidence.completedFailures))
+        throw new ToolingInstrumentError('tooling-setup','tooling completion disagrees with its authenticated child channel');
+    }catch(error){
+      if(!entry?.evidence.completedFailures)throw error;
+      return {...partial(1),observationFailure:{kind:'tooling-setup',reason:String(error)}};
+    }
     if(status===0)rmSync(directory,{recursive:true,force:true});
     return {...result,slice};
   } catch(error){failed=true;primary=error;throw error;}

@@ -24,7 +24,9 @@ test('fresh ${name}',()=>{appendFileSync(${JSON.stringify(pids)},JSON.stringify(
 const first=await runToolingEntry(${JSON.stringify(files[0])},()=>{});const second=await runToolingEntry(${JSON.stringify(files[1])},()=>{});
 assert.equal(first.status,0);assert.equal(second.status,1);assert.equal(second.completedFailures,1);`);
   const control=spawnTest(process.execPath,[reused],{env:fixtureEnvironment(t),encoding:'utf8'},'reused process counterfactual');
-  assert.equal(control.status,0,control.stdout+control.stderr);
+  assert.notEqual(control.status,0,control.stdout+control.stderr);assert.match(control.stdout+control.stderr,/fresh second/);
+  const reusedRows=readFileSync(pids,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  assert.equal(reusedRows.length,4);assert.equal(reusedRows[2].pid,reusedRows[3].pid);
 });
 test('outside inactivity owner stops a hung file and retains its completed FAIL',async t=>{
   for(const failed of [false,true]){
