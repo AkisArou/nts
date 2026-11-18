@@ -130,6 +130,24 @@ After rebasing onto main's plan-only successor, `inner.ts --no-agree` passed
 formatting, Clippy, the fresh compiler build and backend tests. The measured
 after revision remains reachable at its `refs/cited/` ref.
 
+The later rebase onto `531d75a7e43c35907f596e090ed31067ceed835c`
+preserves the pooled `acceptedSourceSelfTest()` export and the CLI's call to
+it. One shared `acceptedSourceTrust()` supplies both that preflight and the
+deleted-path branch; main retains no separate copy of the accepted binding.
+The owning writer refreshed the derived selector record after this integration.
+Strict types passed all six projects and 1,168 modules, and the host audit
+passed 2,097 sources, 338 entry closures and 420 reads.
+
+The committed CLI counterfactual was repeated with the rebased
+`b9e0c480ac530392d96c191921e949625be5bd0c` archive. The reviewed `eb7` owner
+again fails both matched deletions and passes both ignored deletions; the
+rebased owner passes all four, with identical test bytes and no skips. An
+initial scratch-only attempt stopped before assertions because its older
+tooling-only archive omitted the root toolchain input now consumed by the
+canonical Cargo owner. The successful comparison archives the complete pinned
+commit, with no separate dependency list or production relaxation. Both
+attempts' raw output is retained separately.
+
 The selection-cost comparison uses private Git fixture clones at main
 `39f4978a723067b4f99b6639aa8967551a4827bc`, reviewed
 `977cb63af5791ce18b5285a626083c66d5f2e61b`, and fixed
@@ -204,6 +222,11 @@ Raw output and scripts stay in `~/.cache/nts-scratch/798/`:
 | `cli-before-owner.log` | `4ccefc0ecf5fd271032199847e327d99cb9270151aa2a25b672085857a04052a` |
 | `cli-after-owner.log` | `87ad1e07dcfb6ecdbeb952373e95301c9d574f1605d2bc9f8de01e68b7c2e6e6` |
 | `nts-798-cli-proof.log` | `d2728c3ef99245b4ee72008f26a56f7a77ea80ec61b0e5d7b9cb1e4679e0a8b9` |
+| `rebase2-cli-counterfactual.py` | `6c8d1bf7b57fd26dd815e1788e908c241579b9c11e1c4cc06d91c29177dd7eed` |
+| `rebase2-cli-counterfactual.json` | `c7ff263393d219855a2fe1f8d58564e97c5ce3838f8a4b02ada6d73488a48724` |
+| `rebase2-cli-before-owner.log` | `c6bd91acf14f72c94104c9babbba3842e1053f75db466a69db38030f1f860430` |
+| `rebase2-cli-after-owner.log` | `1de80dd11ca235acf75fe075b31831abe82611bf74d4cfd1c417ef33a7e6cef6` |
+| `nts-798-rebase-prepare2.log` | `7239393fc1f86e54f8c908d182f4fb15063b54ed29398b6b14d3d3f82033a3a0` |
 
 The paired experiment ran through `admit.ts` in `nts-798-selector-proof2`, with
 `taskset -c 0-3,6-31`, `Nice=19` and `CPUWeight=20`. Source changes were
