@@ -22,7 +22,7 @@ import {treeUsers,describeUsers} from "./tree-users.ts";
 import { Pool } from "./pool.ts";
 import { Queue } from "./queue.ts";
 import {createWithdrawalWatch} from './withdrawal-watch.ts';
-import type { Ran, RunOptions } from "./run.ts";
+import { recordLines, type Ran, type RunOptions } from "./run.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import { landingCpuMeasure,landingSelection, type Selection } from "./selection.ts";
 import { drain,machineConfig, prepareTree, prune, recordCosts, type Config } from "./service.ts";
@@ -64,7 +64,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
     runSteps: async (options: RunOptions): Promise<Ran> => {
       checked.push(options.commit);
       const red = existsSync(join(options.tree, "RED"));
-      return { state: red ? "red" : "green", message: red ? `tests FAIL; logs ${options.run}` : "green", run: options.run, wall_s: 2, pending: [],
+      return { state: red ? "red" : "green", message: red ? `tests FAIL; logs ${options.run}` : "green", run: options.run, wall_s: 2, pending: [], refresh: [],
         steps: options.steps.map(name => ({ name, verdict: red && name === "tests" ? "FAIL" as const : "PASS" as const, cpu: 5, cpu_measure:landingCpuMeasure(name),wall: 1 })) };
     },
     watchWithdrawals:createWithdrawalWatch,log: line => logs.push(line), ...overrides,
@@ -110,6 +110,24 @@ test("queued changes land one at a time, each rebased onto the newest main, push
   assert.equal(f.queue.status().state, "idle");
 });
 
+test("a landing whose records are all current reports their refresh requests apart, and no pending row", async t => {
+  const refresh = "refresh requested: memory-census: tree-teardown in results/memory-census/tree-teardown.json";
+  // The run's step log lists the census's refresh request; the landing classifies it as run.ts does.
+  const f = service(t, { runSteps: async options => {
+    mkdirSync(options.run, { recursive: true });
+    writeFileSync(join(options.run, "records.log"), `  ${refresh}\n  memory-census: every row current\n`);
+    return { state: "green", message: "green", run: options.run, wall_s: 2, ...recordLines(options.run),
+      steps: options.steps.map(name => ({ name, verdict: "PASS" as const, cpu: 5, cpu_measure: landingCpuMeasure(name), wall: 1 })) };
+  } });
+  const a = f.task("fix/a", { "README.md": "a\n" });
+  const ea = f.submit("fix/a", a.sha);
+  assert.deepEqual((await drain(f.config)).answered.map(r => r.state), ["landed"]);
+  const r = f.queue.result(ea.id)!;
+  assert.deepEqual([r.pending, r.refresh], [[], [refresh]]);
+  assert.doesNotMatch(r.message, /pending/, "a refresh request is no pending row");
+  assert.match(r.message, /; 1 native refresh request\(s\), answered by the full check after landing$/);
+});
+
 test("a revert from the full check is checked before the changes waiting", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" }, { push: false });
@@ -153,7 +171,7 @@ test("a held check waits aside, and lands once retried", async t => {
   let held = true;
   const f = service(t);
   const green = f.config.runSteps;
-  f.config.runSteps = async options => held ? { state: "held", message: "examples INSTRUMENT: memory pressure three times", run: options.run, steps: [], pending: [], wall_s: 1 } : green(options);
+  f.config.runSteps = async options => held ? { state: "held", message: "examples INSTRUMENT: memory pressure three times", run: options.run, steps: [], pending: [], refresh: [], wall_s: 1 } : green(options);
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   const ea = f.submit("fix/a", a.sha);
   await drain(f.config);
@@ -178,7 +196,7 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
     try{const release=f.pool.capacity.beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});release();}
     catch(error){
       assert.ok(error instanceof DiskBuildAdmissionError);
-      return {state:'held',message:error.message,run:options.run,pending:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',reason:error.message,instrument:{kind:error.kind,disk:error.disk}}]};
+      return {state:'held',message:error.message,run:options.run,pending:[],refresh:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',reason:error.message,instrument:{kind:error.kind,disk:error.disk}}]};
     }
     return green(options);
   };
@@ -210,7 +228,7 @@ test('withdrawing a disk-held entry answers it immediately and the idle service 
     try{const release=f.pool.capacity.beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});release();}
     catch(problem){error=problem;}
     assert.ok(error instanceof DiskBuildAdmissionError);
-    return {state:'held',message:error.message,run:options.run,pending:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',instrument:{kind:error.kind,disk:error.disk}}]};
+    return {state:'held',message:error.message,run:options.run,pending:[],refresh:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',instrument:{kind:error.kind,disk:error.disk}}]};
   };
   let finished=false;const running=drain(f.config).finally(()=>{finished=true;});
   t.after(async()=>{f.queue.withdraw(ea.id);await running;});
@@ -270,7 +288,7 @@ test('an unproved cancellation holds the service and resumes only when its retai
     const retry=options.drainRetry();held();await retry;
     assert.equal(f.queue.checking()?.id,ea.id,'the same check still owns recovery');
     assert.equal(f.main(),base);
-    return {state:'cancelled',message:'scope certified empty',run:options.run,wall_s:1,steps:[],pending:[]};
+    return {state:'cancelled',message:'scope certified empty',run:options.run,wall_s:1,steps:[],pending:[],refresh:[]};
   };
   const pending=drain(f.config);await started;f.queue.withdraw(ea.id);await retained;
   const model=landingStatus(f.s.root,f.config.home,Date.parse('2026-11-16T00:00:00Z'));
@@ -295,7 +313,7 @@ test('a retained closer with no proof stays held across service activity without
   f.config.runSteps=async options=>{
     const aborted=new Promise<void>(resolve=>options.signal!.addEventListener('abort',()=>resolve(),{once:true}));entered();await aborted;
     options.cancellationHold!('the real child has not exited');held();await closed;
-    return {state:'cancelled',message:'fixture cleanup finally drained',run:options.run,wall_s:1,steps:[],pending:[]};
+    return {state:'cancelled',message:'fixture cleanup finally drained',run:options.run,wall_s:1,steps:[],pending:[],refresh:[]};
   };
   let answered=false;
   const pending=drain(f.config);pending.then(()=>{answered=true;});
@@ -345,7 +363,7 @@ test('a watcher fault leaves the current verdict intact, fences a later marker, 
     const started=new Promise<void>(resolve=>{entered=resolve;}),closed=new Promise<void>(resolve=>{release=resolve;});
     f.config.runSteps=async options=>{
       signal=options.signal;hold=options.hold;entered();await closed;
-      return {state:arm==='red'?'red':'green',message:'own verdict '+arm,run:options.run,steps:[],pending:[],wall_s:1};
+      return {state:arm==='red'?'red':'green',message:'own verdict '+arm,run:options.run,steps:[],pending:[],refresh:[],wall_s:1};
     };
     f.config.watchWithdrawals=(queue,onFailure)=>new FaultingWatch(queue,onFailure);
     const pending=drain(f.config);t.after(async()=>{release();await pending;});await started;
@@ -511,7 +529,7 @@ test("a second service finds the first draining and leaves", async t => {
 
 test("the costs of passing steps are kept by kind of change, and old runs are pruned", t => {
   const f = service(t);
-  recordCosts(f.config.home, { state: "green", message: "", run: "", pending: [], wall_s: 1, steps: [
+  recordCosts(f.config.home, { state: "green", message: "", run: "", pending: [], refresh: [], wall_s: 1, steps: [
     { name: "build", verdict: "PASS", cpu: 700,cpu_measure:GNU_CPU_MEASURE,wall: 120 }, { name: "tooling", verdict: "PASS", cpu: 500,cpu_measure:STEP_CPU_MEASURE,wall: 240 },
     { name: "tests", verdict: "FAIL", cpu: 9999 } ] }, "rust");
   const costs = JSON.parse(readFileSync(join(f.config.home, "costs.json"), "utf8"));

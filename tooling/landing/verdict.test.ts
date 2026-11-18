@@ -22,7 +22,7 @@ function fixture(t: Parameters<typeof testScratch>[0]) {
     estimate: { seconds: 2, build: 1, work: 1, longest: 1, longestStep: "tests", fixed: 2 },
   };
   const ran: Ran = { state: "green", message: "green", run, steps: steps.map(name => ({ name, verdict: "PASS", cpu: 2, wall: 1 })),
-    pending: [], wall_s: 2, contract };
+    pending: [], refresh: [], wall_s: 2, contract };
   const input = { commit, tree, submission: "c".repeat(40), landing: "fixture-landing", base: "d".repeat(40),
     selected: { selection, interop: "narrow-project", doctests: "narrow-crate" }, ran };
   return { home, run, contract, input };

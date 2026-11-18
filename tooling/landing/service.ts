@@ -253,7 +253,7 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
     queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, run, message: `${steps.join(" ")} on ${short(tip)}, ~${Math.round(selected.selection.estimate.seconds)} s` });
     config.log(`${short(entry.sha)} as ${short(tip)} on main ${short(base)}: ${steps.join(" ") || "nothing to run"}; deferred ${deferredSteps(selected.selection).join(" ") || "none"}`);
     let ran: Ran;
-    if (!steps.length) ran = { state: "green", message: "nothing to run", run, steps: [], pending: [], wall_s: 0 };
+    if (!steps.length) ran = { state: "green", message: "nothing to run", run, steps: [], pending: [], refresh: [], wall_s: 0 };
     else {
       if(queue.withdrawRequested(entry.id))return queue.answer(entry,{state:'withdrawn',base,tip,run,message:'withdrawn before the landing tree was prepared'});
       try { config.prepare(tip); }
@@ -267,7 +267,7 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
       // What the steps cost is for the next estimate; it never decides this one.
       try { recordCosts(config.home, ran, selected.kind); } catch (error) { config.log(`costs not recorded: ${String(error)}`); }
     }
-    const facts = { base, tip, run, landing: steps, deferred: deferredSteps(selected.selection), estimate_s: Math.round(selected.selection.estimate.seconds), wall_s: Math.round(ran.wall_s), pending: ran.pending };
+    const facts = { base, tip, run, landing: steps, deferred: deferredSteps(selected.selection), estimate_s: Math.round(selected.selection.estimate.seconds), wall_s: Math.round(ran.wall_s), pending: ran.pending, refresh: ran.refresh };
     if(ran.state==='cancelled')return queue.answer(entry,{state:'withdrawn',...facts,message:'withdrawn: its owned commands, scopes and reservation have drained'});
     if (ran.state === "red") return queue.answer(entry, { state: "refused", ...facts, message: `red: ${ran.message}` });
     if (ran.state === "held") {
@@ -310,9 +310,10 @@ function finishLanding(config: Config, queue: Queue, entry: Entry, base: string,
   if (pool?.state === "kept") kept.push(pool.reason!);
   const parts = [note ?? `LANDED ${short(entry.sha)} as ${short(tip)}: main is ${short(tip)}`,
     config.remote ? (pushed.ok ? `pushed to ${config.remote}` : `NOT pushed: ${"reason" in pushed ? pushed.reason : ""}; the next landing pushes it`) : "",
-    ...kept, ran?.pending.length ? `${ran.pending.length} record row(s) pending, written after landing` : ""].filter(Boolean);
+    ...kept, ran?.pending.length ? `${ran.pending.length} record row(s) pending, written after landing` : "",
+    ran?.refresh.length ? `${ran.refresh.length} native refresh request(s), answered by the full check after landing` : ""].filter(Boolean);
   return queue.answer(entry, { state: "landed", message: parts.join("; "), base, tip, commits, pushed: pushed.ok, branch, pool: pool?.tree?.path ?? null,
-    ...(ran ? { run: ran.run, wall_s: Math.round(ran.wall_s), pending: ran.pending } : {}),
+    ...(ran ? { run: ran.run, wall_s: Math.round(ran.wall_s), pending: ran.pending, refresh: ran.refresh } : {}),
     ...(selection ? { landing: landingSteps(selection), deferred: deferredSteps(selection), estimate_s: Math.round(selection.estimate.seconds) } : {}) });
 }
 

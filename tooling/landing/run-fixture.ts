@@ -63,7 +63,7 @@ if [ "$1" = --call ]; then
     target-dir) printf '%s' "$CARGO_TARGET_DIR" > "$controls/target-dir"; exit 0 ;;
     oracle-context) node --input-type=module -e 'import {readFileSync,writeFileSync} from "node:fs";import {createHash} from "node:crypto";const capture=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES),parent=readFileSync(${JSON.stringify(join(controls,"parent-record"))},"utf8");writeFileSync(${JSON.stringify(join(controls,"oracle-context.json"))},JSON.stringify({capture,imageSource:JSON.parse(readFileSync(capture.seal.record,"utf8")).source,parentSha256:createHash("sha256").update(readFileSync(parent)).digest("hex"),temporary:JSON.parse(process.env[${JSON.stringify(ENVIRONMENT_CONTEXT)}]).temporary}));'; exit $? ;;
     fail) echo "  $step: a recorded case went wrong"; exit 1 ;;
-    pending) echo "  pending: tests/x/a.ts is not recorded in results/x.tsv yet"; echo "  improved, record pending: tests/x/b.ts refused -> pass"; exit 0 ;;
+    pending) echo "  pending: tests/x/a.ts is not recorded in results/x.tsv yet"; echo "  improved, record pending: tests/x/b.ts refused -> pass"; echo "  refresh requested: memory-census: x in results/memory-census/x.json"; exit 0 ;;
     pressure) [ -e "$controls/$step.pressured" ] && exit 0; : > "$controls/$step.pressured"; instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
     always-pressure) instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
     hung) instrument "NOT RUN" hung "no progress for 600 s" ;;

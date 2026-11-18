@@ -62,8 +62,10 @@ const PENDING = /\bpending: (\S.*?) is not recorded in (\S+) yet\b/;
 const REFRESH = /\brefresh requested: ([a-z][a-z0-9-]*): (\S.*?) in (\S+)(?:$|\s)/;
 const ACCEPTED = /\b(improved|refuses differently), record pending: (\S.*?) in (\S+): (.*)$/;
 
+/** Whether `line` is a native refresh request (refreshLine): the full check answers it after landing, and it names no pending row. */
+export const isRefreshLine = (line: string): boolean => REFRESH.test(line);
 /** Whether `line` is one a check prints for the records, by its words alone: what a landing reports, not what is recorded. */
-export const isListedLine = (line: string): boolean => PENDING.test(line) || REFRESH.test(line) || /\b(?:improved|refuses differently), record pending: \S/.test(line);
+export const isListedLine = (line: string): boolean => PENDING.test(line) || isRefreshLine(line) || /\b(?:improved|refuses differently), record pending: \S/.test(line);
 
 /** A case a check listed for the records, and the record that holds (or will hold) its row. */
 export interface ListedCase { name: string; record: string }

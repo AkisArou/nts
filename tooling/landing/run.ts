@@ -50,7 +50,7 @@ import { nodePin } from "../bootstrap/node.ts";
 import { nodeToolchain } from "../gate/toolchain.ts";
 import { candidateCommandAsync,certifyCandidateGroups } from "./candidate-environment.ts";
 import { STEPS } from "../gate/step-table.mjs";
-import { isListedLine } from "../records/pending.ts";
+import { isListedLine, isRefreshLine } from "../records/pending.ts";
 import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
 import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
 import {readRustRecordDecisions,type RustRecordDecisionAtRevision} from '../gate/rust-selector-decision.ts';
@@ -67,7 +67,7 @@ export type StepResult = {
   binaries?: BinaryIdentities;
   diagnostics?:StepDiagnostics;
 };
-export type Ran = { state: "green" | "red" | "held" | "cancelled"; message: string; run: string; steps: StepResult[]; pending: string[]; wall_s: number;
+export type Ran = { state: "green" | "red" | "held" | "cancelled"; message: string; run: string; steps: StepResult[]; pending: string[]; refresh: string[]; wall_s: number;
   rustRecords?:RustRecordDecisionAtRevision[];
   contract?: VerdictContract; binaries?: BinaryIdentities };
 export type RunOptions = {
@@ -211,7 +211,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
   let contract: VerdictContract | undefined;
   let probeContract: (() => Promise<VerdictContract | undefined>) | undefined;
   const finish = (state: Ran["state"], message: string): Ran => {
-    const ran: Ran = { state, message, run, steps: results, pending: pendingLines(run), wall_s: (clock.wallNow() - started) / 1000,
+    const ran: Ran = { state, message, run, steps: results, ...recordLines(run), wall_s: (clock.wallNow() - started) / 1000,
       ...(rustRecords?{rustRecords}:{}),
       };
     return ran;
@@ -327,7 +327,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
     contract=undefined;
   }
   if(ran.state==='green'&&contract){ran.contract=contract;ran.binaries=results.find(row=>row.name==='build')?.binaries??results.find(row=>row.binaries)?.binaries??{};}
-  ran.pending=pendingLines(run);ran.wall_s=(clock.wallNow()-started)/1000;
+  const lines=recordLines(run);ran.pending=lines.pending;ran.refresh=lines.refresh;ran.wall_s=(clock.wallNow()-started)/1000;
   writeFileSync(join(run,'landing.json'),JSON.stringify(ran,null,2)+'\n');
   return ran;
 }
@@ -430,23 +430,31 @@ async function runSteps(options: RunOptions, node: string, launcher: NodeJS.Proc
 }
 
 /**
- * The lines the run's step logs print for the records: each pending case and
- * accepted change, as tooling/records/pending.ts names them.
+ * The lines a run's step logs print for the records, each once, as
+ * tooling/records/pending.ts names them. `pending` holds each missing row and
+ * accepted change: the rows written after landing. `refresh` holds each native
+ * refresh request, which the full check answers after landing and which is no
+ * pending row; a landing counts the two apart.
  */
-export function pendingLines(run: string): string[] {
-  const out = new Set<string>();
+export function recordLines(run: string): { pending: string[]; refresh: string[] } {
+  const pending = new Set<string>(), refresh = new Set<string>();
   const visit = (dir: string, depth: number) => {
     let names: string[] = [];
     try { names = readdirSync(dir); } catch { return; }
     for (const name of names.sort()) {
       if (depth < 1 && /^attempt-\d+$/.test(name)) visit(join(dir, name), depth + 1);
       else if (name.endsWith(".log")) {
-        try { for (const line of readFileSync(join(dir, name), "utf8").split("\n")) if (isListedLine(line)) out.add(line.trim()); } catch { /* unreadable log */ }
+        try {
+          for (const line of readFileSync(join(dir, name), "utf8").split("\n")) {
+            if (isRefreshLine(line)) refresh.add(line.trim());
+            else if (isListedLine(line)) pending.add(line.trim());
+          }
+        } catch { /* unreadable log */ }
       }
     }
   };
   visit(run, 0);
-  return [...out];
+  return { pending: [...pending], refresh: [...refresh] };
 }
 
 /**

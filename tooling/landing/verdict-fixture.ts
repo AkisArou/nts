@@ -19,7 +19,7 @@ export function recordLandingFixture(home: string, commit: string, tree: string,
   return writeLandingVerdict(home, {
     commit, tree, submission: commit, landing: "fixture-" + commit.slice(0, 12), base: "f".repeat(40),
     selected: { selection, interop: options.interop ?? null, doctests: options.doctests ?? null },
-    ran: { state: "green", message: "green", run, contract: fixtureContract(), pending: [], wall_s: 4,
+    ran: { state: "green", message: "green", run, contract: fixtureContract(), pending: [], refresh: [], wall_s: 4,
       steps: steps.map(name => ({ name, verdict: "PASS", cpu: 10, wall: 3 })) },
   })!;
 }

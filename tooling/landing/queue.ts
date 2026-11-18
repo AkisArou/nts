@@ -52,7 +52,8 @@ export type Result = {
   /** main before and after; `commits` are base..tip, the change as it landed. */
   base?: string; tip?: string; commits?: string[]; run?: string;
   landing?: string[]; deferred?: string[]; estimate_s?: number; wall_s?: number;
-  pending?: string[]; pushed?: boolean; branch?: unknown; pool?: string | null;
+  /** Rows written after landing, and native refresh requests the full check answers: recordLines in run.ts. */
+  pending?: string[]; refresh?: string[]; pushed?: boolean; branch?: unknown; pool?: string | null;
   /** Drained work that automatically returns at its original arrival once disk admits. */
   retryDisk?:DiskBuildRefusal[];
 };

@@ -79,7 +79,7 @@ test('future landing costs give a named empty view and refuse a later stale writ
  const root=testScratch(t,'landing-costs-future'),file=join(root,'costs.json'),warnings:string[]=[];
  const future='{ "version": 3, "steps": "new-format" }\n';writeFileSync(file,future);
  assert.equal(readLandingCosts(file,line=>warnings.push(line)).size,0);assert.match(warnings.join('\n'),/future state version 3/);
- assert.throws(()=>recordCosts(root,{state:'green',message:'control',run:root,steps:[],pending:[],wall_s:0},'other'),/future state version 3/);
+ assert.throws(()=>recordCosts(root,{state:'green',message:'control',run:root,steps:[],pending:[],refresh:[],wall_s:0},'other'),/future state version 3/);
  assert.equal(readFileSync(file,'utf8'),future);
 });
 

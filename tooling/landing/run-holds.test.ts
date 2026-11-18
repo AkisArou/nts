@@ -12,12 +12,13 @@ import {once} from "node:events";
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {PROFILE,pendingLines,runLanding} from "./run.ts";
+import {PROFILE,recordLines,runLanding} from "./run.ts";
 import {gib,jobSizing,readLedger} from "../gate/memory-ledger.ts";
 import {STEPS} from "../gate/step-table.mjs";
 import {peakReservation} from "../gate/step-scheduling.ts";
 import {spawnTest,waitFor} from "../gate/test-wait.ts";
 import {fixture,HOLDER} from './run-fixture.ts';
+import {testScratch} from "../gate/test-scratch.ts";
 
 test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority, and its gate run takes its reservation over", async t => {
   const f = fixture(t);
@@ -160,11 +161,25 @@ test("a tree whose gate cannot say what its steps need holds the change", async 
   assert.match(ran.message, /a runner this change broke/);
 });
 
-test("pending and improved lines are listed as information, and pass", async t => {
+test("pending, improved and refresh lines are listed as information, and pass", async t => {
   const f = fixture(t);
   f.control("outcomes", "pending");
   const ran = await runLanding(f.options(["build", "outcomes"]));
   assert.equal(ran.state, "green", ran.message);
   assert.deepEqual(ran.pending, ["pending: tests/x/a.ts is not recorded in results/x.tsv yet", "improved, record pending: tests/x/b.ts refused -> pass"]);
-  assert.deepEqual(pendingLines(join(f.run, "nowhere")), []);
+  assert.deepEqual(ran.refresh, ["refresh requested: memory-census: x in results/memory-census/x.json"]);
+  assert.deepEqual(recordLines(join(f.run, "nowhere")), { pending: [], refresh: [] });
+});
+
+test("a refresh request is counted apart from the pending rows", t => {
+  const run = testScratch(t, "record-lines");
+  writeFileSync(join(run, "records.log"), [
+    "  pending: tests/x/a.ts is not recorded in results/x.tsv yet",
+    "  refresh requested: memory-census: tree-teardown in results/memory-census/tree-teardown.json",
+    "  memory-census: every row current",
+  ].join("\n") + "\n");
+  const lines = recordLines(run);
+  assert.equal(lines.pending.length, 1, "a refresh request is no pending row");
+  assert.deepEqual(lines.pending, ["pending: tests/x/a.ts is not recorded in results/x.tsv yet"]);
+  assert.deepEqual(lines.refresh, ["refresh requested: memory-census: tree-teardown in results/memory-census/tree-teardown.json"]);
 });

@@ -13,7 +13,7 @@ export type Change = { id: string; sha: string; branch: string | null; issue: nu
 export type Answer = {
   id: string; sha: string; state: Result["state"]; at: string; message: string; branch: string | null; issue: number | null;
   base: string | null; tip: string | null; run: string | null; wall_s: number | null; estimate_s: number | null;
-  landing: string[]; deferred: string[]; pending: number;
+  landing: string[]; deferred: string[]; pending: number; refresh: number;
 };
 /**
  * The landing check as `status --json` prints it, version 2: the service, the
@@ -66,7 +66,7 @@ export function landingStatus(root: string, home:string, now:number): LandingSta
     recent: results.slice(-RECENT).map(r => ({
       id: r.id, sha: r.sha, state: r.state, at: r.at, message: r.message, branch: r.task ?? null, issue: issue(r.task ?? null),
       base: r.base ?? null, tip: r.tip ?? null, run: r.run ?? null, wall_s: r.wall_s ?? null, estimate_s: r.estimate_s ?? null,
-      landing: r.landing ?? [], deferred: r.deferred ?? [], pending: r.pending?.length ?? 0,
+      landing: r.landing ?? [], deferred: r.deferred ?? [], pending: r.pending?.length ?? 0, refresh: r.refresh?.length ?? 0,
     })),
     main: { commit: main, pushed: main === null || remote === null ? null : main === remote },
   };

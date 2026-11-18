@@ -92,11 +92,25 @@ test("the command refuses before it acts: usage, policy variables, a tree not at
   assert.match(serve.out, /the service runs from the shared checkout/);
 });
 
+test("an answer recorded before refresh requests were counted apart still reads, with none", t => {
+  const c = cli(t);
+  const sha = c.s.git(["rev-parse", "HEAD"]);
+  const old = c.queue.submit(sha, { branch: "42-a-task" });
+  c.queue.answer(c.queue.take()!, { state: "landed", message: "LANDED", base: sha, tip: sha, wall_s: 125, estimate_s: 100, landing: ["build"], deferred: [], pending: ["one"] });
+  const stored = c.queue.result(old.id)!;
+  assert.equal(stored.version, 1);
+  assert.equal("refresh" in stored, false, "the answer has the shape written before refresh was kept");
+  const out = c.run(["status", "--json"]);
+  assert.equal(out.status, 0, out.out);
+  const [r] = JSON.parse(out.out).recent;
+  assert.deepEqual([r.id, r.pending, r.refresh], [old.id, 1, 0]);
+});
+
 test("status --json is the same state, versioned, with numbers as numbers and each answer's task and issue", t => {
   const c = cli(t);
   const sha = c.s.git(["rev-parse", "HEAD"]);
   const landed = c.queue.submit(sha, { branch: "42-a-task" });
-  c.queue.answer(c.queue.take()!, { state: "landed", message: "LANDED", base: sha, tip: sha, wall_s: 125, estimate_s: 100, landing: ["build", "tests"], deferred: ["integrity"], pending: ["one"] });
+  c.queue.answer(c.queue.take()!, { state: "landed", message: "LANDED", base: sha, tip: sha, wall_s: 125, estimate_s: 100, landing: ["build", "tests"], deferred: ["integrity"], pending: ["one"], refresh: ["two", "three"] });
   c.queue.submit(sha, { branch: "fix/b", note: "after it" });
   const out = c.run(["status", "--json"]);
   assert.equal(out.status, 0, out.out);
@@ -108,7 +122,7 @@ test("status --json is the same state, versioned, with numbers as numbers and ea
   assert.deepEqual(s.waiting.map((w: { branch: string; issue: number | null; note: string }) => [w.branch, w.issue, w.note]), [["fix/b", null, "after it"]]);
   const [r] = s.recent;
   assert.equal(r.id, landed.id);
-  assert.deepEqual([r.state, r.branch, r.issue, r.wall_s, r.estimate_s, r.pending], ["landed", "42-a-task", 42, 125, 100, 1], "numbers as numbers, and the task's issue");
+  assert.deepEqual([r.state, r.branch, r.issue, r.wall_s, r.estimate_s, r.pending, r.refresh], ["landed", "42-a-task", 42, 125, 100, 1, 2], "numbers as numbers, and the task's issue");
   assert.deepEqual(r.landing, ["build", "tests"]);
   assert.deepEqual(s.day, { landed: 1, refused: 0, held: 0, withdrawn: 0, median_wall_s: 125, max_wall_s: 125 });
   assert.equal(s.main.commit, sha);

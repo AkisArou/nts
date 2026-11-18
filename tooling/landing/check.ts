@@ -108,7 +108,7 @@ async function here(root: string, sha: string,traceRustInputs=false): Promise<nu
     ...(traceRustInputs?{owned:{NTS_RUST_INPUT_TRACE:join(run,'rust-inputs'),NTS_GATE_COSTS_DIR:join(run,'observation-costs')}}:{}),
     ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
   for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
-  for (const line of ran.pending) console.log(`  ${line}`);
+  for (const line of [...ran.pending, ...ran.refresh]) console.log(`  ${line}`);
   say(`${ran.state} in ${Math.round(ran.wall_s)} s: ${ran.message}`);
   return ran.state === "green" ? 0 : ran.state === "held" ? 3 : 1;
 }
@@ -121,7 +121,7 @@ async function wait(root: string, id: string): Promise<number> {
     if (result&&!(result.state==='held'&&result.retryDisk?.length)) {
       say(`${result.state.toUpperCase()}: ${result.message}`);
       if (result.deferred?.length) say(`after landing, the full check runs: ${result.deferred.join(" ")}`);
-      for (const line of result.pending ?? []) say(line);
+      for (const line of [...result.pending ?? [], ...result.refresh ?? []]) say(line);
       return exitFor(result.state);
     }
     const found = queue.find(id);
