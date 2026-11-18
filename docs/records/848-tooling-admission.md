@@ -318,3 +318,37 @@ All raw/source hashes in these manifests were checked against their current byte
 - Controlled 4 GiB-job pair: `/home/akisarou/.cache/nts-scratch/848/pairs-backfill-agent-ffbb588e60/sha256.txt`, SHA-256 `8d03b355c2112f8941a8ab488cc7512ce576048131af6734b1c2323e07d38737`.
 
 The per-arm `comparison.json` retains each known failure and raw-log line. For example, #856 occurs at `pairs-backfill-idle-ffbb588e60/1-before/environment/tooling-tests.raw.log:2031` and `1-after/environment/tooling-tests.raw.log:1957`, under the scratch root above. Every idle and controlled baseline retains the two #842 assertions and #856; every after arm retains only #856. The green `--here` run has neither failure.
+
+## Second review: fixed width and observable starvation barriers
+
+Executable commit `e195eb5af063091bba5ef8cf335576e4ae04f6e8` replaces the earlier availability-based cohort. `TokenOptions.width` is required and validated as a positive safe integer. The single production constructor passes `SLOTS`; fixture constructors pass their capacity explicitly. The allowance never reads `free()`. Thus a request arriving while fixed steps occupy every slot retains the same width as one arriving into an empty pool. The zero-free and one-free socket controls pass on the fix and fail against the actual `7378f75c243027537c86be749b772c6403fa2b93` pool source in private module closures.
+
+The shared pool already allowed unlimited fitting backfill on main. This change restricts that existing behavior for every caller; removing tooling's serialized wrapper exposes its concurrent requests to that owner. The affected producers are definitions, conformance262, typescript-oracles, agree, check-consumers, c-compiles, jvm-verifies, types-check, assembles, blockers, integrity, build-records, compile-time and tooling, including clients reached through `token.sh`. Existing token, admission, verifier, integrity, blockers and census memory/readiness/policy assertions remain passing. The focused run has 140 passes across twelve files, strict types check six projects and 1166 modules, and the host audit checks 2095 sources, 337 entry closures and 420 reads.
+
+`observe()` now emits `token.barrier.begin` and exactly one `token.barrier.end` with its terminal reason (grant, withdraw, disconnect or shutdown). The production queue trace retains both events. Case-cost summaries report union wall time, summed request time and unfinished request IDs in `backfill_barrier`, separately from execution and other admission waits. Controls persist and replay overlapping barriers, preserve an unfinished barrier, and verify all four terminal paths even when the observer throws. Machine-ledger ordering remains unchanged.
+
+### Another elastic producer: definitions
+
+After committing the fix, one unbounded warmup (104.172 s) creates a private seed. Three interleaved unbounded/bounded pairs copy that same seed and use the same authenticated compiler pin `39f4978a723067b4f99b6639aa8967551a4827bc`, binary SHA-256 `c9e2b816aa3245a73a5180008211e8054614e1ec01cc57c9a91621c1efa95ee5`. Only the token-pool barrier conditional is disabled in the unbounded arm; its source is restored from a saved copy after the named unit and sampler drain. No checkout or branch switch is used. Each arm has its own named unit on CPUs 0–3,6–31, canonical owned inputs, private scheduling history and start/end machine snapshots.
+
+| Pair | Unbounded s | Bounded s | Bounded/unbounded | Barrier starts U/B | Barrier wall s U/B | Load U/B | Available GiB U/B |
+|---|---:|---:|---:|---|---|---|---|
+| 1 | 103.827 | 103.877 | 1.00048 | 0/0 | 0.000/0.000 | 2.75/3.35 | 22.4/22.4 |
+| 2 | 103.833 | 104.169 | 1.00324 | 0/0 | 0.000/0.000 | 3.58/3.54 | 22.5/22.5 |
+| 3 | 104.744 | 105.000 | 1.00244 | 0/0 | 0.000/0.000 | 3.43/3.63 | 22.3/22.3 |
+
+The median ratio is 1.00244. Every arm passes all 29 runtime modules with one grant and release per request; no barrier activates and barrier time is zero. Definitions' existing producer runs at most four cases concurrently here; its largest measured case is about 573 MiB. This measures the policy on a real elastic producer with its warmed per-case leases, without demonstrating a pressure-induced barrier. Other producers' wall times remain unmeasured. The restriction can cost them: at most one fixed token-width of later grants passes a waiting request, after which its step waits until that request fits or withdraws. Running cases can finish and release memory. This is a grant-count bound, not a claimed wall-time bound under pressure.
+
+The external definitions RSS sampler incorrectly matched the pin pathname while the gate ran its authenticated content-addressed copy. Its empty per-file RSS observations are unavailable data, not zero peaks. These definitions comparisons use wall time, queue traces and the authoritative ledger/per-case cgroup peaks. The earlier tooling per-file RSS measurements remain unchanged.
+
+The five idle tooling pairs and real 4 GiB agent-job pair above cover executable `ffbb588e60`; they are not relabeled as measurements of `e195eb5af0`. Their whole-step medians are 0.95085 and 0.98406, while their collector regressions (1.11202 and 1.21659) remain disclosed under #857. The new width changes arrival-dependent busy-pool behavior and adds barrier observations; the new landing proof below exercises this executable revision.
+
+### Second-review raw evidence
+
+- Definitions pairs, summaries, queue traces, per-case histories, copied seed, source copies and conditions: `/home/akisarou/.cache/nts-scratch/848/definitions-width-e195eb5af0/sha256.txt`, SHA-256 `03f29cb49bf1cf0f6ab63d8b2b9cfcb60aefa7228c87c9a7281725978a964423` (199 files).
+- Focused controls and strict types/audit: `/home/akisarou/.cache/nts-scratch/848/width-focused/sha256.txt`, SHA-256 `c9e754ef92bd5b838daef3cdf648c7c18f7b66f8a931a1e2ee4510cdc2d0df9c`.
+- Actual reviewed-source counterfactual: `/home/akisarou/.cache/nts-scratch/848/width-counterfactual/sha256.txt`, SHA-256 `592a51b85a80ed344d91987e3699a33ecddedec2ee97f3e9178cc16458d7f4bc`.
+
+`inner.ts --no-agree` on `e195eb5af0` passes formatting (3 s), Clippy (1 s), build (1 s) and all 664 Rust/backend tests (268 s). Its raw output and launcher are retained in `/home/akisarou/.cache/nts-scratch/848/inner-width-e195/sha256.txt`, SHA-256 `a54151776eea1e6d00bbfc103afbc304600964e827cb769fd596c52b82a01c02`.
+
+`check.ts --here e195eb5af063091bba5ef8cf335576e4ae04f6e8` is green in 642 s, including the build and all nineteen runner steps. Tooling completes all 337 unique entries in 632.029 s, with an 8.860 GiB ledger peak and 13.090 GiB scope peak. Its normal warmed history is used, with no measurement overrides. Seven real barrier lifetimes begin and end; the case-cost summary reports 89.517 s union wall time and 89.517 request-seconds, with no unfinished barrier. These overlapping policy observations are not added to execution time. No known #842/#855/#856 failure occurs in this proof. The raw output, queue traces, cost records, launcher and derived inventory are retained in `/home/akisarou/.cache/nts-scratch/848/here-width-e195/sha256.txt`, SHA-256 `c5b71ce86b9212240bb3e6c8a144f3d6b2f0d7f7d6bde3c3c6fd670c76d8f753`.
