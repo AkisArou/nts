@@ -10,7 +10,10 @@ export class ToolingEntryEvidence {
   completedTests=0;
   completedFailures=0;
   readonly open=new Map<number,string>();
-  constructor(readonly file:string,readonly nonce:string,readonly pid:number){}
+  readonly file:string;
+  readonly nonce:string;
+  readonly pid:number;
+  constructor(file:string,nonce:string,pid:number){this.file=file;this.nonce=nonce;this.pid=pid;}
   accept(value:unknown):void {
     const row=value as ToolingEntryFrame;
     const invalid=(reason:string):never=>{throw new ToolingInstrumentError('tooling-setup','invalid tooling entry channel: '+reason);};

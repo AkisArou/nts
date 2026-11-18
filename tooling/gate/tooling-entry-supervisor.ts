@@ -20,7 +20,10 @@ export class ToolingEntrySupervisor {
   private closed=false;
   private observed=false;
   private readonly channel:Readable;
-  constructor(private readonly child:ChildProcess,file:string,nonce:string,idleMs:number,private readonly stop:()=>void){
+  private readonly child:ChildProcess;
+  private readonly stop:()=>void;
+  constructor(child:ChildProcess,file:string,nonce:string,idleMs:number,stop:()=>void){
+    this.child=child;this.stop=stop;
     if(!child.pid)throw new ToolingInstrumentError('tooling-setup','tooling entry has no spawned identity');
     this.evidence=new ToolingEntryEvidence(file,nonce,child.pid);
     this.live=new CommandLiveness(file,{idleMs,startupMs:COMMAND_STARTUP_BOUND_MS,budgetOwner:'enclosing-step'},this.clock(),commandCpuFrequency());

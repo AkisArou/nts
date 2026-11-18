@@ -52,12 +52,12 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
     env,stdio:["ignore","pipe","pipe",singleProcess?'pipe':'ignore'],
   });
   const output=options.output??process.stdout;
-  child.stdout.pipe(output,{end:false});child.stderr.pipe(output,{end:false});
+  child.stdout!.pipe(output,{end:false});child.stderr!.pipe(output,{end:false});
   process.stderr.write(`tooling scope: ${unit}.scope in ${slice}\n`);
   const stop=()=>stopToolingSlice(slice);
   if(singleProcess){
     entry=new ToolingEntrySupervisor(child,resolve(files[0]!),nonce,options.idleMs??TOOLING_IDLE_GUARD_MS,stop);
-    child.stdout.on('data',entry.touch);child.stderr.on('data',entry.touch);
+    child.stdout!.on('data',entry.touch);child.stderr!.on('data',entry.touch);
   }
   let ended:string|undefined;
   closed=new Promise<number>((resolve,reject)=>{
