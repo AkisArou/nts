@@ -2,7 +2,7 @@
 // subjects keep content-addressed claim/component details. Raw streams retain
 // every attempt. The same reader accepts v3 as labelled historical evidence.
 import {createHash} from 'node:crypto';
-import {readCompressedRecords} from './file-input-observer.ts';
+import {readCompressedRecords,LEGACY_OBSERVATION_ROW_BYTES} from './file-input-observer.ts';
 import type {RuntimeClaimAnswer} from './rust-input-claims.ts';
 import type {RuntimeSubjectAssessment} from './rust-input-validation.ts';
 
@@ -107,6 +107,6 @@ export async function readRustInputValidation(file:string,visit:(row:Row,resolve
       complete=true;
     }
     await visit(row,resolve);
-  });
+  },()=>LEGACY_OBSERVATION_ROW_BYTES);
   if(version===undefined||!complete)throw Error('Rust input report: missing completion');
 }

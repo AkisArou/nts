@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {validProcfsTaskAnchor,type CapturedKernelFilesystem,type ProcfsTaskAnchor} from './captured-path.ts';
 import {childLoaderFact,type ChildLoaderObservation,type LoaderCacheStatistics} from './rust-loader.ts';
-import {IMAGE_READER_COMPILER_DEFINITION} from './image-reader-protocol.ts';
+import {IMAGE_READER_COMPILER_DEFINITION,IMAGE_READER_FRAME_BYTES} from './image-reader-protocol.ts';
 
 export type ByteFact={hex:string;error:number;truncated:boolean;null:boolean};
 export type PathResolutionFact={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:ByteFact;finalLink:boolean;finalComponent?:boolean;
@@ -22,7 +22,11 @@ export type ExecEntry={source:'syscall-entry';argv:ByteFact;target:ByteFact;envi
 export type InputAttempt={kind:'attempt';id:string;tid:number;tgid:number;ppid:number;birth:string;parentBirth:string;
   syscall:string;operation:string;outcome:'unknown';canceled:boolean;factsComplete:boolean;args:string[];
   cwd:ByteFact;image:ByteFact;argvRead:boolean;argv:ByteFact;exec?:ExecEntry;imageLoader?:ChildLoaderObservation;paths:PathFact[];dirfds:DescriptorFact[]};
-export type ObservationStart={kind:'start';version:2|3|4|5|6;mechanism:'seccomp-user-notification';noNewPrivileges:true;imageReaderRecipe?:string|null};
+export type ObservationStart={kind:'start';version:2|3|4|5|6|7;mechanism:'seccomp-user-notification';noNewPrivileges:true;imageReaderRecipe?:string|null};
+export const LEGACY_OBSERVATION_ROW_BYTES=256*1024;
+export const MAX_OBSERVATION_ROW_BYTES=IMAGE_READER_FRAME_BYTES;
+const OBSERVATION_ROW_BOUNDS=new Map([[2,LEGACY_OBSERVATION_ROW_BYTES],[3,LEGACY_OBSERVATION_ROW_BYTES],
+  [4,LEGACY_OBSERVATION_ROW_BYTES],[5,LEGACY_OBSERVATION_ROW_BYTES],[6,LEGACY_OBSERVATION_ROW_BYTES],[7,MAX_OBSERVATION_ROW_BYTES]]);
 export type ImageReaderEnd={kind:'image-reader-end';value:{version:1;kind:'complete';statistics:LoaderCacheStatistics}};
 export type ObservationEnd={kind:'complete';complete:boolean;root:number;entered:boolean;execErrno:number;exit:number;signal:number;attempts:number;errors:number;drainComplete:boolean;observerSignal:number;resolutionWalks?:number;resolutionStats?:number};
 export type InheritedDescriptor={kind:'inherited';fd:number;flags:number;target:ByteFact};
@@ -111,7 +115,7 @@ function pathResolution(value:unknown,task:{tid:number;tgid:number}):boolean{
 }
 export function readObservationRow(value:unknown):ObservationRow{
   const row=object(value);let valid=false;
-  if(row.kind==='start')valid=typeof row.version==='number'&&[2,3,4,5,6].includes(row.version)&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true
+  if(row.kind==='start')valid=typeof row.version==='number'&&OBSERVATION_ROW_BOUNDS.has(row.version)&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true
     &&(row.imageReaderRecipe===undefined||row.imageReaderRecipe===null||typeof row.imageReaderRecipe==='string'&&/^[0-9a-f]{64}$/.test(row.imageReaderRecipe));
   else if(row.kind==='image-reader-end'){
     const end=object(row.value),stats=object(end.statistics);valid=end.version===1&&end.kind==='complete'
@@ -182,31 +186,37 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
     }
     await visit(row);
   };
-  const artifact=await readCompressedRecords(file,consume);
+  const artifact=await readCompressedRecords(file,consume,header=>OBSERVATION_ROW_BOUNDS.get(Number(object(header).version))!);
   if(!end||!end.complete||!end.drainComplete||end.errors||end.attempts!==attempts)
     throw Error('file input observer: incomplete census'+(end?' (attempts '+attempts+'/'+end.attempts+', errors '+end.errors+')':''));
   return {terminal:end,artifact};
 }
 
-export const MAX_OBSERVATION_ROW_BYTES=256*1024;
 /** Shared bounded codec for native records and attributed census indices. */
-export async function readCompressedRecords(file:string,visit:(value:unknown)=>void|Promise<void>):Promise<CaptureArtifact>{
-  let pending=Buffer.alloc(0),bytes=0;
+export async function readCompressedRecords(file:string,visit:(value:unknown)=>void|Promise<void>,rowBound:(header:unknown)=>number):Promise<CaptureArtifact>{
+  let pending:Buffer[]=[],pendingBytes=0,bytes=0,limit=LEGACY_OBSERVATION_ROW_BYTES,header=true;
   const digest=createHash('sha256'),input=createReadStream(file);
   input.on('data',(chunk:Buffer)=>{bytes+=chunk.length;digest.update(chunk);});
   const consumeChunk=async(chunk:Buffer)=>{
-    pending=Buffer.concat([pending,chunk]);
+    let start=0;
     for(;;){
-      const at=pending.indexOf(10);if(at<0)break;
-      if(at>MAX_OBSERVATION_ROW_BYTES)throw Error('file input observer: record exceeds bounded row size');
-      const line=pending.subarray(0,at);pending=pending.subarray(at+1);
-      await visit(JSON.parse(line.toString('utf8')) as unknown);
+      // Search each arriving byte once. Retain fragments until a complete row
+      // can be joined once, rather than copying and rescanning its prefix.
+      const at=chunk.indexOf(10,start);if(at<0)break;
+      const size=pendingBytes+at-start;
+      if(size>limit)throw Error('file input observer: record exceeds bounded row size');
+      const tail=chunk.subarray(start,at),line=pending.length?Buffer.concat([...pending,tail],size):tail;
+      pending=[];pendingBytes=0;start=at+1;
+      const value=JSON.parse(line.toString('utf8')) as unknown;
+      await visit(value);
+      if(header){limit=rowBound(value);header=false;}
     }
-    if(pending.length>MAX_OBSERVATION_ROW_BYTES)throw Error('file input observer: record exceeds bounded row size');
+    if(start<chunk.length){pending.push(chunk.subarray(start));pendingBytes+=chunk.length-start;}
+    if(pendingBytes>limit)throw Error('file input observer: record exceeds bounded row size');
   };
   await pipeline(input,createGunzip(),new Writable({write(chunk:Buffer,_encoding,callback){
     consumeChunk(chunk).then(()=>callback(),error=>callback(error instanceof Error?error:new Error(String(error))));
   }}));
-  if(pending.length)throw Error('file input observer: unterminated raw record');
+  if(pendingBytes)throw Error('file input observer: unterminated raw record');
   return {sha256:digest.digest('hex'),bytes};
 }

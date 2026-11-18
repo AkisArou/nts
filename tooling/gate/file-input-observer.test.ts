@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {gzipSync,gunzipSync,constants} from 'node:zlib';
-import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
+import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,MAX_OBSERVATION_ROW_BYTES,LEGACY_OBSERVATION_ROW_BYTES,readCompressedRecords,type ByteFact,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
 import {publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexObservation,type InputIndexProbe,type InputIndexExecRequest,type InputIndexExecution} from './rust-test-inputs.ts';
 import {authenticateRustInputTrace} from './rust-input-authentication.ts';
 import {runtimeSubjectValidator,validateRustInputCapture} from './rust-input-validation.ts';
@@ -17,7 +17,8 @@ import {rustTestExecutionClassifier} from './rust-test-execution.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
-import {IMAGE_READER_COMPILER_DEFINITION} from './image-reader-protocol.ts';
+import {IMAGE_READER_COMPILER_DEFINITION,EXEC_VECTOR_BYTES,EXEC_STRING_PAGES,IMAGE_READER_REPLY_BYTES,IMAGE_READER_METADATA_BYTES,IMAGE_READER_FRAME_BYTES,OBSERVATION_VERSION,readImageReaderFrames} from './image-reader-protocol.ts';
+import {childLoaderReader} from './rust-child-loader.ts';
 
 const source=fileURLToPath(new URL('./file-input-observer.c',import.meta.url));
 const subject=String.raw`
@@ -214,7 +215,9 @@ test('child loader receipts frame concurrent large exec vectors and reuse conten
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-int main(int argc,char **argv){(void)argc;char large[49153];memset(large,'x',sizeof(large)-1);large[sizeof(large)-1]=0;if(setenv("NTS_LONG_CAPTURE_CONTROL",large,1))return 5;pid_t children[3];
+int main(int argc,char **argv){(void)argc;char large[49153];memset(large,'x',sizeof(large)-1);large[sizeof(large)-1]=0;if(setenv("NTS_LONG_CAPTURE_CONTROL",large,1))return 5;
+// The aggregate environment exceeds 64 KiB even with short canonical paths.
+char padding[32769];memset(padding,'p',sizeof(padding)-1);padding[sizeof(padding)-1]=0;if(setenv("NTS_CAPTURE_PADDING",padding,1))return 6;pid_t children[3];
 for(int i=0;i<3;i++){pid_t p=fork();if(p<0)return 1;if(!p){if(setenv("LD_LIBRARY_PATH",argv[i==1?2:1],1))_exit(2);execl(argv[3],argv[3],"child%.0s",large,(char *)0);_exit(3);}children[i]=p;}
 for(int i=0;i<3;i++){int status;if(waitpid(children[i],&status,0)!=children[i]||!WIFEXITED(status)||WEXITSTATUS(status))return 4;}return 0;}\n`);
   const built=spawnTest('cc',['-O1',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
@@ -234,7 +237,7 @@ for(int i=0;i<3;i++){int status;if(waitpid(children[i],&status,0)!=children[i]||
     const bound=image.argvSource;assert.equal(bound?.kind,'request');if(bound?.kind!=='request')throw Error('missing request binding');
     const request=requests.find(row=>row.attempt===bound.attempt);assert.ok(request?.entry.environment);
     assert.ok(byteFactText(request.entry.argv,'large captured argv').length>48*1024);
-    assert.ok(byteFactText(request.entry.environment,'large captured environment').length>48*1024);
+    assert.ok(byteFactText(request.entry.environment,'large captured environment').length>80*1024);
   }
   const counts=statistics as {elfHits:number;loaderHits:number;loaderMisses:number};assert.ok(counts.elfHits>=2);assert.ok(counts.loaderHits>=1);assert.ok(counts.loaderMisses>=2);
   const classifier=rustTestExecutionClassifier(undefined,repository),sourceClassifier=rustTestExecutionClassifier(undefined,root),validator=runtimeSubjectValidator(repository,{files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],projectMatches:[],observations:[]},{capturedIdentities:true});
@@ -508,7 +511,7 @@ test('native fact views retain independent bytes and initialize only metadata, i
   writeFileSync(input,`#define main observer_main\n#include ${JSON.stringify(source)}\n#undef main\n#include <assert.h>
 int main(int argc,char **argv){
   assert(argc==2);assert(chdir(argv[1])==0);
-  unsigned char first[4],exact[4],over[4],missing[4],large[ARGV_BYTES],remote[PATH_BYTES],null_data[PATH_BYTES];
+  unsigned char first[4],exact[4],over[4],missing[4],large[65536],remote[PATH_BYTES],null_data[PATH_BYTES];
   memset(first,0xa5,sizeof(first));memset(exact,0xa5,sizeof(exact));memset(over,0xa5,sizeof(over));
   memset(missing,0xa5,sizeof(missing));memset(large,0xa5,sizeof(large));
   memset(remote,0xa5,sizeof(remote));memset(null_data,0xa5,sizeof(null_data));
@@ -531,6 +534,76 @@ int main(int argc,char **argv){
     fact(Buffer.alloc(65536,0x7f)),fact('path'),fact('',0,false,true)]);
 });
 
+test('native exec vectors share the kernel budget, grow with actual bytes and retain unreadable environments',t=>{
+  const root=newTestScratch('exec-vector-storage');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),input=join(root,'vectors.c'),binary=join(root,'vectors');
+  writeFileSync(input,`#define main observer_main\n#include ${JSON.stringify(source)}\n#undef main\n#include <assert.h>\n#include <sys/mman.h>
+static void clean(ExecVector *v){free(v->value.data);}
+int main(void){
+  long page=sysconf(_SC_PAGESIZE);assert(page>0);size_t string_bytes=EXEC_STRING_PAGES*(size_t)page;
+  pid_t self=getpid();char *small[]={"abc",NULL},*extra[]={"abc","",NULL},*one_byte[]={"",NULL},*empty[]={NULL};
+  ExecVector a=remote_argv(self,(uintptr_t)small,EXEC_VECTOR_BYTES);
+  assert(good(&a.value)&&!a.value.null&&a.value.size==4&&!memcmp(a.value.data,"abc",4));
+  assert(a.capacity<=256&&a.capacity<string_bytes);clean(&a);
+  a=remote_argv(self,(uintptr_t)small,4);assert(good(&a.value)&&a.value.size==4&&a.capacity==4);clean(&a);
+  a=remote_argv(self,(uintptr_t)extra,4);assert(a.value.truncated&&!a.value.error&&a.value.size==4);clean(&a);
+  a=remote_argv(self,0,EXEC_VECTOR_BYTES);assert(a.value.null&&!a.capacity&&!a.value.data);clean(&a);
+  a=remote_argv(self,1,EXEC_VECTOR_BYTES);assert(a.value.error==EFAULT&&!a.capacity);clean(&a);
+  a=remote_argv(self,UINT64_MAX,EXEC_VECTOR_BYTES);assert(a.value.error==EOVERFLOW);clean(&a);
+  char *large=malloc(string_bytes+1);assert(large);memset(large,'x',string_bytes);large[string_bytes]=0;
+  char *one[]={large,NULL};a=remote_argv(self,(uintptr_t)one,EXEC_VECTOR_BYTES);
+  assert(a.value.truncated&&!a.value.error&&a.value.size==string_bytes);clean(&a);
+  large[string_bytes-1]=0;
+  size_t count=EXEC_VECTOR_BYTES/string_bytes;char **full=calloc(count+1,sizeof(char *));assert(full);
+  for(size_t i=0;i<count;i++)full[i]=large;
+  a=remote_argv(self,(uintptr_t)full,EXEC_VECTOR_BYTES);
+  assert(good(&a.value)&&a.value.size==EXEC_VECTOR_BYTES&&a.capacity==EXEC_VECTOR_BYTES);
+  ExecVector b=remote_argv(self,(uintptr_t)empty,EXEC_VECTOR_BYTES-a.value.size);
+  assert(good(&b.value)&&!b.value.null&&!b.value.size&&!b.capacity);clean(&b);
+  b=remote_argv(self,(uintptr_t)one_byte,EXEC_VECTOR_BYTES-a.value.size);assert(b.value.truncated&&!b.value.error);clean(&b);
+  assert(a.value.data[0]=='x'&&a.value.data[EXEC_VECTOR_BYTES-1]==0);
+  // Exercise the producer's byte serializer at all simultaneous maxima.
+  const char *prefix="{\\"padding\\":\\"",*suffix="\\"}";size_t overhead=strlen(prefix)+strlen(suffix);
+  memcpy(image_reply,prefix,strlen(prefix));memset(image_reply+strlen(prefix),'x',IMAGE_READER_REPLY_BYTES-overhead);
+  memcpy(image_reply+IMAGE_READER_REPLY_BYTES-strlen(suffix),suffix,strlen(suffix)+1);
+  char *serialized=NULL;size_t serialized_size=0;output=open_memstream(&serialized,&serialized_size);assert(output);
+  fputs("{\\"exec\\":{\\"argv\\":",output);bytes_json(&a.value);fputs("},\\"imageLoader\\":",output);fputs(image_reply,output);
+  unsigned char longest[PATH_BYTES+1];memset(longest,'p',PATH_BYTES);longest[PATH_BYTES]=0;
+  Bytes path={.data=longest,.size=PATH_BYTES-1};fputs(",\\"path\\":",output);bytes_json(&path);fputs("}",output);
+  assert(!fclose(output)&&serialized_size<=IMAGE_READER_FRAME_BYTES);free(serialized);
+  unsigned char path_data[PATH_BYTES];path=remote_path(self,(uintptr_t)longest,path_data);assert(path.truncated&&!path.error&&path.size==PATH_BYTES);
+  clean(&a);free(full);free(large);
+  unsigned char *pages=mmap(NULL,(size_t)page*2,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);assert(pages!=MAP_FAILED);
+  assert(!mprotect(pages+page,(size_t)page,PROT_NONE));
+  memcpy(pages+page-4,"end",4);char *boundary[]={(char *)pages+page-4,NULL};
+  a=remote_argv(self,(uintptr_t)boundary,EXEC_VECTOR_BYTES);assert(good(&a.value)&&a.value.size==4&&!memcmp(a.value.data,"end",4));clean(&a);
+  memset(pages+page-4,'x',4);a=remote_argv(self,(uintptr_t)boundary,EXEC_VECTOR_BYTES);
+  assert(a.value.error==EFAULT&&a.value.size==4);clean(&a);
+  char *protected[]={(char *)pages+page,NULL};a=remote_argv(self,(uintptr_t)protected,EXEC_VECTOR_BYTES);
+  assert(a.value.error==EFAULT&&!a.value.null&&!a.value.truncated&&!a.capacity);
+  // A pointer read that stops at a protected page cannot invent a terminator.
+  b=remote_argv(self,(uintptr_t)(pages+page-4),EXEC_VECTOR_BYTES);assert(b.value.error==EFAULT);clean(&b);
+  output=stdout;fprintf(output,"{\\"limits\\":[%d,%d,%d,%d,%d,%d],\\"unreadable\\":",EXEC_VECTOR_BYTES,EXEC_STRING_PAGES,IMAGE_READER_REPLY_BYTES,IMAGE_READER_METADATA_BYTES,IMAGE_READER_FRAME_BYTES,OBSERVATION_VERSION);
+  bytes_json(&a.value);puts("}");clean(&a);assert(!munmap(pages,(size_t)page*2));return 0;
+}\n`);
+  const built=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O2','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
+  assert.equal(built.status,0,built.stderr);
+  const ran=spawnTest(binary,[],{env,encoding:'utf8'});assert.equal(ran.status,0,ran.stderr);
+  const result=JSON.parse(ran.stdout) as {limits:number[];unreadable:ByteFact};
+  assert.deepEqual(result.limits,[EXEC_VECTOR_BYTES,EXEC_STRING_PAGES,IMAGE_READER_REPLY_BYTES,IMAGE_READER_METADATA_BYTES,IMAGE_READER_FRAME_BYTES,OBSERVATION_VERSION]);
+  assert.deepEqual(result.unreadable,{hex:'',error:14,truncated:false,null:false});
+  const fact=(text:string):ByteFact=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
+  const request:InputAttempt={kind:'attempt',id:'1',tid:42,tgid:42,ppid:1,birth:'42',parentBirth:'1',syscall:'execve',operation:'execute',outcome:'unknown',canceled:false,factsComplete:true,
+    args:['0','0','0','0','0','0'],cwd:fact('/'),image:fact('/before'),argvRead:false,argv:fact(''),
+    exec:{source:'syscall-entry',argv:fact('/after\0'),target:fact('/after'),environment:result.unreadable},paths:[],dirfds:[]};
+  const reader=childLoaderReader(env),context={namespace:true,platform:'0:0',platformMatches:true};
+  reader.observe({...context,row:request,environment:result.unreadable,changed:true});
+  const receipt=reader.observe({...context,row:{...request,id:'2',syscall:'openat',operation:'open',image:fact('/after'),exec:undefined},changed:true});
+  assert.equal(receipt?.state,'unavailable');
+  assert.ok(receipt?.state==='unavailable'&&/stopped exec environment is unreadable, null or truncated/.test(receipt.reason));
+  assert.equal(receipt.request,'1','the named fault belongs to the actual bound request');
+});
+
 test('the native image response reader refuses short headers and bodies with EPROTO',t=>{
   const root=newTestScratch('file-observer-frame-eof');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const input=join(root,'frame.c'),binary=join(root,'frame'),env=fixtureEnvironment(t);
@@ -541,12 +614,89 @@ test('the native image response reader refuses short headers and bodies with EPR
   assert.equal(built.status,0,built.stderr);const ran=spawnTest(binary,[],{env,encoding:'utf8'});assert.equal(ran.status,0,ran.stderr);
 });
 
+test('a reply one byte above its own bound is refused by name before its body is read',async t=>{
+  const root=newTestScratch('observer-reply-bound');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env),raw=join(root,'raw.gz');
+  const child=spawn(prepared.executable,[raw,'--image-reader','0'.repeat(64),'--','/usr/bin/true'],{env,stdio:['ignore','pipe','pipe','pipe','pipe']});
+  child.stdout!.resume();let stderr='';child.stderr!.on('data',part=>stderr+=part);
+  const requests=child.stdio[3],responses=child.stdio[4];assert.ok(requests&&'read'in requests&&responses&&'write'in responses);
+  const done=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
+  const header=Buffer.alloc(4);header.writeUInt32BE(IMAGE_READER_REPLY_BYTES+1);
+  const served=(async()=>{for await(const _request of readImageReaderFrames(requests)){
+    await new Promise<void>((resolve,reject)=>responses.write(header,error=>error?reject(error):resolve()));
+  }})();
+  void served.catch(()=>{});
+  assert.equal(await done,2,stderr);await served;
+  const rows=gunzipSync(readFileSync(raw)).toString().trim().split('\n').map(line=>JSON.parse(line) as {kind:string;message?:string});
+  assert.ok(rows.some(row=>row.kind==='error'&&row.message==='image reader reply exceeds bounded reply size'));
+});
+
 test('the native wedged-phase decision uses supplied elapsed observations',t=>{
   const root=newTestScratch('file-observer-bound');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const input=join(root,'bound.c'),binary=join(root,'bound');
   writeFileSync(input,'#define main observer_main\n#include '+JSON.stringify(source)+'\n#undef main\n#include <assert.h>\nint main(void){assert(phase_timeout_ms(false,UINT64_MAX)==-1);assert(phase_timeout_ms(true,0)==300000);assert(phase_timeout_ms(true,WEDGED_NS-1)==1);assert(phase_timeout_ms(true,WEDGED_NS)==0);assert(phase_timeout_ms(true,UINT64_MAX)==0);return 0;}\n');
   const env=fixtureEnvironment(t),compiled=spawnTest('cc',[IMAGE_READER_COMPILER_DEFINITION,'-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
   assert.equal(compiled.status,0,compiled.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
+});
+
+test('raw and attributed versions retain their row bounds, including headers and publication',async t=>{
+  const root=newTestScratch('observer-version-bounds');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const fact=(text:string):ByteFact=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
+  const header={kind:'start',version:7,mechanism:'seccomp-user-notification',noNewPrivileges:true,imageReaderRecipe:null};
+  const end={kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:0,errors:0,drainComplete:true,observerSignal:0};
+  const inherited={kind:'inherited',fd:1,flags:0,target:fact('pipe:[1]')};
+  const rows=[header,{kind:'root-start',root:1},inherited,{kind:'root-exit',root:1,exit:0,signal:0},end];
+  const write=(name:string,values:unknown[])=>{const file=join(root,name+'.gz');writeFileSync(file,gzipSync(values.map(row=>JSON.stringify(row)).join('\n')+'\n'));return file;};
+  // Padding is ASCII so these controls measure wire bytes, including JSON
+  // overhead, rather than estimating from the length of a field's value.
+  const padded=(row:object,bytes:number)=>{
+    const value={...row,padding:''};const overhead=Buffer.byteLength(JSON.stringify(value));assert.ok(bytes>=overhead);
+    value.padding='p'.repeat(bytes-overhead);assert.equal(Buffer.byteLength(JSON.stringify(value)),bytes);return value;
+  };
+  const raw=write('raw7',rows),output=join(root,'index10.gz');
+  await publishInputTrace({raw,output,cwd:root,root});
+  const index=gunzipSync(readFileSync(output)).toString().trim().split('\n').map(line=>JSON.parse(line) as Record<string,unknown>);
+  for(const [version,bound] of [[6,LEGACY_OBSERVATION_ROW_BYTES],[7,MAX_OBSERVATION_ROW_BYTES]] as const){
+    for(const extra of [0,1]){
+      const file=write('raw-row-'+version+'-'+extra,[{...header,version},rows[1],padded(inherited,bound+extra),...rows.slice(-2)]);
+      if(extra)await assert.rejects(readFileObservation(file,()=>{}),/exceeds bounded row size/);
+      else assert.equal((await readFileObservation(file,()=>{})).terminal.complete,true);
+    }
+    for(const extra of [0,1]){
+      const file=write('raw-header-'+version+'-'+extra,[padded({...header,version},LEGACY_OBSERVATION_ROW_BYTES+extra),...rows.slice(1)]);
+      if(extra)await assert.rejects(readFileObservation(file,()=>{}),/exceeds bounded row size/);
+      else assert.equal((await readFileObservation(file,()=>{})).terminal.complete,true);
+    }
+  }
+  for(const [version,bound] of [[9,LEGACY_OBSERVATION_ROW_BYTES],[10,MAX_OBSERVATION_ROW_BYTES]] as const){
+    for(const extra of [0,1]){
+      const file=write('index-row-'+version+'-'+extra,[{...index[0],version},padded(inherited,bound+extra),...index.slice(2)]);
+      if(extra)await assert.rejects(readInputTraceIndex(file,()=>{}),/exceeds bounded row size/);
+      else assert.equal((await readInputTraceIndex(file,()=>{})).header.version,version);
+    }
+    for(const extra of [0,1]){
+      const file=write('index-header-'+version+'-'+extra,[padded({...index[0],version},LEGACY_OBSERVATION_ROW_BYTES+extra),...index.slice(1)]);
+      if(extra)await assert.rejects(readInputTraceIndex(file,()=>{}),/exceeds bounded row size/);
+      else assert.equal((await readInputTraceIndex(file,()=>{})).header.version,version);
+    }
+  }
+  // Publication bounds count the terminating newline too. Keep the raw row
+  // within its reader bound while placing the emitted row exactly at/+1.
+  for(const extra of [0,1]){
+    const writerRaw=write('writer-raw-'+extra,[header,rows[1],padded(inherited,MAX_OBSERVATION_ROW_BYTES-1+extra),...rows.slice(-2)]);
+    const written=join(root,'writer-row-'+extra+'.gz'),publishing=publishInputTrace({raw:writerRaw,output:written,cwd:root,root});
+    if(extra)await assert.rejects(publishing,/index row exceeds bounded row size/);
+    else{await publishing;assert.equal((await readInputTraceIndex(written,()=>{})).header.version,10);}
+  }
+  const target={package:'fixture',name:'',kind:['test'],source:'fixture.rs'};
+  const headerBytes=Buffer.byteLength(JSON.stringify({...index[0],target})+'\n');
+  for(const extra of [0,1]){
+    const boundedTarget={...target,name:'p'.repeat(LEGACY_OBSERVATION_ROW_BYTES-headerBytes+extra)};
+    assert.equal(Buffer.byteLength(JSON.stringify({...index[0],target:boundedTarget})+'\n'),LEGACY_OBSERVATION_ROW_BYTES+extra);
+    const written=join(root,'writer-header-'+extra+'.gz'),publishing=publishInputTrace({raw,output:written,cwd:root,root,target:boundedTarget});
+    if(extra)await assert.rejects(publishing,/index header exceeds bounded header size/);
+    else{await publishing;assert.equal((await readInputTraceIndex(written,()=>{})).header.version,10);}
+  }
 });
 
 test('malformed and incomplete raw observations cannot publish a complete census',async t=>{
@@ -566,10 +716,27 @@ test('malformed and incomplete raw observations cannot publish a complete census
   await assert.rejects(readFileObservation(truncated,()=>{}),/unexpected end|buffer error/i);
   const corrupt=join(root,'corrupt.gz'),corrupted=Buffer.from(compressed);corrupted[corrupted.length-8]=corrupted[corrupted.length-8]!^1;writeFileSync(corrupt,corrupted);
   await assert.rejects(readFileObservation(corrupt,()=>{}),/incorrect data check/i);
-  const oversized=join(root,'oversized.gz');writeFileSync(oversized,gzipSync('x'.repeat(256*1024+1)+'\n'));
+  const oversized=join(root,'oversized.gz');writeFileSync(oversized,gzipSync('x'.repeat(MAX_OBSERVATION_ROW_BYTES+1)+'\n'));
   await assert.rejects(readFileObservation(oversized,()=>{}),/exceeds bounded row size/);
   const large=join(root,'many-rows.gz'),descriptor={kind:'inherited',fd:1,flags:1,target:{hex:'706970653a5b315d',error:0,truncated:false,null:false}};
   const many=[start,...Array.from({length:5000},()=>descriptor),{kind:'root-start',root:1},{kind:'root-exit',root:1,exit:0,signal:0},end].map(row=>JSON.stringify(row)).join('\n')+'\n';
   assert.ok(Buffer.byteLength(many)>256*1024);writeFileSync(large,gzipSync(many));
   assert.equal((await readFileObservation(large,()=>{})).terminal.complete,true,'the limit is per decoded row, not total stream size');
+});
+
+test('compressed records join a maximum row once across gunzip chunks',async t=>{
+  const root=newTestScratch('observer-linear-codec');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const file=join(root,'rows.gz'),large='x'.repeat(MAX_OBSERVATION_ROW_BYTES-2);
+  const text=JSON.stringify({version:7})+'\n'+JSON.stringify(large)+'\n'+JSON.stringify({end:true})+'\n';
+  writeFileSync(file,gzipSync(text));
+  let copied=0;
+  const concat=Buffer.concat;
+  t.mock.method(Buffer,'concat',(list:readonly Uint8Array[],length?:number)=>{
+    copied+=length??list.reduce((sum,part)=>sum+part.byteLength,0);return concat(list,length);
+  });
+  const rows:unknown[]=[];
+  await readCompressedRecords(file,row=>{rows.push(row);},()=>MAX_OBSERVATION_ROW_BYTES);
+  assert.deepEqual(rows,[{version:7},large,{end:true}]);
+  t.diagnostic(JSON.stringify({rowBytes:MAX_OBSERVATION_ROW_BYTES,copiedBytes:copied}));
+  assert.ok(copied<=2*Buffer.byteLength(text),'row assembly must copy a linear number of bytes: '+copied);
 });

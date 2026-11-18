@@ -41,7 +41,11 @@
 #error "file input observation requires a supported Linux syscall ABI"
 #endif
 
-enum { PATH_BYTES = 4096, ARGV_BYTES = 65536 };
+#ifndef IMAGE_READER_LIMITS
+#error "build with the limits from image-reader-protocol.ts"
+#endif
+IMAGE_READER_LIMITS
+enum { PATH_BYTES = 4096 };
 /* Startup and post-root drain can wedge independently. A running command has
  * its existing owner's bounds; only these orphanable phases get five minutes.
  */
@@ -161,10 +165,7 @@ static unsigned long errors, attempts;
 static bool output_failed;
 static bool image_reader;
 static const char *image_reader_recipe;
-#ifndef IMAGE_READER_FRAME_BYTES
-#error "prepareFileObserver supplies the image reader frame bound"
-#endif
-static char image_reply[IMAGE_READER_FRAME_BYTES + 1];
+static char image_reply[IMAGE_READER_REPLY_BYTES + 1];
 
 static ssize_t compressed_write(void *cookie, const char *bytes, size_t size) {
   if (size > INT32_MAX) {
@@ -319,52 +320,126 @@ static Bytes remote_path(pid_t tid, uint64_t address,
   return remote_string(tid, address, data, PATH_BYTES);
 }
 static bool good(const Bytes *b) { return !b->error && !b->truncated; }
-/* Read the stopped exec request, never a later /proc cmdline. Missing vectors
- * remain facts about this request; they do not invent an empty invocation. */
-static Bytes remote_argv(pid_t tid, uint64_t address,
-                         unsigned char data[ARGV_BYTES]) {
-  Bytes result = {.data = data};
+/* Exec vectors own only the bytes they have read. The caller shares the
+ * kernel's combined budget between argv and envp and frees both after writing
+ * the request. A failed read retains its error and cannot certify a loader. */
+typedef struct {
+  Bytes value;
+  size_t capacity;
+} ExecVector;
+static bool vector_append(ExecVector *vector, const unsigned char *data,
+                          size_t size, size_t limit) {
+  size_t needed = vector->value.size + size;
+  if (needed > limit) {
+    vector->value.truncated = true;
+    return false;
+  }
+  if (needed > vector->capacity) {
+    size_t capacity = vector->capacity ? vector->capacity : 256;
+    while (capacity < needed)
+      capacity *= 2;
+    if (capacity > limit)
+      capacity = limit;
+    unsigned char *grown = realloc(vector->value.data, capacity);
+    if (!grown) {
+      vector->value.error = ENOMEM;
+      return false;
+    }
+    vector->value.data = grown;
+    vector->capacity = capacity;
+  }
+  if (size)
+    memcpy(vector->value.data + vector->value.size, data, size);
+  vector->value.size = needed;
+  return true;
+}
+static int remote_pointer(pid_t tid, uint64_t address, uint64_t *pointer) {
+  if (address > UINT64_MAX - sizeof(*pointer) + 1)
+    return EOVERFLOW;
+  size_t read = 0;
+  while (read < sizeof(*pointer)) {
+    struct iovec local = {.iov_base = (unsigned char *)pointer + read,
+                          .iov_len = sizeof(*pointer) - read};
+    struct iovec remote = {.iov_base = (void *)(uintptr_t)(address + read),
+                           .iov_len = sizeof(*pointer) - read};
+    ssize_t n = process_vm_readv(tid, &local, 1, &remote, 1, 0);
+    if (n < 0) {
+      if (errno == EINTR)
+        continue;
+      return errno;
+    }
+    if (!n)
+      return EFAULT;
+    read += (size_t)n;
+  }
+  return 0;
+}
+static ExecVector remote_argv(pid_t tid, uint64_t address, size_t limit) {
+  ExecVector result = {0};
   if (!address) {
-    result.null = true;
+    result.value.null = true;
     return result;
   }
-  for (size_t i = 0; result.size < ARGV_BYTES; i++) {
-    uint64_t pointer;
-    if (address > UINT64_MAX - i * sizeof(pointer)) {
-      result.error = EOVERFLOW;
-      return result;
-    }
-    struct iovec local = {.iov_base = &pointer, .iov_len = sizeof(pointer)};
-    struct iovec remote = {
-        .iov_base = (void *)(uintptr_t)(address + i * sizeof(pointer)),
-        .iov_len = sizeof(pointer)};
-    ssize_t n;
-    do {
-      n = process_vm_readv(tid, &local, 1, &remote, 1, 0);
-    } while (n < 0 && errno == EINTR);
-    if (n != (ssize_t)sizeof(pointer)) {
-      result.error = n < 0 ? errno : EFAULT;
-      return result;
-    }
-    if (!pointer)
-      return result;
-    Bytes value = remote_string(tid, pointer, data + result.size,
-                                ARGV_BYTES - result.size);
-    if (!good(&value) || value.null) {
-      result.error = value.error;
-      result.truncated = value.truncated;
-      result.null = value.null;
-      return result;
-    }
-    if (value.size + 1 > ARGV_BYTES - result.size) {
-      result.truncated = true;
-      return result;
-    }
-    result.size += value.size;
-    data[result.size++] = 0;
+  long page_size = sysconf(_SC_PAGESIZE);
+  if (page_size <= 0 || (size_t)page_size > SIZE_MAX / EXEC_STRING_PAGES) {
+    result.value.error = EINVAL;
+    return result;
   }
-  result.truncated = true;
-  return result;
+  size_t string_limit = EXEC_STRING_PAGES * (size_t)page_size;
+  for (;;) {
+    uint64_t pointer;
+    result.value.error = remote_pointer(tid, address, &pointer);
+    if (result.value.error || !pointer)
+      return result;
+    size_t string_size = 0;
+    for (;;) {
+      size_t room = limit - result.value.size;
+      if (room > string_limit - string_size)
+        room = string_limit - string_size;
+      if (!room) {
+        result.value.truncated = true;
+        return result;
+      }
+      unsigned char data[256];
+      size_t chunk = room < sizeof(data) ? room : sizeof(data);
+      if (pointer > UINT64_MAX - chunk + 1) {
+        result.value.error = EOVERFLOW;
+        return result;
+      }
+      struct iovec local = {.iov_base = data, .iov_len = chunk};
+      struct iovec remote = {.iov_base = (void *)(uintptr_t)pointer,
+                             .iov_len = chunk};
+      ssize_t n = process_vm_readv(tid, &local, 1, &remote, 1, 0);
+      if (n < 0) {
+        if (errno == EINTR)
+          continue;
+        result.value.error = errno;
+        return result;
+      }
+      if (!n) {
+        result.value.error = EFAULT;
+        return result;
+      }
+      unsigned char *end = memchr(data, 0, (size_t)n);
+      size_t size = end ? (size_t)(end - data) + 1 : (size_t)n;
+      if (!vector_append(&result, data, size, limit))
+        return result;
+      if (end)
+        break;
+      string_size += size;
+      if (pointer > UINT64_MAX - size) {
+        result.value.error = EOVERFLOW;
+        return result;
+      }
+      pointer += size;
+    }
+    if (address > UINT64_MAX - sizeof(pointer)) {
+      result.value.error = EOVERFLOW;
+      return result;
+    }
+    address += sizeof(pointer);
+    // Read the terminating pointer even when the byte budget is exactly full.
+  }
 }
 static Bytes exec_target(const struct seccomp_notif *request, const Call *call,
                          const Bytes *path, unsigned char data[PATH_BYTES]) {
@@ -973,7 +1048,7 @@ static const char *image_reader_reply(void) {
     return NULL;
   size_t size = (size_t)header[0] << 24 | (size_t)header[1] << 16 |
                 (size_t)header[2] << 8 | header[3];
-  if (!size || size > IMAGE_READER_FRAME_BYTES) {
+  if (!size || size > IMAGE_READER_REPLY_BYTES) {
     errno = EMSGSIZE;
     return NULL;
   }
@@ -1050,8 +1125,8 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
   // All facts remain live until this notification is serialized. Their bounded
   // backing storage is independent; only metadata travels through Bytes views.
   unsigned char cwd_data[PATH_BYTES], image_data[PATH_BYTES],
-      status_data[16384], argv_data[ARGV_BYTES], target_data[PATH_BYTES],
-      path_data[2][PATH_BYTES], descriptor_data[2][PATH_BYTES];
+      status_data[16384], target_data[PATH_BYTES], path_data[2][PATH_BYTES],
+      descriptor_data[2][PATH_BYTES];
   Bytes status, cwd = proc_link(request->pid, "cwd", cwd_data),
                 image = proc_link(request->pid, "exe", image_data);
   task_identity(request->pid, &tgid, &ppid, &status, status_data);
@@ -1084,15 +1159,18 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
   }
   bool is_exec =
       !strcmp(call->name, "execve") || !strcmp(call->name, "execveat");
-  unsigned char environment_data[ARGV_BYTES];
+  ExecVector argv_vector = {0}, environment_vector = {0};
   Bytes requested_argv = {0}, target = {0}, environment = {0};
   if (is_exec) {
     unsigned argument = !strcmp(call->name, "execve") ? 1 : 2;
-    requested_argv =
-        remote_argv(request->pid, request->data.args[argument], argv_data);
+    argv_vector = remote_argv(request->pid, request->data.args[argument],
+                              EXEC_VECTOR_BYTES);
+    requested_argv = argv_vector.value;
     target = exec_target(request, call, &paths[0], target_data);
-    environment = remote_argv(request->pid, request->data.args[argument + 1],
-                              environment_data);
+    environment_vector =
+        remote_argv(request->pid, request->data.args[argument + 1],
+                    EXEC_VECTOR_BYTES - requested_argv.size);
+    environment = environment_vector.value;
   }
   const char *loader_fact = NULL;
   bool namespace_stable = false;
@@ -1141,11 +1219,20 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
       if (fclose(output))
         serialized = false;
       output = saved_output;
-      if (serialized && image_reader_send(message, message_size))
+      if (serialized && image_reader_send(message, message_size)) {
         loader_fact = image_reader_reply();
+        if (!loader_fact)
+          record_error(errno == EMSGSIZE
+                           ? "image reader reply exceeds bounded reply size"
+                           : "image reader reply protocol",
+                       errno ? errno : EIO);
+      } else {
+        record_error(errno == EMSGSIZE
+                         ? "image reader request exceeds bounded frame size"
+                         : "image reader request protocol",
+                     errno ? errno : EIO);
+      }
       free(message);
-      if (!loader_fact)
-        record_error("image reader protocol", errno ? errno : EIO);
       namespace_stable =
           namespace &&
           resolution_namespace(request->pid, &after_mount, &after_root) &&
@@ -1213,6 +1300,8 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
       fputc('}', output);
     }
   fputs("]}\n", output);
+  free(argv_vector.value.data);
+  free(environment_vector.value.data);
   attempts++;
   // An exit notification can be canceled when another thread terminates the
   // group. Its vanished identity contains no filesystem candidate. Keep the
@@ -1369,9 +1458,10 @@ int main(int argc, char **argv) {
   static char buffer[65536];
   if (setvbuf(output, buffer, _IOFBF, sizeof(buffer)))
     fatal("observation buffer");
-  fputs("{\"kind\":\"start\",\"version\":6,\"mechanism\":\"seccomp-user-"
-        "notification\",\"noNewPrivileges\":true,\"imageReaderRecipe\":",
-        output);
+  fprintf(output,
+          "{\"kind\":\"start\",\"version\":%d,\"mechanism\":\"seccomp-user-"
+          "notification\",\"noNewPrivileges\":true,\"imageReaderRecipe\":",
+          OBSERVATION_VERSION);
   if (image_reader_recipe)
     fprintf(output, "\"%s\"", image_reader_recipe);
   else

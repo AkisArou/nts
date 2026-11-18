@@ -10,7 +10,7 @@ import {runtimeInputRequirement,type InputRequirement} from './rust-input-operat
 import {compileRuntimeRepositoryClaims,type RuntimeClaimAnswer} from './rust-input-claims.ts';
 import {authenticateRustInputTrace,type RustInputCapture} from './rust-input-authentication.ts';
 import {durableRecordStream} from './durable-record.ts';
-import {MAX_OBSERVATION_ROW_BYTES,type ByteFact} from './file-input-observer.ts';
+import {LEGACY_OBSERVATION_ROW_BYTES,type ByteFact} from './file-input-observer.ts';
 import {validateReaderSourceObservations} from './reader-observations.ts';
 import type {RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {runtimeSourceAnchor} from './rust-source-anchor.ts';
@@ -146,7 +146,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
     const flush=async()=>{if(size){const text=batch.join('');batch=[];size=0;await append(text);}};
     const emit=async(value:unknown)=>{
       const line=JSON.stringify(value)+'\n',bytes=Buffer.byteLength(line);
-      if(bytes>MAX_OBSERVATION_ROW_BYTES)throw Error('Rust input validation: report row exceeds bounded row size');
+      if(bytes>LEGACY_OBSERVATION_ROW_BYTES)throw Error('Rust input validation: report row exceeds bounded row size');
       batch.push(line);size+=bytes;if(size>=64*1024)await flush();
     };
     const pool=rustInputReportPool(emit);

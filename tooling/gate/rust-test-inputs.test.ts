@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {testArtifactTargets,testBuildStatus,RustInputPhases,publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
-import {readCompressedRecords,type InputAttempt,type ByteFact,type FileObserverReceipt} from './file-input-observer.ts';
+import {readCompressedRecords,MAX_OBSERVATION_ROW_BYTES,type InputAttempt,type ByteFact,type FileObserverReceipt} from './file-input-observer.ts';
 import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {newTestScratch} from './test-scratch.ts';
@@ -141,7 +141,7 @@ test('attempt groups retain kernel path order, two-path positions and actual cha
   await publishInputTrace({raw,output,cwd:'/source/ignored',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
   const rows:InputIndexObservation[]=[];
   const result=await readInputTraceIndex(output,row=>{if(row.kind==='observation')rows.push(row);});
-  assert.equal(result.header.version,9);assert.equal(result.header.observer,null,'absence of capture ABI evidence remains explicit');
+  assert.equal(result.header.version,10);assert.equal(result.header.observer,null,'absence of capture ABI evidence remains explicit');
   assert.deepEqual(rows.map(row=>row.attempt.id),['41','42']);
   assert.deepEqual(rows[0]!.subjects,[
     {kind:'path',arg:1,dirfdArg:0,name:'link/../value',raw:bytes('link/../value').hex,anchor:{kind:'dirfd',fd:3,path:'/source/first',raw:bytes('/source/first').hex}},
@@ -151,7 +151,7 @@ test('attempt groups retain kernel path order, two-path positions and actual cha
   assert.deepEqual(rows[1]!.args,after.args);assert.equal(rows[1]!.cwd,'/source/moved');
   assert.equal(result.complete.raw.sha256,createHash('sha256').update(readFileSync(raw)).digest('hex'));
   assert.equal(result.complete.raw.bytes,readFileSync(raw).length);
-  const records:unknown[]=[];await readCompressedRecords(output,row=>{records.push(row);});
+  const records:unknown[]=[];await readCompressedRecords(output,row=>{records.push(row);},()=>MAX_OBSERVATION_ROW_BYTES);
   const current=rows[1]!;
   const changes:InputIndexObservation[]=[
     {...current,attempt:{...current.attempt,tgid:2}},
@@ -183,7 +183,7 @@ test('capture identities are canonical at decode while attempted pathname spelli
   };
   const options={cwd:'/source/crate',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}};
   const output=join(root,'valid.gz');await publishInputTrace({...options,raw:raw('valid',row),output});
-  const records:unknown[]=[];await readCompressedRecords(output,value=>{records.push(value);});
+  const records:unknown[]=[];await readCompressedRecords(output,value=>{records.push(value);},()=>MAX_OBSERVATION_ROW_BYTES);
   const observed=records.find(value=>(value as {kind:string}).kind==='observation') as InputIndexObservation;
   assert.equal(observed.subjects[0]!.kind==='path'&&observed.subjects[0]!.name,'../link/../file');
   for(const [index,path]of ['/source//file','/source/../file'].entries()){
@@ -213,7 +213,7 @@ test('derived procfs anchors bind the actual task, captured root and numeric suc
   writeFileSync(raw,gzipSync([{kind:'start',version:5,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},row,
     {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:1,errors:0,drainComplete:true,observerSignal:0}].map(value=>JSON.stringify(value)).join('\n')+'\n'));
   await publishInputTrace({raw,output,cwd:'/source/crate',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
-  const records:unknown[]=[];await readCompressedRecords(output,value=>{records.push(value);});
+  const records:unknown[]=[];await readCompressedRecords(output,value=>{records.push(value);},()=>MAX_OBSERVATION_ROW_BYTES);
   await readInputTraceIndex(output,()=>{});
   type Proof=Extract<CapturedPathResolution,{path:string}>;
   const alter=(name:string,change:(proof:Proof)=>void)=>{
@@ -248,9 +248,9 @@ test('descriptor-backed null paths are retained and non-filesystem dirfds never 
   assert.deepEqual(decoded.observations.flatMap(row=>row.subjects.map(subject=>[subject.kind==='descriptor'?subject.target:subject.name,row.operation,row.outcome])),[['/source/crate/value','lookup','unknown']]);
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='null-path'));
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'&&row.raw===Buffer.from('socket:[123]').toString('hex')));
-  const rows:unknown[]=[];await readCompressedRecords(output,row=>{rows.push(row);});
+  const rows:unknown[]=[];await readCompressedRecords(output,row=>{rows.push(row);},()=>MAX_OBSERVATION_ROW_BYTES);
   const changed=(name:string,values:unknown[])=>{const path=join(root,name+'.gz');writeFileSync(path,gzipSync(values.map(row=>JSON.stringify(row)).join('\n')+'\n'));return path;};
-  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:10},...rows.slice(1)]),()=>{}),/unsupported input index version 10/);
+  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:11},...rows.slice(1)]),()=>{}),/unsupported input index version 11/);
   await assert.rejects(readInputTraceIndex(changed('before-empty-path',[{...(rows[0] as object),version:4},...rows.slice(1)]),()=>{}),/rederive legacy normalized indices/);
   await assert.rejects(readInputTraceIndex(changed('legacy',[{...(rows[0] as object),version:3},...rows.slice(1)]),()=>{}),/rederive legacy normalized indices/);
   const footer=rows.at(-1) as {counts:{observations:number}};

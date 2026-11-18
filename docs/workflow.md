@@ -888,6 +888,15 @@ The complete payload and key retain SHA256 authentication. The committed file
 bound has headroom over the measured stable format; packed history growth,
 rather than the uncompressed file size alone, determines this representation.
 
+Stopped exec capture retains argv and environment under one combined kernel
+string budget, with a separate per-string limit. Native storage grows only with
+observed bytes and lives through serialization. The shared protocol owner
+supplies native limits and finite hex-frame and raw/index row bounds. Raw
+observation version 7 and attributed index version 10 accept these larger rows;
+older versions retain their original row bound. Null, unreadable and truncated
+vectors remain explicit facts; an unavailable environment cannot certify a
+child loader receipt.
+
 The observer records attempted filesystem operations with fresh task image,
 cwd and process birth facts. Continuing a notification establishes neither its
 result nor a successful exec. Raw and attributed records keep outcomes unknown.
@@ -2489,3 +2498,10 @@ death; an absent timestamp remains explicit after forced termination.
   reach belongs to the shared `projectMembers` owner. Until the census reader
   declares those inputs, an imported file outside the case can miss the landing
   census check; green-core native refresh still covers every row.
+
+- **Stopped exec vectors share the kernel budget.** The native reader owns
+  growing argv and environment storage through serialization, bounded by the
+  combined exec limit and each string's limit. Protocol-owned definitions keep
+  producer, frame and versioned row bounds consistent. An unreadable vector
+  remains a named unavailable receipt
+  ([log](records/notebooks/decisions-log.md#stopped-exec-vectors-share-the-kernel-budget-11-19)).

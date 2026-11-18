@@ -6,7 +6,7 @@ import {runAsCommand} from '../differential/command-entry/main.ts';
 import {basename,isAbsolute,relative,resolve,sep} from 'node:path';
 import {durableRecord,durableRecordStream} from './durable-record.ts';
 import {emptyPathDescriptorArgument} from './rust-input-abi.ts';
-import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,imageReaderRecipeValid,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
+import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,imageReaderRecipeValid,MAX_OBSERVATION_ROW_BYTES,LEGACY_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
 import type {CapturedPathResolution} from './rust-input-provenance.ts';
 import {canonicalCapturedPath,validProcfsTaskAnchor,validProcfsTaskComponent} from './captured-path.ts';
 import {childLoaderFact,execEnvironment,type ChildLoaderObservation} from './rust-loader.ts';
@@ -182,7 +182,9 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
   if(value.null)return;
   return byteFactText(value,purpose);
 }
-export type InputIndexStart={kind:'index-start';version:5|6|7|8|9;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
+export type InputIndexStart={kind:'index-start';version:5|6|7|8|9|10;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
+const INPUT_INDEX_ROW_BOUNDS=new Map([[5,LEGACY_OBSERVATION_ROW_BYTES],[6,LEGACY_OBSERVATION_ROW_BYTES],
+  [7,LEGACY_OBSERVATION_ROW_BYTES],[8,LEGACY_OBSERVATION_ROW_BYTES],[9,LEGACY_OBSERVATION_ROW_BYTES],[10,MAX_OBSERVATION_ROW_BYTES]]);
 export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'|'argvSource'>&{argvRaw:string;argvSource?:ArgvSource;imageLoader?:ChildLoaderObservation};
 export type InputIndexObservation={kind:'observation'}&RuntimeObservation;
 export type InputIndexCounts={images:number;attempts:number;observations:number;probes:number;terminalFacts:number;inherited:number;execRequests:number};
@@ -199,7 +201,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
   if(observer&&observer.abi!==options.observer?.abi)fail('observer ABI receipt mismatch');
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
   let root:number|undefined,observerBound=false;
-  await emit({kind:'index-start',version:9,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
+  await emit({kind:'index-start',version:10,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
   const capture=await readFileObservation(options.raw,async row=>{
     if(row.kind==='start'&&(row.imageReaderRecipe??null)!==(observer?.imageReader?.sha256??null))fail('raw image-reader recipe differs from observer receipt');
     if(row.kind==='image-reader-end'){await emit(row);return;}
@@ -284,7 +286,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
 
 /** Versioned line records keep both publication and consumption independent of
  * total size. The output batch has a 64 KiB flush target; each row is bounded
- * at 256 KiB. The lossless native record remains separately retained. */
+ * by its format version. The lossless native record remains separately retained. */
 export async function publishInputTrace(options:InputTraceDerivation&{output:string}):Promise<InputIndexEnd>{
   let complete:InputIndexEnd|undefined;
   await durableRecordStream(options.output,async append=>{
@@ -293,6 +295,7 @@ export async function publishInputTrace(options:InputTraceDerivation&{output:str
     await deriveInputTrace(options,async row=>{
       if(row.kind==='index-complete')complete=row;
       const line=JSON.stringify(row)+'\n',size=Buffer.byteLength(line);
+      if(row.kind==='index-start'&&size>LEGACY_OBSERVATION_ROW_BYTES)fail('index header exceeds bounded header size');
       if(size>MAX_OBSERVATION_ROW_BYTES)fail('index row exceeds bounded row size');
       batch.push(line);batchBytes+=size;if(batchBytes>=64*1024)await flush();
     });
@@ -386,7 +389,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
     if(complete)fail('data after input index completion');
     if(!header){
       if(row.kind!=='index-start')fail('missing input index header');
-      if(row.version!==5&&row.version!==6&&row.version!==7&&row.version!==8&&row.version!==9)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
+      if(typeof row.version!=='number'||!INPUT_INDEX_ROW_BOUNDS.has(row.version))fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
       const target=row.target;
       if(row.mechanism!=='seccomp-user-notification'||row.outcomes!=='unknown'||target!==null&&(!target||typeof target!=='object'))fail('malformed input index header');
       if(row.observer!==null&&!receiptValid(row.observer))fail('malformed observer receipt');
@@ -481,7 +484,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       complete=row as InputIndexEnd;
     }else fail('unexpected input index record '+String(row.kind));
     await visit(row as InputIndexRow);
-  });
+  },header=>INPUT_INDEX_ROW_BOUNDS.get(Number(indexObject(header).version))!);
   if(!header||!complete)fail('incomplete input index');
   return {header,complete};
 }

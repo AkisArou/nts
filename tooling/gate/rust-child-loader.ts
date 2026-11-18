@@ -1,7 +1,7 @@
 // One persistent capture helper serves one native observer. Only a proven
 // request/image transition can borrow its stopped exec environment. This
 // helper runs outside the observed tree and returns finite raw evidence.
-import {imageReaderFrame,readImageReaderFrames} from './image-reader-protocol.ts';
+import {imageReaderReply,readImageReaderFrames} from './image-reader-protocol.ts';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {byteFactText,readObservationRow,type InputAttempt,type ByteFact} from './file-input-observer.ts';
 import {RustInputPhases} from './rust-test-inputs.ts';
@@ -41,7 +41,7 @@ export function childLoaderReader(toolEnvironment:NodeJS.ProcessEnv){
 
 runAsCommand(import.meta.url,async()=>{
   const reader=childLoaderReader(process.env);
-  const reply=(value:unknown)=>new Promise<void>((done,reject)=>{process.stdout.write(imageReaderFrame(value),error=>error?reject(error):done());});
+  const reply=(value:unknown)=>new Promise<void>((done,reject)=>{process.stdout.write(imageReaderReply(value),error=>error?reject(error):done());});
   for await(const frame of readImageReaderFrames(process.stdin)){
     const value=frame as Event|{kind:'close'};
     if('kind'in value&&value.kind==='close'){

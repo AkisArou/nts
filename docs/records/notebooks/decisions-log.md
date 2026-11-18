@@ -3912,3 +3912,14 @@ acquisition. The wire codec still preserves its input sequence, and verification
 still authenticates the exact producer output. Old repeated and new coalesced
 producers select identically and each verify against their own output;
 candidate-only duplication or permutation remains a derivation mismatch.
+
+## Stopped exec vectors share the kernel budget (11-19)
+
+The stopped-exec observer uses growing owned storage for argv and environment
+under Linux's combined exec string budget and per-string limit. Both buffers
+remain live until serialization and are then freed. The protocol module supplies
+all native limits and derives the finite frame and row bounds from hex expansion
+plus metadata. Raw version 7 and index version 10 retain the larger rows;
+historical versions keep their earlier bound. Genuine unreadability remains a
+named unavailable child-loader receipt. This removes the fixed 64 KiB vector
+limit whose truncation depended on the canonical environment's path lengths.

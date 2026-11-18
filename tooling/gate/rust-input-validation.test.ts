@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
-import type {FileObserverReceipt} from './file-input-observer.ts';
+import {LEGACY_OBSERVATION_ROW_BYTES,type FileObserverReceipt} from './file-input-observer.ts';
 import {moduleGraph,type InputSnapshot} from './module-closure.ts';
 import {captureReaderObservations} from './reader-observations.ts';
 import {runtimeSubjectValidator,runtimeAssessmentScope,validateRustInputCapture} from './rust-input-validation.ts';
@@ -290,4 +290,50 @@ test('one normalized report preserves every claim and component while repeated s
   const missing=structuredClone(rows),attempt=missing.find(row=>row.kind==='runtime-subject')!;attempt.components={state:'claimed',ref:'0'.repeat(64)};
   const absent=join(root,'missing-reference.gz');await write(absent,missing);
   await assert.rejects(readRustInputValidation(absent,()=>{}),/missing table reference/);
+});
+
+test('validation report versions keep the 256 KiB row bound at exactly the limit and plus one',async t=>{
+  const root=testScratch(t,'validation-report-bounds');
+  const counts=Object.fromEntries(['subjects','reportedSubjects','claimed','literals','gaps','probes','emittedExecutables','loaderProbes','setupAttempts',
+    'ownedOutputs','buildArtifacts','buildScriptOutputs','hostEnvironment','buildNamespace','installedDependencies'].map(key=>[key,0]));
+  const overhead=Buffer.byteLength(JSON.stringify({kind:'validation-table',key:'0'.repeat(64),value:''}));
+  for(const version of [3,4,5,6])for(const extra of [0,1]){
+    const value='x'.repeat(LEGACY_OBSERVATION_ROW_BYTES-overhead+extra),key=createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    const table={kind:'validation-table',key,value};assert.equal(Buffer.byteLength(JSON.stringify(table)),LEGACY_OBSERVATION_ROW_BYTES+extra);
+    const rows=[{kind:'validation-start',version,retention:'uncovered-and-probes'},table,{kind:'validation-complete',version,complete:true,counts}];
+    const file=join(root,'version-'+version+'-'+extra+'.gz');writeFileSync(file,gzipSync(rows.map(row=>JSON.stringify(row)).join('\n')+'\n'));
+    if(extra)await assert.rejects(readRustInputValidation(file,()=>{}),/exceeds bounded row size/);
+    else await readRustInputValidation(file,()=>{});
+  }
+});
+
+test('validation publication retains its newline-inclusive 256 KiB bound',async t=>{
+  const root=testScratch(t,'validation-publication-bound'),raw=join(root,'raw.gz'),index=join(root,'index.gz');
+  const fact=(text:string)=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
+  const rows=[{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},
+    {kind:'attempt',id:'1',tid:1,tgid:1,ppid:0,birth:'1',parentBirth:'0',syscall:'openat',operation:'open',outcome:'unknown',
+      canceled:false,factsComplete:true,args:['ffffffffffffff9c','0','0','0','0','0'],cwd:fact(root),image:fact('/fixture'),argvRead:false,argv:fact(''),
+      paths:[{arg:1,dirfdArg:0,value:fact('input')}],dirfds:[{arg:0,fd:-100,target:fact(root)}]},
+    {kind:'root-exit',root:1,exit:0,signal:0},
+    {kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:1,errors:0,drainComplete:true,observerSignal:0}];
+  writeFileSync(raw,gzipSync(rows.map(row=>JSON.stringify(row)).join('\n')+'\n'));
+  const publish=async(source:string,output:string)=>{
+    const target={source,name:'unit',kind:['test']},capture={raw,index,cwd:root,root,target:{package:'fixture',...target},observer:null};
+    await publishInputTrace({...capture,output:index,observer:undefined});
+    return validateRustInputCapture({capture,output,targets:new Map([[source,{target:{...target,unitTests:true,doctests:false},snapshot:snapshot([])}]])});
+  };
+  const baseline=join(root,'baseline.gz');await publish('s',baseline);
+  const lines=gunzipSync(readFileSync(baseline)).toString().trimEnd().split('\n');
+  const subject=lines.find(line=>(JSON.parse(line) as {kind:string}).kind==='runtime-subject');assert.ok(subject);
+  const overhead=Buffer.byteLength(subject+'\n')-1;
+  for(const extra of [0,1]){
+    const output=join(root,'bound-'+extra+'.gz');
+    const publishing=publish('s'.repeat(LEGACY_OBSERVATION_ROW_BYTES-overhead+extra),output);
+    if(extra){await assert.rejects(publishing,/report row exceeds bounded row size/);assert.equal(existsSync(output),false);}
+    else{
+      await publishing;await readRustInputValidation(output,()=>{});
+      const retained=gunzipSync(readFileSync(output)).toString().trimEnd().split('\n').find(line=>(JSON.parse(line) as {kind:string}).kind==='runtime-subject');
+      assert.equal(Buffer.byteLength(retained+'\n'),LEGACY_OBSERVATION_ROW_BYTES);
+    }
+  }
 });
