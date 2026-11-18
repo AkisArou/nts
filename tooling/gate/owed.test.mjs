@@ -281,16 +281,20 @@ step "tooling" node tooling/empty.test.ts
   put('docs/data/src/before-name.ts','interface RenamedGlobal { value: number }');
   put('docs/data/src/removed/child.ts','interface RemovedDirectoryGlobal { value: number }');
   put('docs/data/src/ignored.tsv','ignored compiler input');
+  for(const [name,text]of Object.entries({'gone.ts':'interface RemovedAliasedGlobal { value: number }','before.ts':'interface RenamedAliasedGlobal { value: number }','keep.ts':'export {};','removed/child.ts':'export {};','ignored.tsv':'ignored'}))put('docs/data/physical/'+name,text);
+  symlinkSync('alias2',join(root,'docs/data/source-alias'));symlinkSync('physical',join(root,'docs/data/alias2'));
   put('docs/data/target.md','target prose');put('docs/data/directory/child.md','child');
   symlinkSync('target.md',join(root,'docs/data/relay'));
   symlinkSync('../relay',join(root,'docs/data/src/alias'));
   put('docs/data/real-configs/base.json','{}');symlinkSync('real-configs',join(root,'docs/data/configs'));
-  put('docs/data/tsconfig.json','{"extends":"./configs/base.json","include":["src/**/*.ts"]}');
+  put('docs/data/tsconfig.json','{"extends":"./configs/base.json","include":["src/**/*.ts","source-alias/**/*.ts"]}');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet'],['add','.'],['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','committed Program roots']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   rmSync(join(root,'docs/data/src/gone.ts'));put('docs/data/src/gone.md','interface RemovedGlobal { value: number }');
   renameSync(join(root,'docs/data/src/before-name.ts'),join(root,'docs/data/src/after-name.ts'));
   rmSync(join(root,'docs/data/src/removed'),{recursive:true});rmSync(join(root,'docs/data/src/ignored.tsv'));
+  rmSync(join(root,'docs/data/physical/gone.ts'));renameSync(join(root,'docs/data/physical/before.ts'),join(root,'docs/data/physical/after.ts'));
+  rmSync(join(root,'docs/data/physical/removed'),{recursive:true});rmSync(join(root,'docs/data/physical/ignored.tsv'));
   const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
 const select=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),fallback:rules.some(row=>row.fallback),facts:rules.filter(row=>row.name.includes(' read by ')).map(row=>row.name),programRules:rules.filter(row=>row.name.includes(' read by ')||row.name==='an input to what a gate step runs').map(row=>({name:row.name,paths:row.paths,steps:row.steps}))};};
 const first=inputMetadataDeclarations();for(const row of first.observations){row.steps.length=0;row.context.entry='mutated';if(row.observation.value&&typeof row.observation.value==='object'&&'files' in row.observation.value)row.observation.value.files.length=0;}
@@ -307,6 +311,10 @@ deletedMatch:select([{path:'docs/data/src/gone.ts',deleted:true}]),
 renamedMatch:select([{path:'docs/data/src/before-name.ts',deleted:true},{path:'docs/data/src/after-name.ts',added:true}]),
 deletedIgnored:select([{path:'docs/data/src/ignored.tsv',deleted:true}]),
 deletedDirectory:select([{path:'docs/data/src/removed',deleted:true}]),
+deletedAlias:select([{path:'docs/data/physical/gone.ts',deleted:true}]),
+renamedAlias:select([{path:'docs/data/physical/before.ts',deleted:true},{path:'docs/data/physical/after.ts',added:true}]),
+deletedAliasIgnored:select([{path:'docs/data/physical/ignored.tsv',deleted:true}]),
+deletedAliasDirectory:select([{path:'docs/data/physical/removed',deleted:true}]),
 add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
 renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
 nearer:select([{path:'docs/data/src/tsconfig.json',added:true}]),
@@ -340,6 +348,23 @@ unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),
   await t.test('deleted matched directories retain their consumers',()=>{
     for(const step of ['profile','addons'])assert.ok(value.deletedDirectory.steps.includes(step),'deletedDirectory retains '+step);
     assert.ok(!value.deletedDirectory.fallback);assert.ok(value.deletedDirectory.facts.includes('project matches read by tooling/private/reader.ts'));
+  });
+  await t.test('deleted physical matches through an alias chain retain their consumers',()=>{
+    for(const step of ['profile','addons'])assert.ok(value.deletedAlias.steps.includes(step),'deletedAlias retains '+step);
+    assert.ok(!value.deletedAlias.fallback);assert.ok(value.deletedAlias.facts.includes('project matches read by tooling/private/reader.ts'));
+  });
+  await t.test('renamed physical matches through an alias chain retain both paths',()=>{
+    for(const path of ['docs/data/physical/before.ts','docs/data/physical/after.ts'])for(const step of ['profile','addons'])
+      assert.ok(value.renamedAlias.programRules.some((/** @type {{paths:string[],steps:string[]}} */ row)=>row.paths.includes(path)&&row.steps.includes(step)),path+' retains '+step);
+    assert.ok(!value.renamedAlias.fallback);
+  });
+  await t.test('deleted ignored physical TSVs through an alias chain add no Program consumers',()=>{
+    for(const step of ['profile','addons'])assert.ok(!value.deletedAliasIgnored.steps.includes(step));
+    assert.ok(!value.deletedAliasIgnored.fallback);
+  });
+  await t.test('deleted physical directories through an alias chain retain their consumers',()=>{
+    for(const step of ['profile','addons'])assert.ok(value.deletedAliasDirectory.steps.includes(step),'deletedAliasDirectory retains '+step);
+    assert.ok(!value.deletedAliasDirectory.fallback);
   });
 });
 

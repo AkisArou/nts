@@ -2132,7 +2132,7 @@ export function owed(changes,options) {
     /** @type {Iterable<StepProjectMatch>} */
     const matches=metadataGraph.projectMatches.values();
     const compare=(/** @type {Pick<import('./owed-range.ts').CommittedSelectorSource,'tree'|'revision'>} */ source)=>{
-      for(const [row,paths]of removedProjectMatches(source.tree,matches,changes))
+      for(const [row,paths]of removedProjectMatches(source.tree,matches,changes,source.revision))
         for(const path of paths)add('project matches read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
     };
     const base=options?.projectBase??trust.committedSource;

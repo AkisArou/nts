@@ -6,6 +6,7 @@ import {isAbsolute,relative,resolve,sep} from 'node:path';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {prepareGeneratedProject,type GeneratedInclude} from './generated-project.ts';
 import type {MetadataChange} from './reader-metadata.ts';
+import {committedProjectPaths} from './committed-project-paths.ts';
 
 export type ProjectRequest={kind:'config';path:string}|{kind:'generated';path:string;directory:string;include:GeneratedInclude};
 export type ProjectMatch={request:ProjectRequest;files:string[]};
@@ -73,19 +74,28 @@ export function projectDiscoveryOwner(source:string,generatedTemporaryParent?:st
 /** A post-change Program cannot query a root that disappeared. Replay its
  * request at the committed base and attribute removed matches to the deleted
  * paths, never to a raw directory listing or an unrelated dirty path. */
-export function removedProjectMatches<R extends ProjectMatch>(source:string,rows:Iterable<R>,changes:readonly MetadataChange[]):Map<R,string[]>{
+export function removedProjectMatches<R extends ProjectMatch>(source:string,rows:Iterable<R>,changes:readonly MetadataChange[],revision:string):Map<R,string[]>{
   const deleted=changes.filter(change=>change.deleted),affected=new Map<R,string[]>();
   if(!deleted.length)return affected;
-  const owner=projectDiscoveryOwner(source),queries=new Map<string,ProjectMatch>();
+  const owner=projectDiscoveryOwner(source),queries=new Map<string,ProjectMatch>(),paths=committedProjectPaths({tree:source,revision});
   try{for(const row of rows){
     // A newly declared config is already an exact byte input of its reader;
     // it supplies no discovery request at the old source.
     if(!existsSync(resolve(source,row.request.path)))continue;
     const key=JSON.stringify(row.request);
     let before=queries.get(key);if(!before){before=owner.read(row.request);queries.set(key,before);}
-    const current=new Set(row.files),removed=before.files.filter(file=>!current.has(file));
-    const paths=deleted.filter(change=>removed.some(file=>file===change.path||file.startsWith(change.path+'/'))).map(change=>change.path);
-    if(paths.length)affected.set(row,paths);
+    const current=new Set(row.files),subjects=new Set<string>();
+    const under=(path:string,file:string)=>file===path||file.startsWith(path+'/');
+    for(const file of before.files){
+      // A retargeted alias can retain a logical filename while replacing its
+      // physical source. Resolve such names at the base, independently of tip
+      // aliases or unrelated working dirt. Unchanged non-alias SDK roots need
+      // no repository identity.
+      if(current.has(file)&&!deleted.some(change=>under(change.path,file))&&!paths.hasAlias(file))continue;
+      const names=paths.identity(file);
+      for(const change of deleted)if(names.some(name=>under(change.path,name)))subjects.add(change.path);
+    }
+    if(subjects.size)affected.set(row,[...subjects]);
   }}finally{owner.close();}
   return affected;
 }
