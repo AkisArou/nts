@@ -1,3 +1,4 @@
+import {declareOwnMembers} from './test-cgroup-members.ts';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
@@ -21,11 +22,13 @@ const GiB=2**30;
 const source=new URL('./',import.meta.url);
 
 function start(t:TestContext,root:string,env:NodeJS.ProcessEnv,entry:string,args:string[]=[]){
-  const unit='nts-test-tooling-files-'+randomUUID();
+  const unit='nts-test-tooling-files-'+randomUUID(),membersEntry=join(root,'membership-entry.mjs');
+  writeFileSync(membersEntry,generatedJavaScript(`import{declareOwnMembers}from ${JSON.stringify(new URL('./test-cgroup-members.ts',source).href)};declareOwnMembers(process.env,[process.pid]);`));
   const child=spawn('systemd-run',['--user','--collect','--wait','--pipe','--quiet','--unit='+unit,...toolingSliceArgs(env,'agent'),
     '-p','Nice=19','-p','CPUWeight=20','-p','CPUAffinity=0-3 6-31','-p','LimitCORE=0','-p','RuntimeMaxSec=300',
     '--working-directory='+root,...Object.entries(env).filter((row):row is [string,string]=>row[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
-    process.execPath,entry,...args],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
+    process.execPath,'--import',membersEntry,entry,...args],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
+  if(child.pid)declareOwnMembers(env,[process.pid,child.pid]);
   let output='';child.stdout.on('data',part=>output+=part);child.stderr.on('data',part=>output+=part);
   const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
   t.after(async()=>{spawnSync('systemctl',['--user','stop',unit],{env:fixtureEnvironment(t),stdio:'ignore'});await closed;});
@@ -100,6 +103,7 @@ process.exitCode=await new Promise(resolve=>child.once('close',code=>resolve(cod
   const memoryDir=join(own,'memory'),reading={totalKiB:31*2**20,availableKiB:20*2**20,
     resident:{kind:'fixed' as const,defaultBytes:128*2**20},scopePeak:{kind:'fixed' as const,bytes:128*2**20,resettable:true}};
   const memory=ownMemory(memoryDir,reading),holders:Reservation[]=[];
+  declareOwnMembers(memory,[process.pid]);
   // One supplied execution worker makes ordering observable without a host
   // timing assumption or a production parallelism override.
   const observations=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));
@@ -114,12 +118,16 @@ process.exitCode=await new Promise(resolve=>child.once('close',code=>resolve(cod
   const planned=gateEnvironment(fixtureEnvironment(t),{run,oracleRoot:root,owned:{...memory,CARGO_TARGET_DIR:target}});
   const child=start(t,root,planned.env,join(gate,'run.mjs'),['tooling']);
   await waitFor('the elastic tooling payload to start',()=>existsSync(ready),{stopped:child.stopped});
-  if(full)ownMemory(memoryDir,{...reading,availableKiB:2*2**20});
+  const updateMemory=(availableKiB:number)=>{
+    const packet=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));
+    ownMemory(memoryDir,{...reading,availableKiB,resident:{...reading.resident,members:packet.resident.members}});
+  };
+  if(full)updateMemory(2*2**20);
   writeFileSync(go,'go');
   if(full){
     await waitFor('the runner to queue per-file memory growth',()=>readLedger(memory.NTS_MEMORY_LEDGER).waiting.some(row=>row.grows!==null),{stopped:child.stopped});
     assert.ok(paths.every((_,index)=>!existsSync(join(own,'entered-'+index))),'no file starts before its memory grant');
-    ownMemory(memoryDir,reading);
+    updateMemory(reading.availableKiB);
   }
   const code=await child.closed;
   if(oversized){

@@ -1,3 +1,4 @@
+import {declareOwnMembers,fixedMembersUnitCommand} from './test-cgroup-members.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
 // Joint CPU/memory admission (with-lock.sh): waiting for either holds neither,
 // and the payload runs inside the single reservation granted with its mutex.
@@ -37,6 +38,7 @@ const GiB_KIB = 2 ** 20;
 function fixture(t: TestContext, availableKiB = 20 * GiB_KIB) {
   const root = newTestScratch("with-lock"), units: string[] = [];
   const memory = ownMemory(join(root, "memory"), { availableKiB, totalKiB: 32 * GiB_KIB });
+  declareOwnMembers(memory,[process.pid]);
   const lock = join(root, "lock.d");
   // A test inside a gate step runs inside the step's reservation: these runs have their own.
   const source = fixtureEnvironment(t);
@@ -51,7 +53,7 @@ function fixture(t: TestContext, availableKiB = 20 * GiB_KIB) {
     units.push(unit);
     const setenv = Object.entries({ ...env, ...extra }).filter((pair): pair is [string, string] => pair[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
     return ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
-      "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=TimeoutStopSec=5s", "--property=RuntimeMaxSec=300s", ...setenv, ...command];
+      "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=TimeoutStopSec=5s", "--property=RuntimeMaxSec=300s", ...setenv, ...fixedMembersUnitCommand(command)];
   };
   const withLock = (args: string[], extra: NodeJS.ProcessEnv = {}) =>
     spawnTest("systemd-run", unitArgs(["sh", WITH_LOCK, ...args], extra), { encoding: "utf8" }, `with-lock.sh ${args.join(" ")}`);

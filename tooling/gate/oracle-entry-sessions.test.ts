@@ -69,7 +69,9 @@ import {discardRunTemporary} from ${JSON.stringify(new URL('./run-temporary.ts',
 import {nodeProcessAlive} from ${JSON.stringify(new URL('../differential/oracle-runtime.ts',import.meta.url).href)};
 import {closeNodeResolutionSession} from ${JSON.stringify(new URL('../differential/oracle-resolution.ts',import.meta.url).href)};
 import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
+import {declareOwnMembers} from ${JSON.stringify(new URL('./test-cgroup-members.ts',import.meta.url).href)};
 const request=JSON.parse(readFileSync(${JSON.stringify(request)},'utf8'));
+declareOwnMembers(request.memory,[process.pid]);
 runAsCommand(import.meta.url,async()=>{
  let planned=gateEnvironment(hostEnvironment(request.env),{run:join(request.root,'owner'),oracleAdmissionContext:'gate',owned:{...request.memory,NTS_BIN:request.binary}}),holder,closed,sessions,passed=false;
  registerCommandCloser('sibling resolver fixtures',{close:async()=>{

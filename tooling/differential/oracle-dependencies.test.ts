@@ -1,3 +1,4 @@
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
@@ -105,6 +106,7 @@ test('complete package inventories are stable across scratch roots and cover a N
 function installFixture(t:import('node:test').TestContext){
   const parent=mkdtempSync(join(tmpdir(),'oracle-install-inputs-')),root=join(parent,'source');mkdirSync(root);
   const memory=ownMemory(join(parent,'memory'));
+  declareOwnMembers(memory,[process.pid]);
   const before=new Map([...Object.keys(memory),'NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY'].map(name=>[name,process.env[name]]));
   useOwnMemory(join(parent,'memory'));
   const writable=(path:string)=>{const info=lstatSync(path);if(info.isDirectory()){chmodSync(path,0o755);for(const name of readdirSync(path))writable(join(path,name));}};

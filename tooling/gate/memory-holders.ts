@@ -20,7 +20,7 @@
 // counted once, where it lives. The ledger already counts a borrower's
 // processes in the borrower's measure only. What a row's charge holds beyond
 // its parts is unledgered: processes no reservation counts.
-import {CgroupDeparted,HostObservationError,type HostObservations} from './host-observations.ts';
+import {sampleCgroup,HostObservationError,type HostObservations} from './host-observations.ts';
 import type {Priority} from './ranks.ts';
 
 /** Bytes a job uses, in the cgroup that holds them; null when the ledger knows no cgroup for them. */
@@ -52,10 +52,10 @@ export function userManager(own:string):{slice:string;manager:string}{
 
 /** A row's charge; a cgroup that ended since its listing holds nothing now. */
 function chargeOf(host:HostObservations,group:string):number|null{
-  try{return host.cgroupCharge(group);}catch(error){if(error instanceof CgroupDeparted)return null;throw error;}
+  return sampleCgroup(group,()=>host.cgroupCharge(group),null);
 }
 function childrenOf(host:HostObservations,group:string):string[]{
-  try{return host.cgroupChildren(group);}catch(error){if(error instanceof CgroupDeparted)return [];throw error;}
+  return sampleCgroup(group,()=>host.cgroupChildren(group),[]);
 }
 
 /** The bounded row set: [cgroup, its own charge] with an expanded slice's remainder as its own row. */

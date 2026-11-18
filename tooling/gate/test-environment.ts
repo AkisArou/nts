@@ -2,14 +2,16 @@ import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {assignOwnedValues} from './environment-values.ts';
 // Test children get tool capabilities and named run handoffs, never the shell's
 // policy. Mutable state belongs to the fixture; declared content caches are shared.
-import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
+import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {userInfo} from 'node:os';
 import {delimiter,dirname,join} from 'node:path';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {FIXED_AMBIENT,HOST_CAPABILITIES,ownTemporary} from './host-environment.ts';
 import type {GateEnvironmentContext} from './environment-types.ts';
 import {ownMemory} from './test-host-observations.ts';
-import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
+import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,type HostObservationFixture} from './host-observations.ts';
+import {fixtureCgroup} from './test-cgroup-members.ts';
+import {durableRecord} from './durable-record.ts';
 import {assertRunTemporary,removable} from './run-temporary.ts';
 import {toolchainDirectories} from './toolchain.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,contentCacheEnvironment} from './cache-environment.ts';
@@ -68,7 +70,17 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
   if(context)for(const name of RUN_HANDOFF)if(source[name]!==undefined)grants[name]=source[name];
   // An owned resource capability is forwarded as one complete packet.
   if(source[HOST_OBSERVATIONS])for(const name of HOST_OBSERVATION_ENVIRONMENT)if(source[name]!==undefined)grants[name]=source[name];
-  if(!grants[HOST_OBSERVATIONS])Object.assign(grants,ownMemory(join(root,'observations')));
+  if(!grants[HOST_OBSERVATIONS]){
+    // This new packet names its creator's group and logical PID. It supplies
+    // no membership for groups acquired later, and never changes a forwarded packet.
+    const group=fixtureCgroup(),memory=ownMemory(join(root,'observations'),{
+      resident:{kind:'fixed',defaultBytes:0,members:{[group]:[process.pid]}},
+    });
+    const packet=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8')) as HostObservationFixture;
+    if(packet.pressure.kind==='fixed')packet.pressure.ownGroup=group;
+    durableRecord(memory.NTS_HOST_OBSERVATIONS,packet);
+    Object.assign(grants,memory);
+  }
   Object.assign(env,grants);
   if(context){
     context={...context,owned:Object.fromEntries(Object.entries(grants).filter((entry):entry is [string,string]=>entry[1]!==undefined)),

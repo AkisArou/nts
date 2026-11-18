@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {fileURLToPath} from 'node:url';
 import { test, type TestContext } from "node:test";
-import { count, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
+import { count, populated, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
 import {scratchRepo} from '../landing/scratch-repo.ts';
 import {acceptedRevision} from '../gate/accepted-revision-data.ts';
 import { spawnTest, waitFor } from "../gate/test-wait.ts";
@@ -19,6 +19,8 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
+
+import {CgroupObservations,CgroupDeparted,HostObservationError,type CgroupFiles} from '../gate/host-observations.ts';
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const DAY = 86_400_000;
@@ -539,4 +541,28 @@ test("the sweep removes real folders inside the cache, read-only ones too, and k
   assert.match(lines[2]!, /outside ~\/\.cache$/);
   assert.equal(existsSync(join(cache, "nts-messages/run-old")), false);
   assert.equal(existsSync(join(outside, "keep")), true, "a link is never followed");
+});
+
+
+for(const code of ['ENOENT','ENODEV','ESRCH','EACCES'])for(const operation of ['stat','cgroup.events'])
+test(`the count observes a listed foreign slice retiring at ${operation}: ${code}`,t=>{
+  const group='/foreign/job.slice',calls:string[]=[];
+  const files:CgroupFiles={inode:()=>{calls.push('stat');if(operation==='stat')throw Object.assign(Error('supplied '+code),{code});return '847';},text:(_group,file)=>{calls.push(file);throw Object.assign(Error('supplied '+code),{code});},children:()=>[]};
+  const observation=new CgroupObservations(files);
+  if(code==='EACCES'){
+    assert.throws(()=>populated(group,observation),error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes(group)&&error.message.includes(operation)&&error.message.includes(code));
+  }else{
+    const stillPopulated=populated(group,observation);assert.equal(stillPopulated,false);
+    const slice:Slice={unit:'ntsforeign847.slice',transient:true,active:true,populated:stillPopulated,bindsTo:['foreign-active.service'],ageMs:7_200_000};
+    const result=count(input(t,{slices:[slice],activeUnits:['foreign-active.service']}),KEEP);
+    assert.deepEqual(result.red.filter(line=>line.startsWith('slice ')),[],'a disappearing foreign child does not interrupt the count or invent a leftover');
+    assert.equal(result.notes.some(line=>line.includes('user manager')),false);
+  }
+  assert.deepEqual(calls,operation==='stat'?['stat']:['stat','cgroup.events']);
+});
+
+test('an unknown unlisted slice is still a named observation failure',()=>{
+  const files:CgroupFiles={inode:()=>{throw Object.assign(Error('unknown slice'),{code:'ENOENT'});},text:()=>{throw Error('unexpected read');},children:()=>[]};
+  const observation=new CgroupObservations(files);
+  assert.throws(()=>observation.populated('/unknown'),error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes('/unknown'));
 });

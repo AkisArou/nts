@@ -1,0 +1,380 @@
+[
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readFileSync(join(CGROUP, group, \"memory.events\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP,memory.group))",
+    "count": 2,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readFileSync('/sys/fs/cgroup' + run.group + '/memory.peak', 'utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP, group))",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP, memory.group))",
+    "count": 9,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP, boundary))",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP, dirname(boundary)))",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readFileSync(join(CGROUP, group, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readFileSync(join(CGROUP, group, \"memory.swap.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readdirSync(join(CGROUP,memory.group),{withFileTypes:true})",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readFileSync(\"/sys/fs/cgroup\" + memory.group + \"/memory.max\", \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "fs.readFileSync(\"/sys/fs/cgroup\" + group + \"/memory.oom.group\", \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readFileSync(join(CGROUP, slice.group, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "readFileSync(join(CGROUP, fixture.group, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP,groups[0]!))",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP,group))",
+    "count": 4,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.test.ts",
+    "source": "existsSync(join(CGROUP,actual.group))",
+    "count": 4,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, group, \"cgroup.events\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, group, local ? \"memory.events.local\" : \"memory.events\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "existsSync(join(CGROUP, group))",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, group, \"memory.max\"), \"utf8\")",
+    "count": 3,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, group, \"memory.swap.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, candidate, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, at, \"memory.swap.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, outer, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, this.#outer, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, this.group, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, this.#parentCap, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, current, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, current, \"memory.swap.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, resident, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-memory.ts",
+    "source": "readFileSync(join(CGROUP, resident, \"memory.swap.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-pool.ts",
+    "source": "readFileSync(join(\"/sys/fs/cgroup\", group, \"memory.current\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/census/worker-pool.ts",
+    "source": "readFileSync(join(\"/sys/fs/cgroup\", group, \"memory.stat\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/chromium/processes.ts",
+    "source": "readFile(join(cgroupRoot, group, \"cgroup.procs\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/conformance/run.mjs",
+    "source": "readFileSync(`${path}/cgroup.procs`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/conformance/run.mjs",
+    "source": "readdirSync(path, { withFileTypes: true })",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/differential/oracle-batch.ts",
+    "source": "readFileSync('/sys/fs/cgroup'+resident.group+'/memory.peak','utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/differential/oracle-dependencies.ts",
+    "source": "readFileSync('/sys/fs/cgroup'+memory.group+'/memory.peak','utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/differential/oracle-dependencies.ts",
+    "source": "readFileSync('/sys/fs/cgroup'+memory.group+'/cpu.stat','utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/differential/oracle-execution.ts",
+    "source": "readFileSync('/sys/fs/cgroup'+resident.group+'/memory.peak','utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/full-check/count.test.ts",
+    "source": "readFileSync(`/sys/fs/cgroup${group}/cgroup.events`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/active-command.test.ts",
+    "source": "readFileSync(`/sys/fs/cgroup${group}/cgroup.procs`,'utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/active-command.test.ts",
+    "source": "readFileSync(`/sys/fs/cgroup${group}/memory.events`,'utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/affinity.ts",
+    "source": "readFileSync(directory + \"/cpuset.cpus.effective\", \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/affinity.ts",
+    "source": "readFileSync(`/sys/fs/cgroup${manager}/cgroup.controllers`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/cpu-limits.ts",
+    "source": "statSync(root,{bigint:true})",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/cpu-limits.ts",
+    "source": "readFileSync(root+'/'+name,'utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/memory-limits.ts",
+    "source": "statSync('/sys/fs/cgroup'+group,{bigint:true})",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/memory-limits.ts",
+    "source": "readFileSync(`/sys/fs/cgroup${group}/${name}`,'utf8')",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/nested-scope.test.ts",
+    "source": "readFileSync(`/sys/fs/cgroup${second.scope.group}/cgroup.events`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/nested-scope.test.ts",
+    "source": "fs.readFileSync(\"/sys/fs/cgroup\"+group+\"/memory.oom.group\",\"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/run-owner.test.ts",
+    "source": "existsSync(`/sys/fs/cgroup${previous.group}`)",
+    "count": 2,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/run-owner.test.ts",
+    "source": "readFileSync(`/sys/fs/cgroup${owner.group}/cgroup.events`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/step-scope.ts",
+    "source": "readFileSync(`${CGROUP}${group}/cgroup.events`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/step-scope.ts",
+    "source": "readFileSync(`${CGROUP}${group}/${file}`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/step-scope.ts",
+    "source": "readFileSync(`${CGROUP}${group}/memory.peak`, \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/step-scope.ts",
+    "source": "statSync(`${CGROUP}${group}`, { bigint: true })",
+    "count": 2,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/step-scope.ts",
+    "source": "statSync(`${CGROUP}${this.group}`, { bigint: true })",
+    "count": 3,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/scopes/step-scope.ts",
+    "source": "statSync(`${CGROUP}${this.group}`,{bigint:true})",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/step-scheduling.test.ts",
+    "source": "readFileSync(join(slice, \"memory.max\"), \"utf8\")",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/tooling-runner.test.ts",
+    "source": "existsSync('/sys/fs/cgroup'+observed.serviceGroup)",
+    "count": 1,
+    "issue": 873
+  },
+  {
+    "file": "tooling/gate/tooling-runner.test.ts",
+    "source": "existsSync('/sys/fs/cgroup'+observed.censusGroup)",
+    "count": 1,
+    "issue": 873
+  }
+]

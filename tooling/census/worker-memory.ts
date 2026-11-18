@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { PressureError, CaseBudgetError, ToolingInstrumentError,publishToolingFailure } from "../gate/step-result.ts";
+import {hostObservations,type HostObservations,type RetainedCgroup} from '../gate/host-observations.ts';
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gate/tooling-slice.ts";
 import { bindsToProperties, ownUnit, rankProperties, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
@@ -238,11 +239,14 @@ export class MemoryRun {
   #closed = false;
   #drain=new MemoryClose();
   #recordPeak = false;
+  #scope:RetainedCgroup|undefined;
+  #host:HostObservations;
   /** The step's sibling worker boundary, when it supplies the aggregate's cap. */
   #outer: string | undefined;
   #parentCap: string | undefined;
   #description: string;
-  constructor({ budgetBytes, id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) }: { budgetBytes?: number; id?: string } = {}) {
+  constructor({ budgetBytes, id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())), host=hostObservations() }: { budgetBytes?: number; id?: string; host?:HostObservations } = {}) {
+    this.#host=host;
     // A budget of its own -- a caller's, as a capture's or a test's -- is its
     // aggregate's own cap wherever it runs; the step's budget (the default)
     // is the step slice's to enforce inside a gate step.
@@ -271,6 +275,7 @@ export class MemoryRun {
       // them loaded for ever (#633). No named unit, no binding: the count
       // finds what such a run leaves.
       this.group = this.#slice(this.slice, this.#outer ? null : this.budgetBytes, ownUnit());
+      if(this.#recordPeak)this.#scope=this.#host.acquireCgroup(this.group);
       ownRun(this);
     } catch (error) {if(isCommandExit(error))throw error;
       failedSetup(error, () => this.close());
@@ -354,8 +359,9 @@ export class MemoryRun {
     }
     const finish=()=>this.#drain.finish(()=>{
       try{
-        if (this.group && this.#recordPeak) recordAggregatePeak(this.group, this.budgetBytes);
-        stopSlice(this.slice, this.group, "run");
+        try{
+          if (this.#scope && this.#recordPeak) recordAggregatePeak(this.#scope, this.budgetBytes,process.env,this.#host);
+        }finally{stopSlice(this.slice, this.group, "run");}
       }finally{rmSync(this.directory, { recursive: true, force: true });}
     },failure);
     if(this.#workers.every(worker=>worker.drained)){

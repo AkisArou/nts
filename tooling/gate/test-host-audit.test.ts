@@ -12,6 +12,34 @@ import {activeCommand} from './active-process.ts';
 import {commandObservationFixture} from './command-observations-fixture.ts';
 import {waitFor} from './test-wait.ts';
 import {installTestHost,poisonedTestEnvironment} from './test-host-bootstrap.ts';
+import {cgroupReadProblems} from './cgroup-read-audit.ts';
+
+test('cgroup reads follow fs aliases, path aliases, local walkers and generated launch code',()=>{
+  const inspect=(source:string)=>inspectHostSource('tooling/new-reader.ts',source).cgroupReads;
+  for(const source of [
+    'import {readFileSync as read} from "node:fs"; const root="/sys/fs/cgroup";read(root+group+"/memory.current","utf8");',
+    'const {readdirSync:list}=require("node:fs");function walk(dir){list(dir);}walk("/sys/fs/cgroup"+group);',
+    'import fs from "node:fs/promises";const path=`/sys/fs/cgroup${group}/cgroup.procs`;await fs.readFile(path);',
+    'import fs from "node:fs";const root="/sys/fs/cgroup",paths={root};fs.readFileSync(paths.root+group);',
+    'import fs from "node:fs";const paths={root:"/sys/fs/cgroup"};fs.statSync(paths["root"]+group);',
+    'spawn(node,["-e",`const fs=require("node:fs");fs.readFileSync("/sys/fs/cgroup/owned/memory.stat")`]);',
+  ]){
+    const reads=inspect(source);assert.ok(reads.length,source);
+    assert.match(cgroupReadProblems(reads,[]).join('\n'),/cgroup fs read outside host-observations.ts/);
+    assert.deepEqual(cgroupReadProblems(reads.map(row=>({...row,file:'tooling/gate/host-observations.ts'})),[]),[]);
+  }
+  assert.deepEqual(inspect('import fs from "node:fs";fs.writeFileSync("/sys/fs/cgroup/owned/memory.max","1");fs.readFileSync("./data");'),[]);
+});
+
+test('cgroup migration allowances bind exact read sites and can only shrink',()=>{
+  const read={file:'tooling/gate/scopes/reader.ts',line:1,source:'fs.readFileSync(path)'},allowance={...read,count:1,issue:873};
+  assert.deepEqual(cgroupReadProblems([read],[allowance],[allowance]),[]);
+  assert.deepEqual(cgroupReadProblems([],[],[allowance]),[]);
+  assert.match(cgroupReadProblems([read,read],[allowance],[allowance]).join('\n'),/outside host-observations/);
+  assert.match(cgroupReadProblems([read],[{...allowance,source:'read(other)'}],[allowance]).join('\n'),/may only shrink/);
+  assert.match(cgroupReadProblems([read],[{...allowance,count:2}],[allowance]).join('\n'),/may only shrink/);
+  assert.match(cgroupReadProblems([read],[{...allowance,issue:0}]).join('\n'),/invalid cgroup read allowance/);
+});
 
 test('every tooling test dependency closure obeys module ownership',()=>{
   const result=auditTestHost(fileURLToPath(new URL('../..',import.meta.url)));

@@ -13,6 +13,24 @@ import {fixtureEnvironment,testEnvironment,testEnvironmentHandoff} from './test-
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation,contentCacheEnvironment} from './cache-environment.ts';
 import {testScratch} from './test-scratch.ts';
 import {assertNoProcessUsers} from '../landing/tree-users.ts';
+import {hostObservations,HostObservationError} from './host-observations.ts';
+import {MemoryRun} from '../census/worker-memory.ts';
+
+test('a new fixture packet declares only its creator; forwarding and later acquisition invent no rows',async t=>{
+  const created=testEnvironment({},{PATH:process.env.PATH}),env=fixtureEnvironment(t,created);
+  const host=hostObservations(env),group=host.ownCgroup();
+  assert.deepEqual(host.cgroupMembers(group),[process.pid]);
+  const before=readFileSync(created.NTS_HOST_OBSERVATIONS!,'utf8');
+  const forwarded=testEnvironment({},env);
+  assert.equal(forwarded.NTS_HOST_OBSERVATIONS,created.NTS_HOST_OBSERVATIONS);
+  assert.equal(readFileSync(created.NTS_HOST_OBSERVATIONS!,'utf8'),before);
+  const run=new MemoryRun({budgetBytes:128*2**20,id:'fixture-later-acquisition'});
+  try{
+    const ref=host.acquireCgroup(run.group);
+    assert.throws(()=>host.cgroupMembers(ref.path,ref.inode),error=>error instanceof HostObservationError&&error.message.includes('resident.members has no cgroup '+run.group));
+    assert.equal(readFileSync(created.NTS_HOST_OBSERVATIONS!,'utf8'),before);
+  }finally{run.close();await run.closed;}
+});
 
 test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
   const poison={PATH:process.env.PATH,HOME:'/unowned/home',XDG_CONFIG_HOME:'/unowned/config',TMPDIR:'/unowned/tmp',

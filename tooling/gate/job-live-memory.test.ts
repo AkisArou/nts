@@ -1,3 +1,4 @@
+import {fixedMembersUnitCommand} from './test-cgroup-members.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 // First-run job accounting, through the real CLI in owned units. The watcher
 // publishes its observed peak, which is the event releasing the held command.
@@ -40,7 +41,7 @@ function fixture(t: TestContext,resident:HostObservationFixture["resident"]={kin
     const setenv = Object.entries({...env,...options.owned}).filter((pair): pair is [string, string] => pair[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
     const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(env,"agent"), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
       "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=TimeoutStopSec=5s", "--property=RuntimeMaxSec=300s",
-      ...(options.properties??[]),...setenv, process.execPath, ADMIT, "--key", "perf-count", "--", process.execPath, "-e", body, ...args], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
+      ...(options.properties??[]),...setenv, ...fixedMembersUnitCommand([process.execPath, ADMIT, "--key", "perf-count", "--", process.execPath, "-e", body, ...args])], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
     let out = "", err = "";
     child.stdout.setEncoding("utf8").on("data", data => { out += data; }); child.stderr.setEncoding("utf8").on("data", data => { err += data; });
     return { unit,done: once(child, "close"), ended: () => child.exitCode !== null ? `unit exited ${child.exitCode}: ${err}` : undefined,
@@ -98,7 +99,7 @@ const HELD_COMMAND="const fs=require('node:fs');const watch=fs.watch(process.arg
 async function observeOwnedPeak(f:ReturnType<typeof fixture>,ready:string,stopped:()=>string|undefined){
  await waitFor('command entry and its admitted identity',()=>existsSync(ready)&&readLedger(f.memory.NTS_MEMORY_LEDGER).admitted.length===1,{stopped});
  const entry=readLedger(f.memory.NTS_MEMORY_LEDGER).admitted[0]!,group=entry.measure.cgroup!.path;
- ownMemory(join(f.root,'memory'),{resident:{kind:'fixed',defaultBytes:0,cgroups:{[group]:160*MiB}}});
+ ownMemory(join(f.root,'memory'),{resident:{kind:'fixed',defaultBytes:0,cgroups:{[group]:160*MiB},members:{[group]:[entry.owner.pid]}}});
  await waitFor('the supplied peak is published by the real watcher',()=>readLedger(f.memory.NTS_MEMORY_LEDGER).admitted.some(row=>(row.sampledPeak??0)>=160*MiB),{stopped});
  return entry.id;
 }

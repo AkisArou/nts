@@ -1,3 +1,4 @@
+import {declareOwnMembers} from './test-cgroup-members.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {join,resolve} from 'node:path';
@@ -61,6 +62,7 @@ test('a refused oversized head keeps its name and cannot strand a fitting reques
 
 for(const priority of ['landing','agent'] as const)test(`a fitting backfill cannot move growth past a waiting ${priority} ledger head`,async t=>{
   const root=testScratch(t,'tooling-backfill-ledger'),memory=ownMemory(root,{totalKiB:31*2**20,availableKiB:10*2**20});
+  declareOwnMembers(memory,[process.pid]);
   const stop=new AbortController(),holders:Reservation[]=[],leases:(()=>void)[]=[],pending:Promise<unknown>[]=[];
   let reservation:Reservation;
   const pool=createTokenPool({width:4,now:()=>0,free:()=>4-pool.total,claim:()=>0,
@@ -130,6 +132,7 @@ test('a file must answer once under its owned identity',()=>{
 
 test('per-file tooling admission fits beside two ordinary jobs while the historical whole step waits; full memory still waits',async t=>{
   const root=testScratch(t,'tooling-file-ledger'),memory=ownMemory(root,{totalKiB:31*2**20,availableKiB:20*2**20});
+  declareOwnMembers(memory,[process.pid]);
   const cancelled=new AbortController(),holders:Reservation[]=[],used=new Map<string,number>();
   const options={env:memory,used:(entry:{what:string})=>used.get(entry.what)??0,signal:cancelled.signal,report:()=>{}};
   t.after(async()=>{cancelled.abort();for(const holder of holders)holder.release();await Promise.all(holders.map(holder=>holder.closed));});

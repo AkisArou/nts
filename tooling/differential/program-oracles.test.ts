@@ -1,3 +1,4 @@
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
@@ -111,8 +112,9 @@ test('program consumers read completed answers from an nts-dev planner after the
   writeFileSync(planner,plannerShim(join(dirname(binary),'oracle-plan'),calls),{mode:0o755});
   // The producers' pool reserves in a ledger of the run's own, against an
   // ample reading, never the machine's.
+  const memory=ownMemory(join(root,'memory'));declareOwnMembers(memory,[process.pid]);
   privateRun=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(root,'run'),standalone:true,
-    oracleAdmissionContext:'gate',owned:{NTS_BIN:join(profile,'nts'),...ownMemory(join(root,'memory'))}}));
+    oracleAdmissionContext:'gate',owned:{NTS_BIN:join(profile,'nts'),...memory}}));
   const privateEnv=privateRun.env;
   const missing=spawnSync(process.execPath,['--input-type=module','-e',`
 import assert from 'node:assert/strict';

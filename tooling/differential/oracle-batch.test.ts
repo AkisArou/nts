@@ -1,3 +1,4 @@
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -118,6 +119,7 @@ test('preparation inside a reservation asks for nothing whatever the host reads;
     // The job's own ledger and reading: room for the step's reservation, and
     // then none of the machine's memory available at all.
     const memoryDirectory=join(root,'memory'),ample={availableKiB:64_000_000,totalKiB:64_000_000},memory=ownMemory(memoryDirectory,ample);
+  declareOwnMembers(memory,[process.pid]);
     const planned=await sealOracleRun(gateEnvironment({...hostEnvironment(process.env),HOME:home},{run,oracleRoot:tree,oracleAdmissionContext:'gate',owned:{...memory}}));
     const step=withoutHanded(oracleStepEnvironment(planned.env,'tests'));
     // A gate step's reservation, which counts this test's children.

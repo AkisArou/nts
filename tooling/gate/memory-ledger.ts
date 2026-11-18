@@ -132,10 +132,10 @@ import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // the peak goes to that history when the reservation ends. An entry says
 // which of its keys were sized without a measurement of their own
 // (`unmeasured`), and which have held more than they reserved (`over`).
-import {hostObservations,hostObservationEnvironment,HostObservationError,parseMemory,parseProcessCharge,parseCgroupCharge,type HostObservations} from "./host-observations.ts";
+import {hostObservations,hostObservationEnvironment,HostObservationError,cgroupOwnershipMembers,cgroupOwnershipAccounted,retainedCgroupCharge,retainedCgroupMembers,parseMemory,parseProcessCharge,parseCgroupCharge,type HostObservations} from "./host-observations.ts";
 import { spawn,spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
@@ -173,7 +173,6 @@ export function rankForOom(priority: Priority, report: (line: string) => void = 
   } catch (error) { report(`memory: cannot raise this process's OOM score to its ${priority} priority's ${wanted}: ${(error as Error).message}`); }
 }
 
-const CGROUP_ROOT = "/sys/fs/cgroup";
 const POLL_MS = 1000;
 const LOCK_RETRY_MS = 20;
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -299,42 +298,17 @@ function cgroupOf(pid: number): string | null {
   catch (error) { if (gone(error)) return null; throw error; }
 }
 
-/** Every process in the cgroup at `path` and in the cgroups under it. */
-function cgroupMembers(path: string): number[] {
-  const members: number[] = [];
-  const walk = (dir: string) => {
-    let procs: string;
-    try { procs = readFileSync(join(dir, "cgroup.procs"), "utf8"); }
-    catch (error) { if (gone(error)) return; throw error; }
-    for (const line of procs.split("\n")) if (line) members.push(Number(line));
-    for (const entry of readdirSync(dir, { withFileTypes: true })) if (entry.isDirectory()) walk(join(dir, entry.name));
-  };
-  walk(CGROUP_ROOT + path);
-  return members;
-}
-
-const inodeOf = (path: string) => String(statSync(path, { bigint: true }).ino);
-const accounted = (path: string) => existsSync(join(CGROUP_ROOT + path, "memory.current"));
+const accounted = cgroupOwnershipAccounted;
 const within = (path: string, group: string) => path === group || path.startsWith(`${group}/`);
 
 /** The owner's cgroup when it is the owner's own and has memory accounting. */
-function ownCgroup(pid: number): CgroupRef | null {
+function ownCgroup(pid: number, host:HostObservations): CgroupRef | null {
   const path = cgroupOf(pid);
   if (path === null || path === "/" || !accounted(path)) return null;
   // Listed before the table, so a process started in between is one the
   // members started: a process enters a cgroup by being forked in it.
-  const members = cgroupMembers(path);
-  return ownedBy(pid, members, processTable()) ? { path, inode: inodeOf(CGROUP_ROOT + path) } : null;
-}
-
-function readCgroupCharge(ref: CgroupRef, host:HostObservations): number {
-  const dir = CGROUP_ROOT + ref.path;
-  try {
-    // Another cgroup by the same name: the job's own has gone, and what is
-    // gone is charged nothing, which leaves its whole reservation pending.
-    if (inodeOf(dir) !== ref.inode) return 0;
-    return host.cgroupCharge(ref.path);
-  } catch (error) { if (gone(error)) return 0; throw error; }
+  const members = cgroupOwnershipMembers(path);
+  return ownedBy(pid, members, processTable()) ? host.acquireCgroup(path) : null;
 }
 
 function readProcessCharge(pid: number, host:HostObservations): number {
@@ -366,8 +340,8 @@ function measuredParts(entry: LedgerEntry, table: () => Table, exclude: Readonly
   const parts: HeldPart[] = [];
   let inside: ReadonlySet<number> = NONE;
   if (cgroup !== null) {
-    let bytes = readCgroupCharge(cgroup, host);
-    const members = tree || exclude.size ? cgroupMembers(cgroup.path) : [];
+    let bytes = retainedCgroupCharge(host,cgroup);
+    const members = tree || exclude.size ? retainedCgroupMembers(host,cgroup) : [];
     if (tree) inside = new Set(members);
     for (const pid of members) if (exclude.has(pid)) bytes -= readProcessCharge(pid, host);
     parts.push({ group: cgroup.path, bytes: Math.max(0, bytes) });
@@ -936,14 +910,14 @@ export async function noteSampledPeak(dir: string, id: string, bytes: number): P
   await rewriteEntry(dir, id, entry => !entry.liveUse || bytes <= (entry.sampledPeak ?? 0) ? null : { ...entry, sampledPeak: bytes });
 }
 
-function measureFor(owner: ProcessIdentity, cgroup: string | undefined, tree = false): Measure {
-  if (cgroup === undefined) return { tree: true, cgroup: ownCgroup(owner.pid) };
+function measureFor(host:HostObservations, owner: ProcessIdentity, cgroup: string | undefined, tree = false): Measure {
+  if (cgroup === undefined) return { tree: true, cgroup: ownCgroup(owner.pid,host) };
   if (typeof tree !== "boolean") throw new TypeError("memory: an owner's tree option must be boolean");
   if (!cgroup.startsWith("/") || cgroup === "/" || cgroup.endsWith("/") || cgroup.split("/").some(part => part === "." || part === "..")) {
     throw new Error(`not a cgroup path: ${cgroup}`);
   }
   if (!accounted(cgroup)) throw new Error(`cgroup ${cgroup} does not exist or has no memory accounting`);
-  return { tree, cgroup: { path: cgroup, inode: inodeOf(CGROUP_ROOT + cgroup) } };
+  return { tree, cgroup: host.acquireCgroup(cgroup) };
 }
 
 type Context = {
@@ -992,7 +966,7 @@ type Account = { used: number; lent: number; drawn: number; parts: HeldPart[] };
  * other has lent it, and promises that much less while it holds it.
  */
 function accountsOf(admitted: ReadonlyMap<string, LedgerEntry>, use: (entry: LedgerEntry, exclude: ReadonlySet<number>) => HeldPart[],
-  table: () => Table): Map<string, Account> {
+  table: () => Table, host:HostObservations): Map<string, Account> {
   const drawers = new Map<string, LedgerEntry[]>();
   for (const entry of admitted.values()) {
     if (entry.drawsOn === undefined || !admitted.has(entry.drawsOn)) continue;
@@ -1004,7 +978,7 @@ function accountsOf(admitted: ReadonlyMap<string, LedgerEntry>, use: (entry: Led
     const theirs = new Set<number>();
     for (const child of children) {
       if (child.measure.tree) for (const pid of processTree(child.owner.pid, table())) theirs.add(pid);
-      if (child.measure.cgroup !== null) for (const pid of cgroupMembers(child.measure.cgroup.path)) theirs.add(pid);
+      if (child.measure.cgroup !== null) for (const pid of retainedCgroupMembers(host,child.measure.cgroup)) theirs.add(pid);
     }
     const parts = use(entry, theirs);
     accounts.set(entry.id, { used: usedOf(parts), lent: 0, drawn: entry.drawn ?? 0, parts });
@@ -1070,7 +1044,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
   const { availableBytes } = context.host.memory();
   let table: Table | undefined;
   const read = () => table ??= processTable();
-  const accounts = accountsOf(admitted, (entry, exclude) => context.measure(entry, read, exclude, false), read);
+  const accounts = accountsOf(admitted, (entry, exclude) => context.measure(entry, read, exclude, false), read, context.host);
   // MemAvailable already excludes these waiting processes' live use. They
   // ask only for the additional margin, not for memory they hold already.
   const liveMargins = new Map<string, number>();
@@ -1159,7 +1133,7 @@ function holdersNow(dir: string, host: HostObservations, measure: Context["measu
   const live = liveReservations(dir);
   let table: Table | undefined;
   const read = () => table ??= processTable();
-  const accounts = accountsOf(live, (entry, exclude) => measure(entry, read, exclude, true), read);
+  const accounts = accountsOf(live, (entry, exclude) => measure(entry, read, exclude, true), read, host);
   return memoryHolders(host, [...live.values()].map(entry => ({
     id: entry.id, what: entry.what, priority: reservationOrder(entry, live).priority, parts: accounts.get(entry.id)!.parts,
   })));
@@ -1362,7 +1336,7 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
     ?? ancestorReservation(dir, owner.pid, request.replaces);
   const self: LedgerEntry = {
     version: 2, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
-    measure: measureFor(owner, request.owner?.cgroup, request.owner?.tree), since: new Date().toISOString(), grows: null,
+    measure: measureFor(host, owner, request.owner?.cgroup, request.owner?.tree), since: new Date().toISOString(), grows: null,
     ...(unmeasured.length ? { unmeasured } : {}),
     ...(request.liveUse ? { liveUse: true } : {}),
     ...(request.replaces !== undefined ? { replaces: request.replaces } : {}),
@@ -1607,8 +1581,8 @@ export function admittedEntry(dir: string, id: string): LedgerEntry | null {
  * is not the job's, is not counted. A reservation drawn on this one counts
  * here too: this is what the job held, as its history learns it.
  */
-export function entryUsage(entry: LedgerEntry, options: { exclude?: number; env?:NodeJS.ProcessEnv } = {}): number {
-  return measured(entry, processTable, options.exclude === undefined ? NONE : new Set([options.exclude]), hostObservations(options.env));
+export function entryUsage(entry: LedgerEntry, options: { exclude?: number; env?:NodeJS.ProcessEnv; host?:HostObservations } = {}): number {
+  return measured(entry, processTable, options.exclude === undefined ? NONE : new Set([options.exclude]), options.host??hostObservations(options.env));
 }
 
 /** The same measure as parts, each in the cgroup that holds it, as the holders census attributes it. */
@@ -1657,7 +1631,7 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
   // A dead entry is dropped by the next decision, so it uses and promises nothing.
   const live = new Map(view.admitted.filter(entry => entry.live).map(entry => [entry.id, entry]));
   const host = hostObservations(env);
-  const accounts = accountsOf(live, (entry, exclude) => measuredParts(entry, read, exclude, host, true), read);
+  const accounts = accountsOf(live, (entry, exclude) => measuredParts(entry, read, exclude, host, true), read, host);
   let holders: LedgerStatus["holders"];
   try {
     holders = memoryHolders(host, [...live.values()].map(entry => ({ id: entry.id, what: entry.what, priority: reservationOrder(entry, live).priority, parts: accounts.get(entry.id)!.parts })));

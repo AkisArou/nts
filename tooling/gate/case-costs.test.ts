@@ -4,6 +4,8 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CaseCosts, distribution, recordAggregatePeak, summarizeCosts, waitingBreakdown, waitCause, type Observation } from "./case-costs.ts";
+import {CgroupObservations,HostObservationError,CgroupDeparted,hostObservations,type CgroupFiles} from './host-observations.ts';
+import {ownMemory} from './test-memory.ts';
 
 const epoch = 1_700_000_000;
 const step = { name: "examples", started_at: new Date(epoch * 1000).toISOString(), wall: 10 };
@@ -179,15 +181,19 @@ test("aggregate peaks retain each scope beside the step's reservation", t => {
   assert.equal(result.status, "complete");
 });
 
-test("unreadable aggregate peaks stay unknown and a failed observation cannot throw", t => {
+test("aggregate peaks use supplied observations and retained scopes retire on departure", t => {
   const dir = fixture(t);
-  const env = { NTS_GATE_CASE_COSTS_DIR: dir, NTS_GATE_STEP: "examples" };
-  recordAggregatePeak("/nonexistent-nts-peak", 1024, env);
+  const owned=ownMemory(join(dir,'observations'),{scopePeak:{kind:'fixed',bytes:4096,resettable:true}});
+  const env = {...owned, NTS_GATE_CASE_COSTS_DIR: dir, NTS_GATE_STEP: "examples" };
+  recordAggregatePeak({path:"/supplied-peak",inode:"retained"}, 1024, env);
   const result = summarizeCosts(dir, [], [step]);
   const data = result.steps.examples as any;
-  assert.equal(data.aggregate_memory.max_scope_peak_bytes, null);
-  assert.equal(data.aggregate_memory.unknown_scopes, 1);
-  assert.doesNotThrow(() => recordAggregatePeak("/nonexistent-nts-peak", 1024, { ...env, NTS_GATE_CASE_COSTS_DIR: join(dir, "absent") }));
+  assert.equal(data.aggregate_memory.max_scope_peak_bytes, 4096);
+  assert.equal(data.aggregate_memory.unknown_scopes, 0);
+  assert.doesNotThrow(() => recordAggregatePeak({path:"/supplied-peak",inode:"retained"}, 1024, { ...env, NTS_GATE_CASE_COSTS_DIR: join(dir, "absent") }));
+  ownMemory(join(dir,'observations'),{scopePeak:{kind:'live'}});
+  recordAggregatePeak({path:'/nonexistent-nts-peak',inode:'acquired-before-departure'},1024,env);
+  assert.equal((summarizeCosts(dir,[],[step]).steps.examples as any).aggregate_memory.unknown_scopes,1);
 });
 
 test("artifact shadow counts distinguish cross-run matches, mismatches, misses and unavailable keys", t => {
@@ -225,4 +231,19 @@ test("reuse summary counts actual skips and matching tool-only CPU without inven
   assert.equal(result.artifact_reuse.matching_hit_cpu_s.sum, .5);
   assert.equal(result.artifact_reuse.unknown_cpu_runs, 1);
   assert.equal(result.artifact_shadow.skipped_runs, 1);
+});
+
+
+for(const code of ['ENOENT','ENODEV','ESRCH','EIO','EACCES'])for(const operation of ['stat','memory.peak'])
+test(`aggregate peak keeps acquired identity across owners at ${operation}: ${code}`,t=>{
+  const dir=fixture(t),scope={path:'/acquired',inode:'123'},env={...ownMemory(join(dir,'observations')),NTS_GATE_CASE_COSTS_DIR:dir,NTS_GATE_STEP:'examples'};
+  let stopped=false;
+  const files:CgroupFiles={inode:()=>{if(stopped&&operation==='stat')throw Object.assign(Error(code),{code});return scope.inode;},text:()=>{if(stopped&&operation==='memory.peak')throw Object.assign(Error(code),{code});return '456';},children:()=>[]};
+  assert.equal(new CgroupObservations(files).inode(scope.path),scope.inode);stopped=true;
+  const sampler=new CgroupObservations(files),host={...hostObservations(env),cgroupMemoryPeak:(path:string,inode?:string)=>sampler.peak(path,inode)};
+  if(['EIO','EACCES'].includes(code))assert.throws(()=>recordAggregatePeak(scope,1024,env,host),error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes(code)&&error.message.includes(operation));
+  else{
+    recordAggregatePeak(scope,1024,env,host);
+    assert.equal((summarizeCosts(dir,[],[step]).steps.examples as any).aggregate_memory.unknown_scopes,1);
+  }
 });

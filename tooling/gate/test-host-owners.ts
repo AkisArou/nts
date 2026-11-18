@@ -3,6 +3,8 @@
 import type {HostReadKind} from './test-host-audit.ts';
 export const HOST_READ_OWNERS: Readonly<Record<string,{reason:string;kinds:readonly HostReadKind[];generatedKinds?:readonly HostReadKind[]}>> = {
   'tooling/gate/host-observations.ts':{reason:'Complete resource capability; fixtures cannot fill a missing field from the host.',kinds:['disk','machine','kernel','clock']},
+  'tooling/gate/cgroup-read-audit.ts':{reason:'Cgroup path-prefix matching in source data, with no native reads. The separate fs-read rule still checks this module.',kinds:['kernel']},
+  'tooling/gate/cgroup-files-fixture.ts':{reason:'Complete supplied cgroup file adapter for the admission CLI race. Only the synthetic scope is substituted; unrelated native ownership paths retain live safety observations.',kinds:[],generatedKinds:['kernel']},
   'tooling/gate/rust-child-loader.ts':{reason:'Only the stopped image executable through /proc/<tid>/exe after the native task mount/root fence. Captured exec environment supplies loader facts; the explicit canonical launch environment supplies host tools. One owned persistent helper, never analysis-time lookup or admission.',kinds:['kernel','environment']},
   'tooling/gate/active-process.ts':{reason:'Command observations and process-group birth identity; fixture observations replace the entire sampler.',kinds:['kernel']},
   'tooling/gate/process-group.ts':{reason:'Birth identity and signalling for a detached child captured directly at spawn; no discovered process gains signal authority.',kinds:['kernel']},

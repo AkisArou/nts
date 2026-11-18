@@ -21,6 +21,8 @@ function inUnit(t:TestContext,f:ReturnType<typeof fixture>,steps:string[],commit
     import {registerCommandCloser} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
     import {readLedger} from ${JSON.stringify(new URL('../gate/memory-ledger.ts',import.meta.url).href)};
     import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
+    import {declareOwnMembers} from ${JSON.stringify(new URL('../gate/test-cgroup-members.ts',import.meta.url).href)};
+    declareOwnMembers(${JSON.stringify(f.memory)},[process.pid]);
     let result;
     registerCommandCloser('disk run fixture',{close:context=>durableRecord(${JSON.stringify(output)},{result,context,ledger:readLedger(${JSON.stringify(f.memory.NTS_MEMORY_LEDGER)})})});
     result=await runLanding(${JSON.stringify(f.options(steps,commit?{commit}:{}))});
@@ -35,7 +37,7 @@ function inUnit(t:TestContext,f:ReturnType<typeof fixture>,steps:string[],commit
 test('the actual landing build disk refusal drains its reservation without an immediate retry',t=>{
   const f=fixture(t);ownMemory(join(f.own,'memory'),{disk:{freeBytes:45*2**30,freeInodes:100}});
   const result=inUnit(t,f,['build','tests']);
-  assert.equal(result.state,'held',result.message);assert.equal(result.steps[0]?.verdict,'INSTRUMENT');
+  assert.equal(result.state,'held',result.message);assert.equal(result.steps[0]?.verdict,'INSTRUMENT',result.message);
   assert.equal(result.steps[0]?.instrument?.kind,'disk-capacity');assert.equal(result.steps[0]?.instrument?.disk?.shortBytes,2**30);
   assert.deepEqual(result.steps.map(row=>row.verdict),['INSTRUMENT','NOT RUN']);assert.equal(result.steps[0]?.attempt,undefined);
 });

@@ -1,3 +1,4 @@
+import {listedCgroupPopulated} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // The count step (docs/workflow.md, The machine: "the full check counts
 // them"). Red when a branch is named by no open issue nor docs/plan.md, a worktree is
@@ -456,18 +457,9 @@ export function sweep(removable: readonly Removable[], cache: string): string[] 
   });
 }
 
-const CGROUP = "/sys/fs/cgroup";
-/** Whether a cgroup holds a process, the kernel's own answer; a group already gone holds none. */
-function populated(group: string): boolean {
-  try {
-    const value = /^populated ([01])$/m.exec(readFileSync(join(CGROUP, group, "cgroup.events"), "utf8"))?.[1];
-    if (value === undefined) throw new Error(`slice cgroup ${group} has no populated answer`);
-    return value === "1";
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
-}
+/** The group came from systemd's physical slice listing; the observation
+ * owner interprets its departure before this safety read as not populated. */
+export const populated=listedCgroupPopulated;
 
 type Shown = { loaded: boolean; transient: boolean; active: boolean; bindsTo: string[]; group: string; enteredMonotonicUs: number | null };
 /** `systemctl show` for slices, by unit: one call, its blocks parsed. A unit the manager does not hold reads LoadState other than loaded. */

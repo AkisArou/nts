@@ -80,6 +80,8 @@ import {gateEnvironment,sealOracleRun} from './tooling/gate/canonical-environmen
 import {hostEnvironment} from './tooling/gate/host-environment.ts';
 import {finishRunTemporary} from './tooling/gate/run-temporary.ts';
 const [mode]=process.argv.slice(2),root=${JSON.stringify(root)},memory=${JSON.stringify(memory)};
+import {declareOwnMembers} from './tooling/gate/test-cgroup-members.ts';
+declareOwnMembers(memory,[process.pid]);
 const run=join(root,'home/.cache/outer'),out=${JSON.stringify(out)};
 let planned=gateEnvironment(hostEnvironment(process.env),{run,oracleRoot:root,oracleAdmissionContext:'gate',owned:{...memory,NTS_TOOLING_SLICE:${JSON.stringify(slice)},NTS_ADDON_OUT:out}});
 Object.assign(process.env,planned.env);

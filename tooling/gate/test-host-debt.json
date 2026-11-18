@@ -10,7 +10,7 @@
   },
   "tooling/bench/host-columns.ts": {
     "kernel": 2,
-    "clock": 8,
+    "clock": 6,
     "environment": 3
   },
   "tooling/bench/layouts-admission.ts": {
@@ -181,12 +181,11 @@
   },
   "tooling/differential/oracle-resolution.ts": {
     "kernel": 3,
-    "environment": 1,
     "clock": 6
   },
   "tooling/differential/oracle-runtime.ts": {
-    "clock": 4,
-    "kernel": 2
+    "kernel": 2,
+    "clock": 2
   },
   "tooling/differential/program-oracles.ts": {
     "machine": 1
@@ -203,8 +202,8 @@
     "kernel": 1
   },
   "tooling/full-check/count.ts": {
-    "kernel": 2,
     "environment": 1,
+    "kernel": 1,
     "clock": 1
   },
   "tooling/full-check/measure-command.ts": {
@@ -229,13 +228,12 @@
     "kernel": 6
   },
   "tooling/gate/all.sh": {
-    "kernel": 2
+    "kernel": 1
   },
   "tooling/gate/artifact-shadow.ts": {
     "clock": 1
   },
   "tooling/gate/case-costs.ts": {
-    "kernel": 1,
     "clock": 2
   },
   "tooling/gate/compile-counter-calibrate.ts": {
@@ -249,9 +247,6 @@
   },
   "tooling/gate/cputime.mjs": {
     "kernel": 1,
-    "environment": 1
-  },
-  "tooling/gate/doctests.ts": {
     "environment": 1
   },
   "tooling/gate/gate-resource.ts": {
@@ -273,7 +268,7 @@
     "kernel": 3
   },
   "tooling/gate/memory-ledger.ts": {
-    "kernel": 6,
+    "kernel": 5,
     "clock": 1
   },
   "tooling/gate/owed-range.test.ts": {
@@ -295,7 +290,7 @@
   "tooling/gate/run.mjs": {
     "environment": 2,
     "clock": 11,
-    "kernel": 3
+    "kernel": 1
   },
   "tooling/gate/scopes/bound-slice.ts": {
     "kernel": 1
@@ -333,9 +328,6 @@
     "clock": 6,
     "environment": 2
   },
-  "tooling/gate/tokenpool.mjs": {
-    "clock": 5
-  },
   "tooling/gate/tokens.test.mjs": {
     "clock": 2
   },
@@ -343,10 +335,7 @@
     "kernel": 2
   },
   "tooling/gate/tooling-runner.ts": {
-    "clock": 1,
-    "machine": 1,
-    "environment": 2,
-    "kernel": 1
+    "environment": 2
   },
   "tooling/inputs/package-manager.test.ts": {
     "machine": 2
@@ -366,27 +355,16 @@
     "clock": 2
   },
   "tooling/landing/pool.ts": {
-    "disk": 1,
-    "clock": 4
+    "clock": 3
   },
   "tooling/landing/run.ts": {
-    "clock": 2,
     "machine": 1
   },
   "tooling/landing/service.ts": {
     "clock": 2,
     "machine": 1
   },
-  "tooling/landing/tree-users.ts": {
-    "kernel": 1
-  },
   "tooling/memory/run.sh": {
     "kernel": 1
-  },
-  "tooling/npm-survey/verdict.ts": {
-    "environment": 1
-  },
-  "tooling/records/record-pending.ts": {
-    "environment": 1
   }
 }

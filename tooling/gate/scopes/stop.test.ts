@@ -40,9 +40,11 @@ import {createHash} from 'node:crypto';
 import {appendFileSync, chmodSync, readFileSync, writeFileSync} from 'node:fs';
 import {isAbsolute, relative, sep} from 'node:path';
 import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
+import {declareFixedMembers,declareOwnMembers} from ${JSON.stringify(new URL('../test-cgroup-members.ts',import.meta.url).href)};
 import {GateScopes as ActualGateScopes} from ${JSON.stringify(actual)};
 export * from ${JSON.stringify(actual)};
 export class GateScopes extends ActualGateScopes {
+  constructor(env,options){super(env,options);declareFixedMembers(env,this.group,[]);declareOwnMembers(env,[process.pid]);}
   override step(limits) {
     const scope=super.step(limits),kill=scope.kill.bind(scope),drain=scope.drain.bind(scope);
     let cancelled=false,draining=false;

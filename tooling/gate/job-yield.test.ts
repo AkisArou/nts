@@ -1,3 +1,4 @@
+import {fixtureCgroup} from './test-cgroup-members.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {join} from 'node:path';
@@ -8,7 +9,11 @@ import {reserve,readLedger,yieldJobMemory,type Reservation} from './memory-ledge
 import {peakReservation} from './step-scheduling.ts';
 
 test('an idle owned forecast returns to observed use and one ordinary growth restores it',async t=>{
- const use=128*2**20,env=ownMemoryEnv(join(testScratch(t,'job-yield'),'memory'),undefined,{availableKiB:24*2**20,totalKiB:32*2**20,resident:{kind:'fixed',defaultBytes:use}});
+ const use=128*2**20,directory=join(testScratch(t,'job-yield'),'memory');
+ const group=fixtureCgroup();
+ const resident={kind:'fixed' as const,defaultBytes:0,processes:{[process.pid]:use},cgroups:{[group]:use},members:{[group]:[process.pid]}};
+ const reading={availableKiB:24*2**20,totalKiB:32*2**20,resident};
+ const env=ownMemoryEnv(directory,undefined,reading);
  const held=await reserve({bytes:4*2**30,what:'owned yielding job',priority:'agent'},{env,used:()=>use});
  try{
   const before=held.bytes,yielded=await yieldJobMemory(held,env);
@@ -19,7 +24,7 @@ test('an idle owned forecast returns to observed use and one ordinary growth res
  }finally{held.release();await held.closed;}
 });
 test('an inherited yield has no parent mutation and cancellation owns the resume obligation',async t=>{
- const env=ownMemoryEnv(join(testScratch(t,'inherited-job-yield'),'memory')),held=await reserve({bytes:2**30,what:'parent job',priority:'agent'},{env});
+ const env=ownMemoryEnv(join(testScratch(t,'inherited-job-yield'),'memory'),undefined,{resident:{kind:'fixed',defaultBytes:0,members:{[fixtureCgroup()]:[process.pid]}}}),held=await reserve({bytes:2**30,what:'parent job',priority:'agent'},{env});
  try{
   const child=await reserve({bytes:512*2**20,what:'inherited pool',priority:'agent'},{env:{...env,...held.env}});assert.equal(child.inherited,true);
   const before=held.bytes,stop=new AbortController(),yielded=await yieldJobMemory(child,env,stop.signal);
@@ -31,7 +36,8 @@ test('an inherited yield has no parent mutation and cancellation owns the resume
 test('a live-use yield never restores an old forecast or rewrites its live entry',async t=>{
  let use=128*2**20,grows=0,shrinks=0;
  const directory=join(testScratch(t,'live-job-yield'),'memory');
- const reading=()=>({availableKiB:24*2**20,totalKiB:32*2**20,resident:{kind:'fixed' as const,defaultBytes:use}});
+ const group=fixtureCgroup();
+ const reading=()=>({availableKiB:24*2**20,totalKiB:32*2**20,resident:{kind:'fixed' as const,defaultBytes:use,members:{[group]:[process.pid]}}});
  const env=ownMemoryEnv(directory,undefined,reading());
  const held=await reserve({bytes:0,liveUse:true,what:'live yielding job',priority:'agent'},{env,used:()=>use});
  const observed=new Proxy(held,{get(target,key){

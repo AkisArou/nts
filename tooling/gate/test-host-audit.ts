@@ -17,6 +17,10 @@ import {inspectFixtureCopies,fixtureCopyProblems,type FixtureCopy} from './test-
 import {inspectRecordPublications,type RecordPublication} from './test-readiness.ts';
 import {auditModuleAsync,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
+import {inspectCgroupReads,cgroupReadProblems,type CgroupRead,type CgroupReadAllowance} from './cgroup-read-audit.ts';
+import {acceptedRevision,acceptedRevisionData} from './accepted-revision-data.ts';
+const CGROUP_ALLOWANCES=new URL('./cgroup-read-allowlist.json',import.meta.url);
+const ACCEPTED_CGROUP_ALLOWANCES=acceptedRevisionData(new URL('./cgroup-read-allowlist.json',import.meta.url));
 import {inspectCommandForwarders,inspectGitInvocations,inspectShellGit,inspectGeneratedGitShells,inspectPythonGit,gitInvocationProblems,parseGitDebt,GIT_DEBT_FILE,EMPTY_GIT_DEBT,type GitInvocation,type GitDebt} from './git-observations.ts';
 
 export type HostReadKind='disk'|'machine'|'kernel'|'clock'|'environment'|'fixture-constructor';
@@ -90,15 +94,18 @@ export function acceptedRevisionDataProblems(facts:SourceFacts):string[]{
 /** Resolve aliases before classifying calls, including require/destructuring.
  * Embedded scripts are parsed as code too, with interpolation holes retained.
  * A path literal is conservatively a kernel read even when it is only data. */
-export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:SourceFacts,generated:GeneratedSourceFacts)=>void,rootFacts?:SourceFacts,inspectGenerated?:(facts:SourceFacts,offset:number,argv?:readonly string[])=>void):{reads:HostRead[];references:string[]} {
+export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:SourceFacts,generated:GeneratedSourceFacts)=>void,rootFacts?:SourceFacts,inspectGenerated?:(facts:SourceFacts,offset:number,argv?:readonly string[])=>void):{reads:HostRead[];references:string[];cgroupReads:CgroupRead[]} {
   const require=createRequire(import.meta.url);
   const {API}=require('typescript/sync') as typeof import('typescript/sync');
   const ast=sourceSyntax();
   const api=shared??new API(),generatedSources=new GeneratedSourceFacts(api,file),reads:HostRead[]=[],references=new Set<string>();
+  const cgroupReads:CgroupRead[]=[];
   function parse(text:string,offset=0,generated=false,depth=0,borrowed?:SourceFacts):void {
     const lease=!borrowed&&!generated?api.createSourceFile(file,text):undefined;
     const facts=borrowed??(generated?generatedSources.get(text):new SourceFacts(file,text,lease!.sourceFile));
     const code=(node:Node)=>facts.code(node),name=(node:Node)=>facts.ambientName(node);
+    // This audit's mutation inputs are inspected source data, never launched.
+    if(!(generated&&file==='tooling/gate/test-host-audit.test.ts'))cgroupReads.push(...inspectCgroupReads(facts).map(row=>({...row,line:row.line+offset})));
     for(const declaration of facts.imports)if(ast.isStringLiteralLikeNode(declaration.moduleSpecifier))references.add(declaration.moduleSpecifier.text);
     const add=(kind:HostReadKind,node:Node)=>reads.push({file,line:offset+facts.line(node.pos),kind,source:code(node).replace(/\s+/g,' ').slice(0,240),generated});
     const literal=(value:string,node:Node):void=>{
@@ -147,7 +154,7 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       // Rust test fixtures must ask the TypeScript fixture owner for the packet.
       for(const [index,line] of source.split('\n').entries())if(/\.env\s*\(\s*"NTS_(?:MEMINFO|VMSTAT|HOST_OBSERVATIONS)"/.test(line))reads.push({file,line:index+1,kind:'fixture-constructor',source:line.trim(),generated:false});
     } else parse(source,0,false,0,rootFacts);
-    return {reads,references:[...references]};
+    return {reads,references:[...references],cgroupReads};
   } finally {generatedSources.close();if(!shared)api.close();}
 }
 
@@ -180,7 +187,7 @@ export function recordHostDebt(path:string,reads:readonly HostRead[],debt:HostDe
 export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
   const declarations=new Map<string,ModuleDeclarations>();
-  const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[],testProfiles:string[]=[];
+  const api=new API(),sources=new Map<string,ReturnType<typeof inspectHostSource>>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[],testProfiles:string[]=[];
   const gitInvocations:GitInvocation[]=[],python:{file:string;source:string}[]=[],signals:string[]=[];
   const oracleEntries=new Map<string,OracleEntryFacts>(),oracleShells:{file:string;source:string;shell:ReturnType<typeof shellCommands>}[]=[];
   const inspect=(file:string,source:string,node:SourceFacts,generated:GeneratedSourceFacts)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
@@ -237,6 +244,19 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
     const members=new Set<string>();reach(entry,members);return {entry,modules:[...members].sort()};
   });
   const reached=new Set(closures.flatMap(row=>row.modules));
+  const cgroupReads=[...sources.values()].flatMap(row=>row.cgroupReads);
+  const allowances=JSON.parse(readFileSync(CGROUP_ALLOWANCES,'utf8')) as CgroupReadAllowance[];
+  let accepted:CgroupReadAllowance[]|undefined;
+  if(!debt){
+    const revision=acceptedRevision(root);
+    if('error' in revision)signals.push('cgroup read ratchet: '+revision.error);
+    else {
+      const content=revision.show(ACCEPTED_CGROUP_ALLOWANCES);
+      if(typeof content==='string')accepted=JSON.parse(content) as CgroupReadAllowance[];
+      else if(!content.error.includes('does not exist in')&&!content.error.includes('exists on disk, but not in'))signals.push('cgroup read ratchet: '+content.error);
+    }
+  }
+  signals.push(...cgroupReadProblems(cgroupReads,allowances,accepted));
   const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
   const gitCeiling=gitDebt??(debt?EMPTY_GIT_DEBT:parseGitDebt(JSON.parse(readFileSync(join(root,GIT_DEBT_FILE),'utf8'))));
   return {files:sources.size,closures,reads,publications,gitInvocations,problems:[...signals,...testProfiles,...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditModuleAsync(root,moduleFacts,declarations).problems,...fixtureCopyProblems(root,copies),...gitInvocationProblems(gitInvocations,gitCeiling)]};

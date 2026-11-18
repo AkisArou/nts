@@ -14,6 +14,7 @@ import {hostEnvironment} from '../gate/host-environment.ts';
 import {removable,finishRunTemporary} from '../gate/run-temporary.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
 import {ownMemory} from '../gate/test-memory.ts';
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {oracleWorkspaceFixture} from './oracle-workspace-fixture.ts';
 import {captureDependencies,type DependencyCapability} from './oracle-dependencies.ts';
@@ -35,6 +36,7 @@ if(mode==='--consume'){
   assert.equal(source,resolve(own,'tree'),'producer fixture source must be its acquired staged tree');
   const run=join(own,'run'),home=join(own,'home');mkdirSync(home);
   const memory=ownMemory(join(own,'memory')),low=ownMemory(join(own,'pressure'),{availableKiB:0,totalKiB:2**20}).NTS_HOST_OBSERVATIONS;
+  declareOwnMembers(memory,[process.pid]);
   const base={...hostEnvironment(process.env),HOME:home};
   const accounting=gateEnvironment(base,{run:join(own,'accounting'),standalone:true,oracleRoot:source,owned:{...memory}});
   const cap:DependencyCapability=JSON.parse(accounting.env.NTS_ORACLE_DEPENDENCIES!);

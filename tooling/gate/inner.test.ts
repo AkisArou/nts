@@ -1,3 +1,4 @@
+import {fixedMembersUnitCommand} from './test-cgroup-members.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {fixtureEnvironment} from "./test-environment.ts";
 // The inner loop's decisions: which crates a change touches, when reference
@@ -138,7 +139,7 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
     const setenv = Object.entries(env).filter((entry): entry is [string,string] => entry[1] !== undefined).map(([key,value]) => `--setenv=${key}=${value}`);
     const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(env,"agent"), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
       "--property=RuntimeMaxSec=300s", "--property=Nice=19", "--property=LimitCORE=0", "--property=CPUAffinity=0-3 6-31",
-      ...setenv, process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])], {env:fixtureEnvironment(t), encoding: "utf8" });
+      ...setenv, ...fixedMembersUnitCommand([process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])])], {env:fixtureEnvironment(t), encoding: "utf8" });
     assert.equal(ran.status, fails||diskPhase ? 1 : 0, ran.stdout + ran.stderr);
     assert.ok(existsSync(calls), ran.stdout + ran.stderr);
     assert.equal(readFileSync(calls+'.metadata-environment','utf8'),'canonical inner environment');

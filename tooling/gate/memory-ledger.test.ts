@@ -1,3 +1,4 @@
+import {declareOwnMembers} from './test-cgroup-members.ts';
 import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // The machine's memory ledger: its rule and its queue as functions, then
 // `reserve` through real files, the real lock and real owner processes, with
@@ -25,6 +26,8 @@ import { ownMemory,withoutHanded } from "./test-memory.ts";
 import {toolingSliceArgs} from './tooling-slice.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
 import {createServer,connect} from 'node:net';
+
+import {departingCgroupPreload} from './cgroup-files-fixture.ts';
 
 const GiB = 2 ** 30;
 const ADMIT = fileURLToPath(new URL("admit.ts", import.meta.url));
@@ -137,7 +140,7 @@ type Fixture = {
 
 function fixture(t: TestContext): Fixture {
   const root = testScratch(t, "memory-ledger");
-  const env=ownMemory(root);
+  const env=ownMemory(root);declareOwnMembers(env,[process.pid]);
   const dir = env.NTS_MEMORY_LEDGER, meminfo = env.NTS_MEMINFO;
   const memory = (availableGiB: number, totalGiB = 64) => {
     writeFileSync(`${meminfo}.next`, `MemTotal:       ${totalGiB * 2 ** 20} kB\nMemFree:         1024 kB\nMemAvailable:   ${Math.round(availableGiB * 2 ** 20)} kB\n`);
@@ -597,6 +600,39 @@ function admitEnv(f: Fixture, extra: Readonly<Record<string, string>> = {}): Nod
 }
 const admit = (f: Fixture, args: string[], extra?: Readonly<Record<string, string>>) =>
   spawnTest(process.execPath, [ADMIT, ...args], { encoding: "utf8", env: admitEnv(f, extra) }, `admit.ts ${args.join(" ")}`);
+
+test('a waiting admit retains FIFO when another job descendant departs during its holder scan',async t=>{
+  const f=fixture(t),root=testScratch(t,'admit-departed-holder'),preload=join(root,'departure.mjs');
+  const held=await f.ask({bytes:10*GiB,what:'departing holder',owner:{pid:ownerProcess(t).pid}});
+  const file=join(f.dir,'admitted',held.id+'.json'),entry=JSON.parse(readFileSync(file,'utf8'));
+  const group='/user.slice/user-1000.slice/user@1000.service/nts.slice/fixture-847.slice';
+  entry.measure={tree:true,cgroup:{path:group,inode:'847'}};writeFileSync(file,JSON.stringify(entry));
+  const view=JSON.parse(readFileSync(f.env.NTS_HOST_OBSERVATIONS!,'utf8'));view.resident={kind:'live'};
+  writeFileSync(f.env.NTS_HOST_OBSERVATIONS!,JSON.stringify(view));
+  // A complete supplied kernel-file adapter. The fault is armed by the
+  // actual CLI's wait report, after decision and before its holder census.
+  writeFileSync(preload,departingCgroupPreload(group));
+  const run=(what:string,imports:string[]=[])=>{
+    const child=spawn(process.execPath,[...imports,ADMIT,'--bytes','10G','--what',what,'--',process.execPath,'-e',"process.stdout.write('admitted command\\n')"],{env:admitEnv(f),stdio:['ignore','pipe','pipe']});
+    let output='';child.stdout.on('data',part=>{output+=part;});child.stderr.on('data',part=>{output+=part;});
+    const closed=once(child,'close');
+    t.after(async()=>{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGTERM');await closed;}});
+    return {child,closed,output:()=>output,stopped:()=>child.exitCode!==null||child.signalCode!==null?output||'admit exited':undefined};
+  };
+  const first=run('first waiter',['--import',preload]);
+  await waitFor('the holder census to observe departure',()=>first.output().includes('supplied holder departure'),{stopped:first.stopped});
+  const before=readLedger(f.dir).waiting.find(row=>row.what==='first waiter')!;assert.ok(before);
+  const second=run('second waiter',['--import',preload]);
+  await waitFor('the later admission to queue',()=>readLedger(f.dir).waiting.some(row=>row.what==='second waiter'),{stopped:second.stopped});
+  const queue=readLedger(f.dir).waiting;
+  assert.deepEqual(queue.map(row=>row.what),['first waiter','second waiter']);
+  assert.deepEqual([queue[0]!.id,queue[0]!.seq],[before.id,before.seq]);
+  assert.doesNotMatch(first.output(),/admit:|held now: unavailable/);
+  held.release();await held.closed;
+  assert.deepEqual(await first.closed,[0,null],first.output());assert.match(first.output(),/admitted command/);
+  assert.deepEqual(await second.closed,[0,null],second.output());assert.match(second.output(),/admitted command/);
+  assert.doesNotMatch(first.output()+second.output(),/admit:.*ENOENT/);
+});
 
 test("a child started inside a reservation runs in it at once and asks for nothing", async t => {
   const f = fixture(t);

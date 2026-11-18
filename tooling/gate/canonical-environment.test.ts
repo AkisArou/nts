@@ -1,3 +1,4 @@
+import {declareOwnMembers} from './test-cgroup-members.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {generatedJavaScript} from './generated-javascript.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-environment.ts';
@@ -566,6 +567,7 @@ release();
 child.release();
 `);
   const memory=ownMemory(join(run,'memory'),{availableKiB,totalKiB:64_000_000});
+  declareOwnMembers(memory,[process.pid]);
   // This arm waits for a measured capture's forecast. An unknown capture
   // asks only for its live margin and would fit beside the runner.
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});

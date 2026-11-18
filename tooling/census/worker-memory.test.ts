@@ -1,3 +1,4 @@
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {testEnvironment,testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import { hangDeadline, type HangDeadline, spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
@@ -23,6 +24,7 @@ import {toolingSlice,toolingSliceArgs} from "../gate/tooling-slice.ts";
 const memoryDirectory = newTestScratch("resident-run-memory");
 after(() => rmSync(memoryDirectory, { recursive: true, force: true }));
 const ownMemory = useOwnMemory(memoryDirectory, { availableKiB: 8 * 2 ** 20, totalKiB: 32 * 2 ** 20 });
+  declareOwnMembers(ownMemory,[process.pid]);
 afterEach(() => {
   for (const [name, value] of Object.entries(ownMemory)) assert.equal(process.env[name], value, `a pool's release left ${name} as this file set it`);
 });
@@ -130,7 +132,7 @@ try {
 } finally { run.close(); }
 console.log(JSON.stringify({ peak, group: run.group }));`;
   const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",
-    env: { ...fixtureEnvironment(t), NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
+    env: { ...fixtureEnvironment(t,writeOwnMemory(join(directory,'observations'),{scopePeak:{kind:'live'}})), NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
   assert.equal(result.status, 0, result.stderr);
   const { peak, group } = JSON.parse(result.stdout);
   const files = readdirSync(costs); assert.equal(files.length, 1);
@@ -140,6 +142,40 @@ console.log(JSON.stringify({ peak, group: run.group }));`;
   assert.equal(observation.scope_budget_bytes, 128 * 2 ** 20);
   assert.equal(observation.step, "peak-control");
   assert.equal(existsSync(join(CGROUP, group)), false);
+});
+
+// The peak observer may retire before close; instrumentation errors still
+// report by name, but neither path may skip the physical slice's stop job.
+for(const failure of ['departed','EIO','EACCES'])
+test(`aggregate peak ${failure} still drains its run slice`,async t=>{
+  const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const costs=join(directory,'costs');mkdirSync(costs);
+  const code=`import assert from 'node:assert/strict';
+import {existsSync} from 'node:fs';
+import {MemoryRun} from ${JSON.stringify(new URL('./worker-memory.ts',import.meta.url).href)};
+import {hostObservations,HostObservationError,CgroupDeparted} from ${JSON.stringify(new URL('../gate/host-observations.ts',import.meta.url).href)};
+import {spawnTest} from ${JSON.stringify(new URL('../gate/test-wait.ts',import.meta.url).href)};
+const failure=${JSON.stringify(failure)},observations=hostObservations();
+const host=failure==='departed'?observations:{...observations,cgroupMemoryPeak:()=>{throw new HostObservationError('host observation memory.peak failed: '+failure,{cause:Object.assign(Error(failure),{code:failure})});}};
+const run=new MemoryRun({budgetBytes:128*2**20,host}),ref=observations.acquireCgroup(run.group);
+if(failure==='departed'){
+ const stopped=spawnTest('systemctl',['--user','stop',run.slice],{encoding:'utf8'});assert.equal(stopped.status,0,stopped.stderr);
+ run.close();await run.closed;
+}else{
+ assert.throws(()=>run.close(),error=>error.cause instanceof HostObservationError&&error.cause.message.includes(failure));
+ await assert.rejects(run.closed,error=>error.cause instanceof HostObservationError&&error.cause.message.includes(failure));
+}
+assert.equal(existsSync(run.directory),false);
+assert.throws(()=>observations.cgroupCharge(ref.path,ref.inode),CgroupDeparted);
+console.log(JSON.stringify({drained:true}));`;
+  const env={...fixtureEnvironment(t,writeOwnMemory(join(directory,'observations'),{resident:{kind:'live'},scopePeak:{kind:'live'}})),NTS_GATE_RUN_DIR:directory,NTS_GATE_CASE_COSTS_DIR:costs,NTS_GATE_STEP:'peak-cleanup'};
+  const result=spawnTest(process.execPath,['--input-type=module','-e',code],{encoding:'utf8',env});
+  assert.equal(result.status,0,result.stderr??'');assert.deepEqual(JSON.parse(result.stdout??''),{drained:true});
+  const rows=readdirSync(costs);
+  if(failure==='departed'){
+    assert.equal(rows.length,1);const file=rows[0];assert.ok(file);
+    assert.equal(JSON.parse(readFileSync(join(costs,file),'utf8')).peak_bytes,null);
+  }else assert.equal(rows.length,0);
 });
 
 test("compiler reserves 32 GiB under a resident cap while executed programs retain RLIMIT_AS", async (t) => {

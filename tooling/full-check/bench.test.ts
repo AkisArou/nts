@@ -1,3 +1,4 @@
+import {fixedMembersUnitCommand} from '../gate/test-cgroup-members.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/bench.test.ts
 //
@@ -47,7 +48,7 @@ function inUnit(t: TestContext, root: string, body: (unit: string) => string) {
   t.after(() => { spawnSync("systemctl", ["--user", "stop", unit], {env:fixtureEnvironment(t), stdio: "ignore" }); });
   const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
     "--property=RuntimeMaxSec=300s", "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31",
-    ...setenv, process.execPath, script], {env:fixtureEnvironment(t), encoding: "utf8" });
+    ...setenv, ...fixedMembersUnitCommand([process.execPath, script])], {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);
   return memory;
 }

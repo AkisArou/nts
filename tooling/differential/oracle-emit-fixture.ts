@@ -1,4 +1,5 @@
 import {testEnvironment} from "../gate/test-environment.ts";
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 // Shared by the oracle emit test files: their oracle test environment, the
 // toolchain, and the helpers their tests call. Each file closes the
 // executions its tests open (afterEach below). The tests were one file whose
@@ -138,7 +139,8 @@ export async function ownerObservationInvalidation(t:TestContext,kind:'listing'|
     writeFileSync(join(root,'src/main.ts'),`import type {Marker} from ${JSON.stringify(specifier)};const value:Marker=19;console.log(value);\n`);
     ordinaryProject(root,['src/main.ts']);
   }
-  const planned=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(outside,'registered'),oracleAdmissionContext:'gate',owned:ownMemory(join(outside,'memory'))}));
+  const memory=ownMemory(join(outside,'memory'));declareOwnMembers(memory,[process.pid]);
+  const planned=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(outside,'registered'),oracleAdmissionContext:'gate',owned:memory}));
   const keys=['NTS_ORACLE_DEPENDENCIES','NTS_GATE_ENV_CONTEXT'] as const,previous=keys.map(key=>process.env[key]);
   const cap=JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!),records:OwnerObservationRecord[]=[];let green=false;
   try{

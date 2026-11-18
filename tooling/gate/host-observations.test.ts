@@ -1,18 +1,19 @@
+import {declareOwnMembers} from './test-cgroup-members.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
-import {readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {spawn,spawnSync} from 'node:child_process';
+import {existsSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,parseCgroupCpu} from './host-observations.ts';
+import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,parseCgroupCpu,CgroupObservations,CgroupDeparted,HostObservationError,retainedCgroupCharge,retainedCgroupMembers,reportMemoryFailure,type CgroupFiles} from './host-observations.ts';
 import {gateEnvironment,assertLandingEnvironment} from './canonical-environment.ts';
 import {hostEnvironment,acquireHostObservations} from './host-environment.ts';
 import {TemporaryAdmission} from './admission.ts';
-import {reserveJob,readLedger,lockLedger} from './memory-ledger.ts';
+import {reserve,reserveJob,readLedger,lockLedger,entryUsage,type LedgerEntry} from './memory-ledger.ts';
 import {waitFor} from './test-wait.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
-import {compileActive,closeMemoryRun} from '../census/worker-memory.ts';
+import {compileActive,closeMemoryRun,MemoryRun} from '../census/worker-memory.ts';
 import {treeProcessFixture} from '../landing/tree-users-fixture.ts';
 import {assertNoObservedProcessUsers} from '../landing/tree-users.ts';
 
@@ -57,7 +58,7 @@ test('one complete owned view supplies every resource, including child observati
   const root=testScratch(t,'host-observations'),clock=join(root,'clock');
   writeFileSync(clock,'125');
   const env=ownMemory(root,{availableKiB:123,totalKiB:456,clock:{kind:'file',file:clock},
-    disk:{freeBytes:789,freeInodes:12},allocated:{kind:'fixed',defaultBytes:11,paths:{'/owned/build':456}},resident:{kind:'fixed',defaultBytes:34,processes:{'71':56},cgroups:{'/owned':78}}});
+    disk:{freeBytes:789,freeInodes:12},allocated:{kind:'fixed',defaultBytes:11,paths:{'/owned/build':456}},resident:{kind:'fixed',defaultBytes:34,processes:{'71':56},cgroups:{'/owned':78},members:{'/owned':[71]}}});
   const data=JSON.parse(readFileSync(env.NTS_HOST_OBSERVATIONS,"utf8"));data.width={logical:7,available:6};data.load=[2,3,4];writeFileSync(env.NTS_HOST_OBSERVATIONS,JSON.stringify(data));
   const host=hostObservations(env);
   assert.deepEqual(host.memory(),{availableBytes:123*1024,totalBytes:456*1024});
@@ -68,6 +69,7 @@ test('one complete owned view supplies every resource, including child observati
   assert.equal(host.allocatedBytes('/owned/build'),456);
   assert.equal(host.allocatedBytes('/missing'),11);
   assert.deepEqual([host.processCharge(71),host.processCharge(-1),host.cgroupCharge('/owned'),host.cgroupCharge('/missing')],[56,34,78,34]);
+  assert.deepEqual(host.cgroupMembers('/owned'),[71]);assert.throws(()=>host.cgroupMembers('/missing'),/host observation resident.members has no cgroup \/missing/);
   assert.deepEqual([host.machineWidth(),host.availableWidth(),host.now()],[7,6,125]);
   ownMemory(root,{availableKiB:321,totalKiB:456});
   writeFileSync(clock,'250');
@@ -161,6 +163,7 @@ test('temporary admission obeys the same owned disk even when the path cannot be
 
 test('a missing sampler observation fails its job and still releases the owned ledger',async t=>{
   const root=testScratch(t,'host-observations-sampler'),env=ownMemory(root);
+  declareOwnMembers(env,[process.pid]);
   const reports:string[]=[];
   const job=await reserveJob({key:'fixture-job',what:'owned sampler control'},{env,report:line=>reports.push(line)});
   const file=env.NTS_HOST_OBSERVATIONS,value=JSON.parse(readFileSync(file,'utf8'));
@@ -216,4 +219,135 @@ test('CPU observations own all three counters, and an omission cannot select the
 test('cpu.stat requires one whole nonnegative counter of each kind',()=>{
   assert.deepEqual(parseCgroupCpu('usage_usec 600\nuser_usec 400\nsystem_usec 200\nnice_usec 15\n'),{usageUsec:600,userUsec:400,systemUsec:200});
   for(const text of ['user_usec 1\nsystem_usec 0\n','usage_usec -1\nuser_usec 1\nsystem_usec 0\n','usage_usec 1\nuser_usec 1\nuser_usec 1\nsystem_usec 0\n'])assert.throws(()=>parseCgroupCpu(text),/cpu.stat/);
+});
+
+// Kernel file operations are supplied together. A child's parent listing is
+// the existence witness even if that child departs before its first stat.
+function cgroupFiles(){
+  const root='/owned',child=root+'/worker',present=new Set([root,child]);
+  let failed:{group:string;operation:string;code:string}|undefined,hits=0;
+  const check=(group:string,operation:string)=>{
+    if(failed?.group===group&&failed.operation===operation){hits++;throw Object.assign(Error('supplied '+failed.code),{code:failed.code});}
+    if(!present.has(group))throw Object.assign(Error('never existed'),{code:'ENOENT'});
+  };
+  const files:CgroupFiles={
+    inode:group=>{check(group,'stat');return group;},
+    text:(group,file)=>{check(group,file);if(file==='cgroup.procs')return group===root?'11':'12';if(file==='memory.peak')return '456';if(file==='memory.current')return '123';if(file==='memory.stat')return 'active_file 0\ninactive_file 0\nslab_reclaimable 0\n';throw Error('unexpected file '+file);},
+    children:group=>{check(group,'children');return group===root?['worker']:[];},
+  };
+  return {root,child,files,present,fail:(group:string,operation:string,code:string)=>{failed={group,operation,code};},hits:()=>hits};
+}
+
+for(const code of ['ENODEV','ENOENT','ESRCH'])for(const operation of ['cgroup.procs','children','stat'])
+test(`a listed scope departing at ${operation} with ${code} ends only its membership sample`,t=>{
+  const f=cgroupFiles(),reader=new CgroupObservations(f.files),env=ownMemory(testScratch(t,'departed-membership'));
+  const host={...hostObservations(env),cgroupCharge:(group:string,inode?:string)=>reader.charge(group,inode),cgroupMembers:(group:string,inode?:string)=>reader.members(group,inode)};
+  const entry={owner:{pid:process.pid},measure:{tree:true,cgroup:{path:f.root,inode:f.root}}} as LedgerEntry;
+  assert.deepEqual(host.cgroupMembers(f.root),[11,12]);assert.equal(entryUsage(entry,{host}),123);
+  f.fail(f.child,operation,code);
+  assert.equal(entryUsage(entry,{host}),123,'the surviving step retains its own charge');
+  assert.ok(f.hits()>0,'the ledger routes the operation through its observation owner');
+  assert.deepEqual(host.cgroupMembers(f.root),[11]);
+  assert.throws(()=>host.cgroupMembers(f.child),error=>error instanceof CgroupDeparted&&error.group===f.child&&(error.cause as NodeJS.ErrnoException).code===code);
+});
+
+for(const code of ['ENODEV','ENOENT','ESRCH'])for(const operation of ['memory.current','memory.stat','stat','open'])
+test(`an acquired scope departing at ${operation} maps ${code} through the owner`,()=>{
+  const f=cgroupFiles(),reader=new CgroupObservations(f.files);
+  reader.charge(f.child);f.fail(f.child,operation,code);
+  if(operation==='open')assert.throws(()=>reader.observe(f.child,'open',()=>{throw Object.assign(Error(code),{code});}),CgroupDeparted);
+  else assert.throws(()=>reader.charge(f.child),error=>error instanceof CgroupDeparted&&error.group===f.child&&(error.cause as NodeJS.ErrnoException).code===code);
+});
+
+test('a parent listing proves existence before a first child observation',()=>{
+  const f=cgroupFiles(),reader=new CgroupObservations(f.files);
+  f.fail(f.child,'stat','ENODEV');assert.deepEqual(reader.members(f.root),[11]);assert.equal(f.hits(),1);
+});
+
+for(const code of ['EACCES','EIO'])for(const operation of ['cgroup.procs','children','stat','memory.current','memory.stat'])
+test(`an acquired scope's ${operation} failure with ${code} remains a named error`,()=>{
+  const f=cgroupFiles(),reader=new CgroupObservations(f.files);
+  reader.charge(f.child);f.fail(f.child,operation,code);
+  assert.throws(()=>operation.startsWith('memory.')?reader.charge(f.child):reader.members(f.root),error=>
+    error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes(operation)&&error.message.includes(code));
+});
+
+test('a never-observed scope is a named error, never a departed sample',()=>{
+  const f=cgroupFiles(),reader=new CgroupObservations(f.files);
+  for(const operation of [()=>reader.members('/never-created'),()=>reader.children('/never-created'),()=>reader.charge('/never-created')])
+    assert.throws(operation,error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes('/never-created'));
+  for(const code of ['ENODEV','ENOENT','ESRCH']){
+    f.fail('/never-created','stat',code);
+    assert.throws(()=>reader.members('/never-created'),error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes(code));
+  }
+});
+
+test('retained root samples finish on departure and preserve other instrument failures',t=>{
+  const f=cgroupFiles(),reader=new CgroupObservations(f.files),env=ownMemory(testScratch(t,'retained-departure'));
+  const host={...hostObservations(env),cgroupCharge:(group:string,inode?:string)=>reader.charge(group,inode),cgroupMembers:(group:string,inode?:string)=>reader.members(group,inode)};
+  const ref={path:f.child,inode:f.child};
+  assert.equal(retainedCgroupCharge(host,ref),123);assert.deepEqual(retainedCgroupMembers(host,ref),[12]);
+  f.fail(f.child,'stat','ENODEV');assert.equal(retainedCgroupCharge(host,ref),0);assert.deepEqual(retainedCgroupMembers(host,ref),[]);
+  f.fail(f.child,'stat','EIO');assert.throws(()=>retainedCgroupCharge(host,ref),/stat.*EIO/);
+});
+
+test('a growth rejection reports its full stack and cause before stopping the run',()=>{
+  const cause=Object.assign(Error('supplied EIO read'),{code:'EIO'}),failure=new HostObservationError('named observation failed',{cause});
+  const lines:string[]=[],stops:string[]=[];
+  reportMemoryFailure(failure,line=>lines.push(line),reason=>stops.push(reason));
+  assert.deepEqual(lines,[failure.stack,cause.stack]);assert.deepEqual(stops,['memory: named observation failed']);
+  assert.match(lines.join('\n'),/host-observations.test.ts/);
+});
+
+test('a live child scope exits between samples without changing its completed verdict',async t=>{
+  const root=testScratch(t,'membership-live-departure'),ready=join(root,'ready'),release=join(root,'release');
+  const env=fixtureEnvironment(t,ownMemory(join(root,'memory'),{resident:{kind:'live'},scopePeak:{kind:'live'}}));
+  const host=hostObservations(env),run=new MemoryRun({id:'membership-departure',budgetBytes:256*2**20});
+  const worker=run.worker('owned',256*2**20);
+  const scope=worker.scope(process.execPath,['--input-type=module','-e',`
+import {existsSync,watch} from 'node:fs';
+import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
+const stop=()=>{if(existsSync(${JSON.stringify(release)})){watcher.close();}};
+const watcher=watch(${JSON.stringify(root)},stop);durableRecord(${JSON.stringify(ready)},{pid:process.pid});stop();
+`],env);
+  const child=spawn('systemd-run',scope.argv,{env:scope.env,stdio:['ignore','pipe','pipe']});
+  let output='',ended=false;
+  child.stdout.on('data',part=>{output+=part;});child.stderr.on('data',part=>{output+=part;});
+  const closed=new Promise<[number|null,NodeJS.Signals|null]>((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>{ended=true;resolve([code,signal]);});});
+  try{
+    await waitFor('the live scope readiness',()=>existsSync(ready),{stopped:()=>ended?output||'worker exited':undefined});
+    const pid=(JSON.parse(readFileSync(ready,'utf8')) as {pid:number}).pid;
+    assert.ok(host.cgroupMembers(run.group).includes(pid));host.cgroupCharge(worker.group);
+    writeFileSync(release,'');assert.deepEqual(await closed,[0,null],output);
+    worker.close();
+    assert.throws(()=>host.cgroupCharge(worker.group),CgroupDeparted);
+    assert.throws(()=>host.cgroupMembers(worker.group),CgroupDeparted);
+    assert.ok(!host.cgroupMembers(run.group).includes(pid));assert.ok(host.cgroupCharge(run.group)>=0);
+    assert.throws(()=>host.cgroupMembers(run.group+'/never-created'),error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted));
+  }finally{worker.close();run.close();await closed;}
+});
+
+
+test('physical acquisition never supplies an undeclared fixed membership observation',async t=>{
+  const root=testScratch(t,'acquired-members'),env=ownMemory(root),host=hostObservations(env);
+  const run=new MemoryRun({budgetBytes:128*2**20,id:'members-acquisition'});
+  t.after(async()=>{run.close();await run.closed;});
+  assert.throws(()=>host.cgroupMembers(run.group),/host observation resident.members has no cgroup/);
+  const held=await reserve({bytes:1,what:'acquired members control',owner:{cgroup:run.group}},{env});
+  t.after(async()=>{held.release();await held.closed;});
+  const ref=readLedger(env.NTS_MEMORY_LEDGER).admitted.find(entry=>entry.id===held.id)!.measure.cgroup!;
+  assert.equal(ref.path,run.group);assert.ok(ref.inode);
+  assert.throws(()=>host.cgroupMembers(run.group),/host observation resident.members has no cgroup/);
+  assert.throws(()=>hostObservations(env).cgroupMembers(run.group),/host observation resident.members has no cgroup/,'acquisition provenance does not supply membership to a new sampler');
+  const child=spawnSync(process.execPath,['--input-type=module','-e',`import {hostObservations} from ${JSON.stringify(new URL('./host-observations.ts',import.meta.url).href)};console.log(JSON.stringify(hostObservations().cgroupMembers(${JSON.stringify(run.group)})));`],{env:{[HOST_OBSERVATIONS]:env.NTS_HOST_OBSERVATIONS},encoding:'utf8'});
+  assert.notEqual(child.status,0);assert.match(child.stderr,/host observation resident.members has no cgroup/);
+  ownMemory(root,{resident:{kind:'fixed',defaultBytes:0,members:{[run.group]:[process.pid]}}});
+  assert.deepEqual(host.cgroupMembers(run.group),[process.pid],'only the declared per-group row supplies membership');
+  assert.throws(()=>host.cgroupMembers('/unexpected'),/host observation resident.members has no cgroup \/unexpected/);
+});
+
+test('tree plus cgroup accounting refuses an omitted membership observation',t=>{
+  const root=testScratch(t,'members-omitted'),group='/owned',host=hostObservations(ownMemory(root,{resident:{kind:'fixed',defaultBytes:0,cgroups:{[group]:123},processes:{[process.pid]:45}}}));
+  const entry={owner:{pid:process.pid},measure:{tree:true,cgroup:{path:group,inode:'retained'}}} as LedgerEntry;
+  assert.throws(()=>entryUsage(entry,{host}),/host observation resident.members has no cgroup \/owned/);
 });

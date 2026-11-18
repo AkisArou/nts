@@ -1,4 +1,5 @@
 // Observations only: none of these values participates in admission or verdicts.
+import {hostObservations,sampleCgroup,type RetainedCgroup,type HostObservations} from './host-observations.ts';
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {prepareChildObserver} from './child-rusage.ts';
@@ -25,13 +26,10 @@ export type Check = { project: string; binary_sha: string; observation?:string;p
 export type TimedStep = { name: string; started_at?: string; wall?: number; cpu?:number;cpu_measure?:string;memory?: { reserved_bytes?: number } };
 let aggregateCounter = 0;
 
-export function recordAggregatePeak(group: string, scopeBudgetBytes: number, env: NodeJS.ProcessEnv = process.env): void {
+export function recordAggregatePeak(scope: RetainedCgroup, scopeBudgetBytes: number, env: NodeJS.ProcessEnv = process.env, host?:HostObservations): void {
   if (!env.NTS_GATE_CASE_COSTS_DIR || !env.NTS_GATE_STEP) return;
-  let peak: number | null = null;
-  try {
-    const text = readFileSync(join("/sys/fs/cgroup", group, "memory.peak"), "utf8").trim();
-    if (/^\d+$/.test(text)) peak = peakRss(Number(text));
-  } catch { /* Unsupported or unreadable observations remain unknown. */ }
+  const group=scope.path;
+  const peak = sampleCgroup(group,()=>(host??hostObservations(env)).cgroupMemoryPeak(group,scope.inode),null);
   try {
     appendFileSync(join(env.NTS_GATE_CASE_COSTS_DIR, `aggregate-${process.pid}-${aggregateCounter++}.jsonl`), JSON.stringify({
       event: "aggregate.peak", epoch: Date.now() / 1000, pid: process.pid, step: env.NTS_GATE_STEP,

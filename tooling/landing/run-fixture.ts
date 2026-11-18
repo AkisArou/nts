@@ -1,3 +1,4 @@
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Running a landing's steps: the build first, the rest through the gate's own
@@ -76,6 +77,7 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: tree, encoding: "utf8", env: { ...fixtureEnvironment(t), GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
   const commit = git("rev-parse", "HEAD");
   const memory = ownMemory(join(own, "memory"));
+  declareOwnMembers(memory,[process.pid]);
   const build = join(own, "build.sh");
   writeFileSync(build, `#!/bin/sh\n[ "$(cat ${JSON.stringify(join(controls, "build"))} 2>/dev/null)" = fail ] && { echo "error[E0308]: mismatched types"; exit 101; }\nmkdir -p "$CARGO_TARGET_DIR/${PROFILE}" && echo "nts $CARGO_INCREMENTAL" > "$CARGO_TARGET_DIR/${PROFILE}/nts" && chmod +x "$CARGO_TARGET_DIR/${PROFILE}/nts"\necho "   Compiling nts-core"\n`);
   chmodSync(build, 0o755);

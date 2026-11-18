@@ -1,3 +1,4 @@
+import {declareOwnMembers} from './test-cgroup-members.ts';
 import assert from 'node:assert/strict';
 import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -12,6 +13,7 @@ import {spawnTest} from './test-wait.ts';
 test('release records its final peak and returns memory synchronously, then the sampler acknowledges and exits',async t=>{
  const root=newTestScratch('sampler-close');t.after(()=>rmSync(root,{recursive:true,force:true}));
  const owned=ownMemory(join(root,'machine'),{resident:{kind:'fixed',defaultBytes:160*2**20}}),env:NodeJS.ProcessEnv={...fixtureEnvironment(t),...owned};
+ declareOwnMembers(env,[process.pid]);
  delete env.NTS_MEMORY_RESERVATION;
  const held=await reserveJob({key:'sampler-close',what:'sampler close control'},{env,report:()=>{}});
  t.after(async()=>{held.release();await held.closed;});
@@ -30,7 +32,7 @@ test('a file-backed sampler owns its execution flags independently of an eval pa
  for(const [index,flags] of variants.entries())await t.test(flags.join(' '),context=>{
   const owned=ownMemory(join(root,String(index)),{resident:{kind:'fixed',defaultBytes:160*2**20}}),env:NodeJS.ProcessEnv={...fixtureEnvironment(context),...owned};
   delete env.NTS_MEMORY_RESERVATION;
-  const code=`(async()=>{const {reserveJob}=await import(${JSON.stringify(new URL('./memory-ledger.ts',import.meta.url).href)});const held=await reserveJob({key:'sampler-flags',what:'sampler execution flag control'});held.release();await held.closed;console.log('sampler drained');})().catch(error=>{console.error(error);process.exitCode=1;});`;
+  const code=`(async()=>{const {declareOwnMembers}=await import(${JSON.stringify(new URL('./test-cgroup-members.ts',import.meta.url).href)});declareOwnMembers(process.env,[process.pid]);const {reserveJob}=await import(${JSON.stringify(new URL('./memory-ledger.ts',import.meta.url).href)});const held=await reserveJob({key:'sampler-flags',what:'sampler execution flag control'});held.release();await held.closed;console.log('sampler drained');})().catch(error=>{console.error(error);process.exitCode=1;});`;
   const result=spawnTest(process.execPath,[...flags,'-e',code],{env,encoding:'utf8'});
   assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/sampler drained/);
  });
