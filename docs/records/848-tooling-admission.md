@@ -205,7 +205,7 @@ Collector-only time is the last source-test completion in the production timing 
 Whole median: 0.8874; every pair <=1.05: True.
 Collector median: 1.1008; every collector ratio <=1.05: False.
 
-The whole-step median is below 1.0, but this does not satisfy the performance requirement: collector-only time regressed, with median ratio 1.1008 and worst pair 1.1785. Moving the old serial selector tail into the pool accounts for the whole-step improvement. The raw queue and file timelines identify memory admission as the collector bottleneck. In pair 1, growth waited for 362 of 383 seconds, while the measured ledger peak was 10.4 GiB and reservations reached 21 GiB. Only about seven files ran together during seconds 20–100, against 28.9 before; the 24-token ceiling was not binding. Longest-first dispatch clustered the 2–3 GiB leases, and tooling's serialized acquire hid fitting lighter files behind a blocked heavy request. Those files' individual peak phases did not coincide. The duplicate-process counterfactual above isolates process startup savings; it does not excuse this separate admission regression.
+The whole-step median is below 1.0, while collector-only time regressed, with median ratio 1.1008 and worst pair 1.1785. Moving the old serial selector tail into the pool accounts for the whole-step improvement. The raw queue and file timelines identify memory admission as the collector bottleneck. In pair 1, growth waited for 362 of 383 seconds, while the measured ledger peak was 10.4 GiB and reservations reached 21 GiB. Only about seven files ran together during seconds 20–100, against 28.9 before; the 24-token ceiling was not binding. Longest-first dispatch clustered the 2–3 GiB leases, and tooling's serialized acquire hid fitting lighter files behind a blocked heavy request. Those files' individual peak phases did not coincide. The duplicate-process counterfactual above isolates process startup savings; it does not excuse this separate admission regression.
 
 Median tooling ledger peak fell from 15.314 to 10.429 GiB; median scope CPU was 5636.368 versus 4929.452 seconds. Growth waits in the table overlap already executing files; they are not a whole-step wait before entry.
 
@@ -243,3 +243,78 @@ These are maxima across the five arms on each side, including each source proces
 - `/home/akisarou/.cache/nts-scratch/848/pairs-single-entry-52f6/sha256.txt`; SHA-256 `cca4e53a856087639a4fb9f72c1cd0df95454161e89634b7a05bbd7cbbc99147`.
 - `/home/akisarou/.cache/nts-scratch/848/pairs-single-entry-52f6/accounting.json`; SHA-256 `b9042916ec2c501f0a9e460cf726ce71d18000090ad788f5cfae82e613a20e38`.
 - `/home/akisarou/.cache/nts-scratch/848/pairs-single-entry-52f6/accounting.sha256`; SHA-256 `23ad67dd46b8b9cc5515a389f05a7c8e6c7d942e02e255881de167d4c6423b7e`.
+
+## Review revision: bounded fitting backfill
+
+Executable commit `ffbb588e60ca5d6b801d9ef0813d9c755de26e1f` removes tooling's serialized acquire wrapper. The shared token pool sees concurrent file requests and can admit fitting work. Each waiting request permits at most one cohort of later grants: the held plus free pool token count when it begins waiting. That allowance is fixed; after it is spent the request is a barrier until admitted or withdrawn. Running cases still finish and release their leases. Machine-ledger priority and arrival order remain with the ledger.
+
+The production constructor remains `run.mjs`. Its clients include census definitions, test262 and TypeScript oracles; differential agree and check-consumers; conformance blockers, integrity, C compilation, assembly, JVM verification and type checks; benchmark recording, compile-time and the shell token command. Existing token, admission, verifier, integrity, blockers and census memory/readiness/policy controls pass unchanged. There are 119 unique focused assertions across eleven files; the final token-lease rerun passes all 15 assertions. Strict types and the host audit pass. Private module-closure counterfactuals fail as expected: strict FIFO leaves admitted memory idle, and removing the backfill bound starves the waiting head under a continuing light stream. Supplied ledger observations prove that pool backfill cannot move growth past higher-priority or earlier ledger work. A refused oversized head preserves its name, and draining or withdrawing a barrier restores progress.
+
+`inner.ts --no-agree` passes formatting, Clippy, build and 664 Rust/backend tests; the test phase takes 268 seconds. The controls and inner raw-output manifest is `/home/akisarou/.cache/nts-scratch/848/backfill-controls.sha256`, SHA-256 `f6fedb85f22d658c1d48dd124cddd05087e91620005e16684c48e196a13f918c`.
+
+`check.ts --here` on that executable commit passes all 20 selected steps. Tooling takes 610.252 seconds, with an 11.586 GiB ledger peak and 14.650 GiB scope peak. All 337 entries complete. Its raw output is retained in `/home/akisarou/.cache/nts-scratch/848/here-backfill-ffbb`, with the `sha256.txt` manifest and `proof-summary.json`.
+
+## Remaining per-file footprint cost
+
+Bounded fitting backfill removes tooling's head-blocking wrapper and bounds starvation. The remaining collector regression is the separate heavy-file footprint issue #857. Each file honestly reserves its measured peak through its whole lifetime: the selector forecast is 4.15 GiB and several other files reserve about 3.1 GiB. In the first new idle pair, summed reservations reach 21 GiB against a 9.609 GiB measured ledger peak; growth waits overlap execution for 377.506 seconds. Sampled concurrency in seconds 20–100 is 9.0 entries versus 28.88 before. The collector-only ratio is 1.1227. These observations are a regression, not a performance pass. The #848 criterion is the card's idle whole-tooling-step wall time; the selector and all test files are included in that comparison.
+
+The before arm remains `39f4978a723067b4f99b6639aa8967551a4827bc`, admitted from an empty private scheduling history solely to bypass its whole-step reservation; execution is unchanged. The after arm uses a copy of normal warmed history. These are measurement runs, separate from landing evidence. Each arm has its own named unit and external `/proc` sampler on CPUs 0–3,6–31. Start/end status, load, available memory, service/process inventory, per-file RSS and concurrency are retained.
+
+#842's two Cargo-layout assertions are known baseline failures; the stack includes its signed-off `9f618231afa6f60fd3e73d14a2cbcf94cce59e5e` separately. #856's stopped-exec-environment receipt assertion can fail in either arm under load. Its raw FAIL verdict is retained per arm. The resumed measurement harness permits only those named assertions, rejects unknown failures, and requires all 330 baseline collector rows plus its successful serial self-test, and all 337 after entries. No incomplete or duplicate inventory can contribute a timing ratio.
+
+## Five idle pairs with bounded backfill
+
+before admitted from an empty private history to bypass the whole-step reservation; execution unchanged; after uses the normal warmed history copied after its green --here. Measurement only.
+
+| Pair | Whole s B/A | Whole ratio | Collector s B/A | Collector ratio | Load B/A | Ledger available GiB B/A | Ledger peak GiB B/A | Max reservation GiB B/A | Wait s B/A |
+|---|---|---:|---|---:|---|---|---|---|---|
+| 1 | 424.378/408.399 | 0.9623 | 340.7/382.5 | 1.1227 | 4.25/3.52 | 23.40/23.00 | 15.598/9.609 | 19.000/21.000 | 0.042/377.506 |
+| 2 | 430.437/418.839 | 0.9731 | 346.4/385.8 | 1.1137 | 0.35/3.70 | 22.70/22.40 | 15.406/9.242 | 19.000/20.000 | 0.038/381.106 |
+| 3 | 438.647/405.021 | 0.9233 | 354.7/382.8 | 1.0792 | 12.02/3.44 | 22.50/22.80 | 15.714/9.168 | 19.000/21.000 | 0.055/377.741 |
+| 4 | 431.995/400.410 | 0.9269 | 347.6/376.2 | 1.0823 | 16.28/5.55 | 22.70/22.60 | 15.812/9.442 | 19.000/21.000 | 0.045/371.929 |
+| 5 | 425.979/405.042 | 0.9508 | 341.9/380.2 | 1.1120 | 14.08/3.13 | 22.80/23.10 | 15.721/9.962 | 19.000/21.000 | 0.117/373.894 |
+
+Whole median: 0.9508; every pair <=1.05: True.
+Collector median: 1.1120; every collector ratio <=1.05: False.
+
+All five after arms complete all 337 entries. Every baseline retains #842 and #856 failures; every after arm retains only #856. Each baseline serial self-test completes. Median ledger peak falls from 15.714 to 9.442 GiB; the whole-step median ratio is 0.95085 and the worst ratio is 0.97306. The idle wall-time criterion passes. Collector-only median ratio is 1.11202, a regression tracked by #857.
+
+| Arm | Source | Own RSS GiB | Tree RSS GiB |
+|---|---|---:|---:|
+| before | `tooling/gate/owed.test.mjs` | 2.536 | 3.055 |
+| before | `tooling/config/workspace-project.test.ts` | 0.081 | 2.632 |
+| before | `tooling/gate/accepted-revision-data.test.ts` | 2.446 | 2.581 |
+| before | `tooling/gate/oracle-record-owed.test.ts` | 2.430 | 2.556 |
+| before | `tooling/landing/selection.test.ts` | 2.426 | 2.521 |
+| after | `tooling/config/workspace-project.test.ts` | 0.093 | 2.583 |
+| after | `tooling/gate/owed.test.mjs` | 2.403 | 2.573 |
+| after | `tooling/gate/owed.mjs` | 2.328 | 2.512 |
+| after | `tooling/gate/oracle-record-owed.test.ts` | 2.336 | 2.498 |
+| after | `tooling/gate/precise-changes.test.ts` | 2.338 | 2.491 |
+
+These external `/proc` RSS maxima include rooted descendants; shared pages may be counted more than once. Independent fixture services are included in the authoritative per-file cgroup peak, rather than process ancestry. The sampler can observe nested source processes as well as admitted entries.
+
+## Controlled ordinary-agent-job arm
+
+One real agent job reserves and touches 4 GiB, retaining that allocation while a single CPU-bound SHA-256 loop runs. The same PID and cgroup remain live at 4.0 GiB in all four start/end snapshots across the two arms. Its affinity excludes CPUs 4–5. The job runs from an immutable module-closure copy outside tree 10, so source switches cannot change it. It is stopped by its named unit after both arms drain. `agent-condition-verified.json` retains the readiness and four ledger lines.
+
+before admitted from an empty private history to bypass the whole-step reservation; execution unchanged; after uses the normal warmed history copied after its green --here. Measurement only.
+
+| Pair | Whole s B/A | Whole ratio | Collector s B/A | Collector ratio | Load B/A | Ledger available GiB B/A | Ledger peak GiB B/A | Max reservation GiB B/A | Wait s B/A |
+|---|---|---:|---|---:|---|---|---|---|---|
+| 1 | 448.806/441.651 | 0.9841 | 362.9/441.5 | 1.2166 | 5.56/4.96 | 19.30/19.40 | 16.183/8.668 | 15.000/17.000 | 326.623/436.102 |
+
+Whole median: 0.9841; every pair <=1.05: True.
+Collector median: 1.2166; every collector ratio <=1.05: False.
+
+Both arms finish beside the real job. The whole-step ratio is 0.98406; the collector-only ratio is 1.21659, a regression under the same per-file footprint constraint tracked by #857. This is one controlled pair, separate from the five idle pairs. The baseline still uses its empty private history solely for measurement. Its growth waits while it executes, and it can hold more than its reservation; neither top-level tooling arm nor the controlled job is OOM-killed or stopped by its budget. Both complete their full entry sets, with the known #842/#856 outcomes retained.
+
+## Bounded-backfill raw evidence
+
+All raw/source hashes in these manifests were checked against their current bytes. The manifests cover summaries, full logs, per-file RSS samples, start/end machine conditions, timing and case histories, controller sources and the controlled job. The idle derived accounting also names every sampled file and its peak RSS.
+
+- Green landing proof: `/home/akisarou/.cache/nts-scratch/848/here-backfill-ffbb/sha256.txt`, SHA-256 `2b36703ab8350dc08df2ea37d11edf8b5647eda6e4075106443c6273f60fbaac`.
+- Five idle pairs: `/home/akisarou/.cache/nts-scratch/848/pairs-backfill-idle-ffbb588e60/sha256.txt`, SHA-256 `79a739e0325eef41c40a25339eea1967691bc3822510d2f323800b6736e677d0`.
+- Controlled 4 GiB-job pair: `/home/akisarou/.cache/nts-scratch/848/pairs-backfill-agent-ffbb588e60/sha256.txt`, SHA-256 `8d03b355c2112f8941a8ab488cc7512ce576048131af6734b1c2323e07d38737`.
+
+The per-arm `comparison.json` retains each known failure and raw-log line. For example, #856 occurs at `pairs-backfill-idle-ffbb588e60/1-before/environment/tooling-tests.raw.log:2031` and `1-after/environment/tooling-tests.raw.log:1957`, under the scratch root above. Every idle and controlled baseline retains the two #842 assertions and #856; every after arm retains only #856. The green `--here` run has neither failure.
