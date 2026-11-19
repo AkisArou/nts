@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { pinnedComparators, sha256, type Pins } from "./comparator-pins.ts";
 import { typedTimer } from "./typed-timer.ts";
 import { absent } from "./run-producers.ts";
-import { COLUMNS, COMPARATORS, type Cell, type Comparator, type Json } from "./run-record.ts";
+import { COMPARATORS, SESSION_COLUMNS, type Cell, type Comparator, type Json } from "./run-record.ts";
 import { buildLauncher, launchEnvironment, launchSitting, type Launcher } from "./launcher.ts";
 import { LAUNCH_COUNT, LAUNCH_KIND, LAUNCH_WARMUPS, launchCell, launchSummary } from "./launch-cell.ts";
 import { gitArguments } from "../gate/git-arguments/main.ts";
@@ -479,8 +479,9 @@ export async function launchColumns(root: string, name: string, out: string, nts
   mkdirSync(directory, { recursive: true });
   const entry = join(root, "benchmarks/cases", name, "case.ts");
   const nts = ntsIdentity(root, ntsBinary, commit);
-  const cells: Record<string, Cell> = Object.fromEntries(COLUMNS.map((column) => [column,
+  const cells: Record<string, Cell> = Object.fromEntries(SESSION_COLUMNS.map((column) => [column,
     column === "nts JVM" ? absent("NOT_RUN", "Startup rows measure native executables and the engines; the JVM's launch is not in this group")
+      : column === "nts f64" ? absent("NOT_RUN", "The unspecialized control prices number specialization in throughput; a launch row has no such build")
       : column === "C++" || column === "Java" ? absent("NOT_PROVIDED", "No hand-written reference for a launch case")
         : absent("NOT_PROVIDED", "Pinned comparator artifact is not installed")]));
   const columns: { column: string; argv: string[]; extra: Record<string, Json> }[] = [];

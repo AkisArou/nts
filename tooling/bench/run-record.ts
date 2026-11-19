@@ -29,6 +29,8 @@ export type Backend = (typeof BACKENDS)[number];
 export const REFERENCES = ["C++", "Java"] as const;
 export type Reference = (typeof REFERENCES)[number];
 export const COLUMNS = [...BACKENDS, ...REFERENCES, ...COMPARATORS] as const;
+/** What an nts-bench session records: the standing columns and the unspecialized control. */
+export const SESSION_COLUMNS = [...COLUMNS, "nts f64"] as const;
 export const POLICY = { version: 1, authority: "docs/README.md#the-bar" } as const;
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Comparator = (typeof COMPARATORS)[number];

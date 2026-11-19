@@ -10,7 +10,7 @@ import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { fileURLToPath } from "node:url";
 import { hostname, cpus } from "node:os";
 import {
-  COLUMNS,
+  SESSION_COLUMNS,
   consoleHeader,
   consoleRow,
   POLICY,
@@ -94,7 +94,7 @@ export function begin(root: string, binary: string, compilerCommit: string): Met
     finishedAt: null,
     complete: false,
     inventory,
-    columns: [...COLUMNS, "nts f64"],
+    columns: [...SESSION_COLUMNS],
     sourceCommit: commit,
     compiler: { commit: compilerCommit, sha256: sha256(binary) },
     harness: { identity, contract: "opaque-bit-input-v1", files },

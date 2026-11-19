@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { COLUMNS, COMPARATORS, POLICY, ownBest, readRuns, renderFull, sealRun, type Cell, type Json, type RunRecord } from "./run-record.ts";
+import { COLUMNS, COMPARATORS, POLICY, SESSION_COLUMNS, ownBest, readRuns, renderFull, sealRun, type Cell, type Json, type RunRecord } from "./run-record.ts";
 import { fromNts, type Metadata } from "./run-producers.ts";
 import {
   LAUNCH_COUNT, LAUNCH_PROTOCOL, LAUNCH_WARMUPS, checkLaunchCell, comparableColdStartups, coldStartupProtocol,
@@ -133,7 +133,7 @@ test("cold-startup details compare only under one named protocol; legacy details
 function meta(): Metadata {
   return {
     schemaVersion: 1, id: `2026-11-19-${pin}-producer`, startedAt: null, finishedAt: null, complete: true, inventory: ["startup-hello"],
-    columns: [...COLUMNS], sourceCommit: pin, compiler: { commit: pin, sha256: digest },
+    columns: [...SESSION_COLUMNS], sourceCommit: pin, compiler: { commit: pin, sha256: digest },
     harness: { identity: digest, contract: "opaque-bit-input-v1", files: [] }, machine: { identity: "test", conditions: null },
     comparators: Object.fromEntries(COMPARATORS.map((c) => [c, null])) as RunRecord["comparators"], verdictPolicy: POLICY, provenance: null,
   };
@@ -144,7 +144,7 @@ function launchRaw(cells: Record<string, Cell>) {
     measured: [{ shown: "startup-hello", workload: { roots: ["module__init"], numeric: null }, source_capture: null,
       results: [null, null, null, null, null, null], absences: { outcomes: {} }, node: null, bun: null,
       launch: { kind: "launch", floor: { median: 300 }, provenance: { protocol: LAUNCH_PROTOCOL },
-        cells: Object.fromEntries(COLUMNS.map((column) => [column, cells[column] ?? absent("NOT_PROVIDED", "No hand-written reference for a launch case")])) } }],
+        cells: Object.fromEntries(SESSION_COLUMNS.map((column) => [column, cells[column] ?? absent("NOT_PROVIDED", "No hand-written reference for a launch case")])) } }],
   };
 }
 
@@ -154,6 +154,11 @@ test("the producer keeps a launch row's cells: an abort stays ABORTED, and outpu
   assert.equal(row.kind, "launch");
   assert.equal(row.cells["nts C"]!.status, "ABORTED");
   assert.equal(row.cells["nts LLVM"]!.status, "OK");
+  // Every session column is the launch row's own: a column it omits is refused, not filled in.
+  const { "nts f64": _omitted, ...short } = launchRaw({ node: cellOf(40_000) }).measured[0]!.launch.cells;
+  const omitting = launchRaw({});
+  omitting.measured[0]!.launch.cells = short as typeof omitting.measured[0]["launch"]["cells"];
+  assert.throws(() => fromNts(meta(), omitting), /launch row omits column nts f64/);
   assert.deepEqual((row.conditions as Record<string, Json>).launchFloor, { median: 300 });
   const wrong = launchCell({ ...details(380, (l) => { for (const one of l) one.stdoutSha256 = other; }), warmups: [], stdoutSha256: other }, {}, "");
   assert.equal(wrong.status, "OK");
