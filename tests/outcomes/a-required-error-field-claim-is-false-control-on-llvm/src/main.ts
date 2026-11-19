@@ -2,10 +2,12 @@
 // backend: llvm
 
 // The required Error.code claim is false after the stored callback throws.
-// A separate generic-method closure is deliberately refused: main then loses
-// the subscriber's handler, while 3(b)'s repair reaches the false field claim.
-// The sibling control removes only the subscriber's throw, keeping that
-// unrelated refusal and the same claim body without entering it.
+// A separate generic-method closure was refused until #843, and its refusal
+// turned off the program's closure raising gate: main then lost the
+// subscriber's handler, while 3(b)'s repair reached the false field claim.
+// Since #843 that closure compiles (`Picker#pick<f64>`), the gate stays on,
+// and the claim is still false on its own. The sibling control removes only
+// the subscriber's throw, keeping the same claim body without entering it.
 
 class Picker { pick<T>(value:T):T { throw value; } }
 const unrelated=(n:number)=>new Picker().pick(n);
