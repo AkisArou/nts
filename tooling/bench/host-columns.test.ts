@@ -117,10 +117,10 @@ test("launch rows refuse an nts that is missing or linked before its sources' la
   const dir = testScratch(t, "nts-identity"), root = fileURLToPath(new URL("../..", import.meta.url));
   const commit = execFileSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).trim();
   const nts = join(dir, "nts");
-  assert.throws(() => ntsIdentity(root, nts, commit), /does not exist/);
+  assert.throws(() => ntsIdentity(nts, root, commit), /does not exist/);
   copyFileSync("/bin/true", nts);
   utimesSync(nts, new Date("2000-01-01T00:00:00Z"), new Date("2000-01-01T00:00:00Z"));
-  assert.throws(() => ntsIdentity(root, nts, commit), /linked before .* the last change to its sources/);
+  assert.throws(() => ntsIdentity(nts, root, commit), /linked before .* the last change to its sources/);
   utimesSync(nts, new Date(), new Date());
-  assert.equal(ntsIdentity(root, nts, commit).binary, nts);
+  assert.equal(ntsIdentity(nts, root, commit).binary, nts);
 });

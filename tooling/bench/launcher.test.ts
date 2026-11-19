@@ -1,21 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { testScratch } from "../gate/test-scratch.ts";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
+import { launchCpu } from "./host-columns.ts";
 import { buildLauncher, environmentDigest, launchEnvironment, launchSitting, parseLaunches, type LaunchRequest } from "./launcher.ts";
 
-/** Any CPU a test may use: the timer itself is pinned to it, never to the measurement pair. */
-function testCpu(): number {
-  const allowed = /^Cpus_allowed_list:\s*(\S+)/m.exec(readFileSync("/proc/self/status", "utf8"))![1]!;
-  for (const part of allowed.split(",")) {
-    const [a, b = a] = part.split("-").map(Number) as [number, number?];
-    for (let cpu = a; cpu <= b!; cpu++) if (cpu !== 4 && cpu !== 5) return cpu;
-  }
-  throw new Error("no CPU outside the measurement pair");
-}
+/** Any CPU a test may use (none of the measurement pair outside the lock): the timer itself is pinned to it. */
+const testCpu = (): number => launchCpu();
 const sha256 = (text: string | Buffer) => createHash("sha256").update(text).digest("hex");
 
 function sitting(t: { after(fn: () => void): void }, columns: LaunchRequest["columns"], warmups = 1, launches = 3, bounds?: LaunchRequest["bounds"]) {

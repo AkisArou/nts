@@ -453,7 +453,7 @@ export const NTS_SOURCES = ["compiler", "runtime", "build", "tooling/cli", "Carg
  * The nts that builds launch rows: beside nts-bench, and not linked before the
  * last commit, up to the measured one, that changed what it is built from.
  */
-export function ntsIdentity(root: string, binary: string, commit: string): { binary: string; sha256: string; version: string } {
+export function ntsIdentity(binary: string, root: string, commit: string): { binary: string; sha256: string; version: string } {
   if (!existsSync(binary)) throw new ToolingInstrumentError("tooling-setup", `launch rows build with ${binary}, which does not exist; build the workspace with cargo build --release`);
   const changed = execFileSync("git", gitArguments(["log", "-1", "--format=%H %ct", commit, "--", ...NTS_SOURCES]), { cwd: root, encoding: "utf8" }).trim();
   const [source, committed] = changed.split(" ");
@@ -478,7 +478,7 @@ export async function launchColumns(root: string, name: string, out: string, nts
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
   const entry = join(root, "benchmarks/cases", name, "case.ts");
-  const nts = ntsIdentity(root, ntsBinary, commit);
+  const nts = ntsIdentity(ntsBinary, root, commit);
   const cells: Record<string, Cell> = Object.fromEntries(SESSION_COLUMNS.map((column) => [column,
     column === "nts JVM" ? absent("NOT_RUN", "Startup rows measure native executables and the engines; the JVM's launch is not in this group")
       : column === "nts f64" ? absent("NOT_RUN", "The unspecialized control prices number specialization in throughput; a launch row has no such build")
