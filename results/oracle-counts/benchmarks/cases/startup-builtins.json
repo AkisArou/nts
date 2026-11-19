@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/startup-builtins",
+  "rows": [
+    {
+      "kind": "no-oracle",
+      "source": "benchmarks/cases/startup-builtins/case.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "906393b12d7dd3c3d28e5d2acaa44f4989624a0560ca0cd0e7189d05efb11320",
+      "source_digest": "ba3dfef4c26956f32e3f55d7db3a0abb",
+      "reason": "a launch-to-exit row: a whole program with no exported workload; its stdout agrees with node's in its launch row (tooling/bench/README.md, \"Launch rows\")"
+    }
+  ]
+}
