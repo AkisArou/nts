@@ -5,7 +5,8 @@
 // roots (tooling/cli/source-roots.txt), whatever HEAD said at build time.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gitArguments } from "../gate/git-arguments/main.ts";
 import { fileInput } from "../gate/reader-inputs/main.ts";
@@ -14,8 +15,8 @@ import { ToolingInstrumentError } from "../gate/step-result.ts";
 export const SOURCE_ROOTS = fileInput(new URL("../cli/source-roots.txt", import.meta.url));
 export type SourceBinary = "nts" | "nts-bench";
 
-/** The roots one binary's digest covers, from the one list both build scripts read. */
-export function sourceRoots(binary: SourceBinary, text = readFileSync(fileURLToPath(SOURCE_ROOTS), "utf8")): string[] {
+/** The roots one binary's digest covers, from the one list both build scripts read; "pinned" names content-pinned reads. */
+export function sourceRoots(binary: SourceBinary | "pinned", text = readFileSync(fileURLToPath(SOURCE_ROOTS), "utf8")): string[] {
   const line = text.split("\n").find((entry) => entry.startsWith(binary + ":"));
   if (!line) throw new ToolingInstrumentError("tooling-setup", `tooling/cli/source-roots.txt names no roots for ${binary}`);
   return line.slice(binary.length + 1).trim().split(/\s+/);
@@ -61,4 +62,34 @@ export function requireSourceDigest(root: string, commit: string, binary: Source
   if (named !== expected)
     throw new ToolingInstrumentError("tooling-setup",
       `${what} was not built from ${commit.slice(0, 12)}'s sources (digest ${named.slice(0, 12)}, expected ${expected.slice(0, 12)}); commit and rebuild with cargo build --release`);
+}
+
+const within = (path: string, roots: readonly string[]) => roots.some((root) => path === root || path.startsWith(root + "/"));
+
+/**
+ * The repository files a binary's Cargo dep-info names that its digest does
+ * not cover: outside its roots and every pinned path. Dep-info lists what
+ * rustc and the build scripts read, by absolute path; the workspace is the
+ * directory of the Cargo.lock it names, and what the build wrote under
+ * `target/` is output, not source.
+ */
+export function uncoveredDepInfo(depInfo: string, binary: SourceBinary, text = readFileSync(fileURLToPath(SOURCE_ROOTS), "utf8")): string[] {
+  const colon = depInfo.search(/(?<!\\):\s/);
+  if (colon < 0) throw new ToolingInstrumentError("tooling-setup", "unreadable dep-info");
+  const paths = depInfo.slice(colon + 1).split("\n")[0]!.trim().split(/(?<!\\)\s+/).filter(Boolean).map((path) => normalize(path.replaceAll("\\ ", " ")));
+  const lock = paths.find((path) => path.endsWith(sep + "Cargo.lock"));
+  if (!lock) throw new ToolingInstrumentError("tooling-setup", "dep-info names no Cargo.lock, so its workspace is unknown");
+  const workspace = dirname(lock), roots = sourceRoots(binary, text), pinned = sourceRoots("pinned", text);
+  return [...new Set(paths.map((path) => relative(workspace, path).split(sep).join("/")))]
+    .filter((path) => !path.startsWith("../") && path !== ".." && !path.startsWith("target/"))
+    .filter((path) => !within(path, roots) && !within(path, pinned)).sort();
+}
+
+/** A binary's own dep-info (`<binary>.d` beside it) must name nothing its digest misses. */
+export function requireCoveredDepInfo(binary: string, which: SourceBinary): void {
+  const file = binary + ".d";
+  if (!existsSync(file)) throw new ToolingInstrumentError("tooling-setup", `${file} is missing: the dep-info Cargo writes beside ${which} says what its digest must cover`);
+  const uncovered = uncoveredDepInfo(readFileSync(file, "utf8"), which);
+  if (uncovered.length) throw new ToolingInstrumentError("tooling-setup",
+    `${which} reads files outside its source roots (tooling/cli/source-roots.txt): ${uncovered.slice(0, 8).join(", ")}${uncovered.length > 8 ? ", ..." : ""}`);
 }

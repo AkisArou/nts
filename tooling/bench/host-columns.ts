@@ -14,7 +14,7 @@ import { absent } from "./run-producers.ts";
 import { COMPARATORS, SESSION_COLUMNS, type Cell, type Comparator, type Json } from "./run-record.ts";
 import { buildLauncher, launchEnvironment, launchSitting, type Launcher } from "./launcher.ts";
 import { gitArguments } from "../gate/git-arguments/main.ts";
-import { requireSourceDigest } from "./source-identity.ts";
+import { requireCoveredDepInfo, requireSourceDigest } from "./source-identity.ts";
 import { LAUNCH_COUNT, LAUNCH_KIND, LAUNCH_WARMUPS, launchCell, launchSummary } from "./launch-cell.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
 import { optionalFile } from "../gate/reader-inputs/main.ts";
@@ -463,6 +463,7 @@ export function ntsIdentity(binary: string, root: string, commit: string): { bin
   if (version.status !== 0) throw new ToolingInstrumentError("tooling-setup", `${binary} version failed: ${version.stderr}`);
   const named = /^source digest ([0-9a-f]{64})$/m.exec(version.stdout)?.[1];
   if (!named) throw new ToolingInstrumentError("tooling-setup", `${binary} names no source digest; rebuild it with cargo build --release`);
+  requireCoveredDepInfo(binary, "nts");
   requireSourceDigest(root, commit, "nts", named, binary);
   return { binary, sha256: sha256(binary), version: version.stdout.trim(), sourceDigest: named };
 }
@@ -475,9 +476,10 @@ export function ntsIdentity(binary: string, root: string, commit: string): { bin
  * keep their reason; nothing here is a verdict (run-producers.ts and
  * run-record.ts decide those).
  */
-export async function launchColumns(root: string, name: string, out: string, ntsBinary: string): Promise<LaunchRow> {
-  // The run measures the checkout's HEAD, which run-session.ts's begin holds clean.
-  const commit = spawnSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).stdout.trim();
+export async function launchColumns(root: string, name: string, out: string, ntsBinary: string, commit: string): Promise<LaunchRow> {
+  // The session's commit, as begin recorded it; the checkout must still be it, clean.
+  const head = spawnSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).stdout.trim();
+  if (head !== commit) throw new ToolingInstrumentError("tooling-setup", `the checkout moved to ${head.slice(0, 12)} during a session measuring ${commit.slice(0, 12)}`);
   await reserveJob({ key: "bench-host-columns", what: `benchmark launch row for ${name}` });
   const pins = pinnedComparators(root), directory = join(out, name + ".launch");
   rmSync(directory, { recursive: true, force: true });
@@ -530,9 +532,9 @@ export async function launchColumns(root: string, name: string, out: string, nts
 }
 runAsCommand(import.meta.url,async()=>{
   if (process.argv[2] === "--launch") {
-    const [root, name, out, nts] = process.argv.slice(3);
-    assert.ok(root && name && out && nts, "host-columns.ts --launch <root> <case> <output> <nts>");
-    try { console.log(JSON.stringify(await launchColumns(root, name, out, nts))); }
+    const [root, name, out, nts, commit] = process.argv.slice(3);
+    assert.ok(root && name && out && nts && commit, "host-columns.ts --launch <root> <case> <output> <nts> <session commit>");
+    try { console.log(JSON.stringify(await launchColumns(root, name, out, nts, commit))); }
     catch(error) {
       if(!(error instanceof ToolingInstrumentError))throw error;
       console.error(error.message);process.exitCode=2;

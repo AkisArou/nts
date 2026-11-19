@@ -24,7 +24,7 @@ import { fromNts, type Metadata } from "./run-producers.ts";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
 import { groupRows, readBenchmarkGroups } from "./groups.ts";
 import { readJournal } from "./run-journal.ts";
-import { requireSourceDigest } from "./source-identity.ts";
+import { requireCoveredDepInfo, requireSourceDigest } from "./source-identity.ts";
 const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
 const CASES=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
 const COMMON=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/common/",import.meta.url))));
@@ -58,6 +58,7 @@ export function begin(root: string, binary: string, sourceDigest: string): Metad
     startedAt = new Date().toISOString();
   assert.match(sourceDigest, /^[a-f0-9]{64}$/, "nts-bench names no source digest; rebuild it");
   // nts-bench is the compiler this run records: exactly HEAD's sources under its roots.
+  requireCoveredDepInfo(binary, "nts-bench");
   requireSourceDigest(root, commit, "nts-bench", sourceDigest, "nts-bench");
   const compilerCommit = commit;
   const inventory = readdirSync(join(root, CASES), { withFileTypes: true })

@@ -6,7 +6,7 @@ import { stripTypeScriptTypes } from "node:module";
 import { parse } from "acorn";
 import { typedTimer } from "./typed-timer.ts";
 import { parseMeasurement, buildCommand, buildFailure, coldStartup, launchCpu, ntsIdentity } from "./host-columns.ts";
-import { chmodSync, utimesSync } from "node:fs";
+import { chmodSync, rmSync, utimesSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { gitArguments } from "../gate/git-arguments/main.ts";
@@ -120,16 +120,22 @@ test("launch rows refuse an nts that is missing or built from other sources than
   const head = git("rev-parse", "HEAD"), changed = git("log", "-1", "--format=%H", head, "--", "compiler");
   const nts = join(dir, "nts");
   assert.throws(() => ntsIdentity(nts, root, head), /does not exist/);
-  const built = (source: string) => {
+  const built = (source: string, depInfo: string | null = `${nts}: ${root}Cargo.lock ${root}compiler/core/src/lib.rs`) => {
     writeFileSync(nts, `#!/bin/sh\necho "nts 0.0.0"\n${source}\n`);
     chmodSync(nts, 0o755);
     utimesSync(nts, new Date(), new Date()); // a fresh copy, as the nightly's: the mtime decides nothing
+    if (depInfo === null) rmSync(nts + ".d", { force: true });
+    else writeFileSync(nts + ".d", depInfo + "\n");
   };
   built(`echo "source digest ${sourceDigest(root, `${changed}~1`, "nts")}"`);
   assert.throws(() => ntsIdentity(nts, root, head), /was not built from .*'s sources/);
   built("");
   assert.throws(() => ntsIdentity(nts, root, head), /names no source digest/);
   const digest = sourceDigest(root, head, "nts");
+  built(`echo "source digest ${digest}"`, null);
+  assert.throws(() => ntsIdentity(nts, root, head), /nts\.d is missing/);
+  built(`echo "source digest ${digest}"`, `${nts}: ${root}Cargo.lock ${root}docs/README.md`);
+  assert.throws(() => ntsIdentity(nts, root, head), /reads files outside its source roots .*docs\/README\.md/);
   built(`echo "source digest ${digest}"`);
   assert.equal(ntsIdentity(nts, root, head).sourceDigest, digest);
 });

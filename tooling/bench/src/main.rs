@@ -521,7 +521,7 @@ fn count_cases(
             continue;
         }
         let mut recorder = build::Recorder::new(&build_session);
-        let computed = run_case(root, case, out, Some(counting), &mut recorder);
+        let computed = run_case(root, case, out, Some(counting), None, &mut recorder);
         let Some(measured) = accept_build(name, computed, &mut row_failures, &mut failed)? else {
             continue;
         };
@@ -575,7 +575,14 @@ fn measure_cases(
         let before = results::conditions(root)?;
         let sibling = reserved::read().ok();
         let mut recorder = build::Recorder::new(&build_session);
-        let computed = run_case(root, case, out, None, &mut recorder);
+        let computed = run_case(
+            root,
+            case,
+            out,
+            None,
+            metadata["sourceCommit"].as_str(),
+            &mut recorder,
+        );
         builds.insert(name.to_owned(), recorder.finish());
         let late = early.is_none().then(|| sibling_busy(sibling)).flatten();
         disturbance_note(name, late.as_deref());
@@ -783,6 +790,7 @@ fn run_case(
     case: &Utf8Path,
     out: &Utf8Path,
     counting: Option<&Counting>,
+    session_commit: Option<&str>,
     builds: &mut build::Recorder<'_>,
 ) -> Result<Measurements> {
     let name = case.file_name().context("a case needs a name")?;
@@ -791,7 +799,7 @@ fn run_case(
             counting.is_none(),
             "{name} is a launch row: launch rows are timed under the measurement lock, never counted"
         );
-        return run_launch_case(root, case, out, name, builds);
+        return run_launch_case(root, case, out, name, session_commit, builds);
     }
     run_workload_case(root, case, out, name, counting, builds)
 }
@@ -952,6 +960,7 @@ fn run_launch_case(
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
+    session_commit: Option<&str>,
     builds: &mut build::Recorder<'_>,
 ) -> Result<Measurements> {
     let tsconfig = case_tsconfig(case, out, name)?;
@@ -967,6 +976,10 @@ fn run_launch_case(
         .arg("--launch")
         .args([root.as_str(), name, out.as_str()])
         .arg(&nts)
+        .arg(
+            session_commit
+                .context("a launch row is measured in a session, which names its commit")?,
+        )
         .current_dir(root)
         .output()
         .context("running the launch row")?;

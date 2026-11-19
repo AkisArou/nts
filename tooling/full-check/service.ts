@@ -962,9 +962,11 @@ function startBenchmarks(fx: Effects, state: State, verified: string): "waiting"
   try {
     copyFileSync(join(fx.layout.target, "release/nts-bench"), bench);
     chmodSync(bench, 0o755);
-    // Beside it, the nts its launch rows build with (`nts build`, tooling/bench/README.md "Launch rows").
+    // Beside it, the nts its launch rows build with (`nts build`, tooling/bench/README.md "Launch rows"),
+    // and each one's dep-info, which says what its source digest must cover.
     copyFileSync(join(fx.layout.target, "release/nts"), join(run, "nts"));
     chmodSync(join(run, "nts"), 0o755);
+    for (const binary of ["nts-bench", "nts"]) copyFileSync(join(fx.layout.target, `release/${binary}.d`), join(run, `${binary}.d`));
   } catch (error) {
     return endNight(fx, state, { commit: verified, at, run, result: `not run: the build at verified left no nts-bench and nts to measure with (${message(error)})`, outcome: "not-run" });
   }
@@ -1030,6 +1032,7 @@ async function followBenchmarks(fx: Effects, state: State): Promise<boolean> {
     // The run's copies of nts-bench and nts serve no unit now; its logs, outcome and record stay.
     rmSync(join(measuring.run, "nts-bench"), { force: true });
     rmSync(join(measuring.run, "nts"), { force: true });
+    for (const binary of ["nts-bench", "nts"]) rmSync(join(measuring.run, `${binary}.d`), { force: true });
     if (seen.state === "lost") {
       endNight(fx, state, { commit: measuring.commit, at: measuring.at, run: measuring.run, outcome: "interrupted",
         result: `${seen.why}, started ${measuring.job.starts} time(s); see ${join(measuring.run, BENCH_UNIT_LOG)}` });

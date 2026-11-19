@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { cargoSync } from "../gate/cargo.ts";
 import { gitArguments } from "../gate/git-arguments/main.ts";
 import { fixtureEnvironment } from "../gate/test-environment.ts";
-import { digestOf, sourceDigest, sourceRoots, type SourceBinary } from "./source-identity.ts";
+import { digestOf, sourceDigest, sourceRoots, uncoveredDepInfo, type SourceBinary } from "./source-identity.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const BINARIES: { binary: SourceBinary; crate: string }[] = [{ binary: "nts", crate: "nts-cli" }, { binary: "nts-bench", crate: "nts-bench" }];
@@ -69,4 +69,23 @@ test("a clean checkout's files on disk digest as its HEAD's blobs do, and any ed
   assert.equal(digestOf([{ path: "b", content: Buffer.from("2") }, { path: "a", content: Buffer.from("1") }]),
     createHash("sha256").update(`nts-source-v1\na\0${createHash("sha256").update("1").digest("hex")}\nb\0${createHash("sha256").update("2").digest("hex")}\n`).digest("hex"),
     "the format source_identity.rs states, in byte order of path");
+});
+
+test("every repository file a binary's dep-info names lies under its roots or a pinned path", () => {
+  const roots = readFileSync(join(root, "tooling/cli/source-roots.txt"), "utf8");
+  const info = (paths: string[]) => `${root}target/release/nts: ${paths.map((path) => root + path).join(" ")}\n`;
+  const read = ["Cargo.lock", "build/../.tool-versions", "build/../tooling/config/src/profiles/data.json", "build/../third_party/node-source/LICENSE",
+    "tooling/differential/src/../../../results/differential-call-costs/calibration.json", "compiler/frontend-tsrs/../../rust-toolchain.toml", "target/release/build/x/out/gen.rs"];
+  assert.deepEqual(uncoveredDepInfo(info(read), "nts", roots), [], "normalized, pinned and build output paths are covered or ignored");
+  // Control: the roots without the profiles directory miss the profile data nts build reads.
+  const without = roots.replace(" tooling/config/src/profiles", "");
+  assert.notEqual(without, roots);
+  assert.deepEqual(uncoveredDepInfo(info(read), "nts", without), ["tooling/config/src/profiles/data.json"]);
+  assert.deepEqual(uncoveredDepInfo(info(["Cargo.lock", "tooling/bootstrap/awfy.pin"]), "nts-bench", roots.replace(" tooling/bootstrap/awfy.pin", "")), ["tooling/bootstrap/awfy.pin"]);
+  assert.throws(() => uncoveredDepInfo("target/release/nts: /x/y.rs\n", "nts", roots), /names no Cargo.lock/);
+  // The tree's own builds, where they exist: what Cargo recorded for each binary.
+  for (const profile of ["nts-dev", "release"]) for (const { binary } of BINARIES) {
+    const file = join(root, "target", profile, binary + ".d");
+    if (existsSync(file)) assert.deepEqual(uncoveredDepInfo(readFileSync(file, "utf8"), binary), [], `${profile}/${binary}.d`);
+  }
 });

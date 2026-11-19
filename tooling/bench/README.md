@@ -55,8 +55,12 @@ marker is an error. The `startup` group's rows are launch rows.
   requires `nts-bench`'s, and a launch row the `nts` one `nts version` names,
   to equal the measured commit's (`source-identity.ts`). A commit that
   changes none of a binary's roots changes neither its digest nor its build.
-  Each root list covers its crate's Cargo path-dependency closure, which a
-  test checks against `cargo metadata`. Node and Bun JIT run `case.ts` itself with no
+  Every repository file Cargo's dep-info for a binary names (what rustc and
+  its build scripts read) must lie under its roots or a content-pinned path,
+  or the run refuses that binary; the nightly copies each binary's `.d`
+  beside it. A test also holds each list to its crate's `cargo metadata`
+  path-dependency closure. Each launch row is measured at the session's own
+  commit, and the record refuses one that was not. Node and Bun JIT run `case.ts` itself with no
   flags; Bun AOT and ScriptC are built from it as for throughput rows. nts JVM
   is `NOT_RUN` and C++ and Java `NOT_PROVIDED`, each with its reason. A cell's
   details name its recipe, command, artifact digest and argv.

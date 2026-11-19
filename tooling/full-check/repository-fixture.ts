@@ -83,6 +83,7 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
       mkdirSync(join(repo.layout.target, "release"), { recursive: true });
       writeFileSync(join(repo.layout.target, "release/nts"), `compiler at ${commit}\n`);
       writeFileSync(join(repo.layout.target, "release/nts-bench"), `nts-bench at ${commit}\n`);
+      for (const binary of ["nts", "nts-bench"]) writeFileSync(join(repo.layout.target, `release/${binary}.d`), `dep-info of ${binary} at ${commit}\n`);
       const run = join(repo.layout.runs, `${label}-${commit.slice(0, 12)}-${++runs}`);
       mkdirSync(run, { recursive: true });
       const red = files(commit, "RED"), heldAt = files(commit, "HELD");

@@ -147,7 +147,7 @@ function launchRaw(cells: Record<string, Cell>) {
   };
 }
 function launchFrame(cells: Record<string, Cell>) {
-  return { kind: "launch", floor: { median: 300 }, provenance: { protocol: LAUNCH_PROTOCOL },
+  return { kind: "launch", floor: { median: 300 }, provenance: { protocol: LAUNCH_PROTOCOL, commit: pin },
     cells: Object.fromEntries(SESSION_COLUMNS.map((column) => [column, cells[column] ?? absent("NOT_PROVIDED", "No hand-written reference for a launch case")])) };
 }
 
@@ -163,6 +163,10 @@ test("the producer keeps a launch row's cells: an abort stays ABORTED, and outpu
   const omitting = launchRaw({});
   omitting.measured[0]!.launch = JSON.stringify(frame);
   assert.throws(() => fromNts(meta(), omitting), /launch row omits column nts f64/);
+  // A launch row measured at another commit than its run is refused, not filed under the run's.
+  const moved = launchRaw({});
+  moved.measured[0]!.launch = JSON.stringify({ ...launchFrame({ node: cellOf(40_000) }), provenance: { protocol: LAUNCH_PROTOCOL, commit: "f".repeat(40) } });
+  assert.throws(() => fromNts(meta(), moved), /measured at another commit than its run/);
   assert.deepEqual((row.conditions as Record<string, Json>).launchFloor, { median: 300 });
   const wrong = launchCell({ ...details(380, (l) => { for (const one of l) one.stdoutSha256 = other; }), warmups: [], stdoutSha256: other }, {}, "");
   assert.equal(wrong.status, "OK");

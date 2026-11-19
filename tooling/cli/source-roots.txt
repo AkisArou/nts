@@ -1,8 +1,12 @@
 # The paths each binary is built from: the roots of its source digest
-# (tooling/cli/source_identity.rs, tooling/bench/source-identity.ts). Each
-# binary's Cargo path-dependency closure lies under its roots, which
-# tooling/bench/source-identity.test.ts checks against cargo metadata; the
-# other roots are files the crates include from outside themselves (runtime/c)
-# and the workspace manifest and lock.
-nts: Cargo.toml Cargo.lock build compiler runtime third_party/react-compiler third_party/tsrs tooling/cli tooling/deps tooling/differential tooling/publication tooling/surfaces
-nts-bench: Cargo.toml Cargo.lock compiler runtime third_party/tsrs tooling/bench tooling/cli/source-roots.txt tooling/cli/source_identity.rs
+# (tooling/cli/source_identity.rs, tooling/bench/source-identity.ts). Every
+# file rustc and the build scripts read for a binary inside the repository,
+# as Cargo's dep-info for that binary names them, lies under its roots or
+# under a pinned path; source-identity.ts refuses a binary whose dep-info
+# names any other, and source-identity.test.ts holds each list to its
+# crate's cargo-metadata path-dependency closure.
+nts: .tool-versions Cargo.toml Cargo.lock build compiler results/differential-call-costs/calibration.json runtime rust-toolchain.toml third_party/react-compiler third_party/tsrs tooling/cli tooling/config/src/profiles tooling/deps tooling/differential tooling/publication tooling/surfaces
+nts-bench: Cargo.toml Cargo.lock compiler runtime rust-toolchain.toml third_party/tsrs tooling/bench tooling/bootstrap/awfy.pin tooling/cli/source-roots.txt tooling/cli/source_identity.rs
+# Read, but pinned by content inside a root (build/node-deps/recipes.json
+# holds each file's hash), so it needs no digest of its own.
+pinned: third_party/node-source

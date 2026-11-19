@@ -220,6 +220,8 @@ export function fromNts(
     const launch = m?.launch === undefined || m?.launch === null ? null : object(JSON.parse(string(m.launch)));
     if (launch) {
       assert.equal(launch.kind, LAUNCH_KIND, "unknown launch row kind");
+      // Every launch row was built and timed at the run's own commit.
+      assert.equal(object(launch.provenance).commit, meta.sourceCommit, `launch row ${name} was measured at another commit than its run`);
       const launchCells = object(launch.cells);
       for (const column of meta.columns) {
         assert.ok(Object.hasOwn(launchCells, column), "launch row omits column " + column);
