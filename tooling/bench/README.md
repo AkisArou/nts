@@ -42,10 +42,12 @@ sibling counters and machine conditions retained.
 
 # Launch rows
 
-A case directory holding `launch.json`, exactly `{"metric":"launch-to-exit"}`,
-is a launch row: its `case.ts` is a whole program with no exported workload,
-and each cell is the time from process launch to exit. Any other content of the
-marker is an error. The `startup` group's rows are launch rows.
+A case directory holding `launch.json` is a launch row: its `case.ts` is a
+whole program with no exported workload, launched by the launch timer below.
+The marker's one reader is `launch-marker.ts`. Exactly
+`{"metric":"launch-to-exit"}` makes each cell the time from process launch to
+exit; the peak-RSS form is in "Peak-RSS rows" below. Any other content of the
+marker is an error. The `startup` group's rows are launch-to-exit rows.
 
 - **What is launched.** nts C and nts LLVM are the executables `nts build`
   makes, from a generated project whose config declares one `app.cli` product
@@ -98,6 +100,62 @@ marker is an error. The `startup` group's rows are launch rows.
 - **The row** carries `kind: "launch"`; throughput rows carry no kind, and a
   row's own best comes only from rows of its kind. The floor and the sitting's
   provenance are in the row's conditions. `--count` does not count launch rows.
+
+# Peak-RSS rows
+
+A launch row whose `launch.json` is
+`{"metric":"peak-rss","case":<case>,"function":<name>,"input":<number>}` is a
+peak-RSS row: it calls that case's workload once at that input, and its cells
+rank by peak resident set. A peak-RSS row is named `rss-<case>-<input>`, and a
+case is measured at two or three sizes.
+
+- **The program.** Its `case.ts` is exactly the text `peakRssProgram` derives
+  from the marker (`launch-marker.ts`): an import of the case's workload and
+  `console.log(<function>(<input>))`. The input is a literal, so each size is
+  a program of its own, built per row: nts does not provide `process.argv`
+  (#871), so one binary cannot be launched at three inputs. The input must lie
+  inside the case's declared domain for that function's one parameter
+  (`case.domains.json`: its minimum, maximum and integer flag). A marker
+  with another field, a case without that domain, an input outside it, or a
+  `case.ts` that differs from the derived text refuses the row as an
+  instrument error.
+- **What is launched** is what a launch row launches (above), with the same
+  recipes. Every column's measured process is the program itself, and wait4
+  reports that pid: nts C and nts LLVM are the executables `nts build`
+  makes; Bun AOT and ScriptC are the executables their builds make, executed
+  directly; node and Bun JIT run `case.ts` in their own process and start no
+  child process (their workers are threads, whose memory is the process's).
+  wait4's ru_maxrss covers a child and the descendants it reaped, so a
+  wrapper could only add to a value, never hide one. nts JVM and nts f64 are
+  `NOT_RUN`, C++ and Java `NOT_PROVIDED`, each with its reason.
+- **The cell** (`peak-rss-cell.ts`) is a launch cell (`launch-to-exit-v1`)
+  with `peakRss`: the median of its 21 timed launches' ru_maxrss in bytes
+  and their interquartile ratio, from the same wait4 that ends each launch's
+  time. So a cell shows memory beside time from one run, not from a second
+  sampler. A launch with no resident set, or a recorded `peakRss` its
+  launches do not derive, is refused by every record reader. An absent cell's
+  `peakRss` is null.
+- **Growth proves the work ran.** A literal input could let a compiler fold
+  the work away. A run derives each column's growth over a case's rows
+  (`growth` on each row, checked like the verdicts): `GROWS` when the column
+  ran at two or more sizes and its time rises strictly at every larger input,
+  `FLAT` when it did not, `UNESTABLISHED` below two sizes. Time is the
+  counterfactual to folding: folded work takes no longer at a larger input.
+  Memory is the ranked value and takes no part in growth, since doing the work
+  in constant memory is the best outcome a peak-RSS row can show. A
+  comparison involving a column that does not grow is `SUSPECT`, with its
+  ratio, and is never ranked, nor a source of own best. Every OK cell's output
+  must match node's at its size, as in every row.
+- **Verdicts** hold the bar's ratios to peak bytes: at 0.8× node's or Bun
+  JIT's bytes or less a row is won, short up to 1×, and lost above; against
+  Bun AOT and ScriptC it is won below 0.95×, tied within max(1.05, the two
+  cells' RSS spreads), and lost above. Own best compares the same row kind's
+  bytes ratios. The row carries `kind: "peak-rss"` and `sized`, the case,
+  function and input.
+- **Baselines.** `full.md`'s peak-RSS section names startup-empty's peak RSS
+  in the same run per column (each runtime's footprint doing nothing), and
+  each row's `/bin/true` floor from its own sitting, so a runtime's baseline
+  and its work can be read apart.
 
 The workload inventory comes from the snapshot already captured by `case()`:
 normalized URI, the native producer's `xxh3-128-le-checked-utf8-v1` content digest

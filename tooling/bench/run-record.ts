@@ -20,7 +20,8 @@ import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
 import { OWN_BEST_REGRESSION } from './own-best-marker.ts';
 import {readBuildDetails,describeBuilds,type BuildDetails} from './build-details.ts';
-import { LAUNCH_KIND, checkLaunchCell } from "./launch-cell.ts";
+import { LAUNCH_KIND, checkLaunchCell, launchSummary, readLaunch } from "./launch-cell.ts";
+import { GROWTHS, PEAK_RSS_KIND, checkPeakRssCell, peakRssGrowth, type Growth, type PeakRss, type Sized } from "./peak-rss-cell.ts";
 
 export const COMPARATORS = ["node", "Bun JIT", "Bun AOT", "ScriptC"] as const;
 export const BACKENDS = ["nts C", "nts LLVM", "nts JVM"] as const;
@@ -55,16 +56,27 @@ export type Cell = {
   instructions?: number | null;
   /** Counted runs only (--count): the fixed repetitions that bracket counted. */
   counted_reps?: number | null;
+  /** Peak-RSS rows only: the peak resident set of the same launches that time the cell (peak-rss-cell.ts); null without a time. */
+  peakRss?: PeakRss | null;
 };
 export type Verdict = {
-  kind: "WON" | "SHORT" | "TIE" | "LOSS" | "UNAVAILABLE" | "NOT_COMPARABLE";
+  /** SUSPECT: a peak-RSS comparison where either column has not shown its work grows with its input. */
+  kind: "WON" | "SHORT" | "TIE" | "LOSS" | "UNAVAILABLE" | "NOT_COMPARABLE" | "SUSPECT";
   ratio: number | null;
   tolerance: number | null;
 };
 export type Row = {
   name: string;
-  /** Absent on throughput rows; "launch" when every cell is a launch-to-exit observation (launch-cell.ts). */
-  kind?: typeof LAUNCH_KIND;
+  /**
+   * Absent on throughput rows; "launch" when every cell is a launch-to-exit
+   * observation (launch-cell.ts); "peak-rss" when every cell is one ranked by
+   * its launches' peak resident set (peak-rss-cell.ts).
+   */
+  kind?: typeof LAUNCH_KIND | typeof PEAK_RSS_KIND;
+  /** Peak-RSS rows only: the case workload the row calls once, and its input. */
+  sized?: Sized;
+  /** Peak-RSS rows only: each column's growth across its case's rows in this run, derived like the verdicts. */
+  growth?: Record<string, Growth>;
   workloadIdentity: string | null;
   eligibleForBest: boolean;
   conditions: Json;
@@ -165,10 +177,10 @@ function date(value: unknown, at: string): string {
   check(/^\d{4}-\d\d-\d\dT/.test(s) && Number.isFinite(Date.parse(s)), at + ": invalid timestamp");
   return s;
 }
-function cell(value: unknown, at: string): Cell {
+function cell(value: unknown, at: string, peak = false): Cell {
   const o = obj(
     value,
-    ["status", "nanoseconds", "spread", "checksum", "verified", "reason", "details"],
+    ["status", "nanoseconds", "spread", "checksum", "verified", "reason", "details", ...(peak ? ["peakRss"] : [])],
     at,
   );
   const status = text(o.status, at + ".status") as Cell["status"];
@@ -210,26 +222,60 @@ function cell(value: unknown, at: string): Cell {
     verified,
     reason,
     details: json(o.details, at + ".details"),
+    ...(peak ? { peakRss: peakRssValue(o.peakRss, at + ".peakRss") } : {}),
   };
 }
-export function fastest(row: Pick<Row, "cells">): { backend: string; cell: Cell } | null {
+function peakRssValue(value: unknown, at: string): PeakRss | null {
+  if (value === null) return null;
+  const o = obj(value, ["bytes", "spread"], at);
+  return { bytes: finite(o.bytes, at + ".bytes", Number.MIN_VALUE), spread: finite(o.spread, at + ".spread", 1) };
+}
+function sizedValue(value: unknown, at: string): Sized {
+  const o = obj(value, ["case", "function", "input"], at);
+  return { case: text(o.case, at + ".case"), function: text(o.function, at + ".function"), input: finite(o.input, at + ".input", -Number.MAX_VALUE) };
+}
+function growthValue(value: unknown, columns: readonly string[], at: string): Record<string, Growth> {
+  const o = obj(value, columns, at);
+  return Object.fromEntries(columns.map((c) => {
+    check(GROWTHS.includes(o[c] as Growth), at + "." + c + ": unknown growth");
+    return [c, o[c] as Growth];
+  }));
+}
+/**
+ * The quantity a row ranks its cells by, with that quantity's spread: a
+ * peak-RSS row's peak resident bytes, every other row's nanoseconds. Null
+ * without a measurement. Every verdict, ratio and own-best reads it here.
+ */
+export function measure(row: Pick<Row, "kind">, cell: Cell): { value: number; spread: number | null } | null {
+  if (cell.status !== "OK") return null;
+  if (row.kind === PEAK_RSS_KIND) {
+    check(cell.peakRss, "a measured peak-RSS cell has no peak RSS");
+    return { value: cell.peakRss.bytes, spread: cell.peakRss.spread };
+  }
+  return { value: cell.nanoseconds!, spread: cell.spread };
+}
+/** Whether a cell's measurement may be ranked: on a peak-RSS row, only where its column grows with input. */
+const ranked = (row: Pick<Row, "kind" | "growth">, column: string): boolean =>
+  row.kind !== PEAK_RSS_KIND || row.growth?.[column] === "GROWS";
+export function fastest(row: Pick<Row, "cells" | "kind">): { backend: string; cell: Cell } | null {
   const values = ["nts C", "nts LLVM", "nts JVM"].flatMap((backend) =>
-    row.cells[backend]?.status === "OK" ? [{ backend, cell: row.cells[backend] }] : [],
+    row.cells[backend]?.status === "OK" ? [{ backend, cell: row.cells[backend], value: measure(row, row.cells[backend])!.value }] : [],
   );
-  values.sort((a, b) => a.cell.nanoseconds! - b.cell.nanoseconds!);
-  return values[0] ?? null;
+  values.sort((a, b) => a.value - b.value);
+  return values[0] ? { backend: values[0].backend, cell: values[0].cell } : null;
 }
 export function verdict(
-  row: Pick<Row, "cells">,
+  row: Pick<Row, "cells" | "kind" | "growth">,
   backend: Backend,
   comparator: Comparator,
 ): Verdict {
-  const mine = row.cells[backend],
-    other = row.cells[comparator];
-  if (mine.status !== "OK") return { kind: "UNAVAILABLE", ratio: null, tolerance: null };
-  if (other.status !== "OK") return { kind: "NOT_COMPARABLE", ratio: null, tolerance: null };
-  const ratio = mine.nanoseconds! / other.nanoseconds!;
+  const mine = measure(row, row.cells[backend]),
+    other = measure(row, row.cells[comparator]);
+  if (!mine) return { kind: "UNAVAILABLE", ratio: null, tolerance: null };
+  if (!other) return { kind: "NOT_COMPARABLE", ratio: null, tolerance: null };
+  const ratio = mine.value / other.value;
   check(Number.isFinite(ratio), "benchmark ratio is not finite");
+  if (!ranked(row, backend) || !ranked(row, comparator)) return { kind: "SUSPECT", ratio, tolerance: null };
   const tolerance = Math.max(1.05, mine.spread ?? 1, other.spread ?? 1);
   const kind =
     comparator === "node" || comparator === "Bun JIT"
@@ -321,22 +367,26 @@ function decode(value: unknown, derive: boolean): RunRecord {
     identity: nullableText(machine.identity, "machine.identity"),
     conditions: json(machine.conditions, "machine.conditions"),
   };
-  const rows = list(o.rows, "rows").map((value, index) => {
+  const parsed = list(o.rows, "rows").map((value, index) => {
     const at = "row " + index,
+      has = (key: string) => value !== null && typeof value === "object" && Object.hasOwn(value, key),
       r = obj(
         value,
         ["name", "workloadIdentity", "eligibleForBest", "conditions", "cells", "verdicts",
-          ...(value&&typeof value==='object'&&Object.hasOwn(value,'builds')?['builds']:[]),
-          ...(value&&typeof value==='object'&&Object.hasOwn(value,'kind')?['kind']:[])],
+          ...["builds", "kind", "sized", "growth"].filter(has)],
         at,
       );
     const name = text(r.name, at + ".name");
     check(inventory.includes(name), "orphan row " + name);
-    if (Object.hasOwn(r, "kind")) check(r.kind === LAUNCH_KIND, name + ": unknown row kind");
-    const launch = r.kind === LAUNCH_KIND;
+    if (Object.hasOwn(r, "kind")) check(r.kind === LAUNCH_KIND || r.kind === PEAK_RSS_KIND, name + ": unknown row kind");
+    const launch = r.kind === LAUNCH_KIND, peak = r.kind === PEAK_RSS_KIND;
+    // A peak-RSS row names its sized workload and records its growth; no other row does.
+    check(Object.hasOwn(r, "sized") === peak && (peak || !Object.hasOwn(r, "growth")),
+      name + ": a sized workload and its growth belong to peak-RSS rows only");
     const rawCells = obj(r.cells, columns, at + ".cells");
-    const cells = Object.fromEntries(columns.map((c) => [c, cell(rawCells[c], name + "/" + c)]));
+    const cells = Object.fromEntries(columns.map((c) => [c, cell(rawCells[c], name + "/" + c, peak)]));
     if (launch) for (const c of columns) checkLaunchCell(cells[c]!, name + "/" + c);
+    if (peak) for (const c of columns) checkPeakRssCell(cells[c]!, name + "/" + c);
     const answers = new Set(
       Object.values(cells)
         .filter((c) => c.status === "OK" && c.verified)
@@ -350,29 +400,43 @@ function decode(value: unknown, derive: boolean): RunRecord {
         workloadIdentity && harnessValue.contract && machineValue.identity,
         "eligible row lacks workload/harness/machine identity",
       );
-    const expected = Object.fromEntries(
+    const builds=Object.hasOwn(r,'builds')?readBuildDetails(r.builds):undefined;
+    if(builds)check(builds.stages.every(stage=>columns.includes(stage.column)),name+': build stage names an unknown column');
+    return {
+      raw: r,
+      row: {
+        name,
+        ...(launch ? { kind: LAUNCH_KIND as typeof LAUNCH_KIND } : {}),
+        ...(peak ? { kind: PEAK_RSS_KIND as typeof PEAK_RSS_KIND, sized: sizedValue(r.sized, name + ".sized") } : {}),
+        workloadIdentity,
+        eligibleForBest,
+        conditions: json(r.conditions, name + ".conditions"),
+        cells,
+        verdicts: {} as Row["verdicts"],
+        ...(builds?{builds}:{}),
+      } as Row,
+    };
+  });
+  // Growth is a fact about a case's rows together, so it is derived once every row is read.
+  const growth = peakRssGrowth(parsed.flatMap(({ row }) => row.sized ? [{ name: row.name, sized: row.sized, cells: row.cells }] : []), columns);
+  const rows = parsed.map(({ raw, row }) => {
+    if (row.sized) {
+      row.growth = growth.get(row.name)!;
+      if (!derive)
+        check(isDeepStrictEqual(growthValue(raw.growth, columns, row.name + ".growth"), row.growth), "changed or missing recorded growth: " + row.name);
+    }
+    row.verdicts = Object.fromEntries(
       BACKENDS.map((b) => [
         b,
-        Object.fromEntries(COMPARATORS.map((c) => [c, verdict({ cells }, b, c)])),
+        Object.fromEntries(COMPARATORS.map((c) => [c, verdict(row, b, c)])),
       ]),
     ) as Row["verdicts"];
     if (!derive)
       check(
-        isDeepStrictEqual(r.verdicts, expected),
-        "changed or missing recorded verdict: " + name,
+        isDeepStrictEqual(raw.verdicts, row.verdicts),
+        "changed or missing recorded verdict: " + row.name,
       );
-    const builds=Object.hasOwn(r,'builds')?readBuildDetails(r.builds):undefined;
-    if(builds)check(builds.stages.every(stage=>columns.includes(stage.column)),name+': build stage names an unknown column');
-    return {
-      name,
-      ...(launch ? { kind: LAUNCH_KIND as typeof LAUNCH_KIND } : {}),
-      workloadIdentity,
-      eligibleForBest,
-      conditions: json(r.conditions, name + ".conditions"),
-      cells,
-      verdicts: expected,
-      ...(builds?{builds}:{}),
-    };
+    return row;
   });
   check(new Set(rows.map((r) => r.name)).size === rows.length, "duplicate benchmark row");
   if (complete) check(rows.length === inventory.length, "complete run omitted a declared row");
@@ -478,8 +542,9 @@ export type OwnBest = {
   backend: Backend;
   comparator: Comparator;
   ratio: number;
-  backendNanoseconds: number;
-  comparatorNanoseconds: number;
+  /** The row's measure (`measure`): nanoseconds, or a peak-RSS row's bytes. */
+  backendValue: number;
+  comparatorValue: number;
   backendSpread: number;
   comparatorSpread: number;
   compiler: string;
@@ -496,18 +561,21 @@ function priorRows(run: RunRecord, row: Row, runs: RunRecord[]): PriorRow[] {
     return candidate && prior.compiler.commit ? [{ run: prior, row: candidate }] : [];
   });
 }
-const verifiedTiming = (cell: Cell | undefined): cell is Cell & { nanoseconds: number; spread: number } =>
-  cell?.status === "OK" && cell.verified && cell.nanoseconds !== null && cell.spread !== null;
+/** A verified, rankable measurement of one column on one row, with its spread. */
+function verifiedMeasure(row: Row, column: string): { value: number; spread: number } | null {
+  const cell = row.cells[column], measured = cell && cell.verified ? measure(row, cell) : null;
+  return measured && measured.spread !== null && ranked(row, column) ? { value: measured.value, spread: measured.spread } : null;
+}
 function bestRatio(backend: Backend, comparator: Comparator, rows: PriorRow[]): OwnBest | null {
   const found: OwnBest[] = [];
   for (const { run, row } of rows) {
-    const mine = row.cells[backend], other = row.cells[comparator];
-    if (!verifiedTiming(mine) || !verifiedTiming(other)) continue;
-    const value = mine.nanoseconds / other.nanoseconds;
+    const mine = verifiedMeasure(row, backend), other = verifiedMeasure(row, comparator);
+    if (!mine || !other) continue;
+    const value = mine.value / other.value;
     check(Number.isFinite(value), "own-best ratio is not finite");
     found.push({
       backend, comparator, ratio: value,
-      backendNanoseconds: mine.nanoseconds, comparatorNanoseconds: other.nanoseconds,
+      backendValue: mine.value, comparatorValue: other.value,
       backendSpread: mine.spread, comparatorSpread: other.spread,
       compiler: run.compiler.commit!, run: run.id,
     });
@@ -533,9 +601,10 @@ export type OwnBestComparison = {
   tolerance: number;
   slowerThanBest: boolean;
 };
-function compareBest(mine: Cell, other: Cell, best: OwnBest | null): OwnBestComparison | null {
-  if (!best || !verifiedTiming(mine) || !verifiedTiming(other)) return null;
-  const currentRatio = mine.nanoseconds / other.nanoseconds, relativeRatio = currentRatio / best.ratio;
+function compareBest(row: Row, backend: Backend, comparator: Comparator, best: OwnBest | null): OwnBestComparison | null {
+  const mine = verifiedMeasure(row, backend), other = verifiedMeasure(row, comparator);
+  if (!best || !mine || !other) return null;
+  const currentRatio = mine.value / other.value, relativeRatio = currentRatio / best.ratio;
   const spreads = {
     currentBackend: mine.spread, currentComparator: other.spread,
     priorBackend: best.backendSpread, priorComparator: best.comparatorSpread,
@@ -573,8 +642,10 @@ export type Results = {
   /** By case name. */
   rows: RowResult[];
 };
-const ratio = (mine: Cell, other: Cell): number | null =>
-  mine.status === "OK" && other.status === "OK" ? mine.nanoseconds! / other.nanoseconds! : null;
+const ratio = (row: Row, mine: string, other: string): number | null => {
+  const a = measure(row, row.cells[mine]!), b = measure(row, row.cells[other]!);
+  return a && b ? a.value / b.value : null;
+};
 export function results(runs: RunRecord[]): Results | null {
   const run = newestComplete(runs);
   if (!run) return null;
@@ -593,15 +664,19 @@ export function results(runs: RunRecord[]): Results | null {
       ),
     ]),
   ) as Results["counts"];
+  // By name, except that a peak-RSS row sorts by its case, function and input, so a case's growth runs down the table.
+  const key = (row: Row): [string, string, number] => row.sized ? [row.sized.case, row.sized.function, row.sized.input] : [row.name, "", 0];
   const rows = [...run.rows]
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => {
+      const [x, y] = [key(a), key(b)];
+      return x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]) || x[2] - y[2] || a.name.localeCompare(b.name);
+    })
     .map((row) => {
       const history = priorRows(run, row, runs);
       const backends = Object.fromEntries(
         BACKENDS.map((backend) => {
-          const current = row.cells[backend];
           const best = Object.fromEntries(COMPARATORS.map((comparator) => [
-            comparator, compareBest(current, row.cells[comparator], bestRatio(backend, comparator, history)),
+            comparator, compareBest(row, backend, comparator, bestRatio(backend, comparator, history)),
           ])) as BackendResult["ownBest"];
           const established = Object.values(best).filter((comparison): comparison is OwnBestComparison => comparison !== null);
           return [
@@ -609,7 +684,7 @@ export function results(runs: RunRecord[]): Results | null {
             {
               versus: row.verdicts[backend],
               references: Object.fromEntries(
-                REFERENCES.map((r) => [r, ratio(current, row.cells[r])]),
+                REFERENCES.map((r) => [r, ratio(row, backend, r)]),
               ),
               ownBest: best,
               slowerThanBest: established.length > 0 && established.every((comparison) => comparison.slowerThanBest),
@@ -617,10 +692,10 @@ export function results(runs: RunRecord[]): Results | null {
           ];
         }),
       ) as RowResult["backends"];
-      const c = row.cells["nts C"],
-        llvm = row.cells["nts LLVM"];
-      const versusC = ratio(llvm, c);
-      const tolerance = Math.max(c.spread ?? 1, llvm.spread ?? 1);
+      const c = measure(row, row.cells["nts C"]),
+        llvm = measure(row, row.cells["nts LLVM"]);
+      const versusC = ratio(row, "nts LLVM", "nts C");
+      const tolerance = Math.max(c?.spread ?? 1, llvm?.spread ?? 1);
       const llvmVersusC =
         versusC === null
           ? null
@@ -645,6 +720,21 @@ const time = (ns: number) =>
       ? (ns / 1e3).toFixed(2) + " µs"
       : (ns / 1e6).toFixed(2) + " ms";
 const escape = (s: string) => s.replaceAll("|", "\\|").replaceAll("\n", " ");
+const size = (bytes: number) => bytes < 2 ** 20 ? (bytes / 1024).toFixed(1) + " KiB" : (bytes / 2 ** 20).toFixed(2) + " MiB";
+/** One measured cell as full.md and the console show it: a peak-RSS cell's memory beside its time, and its growth unless it grows. */
+function shown(row: Row, column: string): string {
+  const cell = row.cells[column]!;
+  if (row.kind !== PEAK_RSS_KIND) return time(cell.nanoseconds!);
+  const growth = row.growth?.[column];
+  return size(cell.peakRss!.bytes) + " · " + time(cell.nanoseconds!) + (growth && growth !== "GROWS" ? " (" + growth + ")" : "");
+}
+/** The median peak resident set of a sitting's timed launches, or null where none were kept. */
+function launchesRss(details: Json): number | null {
+  if (!details || typeof details !== "object" || Array.isArray(details) || !Array.isArray(details.launches) || !details.launches.length) return null;
+  return launchSummary(details.launches.map((value, index) => readLaunch(value, "launches[" + index + "]").maxRssKib)).median * 1024;
+}
+const field = (value: Json | undefined, key: string): Json | undefined =>
+  value && typeof value === "object" && !Array.isArray(value) ? value[key] : undefined;
 /** Verdict counts over one set of rendered rows: a group's standing against the bar. */
 function verdictCounts(rows: RowResult[]): string[] {
   return BACKENDS.map((backend) => {
@@ -692,7 +782,7 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
     const cells = COLUMNS.map((c) => {
       const cell = row.cells[c];
       return cell.status === "OK"
-        ? time(cell.nanoseconds!) + (cell.verified ? "" : " (legacy unverified)")
+        ? shown(row, c) + (cell.verified ? "" : " (legacy unverified)")
         : cell.status;
     });
     const vs = native.flatMap((b) =>
@@ -747,6 +837,12 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
     const median = floor && typeof floor === "object" && !Array.isArray(floor) ? floor.median : null;
     return typeof median === "number" ? ["- " + row.name + ", launch floor: " + time(median) + " (/bin/true in the same sitting)"] : [];
   }));
+  notes.push(...run.rows.flatMap((row) => {
+    if (row.kind !== PEAK_RSS_KIND) return [];
+    const floor = field(row.conditions, "launchFloor"), median = field(floor, "median"), rss = launchesRss(field(floor, "launch") ?? null);
+    return typeof median === "number" && rss !== null
+      ? ["- " + row.name + ", floor: /bin/true peak RSS " + size(rss) + ", " + time(median) + " (the same sitting)"] : [];
+  }));
   if (!groups.length) return header + "\n" + tableFor(model.rows) + "\n\n" + notes.join("\n") + "\n";
   const grouped = new Set<string>(), sections: string[] = [];
   const section = (title: string, declaredBy: string | null, rows: RowResult[]) => {
@@ -754,7 +850,8 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
     const launch = rows.some((row) => row.row.kind === LAUNCH_KIND)
       ? "Launch rows: each time is one process from launch to exit, the median of its timed launches (launch-to-exit-v1); the launch timer's own floor in the same sitting is noted per row.\n\n"
       : "";
-    sections.push(`## ${title}\n\n${source}${launch}${verdictCounts(rows).join("\n")}\n\n${tableFor(rows)}`);
+    const peak = rows.some((row) => row.row.kind === PEAK_RSS_KIND) ? peakRssPreamble(run) : "";
+    sections.push(`## ${title}\n\n${source}${launch}${peak}${verdictCounts(rows).join("\n")}\n\n${tableFor(rows)}`);
   };
   for (const group of groups) {
     const names = new Set(group.rows), rows = model.rows.filter((row) => names.has(row.row.name));
@@ -765,6 +862,21 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
   const ungrouped = model.rows.filter((row) => !grouped.has(row.row.name));
   if (ungrouped.length) section("Ungrouped", null, ungrouped);
   return header + "\n" + sections.join("\n\n") + "\n\n" + notes.join("\n") + "\n";
+}
+/**
+ * What a peak-RSS group says before its table: how a cell is measured and
+ * ranked, and the baselines that tell a runtime's own footprint from its work.
+ */
+function peakRssPreamble(run: RunRecord): string {
+  const empty = run.rows.find((row) => row.name === "startup-empty");
+  const baseline = empty
+    ? COLUMNS.flatMap((c) => {
+        const cell = empty.cells[c]!, rss = cell.status === "OK" ? launchesRss(field(cell.details, "launch") ?? null) : null;
+        return rss === null ? [] : [c + " " + size(rss)];
+      }).join(", ") || "no column ran"
+    : "not in this run";
+  return "Peak-RSS rows: each cell is the median peak resident set (wait4's ru_maxrss) of the same timed launches whose median launch-to-exit time stands beside it (launch-to-exit-v1). Ratios and verdicts compare peak bytes, held to the bar's ratios. A column whose time does not rise at every larger input of its case, as folded work would not, is marked FLAT (or UNESTABLISHED below two sizes), and its comparisons are SUSPECT, never ranked.\n\n" +
+    "Baselines: startup-empty's peak RSS in this run, the program that does nothing: " + baseline + ". Each row's /bin/true floor is noted per row.\n\n";
 }
 export function consoleHeader(): string {
   return [
@@ -777,7 +889,7 @@ export function consoleRow(row: Row): string {
   return [
     row.name,
     ...COLUMNS.map((c) =>
-      row.cells[c].status === "OK" ? time(row.cells[c].nanoseconds!) : row.cells[c].status,
+      row.cells[c].status === "OK" ? shown(row, c) : row.cells[c].status,
     ),
     ...["nts C", "nts LLVM"].flatMap((b) =>
       COMPARATORS.map((c) => {

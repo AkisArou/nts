@@ -16,6 +16,8 @@ import { buildLauncher, launchEnvironment, launchSitting, type Launcher } from "
 import { gitArguments } from "../gate/git-arguments/main.ts";
 import { requireCoveredDepInfo, requireSourceDigest } from "./source-identity.ts";
 import { LAUNCH_COUNT, LAUNCH_KIND, LAUNCH_WARMUPS, launchCell, launchSummary } from "./launch-cell.ts";
+import { readLaunchMarker } from "./launch-marker.ts";
+import { PEAK_RSS_KIND, peakRssCell, type Sized } from "./peak-rss-cell.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
 import { optionalFile } from "../gate/reader-inputs/main.ts";
 // Bun consults this configuration in the repository cwd used below.
@@ -417,8 +419,8 @@ export async function hostColumns(
     },
   };
 }
-/** A launch row: every column's cells, the launcher's own floor in the same sitting, and what built them. */
-export type LaunchRow = { kind: typeof LAUNCH_KIND; cells: Record<string, Cell>; floor: Json; provenance: Json };
+/** A launch row: every column's cells, the launcher's own floor in the same sitting, and what built them; a peak-RSS row also its sized workload. */
+export type LaunchRow = { kind: typeof LAUNCH_KIND | typeof PEAK_RSS_KIND; cells: Record<string, Cell>; floor: Json; provenance: Json; sized?: Sized };
 const NTS_TARGETS = [{ column: "nts C", backend: "c" }, { column: "nts LLVM", backend: "llvm" }] as const;
 
 /**
@@ -472,14 +474,17 @@ export function ntsIdentity(binary: string, root: string, commit: string): { bin
  * A launch case's row: nts C and LLVM as `nts build` makes them, node and
  * Bun JIT on the case itself, Bun AOT and ScriptC built from it, and
  * /bin/true as the launcher's floor, all timed in one rotating sitting by the
- * one launch timer under one environment and cwd. Columns that cannot run
- * keep their reason; nothing here is a verdict (run-producers.ts and
- * run-record.ts decide those).
+ * one launch timer under one environment and cwd. Its marker
+ * (launch-marker.ts) says what the row ranks by: a peak-RSS row's cells also
+ * carry the peak resident set of the same launches (peak-rss-cell.ts).
+ * Columns that cannot run keep their reason; nothing here is a verdict
+ * (run-producers.ts and run-record.ts decide those).
  */
 export async function launchColumns(root: string, name: string, out: string, ntsBinary: string, commit: string): Promise<LaunchRow> {
   // The session's commit, as begin recorded it; the checkout must still be it, clean.
   const head = spawnSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).stdout.trim();
   if (head !== commit) throw new ToolingInstrumentError("tooling-setup", `the checkout moved to ${head.slice(0, 12)} during a session measuring ${commit.slice(0, 12)}`);
+  const marker = readLaunchMarker(root, name), peak = marker.metric === "peak-rss";
   await reserveJob({ key: "bench-host-columns", what: `benchmark launch row for ${name}` });
   const pins = pinnedComparators(root), directory = join(out, name + ".launch");
   rmSync(directory, { recursive: true, force: true });
@@ -487,9 +492,11 @@ export async function launchColumns(root: string, name: string, out: string, nts
   const entry = join(root, "benchmarks/cases", name, "case.ts");
   const nts = ntsIdentity(ntsBinary, root, commit);
   const cells: Record<string, Cell> = Object.fromEntries(SESSION_COLUMNS.map((column) => [column,
-    column === "nts JVM" ? absent("NOT_RUN", "Startup rows measure native executables and the engines; the JVM's launch is not in this group")
+    column === "nts JVM" ? absent("NOT_RUN", peak ? "Peak-RSS rows measure native executables and the engines; the JVM's footprint is not in this group"
+      : "Startup rows measure native executables and the engines; the JVM's launch is not in this group")
       : column === "nts f64" ? absent("NOT_RUN", "The unspecialized control prices number specialization in throughput; a launch row has no such build")
-      : column === "C++" || column === "Java" ? absent("NOT_PROVIDED", "No hand-written reference for a launch case")
+      : column === "C++" || column === "Java" ? absent("NOT_PROVIDED", peak ? "A peak-RSS row launches a whole program; the hand-written references are linked to the throughput driver only"
+        : "No hand-written reference for a launch case")
         : absent("NOT_PROVIDED", "Pinned comparator artifact is not installed")]));
   const columns: { column: string; argv: string[]; extra: Record<string, Json> }[] = [];
   for (const { column, backend } of NTS_TARGETS) {
@@ -520,9 +527,11 @@ export async function launchColumns(root: string, name: string, out: string, nts
     const observed = sitting.columns[index]!;
     cells[column] = launchCell(observed.details, { ...extra, argv, cwd: root, stdout: observed.stdout }, observed.stderr);
   }
+  if (peak) for (const column of Object.keys(cells)) cells[column] = peakRssCell(cells[column]!, `${name}/${column}`);
   const measuredFloor = sitting.columns.at(-1)!;
   return {
-    kind: LAUNCH_KIND,
+    kind: peak ? PEAK_RSS_KIND : LAUNCH_KIND,
+    ...(marker.metric === "peak-rss" ? { sized: { case: marker.case, function: marker.function, input: marker.input } } : {}),
     cells,
     floor: { argv: floor.argv, ...launchSummary(measuredFloor.details.launches.map((launch) => launch.wallNanoseconds)),
       launch: measuredFloor.details as unknown as Json },

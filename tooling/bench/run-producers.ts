@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {readBuildDetails} from './build-details.ts';
 import { LAUNCH_KIND, checkLaunchCell } from "./launch-cell.ts";
+import { PEAK_RSS_KIND, checkPeakRssCell, type Sized } from "./peak-rss-cell.ts";
 import {
   COMPARATORS,
   sealRun,
@@ -65,15 +66,24 @@ function measured(value: unknown, legacy = false): Cell {
 /**
  * A launch row's cell as host-columns.ts --launch made it: a launch cell
  * holds its whole protocol (checked again when the run is sealed), and an
- * absent one its reason. Anything else is an instrument error.
+ * absent one its reason; a peak-RSS row's cell also its peak RSS, derived
+ * from the same launches. Anything else is an instrument error.
  */
-function launchCell(value: unknown, at: string): Cell {
+function launchCell(value: unknown, at: string, peak: boolean): Cell {
   const o = object(value);
-  assert.deepEqual(Object.keys(o).sort(), ["checksum", "details", "nanoseconds", "reason", "spread", "status", "verified"], at + ": malformed launch cell");
+  assert.deepEqual(Object.keys(o).sort(), ["checksum", "details", "nanoseconds", ...(peak ? ["peakRss"] : []), "reason", "spread", "status", "verified"], at + ": malformed launch cell");
   const cell = { ...(o as unknown as Cell), details: clean(o.details) };
-  if (cell.status === "OK") checkLaunchCell(cell, at);
-  else assert.ok(cell.nanoseconds === null && cell.spread === null && !cell.verified && typeof cell.reason === "string", at + ": an absent launch cell carries a timing");
+  if (peak) checkPeakRssCell(cell, at);
+  else if (cell.status === "OK") checkLaunchCell(cell, at);
+  if (cell.status !== "OK") assert.ok(cell.nanoseconds === null && cell.spread === null && !cell.verified && typeof cell.reason === "string", at + ": an absent launch cell carries a timing");
   return cell;
+}
+/** A peak-RSS frame's sized workload, exactly. */
+function sized(value: unknown): Sized {
+  const o = object(value);
+  assert.deepEqual(Object.keys(o).sort(), ["case", "function", "input"], "malformed peak-RSS workload");
+  assert.ok(typeof o.case === "string" && typeof o.function === "string" && typeof o.input === "number" && Number.isFinite(o.input), "malformed peak-RSS workload");
+  return { case: o.case, function: o.function, input: o.input };
 }
 export function comparatorCell(value: unknown): Cell {
   const o = object(value),
@@ -108,11 +118,14 @@ function row(
   conditions: unknown,
   identity: string | null,
   eligible: boolean,
+  peak = false,
 ): Row {
+  // A peak-RSS row's cells all say whether they have a peak RSS; an invalidated one has none.
+  const invalid = (why: string, c: Cell): Cell => ({ ...absent("INVALID", why, c), ...(peak ? { peakRss: null } : {}) });
   if (cells.node.status !== "OK")
     for (const [column, c] of Object.entries(cells))
       if (c.status === "OK")
-        cells[column] = absent("INVALID", "Node oracle did not complete; timing is unverified", c);
+        cells[column] = invalid("Node oracle did not complete; timing is unverified", c);
   const answers = new Set(
     Object.values(cells)
       .filter((c) => c.status === "OK" && c.verified)
@@ -121,7 +134,7 @@ function row(
   if (answers.size > 1)
     for (const [column, c] of Object.entries(cells))
       if (c.status === "OK")
-        cells[column] = absent("INVALID", "Checksum disagreement; row is not timed", c);
+        cells[column] = invalid("Checksum disagreement; row is not timed", c);
   return {
     name,
     workloadIdentity: identity,
@@ -218,14 +231,16 @@ export function fromNts(
     );
     // The frame's own JSON text, which no other parser has rounded (main.rs's Measurements.launch).
     const launch = m?.launch === undefined || m?.launch === null ? null : object(JSON.parse(string(m.launch)));
+    const peak = launch?.kind === PEAK_RSS_KIND;
     if (launch) {
-      assert.equal(launch.kind, LAUNCH_KIND, "unknown launch row kind");
+      assert.ok(launch.kind === LAUNCH_KIND || peak, "unknown launch row kind");
+      assert.deepEqual(Object.keys(launch).sort(), ["cells", "floor", "kind", "provenance", ...(peak ? ["sized"] : [])], `launch row ${name}: malformed frame`);
       // Every launch row was built and timed at the run's own commit.
       assert.equal(object(launch.provenance).commit, meta.sourceCommit, `launch row ${name} was measured at another commit than its run`);
       const launchCells = object(launch.cells);
       for (const column of meta.columns) {
         assert.ok(Object.hasOwn(launchCells, column), "launch row omits column " + column);
-        cells[column] = launchCell(launchCells[column], name + "/" + column);
+        cells[column] = launchCell(launchCells[column], name + "/" + column, peak);
       }
     } else if (m) {
       const measuredCells = values(m.results),
@@ -292,7 +307,7 @@ export function fromNts(
     }
     if (failure?.kind === "invalid")
       for (const [column, c] of Object.entries(cells))
-        if (c.status === "OK") cells[column] = absent("INVALID", string(failure.reason), c);
+        if (c.status === "OK") cells[column] = { ...absent("INVALID", string(failure.reason), c), ...(peak ? { peakRss: null } : {}) };
     const result=row(
       name,
       cells,
@@ -305,8 +320,10 @@ export function fromNts(
       },
       identities[name] ?? workloadIdentity(m?.source_capture, m?.workload),
       Boolean(identities[name] ?? m?.source_capture) && !values(raw.spoiled).includes(name),
+      peak,
     );
-    if (launch) result.kind = LAUNCH_KIND;
+    if (launch && peak) Object.assign(result, { kind: PEAK_RSS_KIND, sized: sized(launch.sized) });
+    else if (launch) result.kind = LAUNCH_KIND;
     const builds=object(raw.builds??{})[name];
     if(builds!==undefined)result.builds=readBuildDetails(builds);
     return result;

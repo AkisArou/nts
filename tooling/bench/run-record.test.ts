@@ -206,11 +206,11 @@ test("own best excludes invalid, unverified, different workload and different ha
     legacy,
     current,
   ]);
-  assert.equal(best?.backendNanoseconds, 40);
+  assert.equal(best?.backendValue, 40);
   assert.equal(best?.ratio, 0.4);
   assert.equal(best?.backend, "nts LLVM");
   assert.equal(best?.run, good.id);
-  assert.equal(ownBest(current, current.rows[1], "nts C", "node", [good, current])?.backendNanoseconds, 80);
+  assert.equal(ownBest(current, current.rows[1], "nts C", "node", [good, current])?.backendValue, 80);
 });
 
 test("slower-than-best flag stays beside current timing and all best provenance", () => {
@@ -395,7 +395,7 @@ test("native verdicts and own-best never borrow the other backend's faster obser
   const sealed = sealRun(current);
   assert.equal(present(sealed.rows[0]).verdicts["nts C"].node.kind, "WON");
   assert.equal(present(sealed.rows[0]).verdicts["nts LLVM"].node.kind, "LOSS");
-  assert.equal(ownBest(sealed, present(sealed.rows[0]), "nts LLVM", "node", [old, sealed])?.backendNanoseconds, 110);
+  assert.equal(ownBest(sealed, present(sealed.rows[0]), "nts LLVM", "node", [old, sealed])?.backendValue, 110);
   const output = renderFull([old, sealed]);
   assert.match(output, /LLVM TRAILS C/);
   assert.match(output, /\*\*nts C\*\*/);

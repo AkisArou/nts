@@ -12,7 +12,7 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // parsers their writers and checks use, and measures nothing. A record that
 // does not parse is an error, never a partial summary.
 //
-// # The contracts: benchmarks version 2, conformance version 1
+// # The contracts: benchmarks version 3, conformance version 1
 //
 // Every summary is an object with, as the landing and full checks' status
 // (`--json`) has,
@@ -47,19 +47,31 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //   counts    { <backend>: { <comparator>: { <verdict kind>: n } } }, full.md's
 //             header counts; null with no run
 //   rows      by case name, each
-//             { name,
-//               cells: { <column>: { status, nanoseconds, spread, verified, reason } },
+//             { name, kind,
+//               sized: { case, function, input } (peak-RSS rows only),
+//               growth: { <column>: GROWS | FLAT | UNESTABLISHED } (peak-RSS rows only),
+//               cells: { <column>: { status, nanoseconds, spread, verified, reason, peakRss } },
 //               backends: { <backend>: {
 //                 versus: { <comparator>: { kind, ratio, tolerance } },
 //                 references: { "C++": <ratio>, "Java": <ratio> },
 //                 ownBest: { <comparator>: { currentRatio,
-//                   best: { backend, comparator, ratio, backendNanoseconds,
-//                     comparatorNanoseconds, backendSpread, comparatorSpread, compiler, run },
+//                   best: { backend, comparator, ratio, backendValue,
+//                     comparatorValue, backendSpread, comparatorSpread, compiler, run },
 //                   relativeRatio, spreads: { currentBackend, currentComparator,
 //                     priorBackend, priorComparator }, spreadProduct, tolerance,
 //                   slowerThanBest } | null },
 //                 slowerThanBest } },
 //               llvmVersusC: { ratio, tolerance, trailing } | null }
+//
+// A row's kind is "throughput", "launch" (each time one process from launch to
+// exit) or "peak-rss" (tooling/bench/README.md, "Peak-RSS rows"). A peak-RSS
+// row ranks by bytes: each OK cell's peakRss is { bytes, spread }, the peak
+// resident set of the same launches whose time it shows (null on other rows
+// and without a time), and its ratios, own-best values (backendValue,
+// comparatorValue) and spreads are of bytes where every other row's are of
+// nanoseconds. Its growth says, per column, whether its time rose at every
+// larger input of its case in this run; a comparison where either
+// column does not grow is SUSPECT, with its ratio, and is never ranked.
 //
 // The comparators are node, Bun JIT, Bun AOT and ScriptC; the columns are the
 // run's standing ones, the three backends', the C++ and Java references' and
@@ -162,7 +174,7 @@ import {NO_RUN} from './recorder-core.ts';
 
 export const KINDS = ["benchmarks", "conformance"] as const;
 export type Kind = typeof KINDS[number];
-export const VERSIONS = { benchmarks: 2, conformance: 1 } as const satisfies Record<Kind, number>;
+export const VERSIONS = { benchmarks: 3, conformance: 1 } as const satisfies Record<Kind, number>;
 
 /** Each backend by the name `--backend` and results/ give it, and its column in a benchmark run. */
 const COLUMN = { c: "nts C", llvm: "nts LLVM", jvm: "nts JVM" } as const satisfies Record<string, BackendColumn>;
@@ -205,9 +217,11 @@ export function benchmarkSummary(root: string) {
     counts: model && Object.fromEntries(BACKENDS.map(backend => [backend, model.counts[COLUMN[backend]]])),
     rows: (model?.rows ?? []).map(({ row, backends, llvmVersusC }) => ({
       name: row.name,
+      kind: row.kind ?? "throughput",
+      ...(row.sized ? { sized: row.sized, growth: Object.fromEntries(COLUMNS.map(column => [column, row.growth![column]])) } : {}),
       cells: Object.fromEntries(COLUMNS.map(column => {
-        const { status, nanoseconds, spread, verified, reason } = row.cells[column];
-        return [column, { status, nanoseconds, spread, verified, reason }];
+        const { status, nanoseconds, spread, verified, reason, peakRss } = row.cells[column]!;
+        return [column, { status, nanoseconds, spread, verified, reason, peakRss: peakRss ?? null }];
       })),
       backends: Object.fromEntries(BACKENDS.map(backend => {
         const { versus, references, ownBest, slowerThanBest } = backends[COLUMN[backend]];

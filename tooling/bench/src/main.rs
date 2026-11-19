@@ -516,7 +516,7 @@ fn count_cases(
     let build_session = build::Session::new(root)?;
     for case in cases {
         let name = case.file_name().unwrap_or("?");
-        if is_launch_case(case)? {
+        if is_launch_case(case) {
             println!("{name}\tlaunch row: timed under the measurement lock, never counted");
             continue;
         }
@@ -794,7 +794,7 @@ fn run_case(
     builds: &mut build::Recorder<'_>,
 ) -> Result<Measurements> {
     let name = case.file_name().context("a case needs a name")?;
-    if is_launch_case(case)? {
+    if is_launch_case(case) {
         ensure!(
             counting.is_none(),
             "{name} is a launch row: launch rows are timed under the measurement lock, never counted"
@@ -932,24 +932,15 @@ fn run_workload_case(
 }
 
 /// The file that makes a case a launch row: its `case.ts` is a whole program,
-/// timed from process launch to exit (tooling/bench/README.md, "Launch rows").
+/// launched by the launch timer (tooling/bench/README.md, "Launch rows" and
+/// "Peak-RSS rows").
 const LAUNCH_MARKER: &str = "launch.json";
 
-/// Whether `case` is a launch row. The marker's content is exact, so a stray
-/// or misspelt file is an error rather than a silently different row.
-fn is_launch_case(case: &Utf8Path) -> Result<bool> {
-    let marker = case.join(LAUNCH_MARKER);
-    if !marker.exists() {
-        return Ok(false);
-    }
-    let text = std::fs::read_to_string(&marker).with_context(|| format!("reading {marker}"))?;
-    let value: serde_json::Value =
-        serde_json::from_str(&text).with_context(|| format!("{marker} is not JSON"))?;
-    ensure!(
-        value == serde_json::json!({"metric": "launch-to-exit"}),
-        "{marker} must be exactly {{\"metric\":\"launch-to-exit\"}}"
-    );
-    Ok(true)
+/// Whether `case` is a launch row. Only its presence routes the case here:
+/// what the marker says, and whether it is well formed, is checked by its one
+/// reader, tooling/bench/launch-marker.ts, before anything is measured.
+fn is_launch_case(case: &Utf8Path) -> bool {
+    case.join(LAUNCH_MARKER).exists()
 }
 
 /// A launch row: the source capture that identifies its workload, then every
@@ -3217,42 +3208,24 @@ mod tests {
     }
 
     #[test]
-    fn a_launch_marker_is_exact_and_absence_means_a_throughput_case() {
+    fn a_launch_marker_routes_a_case_and_absence_means_a_throughput_case() {
         let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize_utf8()
             .expect("workspace");
-        let dir =
-            super::scratch::ScratchDir::new(&root.join("target/bench-launch-tests"), "marker");
-        assert!(!super::is_launch_case(&dir).expect("no marker"));
-        std::fs::write(
-            dir.join("launch.json"),
-            "{\"metric\": \"launch-to-exit\"}\n",
-        )
-        .expect("marker");
-        assert!(super::is_launch_case(&dir).expect("exact marker"));
-        for wrong in [
-            "{}",
-            "{\"metric\":\"launch\"}",
-            "launch-to-exit",
-            "{\"metric\":\"launch-to-exit\",\"x\":1}",
-        ] {
-            std::fs::write(dir.join("launch.json"), wrong).expect("marker");
-            assert!(
-                super::is_launch_case(&dir).is_err(),
-                "{wrong} is refused, not read as either kind"
-            );
-        }
+        // The marker's content is launch-marker.ts's to check
+        // (launch-marker.test.ts); here only its presence routes the case.
         for case in ["startup-empty", "startup-hello", "startup-builtins"] {
-            assert!(
-                super::is_launch_case(&root.join("benchmarks/cases").join(case))
-                    .expect("committed marker")
-            );
+            assert!(super::is_launch_case(
+                &root.join("benchmarks/cases").join(case)
+            ));
         }
-        assert!(
-            !super::is_launch_case(&root.join("benchmarks/cases/objects"))
-                .expect("throughput case")
-        );
+        assert!(!super::is_launch_case(
+            &root.join("benchmarks/cases/objects")
+        ));
+        assert!(!super::is_launch_case(
+            &root.join("benchmarks/cases/clbg-binary-trees")
+        ));
     }
 
     #[test]

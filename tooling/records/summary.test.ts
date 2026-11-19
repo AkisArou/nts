@@ -90,7 +90,7 @@ test("full.md retains standing values and shows ratio history with its allowance
 
 test("the benchmark summary is the newest complete run, from the model full.md renders", t => {
   const root = benchmarkTree(t), summary = benchmarkSummary(root);
-  assert.deepEqual([summary.version, summary.kind, summary.read], [2, "benchmarks", { root, commit: null }]);
+  assert.deepEqual([summary.version, summary.kind, summary.read], [3, "benchmarks", { root, commit: null }]);
   assert.ok(Number.isFinite(Date.parse(summary.at)) && summary.at === new Date(summary.at).toISOString(), summary.at);
   const newest = "2026-11-02-aaaaaaaaaaaa-newest";
   assert.deepEqual(summary.run, {
@@ -106,7 +106,9 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.ok(fast.backends.c&&fast.backends.llvm&&fast.backends.jvm);
   assert.ok(gaps.backends.c&&gaps.backends.llvm&&gaps.backends.jvm);
 
-  assert.deepEqual(fast.cells["nts C"], { status: "OK", nanoseconds: 80, spread: 1, verified: true, reason: null });
+  assert.equal(fast.kind, "throughput");
+  assert.ok(!("sized" in fast) && !("growth" in fast), "only peak-RSS rows name a sized workload");
+  assert.deepEqual(fast.cells["nts C"], { status: "OK", nanoseconds: 80, spread: 1, verified: true, reason: null, peakRss: null });
   assert.deepEqual(fast.backends.c.versus, {
     node: { kind: "WON", ratio: 0.8, tolerance: null }, "Bun JIT": { kind: "WON", ratio: 0.8, tolerance: null },
     "Bun AOT": { kind: "WON", ratio: 0.8, tolerance: 1.2 }, ScriptC: { kind: "WON", ratio: 0.8, tolerance: 1.05 },
@@ -116,7 +118,7 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.deepEqual(fast.backends.jvm.references, { "C++": 300 / 70, Java: 300 / 250 });
   // Each comparator has a prior ratio; a faster current LLVM ratio does not replace that provenance.
   assert.deepEqual(fast.backends.c.ownBest.node, {
-    currentRatio:0.8,best:{backend:'nts C',comparator:'node',ratio:0.4,backendNanoseconds:40,comparatorNanoseconds:100,
+    currentRatio:0.8,best:{backend:'nts C',comparator:'node',ratio:0.4,backendValue:40,comparatorValue:100,
       backendSpread:1,comparatorSpread:1,compiler:older,run:'2026-11-01-cccccccccccc-earlier'},
     relativeRatio:2,spreads:{currentBackend:1,currentComparator:1,priorBackend:1,priorComparator:1},spreadProduct:1,tolerance:1.05,slowerThanBest:true,
   });
@@ -125,7 +127,7 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.deepEqual(fast.llvmVersusC, { ratio: 1.5, tolerance: 1, trailing: "llvm" });
 
   // A refused backend is UNAVAILABLE, a comparator without a time NOT_COMPARABLE, both without a ratio.
-  assert.deepEqual(gaps.cells["nts C"], { status: "REFUSED", nanoseconds: null, spread: null, verified: false, reason: "NTS1001 a shape | with a pipe\nand a second line" });
+  assert.deepEqual(gaps.cells["nts C"], { status: "REFUSED", nanoseconds: null, spread: null, verified: false, reason: "NTS1001 a shape | with a pipe\nand a second line", peakRss: null });
   assert.deepEqual(gaps.backends.c.versus.node, { kind: "UNAVAILABLE", ratio: null, tolerance: null });
   assert.deepEqual(gaps.backends.llvm.versus.ScriptC, { kind: "NOT_COMPARABLE", ratio: null, tolerance: null });
   assert.deepEqual(gaps.backends.llvm.references, { "C++": 50 / 45, Java: null });
@@ -185,7 +187,7 @@ test("numbers are numbers: no time, ratio or count is text", t => {
     const all = leaves(summary);
     const texts = all.filter(([, value]) => typeof value === "string" && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$|\d\s*(?:ns|µs|ms)\b|×/.test(value));
     assert.deepEqual(texts, [], `${summary.kind}: numbers rendered as text`);
-    assert.equal(summary.version, summary.kind==='benchmarks'?2:1);
+    assert.equal(summary.version, summary.kind==='benchmarks'?3:1);
     const measures = all.filter(([at]) => /\.(nanoseconds|spread|ratio|tolerance|references\.(C\+\+|Java))$/.test(at));
     const counts = all.filter(([at]) => /\.counts\.[^.]+\.[^.]+\.[^.]+$|\.outcomes\.[^.]+$|\.(cases|pending)$/.test(at));
     assert.ok(measures.length + counts.length > 20, `${summary.kind}: the walk found its numbers`);
