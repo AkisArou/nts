@@ -1,3 +1,4 @@
+import {gateFixtureMemory,writeGateFixtureScript} from '../gate/fixed-members-fixture.ts';
 import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
@@ -26,7 +27,6 @@ import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.t
 import {copyModuleClosure} from "../gate/module-closure-fixture.ts";
 import {PROFILE,removeRun,type RunOptions} from "./run.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
-import {ownMemory} from "../gate/test-memory.ts";
 
 
 export const GATE = dirname(fileURLToPath(new URL("../gate/all.sh", import.meta.url)));
@@ -42,7 +42,7 @@ export function fixture(t: TestContext) {
   writeFileSync(join(tree,".tool-versions"),`nodejs ${process.versions.node}\n`);
   symlinkSync(fileURLToPath(new URL("../gate/times.tsv", import.meta.url)), join(gate, "times.tsv"));
   const names = execFileSync("sh", [join(GATE, "all.sh"), "--list"], {env:fixtureEnvironment(t), encoding: "utf8" }).trim();
-  writeFileSync(join(gate, "all.sh"), `#!/bin/sh
+  writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
 controls=${JSON.stringify(controls)}
 if [ "$1" = --list ]; then
 cat <<'NAMES'
@@ -76,7 +76,7 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   chmodSync(join(gate, "all.sh"), 0o755);
   const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: tree, encoding: "utf8", env: { ...fixtureEnvironment(t), GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
   const commit = git("rev-parse", "HEAD");
-  const memory = ownMemory(join(own, "memory"));
+  const memory = gateFixtureMemory(join(own, "memory"),tree);
   declareOwnMembers(memory,[process.pid]);
   const build = join(own, "build.sh");
   writeFileSync(build, `#!/bin/sh\n[ "$(cat ${JSON.stringify(join(controls, "build"))} 2>/dev/null)" = fail ] && { echo "error[E0308]: mismatched types"; exit 101; }\nmkdir -p "$CARGO_TARGET_DIR/${PROFILE}" && echo "nts $CARGO_INCREMENTAL" > "$CARGO_TARGET_DIR/${PROFILE}/nts" && chmod +x "$CARGO_TARGET_DIR/${PROFILE}/nts"\necho "   Compiling nts-core"\n`);

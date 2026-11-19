@@ -11,8 +11,8 @@ export type OwnMemory = Record<(typeof HOST_OBSERVATION_ENVIRONMENT)[number],str
  * Called again, it changes the reading at once, as a reader polling it sees
  * it: whole, never half written.
  */
-export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, allocated, resident, clock, cpu, selfCpu, scopePeak, pressure, loopDelay, wallClock, processUsers }:
-  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];allocated?:HostObservationFixture['allocated'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];selfCpu?:HostObservationFixture['selfCpu'];scopePeak?:HostObservationFixture['scopePeak'];pressure?:HostObservationFixture['pressure'];loopDelay?:HostObservationFixture['loopDelay'];wallClock?:HostObservationFixture['wallClock'];processUsers?:HostObservationFixture['processUsers']} = {}): OwnMemory {
+export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, allocated, resident, clock, cpu, selfCpu, scopePeak, pressure, loopDelay, wallClock, processUsers, memberScopes }:
+  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];allocated?:HostObservationFixture['allocated'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];selfCpu?:HostObservationFixture['selfCpu'];scopePeak?:HostObservationFixture['scopePeak'];pressure?:HostObservationFixture['pressure'];loopDelay?:HostObservationFixture['loopDelay'];wallClock?:HostObservationFixture['wallClock'];processUsers?:HostObservationFixture['processUsers'];memberScopes?:string[]} = {}): OwnMemory {
   mkdirSync(dir, { recursive: true });
   const meminfo = join(dir, "meminfo"), vmstat = join(dir, "vmstat");
   writeFileSync(`${meminfo}.next`, `MemTotal:       ${totalKiB} kB\nMemFree:        ${availableKiB} kB\nMemAvailable:   ${availableKiB} kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n`);
@@ -20,10 +20,12 @@ export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = M
   writeFileSync(`${vmstat}.next`, "pswpin 0\npswpout 0\n");
   renameSync(`${vmstat}.next`, vmstat);
   const capability=join(dir,'host-observations.json');
+  mkdirSync(join(dir,'members','scopes'),{recursive:true});
   const previous:HostObservationFixture|undefined=existsSync(capability)?JSON.parse(readFileSync(capability,'utf8')):undefined;
   const processes:HostObservationFixture['processUsers']=processUsers??previous?.processUsers??{kind:'proc',root:join(dir,'proc')};
   if(!processUsers&&!previous?.processUsers)mkdirSync(join(dir,'proc'),{recursive:true});
   const observations:HostObservationFixture={version:1,memory:{file:meminfo},paging:{file:vmstat},
+    memberDeclarations:{directory:join(dir,'members'),scopeReceipts:memberScopes??previous?.memberDeclarations?.scopeReceipts??[]},
     disk:disk??previous?.disk??{freeBytes:2**40,freeInodes:2**30},
     allocated:allocated??previous?.allocated??{kind:'fixed',defaultBytes:0},
     resident:resident??previous?.resident??{kind:'fixed',defaultBytes:0},

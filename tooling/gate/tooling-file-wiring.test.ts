@@ -1,3 +1,4 @@
+import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
 import {declareOwnMembers} from './test-cgroup-members.ts';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
@@ -42,13 +43,13 @@ for(const scenario of ['ordinary','full','oversized'] as const)test(`real toolin
   oracleWorkspaceFixture(t,root);
   const listed=spawnSync('sh',[new URL('./all.sh',source).pathname,'--list'],{env:fixtureEnvironment(t),encoding:'utf8'});
   assert.equal(listed.status,0,listed.stderr);
-  const independent=full||oversized?undefined:{root:join(own,'nested-repo'),run:join(own,'nested-run'),target:join(own,'nested-target'),marker:join(own,'nested-marker.json'),memory:ownMemory(join(own,'nested-memory'))};
+  const independent=full||oversized?undefined:{root:join(own,'nested-repo'),run:join(own,'nested-run'),target:join(own,'nested-target'),marker:join(own,'nested-marker.json'),memory:gateFixtureMemory(join(own,'nested-memory'),join(own,'nested-repo'))};
   if(independent){
     copyModuleClosure(['tooling/gate/run.mjs'],independent.root);oracleWorkspaceFixture(t,independent.root);
     mkdirSync(join(independent.target,'release'),{recursive:true});writeFileSync(join(independent.target,'release/nts'),'#!/bin/sh\nexit 0\n',{mode:0o755});
     const observe=`const fs=require('node:fs');if(process.env.NTS_MEMORY_LEDGER!==${JSON.stringify(independent.memory.NTS_MEMORY_LEDGER)})throw Error('nested runner escaped its supplied ledger');fs.writeFileSync(${JSON.stringify(independent.marker)},JSON.stringify({ledger:process.env.NTS_MEMORY_LEDGER,reservation:process.env.NTS_MEMORY_RESERVATION}));`;
     writeFileSync(join(independent.root,'tooling/gate/nested-marker.mjs'),generatedJavaScript(observe.replace("const fs=require('node:fs');","import fs from 'node:fs';")));
-    writeFileSync(join(independent.root,'tooling/gate/all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nnode tooling/gate/nested-marker.mjs\nfi\n`);
+    writeGateFixtureScript(join(independent.root,'tooling/gate/all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nnode tooling/gate/nested-marker.mjs\nfi\n`);
   }
   const paths=['tooling/first.test.mjs','tooling/second.test.mjs'];
   // Explicit live kernel wiring; admission still uses the complete supplied
@@ -99,10 +100,10 @@ writeFileSync(${JSON.stringify(ready)},'ready');
 await new Promise(resolve=>{const check=()=>{if(existsSync(${JSON.stringify(go)})){watcher.close();resolve();}};const watcher=watch(${JSON.stringify(own)},check);check();});
 const child=spawn(process.execPath,[${JSON.stringify(join(gate,'tooling-runner.ts'))},...${JSON.stringify(paths.map(path=>join(root,path)))}],{stdio:'inherit'});
 process.exitCode=await new Promise(resolve=>child.once('close',code=>resolve(code??2)));`));
-  writeFileSync(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nexec node ${JSON.stringify(driver)}\nfi\n`);
+  writeGateFixtureScript(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nexec node ${JSON.stringify(driver)}\nfi\n`);
   const memoryDir=join(own,'memory'),reading={totalKiB:31*2**20,availableKiB:20*2**20,
     resident:{kind:'fixed' as const,defaultBytes:128*2**20},scopePeak:{kind:'fixed' as const,bytes:128*2**20,resettable:true}};
-  const memory=ownMemory(memoryDir,reading),holders:Reservation[]=[];
+  const memory=gateFixtureMemory(memoryDir,root,reading),holders:Reservation[]=[];
   declareOwnMembers(memory,[process.pid]);
   // One supplied execution worker makes ordering observable without a host
   // timing assumption or a production parallelism override.
@@ -119,8 +120,7 @@ process.exitCode=await new Promise(resolve=>child.once('close',code=>resolve(cod
   const child=start(t,root,planned.env,join(gate,'run.mjs'),['tooling']);
   await waitFor('the elastic tooling payload to start',()=>existsSync(ready),{stopped:child.stopped});
   const updateMemory=(availableKiB:number)=>{
-    const packet=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));
-    ownMemory(memoryDir,{...reading,availableKiB,resident:{...reading.resident,members:packet.resident.members}});
+    ownMemory(memoryDir,{...reading,availableKiB});
   };
   if(full)updateMemory(2*2**20);
   writeFileSync(go,'go');
@@ -252,9 +252,9 @@ ${outcome==='observation'?"throw Error('supplied selector observation failure');
   writeFileSync(driver,generatedJavaScript(`import{runToolingFiles}from'./tooling-file-admission.ts';import{runAsCommand}from'../differential/command-entry/main.ts';
 runAsCommand(import.meta.url,async()=>{const result=await runToolingFiles({files:[${JSON.stringify(entry)}],selectorSelfTest:'include',complete:${JSON.stringify(join(own,'complete.json'))},nonce:'selector-suite'},{resultEnv:process.env});process.exitCode=result.status;});`));
   const listed=spawnSync('sh',[new URL('./all.sh',source).pathname,'--list'],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
-  writeFileSync(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nexec node ${JSON.stringify(driver)}\nfi\n`);
+  writeGateFixtureScript(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nexec node ${JSON.stringify(driver)}\nfi\n`);
   mkdirSync(join(target,'release'),{recursive:true});writeFileSync(join(target,'release/nts'),'#!/bin/sh\nexit 0\n',{mode:0o755});
-  const memory=ownMemory(join(own,'memory'),{availableKiB:20*2**20,totalKiB:31*2**20,resident:{kind:'fixed',defaultBytes:128*2**20},scopePeak:{kind:'fixed',bytes:128*2**20,resettable:true}});
+  const memory=gateFixtureMemory(join(own,'memory'),root,{availableKiB:20*2**20,totalKiB:31*2**20,resident:{kind:'fixed',defaultBytes:128*2**20},scopePeak:{kind:'fixed',bytes:128*2**20,resettable:true}});
   const observations=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));observations.width={logical:3,available:3};durableRecord(memory.NTS_HOST_OBSERVATIONS,observations);
   const planned=gateEnvironment(fixtureEnvironment(t),{run,oracleRoot:root,owned:{...memory,CARGO_TARGET_DIR:target,NTS_CENSUS_MEMORY_CAP_KB:String(512*1024)}}),child=start(t,root,planned.env,join(gate,'run.mjs'),['tooling']);
   const code=await child.closed,summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8')) as {steps:{verdict:string;reason?:string}[]};

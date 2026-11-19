@@ -6,6 +6,7 @@ import {HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {WORKER_ROLE_VARIABLES} from '../census/worker-identity.ts';
 import {beforeEach} from 'node:test';
+import {declareOwnMembers} from './test-cgroup-members.ts';
 import {setImmediate} from 'node:timers/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -16,6 +17,7 @@ export function poisonedTestEnvironment(source:NodeJS.ProcessEnv=process.env):No
 export function installTestHost(entryFile?:string):void {
   if(entryFile!==undefined)process.argv=[process.execPath,resolve(entryFile)];
   const environment=poisonedTestEnvironment();
+  declareOwnMembers(environment,[process.pid]);
   // Entry tests choose their own fixture execution roles and budgets. Their
   // real enclosing file cap remains in the kernel after these roles leave.
   const revoked=['NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY',...WORKER_ROLE_VARIABLES];

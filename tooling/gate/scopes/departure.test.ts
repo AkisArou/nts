@@ -1,3 +1,5 @@
+import {fixedMembersUnitCommand} from '../test-cgroup-members.ts';
+import {gateFixtureMemory,writeGateFixtureScript} from '../fixed-members-fixture.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -9,7 +11,6 @@ import {createInterface} from 'node:readline';
 import {startArgs} from '../../agents/agents.ts';
 import {gateEnvironment} from '../canonical-environment.ts';
 import {copyModuleClosure} from '../module-closure-fixture.ts';
-import {ownMemory} from '../test-memory.ts';
 import {fixtureEnvironment} from '../test-environment.ts';
 import {testScratch} from '../test-scratch.ts';
 import {spawnTest,waitFor} from '../test-wait.ts';
@@ -44,17 +45,17 @@ for(const arm of ['normal','cancel'] as const)test(`an acquired runner root ${ar
   writeFileSync(entry,original.replace(marker,fence+'\n'+marker));
   const listed=spawnTest('sh',[fileURLToPath(new URL('../all.sh',import.meta.url)),'--list'],{cwd:repo,env,encoding:'utf8'});
   assert.equal(listed.status,0,listed.stderr);
-  writeFileSync(join(repo,'tooling/gate/all.sh'),`#!/bin/sh
+  writeGateFixtureScript(join(repo,'tooling/gate/all.sh'),`#!/bin/sh
 if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
 NAMES
 else exit 0; fi
 `);
-  const planned=gateEnvironment(env,{run,owned:{...ownMemory(join(own,'observations'),{pressure:{kind:'live'}}),
+  const planned=gateEnvironment(env,{run,owned:{...gateFixtureMemory(join(own,'observations'),repo,{pressure:{kind:'live'}}),
     NTS_GATE_STEPS:'old-paths',NTS_GATE_SLOTS:'1',CARGO_TARGET_DIR:join(own,'target')}});
   const name='root-departure-'+randomUUID(),unit='nts-agent-'+name+'.service',parent=ownUnit();assert.ok(parent);
-  const command=['/usr/bin/env',...Object.entries(planned.env).filter(([,value])=>value!==undefined).map(([name,value])=>name+'='+value),process.execPath,entry];
+  const command=['/usr/bin/env',...Object.entries(planned.env).filter(([,value])=>value!==undefined).map(([name,value])=>name+'='+value),...fixedMembersUnitCommand([process.execPath,entry])];
   const args=startArgs(name,command,env,repo);args.splice(args.indexOf('--'),0,'--wait','--pipe','-p','PartOf='+parent);
   const output=createWriteStream(join(own,'runner.log')),child=spawn('systemd-run',args,{cwd:repo,env,stdio:['ignore','pipe','pipe']});
   child.stdout.pipe(output,{end:false});child.stderr.pipe(output,{end:false});

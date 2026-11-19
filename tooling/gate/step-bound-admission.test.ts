@@ -1,3 +1,5 @@
+import {fixedMembersUnitCommand} from './test-cgroup-members.ts';
+import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 // A real tokened step waits past its execution allowance without spending
 // it. The control holds a token forever and still reaches its own bound.
@@ -41,7 +43,7 @@ function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
   assert.match(readFileSync(table,"utf8"),/name: "test262-census-c", bound: 3,/);
   const listed=spawnSync("sh",[join(SOURCE,"tooling/gate/all.sh"),"--list"],{env:fixtureEnvironment(t),encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
-  writeFileSync(join(gate,"all.sh"),`#!/bin/sh
+  writeGateFixtureScript(join(gate,"all.sh"),`#!/bin/sh
 if [ "$1" = --list ];then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -92,7 +94,7 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   // remain alive while holding its token, so keep a filesystem watcher.
   if(mode==="active")writeFileSync(join(gate,"payload.mjs"),readFileSync(join(gate,"payload.mjs"),"utf8").replace('await new Promise(()=>{});',`await new Promise(()=>{watch(${JSON.stringify(own)},()=>{});});`));
   oracleWorkspaceFixture(t,root);
-  const memoryDir=join(own,"memory"),memory=ownMemory(memoryDir,{availableKiB:mode==="active"?16*2**20:3.25*2**20,totalKiB:16*2**20,clock:{kind:"file",file:clock}});
+  const memoryDir=join(own,"memory"),memory=gateFixtureMemory(memoryDir,root,{availableKiB:mode==="active"?16*2**20:3.25*2**20,totalKiB:16*2**20,clock:{kind:"file",file:clock}});
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
   assert.equal(writeCostHistory(historyFile(memory),{steps:[{name:STEP,memory:{unit:"token",peak:Math.floor(2*GiB/1.25)}}],
     jobs:[{key:"oracle-dependency-capture",basis:"job",width:1,peak:1}]}),undefined);
@@ -106,7 +108,7 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   const child=spawn("systemd-run",["--user",`--unit=${unit}`,`--slice=${slice}`,"--collect","--quiet","--wait","--pipe",
     "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=180s","-p","TimeoutStopSec=5s",
     `--working-directory=${root}`,...Object.entries(planned.env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>`--setenv=${key}=${value}`),
-    process.execPath,'--import',join(gate,"entry.mjs"),join(gate,'run.mjs')],{env:fixtureEnvironment(t),stdio:["ignore","pipe","pipe"]});
+    ...fixedMembersUnitCommand([process.execPath,'--import',join(gate,"entry.mjs"),join(gate,'run.mjs')])],{env:fixtureEnvironment(t),stdio:["ignore","pipe","pipe"]});
   let output="";child.stdout.on("data",b=>{output+=b;});child.stderr.on("data",b=>{output+=b;});
   const done=once(child,"close"),stopped=()=>child.exitCode!==null||child.signalCode!==null?`runner exited ${child.exitCode??child.signalCode}: ${output}`:undefined;
   const observation=():Observation|undefined=>existsSync(observed)?JSON.parse(readFileSync(observed,"utf8")):undefined;

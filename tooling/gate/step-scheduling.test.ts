@@ -1,3 +1,5 @@
+import {fixedMembersUnitCommand} from './test-cgroup-members.ts';
+import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
 import {STEP_CPU_MEASURE,GNU_CPU_MEASURE} from './step-time.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
@@ -19,7 +21,7 @@ import {once} from "node:events";
 import {COST_HISTORY_VERSION,historyFile as schedulingHistoryFile,RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
   snapshotCostHistory,unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
-import {ownMemory, type OwnMemory} from "./test-memory.ts";
+import {type OwnMemory} from "./test-memory.ts";
 import {OOM_SCORE,readLedger} from "./memory-ledger.ts";
 
 // Scheduling vectors are fixture-owned CPU observations of the current measure.
@@ -142,13 +144,13 @@ test("measured CPU work starts TypeScript at full width against a competing fixe
   const baseline = fixtureBaseline("tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n");
   writeFileSync(join(gate, "times.tsv"), baseline);
   // The run's history is the test's own, as its memory is.
-  const memory = ownMemory(join(own, "memory"),{cpu:{kind:"fixed",default:{usageUsec:5_000_000,userUsec:4_000_000,systemUsec:1_000_000}}}), historyFile = schedulingHistoryFile(memory);
+  const memory = gateFixtureMemory(join(own, "memory"),root,{cpu:{kind:"fixed",default:{usageUsec:5_000_000,userUsec:4_000_000,systemUsec:1_000_000}}}), historyFile = schedulingHistoryFile(memory);
   mkdirSync(memory.NTS_GATE_COSTS_DIR);
   writeFileSync(historyFile, JSON.stringify({version:4,cpu_measure:STEP_CPU_MEASURE,jobs:{},steps:{tests:{cpu:100},"typescript-c":{cpu:8000},"typescript-oracles":{cpu:16000}}}) + "\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   const observed = join(own, "starts.jsonl");
-  writeFileSync(join(gate, "all.sh"), `#!/bin/sh
+  writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
 if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -336,7 +338,7 @@ export { stepTableProblem };
   writeFileSync(join(gate, "payload.sh"), payload);
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
-  writeFileSync(join(gate, "all.sh"), `#!/bin/sh
+  writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
 if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -345,7 +347,7 @@ else
   exec sh "$(dirname "$0")/payload.sh" "$2" ${JSON.stringify(own)}
 fi
 `);
-  const memory = ownMemory(join(own, "memory"), { availableKiB, totalKiB,resident:liveResident?{kind:"live"}:{kind:"fixed",defaultBytes:2**20} });
+  const memory = gateFixtureMemory(join(own, "memory"),root, { availableKiB, totalKiB,resident:liveResident?{kind:"live"}:{kind:"fixed",defaultBytes:2**20} });
   const history = schedulingHistoryFile(memory);
   mkdirSync(memory.NTS_GATE_COSTS_DIR);
   writeFileSync(history, JSON.stringify({ version: 3, jobs: {}, steps: Object.fromEntries(Object.entries(rows).flatMap(([name, row]) => row.reserve === undefined ? []
@@ -360,7 +362,7 @@ fi
     // A service is forked by the manager, so explicitly retain the caller's
     // score as a normal child would. The runner then raises it to its priority.
     `--property=OOMScoreAdjust=${Math.max(oomScore, OOM_SCORE.landing)}`,
-    `--working-directory=${root}`, ...setenv, process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
+    `--working-directory=${root}`, ...setenv, ...fixedMembersUnitCommand([process.execPath, join(gate, "run.mjs")])], { encoding: "utf8" });
   assert.ok(existsSync(join(run, "summary.json")), result.stdout + result.stderr);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
     verdict: string; steps: MemoryStep[];scope_cleanup:{state:string;reason?:string};

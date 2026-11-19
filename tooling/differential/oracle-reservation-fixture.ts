@@ -1,3 +1,4 @@
+import {gateFixtureMemory,writeGateFixtureScript} from '../gate/fixed-members-fixture.ts';
 // The tooling producer proof executes from its own staged, committed source.
 // Rust tests consume a parent seal and never stage or install dependencies.
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
@@ -14,7 +15,7 @@ import {hostEnvironment} from '../gate/host-environment.ts';
 import {removable,finishRunTemporary} from '../gate/run-temporary.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
 import {ownMemory} from '../gate/test-memory.ts';
-import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
+import {declareOwnMembers,fixedMembersUnitCommand} from '../gate/test-cgroup-members.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {oracleWorkspaceFixture} from './oracle-workspace-fixture.ts';
 import {captureDependencies,type DependencyCapability} from './oracle-dependencies.ts';
@@ -35,7 +36,7 @@ if(mode==='--consume'){
   const own=process.argv[3];assert.ok(own);
   assert.equal(source,resolve(own,'tree'),'producer fixture source must be its acquired staged tree');
   const run=join(own,'run'),home=join(own,'home');mkdirSync(home);
-  const memory=ownMemory(join(own,'memory')),low=ownMemory(join(own,'pressure'),{availableKiB:0,totalKiB:2**20}).NTS_HOST_OBSERVATIONS;
+  const memory=gateFixtureMemory(join(own,'memory'),source),low=ownMemory(join(own,'pressure'),{availableKiB:0,totalKiB:2**20}).NTS_HOST_OBSERVATIONS;
   declareOwnMembers(memory,[process.pid]);
   const base={...hostEnvironment(process.env),HOME:home};
   const accounting=gateEnvironment(base,{run:join(own,'accounting'),standalone:true,oracleRoot:source,owned:{...memory}});
@@ -58,7 +59,7 @@ if(mode==='--consume'){
   const fake=join(own,'nts');writeFileSync(fake,'#!/bin/sh\nexit 0\n',{mode:0o755});
   const names=execFileSync('sh',[fileURLToPath(GATE_LIST),'--list'],{env:testEnvironment(),encoding:'utf8'}).trim();
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
-  writeFileSync(join(source,'tooling/gate/all.sh'),`#!/bin/sh
+  writeGateFixtureScript(join(source,'tooling/gate/all.sh'),`#!/bin/sh
 set -eu
 if [ "$1" = --list ]; then
 cat <<'NTS_STEPS'
@@ -76,7 +77,7 @@ fi
     // run.mjs owns the cold preparation in its reservation, before this step
     // sees the intentionally empty host. The step consumes that exact seal.
     const planned=gateEnvironment(base,{run,standalone:true,oracleRoot:source,owned:{NTS_GATE_RUN_DIR:run,NTS_GATE_STEPS:'tests',...memory,NTS_BIN:fake,NTS_SUITE_BIN:fake,NTS_CHECKERS:'1'}});
-    const result=spawnTest('systemd-run',['--user','--scope','--unit='+unit,'--collect','--quiet','prlimit','--core=0',process.execPath,fileURLToPath(GATE_RUN)],{cwd:source,env:planned.env,encoding:'utf8',maxBuffer:16*2**20},'owned producer preparation before a zero-memory consuming test');
+    const result=spawnTest('systemd-run',['--user','--scope','--unit='+unit,'--collect','--quiet','prlimit','--core=0',...fixedMembersUnitCommand([process.execPath,fileURLToPath(GATE_RUN)])],{cwd:source,env:planned.env,encoding:'utf8',maxBuffer:16*2**20},'owned producer preparation before a zero-memory consuming test');
     assert.equal(result.status,0,result.stdout+result.stderr);
     assert.equal(result.signal,null,result.stdout+result.stderr);
     const summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8'));

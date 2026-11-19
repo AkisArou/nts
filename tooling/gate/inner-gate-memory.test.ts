@@ -1,3 +1,5 @@
+import {fixedMembersUnitCommand} from './test-cgroup-members.ts';
+import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 // An inner gate run is admitted by the memory reading and the memory ledger its
 // test gives it, never the host's memory or the machine's queue. A run waits in
@@ -33,7 +35,6 @@ import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.t
 import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
-import {ownMemory} from "./test-memory.ts";
 import {readLedger} from "./memory-ledger.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 
@@ -54,7 +55,7 @@ function fixture(t: TestContext) {
   const listed = spawnTest("sh", [join(GATE, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   // The step's one case holds a token while it runs.
-  writeFileSync(join(gate, "all.sh"), `#!/bin/sh
+  writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
 if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -67,7 +68,7 @@ fi
 `);
   const compiler = join(own, "nts"); writeFileSync(compiler, "controlled compiler identity\n");
   const planned = (name: string, availableKiB: number) => {
-    const run = join(own, "home/.cache", name), memory = ownMemory(join(own, name), { availableKiB, totalKiB: 32_000_000 });
+    const run = join(own, "home/.cache", name), memory = gateFixtureMemory(join(own, name),root, { availableKiB, totalKiB: 32_000_000 });
     return { run, memory, env: gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") },
       { run, oracleRoot:root, owned: { NTS_GATE_STEPS: "examples", NTS_BIN: compiler, CARGO_TARGET_DIR: join(own, "target"), ...memory } }).env };
   };
@@ -94,7 +95,7 @@ test("an inner gate run whose reading has no room for it waits in its own ledger
   // In the tooling run's slice, so a test stopped before its own cleanup
   // stops the run with it.
   const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
-    `--working-directory=${f.root}`, ...setenv, process.execPath, join(f.gate, "run.mjs")], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
+    `--working-directory=${f.root}`, ...setenv, ...fixedMembersUnitCommand([process.execPath, join(f.gate, "run.mjs")])], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
   // The event, not a timer: the run says it waits, or it ends.
   const waiting = await new Promise<boolean>(resolve => {
     const seen = (line: string) => { if (WAITING.test(line)) resolve(true); };
@@ -132,7 +133,7 @@ test("a holder at an agent's priority starts a gate run that needs more than the
     const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `--setenv=${name}=${value}`);
     const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
       `--working-directory=${f.root}`, ...setenv, process.execPath, ADMIT, "--bytes", "12G", "--what", "holder", "--",
-      "sh", "-c", command, process.execPath, join(f.gate, "run.mjs")], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
+      ...fixedMembersUnitCommand(["sh", "-c", command, process.execPath, join(f.gate, "run.mjs")])], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     const seen = (line: string) => { output += `${line}\n`; };
     createInterface({ input: child.stdout! }).on("line", seen);

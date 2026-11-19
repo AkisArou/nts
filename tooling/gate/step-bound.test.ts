@@ -1,3 +1,4 @@
+import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
 // The step bound (step-bound.ts), the committed table it reads, and the runner
 // that applies it (run.mjs): a step past its bound is stopped through its own
 // scope and held, and a step within its bound is untouched.
@@ -20,7 +21,6 @@ import { spawnTest } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import { removable } from "./run-temporary.ts";
-import { ownMemory } from "./test-memory.ts";
 
 // These are arithmetic policy vectors, not comparisons of measured CPU.
 const baseline = () => readStepBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
@@ -134,7 +134,7 @@ if (process.env.NTS_GATE_STEP === "format") {
   await new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
 } else console.log("records finished");
 `);
-  writeFileSync(join(gate, "all.sh"), `#!/bin/sh
+  writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
 if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -145,7 +145,7 @@ fi
 `);
   // An ample memory reading and a ledger of its own, as every test that starts a real runner gives it.
   const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", ...ownMemory(join(own, "memory")), CARGO_TARGET_DIR: target, ...owned,
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", ...gateFixtureMemory(join(own, "memory"),root), CARGO_TARGET_DIR: target, ...owned,
   } });
   const result = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string;

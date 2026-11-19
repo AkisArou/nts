@@ -1,3 +1,4 @@
+import {gateFixtureMemory,writeGateFixtureScript} from '../gate/fixed-members-fixture.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {gateEnvironment,launcherPolicyNames} from '../gate/canonical-environment.ts';
@@ -14,7 +15,6 @@ import {join} from "node:path";
 import {test} from "node:test";
 import {fullPlan, fullEnvironment} from "./full-plan.ts";
 import {testScratch, newTestScratch} from "../gate/test-scratch.ts";
-import {ownMemory} from "../gate/test-memory.ts";
 
 
 test("missing full-run environment refuses before setup", t => {
@@ -77,7 +77,7 @@ test("a plain full run canonically accepts exactly the landing's standing skips"
   symlinkSync(new URL("../gate/times.tsv",import.meta.url),join(gate,"times.tsv"));
   const listed=spawnTest("sh",[new URL("../gate/all.sh",import.meta.url).pathname,"--list"],{encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
-  writeFileSync(join(gate,"all.sh"),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  echo 'SKIP: fixture unavailable'\n  exit 77\nfi\n`);
+  writeGateFixtureScript(join(gate,"all.sh"),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  echo 'SKIP: fixture unavailable'\n  exit 77\nfi\n`);
   const home=join(f.directory,"home");
   mkdirSync(join(f.root,"target/release"),{recursive:true});
   writeFileSync(join(f.root,"target/release/nts"),"fixture compiler identity; steps return 77 without invoking it\n");
@@ -88,7 +88,7 @@ test("a plain full run canonically accepts exactly the landing's standing skips"
     assert.equal(JSON.parse(env[ENVIRONMENT_CONTEXT]!).report.canonical,true);
     // The inner run decides by a reading and a ledger of its own, never the
     // host's memory, which a full gate can hold low, or the machine's queue.
-    const admitted=gateEnvironment(env,{run:plan.run,owned:ownMemory(join(f.directory,"memory"))}).env;
+    const admitted=gateEnvironment(env,{run:plan.run,owned:gateFixtureMemory(join(f.directory,"memory"),f.root)}).env;
     const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:f.root,env:admitted,encoding:"utf8"});
     const accepted=step==="on-device";
     assert.equal(actual.status,accepted?0:1,actual.stdout+actual.stderr);

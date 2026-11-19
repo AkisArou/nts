@@ -37,6 +37,9 @@ function readOwner(text: string,file="gate root receipt"): RunOwner {
   return value;
 }
 
+/** The creation receipt has one schema, shared by its owner and observers. */
+export {readOwner as parseRunOwner};
+
 export function reapRunOwner(path: string, reap: (previous: RunOwner) => void): void {
   withStateLock(path,()=>{
     let prior: string | undefined;

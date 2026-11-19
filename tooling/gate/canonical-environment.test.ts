@@ -1,4 +1,5 @@
-import {declareOwnMembers} from './test-cgroup-members.ts';
+import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
+import {declareOwnMembers,fixedMembersUnitCommand} from './test-cgroup-members.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {generatedJavaScript} from './generated-javascript.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-environment.ts';
@@ -417,7 +418,7 @@ test("a failed Node heap reports its specific diagnostic",()=>{
 test("the real runner records the environment and distinguishes verdict failures from instruments",t=>{
   // An inner run decides by a reading and a ledger of its own, never the
   // host's memory or the machine's queue.
-  const {run,base}=fixture(t),memory=ownMemory(join(run,"memory")),root=join(run,"repo"),gate=join(root,"tooling/gate");
+  const {run,base}=fixture(t),memory=gateFixtureMemory(join(run,"memory"),join(run,"repo")),root=join(run,"repo"),gate=join(root,"tooling/gate");
   const nodeCommand="'"+process.execPath.replaceAll("'","'\\''")+"'";
   mkdirSync(gate,{recursive:true});
   const source=new URL("./",import.meta.url).pathname;
@@ -426,7 +427,7 @@ test("the real runner records the environment and distinguishes verdict failures
   symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
   const listed=spawnTest("sh",[join(source,"all.sh"),"--list"],{encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
-  writeFileSync(join(gate,"all.sh"),`#!/bin/sh
+  writeGateFixtureScript(join(gate,"all.sh"),`#!/bin/sh
 if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -488,7 +489,7 @@ test("a nested pinned entry cannot take ownership of its parent step's scratch",
 });
 
 test('the real runner preserves typed parent capture failures before launching any step',t=>{
-  const {run,base}=fixture(t),memory=ownMemory(join(run,'memory')),source=new URL('./',import.meta.url).pathname;
+  const {run,base}=fixture(t),memory=gateFixtureMemory(join(run,'memory'),join(run,'repo')),source=new URL('./',import.meta.url).pathname;
   for(const kind of ['tooling-setup','case-budget']){
     const root=join(run,kind),gate=join(root,'tooling/gate');mkdirSync(gate,{recursive:true});
   copyModuleClosure(["tooling/gate/run.mjs"],root);
@@ -496,7 +497,7 @@ test('the real runner preserves typed parent capture failures before launching a
     const canonical=new URL('./canonical-environment.ts',import.meta.url).href;
     writeFileSync(join(gate,'canonical-environment.ts'),`export * from ${JSON.stringify(canonical)};import {CaseBudgetError,ToolingInstrumentError} from './step-result.ts';export async function sealOracleRun(){throw ${kind==='case-budget'?"new CaseBudgetError('parent capture budget control')":"new ToolingInstrumentError('tooling-setup','oracle dependency seal changed: parent control')"};}\n`);
     const listed=spawnTest('sh',[join(source,'all.sh'),'--list'],{encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
-    writeFileSync(join(gate,'all.sh'),`#!/bin/sh
+    writeGateFixtureScript(join(gate,'all.sh'),`#!/bin/sh
 if [ "$1" = --list ];then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -538,7 +539,7 @@ function startupRunner(t:{after(fn:()=>void):void},availableKiB:number,oracle?:"
   symlinkSync(join(source,'times.tsv'),join(gate,'times.tsv'));
   const listed=spawnTest('sh',[join(source,'all.sh'),'--list'],{encoding:'utf8'});
   assert.equal(listed.status,0,listed.stderr);
-  writeFileSync(join(gate,'all.sh'),`#!/bin/sh
+  writeGateFixtureScript(join(gate,'all.sh'),`#!/bin/sh
 if [ "$1" = --list ];then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -566,7 +567,7 @@ createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipe
 release();
 child.release();
 `);
-  const memory=ownMemory(join(run,'memory'),{availableKiB,totalKiB:64_000_000});
+  const memory=gateFixtureMemory(join(run,'memory'),root,{availableKiB,totalKiB:64_000_000});
   declareOwnMembers(memory,[process.pid]);
   // This arm waits for a measured capture's forecast. An unknown capture
   // asks only for its live margin and would fit beside the runner.
@@ -581,7 +582,7 @@ child.release();
   const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
   const child=spawn('systemd-run',['--user',...toolingSliceArgs(process.env,"agent"),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','Nice=19','-p','RuntimeMaxSec=120s','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
-    '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
+    '-p','WorkingDirectory='+root,...fixedMembersUnitCommand(['taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')])],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});

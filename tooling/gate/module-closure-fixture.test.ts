@@ -18,17 +18,18 @@ function fixture(t: TestContext) {
   return {source, destination, write};
 }
 
-test('the copier stages real runner membership once, including indirect copies, and keeps source links unchanged',t=>{
+test('copied, linked and reused runner closures preserve every product source byte',t=>{
   const root=testScratch(t,'runner-members-copy'),entry='tooling/gate/run.mjs',scope='tooling/gate/scopes/step-scope.ts';
   const source=readFileSync(new URL('./scopes/step-scope.ts',import.meta.url),'utf8');
   const files=copyModuleClosure([entry],join(root,'private'));
   assert.ok(files.includes(scope));
-  assert.ok(files.includes('tooling/gate/test-cgroup-members.ts'));
   const staged=readFileSync(join(root,'private',scope),'utf8');
-  assert.match(staged,/declareFixedMembers\(env,this.group,\[\]\)/);
+  assert.equal(staged,source);
+  for(const name of files)assert.deepEqual(readFileSync(join(root,'private',name)),readFileSync(new URL('../../'+name,import.meta.url)),name);
   copyModuleClosure([entry],join(root,'private'));
   assert.equal(readFileSync(join(root,'private',scope),'utf8'),staged);
   copyModuleClosure([entry],join(root,'linked'),{link:true});
+  copyModuleClosure([entry],join(root,'linked'),{reuseSourceLinks:true});
   assert.equal(readFileSync(join(root,'linked',scope),'utf8'),source);
   assert.equal(readFileSync(new URL('./scopes/step-scope.ts',import.meta.url),'utf8'),source);
 });

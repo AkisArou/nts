@@ -1,19 +1,23 @@
-// The fixture copier owns these private declarations at scope creation and
-// process entry. Acquisition in the product still supplies provenance only.
-export function fixedMembersSource(name:string,source:string):string{
-  if(name==='tooling/gate/scopes/step-scope.ts'){
-    if(source.includes('declareFixedMembers(env,this.group,[])'))return source;
-    const seam='this.group = startBoundSlice(this.slice, owner, { rank });';
-    if(!source.includes(seam))throw Error('fixed gate membership fixture lost its scope-creation seam');
-    return "import {declareFixedMembers,declareOwnMembers} from '../test-cgroup-members.ts';\n"+
-      source.replace(seam,seam+'\n    declareFixedMembers(env,this.group,[]);\n    declareOwnMembers(env,[process.pid]);');
-  }
-  if(name==='tooling/gate/test-host-bootstrap.ts'){
-    if(source.includes('declareOwnMembers(environment,[process.pid])'))return source;
-    const seam='const environment=poisonedTestEnvironment();';
-    if(!source.includes(seam))throw Error('fixed membership fixture lost its scope-entry seam');
-    return "import {declareOwnMembers} from './test-cgroup-members.ts';\n"+
-      source.replace(seam,seam+'\n  declareOwnMembers(environment,[process.pid]);');
-  }
-  return source;
+// Fixed runner observations opt in to the exact receipt written by GateScopes.
+// Product modules are copied unchanged; private payloads declare their actors.
+import {join} from 'node:path';
+import {ownMemory} from './test-memory.ts';
+import {fixedMembersEntryArguments} from './test-cgroup-members.ts';
+import {existsSync,lstatSync,writeFileSync} from 'node:fs';
+
+export function gateFixtureMemory(directory:string,tree:string,reading:NonNullable<Parameters<typeof ownMemory>[1]>={}){
+  return ownMemory(directory,{...reading,memberScopes:[join(tree,'target/gate-scope-owner.json')]});
+}
+
+/** A fixture's shell payload is the known logical actor, before it launches. */
+export function fixtureStepMembers():string{
+  const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
+  return fixedMembersEntryArguments().map(quote).join(' ');
+}
+
+/** Write the fixture's own payload, never transform a copied product module. */
+export function writeGateFixtureScript(path:string,source:string):void{
+  if(existsSync(path)&&lstatSync(path).isSymbolicLink())throw Error('fixture payload cannot replace a source link');
+  if(!source.startsWith('#!/bin/sh\n'))throw Error('fixture payload requires its shell entry');
+  writeFileSync(path,'#!/bin/sh\nif [ "$1" != --list ]; then\n  '+fixtureStepMembers()+' || exit $?\nfi\n'+source.slice('#!/bin/sh\n'.length));
 }

@@ -1,7 +1,6 @@
 // Test repositories carry the modules their entry points actually import.
 // Package installations and non-module assets remain explicit fixture inputs.
-import {copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync,writeFileSync} from "node:fs";
-import {fixedMembersSource} from './fixed-members-fixture.ts';
+import {copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync} from "node:fs";
 import {dirname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
@@ -210,16 +209,7 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   const dependencyCatalog=options.dependencyCatalog===undefined?sourceCatalog(source):options.dependencyCatalog;
   const graph = moduleGraph({...options, sourceRoot: source,dependencyCatalog,unavailableInputs:'refuse'});
   let snapshot:InputSnapshot;
-  try {
-    snapshot=graph.describe(entries);
-    if(!options.link&&!options.reuseSourceLinks&&(
-      snapshot.stagingFiles.includes('tooling/gate/run.mjs')&&snapshot.stagingFiles.includes('tooling/gate/scopes/step-scope.ts')
-      ||snapshot.stagingFiles.includes('tooling/gate/tooling-test-worker.ts'))){
-      // The private declaration is an executable fixture entry. Its own
-      // imports, rather than a second list of dependencies, supply its closure.
-      snapshot=graph.describe([...entries,'tooling/gate/test-cgroup-members.ts']);
-    }
-  }
+  try {snapshot=graph.describe(entries);}
   catch(error){
     if(error instanceof InstalledPackageReachUnavailable)refuseInstallationReach(error.rows,source,options.dependencyCatalog!==undefined,error);
     throw Error('fixture closure '+JSON.stringify(entries)+' from '+source+': '+String(error),{cause:error});
@@ -228,12 +218,6 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   validateReaderSourceObservations(snapshot,source);
   const staged=fixtureStagingSnapshot(snapshot);
   const data=fixtureData(staged,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;
-  // A copied real runner creates its fixture's scopes after the packet was
-  // built. The copy owner stages those logical declarations once, including
-  // indirect runner copies. Borrowed source links always retain source bytes.
-  const fixedMembers=!options.link&&!options.reuseSourceLinks&&(
-    files.includes('tooling/gate/run.mjs')&&files.includes('tooling/gate/scopes/step-scope.ts')
-    ||files.includes('tooling/gate/tooling-test-worker.ts'));
   const inputs=files.map(name=>{
     const from=resolve(source,name),to=resolve(destination,name);
     if (to === from) throw new Error("fixture destination is the source: " + name);
@@ -242,8 +226,6 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   });
   for(const {name,from,to}of inputs){
     if(options.reuseSourceLinks&&info(to)&&realpathSync(to)===from)continue;
-    const content=fixedMembers&&(name==='tooling/gate/scopes/step-scope.ts'||name==='tooling/gate/test-host-bootstrap.ts')
-      ?Buffer.from(fixedMembersSource(name,readFileSync(from,'utf8'))):undefined;
     let parent = destination;
     for (const part of ["", ...relative(destination, dirname(to)).split(sep).filter(Boolean)]) {
       parent = join(parent, part);
@@ -253,11 +235,10 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
     }
     const existing = info(to);
     if (existing) {
-      if (options.link ? existing.isSymbolicLink() && realpathSync(to) === from : existing.isFile() && readFileSync(to).equals(content??readFileSync(from))) continue;
+      if (options.link ? existing.isSymbolicLink() && realpathSync(to) === from : existing.isFile() && readFileSync(to).equals(readFileSync(from))) continue;
       throw new Error("fixture module already has different input: " + name);
     }
     if (options.link) symlinkSync(from, to);
-    else if(content)writeFileSync(to,content);
     else copyFileSync(from, to);
   }
   fixtureMetadata(staged,destination,dataNamespaces,fixtureEntries,data.publish||data.manifest.data.length>0);

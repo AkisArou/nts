@@ -13,6 +13,7 @@ import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {dirname,isAbsolute,join,resolve} from 'node:path';
 import {observeTreeProcesses,type TreeProcessObservation} from '../landing/tree-users.ts';
+import {parseRunOwner,type RunOwner} from './scopes/run-owner.ts';
 
 export const HOST_OBSERVATIONS = 'NTS_HOST_OBSERVATIONS';
 export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR','NTS_DISK_CAPACITY'] as const;
@@ -97,6 +98,14 @@ export function listedCgroupPopulated(group:string,observations=new CgroupObserv
   return sampleCgroup(group,()=>observations.populated(group),false);
 }
 export type RetainedCgroup={path:string;inode:string};
+export type MemberDeclaration={version:1;group:string;members:number[]};
+/** Immutable fixture actor records have one writer/reader schema. */
+export function parseMemberDeclaration(value:unknown,name='resident.members declaration'):MemberDeclaration{
+  const row=value as MemberDeclaration;
+  if(!row||typeof row!=='object'||row.version!==1||Object.keys(row).sort().join(',')!=='group,members,version'
+    ||typeof row.group!=='string'||!Array.isArray(row.members)||row.members.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw new HostObservationError(`host observation ${name} is invalid`);
+  checkedGroup(row.group);return row;
+}
 export function sampleCgroup<T>(group:string,read:()=>T,departed:T):T{
   try{return read();}catch(error){if(error instanceof CgroupDeparted&&error.group===group)return departed;throw error;}
 }
@@ -119,6 +128,7 @@ export type OwnCpu = {userUsec:number;systemUsec:number};
 export type ScopeMemoryPeak = {readonly resettable:boolean;reset():void;read():number;close():void};
 export type HostObservationFixture = {
   version:1;
+  memberDeclarations?:{directory:string;scopeReceipts:string[]};
   memory:{file:string};
   paging:{file:string};
   disk:DiskSpace;
@@ -355,20 +365,87 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     const acquisitionFile=(path:string)=>join(file+'.acquired',createHash('sha256').update(checkedGroup(path)).digest('hex')+'.json');
     const acquireCgroup=(path:string):RetainedCgroup=>{
       const ref={path,inode:cgroups.inode(path)};
-      if(read().resident.kind==='fixed')durableRecord(acquisitionFile(path),ref);
+      if(read().resident.kind==='fixed'){
+        durableRecord(acquisitionFile(path),ref);
+        fixtureScope(path,ref.inode);
+      }
       return ref;
     };
-    const fixtureMembers=(path:string,declared:Record<string,number[]>|undefined):number[]=>{
-      checkedGroup(path);
-      const value=declared?.[path];
-      if(value===undefined)throw new HostObservationError(`host observation resident.members has no cgroup ${path}`);
-      if(!Array.isArray(value)||value.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw new HostObservationError(`host observation resident.members is invalid for ${path}`);
-      return [...value];
+    const fixtureJson=(path:string,name:string,optional=false):unknown=>{
+      try{return JSON.parse(readFileSync(path,'utf8'));}
+      catch(error){if(optional&&(error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw new HostObservationError(`host observation ${name} is unreadable: ${path}`,{cause:error});}
     };
-    const charge=(kind:'processes'|'cgroups',key:string)=>{
+    const fixtureRecords=(directory:string):string[]=>{
+      try{return readdirSync(directory).filter(name=>name.endsWith('.json')).sort().map(name=>join(directory,name));}
+      catch(error){throw new HostObservationError(`host observation resident.members declaration directory is unreadable: ${directory}`,{cause:error});}
+    };
+    const fixtureScope=(path:string,inode?:string,source=read().memberDeclarations):boolean=>{
+      if(!source||read().resident.kind!=='fixed')return false;
+      if(typeof source.directory!=='string'||!isAbsolute(source.directory)||!Array.isArray(source.scopeReceipts)||source.scopeReceipts.some(value=>typeof value!=='string'||!isAbsolute(value)))throw new HostObservationError('host observation resident.members declaration source is invalid');
+      if(source.scopeReceipts.length===0)return false;
+      const receipts=new Map<string,RunOwner|undefined>();
+      for(const receipt of source.scopeReceipts){
+        const value=fixtureJson(receipt,'resident.members creation receipt',true);
+        try{receipts.set(receipt,value===undefined?undefined:parseRunOwner(JSON.stringify(value),receipt));}
+        catch(error){throw new HostObservationError(`host observation resident.members creation receipt is invalid: ${receipt}`,{cause:error});}
+      }
+      // Bindings retain identity only, so a fresh sampler can recognize a
+      // closed receipt. Membership always comes from explicit logical declarations.
+      let mismatchedIdentity=false;
+      for(const record of fixtureRecords(join(source.directory,'scopes'))){
+        const binding=fixtureJson(record,'resident.members scope binding') as {version?:number;receipt?:string;owner?:RunOwner};
+        if(!binding||binding.version!==1||typeof binding.receipt!=='string'||!receipts.has(binding.receipt)||Object.keys(binding).sort().join(',')!=='owner,receipt,version')throw new HostObservationError(`host observation resident.members scope binding is invalid: ${record}`);
+        let prior:RunOwner;
+        try{prior=parseRunOwner(JSON.stringify(binding.owner),record);}
+        catch(error){throw new HostObservationError(`host observation resident.members scope binding is invalid: ${record}`,{cause:error});}
+        if(!prior.scope)throw new HostObservationError(`host observation resident.members scope binding lacks identity: ${record}`);
+        if(prior.scope.group!==path)continue;
+        if(inode!==undefined&&inode!==prior.scope.inode){mismatchedIdentity=true;continue;}
+        const current=receipts.get(binding.receipt);
+        if(!current||current.nonce!==prior.nonce)throw new CgroupDeparted(path,Error('fixture creation receipt closed'));
+        if(!current.scope||current.scope.group!==path||current.scope.device!==prior.scope.device||current.scope.inode!==prior.scope.inode)throw new HostObservationError(`host observation resident.members creation identity changed for ${path}`);
+      }
+      for(const [receipt,owner]of receipts){
+        const scope=owner?.scope;if(!scope||scope.group!==path)continue;
+        cgroups.listed([path]);
+        const identity=cgroups.observe(path,'fixture creation identity',()=>{
+          const value=statSync(`/sys/fs/cgroup${path}`,{bigint:true});return {device:String(value.dev),inode:String(value.ino)};
+        });
+        if(identity.device!==scope.device||identity.inode!==scope.inode||inode!==undefined&&inode!==scope.inode)throw new HostObservationError(`host observation resident.members creation identity does not match ${path}`);
+        const key=createHash('sha256').update(JSON.stringify([receipt,owner!.nonce,scope])).digest('hex');
+        const binding=join(source.directory,'scopes',key+'.json');
+        if(!existsSync(binding))durableRecord(binding,{version:1,receipt,owner});
+        return true;
+      }
+      if(mismatchedIdentity)throw new HostObservationError(`host observation resident.members creation identity does not match ${path}`);
+      return false;
+    };
+    const fixtureMembers=(path:string,declared:Record<string,number[]>|undefined,inode?:string):number[]=>{
+      checkedGroup(path);
+      const rows=new Map<string,number[]>();
+      const add=(group:unknown,members:unknown)=>{
+        if(typeof group!=='string'||!Array.isArray(members)||members.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw new HostObservationError(`host observation resident.members declaration is invalid for ${path}`);
+        checkedGroup(group);rows.set(group,[...new Set([...(rows.get(group)??[]),...members as number[]])]);
+      };
+      for(const [group,members]of Object.entries(declared??{}))add(group,members);
+      const source=read().memberDeclarations;
+      if(source){
+        if(typeof source.directory!=='string'||!isAbsolute(source.directory)||!Array.isArray(source.scopeReceipts)||source.scopeReceipts.some(value=>typeof value!=='string'||!isAbsolute(value)))throw new HostObservationError('host observation resident.members declaration source is invalid');
+        for(const record of fixtureRecords(source.directory)){
+          const row=parseMemberDeclaration(fixtureJson(record,'resident.members declaration'),'resident.members declaration '+record);
+          add(row.group,row.members);
+        }
+        if(fixtureScope(path,inode,source))return [...new Set([...rows].filter(([group])=>group===path||group.startsWith(path+'/')).flatMap(([,members])=>members))];
+      }
+      const value=rows.get(path);
+      if(value===undefined)throw new HostObservationError(`host observation resident.members has no cgroup ${path}`);
+      return value;
+    };
+    const charge=(kind:'processes'|'cgroups',key:string,inode?:string)=>{
       const resident=read().resident;
       if(resident?.kind==='live')return kind==='processes'?liveProcessCharge(Number(key)):cgroups.charge(key);
       if(resident?.kind!=='fixed')throw new HostObservationError('host observation resident is missing or invalid');
+      if(kind==='cgroups')fixtureScope(key,inode);
       return number(resident[kind]?.[key]??resident.defaultBytes,`resident.${kind}.${key}`);
     };
     const scopePeak=(group?:string):ScopeMemoryPeak=>{
@@ -392,10 +469,10 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       allocatedBytes:path=>{const value=read().allocated;return value.kind==='live'?liveAllocatedBytes(path,env):number(value.paths?.[path]??value.defaultBytes,'allocated.paths.'+path);},
       processCharge:pid=>charge('processes',String(pid)),
       acquireCgroup,
-      cgroupCharge:(path,inode)=>read().resident.kind==='live'?cgroups.charge(path,inode):charge('cgroups',path),
-      cgroupMembers:(path,inode)=>{const resident=read().resident;return resident.kind==='live'?cgroups.members(path,inode):fixtureMembers(path,resident.members);},
+      cgroupCharge:(path,inode)=>read().resident.kind==='live'?cgroups.charge(path,inode):charge('cgroups',path,inode),
+      cgroupMembers:(path,inode)=>{const resident=read().resident;return resident.kind==='live'?cgroups.members(path,inode):fixtureMembers(path,resident.members,inode);},
       cgroupText:(path,file)=>{const resident=read().resident;if(resident.kind==='live'){cgroups.inode(path);return cgroups.text(path,file);}const value=resident.files?.[path]?.[file];if(value===undefined)throw new HostObservationError(`host observation cgroup ${path} ${file} is missing`);return value;},
-      cgroupMemoryPeak:(path,inode)=>{const value=read().scopePeak;return value.kind==='live'?cgroups.peak(path,inode):number(value.bytes,'scopePeak.bytes');},
+      cgroupMemoryPeak:(path,inode)=>{const value=read().scopePeak;if(value.kind==='live')return cgroups.peak(path,inode);fixtureScope(path,inode);return number(value.bytes,'scopePeak.bytes');},
       cgroupChildren:path=>{
         checkedGroup(path);const resident=read().resident;
         if(resident.kind==='live')return cgroups.children(path);

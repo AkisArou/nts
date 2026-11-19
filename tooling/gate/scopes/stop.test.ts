@@ -1,3 +1,4 @@
+import {gateFixtureMemory,writeGateFixtureScript} from '../fixed-members-fixture.ts';
 import {gitArguments} from "../git-arguments/main.ts";
 import {fixtureEnvironment} from "../test-environment.ts";
 import assert from "node:assert/strict";
@@ -15,7 +16,6 @@ import {instrumentPolicy} from "../step-result.ts";
 import {spawnTest, waitFor} from "../test-wait.ts";
 import {processActivity} from "../active-command.ts";
 import {newTestScratch} from "../test-scratch.ts";
-import {ownMemory} from "../test-memory.ts";
 
 type Row = { name: string; verdict: string; reason?: string; started_at?: string;
   signal?: string | null; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
@@ -40,11 +40,9 @@ import {createHash} from 'node:crypto';
 import {appendFileSync, chmodSync, readFileSync, writeFileSync} from 'node:fs';
 import {isAbsolute, relative, sep} from 'node:path';
 import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
-import {declareFixedMembers,declareOwnMembers} from ${JSON.stringify(new URL('../test-cgroup-members.ts',import.meta.url).href)};
 import {GateScopes as ActualGateScopes} from ${JSON.stringify(actual)};
 export * from ${JSON.stringify(actual)};
 export class GateScopes extends ActualGateScopes {
-  constructor(env,options){super(env,options);declareFixedMembers(env,this.group,[]);declareOwnMembers(env,[process.pid]);}
   override step(limits) {
     const scope=super.step(limits),kill=scope.kill.bind(scope),drain=scope.drain.bind(scope);
     let cancelled=false,draining=false;
@@ -165,7 +163,7 @@ if (process.env.NTS_GATE_STEP === "old-paths") {
   writeFileSync(own + "/records-started", "admitted"); writeFileSync(release, "released");
 }
 `);
-  writeFileSync(join(gate, "all.sh"), `#!/bin/sh
+  writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
 if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
@@ -197,7 +195,7 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   }
   planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
     NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2",
-    ...ownMemory(join(own, "memory")), CARGO_TARGET_DIR: target, ...(failFast ? { NTS_GATE_FAIL_FAST: "1" } : {}),
+    ...gateFixtureMemory(join(own, "memory"),root), CARGO_TARGET_DIR: target, ...(failFast ? { NTS_GATE_FAIL_FAST: "1" } : {}),
     ...(control.launcherFailure ? { PATH: launcher.PATH } : {}),
   } });
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
