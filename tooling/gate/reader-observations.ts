@@ -63,7 +63,7 @@ export function readerObservationCapture(root:string){
     if(closed)throw Error('reader observation capture is closed');closed=true;
     return filesystem.captured().map(observation=>{
       const key=JSON.stringify([observation.kind,observation.path]);
-      return {observation:structuredClone(observation),causes:[...causes.get(key)!.values()],...(only.get(key)?{observationOnly:true as const}:{})};
+      return {observation:structuredClone(observation),causes:[...causes.get(key)!.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([,cause])=>cause),...(only.get(key)?{observationOnly:true as const}:{})};
     });
   }};
 }
@@ -105,7 +105,10 @@ export function projectObservationCapture(root:string){
     }
     if(!row.observationOnly)delete retained.observationOnly;
   },finish():CapturedReaderObservation[]{
-    if(closed)throw Error('project observation capture is closed');closed=true;return [...capture.finish(),...facts.values()];
+    if(closed)throw Error('project observation capture is closed');closed=true;
+    const rows=capture.finish().map(row=>[JSON.stringify([row.observation.kind,row.observation.path,null,null,null,false]),row] as const);
+    for(const [key,row]of facts){row.causes.sort((a,b)=>{const x=JSON.stringify(a),y=JSON.stringify(b);return x<y?-1:x>y?1:0;});rows.push([key,row]);}
+    return rows.sort(([a],[b])=>a<b?-1:a>b?1:0).map(([,row])=>row);
   }};
 }
 

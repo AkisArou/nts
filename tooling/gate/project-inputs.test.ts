@@ -115,6 +115,16 @@ test('binding coalescing keeps distinct readers separate',t=>{
   }finally{owner.close();}
 });
 
+test('reader capture has one canonical answer order when its Programs are acquired in reverse',t=>{
+  const root=testScratch(t,'project-capture-order');mkdirSync(join(root,'src'));
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');writeFileSync(join(root,'src/main.ts'),'export {};');
+  for(const name of ['tsconfig.json','first.json','second.json'])writeFileSync(join(root,name),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
+  const entries=['first.json','second.json'].map(path=>projectConfig(pathToFileURL(join(root,path)),'compiled-program'));
+  const owner=moduleGraph({sourceRoot:root});
+  try{assert.deepEqual(owner.describe(entries),owner.describe([...entries].reverse()));}
+  finally{owner.close();}
+});
+
 test('a snapshot capture unions causes, promotes config entries in either order and refuses a conflicting answer',t=>{
   const root=testScratch(t,'project-capture-causes');mkdirSync(join(root,'src'));writeFileSync(join(root,'src/main.ts'),'export {};');
   const filesystem=new OracleFilesystem(),directory=join(root,'src');filesystem.getAccessibleEntries(directory);
@@ -379,8 +389,11 @@ test('equal capability answers retain distinct authorities and validate each des
     const valid=observations.filter(row=>row.capability?.kind==='typescript-sdk'&&row.capability.identity.rootPackageSha256!==invalid.identity.rootPackageSha256);
     assert.equal(valid.length,2);assert.equal(valid[0]!.capability,valid[1]!.capability,'one detached descriptor serves its own facts');
     validateReaderBatchObservations([{...snapshot,observations:valid}],root);
-    assert.throws(()=>validateReaderBatchObservations([{...snapshot,observations}],root),/not an authenticated installed SDK fact/);
-    assert.throws(()=>validateReaderSourceObservations({...snapshot,observations},root),/not an authenticated installed SDK fact/);
+    const different=observations.filter(row=>!valid.includes(row));
+    for(const observations of [[...valid,...different],[...different,...valid]]){
+      assert.throws(()=>validateReaderBatchObservations([{...snapshot,observations}],root),/not an authenticated installed SDK fact/);
+      assert.throws(()=>validateReaderSourceObservations({...snapshot,observations},root),/not an authenticated installed SDK fact/);
+    }
   }finally{graph.close();}
 });
 

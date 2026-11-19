@@ -526,8 +526,9 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         visit(types,resolve(root,entry),true,true,false,true);
       }
     }
-    for(const owner of programCaptures.values())for(const captured of owner.capture.finish())
+    for(const [,owner]of [...programCaptures].sort(([a],[b])=>a<b?-1:a>b?1:0))for(const captured of owner.capture.finish())
       observations.push({reader:owner.reader,context:owner.context,protocol:'project',...captured});
+    projectMatches.sort((a,b)=>{const x=JSON.stringify([a.reader,a.context,a.request]),y=JSON.stringify([b.reader,b.context,b.request]);return x<y?-1:x>y?1:0;});
     return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,projectMatches,...(unavailableInputs.length?{unavailableInputs}:{})};
   }
   /** A batch is one transaction, not a graph-lifetime result cache. Compiler

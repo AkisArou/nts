@@ -21,6 +21,8 @@ import {encodeRustSelectorRecord,type RustSelectorRecord} from './rust-selector-
 import {RUST_SELECTOR_RECORD,SELECTOR_SCHEMA_SHA256,selectorHash,selectorFile,selectorFact,selectorPopulation,validateRustSelectorMaterial,parseRustSelectorMaterial,
   type RustSelectorMaterial,type RustSelectorMaterialTarget,type SelectorFact,type TrackedFile,type SelectorRoots} from './rust-selector-material.ts';
 
+const orderedValues=<T>(rows:ReadonlyMap<string,T>):T[]=>[...rows].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([,row])=>row);
+
 export function verifySelectorSources(sources:Iterable<{path:string;sha256:string}>,files:readonly RustSelectorMaterial['key']['files'][number][]):void{
   const captured=new Map(files.filter(row=>row.path.root==='source').map(row=>[row.path.path,row.sha256]));
   for(const source of sources)if(captured.get(source.path)!==source.sha256)throw Error('Rust selector source changed after parse: '+source.path);
@@ -64,7 +66,8 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
     }
   };
   try{
-    for(const described of owner.describeAll()){
+    const targetOrder=new Map(inventory.map((target,index)=>[target.source,index]));
+    for(const described of owner.describeAll().sort((a,b)=>targetOrder.get(a.target.source)!-targetOrder.get(b.target.source)!)){
       const {snapshot,byteInputs}=described;
       options.composition?.(described.target.source,described.composition);
       for(const source of described.sourceInputs){
@@ -111,7 +114,7 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
   const sdkFiles=[...installed.files.keys()].map(path=>join(installed.root,path)).concat([...installed.nativeFiles.keys()].map(path=>join(installed.nativeRoot,path)));
   const key:RustSelectorMaterial['key']={engine,declarations,cargo:{inputs:cargoInputs,targets:inventory},
     sdk:{...installed.identity},files:[...capturedFiles,...sdkFiles.sort().map(path=>selectorFile(roots,path))],
-    facts:[...facts.values()],projects:[...projects.values()],candidates:[...candidates.values()],populations:[...populations.values()]};
+    facts:orderedValues(facts),projects:orderedValues(projects),candidates:orderedValues(candidates),populations:orderedValues(populations)};
   const record=parseRustSelectorMaterial({version:1,schemaSha256:SELECTOR_SCHEMA_SHA256,key,targets,keySha256:selectorHash(key),targetsSha256:selectorHash(targets)});
   // Validate again after every graph transaction and key read. A concurrent
   // input change cannot publish roles measured from a different answer.
