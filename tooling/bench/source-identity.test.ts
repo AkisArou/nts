@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cargoSync } from "../gate/cargo.ts";
 import { gitArguments } from "../gate/git-arguments/main.ts";
 import { fixtureEnvironment } from "../gate/test-environment.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 import { digestOf, sourceDigest, sourceRoots, uncoveredDepInfo, type SourceBinary } from "./source-identity.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -50,22 +51,63 @@ test("control: a closure check over a list missing one dependency names it", () 
   assert.throws(() => sourceRoots("nts-bench", "nts: compiler\n"), /names no roots for nts-bench/);
 });
 
-test("a clean checkout's files on disk digest as its HEAD's blobs do, and any edit or other commit differs", () => {
-  const head = execFileSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).trim();
-  for (const { binary } of BINARIES) {
+for (const { binary } of BINARIES) test(`${binary}: source identity uses file paths and bytes in a private checkout`, t => {
+  const repository = testScratch(t, "source-identity");
+  const env = fixtureEnvironment(t);
+  const git = (args: string[]) => execFileSync("git", gitArguments(args), { cwd: repository, env, encoding: "utf8" }).trim();
+  mkdirSync(join(repository, "compiler"));
+  const source = join(repository, "compiler/source.rs"), original = "fn source() {}\n";
+  const sibling = join(repository, "compiler/sibling.rs"), siblingBytes = "fn sibling() {}\n";
+  writeFileSync(source, original); chmodSync(source, 0o644);
+  writeFileSync(sibling, siblingBytes);
+  git(["init", "--quiet", "--initial-branch=main"]);
+  git(["config", "core.fileMode", "true"]);
+  git(["add", "."]);
+  git(["commit", "--quiet", "-m", "source identity fixture"]);
+  const head = git(["rev-parse", "HEAD"]);
+  const onDisk = () => {
     // The working-tree side, as source_identity.rs reads it: tracked or untracked-not-ignored files that exist.
-    const listed = execFileSync("git", gitArguments(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...sourceRoots(binary)]), { cwd: root })
-      .toString("utf8").split("\0").filter(Boolean);
-    const dirty = execFileSync("git", gitArguments(["status", "--porcelain", "--", ...sourceRoots(binary)]), { cwd: root, encoding: "utf8" }).trim();
-    const files = [...new Set(listed)].filter((path) => existsSync(join(root, path)) || lstatSync(join(root, path), { throwIfNoEntry: false }))
-      .map((path) => ({ path, content: lstatSync(join(root, path)).isSymbolicLink() ? Buffer.from(readlinkSync(join(root, path))) : readFileSync(join(root, path)) }));
-    const onDisk = digestOf(files), atHead = sourceDigest(root, head, binary);
-    if (dirty === "") assert.equal(onDisk, atHead, `${binary}: a clean checkout is its commit`);
-    else assert.notEqual(onDisk, atHead, `${binary}: an edited checkout is not its commit`);
-    const edited = files.map((file, index) => index === 0 ? { ...file, content: Buffer.concat([file.content, Buffer.from(" ")]) } : file);
-    assert.notEqual(digestOf(edited), onDisk, "one byte changes the digest");
-    assert.notEqual(digestOf(files.slice(1)), onDisk, "a missing file changes the digest");
-  }
+    const listed = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...sourceRoots(binary)])
+      .split("\0").filter(Boolean);
+    const files = [...new Set(listed)].filter((path) => lstatSync(join(repository, path), { throwIfNoEntry: false }))
+      .map((path) => ({ path, content: lstatSync(join(repository, path)).isSymbolicLink() ? Buffer.from(readlinkSync(join(repository, path))) : readFileSync(join(repository, path)) }));
+    return digestOf(files);
+  };
+  const atHead = sourceDigest(repository, head, binary);
+  assert.equal(onDisk(), atHead, "a clean checkout is its commit");
+
+  writeFileSync(source, original + " ");
+  assert.notEqual(onDisk(), atHead, "one edited byte changes the digest");
+  writeFileSync(source, original);
+  assert.equal(onDisk(), atHead, "restoring the edit restores the clean digest");
+
+  const untracked = join(repository, "compiler/untracked.rs");
+  writeFileSync(untracked, original);
+  assert.notEqual(onDisk(), atHead, "an untracked file changes the digest even with identical bytes");
+  unlinkSync(untracked);
+  assert.equal(onDisk(), atHead, "removing the untracked file restores the clean digest");
+
+  unlinkSync(sibling);
+  assert.notEqual(onDisk(), atHead, "a deleted tracked file changes the digest");
+  writeFileSync(sibling, siblingBytes);
+  assert.equal(onDisk(), atHead, "restoring the deleted file restores the clean digest");
+
+  chmodSync(source, 0o755);
+  assert.match(git(["diff", "--summary"]), /mode change 100644 => 100755/);
+  assert.equal(onDisk(), atHead, "mode-only changes are excluded from the path/content identity");
+  chmodSync(source, 0o644);
+
+  writeFileSync(source, original + " ");
+  git(["add", "."]);
+  git(["commit", "--quiet", "-m", "edited source"]);
+  const next = git(["rev-parse", "HEAD"]);
+  assert.notEqual(next, head);
+  assert.notEqual(sourceDigest(repository, next, binary), atHead, "a commit with edited sources has a different digest");
+  assert.equal(sourceDigest(repository, head, binary), atHead, "the original revision retains its digest");
+  assert.equal(onDisk(), sourceDigest(repository, next, binary), "the edited checkout agrees with its new commit");
+});
+
+test("source digests use the Rust build script's format and byte order of path", () => {
   assert.equal(digestOf([{ path: "b", content: Buffer.from("2") }, { path: "a", content: Buffer.from("1") }]),
     createHash("sha256").update(`nts-source-v1\na\0${createHash("sha256").update("1").digest("hex")}\nb\0${createHash("sha256").update("2").digest("hex")}\n`).digest("hex"),
     "the format source_identity.rs states, in byte order of path");
