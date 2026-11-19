@@ -373,7 +373,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     };
     const fixtureJson=(path:string,name:string,optional=false):unknown=>{
       try{return JSON.parse(readFileSync(path,'utf8'));}
-      catch(error){if(optional&&(error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw new HostObservationError(`host observation ${name} is unreadable: ${path}`,{cause:error});}
+      catch(error){if(optional&&(error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw new HostObservationError(`host observation ${name} is unreadable: ${path}: ${String(error)}`,{cause:error});}
     };
     const fixtureRecords=(directory:string):string[]=>{
       try{return readdirSync(directory).filter(name=>name.endsWith('.json')).sort().map(name=>join(directory,name));}
@@ -387,7 +387,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       for(const receipt of source.scopeReceipts){
         const value=fixtureJson(receipt,'resident.members creation receipt',true);
         try{receipts.set(receipt,value===undefined?undefined:parseRunOwner(JSON.stringify(value),receipt));}
-        catch(error){throw new HostObservationError(`host observation resident.members creation receipt is invalid: ${receipt}`,{cause:error});}
+        catch(error){throw new HostObservationError(`host observation resident.members creation receipt is invalid: ${receipt}: ${String(error)}`,{cause:error});}
       }
       // Bindings retain identity only, so a fresh sampler can recognize a
       // closed receipt. Membership always comes from explicit logical declarations.
@@ -397,7 +397,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
         if(!binding||binding.version!==1||typeof binding.receipt!=='string'||!receipts.has(binding.receipt)||Object.keys(binding).sort().join(',')!=='owner,receipt,version')throw new HostObservationError(`host observation resident.members scope binding is invalid: ${record}`);
         let prior:RunOwner;
         try{prior=parseRunOwner(JSON.stringify(binding.owner),record);}
-        catch(error){throw new HostObservationError(`host observation resident.members scope binding is invalid: ${record}`,{cause:error});}
+        catch(error){throw new HostObservationError(`host observation resident.members scope binding is invalid: ${record}: ${String(error)}`,{cause:error});}
         if(!prior.scope)throw new HostObservationError(`host observation resident.members scope binding lacks identity: ${record}`);
         if(prior.scope.group!==path)continue;
         if(inode!==undefined&&inode!==prior.scope.inode){mismatchedIdentity=true;continue;}
