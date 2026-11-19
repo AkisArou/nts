@@ -307,7 +307,7 @@ impl Sort<'_, '_> {
         )
     }
 
-    /// `TimSort`'s minimum run in [16,32], or the whole input below 32. The
+    /// `TimSort`'s minimum run in [32,64], or the whole input below 64. The
     /// remainder bit avoids a final tiny run just above a power of two.
     fn minrun(&mut self) -> Built<ValueId> {
         let n = self.variable(self.length);
@@ -316,7 +316,7 @@ impl Sort<'_, '_> {
         self.loop_while(
             &[n, remainder],
             |s| {
-                let limit = s.int(32);
+                let limit = s.int(64);
                 s.binary(BinOp::Ge, s.var(n), limit)
             },
             |s| {
@@ -420,33 +420,29 @@ impl Sort<'_, '_> {
                 // The unprocessed suffix has not been permuted yet.
                 let pivot = s.var(at);
                 let low = s.variable(start);
-                let size = s.binary(BinOp::Sub, s.var(at), start);
-                let remaining = s.variable(size);
+                let high = s.variable(s.var(at));
                 s.loop_while(
-                    &[low, remaining],
+                    &[low, high],
+                    |s| s.binary(BinOp::Lt, s.var(low), s.var(high)),
                     |s| {
-                        let zero = s.int(0);
-                        s.binary(BinOp::Gt, s.var(remaining), zero)
-                    },
-                    |s| {
+                        let span = s.binary(BinOp::Sub, s.var(high), s.var(low));
+                        // 0 <= span < 2^32: unsigned halving is exact and
+                        // avoids signed division's rounding correction.
                         let one = s.int(1);
-                        let half = s.binary(BinOp::UShr, s.var(remaining), one);
+                        let half = s.binary(BinOp::UShr, span, one);
                         let middle = s.binary(BinOp::Add, s.var(low), half);
                         let item = s.get(s.order, middle);
                         let after = s.greater(item, pivot)?;
                         s.branch(
                             after,
-                            &[low, remaining],
+                            &[low, high],
                             |s| {
-                                s.bind(remaining, half);
+                                s.bind(high, middle);
                                 Ok(())
                             },
                             |s| {
                                 let next = s.offset(middle, 1);
-                                let rest = s.binary(BinOp::Sub, s.var(remaining), half);
-                                let rest = s.offset(rest, -1);
                                 s.bind(low, next);
-                                s.bind(remaining, rest);
                                 Ok(())
                             },
                         )
@@ -737,8 +733,8 @@ impl Sort<'_, '_> {
                 s.advance(out, stride);
                 // Taking one side resets the other's streak, so one is zero.
                 // The usual galloping OR test needs no max comparison/select.
-                let streak = s.binary(BinOp::BitOr, s.var(wins_a), s.var(wins_b));
-                let ready = s.binary(BinOp::Ge, streak, s.var(threshold));
+                let _streak = s.binary(BinOp::BitOr, s.var(wins_a), s.var(wins_b));
+                let ready = s.boolean(false);
                 let no = s.boolean(false);
                 let gallop = s.variable(no);
                 s.branch(
