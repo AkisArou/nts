@@ -11,7 +11,7 @@ import {OracleFilesystem,validateHostObservations} from '../differential/oracle-
 import {projectInputs,projectInputOwner} from './project-inputs.ts';
 import {testScratch} from './test-scratch.ts';
 import {moduleGraph,closeModuleGraphOwners} from './module-closure.ts';
-import {captureReaderObservations,readerObservationCapture,validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import {captureReaderObservations,readerObservationCapture,projectObservationCapture,validateReaderBatchObservations,validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {projectConfig} from './reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -103,15 +103,15 @@ test('a shared reader coalesces binding answers across Programs and retains ever
 test('binding coalescing keeps distinct readers separate',t=>{
   const root=testScratch(t,'project-binding-readers');mkdirSync(join(root,'src'));
   writeFileSync(join(root,'package.json'),'{"type":"module"}');writeFileSync(join(root,'src/main.ts'),'export {};');
-  writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
+  for(const name of ['tsconfig.json','first.json','second.json'])writeFileSync(join(root,name),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
   for(const name of ['first.ts','second.ts'])writeFileSync(join(root,name),'export {};');
-  const declarations=new Map(['first.ts','second.ts'].map(name=>[name,{imports:[],assets:[{kind:'project-config' as const,path:'./tsconfig.json',role:'compiled-program' as const}]}]));
+  const declarations=new Map(['first','second'].map(name=>[name+'.ts',{imports:[],assets:[{kind:'project-config' as const,path:'./'+name+'.json',role:'compiled-program' as const}]}]));
   const owner=moduleGraph({sourceRoot:root,declarations});
   try{
     const snapshot=owner.describe(['first.ts','second.ts']);
     const facts=snapshot.observations.filter(row=>row.observation.kind==='realpath'&&row.observation.path===join(root,'src/main.ts'));
     assert.deepEqual(facts.map(row=>row.reader).sort(),['first.ts','second.ts']);
-    assert.equal(snapshot.projectMatches.length,2,'the same native request keeps both readers');
+    assert.equal(snapshot.projectMatches.length,2,'both native requests retain their readers');
   }finally{owner.close();}
 });
 
@@ -355,6 +355,32 @@ test('installed SDK facts retain exact authenticated membership and no repositor
     const unlisted=structuredClone(snapshot),outside=unlisted.observations.find(item=>item.capability&&item.observation.kind==='file')!;
     outside.observation.path=join(root,'entry.ts');
     assert.throws(()=>validateReaderSourceObservations(unlisted,root),/not an authenticated installed SDK fact/);
+  }finally{graph.close();}
+});
+
+test('equal capability answers retain distinct authorities and validate each descriptor',t=>{
+  const root=testScratch(t,'project-capability-authorities');
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');
+  writeFileSync(join(root,'entry.ts'),'export {};');writeFileSync(join(root,'tsconfig.json'),'{"files":["entry.ts"],"compilerOptions":{"types":[]}}');
+  const graph=moduleGraph({sourceRoot:root});
+  try{
+    const snapshot=graph.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program')]);
+    const row=snapshot.observations.find(row=>row.capability?.kind==='typescript-sdk'&&row.observation.kind==='file')!;
+    assert.ok(row.capability?.kind==='typescript-sdk');
+    const invalid=structuredClone(row.capability);invalid.identity.rootPackageSha256='0'.repeat(64);
+    const capture=projectObservationCapture(root),fact={observation:row.observation,capability:row.capability,causes:row.causes};
+    capture.retain(fact);capture.retain(structuredClone(fact));
+    capture.retain({...fact,capability:invalid});
+    const other=snapshot.observations.find(other=>other.capability?.kind==='typescript-sdk'&&other.observation.path!==row.observation.path)!;
+    assert.ok(other);capture.retain({observation:other.observation,capability:other.capability,causes:other.causes});
+    assert.throws(()=>capture.retain({...fact,observation:{...row.observation,value:'0'.repeat(64)}}),/project observation changed/);
+    const facts=capture.finish();assert.equal(facts.length,3,'equal answers coalesce only with identical authority');
+    const observations=facts.map(fact=>({...fact,reader:row.reader,context:row.context,protocol:row.protocol}));
+    const valid=observations.filter(row=>row.capability?.kind==='typescript-sdk'&&row.capability.identity.rootPackageSha256!==invalid.identity.rootPackageSha256);
+    assert.equal(valid.length,2);assert.equal(valid[0]!.capability,valid[1]!.capability,'one detached descriptor serves its own facts');
+    validateReaderBatchObservations([{...snapshot,observations:valid}],root);
+    assert.throws(()=>validateReaderBatchObservations([{...snapshot,observations}],root),/not an authenticated installed SDK fact/);
+    assert.throws(()=>validateReaderSourceObservations({...snapshot,observations},root),/not an authenticated installed SDK fact/);
   }finally{graph.close();}
 });
 

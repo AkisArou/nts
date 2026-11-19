@@ -4,7 +4,7 @@ import {isAbsolute,join,posix,relative,resolve,sep} from 'node:path';
 import {captureToolchain,toolchainDescriptor,toolchainFact,type Capture} from '../differential/oracle-toolchain.ts';
 import {OracleFilesystem,readHostObservation,validateHostObservations} from '../differential/oracle-filesystem.ts';
 import {readdirSync} from 'node:fs';
-import type {HostObservation} from '../differential/oracle-runtime.ts';
+import {sameOracleObservation,type HostObservation} from '../differential/oracle-runtime.ts';
 import type {InputSnapshot,ReaderObservation} from './module-closure.ts';
 import {metadataParents,membershipIndex,type MetadataChange} from './reader-metadata.ts';
 import {generatedProjectFact} from './generated-project.ts';
@@ -70,6 +70,43 @@ export function readerObservationCapture(root:string){
 /** A standalone transaction uses the same owner as a snapshot's Programs. */
 export function captureReaderObservations(root:string,rows:readonly HostObservation[]):Pick<ReaderObservation,'observation'|'causes'>[]{
   const capture=readerObservationCapture(root);capture.add(rows);return capture.finish();
+}
+
+type CapturedReaderObservation=Omit<ReaderObservation,'reader'|'context'|'protocol'>;
+/** One reader/context's snapshot transaction. Identical authority can share
+ * an answer; another descriptor must still pass its own validator. */
+export function projectObservationCapture(root:string){
+  const capture=readerObservationCapture(root),facts=new Map<string,CapturedReaderObservation>();
+  const descriptors=new Map<string,object>(),identities=new WeakMap<object,{key:string;value:object}>();
+  const causes=new Map<string,ReaderObservation['causes'][number]>();
+  let closed=false;
+  function descriptor<T extends object>(input:T):{key:string;value:T}{
+    const previous=identities.get(input);if(previous)return previous as {key:string;value:T};
+    const key=JSON.stringify(input),value=descriptors.get(key)??structuredClone(input),entry={key,value};
+    descriptors.set(key,value);identities.set(input,entry);return entry as {key:string;value:T};
+  }
+  return {add(rows:readonly HostObservation[],matchingEntries?:ReadonlySet<string>):string[]{
+    if(closed)throw Error('project observation capture is closed');return capture.add(rows,matchingEntries);
+  },retain(row:CapturedReaderObservation):void{
+    if(closed)throw Error('project observation capture is closed');
+    if(!row.capability&&!row.environment&&!row.dependency&&!row.selectorOnly)throw Error('typed project observation needs its authority');
+    const capability=row.capability?descriptor(row.capability):undefined,environment=row.environment?descriptor(row.environment):undefined,dependency=row.dependency?descriptor(row.dependency):undefined;
+    const key=JSON.stringify([row.observation.kind,row.observation.path,capability?.key,environment?.key,dependency?.key,!!row.selectorOnly]);
+    let retained=facts.get(key);
+    if(retained){
+      if(!sameOracleObservation(retained.observation.value,row.observation.value))throw Error('project observation changed during capture: '+row.observation.kind+' '+row.observation.path);
+    }else{
+      retained={observation:structuredClone(row.observation),causes:[],...(capability?{capability:capability.value}:{}),...(environment?{environment:environment.value}:{}),...(dependency?{dependency:dependency.value}:{}),...(row.selectorOnly?{selectorOnly:true as const}:{}),...(row.observationOnly?{observationOnly:true as const}:{})};
+      facts.set(key,retained);
+    }
+    for(const cause of row.causes){
+      const key=JSON.stringify(cause);let shared=causes.get(key);if(!shared){shared={...cause};causes.set(key,shared);}
+      if(!retained.causes.some(previous=>previous===shared))retained.causes.push(shared);
+    }
+    if(!row.observationOnly)delete retained.observationOnly;
+  },finish():CapturedReaderObservation[]{
+    if(closed)throw Error('project observation capture is closed');closed=true;return [...capture.finish(),...facts.values()];
+  }};
 }
 
 export function readerObservationDependency(root:string,row:ReaderObservation):{path:string;bytes:boolean;directoryStat:boolean}|undefined{
@@ -208,18 +245,22 @@ function derivedReaderValidator(source?:string){
  * conflicting answers refuse, and no fact supplies ownership to another row. */
 export function validateReaderBatchObservations(snapshots:readonly InputSnapshot[],source:string):void{
   const installed=derivedReaderValidator(),facts=new Map<string,string>();
+  const authorityKeys=new WeakMap<object,string>(),authorities=new Map<string,Set<string>>();
   for(const snapshot of snapshots)for(const row of snapshot.observations){
     const key=JSON.stringify([row.observation.kind,row.observation.path]),answer=JSON.stringify(row.observation.value);
-    // Each authority descriptor is checked even when another row has the
-    // same answer: equality cannot lend declared provenance to ambient rows.
-    if(row.environment||row.dependency)installed(row);
     const previous=facts.get(key);
-    if(previous!==undefined){
-      if(previous!==answer)throw Error('reader batch observation changed during discovery: '+row.observation.kind+' '+row.observation.path);
-      continue;
+    if(previous!==undefined&&previous!==answer)throw Error('reader batch observation changed during discovery: '+row.observation.kind+' '+row.observation.path);
+    // Equal answers share a replay only under equal authority. A different
+    // SDK or Program descriptor must still pass its own provenance check.
+    const authority=row.dependency??row.environment??row.capability;
+    if(authority){
+      let identity=authorityKeys.get(authority);if(identity===undefined){identity=JSON.stringify(authority);authorityKeys.set(authority,identity);}
+      const checked=authorities.get(identity)??new Set<string>(),subject=JSON.stringify([row.protocol,key]);
+      if(!checked.has(subject)){installed(row);checked.add(subject);authorities.set(identity,checked);}
+    }else if(previous===undefined){
+      validateHostObservations([row.observation]);
     }
     facts.set(key,answer);
-    if(!installed(row))validateHostObservations([row.observation]);
   }
   validateProjectMatches(snapshots.flatMap(snapshot=>snapshot.projectMatches),source);
 }

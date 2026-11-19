@@ -375,3 +375,66 @@ Additional raw evidence under `~/.cache/nts-scratch/798/`:
 | `merge-after-owner.log` | `30a766ab3884148ee2615e871f1856cd96990a63c562d436965fe84d0524b910` |
 | `nts-798-merged-target.log` | `71c38e7bf914d0e08eb17d3c61c0b8fb273e25b03d2172e5795ff2239f6f6a8d` |
 | `nts-798-merged-prepare.log` | `223444459952b64c8cf68d65c81342403b713fcaf6255a968438889286664479` |
+
+## Reader-context capture boundary
+
+The first paired repeat at `b476fd27c5ae890780c0c838d03fa06556ce7eae`
+showed that joining one Program's captures was insufficient. Main's owed test
+passed with a 2000.59 MiB peak heap and 2496832 KiB RSS; the tip still reached
+2035.79 MiB and 2522784 KiB RSS before heap OOM. Both limits remained 2144 MiB.
+The coordinator stopped the remaining batch after that decisive result; the
+third arm was interrupted, and the remaining five were not run.
+
+Paired diagnostic captures stopped at the same first 57-snapshot boundary,
+before validation or any assertion. They classify 1438046 rows on main and
+1673791 on that tip. These early exits are not passing test results. Comparing
+snapshot, reader, context, protocol, kind and path finds 235745 added rows and
+no removed rows. Of these, 176404 are additional repeated copies within the
+same owner, and 59341 are distinct owner facts.
+
+| Kind | Additional repeated copies | Distinct owner facts |
+| --- | ---: | ---: |
+| realpath | 107394 | 39447 |
+| fileExists | 30555 | 10051 |
+| runtimeKind | 29463 | 8548 |
+| file | 8804 | 907 |
+| selector-only file | 94 | 194 |
+| selector-only runtimeKind | 94 | 194 |
+
+The causes identify actual emitter operations: 146841 added realpath rows,
+40606 config-existence probes, 28061 kind facts caused only by those probes,
+9705 tsconfig byte reads, and shared config/entries/identity causes. The largest
+reader is `compiler/frontend-ts/src/capture/tests.rs`, with 211438 added rows.
+For example, one source realpath has 16 copies under the same owner in the first
+snapshot. Main already has 912170 repeated owner rows, compared with 1088574 on
+the intermediate tip. A raw-fact-only merge would also leave typed copies: the
+first snapshot alone has 8642 repeated SDK facts.
+
+The coordinator approved the complete reader/context boundary, including the
+beneficial removal of existing copies. One capture now normalizes all that
+owner's Programs in a snapshot; all native callbacks and nearest-config probes
+still run. Typed SDK, dependency and pin answers coalesce only with identical
+authority descriptors, shared once after detachment. Different authority or
+Program provenance stays separate. The batch validator checks each distinct
+authority even if another authority supplied the same answer. No persisted
+schema changes. The separate retention of 57 snapshots remains with #857.
+
+All 23 Program-input controls and strict checking of six projects/1173 modules
+pass. The union control now covers two Programs; other controls retain distinct
+readers, every native request, promotion in both orders and conflict refusal.
+Equal-answer SDK facts with different descriptors stay separate: the authentic
+descriptor passes, and the forged descriptor refuses in both source and batch
+validation. Equal descriptors share one detached object. An initial separate-
+reader fixture named one identical project request, which existing traversal
+visits once; it was corrected to two configs reaching the same source. The
+earlier queued target was stopped before editing to complete typed collection;
+the successful target ran after those source edits.
+
+Additional raw evidence under `~/.cache/nts-scratch/798/`:
+
+| File | SHA-256 |
+| --- | --- |
+| `heap-fixed-first-pair.json` | `ef34e791dc14ee8f73b30ec4ff6f9a70ca37714dc6f57a926f1f2af4103ae152` |
+| `fact-classification/classification.json` | `e8b6d0073dae2b09c9063021f527f0cb5c7e13e39475573aa2c6677dc82f6057` |
+| `fact-classification/duplicates.json` | `61e7136abdab7ae839b0a8356fa413cc1a332658ed90024d546108939e06d230` |
+| `nts-798-snapshot-target3.log` | `31241da34a592ea8b502b572cbd67b6e483a2f2c5cf294ea599f2a58e8da0aea` |

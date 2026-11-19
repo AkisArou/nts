@@ -3892,3 +3892,16 @@ stay within the source; unsupported or outside identities refuse by name.
 Retargeting can keep a logical match while replacing a physical source, so the
 base identity stays independent of tip aliases. Native matching retains all
 extension and pattern authority; raw directory reads remain acquisition guards.
+
+## Reader-context Program capture (11-19)
+
+Issue #798 captures all Programs of one reader and namespace context in one
+snapshot transaction. Program callbacks and compiled nearest-config probes keep
+their actual answers and union their causes; an ordinary cause promotes a
+config-only fact in either order, and conflicting answers refuse. SDK,
+dependency and pin facts coalesce only under identical authority. Detached
+descriptors are shared within their owner, while different authority and Program
+provenance retain separate rows and validation. Native reads still run, and no
+Program or capture is cached across snapshots. This removes repeated per-target
+facts without dropping the necessary new nearest-config observations. The
+separate cost of retaining 57 snapshots remains with #857.

@@ -17,7 +17,7 @@ import {projectRole,executableModuleSource,fixtureNamespaces,moduleMemberName,pr
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
-import {captureReaderObservations,readerObservationCapture,validateReaderBatchObservations} from './reader-observations.ts';
+import {captureReaderObservations,projectObservationCapture,validateReaderBatchObservations} from './reader-observations.ts';
 import {projectOwnerAncestorAbsence,type ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
 import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
@@ -185,14 +185,17 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
       localTypes?:true;projectRole?:import('./reader-inputs/main.ts').ProjectRole;compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
-    const programCaptures=new Map<string,{reader:string;context:ReaderContext;capture:ReturnType<typeof readerObservationCapture>}>();
+    const programCaptures=new Map<string,{reader:string;context:ReaderContext;capture:ReturnType<typeof projectObservationCapture>}>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
+    function projectCapture(context:Context,reader:string){
+      const key=JSON.stringify([reader,context.entry,context.namespaces]);
+      let owner=programCaptures.get(key);
+      if(!owner){owner={reader,context:{entry:context.entry,dataNamespaces:context.namespaces},capture:projectObservationCapture(root)};programCaptures.set(key,owner);}
+      return owner.capture;
+    }
     const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[],matchingEntries:ReadonlySet<string>=new Set())=>{
       if(protocol==='project'){
-        const key=JSON.stringify([reader,context.entry,context.namespaces]);
-        let owner=programCaptures.get(key);
-        if(!owner){owner={reader,context:{entry:context.entry,dataNamespaces:context.namespaces},capture:readerObservationCapture(root)};programCaptures.set(key,owner);}
-        for(const path of owner.capture.add(rows,matchingEntries))if(inside(root,path))visit(context,path,false,false,false);
+        for(const path of projectCapture(context,reader).add(rows,matchingEntries))if(inside(root,path))visit(context,path,false,false,false);
         return;
       }
       for(const captured of captureReaderObservations(root,rows)){
@@ -220,7 +223,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         if(!projectOwnerAncestorAbsence(root,observation)||lookups.runtimeKind(observation.path)!==null)
           throw Error('compiled project owner lookup has no genuine ancestor absence: '+observation.path);
         for(const fact of [observation,{kind:'runtimeKind' as const,path:observation.path,value:null}])
-          observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',observation:structuredClone(fact),environment,causes:[{kind:fact.kind,path:fact.path}]});
+          projectCapture(context,reader).retain({observation:fact,environment,causes:[{kind:fact.kind,path:fact.path}]});
       }
       observe(context,reader,'project',[...project.observations,...local],new Set(project.matchingEntries));
     }
@@ -409,18 +412,18 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           unavailableInputs.push(...rows);
         }
         if(role==='compiled-program')observeCompiledProject(context,reader,project,request,entry);
-        for(const fact of project.dependencyObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
-          observation:structuredClone(fact.observation),dependency:structuredClone(fact.dependency),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
+        for(const fact of project.dependencyObservations)projectCapture(context,reader).retain({
+          observation:fact.observation,dependency:fact.dependency,causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
         for(const fact of captureReaderObservations(root,project.pinObservations)){
           if(fact.observation.kind==='file'&&fact.observation.value!==null)visit(context,fact.observation.path,false,false,false,true);
-          observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',...fact,selectorOnly:true});
+          projectCapture(context,reader).retain({...fact,selectorOnly:true});
         }
-        for(const fact of project.hostObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
-          observation:structuredClone(fact.observation),environment:structuredClone(fact.environment),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
-        for(const fact of project.installedObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
-          observation:structuredClone(fact.observation),capability:structuredClone(fact.capability),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
-        for(const fact of project.generatedObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
-          observation:structuredClone(fact.observation),capability:structuredClone(fact.capability),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
+        for(const fact of project.hostObservations)projectCapture(context,reader).retain({
+          observation:fact.observation,environment:fact.environment,causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
+        for(const fact of project.installedObservations)projectCapture(context,reader).retain({
+          observation:fact.observation,capability:fact.capability,causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
+        for(const fact of project.generatedObservations)projectCapture(context,reader).retain({
+          observation:fact.observation,capability:fact.capability,causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
         for(const config of project.configs)visit(context,resolve(root,config),false);
         // A compiler project has its own resolution and visit state. Literal
         // host imports and another project's options cannot replace its edges.
