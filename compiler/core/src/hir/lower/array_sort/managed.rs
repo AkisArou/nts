@@ -642,9 +642,9 @@ impl Sort<'_, '_> {
             &names,
             |s| s.both_present(a, stop_a, b, stop_b),
             |s| {
-                let x = s.get(first, s.var(a));
-                let y = s.get(second, s.var(b));
-                let greater = s.greater(x, y)?;
+                let first_item = s.get(first, s.var(a));
+                let second_item = s.get(second, s.var(b));
+                let greater = s.greater(first_item, second_item)?;
                 let take_a = if low {
                     let no = s.boolean(false);
                     s.binary(BinOp::Eq, greater, no)
@@ -655,14 +655,14 @@ impl Sort<'_, '_> {
                     take_a,
                     &[a, b, wins_a, wins_b],
                     |s| {
-                        s.put(s.order, s.var(out), x);
+                        s.put(s.order, s.var(out), first_item);
                         s.advance(a, stride);
                         s.advance(wins_a, 1);
                         s.bind(wins_b, zero);
                         Ok(())
                     },
                     |s| {
-                        s.put(s.order, s.var(out), y);
+                        s.put(s.order, s.var(out), second_item);
                         s.advance(b, stride);
                         s.advance(wins_b, 1);
                         s.bind(wins_a, zero);
@@ -730,7 +730,7 @@ impl Sort<'_, '_> {
 
     fn merge_gallop(
         &mut self,
-        (source, cursor, stop): (ValueId, u32, ValueId),
+        (source, cursor, boundary): (ValueId, u32, ValueId),
         (other, other_cursor): (ValueId, u32),
         out: u32,
         threshold: u32,
@@ -739,9 +739,9 @@ impl Sort<'_, '_> {
     ) -> Built {
         let pivot = self.get(other, self.var(other_cursor));
         let available = if low {
-            self.binary(BinOp::Sub, stop, self.var(cursor))
+            self.binary(BinOp::Sub, boundary, self.var(cursor))
         } else {
-            self.binary(BinOp::Sub, self.var(cursor), stop)
+            self.binary(BinOp::Sub, self.var(cursor), boundary)
         };
         let n = self.gallop(source, self.var(cursor), available, pivot, low, first)?;
         let stride = if low { 1 } else { -1 };
