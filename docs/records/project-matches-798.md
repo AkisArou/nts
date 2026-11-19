@@ -303,3 +303,75 @@ Raw files under `~/.cache/nts-scratch/798/`:
 | `census-main-check.log` | `e39dfb9cb9180b7191c94de610444aefa51a60fa3ae754bbe9f19b78dd435340` |
 | `census-tip-check.log` | `e39dfb9cb9180b7191c94de610444aefa51a60fa3ae754bbe9f19b78dd435340` |
 | `nts-798-census-prepare2.log` | `44ac4af9bd62ad4d446945eb62a39894a3aa41fcaa134c00d859a7589aa73e75` |
+
+## Compiled-owner retention control
+
+The production file boundary introduced a decisive memory control: each of
+four unrelated selector readers ran singly on main
+`ae4898abff477e6ddc33ca5af86a66f032c5ce88` and on
+`14969f2f3fe9ce7dec4d8a101b142f78a6b6740b`. Both used the canonical environment,
+`runScopedTooling`, a 6144000000-byte scope and the same 2248146944-byte V8 heap
+limit. Each ran through `admit.ts` with the stable `tooling-focused` key, under a
+named unit excluding CPUs 4–5. Peak heap combines synchronous V8 GC object sizes,
+100 ms samples and exit statistics; GNU time records maximum RSS.
+
+| Owner | Main | Main peak heap MiB | Tip | Tip peak heap MiB |
+| --- | --- | ---: | --- | ---: |
+| owed.test.mjs | pass | 1977.09 | heap OOM | 2040.55 |
+| oracle-record-owed.test.ts | pass | 1967.54 | heap OOM | 2036.66 |
+| precise-changes.test.ts | pass | 1967.45 | heap OOM | 2039.22 |
+| tooling/jvm/member-name.test.ts | pass | 1961.33 | heap OOM | 2035.37 |
+
+The uncapped calibration is excluded: it let main's owed test pass with
+2632300 KiB RSS but did not reproduce production's boundary. A first near-limit
+snapshot exceeded that boundary during dump construction and produced no data.
+The coordinator authorized a diagnostic-only 12 GiB reservation, with old space
+pinned to 2048 MiB and the original heap limit verified before and after capture.
+
+The paired dumps stop at the same first Rust-input batch, first package.json
+fact and 57 snapshots. Main retains 1438046 observation rows; the tip retains
+1877255, adding 439209. Strong-root retained size grows from 1856596467 to
+2090778016 bytes: 223.33 MiB, larger than the OOM-censored peak difference.
+Retainer paths run through `describeBatch` results, each snapshot's observations,
+and reader contexts, answers and causes. Constructor shallow deltas include
+126.86 MiB of Objects and 90.66 MiB of strings. A streaming analyzer computes
+strong-edge dominators and passes a diamond/shared-child control. Its retained
+constructor totals overlap and are not additive.
+
+The added facts come from normalizing the compiled nearest-config walk separately
+from its Program. Commit `3e0830fab2b2fe4703195c8f78dfdb3fa31d70aa` puts both
+sets through one capture transaction, retaining every probe while merging equal
+answers, refusing conflicts and unioning causes. Each completed owner-lookup
+provenance descriptor is shared only inside its own detached project. The
+unavailable-package refusal remains intact; the batch validator is unchanged.
+This does not coalesce the pre-existing batch or change production limits.
+
+The new union control compares the actual compiled snapshot with both old
+captures: every answer and cause is retained, ordinary authority is preserved,
+and conflicting answers refuse. Replacing only module-closure.ts with the old
+14969 bytes makes this control fail. The distinct-Program-owner control passes
+in both arms. Identical new test bytes run in both. All 20 Program-input tests
+and strict checking of six projects/1173 modules pass; the host audit checks
+2104 sources, 340 entry closures and 420 reads. The installation receipt and
+selector projection are refreshed through their owning tools.
+
+The baseline belongs to #857: the first owed question takes the stale-record
+live-projection route through `buildRustSelectorMaterial`,
+`rustRuntimeInputGraph.describeAll` and `moduleGraph.describeBatch`. Holding 57
+full detached snapshots and their 1.438 million raw facts produces the large
+shared baseline; this is not work done merely by importing the module. Its
+baseline representation is unchanged here. Both diagnostic dumps and the empty
+failed dump were deleted after the constructor/retainer summary was extracted,
+as the coordinator requested.
+
+Additional raw evidence under `~/.cache/nts-scratch/798/`:
+
+| File | SHA-256 |
+| --- | --- |
+| `heap-production-table.json` | `cc75f548450e1ab19265aec0ca6f02954a16154a02755969340a5dc92df518bf` |
+| `heap-pair/retention-summary.json` | `95e9ee4e6dc173fbd8ee5f6af5a206b774debfae36a901de480b7377414ae83d` |
+| `merge-counterfactual.json` | `bc361951173ab10d4b9e288c1a0b9386177fb0135eedd5b31d7c226bc9d03e37` |
+| `merge-before-owner.log` | `9485d0a1a284f2772604df872089e20f51d1c67a0841e47e99e51dde3ab5c389` |
+| `merge-after-owner.log` | `30a766ab3884148ee2615e871f1856cd96990a63c562d436965fe84d0524b910` |
+| `nts-798-merged-target.log` | `71c38e7bf914d0e08eb17d3c61c0b8fb273e25b03d2172e5795ff2239f6f6a8d` |
+| `nts-798-merged-prepare.log` | `223444459952b64c8cf68d65c81342403b713fcaf6255a968438889286664479` |
