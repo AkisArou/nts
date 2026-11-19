@@ -4,7 +4,7 @@
 // source does, and only then.
 
 include!("src/generator_inputs.rs");
-// The commit `nts version` names, and whether its sources were edited then.
+// The source digest `nts version` names (tooling/cli/source-roots.txt).
 include!("source_identity.rs");
 
 fn main() {
@@ -21,16 +21,5 @@ fn main() {
             .unwrap_or_else(|error| panic!("hashing the {name} generator's inputs: {error}"));
         println!("cargo:rustc-env=NTS_GENERATOR_{name}={hash:016x}");
     }
-    emit_source_identity(
-        &root.join("../.."),
-        "NTS",
-        &[
-            "compiler",
-            "runtime",
-            "build",
-            "tooling/cli",
-            "Cargo.toml",
-            "Cargo.lock",
-        ],
-    );
+    emit_source_identity(&root.join("../.."), "NTS", "nts");
 }

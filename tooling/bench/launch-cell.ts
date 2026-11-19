@@ -24,7 +24,13 @@ export type Launch = {
   systemMicroseconds: number;
   /** wait4's own ru_maxrss for this child: an observation only, not a row. */
   maxRssKib: number;
-  /** User and nice ticks on the timed CPU's sibling around this launch; null when none was named. */
+  /**
+   * User and nice ticks on the timed CPU's sibling around this launch; null
+   * when none was named. /proc/stat counts in 10 ms ticks, so a launch of a
+   * few hundred microseconds sees a tick only when it straddles one: a
+   * non-zero count says the sibling ran a program, and zero says little.
+   * The row's spoil check, over the whole case, is the disturbance control.
+   */
   siblingTicks: number | null;
   stdoutSha256: string;
 };

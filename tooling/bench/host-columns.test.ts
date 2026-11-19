@@ -7,6 +7,10 @@ import { parse } from "acorn";
 import { typedTimer } from "./typed-timer.ts";
 import { parseMeasurement, buildCommand, buildFailure, coldStartup, launchCpu, ntsIdentity } from "./host-columns.ts";
 import { chmodSync, utimesSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import { gitArguments } from "../gate/git-arguments/main.ts";
+import { sourceDigest } from "./source-identity.ts";
 import { buildLauncher } from "./launcher.ts";
 import { LAUNCH_PROTOCOL } from "./launch-cell.ts";
 import { join } from "node:path";
@@ -110,23 +114,22 @@ test("the cold-startup arm is one launch of the launch timer, under its named pr
   assert.equal((await coldStartup(cold, "/bin/sh", [script], "4000000000000000", "case-aot") as Record<string, unknown>).status, "ABORTED");
 });
 
-test("launch rows refuse an nts that is missing, built from another commit or from uncommitted sources, whatever its mtime", t => {
-  const dir = testScratch(t, "nts-identity"), commit = "a".repeat(40), other = "b".repeat(40);
+test("launch rows refuse an nts that is missing or built from other sources than the measured commit's, whatever its mtime", t => {
+  const dir = testScratch(t, "nts-identity"), root = fileURLToPath(new URL("../..", import.meta.url));
+  const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: root, encoding: "utf8" }).trim();
+  const head = git("rev-parse", "HEAD"), changed = git("log", "-1", "--format=%H", head, "--", "compiler");
   const nts = join(dir, "nts");
-  assert.throws(() => ntsIdentity(nts, commit), /does not exist/);
+  assert.throws(() => ntsIdentity(nts, root, head), /does not exist/);
   const built = (source: string) => {
     writeFileSync(nts, `#!/bin/sh\necho "nts 0.0.0"\n${source}\n`);
     chmodSync(nts, 0o755);
     utimesSync(nts, new Date(), new Date()); // a fresh copy, as the nightly's: the mtime decides nothing
   };
-  built(`echo "source commit ${other} (clean)"`);
-  assert.throws(() => ntsIdentity(nts, commit), /was built from bbbbbbbbbbbb, not the measured aaaaaaaaaaaa/);
-  built(`echo "source commit ${commit} (dirty)"`);
-  assert.throws(() => ntsIdentity(nts, commit), /uncommitted sources/);
+  built(`echo "source digest ${sourceDigest(root, `${changed}~1`, "nts")}"`);
+  assert.throws(() => ntsIdentity(nts, root, head), /was not built from .*'s sources/);
   built("");
-  assert.throws(() => ntsIdentity(nts, commit), /names no source commit/);
-  built(`echo "source commit ${commit} (clean)"`);
-  const identity = ntsIdentity(nts, commit);
-  assert.equal(identity.sourceCommit, commit);
-  assert.match(identity.version, /source commit a{40} \(clean\)/);
+  assert.throws(() => ntsIdentity(nts, root, head), /names no source digest/);
+  const digest = sourceDigest(root, head, "nts");
+  built(`echo "source digest ${digest}"`);
+  assert.equal(ntsIdentity(nts, root, head).sourceDigest, digest);
 });

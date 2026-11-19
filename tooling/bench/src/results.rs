@@ -56,13 +56,10 @@ pub(super) fn group_cases(root: &Utf8Path, name: &str) -> Result<Vec<String>> {
 }
 
 pub(super) fn begin(root: &Utf8Path) -> Result<serde_json::Value> {
-    ensure!(
-        env!("NTS_BENCH_SOURCE_DIRTY") == "false",
-        "nts-bench was built from dirty sources; commit and rebuild"
-    );
+    // The record authority holds this digest to the measured commit's sources.
     let binary = std::env::current_exe().context("benchmark executable path")?;
     let binary = binary.to_str().context("benchmark path is not UTF-8")?;
-    let text = command(root, "begin", &[binary, env!("NTS_BENCH_SOURCE_COMMIT")])?;
+    let text = command(root, "begin", &[binary, env!("NTS_BENCH_SOURCE_DIGEST")])?;
     serde_json::from_str(&text).context("invalid benchmark run metadata")
 }
 

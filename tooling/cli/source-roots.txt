@@ -1,0 +1,8 @@
+# The paths each binary is built from: the roots of its source digest
+# (tooling/cli/source_identity.rs, tooling/bench/source-identity.ts). Each
+# binary's Cargo path-dependency closure lies under its roots, which
+# tooling/bench/source-identity.test.ts checks against cargo metadata; the
+# other roots are files the crates include from outside themselves (runtime/c)
+# and the workspace manifest and lock.
+nts: Cargo.toml Cargo.lock build compiler runtime third_party/react-compiler third_party/tsrs tooling/cli tooling/deps tooling/differential tooling/publication tooling/surfaces
+nts-bench: Cargo.toml Cargo.lock compiler runtime third_party/tsrs tooling/bench tooling/cli/source-roots.txt tooling/cli/source_identity.rs

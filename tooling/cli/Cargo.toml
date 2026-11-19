@@ -11,6 +11,10 @@ publish.workspace = true
 name = "nts"
 path = "src/main.rs"
 
+[build-dependencies]
+# The source digest (tooling/cli/source_identity.rs).
+hmac-sha256.workspace = true
+
 [dependencies]
 nts-publication.workspace = true
 nts-build.workspace = true

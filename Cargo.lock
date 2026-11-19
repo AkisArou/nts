@@ -395,6 +395,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "camino",
+ "hmac-sha256",
  "nts-build",
  "nts-codegen-c",
  "nts-codegen-common",

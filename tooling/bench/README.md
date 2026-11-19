@@ -49,10 +49,14 @@ marker is an error. The `startup` group's rows are launch rows.
 
 - **What is launched.** nts C and nts LLVM are the executables `nts build`
   makes, from a generated project whose config declares one `app.cli` product
-  per backend, with the `nts` beside `nts-bench`. That `nts` must name, in
-  `nts version`, the commit `nts-bench` was built from, built clean: both
-  embed their source commit and dirty flag at build time
-  (`tooling/cli/source_identity.rs`). Node and Bun JIT run `case.ts` itself with no
+  per backend, with the `nts` beside `nts-bench`. Both binaries embed a
+  digest of the files under their source roots as they were built
+  (`tooling/cli/source-roots.txt`, `tooling/cli/source_identity.rs`); a run
+  requires `nts-bench`'s, and a launch row the `nts` one `nts version` names,
+  to equal the measured commit's (`source-identity.ts`). A commit that
+  changes none of a binary's roots changes neither its digest nor its build.
+  Each root list covers its crate's Cargo path-dependency closure, which a
+  test checks against `cargo metadata`. Node and Bun JIT run `case.ts` itself with no
   flags; Bun AOT and ScriptC are built from it as for throughput rows. nts JVM
   is `NOT_RUN` and C++ and Java `NOT_PROVIDED`, each with its reason. A cell's
   details name its recipe, command, artifact digest and argv.
@@ -68,7 +72,10 @@ marker is an error. The `startup` group's rows are launch rows.
   bound (the wall bound killed it, or its own CPU time reached the CPU bound),
   wait4's user and system time and peak RSS (an observation only; size and
   RSS rows are their own instruments), and the user and nice ticks of the
-  timed CPU's sibling 5 around it.
+  timed CPU's sibling 5 around it. Those ticks are 10 ms, so for a launch of
+  a few hundred microseconds a non-zero count shows the sibling ran a program
+  and a zero shows little; the row's spoil check over the whole case is the
+  disturbance control.
 - **One sitting per row.** Every column, and `/bin/true` as the timer's own
   floor, launch in rotating rounds (round r starts at column r): three warm-up
   rounds, which only warm the page cache, then 21 timed rounds. All columns

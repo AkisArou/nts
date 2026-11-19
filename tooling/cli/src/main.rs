@@ -1049,15 +1049,7 @@ fn run_command() -> Result<()> {
             for patch in frontend.patches {
                 println!("tsrs local patch {} {}", patch.id, patch.sha256);
             }
-            println!(
-                "source commit {} ({})",
-                env!("NTS_SOURCE_COMMIT"),
-                if env!("NTS_SOURCE_DIRTY") == "false" {
-                    "clean"
-                } else {
-                    "dirty"
-                }
-            );
+            println!("source digest {}", env!("NTS_SOURCE_DIGEST"));
             binary_identity();
             Ok(())
         }

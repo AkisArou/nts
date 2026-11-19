@@ -24,6 +24,7 @@ import { fromNts, type Metadata } from "./run-producers.ts";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
 import { groupRows, readBenchmarkGroups } from "./groups.ts";
 import { readJournal } from "./run-journal.ts";
+import { requireSourceDigest } from "./source-identity.ts";
 const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
 const CASES=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
 const COMMON=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/common/",import.meta.url))));
@@ -50,16 +51,15 @@ function cleanSources(root: string): void {
     "benchmark source tree is dirty: " + paths.filter((p) => !p.startsWith("results/")).join(", "),
   );
 }
-export function begin(root: string, binary: string, compilerCommit: string): Metadata {
+export function begin(root: string, binary: string, sourceDigest: string): Metadata {
   cleanSources(root);
   const pins = pinnedComparators(root),
     commit = command("git", gitArguments(["rev-parse", "HEAD"]), root),
     startedAt = new Date().toISOString();
-  assert.match(
-    compilerCommit,
-    /^[a-f0-9]{40}$/,
-    "compiler build has no committed source identity; rebuild nts-bench",
-  );
+  assert.match(sourceDigest, /^[a-f0-9]{64}$/, "nts-bench names no source digest; rebuild it");
+  // nts-bench is the compiler this run records: exactly HEAD's sources under its roots.
+  requireSourceDigest(root, commit, "nts-bench", sourceDigest, "nts-bench");
+  const compilerCommit = commit;
   const inventory = readdirSync(join(root, CASES), { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)

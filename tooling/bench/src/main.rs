@@ -967,7 +967,6 @@ fn run_launch_case(
         .arg("--launch")
         .args([root.as_str(), name, out.as_str()])
         .arg(&nts)
-        .arg(env!("NTS_BENCH_SOURCE_COMMIT"))
         .current_dir(root)
         .output()
         .context("running the launch row")?;
