@@ -1478,3 +1478,84 @@ it grants no runtime input paths and changes no selector policy.
 | `class-method-sizes.py` | `b1596fd3b0e32516dadd8303ebf433374df3af955c55ba781df43422b9660f49` |
 | `sort-reader.patch` | `b1be9da7b024d2bb77b0065dfefe51f6106ba32ec49c594b1bcc5f31264cdad5` |
 | `final-timed-retention.log` | `b26bcf8258d06ac073f3cc17b2be942827fd9b19295496e3a64537c9a7d24a95` |
+
+## JVM diagnosis: huge-method compilation control
+
+Commit `1ba7adb4815bac41f6ea435d4016408f1453564c`; one locked CPU-4
+sitting, sibling 5 idle, six alternating invocations per arm, equal
+checksums. Every arm has the same 1 GiB diagnostic cgroup cap and compilation
+logging. This is a diagnostic control, separate from the standard full-engine
+sitting. Only the last arm enables compilation of huge methods; production
+VM policy is unchanged. All samples, including the slow enabled runs, remain
+in the JSON and the table's min/max ranges.
+
+[OpenJDK 21.0.5's declared limit](https://github.com/openjdk/jdk21u/blob/jdk-21.0.5%2B11/src/hotspot/share/compiler/compiler_globals.hpp)
+is 8,000 bytecodes. Its [compilation policy](https://github.com/openjdk/jdk21u/blob/jdk-21.0.5%2B11/src/hotspot/share/compiler/compilationPolicy.cpp)
+rejects larger methods when DontCompileHugeMethods is enabled. The local JDK
+has that default. Every adaptive-default workload has no C1/C2 workload
+compilation in all six runs; the enabled arm does compile workload methods.
+Constructor compilations are excluded from that observation.
+
+| Row | Arm | Median µs | Min µs | Max µs | / original median | Verdict vs original (descriptive 3%) | C1 workload runs /6 | C2 workload runs /6 |
+|---|---|---:|---:|---:|---:|---|---:|---:|
+| map-entries-top-k | original | 18.290608 | 18.092892 | 18.594256 | 1.000000 | within 3% | 6 | 6 |
+| map-entries-top-k | adaptive-default | 279.092083 | 266.941500 | 283.751432 | 15.258765 | LOSS | 0 | 0 |
+| map-entries-top-k | adaptive-compile-huge | 25.037432 | 24.829716 | 117.492152 | 1.368868 | LOSS | 6 | 6 |
+| sort-objects | original | 95.996420 | 95.417106 | 98.056207 | 1.000000 | within 3% | 6 | 6 |
+| sort-objects | adaptive-default | 761.334249 | 758.266697 | 764.700382 | 7.930861 | LOSS | 0 | 0 |
+| sort-objects | adaptive-compile-huge | 49.701584 | 49.116728 | 50.196052 | 0.517744 | gain | 6 | 6 |
+| sort-objects-runs | original | 104.361377 | 102.924710 | 105.898413 | 1.000000 | within 3% | 6 | 6 |
+| sort-objects-runs | adaptive-default | 853.989846 | 847.772678 | 857.847836 | 8.183007 | LOSS | 0 | 0 |
+| sort-objects-runs | adaptive-compile-huge | 82.740324 | 54.077816 | 203.115020 | 0.792825 | gain | 6 | 6 |
+| sort-objects-shuffled | original | 245.856530 | 241.141387 | 252.894958 | 1.000000 | within 3% | 6 | 6 |
+| sort-objects-shuffled | adaptive-default | 4184.805478 | 4158.529333 | 4195.834609 | 17.021331 | LOSS | 0 | 0 |
+| sort-objects-shuffled | adaptive-compile-huge | 405.856295 | 346.601503 | 1231.723454 | 1.650785 | LOSS | 6 | 6 |
+| string-sort-control | original | 0.098232 | 0.091082 | 0.114383 | 1.000000 | within 3% | 6 | 6 |
+| string-sort-control | adaptive-default | 2.777265 | 2.706944 | 2.798838 | 28.272434 | LOSS | 0 | 0 |
+| string-sort-control | adaptive-compile-huge | 0.159918 | 0.157499 | 0.162889 | 1.627957 | LOSS | 6 | 6 |
+
+The flag control removes most of the loss but is not a product fix: enabled
+map, shuffled and string rows still lose to original by 37%, 65% and 63%.
+The emitted code must have smaller method boundaries so the default JVM
+compiles the phases effectively. The coordinator requires shared run,
+merge and insertion methods; no VM policy change will land.
+
+| Row | CPU-5 user+nice before → after | Load before → after | Spoiled |
+|---|---|---|---|
+| map-entries-top-k | 8726 → 8726 | 16.00 → 16.09 | False |
+| sort-objects | 8726 → 8726 | 16.09 → 15.38 | False |
+| sort-objects-runs | 8726 → 8726 | 15.38 → 15.12 | False |
+| sort-objects-shuffled | 8726 → 8726 | 15.12 → 16.83 | False |
+| string-sort-control | 8726 → 8726 | 16.83 → 18.66 | False |
+
+### Method sizes from javap
+
+Each row is javap's last instruction offset plus the terminal return/throw
+byte. Every endpoint is independently checked against the classfile Code
+attribute's exact length. Original and adaptive disassemblies, all methods
+and command lines are retained. The after-correction sizes are still owed.
+
+| Row | Phase | Method | Bytecodes | Against default 8,000-byte limit |
+|---|---|---|---:|---|
+| map-entries-top-k | original | `public static double topWords(double);` | 1422 | within limit |
+| map-entries-top-k | original | `public static int ¢nts$body$topWords$23$whole(int);` | 1357 | within limit |
+| map-entries-top-k | adaptive | `public static double topWords(double);` | 10020 | OVER LIMIT |
+| map-entries-top-k | adaptive | `public static int ¢nts$body$topWords$23$whole(int);` | 9881 | OVER LIMIT |
+| sort-objects | original | `public static double work(double);` | 1151 | within limit |
+| sort-objects | original | `public static int ¢nts$body$work$23$whole(int);` | 1091 | within limit |
+| sort-objects | adaptive | `public static double work(double);` | 9520 | OVER LIMIT |
+| sort-objects | adaptive | `public static int ¢nts$body$work$23$whole(int);` | 9378 | OVER LIMIT |
+| sort-objects-runs | original | `public static double work(double);` | 1263 | within limit |
+| sort-objects-runs | original | `public static int ¢nts$body$work$23$whole(int);` | 1199 | within limit |
+| sort-objects-runs | adaptive | `public static double work(double);` | 9724 | OVER LIMIT |
+| sort-objects-runs | adaptive | `public static int ¢nts$body$work$23$whole(int);` | 9572 | OVER LIMIT |
+| sort-objects-shuffled | original | `public static double work(double);` | 1409 | within limit |
+| sort-objects-shuffled | original | `public static int ¢nts$body$work$23$whole(int);` | 1345 | within limit |
+| sort-objects-shuffled | adaptive | `public static double work(double);` | 9966 | OVER LIMIT |
+| sort-objects-shuffled | adaptive | `public static int ¢nts$body$work$23$whole(int);` | 9840 | OVER LIMIT |
+| string-sort-control | original | `public static double work(double);` | 927 | within limit |
+| string-sort-control | original | `public static int ¢nts$body$work$23$whole(int);` | 860 | within limit |
+| string-sort-control | adaptive | `public static double work(double);` | 9128 | OVER LIMIT |
+| string-sort-control | adaptive | `public static int ¢nts$body$work$23$whole(int);` | 8970 | OVER LIMIT |
+
+Raw evidence manifest: `/home/akisarou/.cache/nts-scratch/876/jvm-control-evidence.json`, SHA-256 `9b47dc03c526fb6bdc8a665e4592e3a4d615008b76d1a5c871f90af883f35be5`.
