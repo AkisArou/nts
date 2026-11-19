@@ -3924,6 +3924,30 @@ historical versions keep their earlier bound. Genuine unreadability remains a
 named unavailable child-loader receipt. This removes the fixed 64 KiB vector
 limit whose truncation depended on the canonical environment's path lengths.
 
+## The full check's run bound measures progress (11-19)
+
+Approved by the coordinator for #825. On 2026-11-17 the core run at
+19bee248e2b0 was held on every step at its wall ceiling of 4412 s, although it
+was progressing. It was outranked, as the ledger's ranks and #823's CPU weights
+require. One of its steps logged 809 s of execution beside 3,339 s of admission
+waits. In #823's contended batch its slice ran 76.8 cpu-s in 982 s, while each
+agent load ran about 7,760. The ceiling was a plain wall clock, so it counted
+ledger waits and CPU taken by higher ranks as if the run had hung.
+
+The bound now has one owner shared with the step clock (`ProgressBound`,
+tooling/gate/step-bound.ts). It splits each interval into declared waits, CPU
+lost (cpu.pressure `some`), used time, and stalled time (used time the slice did
+not run). The full check holds a run at a stall bound of three times its last
+green wall, unchanged, and at a CPU bound of three times its last green
+measured CPU. The CPU bound is justified separately: a spinner never stalls,
+and outranking lowers CPU per wall second, never in total. IO and memory
+pressure are not progress, because an IO hang could excuse itself for ever.
+
+The wall bound and the scope's RuntimeMaxSec are removed. Every wait the bound
+excuses ends when the work it waits on ends, and that work has its own bound.
+As the coordinator's guard asked, the run's progress receipt is kept live, and
+`service.ts --status` names the request a run waits behind and since when.
+
 ## Memory stages 1 and 2 start on their own instruments (11-19)
 
 Decided by the coordinator with the owner's assistant, on the owner's request:

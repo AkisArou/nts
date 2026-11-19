@@ -101,7 +101,7 @@ import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstr
 import {GateScopes} from "./scopes/step-scope.ts";
 import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
-import {StepBoundClock, stepBound, stepBoundReason, stepBoundWait} from "./step-bound.ts";
+import {ProgressBound, stepBound, stepBoundReason, stepBoundWait} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
@@ -1312,7 +1312,7 @@ function start(step, slots, rider = false) {
   // log stays, and it is neither a pass nor a red verdict about the change.
   // Killed again until it exits: a kill reaches only what its scope holds.
   let boundTimer;
-  const boundStarted = host.now(), boundClock = new StepBoundClock(bound.seconds, boundStarted, STEP_CEILING);
+  const boundStarted = host.now(), boundClock = new ProgressBound({ execution_s: bound.seconds, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
   let boundState = boundClock.observe(boundStarted), boundFailure;
   owned.observeBound = (now, u) => {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
@@ -1332,7 +1332,7 @@ function start(step, slots, rider = false) {
     outranked();
     owned.observeBound(host.now(), used());
     if (boundState.expired) {
-      boundFailure = boundState.used_s < bound.seconds && STEP_CEILING !== undefined
+      boundFailure = boundState.expired === "wall_s"
         ? `step exceeded the landing wall ceiling of ${STEP_CEILING} s` : stepBoundReason(bound.seconds);
       stopAtBound();
     } else {

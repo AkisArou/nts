@@ -332,11 +332,32 @@ times the change's estimate). A tokened step spends this execution allowance
 while a case runs or its script works; a known admission wait with no case
 running spends none. This includes memory, priority, slots and frontend
 admission. The log and summary name these waits. A landing's ceiling always
-bounds wall time, including waits. A full-check measurement has an independent
-wall ceiling of three times its last canonical green run, with a fifteen-minute
-floor. Without that run, its longest measured step supplies the baseline.
-The controller owns the ceiling, including for historical runners, and stops
-the measurement's whole slice when it expires. Tooling and measurement slices
+bounds wall time, including waits.
+
+**A full-check run is held when it stops progressing, never because higher
+ranks slowed it.** Its bound
+([`tooling/full-check/measure-command.ts`](../tooling/full-check/measure-command.ts))
+is spent by the same owner as a step's (`ProgressBound`). Every second it reads
+the run slice's CPU (`cpu.stat`), the time its tasks were runnable while the
+CPUs ran other work (`cpu.pressure`), and its waits in the memory ledger: its
+own requests, and those of higher rank it yields to (`ledgerWait`). Waits and
+CPU lost to other work spend nothing. IO and memory pressure are not progress.
+The run is held when it has *stalled* (neither run, been runnable nor waited)
+for three times its last canonical green run's wall, at least fifteen minutes;
+without that run, three times its longest measured step. It is also held when
+it has used three times that green run's measured CPU, at least fifteen
+minutes of the whole machine; without it, three times its steps' baseline CPU.
+That catches a spinning run, which never stalls, and a slowed run never
+reaches it. A run with a step that has no baseline and no green run behind it
+has no CPU bound; its stall bound and each step's own bound still hold. There
+is no wall bound: every wait the bound excuses ends when the work it waits on
+ends, and that work has its own bound. The run folder's
+`measurement-progress.json` is kept up to date while the run lasts.
+`service.ts --status` shows from it what the run has run, lost and stalled
+against its bounds, and the ledger request it waits behind and since when, so
+a wait that never ends is seen while it lasts. The held reason names the bound
+and the measured progress. The controller owns this bound, including for
+historical runners, and stops the measurement's whole slice when it expires. Tooling and measurement slices
 are created explicitly before their first member, with `BindsTo` and `After`
 naming the creating process's user-manager scope or service. The same transient
 creator owns gate roots and step slices. An empty start and a live nested child
@@ -2498,6 +2519,13 @@ death; an absent timestamp remains explicit after forced termination.
   reach belongs to the shared `projectMembers` owner. Until the census reader
   declares those inputs, an imported file outside the case can miss the landing
   census check; green-core native refresh still covers every row.
+
+- **The full check's run bound measures progress, not wall time.** A run is
+  held when it has stalled outside its waits for its stall bound, or when it has
+  used its CPU bound. Ledger waits, and CPU that higher ranks take from it, spend
+  neither. No wall bound remains; the live progress receipt makes an endless
+  wait visible in the status
+  ([log](records/notebooks/decisions-log.md#the-full-checks-run-bound-measures-progress-11-19)).
 
 - **Stopped exec vectors share the kernel budget.** The native reader owns
   growing argv and environment storage through serialization, bounded by the

@@ -13,7 +13,7 @@ import {readStepBaseline} from "./step-time.ts";
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
-import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, StepBoundClock, landingCeiling, stepBound, stepBoundReason, stepBoundWait, unmeasuredSteps } from "./step-bound.ts";
+import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, ProgressBound, landingCeiling, progressSummary, stepBound, stepBoundReason, stepBoundWait, unmeasuredSteps } from "./step-bound.ts";
 import { instrumentPolicy } from "./step-result.ts";
 import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
@@ -37,16 +37,61 @@ test("only a gate-owned admission wait with no executing case suspends a step's 
   assert.equal(stepBoundWait({...ready,elastic:false,outranked:true}), undefined, "a fixed step's work is not tracked by tokens");
 });
 
+const spent = (state: ReturnType<ProgressBound["observe"]>) => ({ used_s: state.used_s, waited_s: state.waited_s, expired: state.expired });
+
 test("admission waits leave execution time intact, while a landing's wall ceiling always expires", () => {
-  const clock = new StepBoundClock(2,0);
+  const clock = new ProgressBound({ execution_s: 2 }, 0);
   clock.observe(0,"memory");
-  assert.equal(clock.observe(10_000,"priority").expired,false);
-  assert.equal(clock.observe(11_000).expired,false);
-  assert.equal(clock.observe(12_000).expired,false);
-  assert.deepEqual(clock.observe(13_000), {used_s:2,waited_s:{memory:10,priority:1},expired:true});
-  const landing = new StepBoundClock(2,0,3);
+  assert.equal(clock.observe(10_000,"priority").expired,undefined);
+  assert.equal(clock.observe(11_000).expired,undefined);
+  assert.equal(clock.observe(12_000).expired,undefined);
+  assert.deepEqual(spent(clock.observe(13_000)), {used_s:2,waited_s:{memory:10,priority:1},expired:"execution_s"});
+  const landing = new ProgressBound({ execution_s: 2, wall_s: 3 }, 0);
   landing.observe(0,"memory");
-  assert.deepEqual(landing.observe(3000,"memory"),{used_s:0,waited_s:{memory:3},expired:true});
+  assert.deepEqual(spent(landing.observe(3000,"memory")),{used_s:0,waited_s:{memory:3},expired:"wall_s"});
+  assert.equal(new ProgressBound({ execution_s: 2 }, 0).observe(5000).stalled_s, 0, "without CPU samples a budget only spends; nothing is called stalled");
+  for (const value of [0, -1, Number.NaN, Infinity]) assert.throws(() => new ProgressBound({ stall_s: value }, 0), /stall_s of .* is not a positive number/);
+});
+
+// A run's CPU counters, in seconds: what it ran and how long some of it waited for a CPU.
+const cpu = (ran: number, waited = 0) => ({ usageUsec: ran * 1e6, waitingUsec: waited * 1e6 });
+
+test("a run's waits suspend its stall bound, and declared waits spend nothing however little it runs", () => {
+  const bound = new ProgressBound({ stall_s: 5 }, 0);
+  bound.observe(0, "memory", cpu(0));
+  const waited = bound.observe(600_000, "priority", cpu(0.5));
+  assert.deepEqual([waited.stalled_s, waited.waited_s, waited.cpu_s, waited.expired], [0, { memory: 600 }, 0.5, undefined]);
+  const after = bound.observe(1_200_000, undefined, cpu(0.5));
+  assert.deepEqual([after.stalled_s, after.waited_s, after.expired], [0, { memory: 600, priority: 600 }, undefined]);
+});
+
+test("CPU progress feeds a run's bound: what it runs, and what higher ranks take from it, is not a stall", () => {
+  const busy = new ProgressBound({ stall_s: 5 }, 0);
+  busy.observe(0, undefined, cpu(0));
+  const working = busy.observe(100_000, undefined, cpu(2400));
+  assert.deepEqual([working.used_s, working.stalled_s, working.cpu_s, working.expired], [100, 0, 2400, undefined], "a run using the machine");
+  const outranked = new ProgressBound({ stall_s: 5 }, 0);
+  outranked.observe(0, undefined, cpu(0));
+  // #823's held run: about 1% of a CPU, its tasks runnable the rest of the time.
+  const slowed = outranked.observe(1_000_000, undefined, cpu(10, 990));
+  assert.deepEqual([slowed.cpu_lost_s, slowed.used_s, slowed.stalled_s, slowed.expired], [990, 10, 0, undefined]);
+  assert.equal(new ProgressBound({ wall_s: 5 }, 0).observe(1_000_000).expired, "wall_s", "the counterfactual: a wall clock holds that run");
+});
+
+test("a run that neither runs nor waits stalls and is held at its stall bound, and a spinning run at its CPU bound", () => {
+  const sleeping = new ProgressBound({ stall_s: 5, cpu_s: 100 }, 0);
+  sleeping.observe(0, undefined, cpu(0));
+  // A hung runner still samples itself: about 1% of a CPU.
+  assert.equal(sleeping.observe(4000, undefined, cpu(0.04)).expired, undefined);
+  const held = sleeping.observe(6000, undefined, cpu(0.06));
+  assert.equal(held.expired, "stall_s");
+  assert.ok(Math.abs(held.stalled_s - 5.94) < 1e-9, String(held.stalled_s));
+  assert.equal(progressSummary(held), "in 6 s it ran 0.1 cpu-s, lost 0 s to higher-ranked CPU work and stalled 6 s");
+  const spinning = new ProgressBound({ stall_s: 5, cpu_s: 100 }, 0);
+  spinning.observe(0, undefined, cpu(0));
+  const spun = spinning.observe(100_000, "memory", cpu(100));
+  assert.deepEqual([spun.expired, spun.stalled_s], ["cpu_s", 0]);
+  assert.equal(progressSummary(spinning.observe(101_000, undefined, cpu(101))), "in 101 s it ran 101.0 cpu-s, lost 0 s to higher-ranked CPU work, waited 1 s for memory and stalled 0 s");
 });
 
 test("a stated bound wins; otherwise three times the step's work and the run's over their slots, above a floor", () => {

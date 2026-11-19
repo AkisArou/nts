@@ -206,9 +206,6 @@
     "kernel": 1,
     "clock": 1
   },
-  "tooling/full-check/measure-command.ts": {
-    "clock": 2
-  },
   "tooling/full-check/node-cache-retention.ts": {
     "clock": 1
   },

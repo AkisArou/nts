@@ -23,6 +23,11 @@
 // estimate, at least fifteen minutes (tooling/landing/selection.ts). The
 // landing check passes it to the runner as NTS_GATE_STEP_CEILING_S, so a stuck
 // step holds the queue for minutes, not the hour the full check allows.
+//
+// **The clock that spends a bound** is `ProgressBound`, the same owner the
+// full check's run bound uses (tooling/full-check/measure-command.ts): a
+// declared admission wait spends nothing, and a step's budget is the rest of
+// its wall time.
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 
 export const STEP_BOUND_FACTOR = 3;
@@ -51,30 +56,87 @@ export function stepBoundWait(state: {
   if (state.requests.every(bytes => bytes > state.freeBytes)) return "memory";
 }
 
-/** The step's execution budget, with an independent wall ceiling for a
- * landing. Only the runner's admission decisions can suspend this clock;
- * individual command supervisors keep their own clocks throughout. */
-export class StepBoundClock {
+/** A cgroup's CPU counters at one moment: what it ran (cpu.stat usage_usec)
+ * and how long some task of it was runnable but not running (cpu.pressure
+ * `some` total), both in microseconds since the cgroup began. */
+export type CpuSample = { usageUsec: number; waitingUsec: number };
+
+/** The limits a bound holds work to, in seconds (cpu: CPU seconds). */
+export type ProgressLimits = { execution_s?: number; wall_s?: number; stall_s?: number; cpu_s?: number };
+export type ProgressLimit = keyof ProgressLimits;
+
+/** What a bound has measured so far, and the limit that expired, if one has. */
+export type ProgressState = {
+  wall_s: number;
+  /** Time outside declared waits and outside CPU lost to other work. */
+  used_s: number;
+  /** Of `used_s`, the time the work neither ran nor waited for a CPU. */
+  stalled_s: number;
+  /** CPU the work ran, waits included. */
+  cpu_s: number;
+  /** Time some of the work was runnable while the CPUs ran other work. */
+  cpu_lost_s: number;
+  waited_s: Partial<Record<BoundWait, number>>;
+  expired: ProgressLimit | undefined;
+};
+
+const LIMIT_ORDER: readonly ProgressLimit[] = ["execution_s", "stall_s", "cpu_s", "wall_s"];
+
+/**
+ * **The one bound owner** of gate work: a step's execution budget
+ * (run.mjs) and the full check's run bound (full-check/measure-command.ts).
+ * Each interval between observations is the state the previous observation
+ * named. A declared wait (the ledger's memory or priority, the runner's slots
+ * or frontends) spends nothing. Otherwise, given CPU samples of the work's
+ * cgroup, the time some of it was runnable but given no CPU is CPU lost to
+ * other work, which a higher rank takes by design (ranks.ts), and spends
+ * nothing either; the rest is used, and what of it the work did not run is
+ * stalled. Without CPU samples every undeclared second is used, as a step's
+ * budget is. IO and memory pressure are not progress: a hung IO wait would
+ * excuse itself for ever. `wall_s` alone counts everything.
+ */
+export class ProgressBound {
   #start: number;
   #last: number;
   #wait: BoundWait | undefined;
-  #used = 0;
+  #cpu: CpuSample | undefined;
+  #state: Omit<ProgressState, "expired" | "waited_s"> = { wall_s: 0, used_s: 0, stalled_s: 0, cpu_s: 0, cpu_lost_s: 0 };
   #waited: Partial<Record<BoundWait, number>> = {};
-  #seconds: number;
-  #ceiling: number | undefined;
+  readonly limits: Readonly<ProgressLimits>;
 
-  constructor(seconds: number, startedMs: number, ceilingSeconds?: number) {
-    this.#seconds = seconds; this.#start = this.#last = startedMs; this.#ceiling = ceilingSeconds;
+  constructor(limits: ProgressLimits, startedMs: number) {
+    for (const [name, value] of Object.entries(limits)) {
+      if (value !== undefined && !positive(value)) throw new Error(`a progress bound's ${name} of ${String(value)} is not a positive number`);
+    }
+    this.limits = { ...limits }; this.#start = this.#last = startedMs;
   }
 
-  observe(nowMs: number, waiting?: BoundWait) {
-    const elapsed = Math.max(0, nowMs - this.#last) / 1000;
+  /** The interval since the last observation, then what holds from `nowMs` on. */
+  observe(nowMs: number, waiting?: BoundWait, cpu?: CpuSample): ProgressState {
+    const elapsed = Math.max(0, nowMs - this.#last) / 1000, state = this.#state, before = this.#cpu;
+    const ran = cpu && before ? Math.max(0, cpu.usageUsec - before.usageUsec) / 1e6 : 0;
+    state.cpu_s += ran;
     if (this.#wait) this.#waited[this.#wait] = (this.#waited[this.#wait] ?? 0) + elapsed;
-    else this.#used += elapsed;
+    else if (cpu && before) {
+      const lost = Math.min(elapsed, Math.max(0, cpu.waitingUsec - before.waitingUsec) / 1e6), active = elapsed - lost;
+      state.cpu_lost_s += lost; state.used_s += active; state.stalled_s += active - Math.min(active, ran);
+    } else state.used_s += elapsed;
+    if (cpu) this.#cpu = cpu;
     this.#last = nowMs; this.#wait = waiting;
-    return { used_s: this.#used, waited_s: { ...this.#waited },
-      expired: this.#used >= this.#seconds || this.#ceiling !== undefined && (nowMs - this.#start) / 1000 >= this.#ceiling };
+    state.wall_s = Math.max(0, nowMs - this.#start) / 1000;
+    const measured: Record<ProgressLimit, number> = { execution_s: state.used_s, stall_s: state.stalled_s, cpu_s: state.cpu_s, wall_s: state.wall_s };
+    const expired = LIMIT_ORDER.find(limit => this.limits[limit] !== undefined && measured[limit] >= this.limits[limit]!);
+    return { ...state, waited_s: { ...this.#waited }, expired };
   }
+}
+
+const seconds = (value: number) => Math.round(value);
+/** What a bound measured, in words: the progress a held reason names. */
+export function progressSummary(state: ProgressState): string {
+  const waits = Object.entries(state.waited_s).filter(([, value]) => value > 0)
+    .map(([kind, value]) => `${seconds(value)} s ${kind === "priority" ? "behind higher-ranked work" : `for ${kind}`}`);
+  return `in ${seconds(state.wall_s)} s it ran ${state.cpu_s.toFixed(1)} cpu-s, lost ${seconds(state.cpu_lost_s)} s to higher-ranked CPU work`
+    + `${waits.length ? `, waited ${waits.join(", ")}` : ""} and stalled ${seconds(state.stalled_s)} s`;
 }
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;

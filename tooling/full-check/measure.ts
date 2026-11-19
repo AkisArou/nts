@@ -9,7 +9,8 @@ import { PLATFORM_PROGRAMS, PLATFORMS_UNRUN_OK, unrunPlatforms, type UnrunPolicy
 import type { Layout, RunRecord } from "./state.ts";
 import {readStepBaseline} from "../gate/step-time.ts";
 import { newToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
-import { MEASUREMENT_HOLD } from "./measure-command.ts";
+import { MEASUREMENT_HOLD, readMeasurementProgress, type RunBounds } from "./measure-command.ts";
+import { hostObservations } from "../gate/host-observations.ts";
 import {nodePin} from "../bootstrap/node.ts";
 import {nodeToolchain} from "../gate/toolchain.ts";
 import {candidateCommand} from '../landing/candidate-environment.ts';
@@ -97,30 +98,51 @@ export type Gate = {
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
-/** Three times the last completed run's wall. Before there is one, use
- * three times the longest measured step's wall and the same floor. */
-export function fullCheckCeiling(lastGreen: RunRecord | undefined, steps: readonly string[], baseline: string): number {
-  let wall: number | undefined;
+/** The floor of a run's stall bound, and, over the machine's width, of its CPU bound. */
+export const RUN_BOUND_FLOOR_S = 15 * 60;
+
+/**
+ * A run's bounds (measure-command.ts). Its stall bound is three times the last
+ * canonical green run's wall, at least fifteen minutes; before there is one,
+ * three times the longest measured step's wall. Its CPU bound is three times
+ * that same run's measured CPU, at least fifteen minutes of the whole machine
+ * (a cold release build fits); without that run's measured CPU, three times
+ * the summed baseline CPU of the requested steps. A requested step with no
+ * baseline row, a new one, gives the CPU bound no basis: that run has none,
+ * and its stall bound and each step's own bound still hold. Once a green run
+ * has executed the new step, its measured CPU includes it, so a run made
+ * heavier by a new step is never held by a CPU bound it was not measured
+ * against.
+ */
+export function fullCheckBound(lastGreen: RunRecord | undefined, steps: readonly string[], baseline: string, width: number): RunBounds {
+  let wall: number | undefined, cpu: number | undefined;
   if (lastGreen) {
     try {
       const summary = JSON.parse(readFileSync(join(lastGreen.run, "summary.json"), "utf8")) as Summary;
       if (summary.verdict === "green" && summary.environment?.canonical === true &&
           summary.identities?.commit && lastGreen.commit.startsWith(summary.identities.commit) &&
           (!summary.executed || [...summary.executed].sort().join(" ") === [...steps].sort().join(" ")) &&
-          typeof summary.wall_s === "number" && Number.isFinite(summary.wall_s) && summary.wall_s > 0) wall = summary.wall_s;
+          typeof summary.wall_s === "number" && Number.isFinite(summary.wall_s) && summary.wall_s > 0) {
+        wall = summary.wall_s;
+        const progress = readMeasurementProgress(lastGreen.run);
+        if (progress && !progress.live && progress.held === null && progress.cpu_s > 0) cpu = progress.cpu_s;
+      }
     } catch { /* There may be no history, or its run has been pruned. */ }
   }
-  if (wall === undefined) {
-    const costs = readStepBaseline(baseline);
-    wall = Math.max(0, ...steps.map(step => costs.get(step)?.wall ?? 0));
-  }
-  return Math.ceil(Math.max(15 * 60, 3 * wall));
+  const costs = readStepBaseline(baseline);
+  wall ??= Math.max(0, ...steps.map(step => costs.get(step)?.wall ?? 0));
+  if (cpu === undefined && steps.every(step => costs.has(step))) cpu = steps.reduce((sum, step) => sum + costs.get(step)!.cpu, 0);
+  if (!Number.isSafeInteger(width) || width <= 0) throw new Error(`a full-check CPU bound needs the machine's width, not ${String(width)}`);
+  return {
+    stall_s: Math.ceil(Math.max(RUN_BOUND_FLOOR_S, 3 * wall)),
+    cpu_s: cpu === undefined ? null : Math.ceil(Math.max(RUN_BOUND_FLOOR_S * width, 3 * cpu)),
+  };
 }
 
 /** The production gate: pinned.sh from the controller's tree, measuring in the full check's. */
 export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string;env?:NodeJS.ProcessEnv;landingHome?:string}={}): Gate {
   const pinned = join(controller, "tooling/gate/pinned.sh");
-  const launch = (commit: string, run: string, steps: readonly string[], ceiling?: number, probeContract = false) => {
+  const launch = (commit: string, run: string, steps: readonly string[], bounds?: RunBounds, probeContract = false) => {
     mkdirSync(run, { recursive: true });
     const selected = nodeToolchain(nodePin(controller, commit), options.env ?? process.env, options.nodeInstallations);
     // Hold pinned.sh's existing tree lock through setup, candidate import and
@@ -159,7 +181,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
           command: [selected.node, helper, join(run, "verdict-contract.json")],
         }, launcher, { output: out, treeLock: lock.fd });
       }
-      if (ceiling === undefined) return prepared;
+      if (bounds === undefined) return prepared;
       // A historical runner validates its own slice grammar. Ask that version
       // to construct the boundary, using its canonical environment and Node.
       const namingModule = join(layout.tree, "tooling/gate/tooling-slice.ts");
@@ -179,11 +201,11 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
         slice = toolingSlice({ NTS_TOOLING_SLICE: readFileSync(receipt, "utf8") })!;
       } else slice = newToolingSlice(false, launcher);
       const measure = fileURLToPath(new URL("./measure-command.ts", import.meta.url));
-      log(`full check wall ceiling: ${ceiling} s; logs ${run}`);
+      log(`full check run bounds: stalled ${bounds.stall_s} s, ${bounds.cpu_s === null ? "no CPU bound (no measured basis)" : `CPU ${bounds.cpu_s} cpu-s`}; logs ${run}`);
       return candidateCommand(selected.node, {
         tree: layout.tree, run, owned: { ...owned, NTS_TOOLING_SLICE: slice }, standalone: true,
         command: ['sh', pinned, '--environment-ready', commit],
-      }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(ceiling), run, slice] });
+      }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(bounds.stall_s), bounds.cpu_s === null ? "none" : String(bounds.cpu_s), run, slice] });
       });
     } finally { if (out !== undefined) closeSync(out); lock.close(); }
   };
@@ -194,8 +216,8 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
     let result:ReturnType<typeof spawnSync>;
     try {
       const file = join(controller, "tooling/gate/times.tsv");
-      const ceiling = fullCheckCeiling(lastGreen, steps, existsSync(file) ? readFileSync(file, "utf8") : "");
-      result = launch(commit, run, steps, ceiling);
+      const bounds = fullCheckBound(lastGreen, steps, existsSync(file) ? readFileSync(file, "utf8") : "", hostObservations(options.env ?? process.env).machineWidth());
+      result = launch(commit, run, steps, bounds);
     }
     catch(error) {
       const reason=String(error);log(reason);
@@ -204,7 +226,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
     if (result.error) log(`pinned.sh did not start: ${result.error.message}`);
     const read = result.status === 124 && !existsSync(join(run, MEASUREMENT_HOLD))
       ? { steps: Object.fromEntries(steps.map(step => [step, "HELD" as const])),
-          reasons: Object.fromEntries(steps.map(step => [step, "full check run exceeded its wall ceiling"])) }
+          reasons: Object.fromEntries(steps.map(step => [step, "full check run stopped at its run bound, and its hold receipt could not be written"])) }
       : readSummary(run, commit, steps);
     return { commit, run, ...read, verdict: verdictOf(read.steps) };
   };

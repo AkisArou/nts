@@ -89,6 +89,7 @@ import {selectRange,type RangeSelection} from '../gate/owed-range.ts';
 import {owedReach} from '../landing/selection.ts';
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
+import { measuring, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
 import { landedTimes, landingQueue, submitTo, type LandingAnswer, type LandingQueue } from "./queue.ts";
 import { applyAt, applyRecords, recordAt, recordsMessage, runPin, type Applier, type Recorder } from "./records.ts";
 import { appliedIn, countsText, DELTA_FILE, parseDelta } from "../records/delta.ts";
@@ -1469,6 +1470,13 @@ export type FullCheckStatus = {
   version: 2; kind: "full-check"; at: string;
   controller: { pid: number | null; running: boolean };
   now: (Doing & { seconds: number }) | null;
+  /**
+   * The measurement running now, as its run bound measures it
+   * (measure-command.ts): its run folder, what it has run, lost and stalled,
+   * its bounds, and the ledger wait it is in, with the request it waits
+   * behind and for how long; null with none running.
+   */
+  measurement: (MeasurementProgress & { run: string; waited_now_s: number | null }) | null;
   main: string | null;
   verified: { commit: string | null; pushed: string | null };
   /** The commits on main that verified has not reached, and how long the oldest has waited since it landed; null with nothing verified. */
@@ -1492,6 +1500,8 @@ export type StatusInputs = {
   controller: { pid: number; alive: boolean } | null;
   /** The count's own file, as the last count wrote it. */
   count: CountRecord | null;
+  /** The live measurement's progress receipt and its run folder. */
+  measurement?: { run: string; progress: MeasurementProgress } | null;
   now: Date;
 };
 
@@ -1506,6 +1516,8 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
     controller: { pid: inputs.controller?.pid ?? null, running },
     // What a controller that stopped was doing is not being done.
     now: running && state.now ? { ...state.now, seconds: Math.round((now - Date.parse(state.now.since)) / 1000) } : null,
+    measurement: inputs.measurement ? { ...inputs.measurement.progress, run: inputs.measurement.run,
+      waited_now_s: inputs.measurement.progress.waiting ? Math.round((now - Date.parse(inputs.measurement.progress.waiting.observed_since)) / 1000) : null } : null,
     main: inputs.main,
     verified: { commit: inputs.verified, pushed: state.pushed ?? null },
     behind: inputs.unverified === null ? null
@@ -1521,6 +1533,31 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
 
 const minutes = (seconds: number) => `${Math.round(seconds / 60)} min`;
 
+/** The live measurement in a line: its progress against its bounds, and what it waits behind. */
+export function measurementText(m: NonNullable<FullCheckStatus["measurement"]>): string {
+  const waits = Object.entries(m.waited_s).filter(([, value]) => value > 0).map(([kind, value]) => `${kind} ${Math.round(value)} s`);
+  return `${m.run}: ran ${m.cpu_s.toFixed(0)}${m.bounds.cpu_s === null ? "" : ` of ${m.bounds.cpu_s}`} cpu-s in ${Math.round(m.wall_s)} s, `
+    + `stalled ${Math.round(m.stalled_s)} of ${m.bounds.stall_s} s, lost ${Math.round(m.cpu_lost_s)} s to higher-ranked CPU work`
+    + `${waits.length ? `, waited ${waits.join(", ")}` : ""}`
+    + `${m.waiting ? `; waiting ${m.waiting.kind === "memory" ? "for memory as" : "behind"} ${m.waiting.what} (${m.waiting.priority}, ${m.waiting.id}) since ${m.waiting.observed_since}${m.waited_now_s === null ? "" : `, ${minutes(m.waited_now_s)}`}` : ""}`;
+}
+
+/**
+ * The measurement running now: the newest progress receipt, among the run
+ * folders of the commit the controller is measuring, whose writer still runs.
+ */
+export function liveMeasurement(runs: string, commit: string | undefined): { run: string; progress: MeasurementProgress } | null {
+  if (!commit) return null;
+  let names: string[];
+  try { names = readdirSync(runs); } catch { return null; }
+  let found: { run: string; progress: MeasurementProgress } | null = null;
+  for (const name of names.filter(name => name.includes(`-${commit.slice(0, 12)}-`))) {
+    const run = join(runs, name), progress = readMeasurementProgress(run);
+    if (progress && measuring(progress) && (!found || progress.updated_at > found.progress.updated_at)) found = { run, progress };
+  }
+  return found;
+}
+
 /** The status as `--status` prints it, from the same model `--json` prints. */
 export function statusText(s: FullCheckStatus): string {
   const run = (r: RunRecord | null) => r ? `${r.verdict} at ${short(r.commit)} (${r.at})${r.failed.length ? `: ${r.failed.join(", ")}` : ""}${r.reason ? `: ${r.reason}` : ""}; ${r.run}` : "none";
@@ -1530,6 +1567,7 @@ export function statusText(s: FullCheckStatus): string {
     : `${s.now.doing} at ${short(s.now.commit)} for ${minutes(s.now.seconds)}` : "between cycles";
   return [
     `controller: ${s.controller.running ? `running (pid ${s.controller.pid}); ${doing}` : "not running"}`,
+    ...(s.measurement ? [`measuring: ${measurementText(s.measurement)}`] : []),
     `core: last ${run(s.core.last_run)}`, `      green ${run(s.core.last_green)}`,
     `wide: last ${run(s.wide.last_run)}`, `      green ${run(s.wide.last_green)}`,
     ...(s.wide.waiting ? [`      waiting: ${s.wide.waiting}`] : []),
@@ -1557,8 +1595,10 @@ export function machineStatus(layout: Layout, now = new Date()): FullCheckStatus
   const landed = landedTimes();
   // A commit the landing check has no answer for counts from when it was committed.
   const landedAt = (commit: string) => landed.get(commit) ?? new Date(git.run(["log", "-1", "--format=%cI", commit])).toISOString();
-  return fullCheckStatus(readState(layout.state), {
-    main, verified, unverified: main && verified ? firstParents(git, verified, main) : null, landedAt, controller: lockHolder(layout.lock), count: readCount(layout.count), now,
+  const state = readState(layout.state);
+  return fullCheckStatus(state, {
+    main, verified, unverified: main && verified ? firstParents(git, verified, main) : null, landedAt, controller: lockHolder(layout.lock), count: readCount(layout.count),
+    measurement: liveMeasurement(layout.runs, state.now?.commit), now,
   });
 }
 

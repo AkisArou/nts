@@ -13,7 +13,12 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { test } from "node:test";
 import {spawn} from "node:child_process";
-import { fullCheckCeiling, pinnedGate, readSummary, verdictOf } from "./measure.ts";
+import { fullCheckBound, pinnedGate, readSummary, RUN_BOUND_FLOOR_S, verdictOf } from "./measure.ts";
+import { MEASUREMENT_PROGRESS, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
+import { fullCheckStatus, liveMeasurement, statusText } from "./service.ts";
+import { readState } from "./state.ts";
+import { processIdentity } from "../gate/memory-ledger.ts";
+import { inheritedCpus, gateCpus } from "../gate/affinity.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
 import { spawnTest,waitFor } from "../gate/test-wait.ts";
 import { newToolingSlice, stopToolingSlice, toolingSliceArgs } from "../gate/tooling-slice.ts";
@@ -44,35 +49,102 @@ const steps = [
   { name: "llvm", verdict: "NOT RUN", reason: "build failed" },
 ];
 
-test("the full check sizes its backstop from the last canonical green wall",t=>{
+test("the full check's run bounds: stalled three times the last canonical green wall, CPU three times its measured CPU",t=>{
   const baseline="build\t800\t1000\t1\ntests\t1200\t4000\t8\n";
-  const run=summary(t,{wall_s:1820.1,verdict:"green",identities:{commit:COMMIT},environment:{canonical:true}});
+  const run=summary(t,{wall_s:1820.1,verdict:"green",identities:{commit:COMMIT},environment:{canonical:true},executed:["tests","build"]});
   const previous={commit:COMMIT,run,verdict:"green" as const,at:"",failed:[]};
-  assert.equal(fullCheckCeiling(previous,["build","tests"],baseline),5461);
-  assert.equal(fullCheckCeiling({...previous,commit:"f".repeat(40)},["build","tests"],baseline),3600);
-  assert.equal(fullCheckCeiling(undefined,["build"],baseline),2400);
-  assert.equal(fullCheckCeiling(undefined,["format"],baseline),900);
+  assert.deepEqual(fullCheckBound(previous,["build","tests"],baseline,24),{stall_s:5461,cpu_s:21600},"no measured CPU: the summed baseline, at least fifteen minutes of the machine");
+  const progress=(cpu_s:number,more:Partial<MeasurementProgress>={})=>writeFileSync(join(run,MEASUREMENT_PROGRESS),JSON.stringify({version:1,writer:{boot:"b",pid:1,start:"1"},live:false,
+    updated_at:"",bounds:{stall_s:1,cpu_s:null},wall_s:1820,used_s:1800,stalled_s:20,cpu_s,cpu_lost_s:0,waited_s:{},waiting:null,held:null,...more}));
+  progress(30000);
+  assert.deepEqual(fullCheckBound(previous,["build","tests"],baseline,24),{stall_s:5461,cpu_s:90000},"the green run's measured CPU");
+  progress(30000,{held:"held"});
+  assert.equal(fullCheckBound(previous,["build","tests"],baseline,24).cpu_s,21600,"a held run measures nothing");
+  progress(30000);
+  assert.deepEqual(fullCheckBound({...previous,commit:"f".repeat(40)},["build","tests"],baseline,24),{stall_s:3600,cpu_s:21600});
+  assert.deepEqual(fullCheckBound(undefined,["build"],baseline,24),{stall_s:2400,cpu_s:21600});
+  assert.deepEqual(fullCheckBound(undefined,["build","tests"],baseline,2),{stall_s:3600,cpu_s:15000});
+  assert.deepEqual(fullCheckBound(undefined,["format"],baseline,24),{stall_s:900,cpu_s:null},"a step with no baseline gives the CPU bound no basis");
+  assert.deepEqual(fullCheckBound(previous,["build","tests","new-step"],baseline,24),{stall_s:3600,cpu_s:null},"nor does a new step the last green run never ran");
+  assert.equal(RUN_BOUND_FLOOR_S,15*60);
 });
 
-test("a full-check wall ceiling stops an older command and holds even a green summary",t=>{
-  const run=newTestScratch("full-check-wall-ceiling"),slice=newToolingSlice(true),unit=`nts-test-full-check-wall-${randomUUID()}`;
+// A measurement in its own unit, as the controller starts it: `command` in a
+// slice of the full check's rank, with an owned ledger and live CPU.
+function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,stall:number,command:string[],options:{slice?:string;ledger?:(dir:string)=>void}={}){
+  const dir=newTestScratch(name),runs=join(dir,"runs"),run=join(runs,`core-${COMMIT.slice(0,12)}-${randomUUID()}`);
+  mkdirSync(run,{recursive:true});
+  const memory=ownMemory(join(dir,"machine"),{cpu:{kind:"live"},pressure:{kind:"live"},wallClock:{kind:"live"}});
+  options.ledger?.(memory.NTS_MEMORY_LEDGER);
+  const slice=options.slice??newToolingSlice(true),unit=`nts-test-full-check-${name}-${randomUUID()}`;
+  const args=["--user",`--unit=${unit}`,...toolingSliceArgs(process.env,"agent"),"--collect","--quiet","--pipe","--wait",
+    "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=120s",
+    ...Object.entries(memory).map(([key,value])=>`--setenv=${key}=${value}`),
+    process.execPath,fileURLToPath(new URL("./measure-command.ts",import.meta.url)),String(stall),"none",run,slice,...command];
   t.after(()=>{
     spawnTest("systemctl",["--user","stop",unit],{encoding:"utf8"});
     stopToolingSlice(slice);
-    rmSync(run,{recursive:true,force:true});
+    rmSync(dir,{recursive:true,force:true});
   });
-  writeFileSync(join(run,"summary.json"),JSON.stringify({
+  return {run,runs,unit,args,progress:()=>readMeasurementProgress(run)};
+}
+
+test("a run of sleeping processes is held at its stall bound, with the bound and its measured progress, even beside a green summary",t=>{
+  const m=measured(t,"stall",2,["tail","-f","/dev/null"]);
+  writeFileSync(join(m.run,"summary.json"),JSON.stringify({
     identities:{commit:COMMIT},environment:{canonical:true},steps:[{name:"program-oracles",verdict:"PASS"}],
   }));
-  const measure=fileURLToPath(new URL("./measure-command.ts",import.meta.url));
-  const result=spawnTest("systemd-run",["--user",`--unit=${unit}`,...toolingSliceArgs(process.env,"agent"),"--collect","--quiet","--pipe","--wait",
-    "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=30s",
-    process.execPath,measure,"3",run,slice,"tail","-f","/dev/null"],{encoding:"utf8"});
+  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
   assert.equal(result.status,124,result.stdout+result.stderr);
-  assert.deepEqual(readSummary(run,COMMIT,["program-oracles"]),{
-    steps:{"program-oracles":"HELD"},
-    reasons:{"program-oracles":"full check run exceeded its wall ceiling of 3 s"},
-  });
+  const read=readSummary(m.run,COMMIT,["program-oracles"]);
+  assert.equal(read.steps["program-oracles"],"HELD");
+  assert.match(read.reasons["program-oracles"]!,/^full check run made no progress outside waits for its stall bound of 2 s: in \d+ s it ran [\d.]+ cpu-s, lost \d+ s to higher-ranked CPU work and stalled \d+ s$/);
+  const progress=m.progress()!;
+  assert.deepEqual([progress.live,progress.held===read.reasons["program-oracles"]],[false,true]);
+  assert.ok(progress.stalled_s>=2&&progress.wall_s<20,JSON.stringify(progress));
+});
+
+test("a run outranked for CPU by a weighted spinner, but progressing, is never held, however long past its stall bound it runs",t=>{
+  // One CPU of this process's, outside the measurement core, for the spinner and the run alike.
+  const cpu=gateCpus(inheritedCpus()).split(",").at(-1)!.split("-").at(-1)!;
+  const spinner=`nts-test-full-check-spinner-${randomUUID()}`;
+  t.after(()=>{spawnTest("systemctl",["--user","stop",spinner],{encoding:"utf8"});});
+  // The spinner at an agent's weight, the run at the full check's: siblings under nts.slice (ranks.ts).
+  const spun=spawnTest("systemd-run",["--user",`--unit=${spinner}`,...toolingSliceArgs({},"agent"),"--collect","--quiet",
+    "-p","LimitCORE=0","-p","RuntimeMaxSec=120s","taskset","-c",cpu,"sh","-c","while :; do :; done"],{encoding:"utf8"});
+  assert.equal(spun.status,0,spun.stderr);
+  const m=measured(t,"outranked",2,["taskset","-c",cpu,"sh","-c","i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done"],{slice:newToolingSlice(true,{})});
+  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.equal(existsSync(join(m.run,"measurement-hold.txt")),false,"never held");
+  const progress=m.progress()!;
+  assert.equal(progress.held,null);
+  assert.ok(progress.wall_s>2&&progress.cpu_lost_s>2&&progress.stalled_s<2,`it ran past its stall bound, losing the CPU to the spinner: ${JSON.stringify(progress)}`);
+});
+
+test("a run waiting behind a never-released higher-ranked request is not held, and the status names what it waits behind and since when",async t=>{
+  const me=processIdentity(process.pid)!,id=randomUUID();
+  const m=measured(t,"priority-wait",2,["tail","-f","/dev/null"],{ledger:dir=>{
+    mkdirSync(join(dir,"waiting"),{recursive:true});
+    writeFileSync(join(dir,"waiting",`${id}.json`),JSON.stringify({version:2,id,seq:0,bytes:2**30,what:"a landing that never ends",priority:"landing",
+      owner:me,waiter:me,measure:{tree:true,cgroup:null},since:"2026-11-19T10:00:00.000Z",grows:null,fits:true}));
+  }});
+  let output="",ended=false;
+  const child=spawn("systemd-run",m.args,{stdio:["ignore","pipe","pipe"]});
+  child.stdout.on("data",bytes=>output+=bytes);child.stderr.on("data",bytes=>output+=bytes);
+  const closed=new Promise<number|null>((resolve,reject)=>{child.once("error",reject);child.once("close",code=>{ended=true;resolve(code);});});
+  try{
+    await waitFor("the run to wait past its stall bound",()=>(m.progress()?.waited_s.priority??0)>4,{stopped:()=>ended?output:undefined});
+    assert.equal(existsSync(join(m.run,"measurement-hold.txt")),false,output);
+    const live=liveMeasurement(m.runs,COMMIT);
+    assert.ok(live,"the live measurement is found by its commit");
+    assert.deepEqual([live.progress.waiting?.kind,live.progress.waiting?.id,live.progress.stalled_s<2],["priority",id,true]);
+    const status=fullCheckStatus(readState("/nonexistent"),{main:null,verified:null,unverified:null,landedAt:()=>"",controller:null,count:null,measurement:live,now:new Date(live.progress.updated_at)});
+    assert.equal(status.measurement?.waiting?.what,"a landing that never ends");
+    assert.match(statusText(status),new RegExp(`^measuring: ${m.run}: ran \\d+ cpu-s in \\d+ s, stalled \\d+ of 2 s, lost \\d+ s to higher-ranked CPU work, waited priority \\d+ s; waiting behind a landing that never ends \\(landing, ${id}\\) since \\S+, \\d+ min$`,"m"));
+  }finally{
+    spawnTest("systemctl",["--user","stop",m.unit],{encoding:"utf8"});await closed;
+  }
 });
 
 test("the full check launches each measured commit with its pin, including historical commits",t=>{

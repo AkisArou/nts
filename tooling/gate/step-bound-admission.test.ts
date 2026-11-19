@@ -26,7 +26,7 @@ import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts"
 
 const SOURCE=fileURLToPath(new URL("../../",import.meta.url));
 const STEP="test262-census-c", GiB=2**30;
-type Observation={now:number;waiting:BoundWait|null;used_s:number;waited_s:Partial<Record<BoundWait,number>>;expired:boolean};
+type Observation={now:number;waiting:BoundWait|null;used_s:number;waited_s:Partial<Record<BoundWait,number>>;expired:string|null};
 
 function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
   const own=newTestScratch("bound-admission"),root=join(own,"repo"),gate=join(root,"tooling/gate");
@@ -66,11 +66,11 @@ const read=fs.readFileSync;
 fs.readFileSync=(path,...args)=>{if(/^\\/proc\\/(meminfo|vmstat)$/.test(String(path)))throw Error("fixture reached host "+path);return read(path,...args);};
 fs.statfsSync=()=>{throw Error("fixture reached host disk");};
 syncBuiltinESMExports();
-import {StepBoundClock} from "./step-bound.ts";
-const observe=StepBoundClock.prototype.observe;
-StepBoundClock.prototype.observe=function(now,waiting){
-  const result=observe.call(this,now,waiting);
-  durableRecord(${JSON.stringify(observed)},{now,waiting:waiting??null,...result});
+import {ProgressBound} from "./step-bound.ts";
+const observe=ProgressBound.prototype.observe;
+ProgressBound.prototype.observe=function(now,waiting,cpu){
+  const result=observe.call(this,now,waiting,cpu);
+  durableRecord(${JSON.stringify(observed)},{now,waiting:waiting??null,...result,expired:result.expired??null});
   return result;
 };
 `);
@@ -145,7 +145,7 @@ for(const mode of ["memory","priority"] as const)test(`a census resumes after a 
   const elapsed=await f.advance(4500);
   assert.equal(elapsed.used_s,0);
   assert.equal(elapsed.waited_s[mode],4.5);
-  assert.equal(elapsed.expired,false);
+  assert.equal(elapsed.expired,null);
   await release();ownMemory(f.memoryDir,{availableKiB:16*2**20,totalKiB:16*2**20});
   assert.deepEqual(await f.done,[0,null],f.output());
   const summary=JSON.parse(readFileSync(join(f.run,"summary.json"),"utf8"));
@@ -160,7 +160,7 @@ for(const mode of ["active","ceiling"] as const)test(`${mode==="active"?"a censu
   const f=fixture(t,mode);await f.start();writeFileSync(f.go,"go");
   await waitFor("the case or its memory wait",()=>mode==="active"?existsSync(f.entered):f.observation()?.waiting==="memory",{stopped:f.stopped});
   const elapsed=await f.advance(mode==="active"?4000:2000);
-  assert.equal(elapsed.expired,true);
+  assert.equal(elapsed.expired,mode==="active"?"execution_s":"wall_s");
   assert.equal(elapsed.used_s,mode==="active"?4:0);
   assert.deepEqual(await f.done,[1,null],f.output());
   const row=JSON.parse(readFileSync(join(f.run,"summary.json"),"utf8")).steps[0];

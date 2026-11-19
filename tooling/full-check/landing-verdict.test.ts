@@ -9,7 +9,7 @@ import { recordLandingFixture } from "../landing/verdict-fixture.ts";
 import { verdictPath } from "../landing/verdict.ts";
 import { listedIn } from "../records/pending.ts";
 import { measureWithLanding } from "./landing-verdict.ts";
-import { fullCheckCeiling, readSummary, verdictOf, type Measurement } from "./measure.ts";
+import { fullCheckBound, readSummary, verdictOf, type Measurement } from "./measure.ts";
 
 const commit = "a".repeat(40), tree = "b".repeat(40);
 
@@ -121,7 +121,7 @@ test("a short reused core never supplies a full core's wall backstop", t => {
   recordLandingFixture(f.home, commit, tree, ["tests", "rustfmt"]);
   const result = measureWithLanding({ ...f.options, requested: ["tests", "rustfmt"] });
   const previous = { commit, run: result.run, at: "", verdict: "green" as const, failed: [] };
-  assert.equal(fullCheckCeiling(previous, ["build", "tests"], "build\t800\t1000\t1\ntests\t1200\t4000\t8\n"), 3600);
+  assert.equal(fullCheckBound(previous, ["build", "tests"], "build\t800\t1000\t1\ntests\t1200\t4000\t8\n", 24).stall_s, 3600);
 });
 
 test("unmeasured CPU remains unavailable in the combined accounting", t => {

@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {createTokenPool} from './token-pool.ts';
 import {tokenClient} from './tokens.mjs';
 import {waitFor} from './test-wait.ts';
-import {StepBoundClock,stepBoundWait} from './step-bound.ts';
+import {ProgressBound,stepBoundWait} from './step-bound.ts';
 
 test('pool width is an explicit positive integer, independent of current availability',()=>{
   for(const width of [0,-1,.5,NaN,Infinity,Number.MAX_SAFE_INTEGER+1])
@@ -148,7 +148,7 @@ test('a backfill barrier drains running files and admits the waiting head withou
 
 for(const mode of ['unsized','sized-sync','sized-async'] as const)test(`${mode} admission is observed before its client can spend the execution bound`,async()=>{
   let now=0,entered=false;
-  const clock=new StepBoundClock(3,0),socket=new Socket(),events:{event:string;now:number;held?:number}[]=[];
+  const clock=new ProgressBound({execution_s:3},0),socket=new Socket(),events:{event:string;now:number;held?:number}[]=[];
   clock.observe(0,'memory');
   const pool=createTokenPool({width:1,free:()=>1-pool.total,claim:()=>0,now:()=>now,
     answering:()=>mode==='sized-async'?Promise.resolve():null,
@@ -166,7 +166,7 @@ for(const mode of ['unsized','sized-sync','sized-async'] as const)test(`${mode} 
     pool.waiting.push({sock:socket,id:1,step:'census',pid:1,context:'supplied-interleaving',since:0,granted:false,gone:false,...(mode==='unsized'?{}:{bytes:1})});
     pool.grant();await Promise.resolve();
     assert.equal(entered,true);assert.equal(pool.held.get('census'),1);
-    assert.deepEqual(clock.observe(now),{used_s:4,waited_s:{memory:0},expired:true});
+    const state=clock.observe(now);assert.deepEqual([state.used_s,state.waited_s,state.expired],[4,{memory:0},'execution_s']);
     assert.deepEqual(events,[{event:'runner-observes-held',now:0,held:1},{event:'client-enters',now:0}]);
   }finally{socket.destroy();pool.close();await pool.closed;}
 });

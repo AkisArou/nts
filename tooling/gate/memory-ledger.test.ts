@@ -16,13 +16,14 @@ import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, releaseLedgerEntries, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
+  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, ledgerWait, lockLedger, releaseLedgerEntries, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { peakReservation, readCostHistory, historyFile, writeCostHistory, type JobBasis } from "./step-scheduling.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 import { ownMemory,withoutHanded } from "./test-memory.ts";
+import { hostObservations } from "./host-observations.ts";
 import {toolingSliceArgs} from './tooling-slice.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
 import {createServer,connect} from 'node:net';
@@ -760,6 +761,31 @@ test("a reservation is outranked while a live request of higher priority waits, 
   full.release();
   (await peer).release();
   assert.equal(full.outranked(), false);
+});
+
+test("an observer outside a run reads its ledger wait: its own request first, else the live request of higher rank it yields to", t => {
+  const dir = join(testScratch(t, "memory-ledger-run-wait"), "ledger"), run = "/fixture.slice/nts-run.slice";
+  for (const state of ["waiting", "admitted"]) mkdirSync(join(dir, state), { recursive: true });
+  const me = processIdentity(process.pid)!, dead = { ...me, start: "0" };
+  let seq = 0;
+  const put = (state: "waiting" | "admitted", fields: Partial<LedgerEntry>) => {
+    const entry = { version: 2, id: randomUUID(), seq: seq++, bytes: GiB, what: "job", priority: "agent", owner: me, waiter: me,
+      measure: { tree: true, cgroup: null }, since: new Date(Date.UTC(2026, 10, 17, 10, seq)).toISOString(), grows: null, ...fields };
+    writeFileSync(join(dir, state, `${entry.id}.json`), JSON.stringify(entry));
+    return entry;
+  };
+  assert.equal(ledgerWait(dir, run, "full-check"), null, "an empty ledger holds nobody");
+  put("waiting", { what: "a request that could never fit", priority: "landing", fits: false });
+  put("waiting", { what: "a request whose waiter has exited", priority: "landing", waiter: dead });
+  put("waiting", { what: "another full-check request", priority: "full-check" });
+  assert.equal(ledgerWait(dir, run, "full-check"), null, "only a live request of higher rank that could fit is yielded to");
+  const landing = put("waiting", { what: "gate run of a landing", priority: "landing", fits: true });
+  assert.deepEqual(ledgerWait(dir, run, "full-check"), { kind: "priority", id: landing.id, what: landing.what, priority: "landing", since: landing.since });
+  assert.equal(ledgerWait(dir, run, "landing"), null, "nothing outranks a landing");
+  const runs = put("admitted", { what: "gate run of the full check", priority: "full-check", measure: { tree: false, cgroup: { path: `${run}/nts-run-w.slice`, inode: "1" } } });
+  const growth = put("waiting", { what: "gate run of the full check", priority: "full-check", grows: runs.id, measure: { tree: false, cgroup: null } });
+  assert.deepEqual(ledgerWait(dir, run, "full-check"), { kind: "memory", id: growth.id, what: growth.what, priority: "full-check", since: growth.since }, "its own growth is named first");
+  assert.equal(ledgerWait(dir, hostObservations({}).ownCgroup(), "landing")?.kind, "memory", "a request whose waiter runs in the group is its own");
 });
 
 test("an entry an older admit.ts wrote, version 1 without a growth, counts as a reservation of its own", async t => {
