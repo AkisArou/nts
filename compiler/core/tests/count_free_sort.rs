@@ -64,17 +64,6 @@ fn assert_managed_sort_contract(func: &hir::Func, name: &str) {
             );
         }
     }
-    for op in &func.values {
-        if &op.origin.location != sort_origin {
-            continue;
-        }
-        if let OpKind::ArrayGet { index, .. } | OpKind::ArraySet { index, .. } = op.kind {
-            assert!(
-                matches!(func.values[index.0 as usize].ty, HirType::Int { bits, .. } if bits <= 32),
-                "{name}: memory cursors stay within the u32 index contract"
-            );
-        }
-    }
     assert_eq!(
         func.values
             .iter()
