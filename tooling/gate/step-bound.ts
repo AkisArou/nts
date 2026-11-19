@@ -80,7 +80,7 @@ export type ProgressState = {
   cpu_s: number;
   /** Time some of the work was runnable while the CPUs ran other work. */
   cpu_lost_s: number;
-  /** Given step lifecycles: time outside declared waits with no step running, since the last step event. */
+  /** Given step lifecycles: used time with no step running, since the last step event. */
   outside_s: number;
   waited_s: Partial<Record<BoundWait, number>>;
   expired: ProgressLimit | undefined;
@@ -99,10 +99,10 @@ const LIMIT_ORDER: readonly ProgressLimit[] = ["execution_s", "stall_s", "lifecy
  * nothing either; the rest is used, and what of it the work did not run is
  * stalled. Without CPU samples every undeclared second is used, as a step's
  * budget is. IO and memory pressure are not progress: a hung IO wait would
- * excuse itself for ever. Given the run's step lifecycle, time outside any
- * step and outside declared waits counts towards `lifecycle_s` until the next
- * step event: work no step bounds -- setup, the release build, the time after
- * the last step -- cannot spin unseen. `wall_s` alone counts everything.
+ * excuse itself for ever. Given the run's step lifecycle, used time with no
+ * step running counts towards `lifecycle_s` until the next step event: work
+ * no step bounds -- setup, the release build, the time after the last step --
+ * cannot spin unseen, and a build slowed by higher ranks is not held for it. `wall_s` alone counts everything.
  */
 export class ProgressBound {
   #start: number;
@@ -126,13 +126,15 @@ export class ProgressBound {
     const elapsed = Math.max(0, nowMs - this.#last) / 1000, state = this.#state, before = this.#cpu, earlier = this.#steps;
     const ran = cpu && before ? Math.max(0, cpu.usageUsec - before.usageUsec) / 1e6 : 0;
     state.cpu_s += ran;
+    let active = 0;
     if (this.#wait) this.#waited[this.#wait] = (this.#waited[this.#wait] ?? 0) + elapsed;
     else if (cpu && before) {
-      const lost = Math.min(elapsed, Math.max(0, cpu.waitingUsec - before.waitingUsec) / 1e6), active = elapsed - lost;
+      const lost = Math.min(elapsed, Math.max(0, cpu.waitingUsec - before.waitingUsec) / 1e6);
+      active = elapsed - lost;
       state.cpu_lost_s += lost; state.used_s += active; state.stalled_s += active - Math.min(active, ran);
-    } else state.used_s += elapsed;
+    } else { active = elapsed; state.used_s += elapsed; }
     if (steps) {
-      if (!this.#wait && (earlier?.running ?? 0) === 0) state.outside_s += elapsed;
+      if ((earlier?.running ?? 0) === 0) state.outside_s += active;
       if (earlier && steps.events !== earlier.events) state.outside_s = 0;
       this.#steps = steps;
     }

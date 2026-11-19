@@ -11,7 +11,7 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // request it yields to may wait on that memory. The run is held when it has
 // stalled -- neither run, been runnable nor waited -- for its stall bound;
 // when no step has run, started or finished for its lifecycle bound, outside
-// its waits, which catches a spinner no step bounds; or when it has used its
+// its waits and lost CPU, which catches a spinner no step bounds; or when it has used its
 // CPU bound, the backstop a slowed run cannot reach. There is no wall bound:
 // the only waits it excuses are its own requests, which end when the work
 // they wait on ends, and that work has its own bound. What it measured is kept
@@ -73,7 +73,7 @@ export function measuring(progress: MeasurementProgress): boolean {
 /** The reason a run stopped at a bound records. */
 export function runBoundReason(state: ProgressState, bounds: RunBounds): string {
   const why = state.expired === "cpu_s" ? `used its CPU bound of ${bounds.cpu_s} cpu-s`
-    : state.expired === "lifecycle_s" ? `made no step progress for its lifecycle bound of ${bounds.lifecycle_s} s: no step ran, started or finished for ${Math.round(state.outside_s)} s outside its waits`
+    : state.expired === "lifecycle_s" ? `made no step progress for its lifecycle bound of ${bounds.lifecycle_s} s: no step ran, started or finished for ${Math.round(state.outside_s)} s of its own time`
     : `made no progress outside waits for its stall bound of ${bounds.stall_s} s`;
   return `full check run ${why}: ${progressSummary(state)}`;
 }

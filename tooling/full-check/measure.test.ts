@@ -122,7 +122,7 @@ test("a run of sleeping processes is held at its stall bound, with the bound and
   assert.ok(progress.stalled_s>=2&&progress.wall_s<20,JSON.stringify(progress));
 });
 
-test("a run outranked for CPU by a weighted spinner, but progressing, is never held, however long past its stall bound it runs",t=>{
+test("a run outranked for CPU by a weighted spinner, but progressing, is never held, however long past its stall and lifecycle bounds it runs",t=>{
   // One CPU of this process's, outside the measurement core, for the spinner and the run alike.
   const cpu=gateCpus(inheritedCpus()).split(",").at(-1)!.split("-").at(-1)!;
   const spinner=`nts-test-full-check-spinner-${randomUUID()}`;
@@ -131,13 +131,14 @@ test("a run outranked for CPU by a weighted spinner, but progressing, is never h
   const spun=spawnTest("systemd-run",["--user",`--unit=${spinner}`,...toolingSliceArgs({},"agent"),"--collect","--quiet",
     "-p","LimitCORE=0","-p","RuntimeMaxSec=120s","taskset","-c",cpu,"sh","-c","while :; do :; done"],{encoding:"utf8"});
   assert.equal(spun.status,0,spun.stderr);
-  const m=measured(t,"outranked",{stall:2},()=>["taskset","-c",cpu,"sh","-c","i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done"],{slice:newToolingSlice(true,{})});
+  // Its work runs outside any step, as a release build does: the lifecycle bound holds it no more than the stall bound.
+  const m=measured(t,"outranked",{stall:2,lifecycle:2},()=>["taskset","-c",cpu,"sh","-c","i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done"],{slice:newToolingSlice(true,{})});
   const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
   assert.equal(result.status,0,result.stdout+result.stderr);
   assert.equal(existsSync(join(m.run,"measurement-hold.txt")),false,"never held");
   const progress=m.progress()!;
   assert.equal(progress.held,null);
-  assert.ok(progress.wall_s>2&&progress.cpu_lost_s>2&&progress.stalled_s<2,`it ran past its stall bound, losing the CPU to the spinner: ${JSON.stringify(progress)}`);
+  assert.ok(progress.wall_s>2&&progress.cpu_lost_s>2&&progress.stalled_s<2&&progress.outside_s<2,`it ran past its stall and lifecycle bounds, losing the CPU to the spinner: ${JSON.stringify(progress)}`);
 });
 
 test("a run whose own request waits behind a never-released higher-ranked one is not held, and the status names that request and since when",async t=>{
@@ -190,7 +191,7 @@ test("a run that spins after its last step is held at its lifecycle bound, with 
     `const {RunLifecycleFeed}=await import(${JSON.stringify(lifecycle)});const feed=new RunLifecycleFeed(${JSON.stringify(run)});feed.started("only");feed.finished("only");for(;;){}`]);
   const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
   assert.equal(result.status,124,result.stdout+result.stderr);
-  assert.match(readFileSync(join(m.run,"measurement-hold.txt"),"utf8"),/^full check run made no step progress for its lifecycle bound of 2 s: no step ran, started or finished for \d+ s outside its waits: in \d+ s it ran [\d.]+ cpu-s/);
+  assert.match(readFileSync(join(m.run,"measurement-hold.txt"),"utf8"),/^full check run made no step progress for its lifecycle bound of 2 s: no step ran, started or finished for \d+ s of its own time: in \d+ s it ran [\d.]+ cpu-s/);
   const progress=m.progress()!;
   assert.ok(progress.stalled_s<2&&progress.cpu_s>1,`it spun, so only its lifecycle held it: ${JSON.stringify(progress)}`);
 });

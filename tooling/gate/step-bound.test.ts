@@ -95,7 +95,7 @@ test("a run that neither runs nor waits stalls and is held at its stall bound, a
   assert.equal(progressSummary(spinning.observe(101_000, undefined, cpu(101))), "in 101 s it ran 101.0 cpu-s, lost 0 s to higher-ranked CPU work, waited 1 s for memory and stalled 0 s");
 });
 
-test("time outside any step, with no step event and outside its waits, spends a run's lifecycle bound; a step event resets it", () => {
+test("used time outside any step, with no step event, spends a run's lifecycle bound; a step event resets it, and waits and lost CPU spend nothing", () => {
   const steps = (events: number, running: number) => ({ events, running });
   const bound = new ProgressBound({ stall_s: 100, lifecycle_s: 5 }, 0);
   bound.observe(0, undefined, cpu(0), steps(0, 0));
@@ -107,6 +107,11 @@ test("time outside any step, with no step event and outside its waits, spends a 
   // After the last step, the runner spins: every second is CPU, and no step moves.
   const spun = bound.observe(105_000, undefined, cpu(66), steps(2, 0));
   assert.deepEqual([spun.expired, spun.outside_s, spun.stalled_s], ["lifecycle_s", 5, 0]);
+  // A release build outranked for the CPUs, before its first step: what higher ranks take spends nothing.
+  const build = new ProgressBound({ stall_s: 100, lifecycle_s: 10 }, 0);
+  build.observe(0, undefined, cpu(0), steps(0, 0));
+  const slowed = build.observe(600_000, undefined, cpu(6, 594), steps(0, 0));
+  assert.deepEqual([slowed.expired, slowed.outside_s, slowed.cpu_lost_s], [undefined, 6, 594]);
   assert.equal(new ProgressBound({ execution_s: 2 }, 0).observe(5000).outside_s, 0, "without a lifecycle nothing is outside a step");
 });
 

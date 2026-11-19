@@ -3952,9 +3952,10 @@ liveness gaps, and both are closed:
 - A lifecycle bound in the same owner holds a spinner outside every step's own
   bound: in setup, in the release build, or after the last step. Without it,
   only the CPU bound would hold that spinner, after hours. The runner publishes
-  its step starts and finishes (run-lifecycle.ts), and time with no step
-  running and no step event, outside the run's own waits, is bounded by the
-  stall bound, at least 45 minutes so that a cold release build fits.
+  its step starts and finishes (run-lifecycle.ts). Time with no step running
+  and no step event, outside the run's own waits and the CPU that higher ranks
+  take, is bounded by the stall bound, at least 45 minutes so that a cold
+  release build fits. A build outranked for the CPUs is not held for it.
 
 As the coordinator's guard asked, the run's progress receipt is kept live, and
 `service.ts --status` names the run's own waiting request, what is queued

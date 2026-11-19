@@ -353,9 +353,9 @@ these is reached:
 - **Stall bound.** It has *stalled* (neither run, been runnable nor waited) for
   three times its last canonical green run's wall, at least fifteen minutes;
   without that run, three times its longest measured step.
-- **Lifecycle bound.** No step has run, started or finished, outside its own
-  waits, for its stall bound, at least forty-five minutes so that a cold
-  release build fits. This catches a spinner outside every step's own bound:
+- **Lifecycle bound.** No step has run, started or finished for its stall
+  bound, at least forty-five minutes so that a cold release build fits,
+  counting neither its own waits nor CPU that higher ranks take. This catches a spinner outside every step's own bound:
   in setup, in the release build, or after the last step. A runner older than
   its lifecycle publishes none and has no such bound.
 - **CPU bound.** It has used three times that green run's measured CPU, at
