@@ -4798,6 +4798,7 @@ fn changes_array_length(name: &str) -> bool {
         // `arrays_can_grow` of `false`, so every array in the program takes a
         // representation that cannot change length.
         "nts_array_set_length",
+        "nts_array_sort_writeback_ref",
     ]
     .iter()
     .any(|family| name.starts_with(family))
@@ -5013,6 +5014,7 @@ const KEEPS_FIELD_BORROWS: &[&str] = &[
     "nts_array_fill_bool",
     "nts_array_extend",
     "nts_array_extend_ref",
+    "nts_array_sort_writeback_ref",
     // Reorders the element storage of the array it is given, comparing strings
     // and nothing else: no element is released and no other code runs.
     "nts_array_sort_str",

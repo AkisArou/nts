@@ -3311,6 +3311,18 @@ NtsArray *nts_array_reverse_ref(NtsArray *a);
  * machines, and the differential would find it on one of them. Sorts in place
  * and hands back the array it was given, as `reverse` does. */
 NtsArray *nts_array_sort_str(NtsArray *a, uint32_t null_slot);
+/* Commit a completed comparator sort. `order` is a private uint32 permutation
+ * of [0, snapshot.length); all three arguments are borrowed. Comparisons have
+ * finished, and `snapshot` has kept their elements alive throughout.
+ *
+ * An unchanged target prefix owns exactly this multiset: rewriting it moves
+ * references, with no counts. A comparator's changed slots instead require
+ * ordinary counted replacement/append. A grown tail is preserved either way.
+ * For toSorted, the private copy is both target and snapshot: apply cycles in
+ * place, marking visited entries of the private permutation with identity.
+ * The helper may change `order`; no caller reads it afterwards. */
+void nts_array_sort_writeback_ref(NtsArray *target, const NtsArray *snapshot,
+                                  NtsArray *order);
 NTS_READS_ONLY double nts_array_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY double nts_array_last_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY bool nts_array_includes(const NtsArray *a, double needle);

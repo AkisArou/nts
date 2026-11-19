@@ -5851,6 +5851,54 @@ NtsArray *nts_array_slice_foreign(const NtsArray *a, double from, double to) {
   return nts_array_slice_counted(a, from, to, nts_array_family(a)->retain);
 }
 
+void nts_array_sort_writeback_ref(NtsArray *target, const NtsArray *snapshot,
+                                  NtsArray *order) {
+  uint32_t n = snapshot->header.length;
+  if (n == 0) {
+    return;
+  }
+  uint32_t *permutation = NTS_ITEMS(order, uint32_t);
+  void *const *source = NTS_ITEMS(snapshot, void *);
+  void **items = NTS_ITEMS(target, void *);
+  if (target == snapshot) {
+    /* No callback can reach toSorted's private copy. Each cycle hands its
+     * references on; even its temporary owns a move, never another count. */
+    for (uint32_t start = 0; start < n; start++) {
+      uint32_t at = start;
+      void *held = items[at];
+      while (permutation[at] != start) {
+        uint32_t next = permutation[at];
+        items[at] = items[next];
+        permutation[at] = at;
+        at = next;
+      }
+      items[at] = held;
+      permutation[at] = at;
+    }
+  } else if (target->header.length >= n &&
+             memcmp(items, source, (size_t)n * sizeof(void *)) == 0) {
+    for (uint32_t at = 0; at < n; at++) {
+      items[at] = source[permutation[at]];
+    }
+  } else {
+    /* A mutation can drop the target's last reference to an element. The
+     * separate snapshot owns every source slot until this reconciliation ends.
+     * Retain before overwriting, and give that count to a consuming push. */
+    for (uint32_t at = 0; at < n; at++) {
+      void *item = source[permutation[at]];
+      nts_retain((NtsHeader *)item);
+      if (at < target->header.length) {
+        void **slots = NTS_ITEMS(target, void *);
+        void *old = slots[at];
+        slots[at] = item;
+        nts_release((NtsHeader *)old);
+      } else {
+        nts_array_push_ref(target, item);
+      }
+    }
+  }
+}
+
 /* Shorten an array to its first `count` elements.
  *
  * What `filter` does *before* it writes any: it allocates the longest result it

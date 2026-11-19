@@ -407,6 +407,12 @@ static SIGNATURES: &[Declared] = &[
         Raising::NoRaise,
     ),
     (
+        "nts_array_sort_writeback_ref",
+        Some(&[None, None, None]),
+        None,
+        Raising::NoRaise,
+    ),
+    (
         "nts_array_splice",
         Some(&[
             None,

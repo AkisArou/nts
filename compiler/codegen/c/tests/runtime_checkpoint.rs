@@ -32,6 +32,25 @@ fn run_suite(name: &str, provider: &[&str]) -> String {
     run_suite_with(name, provider, &["nts_test_host.c"], &[])
 }
 
+#[test]
+fn a_sort_commits_a_permutation_without_counting_and_reconciles_mutations() {
+    let report = run_suite(
+        "array_sort",
+        &[
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_COUNT_OPERATIONS",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    );
+    assert_eq!(
+        checks(&report),
+        23,
+        "all permutation and mutation controls: {report}"
+    );
+}
+
 /// The same, with extra runtime sources and linker flags.
 ///
 /// The libuv host needs both, and it is the only suite that does: everything

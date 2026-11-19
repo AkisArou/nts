@@ -302,6 +302,19 @@ public final class NtsArrayL {
         return a;
     }
 
+    /** The permutation is private, and its identity marks visited cycles. */
+    public static void sortWriteback(NtsArrayL target, NtsArrayL snapshot, NtsArrayD order) {
+        if (target == snapshot) {
+            NtsRuntime.arraySortWriteback(target.items, snapshot.items, order.items, snapshot.length);
+            return;
+        }
+        for (int i = 0; i < snapshot.length; i++) {
+            Object value = snapshot.items[(int)order.items[i]];
+            if (i < target.length) target.items[i] = value;
+            else push(target, value);
+        }
+    }
+
     public static NtsArrayL reverse(NtsArrayL a) {
         Object[] items = a.items;
         for (int i = 0, j = a.length - 1; i < j; i++, j--) {

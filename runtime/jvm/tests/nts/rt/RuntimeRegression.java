@@ -645,6 +645,24 @@ public final class RuntimeRegression {
         NtsArrayL.push(refs, new String("test"));
         check(NtsArrayL.indexOfStr(refs, new String("test")) == 0, "string search value");
         check(NtsArrayL.indexOf(refs, new String("test")) == -1, "reference search identity");
+        Object first = new Object(), second = new Object(), third = new Object();
+        Object[] sortedCopy = {first, second, third};
+        double[] permutation = {2, 0, 1};
+        NtsRuntime.arraySortWriteback(sortedCopy, sortedCopy, permutation);
+        check(sortedCopy[0] == third && sortedCopy[1] == first && sortedCopy[2] == second,
+            "private sort copy applies cycles by reference identity");
+        check(Arrays.equals(permutation, new double[] {0, 1, 2}), "private permutation visitation");
+        NtsArrayL changedSort = NtsArrayL.empty();
+        NtsArrayL sortSnapshot = NtsArrayL.empty();
+        NtsArrayL.push(sortSnapshot, first); NtsArrayL.push(sortSnapshot, second); NtsArrayL.push(sortSnapshot, third);
+        NtsArrayD sortOrder = NtsArrayD.of(3);
+        sortOrder.items[0] = 2; sortOrder.items[1] = 0; sortOrder.items[2] = 1;
+        NtsArrayL.sortWriteback(changedSort, sortSnapshot, sortOrder);
+        check(changedSort.length == 3 && changedSort.items[0] == third && changedSort.items[1] == first,
+            "sort repopulates a comparator's emptied source");
+        Object tail = new Object(); NtsArrayL.push(changedSort, tail);
+        NtsArrayL.sortWriteback(changedSort, sortSnapshot, sortOrder);
+        check(changedSort.length == 4 && changedSort.items[3] == tail, "sort preserves comparator's appended tail");
         Object[] joined = {NtsValue.NULL_VALUE, NtsValue.UNDEFINED_VALUE, NtsValue.ofNumber(-0.0), "x", null};
         equal(NtsRuntime.arrayJoinStr(joined, ","), ",,0,x,", "boxed absent join");
         NtsArrayZ bools = NtsArrayZ.empty(); NtsArrayZ.push(bools, true); NtsArrayZ.unshift(bools, false);

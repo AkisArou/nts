@@ -1,9 +1,9 @@
-//! The scratch stores must really be uint32 permutations: answer agreement
-//! alone also passes with the old O(N log N) managed stores.
+//! Scratch stores and powersort metadata must really be uint32 indices. Answer
+//! agreement alone also passes with the old O(N log N) managed stores.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, HirType, ManagedType, OpKind};
+use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
 use nts_frontend_ts::Frontend;
 
 fn index_arrays(func: &hir::Func) -> usize {
@@ -50,8 +50,8 @@ fn managed_sorts_merge_uint32_indices_but_numeric_sorts_keep_values() {
             let func = program.funcs.iter().find(|f| f.name == name).expect(name);
             assert_eq!(
                 index_arrays(func),
-                2,
-                "{name} must keep two four-byte index buffers"
+                3,
+                "{name} must keep an order, smaller-run scratch and node-power stack"
             );
             let sort_origin = &func
                 .values
@@ -67,9 +67,8 @@ fn managed_sorts_merge_uint32_indices_but_numeric_sorts_keep_values() {
                 .expect("the sort's scratch allocation")
                 .origin
                 .location;
-            // Only final write-back stores a managed value at the sort call.
-            // The original string-array literal has its own initialization
-            // stores, at a different source location.
+            // Even final write-back goes through its permutation contract.
+            // String-array literal initialization has a different origin.
             let managed_stores = func
                 .values
                 .iter()
@@ -79,7 +78,31 @@ fn managed_sorts_merge_uint32_indices_but_numeric_sorts_keep_values() {
                     if matches!(func.values[value.0 as usize].ty, HirType::Managed(_)))
                 })
                 .count();
-            assert_eq!(managed_stores, 1, "{name}: no managed merge store");
+            assert_eq!(managed_stores, 0, "{name}: no managed permutation store");
+            assert_eq!(
+                func.values
+                    .iter()
+                    .filter(|op| matches!(
+                        &op.kind, OpKind::Call { callee: Callee::External(name), .. }
+                            if name == "nts_array_sort_writeback_ref"
+                    ))
+                    .count(),
+                1,
+                "{name}: one completed permutation commit"
+            );
+            if name == "copied" {
+                assert_eq!(
+                    func.values
+                        .iter()
+                        .filter(|op| matches!(
+                            &op.kind, OpKind::Call { callee: Callee::External(name), .. }
+                                if name == "nts_array_slice_ref"
+                        ))
+                        .count(),
+                    1,
+                    "toSorted's single private owner is already its snapshot"
+                );
+            }
         }
         let numeric = program
             .funcs

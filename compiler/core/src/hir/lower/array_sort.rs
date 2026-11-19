@@ -5,6 +5,8 @@ use super::{
     OpKind, Origin, Step, Terminator, TypeId, TypeKind, UniformArguments, ValueId, counted_helper,
 };
 
+mod managed;
+
 /// A `sort` comparator as the merge calls it: the function value, which body
 /// that reaches, and the parameters its arguments are coerced to.
 struct Comparator {
@@ -74,7 +76,7 @@ impl FuncBuilder<'_> {
         ))
     }
 
-    /// `sort(compare)` and `toSorted(compare)`: a stable bottom-up merge sort,
+    /// `sort(compare)` and `toSorted(compare)`: stable sorting loops,
     /// lowered here as loops, calling the comparator as the function value it
     /// is -- an arrow, a named function, or anything else that holds one.
     ///
@@ -103,6 +105,10 @@ impl FuncBuilder<'_> {
     ///   them out is its own step, not written yet.
     ///
     /// `toSorted` sorts a copy (`slice`) the same way and answers it.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "signature validation and the two storage paths"
+    )]
     fn lower_sort_with(
         &mut self,
         id: NodeId,
@@ -163,24 +169,7 @@ impl FuncBuilder<'_> {
         } else {
             receiver
         };
-        // Keep managed elements owned by one immutable snapshot throughout
-        // comparisons and write-back. The comparator can mutate the original
-        // array, retain an element, collect or throw; it cannot reach this
-        // private owner. Merge passes move only uint32 indices, so their
-        // partial results need no element counts, even on an exceptional exit.
-        let snapshot = matches!(element, HirType::Managed(_))
-            .then(|| self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin));
-        let runs = if let Some(snapshot) = snapshot {
-            self.sort_indices(id, snapshot, &origin)?
-        } else {
-            // Numeric sorts already move uncounted values; an index would add
-            // an indirection without removing any count traffic.
-            (
-                self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
-                self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
-            )
-        };
-        let comparator = Comparator {
+        let mut comparator = Comparator {
             node: compare,
             function,
             callee,
@@ -192,68 +181,61 @@ impl FuncBuilder<'_> {
                     _ => None,
                 }
             }),
-            snapshot,
+            snapshot: None,
         };
-        let sorted = self.merge_passes(id, runs, &element, &comparator, &origin)?;
-        self.write_back(id, (sorted, target), &element, snapshot, &origin)?;
-        Ok(target)
-    }
-
-    /// Two private index buffers, initially `0..length` and zeros. An array's
-    /// length is uint32, so every valid index fits exactly in four bytes. The
-    /// second buffer is read only after a complete pass has filled it.
-    fn sort_indices(
-        &mut self,
-        id: NodeId,
-        snapshot: ValueId,
-        origin: &Origin,
-    ) -> Result<(ValueId, ValueId), Diagnostic> {
-        let length = self.push(OpKind::Length(snapshot), HirType::NUMBER, origin.clone());
-        let index_type = HirType::Int {
-            bits: 32,
-            signed: false,
-        };
-        let array_type = HirType::Managed(ManagedType::Array(Box::new(index_type.clone())));
-        let mut allocate = || {
-            self.push(
-                OpKind::ArrayNew {
-                    length,
-                    fill: ArrayFill::Filled,
+        if matches!(element, HirType::Managed(_)) {
+            let length = self.push(OpKind::Length(target), HirType::NUMBER, origin.clone());
+            let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+            let needed = self.push(
+                OpKind::Binary {
+                    op: BinOp::Gt,
+                    lhs: length,
+                    rhs: one,
                 },
-                array_type.clone(),
+                HirType::Bool,
                 origin.clone(),
-            )
-        };
-        let buffers = (allocate(), allocate());
-        let at = self.synthetic_symbol();
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        self.bindings.insert(at, zero);
-        let fill = self.begin_loop(id, &[at], true, origin)?;
-        let index = self.bindings[&at];
-        let more = self.push(
-            OpKind::Binary {
-                op: BinOp::Lt,
-                lhs: index,
-                rhs: length,
-            },
-            HirType::Bool,
-            origin.clone(),
-        );
-        self.test_loop(more, &fill);
-        self.switch_to(fill.body);
-        let value = self.push(OpKind::Convert(index), index_type, origin.clone());
-        self.push(
-            OpKind::ArraySet {
-                array: buffers.0,
-                index,
-                value,
-                checked: false,
-            },
-            HirType::Void,
-            origin.clone(),
-        );
-        self.end_loop(&fill, Step::Count { name: at, by: 1.0 })?;
-        Ok(buffers)
+            );
+            let (sort, done) = (self.new_block(), self.new_block());
+            self.terminate(Terminator::Branch {
+                cond: needed,
+                then_target: sort,
+                then_args: Vec::new(),
+                else_target: done,
+                else_args: Vec::new(),
+            });
+            self.switch_to(sort);
+            // toSorted's fresh copy is already an unreachable private owner.
+            // sort needs its own snapshot because its callback can remove the
+            // original array's last references, reenter, collect or throw.
+            let owner = if name == "toSorted" {
+                target
+            } else {
+                self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin)
+            };
+            comparator.snapshot = Some(owner);
+            let sorted = self.sort_managed(id, owner, &element, &comparator, &origin)?;
+            self.call_runtime(
+                "nts_array_sort_writeback_ref",
+                vec![target, owner, sorted],
+                HirType::Void,
+                &origin,
+            );
+            self.terminate(Terminator::Jump {
+                target: done,
+                args: Vec::new(),
+            });
+            self.switch_to(done);
+        } else {
+            // Numeric sorts move uncounted values directly: the managed-index
+            // representation and its run policy are a separate measured path.
+            let runs = (
+                self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
+                self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
+            );
+            let sorted = self.merge_passes(id, runs, &element, &comparator, &origin)?;
+            self.write_back(id, (sorted, target), &element, None, &origin)?;
+        }
+        Ok(target)
     }
 
     /// Read one merge element. Managed sorts read an index and then borrow
@@ -446,27 +428,7 @@ impl FuncBuilder<'_> {
         self.switch_to(both);
         let first = self.sort_element((source, left_at), element, comparator.snapshot, origin);
         let second = self.sort_element((source, right_at), element, comparator.snapshot, origin);
-        let mut args = vec![comparator.function];
-        for (value, want) in [first, second].into_iter().zip(&comparator.parameters) {
-            args.push(self.coerce(value, want, comparator.node)?);
-        }
-        // **Through [`Self::call_a_closure_entry`], because `closure_callee` may have
-        // chosen a uniform slot for this call and a uniform entry takes erased
-        // arguments.** Built by hand here it passed the comparator's *written* ones,
-        // and the ordinary body survived only because `fields::devirtualize` rewrites a
-        // known class back to the written `#call`.
-        //
-        // Keyed on `id`, the `sort` call: that is the node `closure_callee` chose the
-        // slot for and the node `call_within` records, so the slot, the flag test and
-        // the handler edge are one answer about one node.
-        if let Some(source) = comparator.argument_source {
-            self.argument_sources.insert(
-                id,
-                UniformArguments::new(vec![source; comparator.parameters.len()]),
-            );
-        }
-        let answer =
-            self.call_a_closure_entry(id, comparator.callee, None, args, &HirType::NUMBER)?;
+        let answer = self.sort_compare(id, (first, second), comparator)?;
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let right_first = binary(self, BinOp::Gt, answer, zero, HirType::Bool);
         // One block per answer rather than both arms into `merged`: an edge is
@@ -522,6 +484,34 @@ impl FuncBuilder<'_> {
         self.bindings.insert(left, next_left);
         self.bindings.insert(right, next_right);
         self.end_loop(&merge, Step::Count { name: at, by: 1.0 })
+    }
+
+    fn sort_compare(
+        &mut self,
+        id: NodeId,
+        (first, second): (ValueId, ValueId),
+        comparator: &Comparator,
+    ) -> Result<ValueId, Diagnostic> {
+        let mut args = vec![comparator.function];
+        for (value, want) in [first, second].into_iter().zip(&comparator.parameters) {
+            args.push(self.coerce(value, want, comparator.node)?);
+        }
+        // **Through [`Self::call_a_closure_entry`], because `closure_callee` may have
+        // chosen a uniform slot for this call and a uniform entry takes erased
+        // arguments.** Built by hand here it passed the comparator's *written* ones,
+        // and the ordinary body survived only because `fields::devirtualize` rewrites a
+        // known class back to the written `#call`.
+        //
+        // Keyed on `id`, the `sort` call: that is the node `closure_callee` chose the
+        // slot for and the node `call_within` records, so the slot, the flag test and
+        // the handler edge are one answer about one node.
+        if let Some(source) = comparator.argument_source {
+            self.argument_sources.insert(
+                id,
+                UniformArguments::new(vec![source; comparator.parameters.len()]),
+            );
+        }
+        self.call_a_closure_entry(id, comparator.callee, None, args, &HirType::NUMBER)
     }
 
     /// The sorted elements written back in order into the array the program

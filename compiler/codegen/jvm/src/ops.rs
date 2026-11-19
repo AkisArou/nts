@@ -207,6 +207,10 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         // that names its methods, so it is the only one that could say so.
         // The tag a null slot reads as rides along, as on the fixed path.
         "sort_str" => ("sortStr", format!("(L{class};I)L{class};")),
+        "sort_writeback_ref" => (
+            "sortWriteback",
+            "(Lnts/rt/NtsArrayL;Lnts/rt/NtsArrayL;Lnts/rt/NtsArrayD;)V".into(),
+        ),
         "slice" | "slice_ref" => ("slice", format!("(L{class};DD)L{class};")),
         // `_value` joins the two above rather than needing a third method:
         // the class comes from what the array *holds*, and an `NtsValue` is a
@@ -397,6 +401,11 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         // element to a string first and that conversion is the identity only
         // here.
         "nts_array_sort_str" => (RUNTIME, "arraySortStr", format!("({array}I){result}")),
+        "nts_array_sort_writeback_ref" => (
+            RUNTIME,
+            "arraySortWriteback",
+            "([Ljava/lang/Object;[Ljava/lang/Object;[D)V".into(),
+        ),
         "nts_array_join_str" => (
             RUNTIME,
             "arrayJoinStr",

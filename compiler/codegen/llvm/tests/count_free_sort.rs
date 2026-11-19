@@ -81,10 +81,17 @@ fn checked(command: &mut Command) -> Vec<u8> {
     output.stdout
 }
 
-fn collect_at_closure_entries(program: &mut hir::Program) {
+fn collect_at_closure_entries(program: &mut hir::Program, numeric_only: bool) {
     let mut inserted = 0;
     for func in &mut program.funcs {
-        if !func.name.starts_with("Closure") || !func.name.contains("#call") {
+        if !func.name.starts_with("Closure")
+            || !func.name.contains("#call")
+            || (numeric_only
+                && !matches!(
+                    func.return_type,
+                    HirType::Float { .. } | HirType::Int { .. }
+                ))
+        {
             continue;
         }
         let value = ValueId(u32::try_from(func.values.len()).unwrap());
@@ -106,23 +113,38 @@ fn collect_at_closure_entries(program: &mut hir::Program) {
 
 #[test]
 fn native_sort_snapshots_survive_collection_reentrancy_and_throws() {
+    native_sort_case(
+        SOURCE,
+        DRIVER,
+        "import * as m from './main.ts';\nfor(let i=0;i<32;i++) for(const name of ['stableObjects','emptiedSource','reentrant','retainArgument','throwing','copied','stableStrings','numericControl']) process.stdout.write(String(m[name](i))+'\\n');\n",
+        false,
+    );
+}
+
+#[test]
+fn adaptive_sorts_compare_a_natural_run_once_and_keep_snapshot_ownership() {
+    native_sort_case(
+        include_str!("../../../../tests/programs/adaptive-sort/src/main.ts"),
+        ADAPTIVE_DRIVER,
+        "import * as m from './main.ts';\nfor(let i=0;i<32;i++) for(const name of ['ordered','reversed','reversedEqual','unevenRuns','shuffled','throwing','mutating','mutatingThrow','copied','copiedMutating','copiedThrow']) process.stdout.write(m[name](i)+'\\n');\n",
+        true,
+    );
+}
+
+fn native_sort_case(source: &str, driver: &str, expected_script: &str, numeric_only: bool) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
     let dir = ScratchDir::new(&root.join("target/count-free-sort-tests"), "collections");
-    std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
+    std::fs::write(dir.join("main.ts"), source).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
     )
     .unwrap();
-    std::fs::write(dir.join("drive.c"), DRIVER).unwrap();
-    std::fs::write(
-        dir.join("expected.mjs"),
-        "import * as m from './main.ts';\nfor(let i=0;i<32;i++) for(const name of ['stableObjects','emptiedSource','reentrant','retainArgument','throwing','copied','stableStrings','numericControl']) process.stdout.write(String(m[name](i))+'\\n');\n",
-    )
-    .unwrap();
+    std::fs::write(dir.join("drive.c"), driver).unwrap();
+    std::fs::write(dir.join("expected.mjs"), expected_script).unwrap();
     let expected = checked(Command::new("node").arg(dir.join("expected.mjs")));
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
@@ -143,7 +165,7 @@ fn native_sort_snapshots_survive_collection_reentrancy_and_throws() {
             "{:?}",
             prepared.diagnostics
         );
-        collect_at_closure_entries(&mut prepared.program);
+        collect_at_closure_entries(&mut prepared.program, numeric_only);
         let c = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
         let llvm =
             nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -170,6 +192,9 @@ fn native_sort_snapshots_survive_collection_reentrancy_and_throws() {
                 "-Wno-override-module",
                 "-I.",
             ]);
+            if numeric_only {
+                cc.arg("-Wl,--wrap=nts_collect_cycles");
+            }
             if provider == hir::Memory::ReferenceCounting {
                 cc.args([
                     "-DNTS_PROVIDER_RC",
@@ -194,3 +219,49 @@ fn native_sort_snapshots_survive_collection_reentrancy_and_throws() {
         }
     }
 }
+
+// The linker wrapper both counts comparisons and runs a real collection.
+// Number-returning closure entries are comparators; tags' map returns strings.
+// The old fixed-width merge loop fails the N-1 assertions even though its
+// outputs agree. Empty and singleton arrays remain in the smaller fixture.
+const ADAPTIVE_DRIVER: &str = r#"
+#include "nts_runtime.h"
+#include <stdio.h>
+extern NtsString *ordered(double), *reversed(double), *reversedEqual(double);
+extern NtsString *unevenRuns(double), *shuffled(double), *throwing(double);
+extern NtsString *mutating(double), *mutatingThrow(double), *copied(double);
+extern NtsString *copiedMutating(double), *copiedThrow(double);
+extern void __real_nts_collect_cycles(void);
+static uint64_t comparisons;
+void __wrap_nts_collect_cycles(void) {
+  comparisons++;
+  __real_nts_collect_cycles();
+}
+static void line(NtsString *s) {
+  for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_str_char_code_at_int(s, i));
+  putchar('\n');
+  nts_release((NtsHeader *)s);
+}
+int main(void) {
+  typedef NtsString *(*Case)(double);
+  static const Case cases[] = {ordered, reversed, reversedEqual, unevenRuns,
+    shuffled, throwing, mutating, mutatingThrow, copied, copiedMutating, copiedThrow};
+  for (int seed = 0; seed < 32; seed++) {
+    for (uint32_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+      comparisons = 0;
+      NtsString *answer = cases[c](seed);
+      if (c < 2 && comparisons != (uint64_t)((seed & 127) + 64)) {
+        fprintf(stderr, "case %u seed %d compared %llu times\n", c, seed,
+                (unsigned long long)comparisons);
+        return 5;
+      }
+      line(answer);
+    }
+    nts_collect_cycles();
+#ifdef NTS_PROVIDER_RC
+    if (nts_live_count() != 0 || nts_live_bytes() != 0) return 6;
+#endif
+  }
+  return 0;
+}
+"#;

@@ -1748,6 +1748,28 @@ public final class NtsRuntime {
      * goes to the end in order *without being compared*, as JavaScript does,
      * and `null` is compared as the string "null", as `String(null)` is. Both
      * were a `compareTo` on null. */
+    public static void arraySortWriteback(Object[] target, Object[] snapshot, double[] order) {
+        arraySortWriteback(target, snapshot, order, snapshot.length);
+    }
+    static void arraySortWriteback(Object[] target, Object[] snapshot, double[] order, int n) {
+        if (target == snapshot) {
+            for (int start = 0; start < n; start++) {
+                int at = start;
+                Object held = target[at];
+                while ((int)order[at] != start) {
+                    int next = (int)order[at];
+                    target[at] = target[next];
+                    order[at] = at;
+                    at = next;
+                }
+                target[at] = held;
+                order[at] = at;
+            }
+        } else {
+            for (int i = 0; i < n; i++) target[i] = snapshot[(int)order[i]];
+        }
+    }
+
     public static Object[] arraySortStr(Object[] a, int nullSlot) {
         sortStrings(a, a.length, nullSlot);
         return a;
