@@ -518,7 +518,7 @@ impl Sort<'_, '_> {
         Ok(self.var(power))
     }
 
-    /// Positive powers increase strictly and are at most 32 for N<=u32::MAX.
+    /// Positive powers increase strictly and are at most 32 for N<=`u32::MAX`.
     /// The 33 rows include a zero-power sentinel; one further slot remembers
     /// min-gallop. Midpoints and the final doubling stay below 4*N < 2^34,
     /// so power arithmetic is i64. Stored node powers fit u32 exactly.
