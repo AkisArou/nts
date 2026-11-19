@@ -1,12 +1,15 @@
 // Control for `refusals/a-closure-calling-an-optional-interface-method` (#866):
-// the same interface with its optional method and the same `!` call, but `make`
-// returns the class `S` rather than the interface `Sig`, so the call names
-// `S#throwIfAborted`, a method this compiler copies, and the closure's `throw`
-// reaches the handler.
+// the same interface with its optional method, but `make` returns the class `S`
+// rather than the interface `Sig`, so the call names `S#throwIfAborted`, a
+// method this compiler copies, and the closure's `throw` reaches the handler.
 //
-// Not the required-method shape on the interface: that one aborts for a
-// different reason, recorded as
-// outcomes/a-closure-calling-a-throwing-interface-method-inside-a-try (#872).
+// The refusal's `!` is dropped here. On a required class method TypeScript
+// erases it, so the program means the same; it returns once #882 is fixed,
+// because `s.throwIfAborted!()` on a class instance aborts today
+// (outcomes/a-method-called-through-a-non-null-assertion). Making the method
+// required on the interface instead is not a control either: that shape aborts
+// for its own reason, outcomes/a-closure-calling-a-throwing-interface-method-inside-a-try
+// (#872).
 
 interface Sig {
   aborted: boolean;
@@ -36,7 +39,7 @@ export function probe(n: number): number {
   const s = make();
   s.aborted = (n & 1) === 1;
   return attempt(() => {
-    s.throwIfAborted!();
+    s.throwIfAborted();
     return n;
   });
 }

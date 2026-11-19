@@ -7,11 +7,13 @@
 // corpora: `runtime/node/zlib`'s makeAsyncCompressionTransform calls
 // `signal.throwIfAborted!()` on a `StreamAbortSignal`.
 // The one-difference control is
-// programs/a-closure-calling-an-optional-interface-method-control: the same
-// optional method and `!`, on a receiver typed as the class `S` rather than
-// the interface `Sig`. Making the method required instead is not a control:
-// that shape aborts for its own reason,
-// outcomes/a-closure-calling-a-throwing-interface-method-inside-a-try (#872).
+// programs/a-closure-calling-an-optional-interface-method-control: the
+// receiver is typed as the class `S` rather than the interface `Sig`. It drops
+// the `!`, which TypeScript erases on a required class method, until #882 is
+// fixed (outcomes/a-method-called-through-a-non-null-assertion). Making the
+// method required instead is not a control: that shape aborts for its own
+// reason, outcomes/a-closure-calling-a-throwing-interface-method-inside-a-try
+// (#872).
 
 interface Sig {
   aborted: boolean;
