@@ -15,16 +15,26 @@ import {projectDiscoveryOwner} from './project-discovery.ts';
 /** The original callback remains unchanged. Additional real observations
  * retain alias text, intermediate presence/kind and followed target identity.
  * Metadata callbacks derive no content reads. */
-export function captureReaderObservations(root:string,rows:readonly HostObservation[]):Pick<ReaderObservation,'observation'|'causes'>[]{
+export function readerObservationCapture(root:string){
   let cause:{kind:HostObservation['kind'];path:string}|undefined;
+  let acquisitionOnly=false,closed=false;
   const causes=new Map<string,Map<string,NonNullable<typeof cause>>>();
+  const only=new Map<string,boolean>(),sourceCauses=new Map<string,NonNullable<typeof cause>>(),files=new Set<string>();
+  let addedFiles:string[]=[];
   const filesystem=new OracleFilesystem(row=>{
     if(!cause)throw Error('reader identity observation has no callback provenance');
     const key=JSON.stringify([row.kind,row.path]),values=causes.get(key)??new Map();
-    values.set(JSON.stringify(cause),{...cause});causes.set(key,values);
+    values.set(JSON.stringify(cause),cause);causes.set(key,values);
+    only.set(key,(only.get(key)??true)&&acquisitionOnly);
+    if(row.kind==='file'&&row.value!==null&&!files.has(row.path)){files.add(row.path);addedFiles.push(row.path);}
   });
+  return {add(rows:readonly HostObservation[],matchingEntries:ReadonlySet<string>=new Set()):string[]{
+  if(closed)throw Error('reader observation capture is closed');
+  addedFiles=[];
   for(const row of rows){
-    cause={kind:row.kind,path:row.path};filesystem.merge([row]);
+    const key=JSON.stringify([row.kind,row.path]);
+    cause=sourceCauses.get(key);if(!cause){cause={kind:row.kind,path:row.path};sourceCauses.set(key,cause);}
+    acquisitionOnly=row.kind==='entries'&&matchingEntries.has(row.path);filesystem.merge([row]);
     const follow=!['readlink','runtimeKind'].includes(row.kind),physical=filesystem.inputIdentity(row.path,root,follow).path;
     if(physical!==row.path){
       switch(row.kind){
@@ -48,7 +58,18 @@ export function captureReaderObservations(root:string,rows:readonly HostObservat
       }
     }
   }
-  return filesystem.captured().map(observation=>({observation:structuredClone(observation),causes:[...causes.get(JSON.stringify([observation.kind,observation.path]))!.values()]}));
+  return addedFiles;
+  },finish():Pick<ReaderObservation,'observation'|'causes'|'observationOnly'>[]{
+    if(closed)throw Error('reader observation capture is closed');closed=true;
+    return filesystem.captured().map(observation=>{
+      const key=JSON.stringify([observation.kind,observation.path]);
+      return {observation:structuredClone(observation),causes:[...causes.get(key)!.values()],...(only.get(key)?{observationOnly:true as const}:{})};
+    });
+  }};
+}
+/** A standalone transaction uses the same owner as a snapshot's Programs. */
+export function captureReaderObservations(root:string,rows:readonly HostObservation[]):Pick<ReaderObservation,'observation'|'causes'>[]{
+  const capture=readerObservationCapture(root);capture.add(rows);return capture.finish();
 }
 
 export function readerObservationDependency(root:string,row:ReaderObservation):{path:string;bytes:boolean;directoryStat:boolean}|undefined{

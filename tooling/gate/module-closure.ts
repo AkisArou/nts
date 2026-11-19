@@ -17,7 +17,7 @@ import {projectRole,executableModuleSource,fixtureNamespaces,moduleMemberName,pr
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
-import {captureReaderObservations,validateReaderBatchObservations} from './reader-observations.ts';
+import {captureReaderObservations,readerObservationCapture,validateReaderBatchObservations} from './reader-observations.ts';
 import {projectOwnerAncestorAbsence,type ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
 import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
@@ -185,18 +185,24 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
       localTypes?:true;projectRole?:import('./reader-inputs/main.ts').ProjectRole;compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
+    const programCaptures=new Map<string,{reader:string;context:ReaderContext;capture:ReturnType<typeof readerObservationCapture>}>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
     const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[],matchingEntries:ReadonlySet<string>=new Set())=>{
+      if(protocol==='project'){
+        const key=JSON.stringify([reader,context.entry,context.namespaces]);
+        let owner=programCaptures.get(key);
+        if(!owner){owner={reader,context:{entry:context.entry,dataNamespaces:context.namespaces},capture:readerObservationCapture(root)};programCaptures.set(key,owner);}
+        for(const path of owner.capture.add(rows,matchingEntries))if(inside(root,path))visit(context,path,false,false,false);
+        return;
+      }
       for(const captured of captureReaderObservations(root,rows)){
         if(captured.observation.kind==='file'&&captured.observation.value!==null&&inside(root,captured.observation.path))
           visit(context,captured.observation.path,false,false,false);
-        const observationOnly=captured.causes.length>0&&captured.causes.every(cause=>cause.kind==='entries'&&matchingEntries.has(cause.path));
-        observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured,...(observationOnly?{observationOnly:true as const}:{})});
+        observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured});
       }
     };
-    /** The Program and its emitter probes own one set of typed answers. One
-     * capture merges their shared binding facts and unions the actual causes;
-     * capturing twice retains a second copy of the same source identities. */
+    /** Every Program and emitter probe of one reader/context contributes to
+     * its snapshot transaction, retaining one answer and all actual causes. */
     function observeCompiledProject(context:Context,reader:string,project:ProjectInputs,request:ProjectRequest,config:string):void{
       const modules=project.modules.map(row=>row.path).filter(path=>! /\.d\.[cm]?ts$/.test(path)),lookups=new OracleFilesystem(),ancestorLookups:string[]=[];
       for(const module of modules){
@@ -517,6 +523,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         visit(types,resolve(root,entry),true,true,false,true);
       }
     }
+    for(const owner of programCaptures.values())for(const captured of owner.capture.finish())
+      observations.push({reader:owner.reader,context:owner.context,protocol:'project',...captured});
     return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,projectMatches,...(unavailableInputs.length?{unavailableInputs}:{})};
   }
   /** A batch is one transaction, not a graph-lifetime result cache. Compiler

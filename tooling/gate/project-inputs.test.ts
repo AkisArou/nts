@@ -11,7 +11,7 @@ import {OracleFilesystem,validateHostObservations} from '../differential/oracle-
 import {projectInputs,projectInputOwner} from './project-inputs.ts';
 import {testScratch} from './test-scratch.ts';
 import {moduleGraph,closeModuleGraphOwners} from './module-closure.ts';
-import {captureReaderObservations,validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import {captureReaderObservations,readerObservationCapture,validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {projectConfig} from './reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -56,9 +56,11 @@ test('compiled binding facts equal the union of Program and emitter answers, wit
   const root=testScratch(t,'project-binding-union');mkdirSync(join(root,'src'));
   writeFileSync(join(root,'package.json'),'{"type":"module"}');
   writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
+  writeFileSync(join(root,'first.json'),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
+  writeFileSync(join(root,'second.json'),'{"compilerOptions":{"types":[]},"files":["src/main.ts"]}');
   writeFileSync(join(root,'src/main.ts'),'export {};');
   const source=join(root,'src/main.ts'),config=join(root,'tsconfig.json');
-  const program=projectInputs([{kind:'config',path:'tsconfig.json'}],root),emitter=new OracleFilesystem();
+  const program=projectInputs([{kind:'config',path:'first.json'},{kind:'config',path:'second.json'}],root),emitter=new OracleFilesystem();
   assert.equal(emitter.realpath(source),source);assert.equal(emitter.projectFor(source),config);emitter.readBytes(config);
   const separate=[captureReaderObservations(root,program.observations),captureReaderObservations(root,emitter.captured())];
   const key=(row:{observation:{kind:string;path:string}})=>JSON.stringify([row.observation.kind,row.observation.path]);
@@ -70,7 +72,7 @@ test('compiled binding facts equal the union of Program and emitter answers, wit
   }
   const owner=moduleGraph({sourceRoot:root});
   try{
-    const snapshot=owner.describe([projectConfig(pathToFileURL(config),'compiled-program')]);
+    const snapshot=owner.describe(['first.json','second.json'].map(path=>projectConfig(pathToFileURL(join(root,path)),'compiled-program')));
     const rows=snapshot.observations.filter(row=>row.protocol==='project'&&!row.capability&&!row.environment&&!row.dependency&&!row.selectorOnly);
     assert.equal(rows.length,expected.size,'one typed fact per Program owner, with no answer discarded');
     assert.deepEqual(rows.map(key).sort(),[...expected.keys()].sort());
@@ -84,7 +86,7 @@ test('compiled binding facts equal the union of Program and emitter answers, wit
   }finally{owner.close();}
 });
 
-test('binding coalescing retains each distinct compiled Program owner',t=>{
+test('a shared reader coalesces binding answers across Programs and retains every native query',t=>{
   const root=testScratch(t,'project-binding-owners');mkdirSync(join(root,'src'));
   writeFileSync(join(root,'package.json'),'{"type":"module"}');writeFileSync(join(root,'src/main.ts'),'export {};');
   const text='{"compilerOptions":{"types":[]},"include":["src/*.ts"]}';
@@ -93,9 +95,41 @@ test('binding coalescing retains each distinct compiled Program owner',t=>{
   try{
     const snapshot=owner.describe(['first.json','second.json'].map(path=>projectConfig(pathToFileURL(join(root,path)),'compiled-program')));
     const facts=snapshot.observations.filter(row=>row.observation.kind==='realpath'&&row.observation.path===join(root,'src/main.ts'));
-    assert.equal(facts.length,2,'each Program keeps its own binding answer');
+    assert.equal(facts.length,1,'one reader/context owns one binding answer across its Programs');
     assert.deepEqual(snapshot.projectMatches.map(match=>match.request.path).sort(),['first.json','second.json']);
   }finally{owner.close();}
+});
+
+test('binding coalescing keeps distinct readers separate',t=>{
+  const root=testScratch(t,'project-binding-readers');mkdirSync(join(root,'src'));
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');writeFileSync(join(root,'src/main.ts'),'export {};');
+  writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
+  for(const name of ['first.ts','second.ts'])writeFileSync(join(root,name),'export {};');
+  const declarations=new Map(['first.ts','second.ts'].map(name=>[name,{imports:[],assets:[{kind:'project-config' as const,path:'./tsconfig.json',role:'compiled-program' as const}]}]));
+  const owner=moduleGraph({sourceRoot:root,declarations});
+  try{
+    const snapshot=owner.describe(['first.ts','second.ts']);
+    const facts=snapshot.observations.filter(row=>row.observation.kind==='realpath'&&row.observation.path===join(root,'src/main.ts'));
+    assert.deepEqual(facts.map(row=>row.reader).sort(),['first.ts','second.ts']);
+    assert.equal(snapshot.projectMatches.length,2,'the same native request keeps both readers');
+  }finally{owner.close();}
+});
+
+test('a snapshot capture unions causes, promotes config entries in either order and refuses a conflicting answer',t=>{
+  const root=testScratch(t,'project-capture-causes');mkdirSync(join(root,'src'));writeFileSync(join(root,'src/main.ts'),'export {};');
+  const filesystem=new OracleFilesystem(),directory=join(root,'src');filesystem.getAccessibleEntries(directory);
+  const entries=filesystem.captured();
+  for(const matchingFirst of [false,true]){
+    const capture=readerObservationCapture(root);
+    for(const matching of [matchingFirst,!matchingFirst])capture.add(entries,matching?new Set([directory]):new Set());
+    const rows=capture.finish();
+    assert.equal(rows.filter(row=>row.observation.kind==='entries').length,1);
+    assert.ok(rows.every(row=>!row.observationOnly),'the actual ordinary read promotes every shared answer');
+    assert.ok(rows.every(row=>row.causes.length===1&&row.causes[0]!.kind==='entries'&&row.causes[0]!.path===directory));
+  }
+  const capture=readerObservationCapture(root),path=join(root,'src/main.ts');
+  capture.add([{kind:'fileExists',path,value:true}]);
+  assert.throws(()=>capture.add([{kind:'fileExists',path,value:false}]),/fileExists changed/);
 });
 
 test('a compiled owner walk retains genuine ancestor config absences and refuses a positive external owner',t=>{
