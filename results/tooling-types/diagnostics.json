@@ -137,7 +137,7 @@
       "counts": {
         "runtime/web-platform/test/wpt/harness.ts": 38
       },
-      "source": "sha256:913234f86f58aa29efb2e8138705e3452755724dfe8d701b3f2d5b282ee1bb51"
+      "source": "sha256:b153f3293fc8f970921e1840ad05841ef36dece8b30b89b04f34315c18081230"
     },
     "tooling/conformance/ecmascript/icu-compiled/tsconfig.c.json": {
       "modules": [
@@ -778,6 +778,9 @@
         "tooling/gate/case-spawn.ts",
         "tooling/gate/census-phase-summary.test.ts",
         "tooling/gate/census-phase-summary.ts",
+        "tooling/gate/cgroup-admission.test.ts",
+        "tooling/gate/cgroup-files-fixture.ts",
+        "tooling/gate/cgroup-read-audit.ts",
         "tooling/gate/change-paths.ts",
         "tooling/gate/check-report-consumers.test.ts",
         "tooling/gate/check-report-outcomes.test.ts",
@@ -838,6 +841,9 @@
         "tooling/gate/file-input-observer-session.ts",
         "tooling/gate/file-input-observer.test.ts",
         "tooling/gate/file-input-observer.ts",
+        "tooling/gate/fixed-members-fixture.ts",
+        "tooling/gate/fixed-members-probe.ts",
+        "tooling/gate/fixed-members.test.ts",
         "tooling/gate/frontend-cap.test.ts",
         "tooling/gate/full-gate-census.test.ts",
         "tooling/gate/full-gate-census.ts",
@@ -1045,6 +1051,7 @@
         "tooling/gate/step-time.ts",
         "tooling/gate/test-artifacts.test.ts",
         "tooling/gate/test-artifacts.ts",
+        "tooling/gate/test-cgroup-members.ts",
         "tooling/gate/test-environment.test.ts",
         "tooling/gate/test-environment.ts",
         "tooling/gate/test-fixture-copies.test.ts",
@@ -1480,7 +1487,7 @@
         "tooling/gate/owed.test.mjs": 83,
         "tooling/gate/precise-changes.test.ts": 1,
         "tooling/gate/registry-inputs.test.ts": 1,
-        "tooling/gate/run.mjs": 212,
+        "tooling/gate/run.mjs": 210,
         "tooling/gate/step-bound.ts": 1,
         "tooling/gate/step-result.test.ts": 1,
         "tooling/gate/step-scheduling.test.ts": 1,
@@ -1512,7 +1519,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:3a966b31074f0bf30048f7e697f1f087b2a548d29e8d6499bebaa2b867a8d40a"
+      "source": "sha256:0a1d752b81aa182887c8ebbd9435d96eb7d709c54b90244b8642aefc6648bf14"
     }
   }
 }

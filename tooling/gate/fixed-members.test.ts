@@ -134,22 +134,23 @@ test('future-version and malformed creation receipts refuse every memory observa
   const env=fixtureEnvironment(t,{...memory,NTS_GATE_RUN_DIR:join(root,'run')});
   const scopes=new GateScopes(env,{rank:'agent',ownerFile:receipt});
   const original=readFileSync(receipt,'utf8');
-  t.after(()=>{writeFileSync(receipt,original);scopes.close();});
-  const host=hostObservations(env),ref=host.acquireCgroup(scopes.group);
-  for(const [name,text,reason,cause]of [
-    ['future version',JSON.stringify({...JSON.parse(original),version:2}),/creation receipt is invalid:.*future state version 2/,'FutureStateVersionError'],
-    ['malformed','{',/creation receipt is unreadable:.*SyntaxError/,'SyntaxError'],
-  ] as const){
-    writeFileSync(receipt,text);
-    for(const sampler of [host,hostObservations(env)]){
-      for(const [observation,read]of [
-        ['members',()=>sampler.cgroupMembers(ref.path,ref.inode)],
-        ['charge',()=>sampler.cgroupCharge(ref.path,ref.inode)],
-        ['peak',()=>sampler.cgroupMemoryPeak(ref.path,ref.inode)],
-      ] as const){
-        assert.throws(read,error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)
-          &&reason.test(error.message)&&error.cause instanceof Error&&error.cause.name===cause,name+' '+observation);
+  try{
+    const host=hostObservations(env),ref=host.acquireCgroup(scopes.group);
+    for(const [name,text,reason,cause]of [
+      ['future version',JSON.stringify({...JSON.parse(original),version:2}),/creation receipt is invalid:.*future state version 2/,'FutureStateVersionError'],
+      ['malformed','{',/creation receipt is unreadable:.*SyntaxError/,'SyntaxError'],
+    ] as const){
+      writeFileSync(receipt,text);
+      for(const sampler of [host,hostObservations(env)]){
+        for(const [observation,read]of [
+          ['members',()=>sampler.cgroupMembers(ref.path,ref.inode)],
+          ['charge',()=>sampler.cgroupCharge(ref.path,ref.inode)],
+          ['peak',()=>sampler.cgroupMemoryPeak(ref.path,ref.inode)],
+        ] as const){
+          assert.throws(read,error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)
+            &&reason.test(error.message)&&error.cause instanceof Error&&error.cause.name===cause,name+' '+observation);
+        }
       }
     }
-  }
+  }finally{writeFileSync(receipt,original);scopes.close();}
 });

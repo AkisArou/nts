@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {dirname,join} from 'node:path';
 import {fixture} from './run-fixture.ts';
 import {runLanding,launcherEnvironment} from './run.ts';
 import {candidateCommandAsync} from './candidate-environment.ts';
@@ -102,7 +102,12 @@ test('withdrawal at the memory retry boundary starts no replacement attempt',asy
 });
 
 test('a real runner retains a failed scope certificate and recovers through the repeated durable withdrawal',async t=>{
-  const f=fixture(t),options=f.options(['build','outcomes']);f.control('outcomes','stuck');
+  const f=fixture(t);
+  // This kernel control corrupts GateScopes' own receipt. Live resident
+  // observation lets that owner certify its real drain, without the fixed
+  // packet's receipt rule rejecting the same corruption during sampling.
+  ownMemory(dirname(f.memory.NTS_MEMINFO),{resident:{kind:'live'}});
+  const options=f.options(['build','outcomes']);f.control('outcomes','stuck');
   const queue=new Queue(join(f.own,'queue')),entry=queue.submit(options.commit);queue.take();
   const watch=new WithdrawalWatch(queue),cancellation=watch.entry(entry.id),reasons:string[]=[];
   const owner=join(f.tree,'target/gate-scope-owner.json');let original:string|undefined,finished=false;
