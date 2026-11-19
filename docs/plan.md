@@ -71,10 +71,15 @@ priority even when a foundation group owns the affected representation.
 1. **Instruments before mechanisms:** the memory census (M-1) and the memory
    rows; the Are We Fast Yet suite of fourteen against node, Bun, C++ and
    Java; the Computer Language Benchmarks Game, Octane and ARES-6; startup,
-   size and peak-RSS rows (P-2); a differential program fuzzer (Q-6).
-2. **Memory stages 1 and 2** ([memory](foundations/memory.md)), beside
-   **native Unicode stage 1** ([unicode](foundations/unicode.md)). The JVM's
-   tables follow the managed-backend phase.
+   size and peak-RSS rows (P-2); a differential program fuzzer (Q-6). Each
+   mechanism waits only for the instruments its rows need.
+2. **Memory stages 1 and 2** ([memory](foundations/memory.md)), as soon as
+   their own instruments exist: the memory rows and instruction counts for
+   stage 1, the memory census for stage 2. They run beside the remaining
+   instruments (size and peak-RSS rows, per-site run-time counts, the
+   differential fuzzer) and beside **native Unicode stage 1**
+   ([unicode](foundations/unicode.md)). The JVM's tables follow the
+   managed-backend phase.
 3. **Typed containers:** `Map` and `Set` stored by the proven layout of their
    keys and values ([objects](foundations/objects.md)).
 4. **Then** memory stage 3, Unicode stages 2–3, strings stages D and E
