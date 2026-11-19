@@ -123,6 +123,7 @@ import {workerCapBytes} from "../census/worker-memory.ts";
 import {defaultSlots, frontendBudget} from "./budget.ts";
 import {fixedReservation} from "./reservation.ts";
 import {STEPS, stepTableProblem} from "./step-table.mjs";
+import {programOracleConsumers} from "./program-oracle-consumers.ts";
 import {finishRunTemporary} from "./run-temporary.ts";
 import {gateEnvironment,sealOracleRun,oracleStepEnvironment,reportEnvironment,nodeHeapOomReason} from './canonical-environment.ts';
 import {assignOwnedValues} from './environment-values.ts';
@@ -145,6 +146,8 @@ process.chdir(ROOT);
 // `checkTable` fails the run if the two disagree in either direction.
 // ---------------------------------------------------------------------------
 const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
+// The steps whose row needs `program-oracles`: they get the producer's reference.
+const PROGRAM_ORACLE_CONSUMERS = programOracleConsumers(STEPS);
 
 // ---------------------------------------------------------------------------
 // Environment and budgets.
@@ -310,7 +313,7 @@ function requested() {
     );
   }
   const set = new Set(want);
-  if(want.some(name=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(name)))set.add('program-oracles');
+  if(want.some(name=>PROGRAM_ORACLE_CONSUMERS.includes(name)))set.add('program-oracles');
   if(want.some(name=>['typescript-c','typescript-llvm','typescript-jvm'].includes(name)))set.add('typescript-oracles');
   return STEPS.map((s) => s.name).filter((n) => set.has(n));
 }
@@ -389,7 +392,7 @@ function stepEnv(step, slots, scope) {
     if(results.get('typescript-oracles')?.verdict!=='PASS'||!typeScriptOracleReference)throw new ToolingInstrumentError('tooling-setup','TypeScript oracle reference prerequisite did not pass');
     owned.NTS_TYPESCRIPT_ORACLE=JSON.stringify(typeScriptOracleReference);
   }
-  if(['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(step.name)){
+  if(PROGRAM_ORACLE_CONSUMERS.includes(step.name)){
     if(results.get('program-oracles')?.verdict!=='PASS'||!programOracleReference)throw new ToolingInstrumentError('tooling-setup','program oracle reference prerequisite did not pass');
     owned.NTS_PROGRAM_ORACLE=JSON.stringify(programOracleReference);
   }

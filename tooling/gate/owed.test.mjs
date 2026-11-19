@@ -17,6 +17,8 @@ import { fileURLToPath } from "node:url";
 import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, owed, parseNameStatus, selfTest, stepInputs, targetFiles, WIDE } from "./owed.mjs";
 import * as policy from "./owed.mjs";
 import {preciseChange} from "./precise-changes.ts";
+import {STEPS} from "./step-table.mjs";
+import {programOracleConsumers} from "./program-oracle-consumers.ts";
 import {auditTestHost} from "./test-host-audit.ts";
 import {spawnTest} from './test-wait.ts';
 import {testScratch} from './test-scratch.ts';
@@ -499,7 +501,10 @@ test('module data strings add no reach and cannot place unknown paths', t => {
 });
 
 test('each program consumer owes one shared producer before native execution',()=>{
-  for(const step of ['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree']){
+  // The consumers are the step rows that need the producer, listed nowhere else.
+  const consumers=programOracleConsumers(STEPS);
+  assert.deepEqual([...consumers].sort(),['bench-agree','examples','jvm','launch-agree','llvm','llvm-rc','outcomes','rc']);
+  for(const step of consumers){
     assert.deepEqual(gateSteps([{precise:true,steps:[step]}]),['program-oracles',step]);
     assert.deepEqual(gateSteps([{precise:true,steps:['program-oracles',step]}]),['program-oracles',step]);
   }

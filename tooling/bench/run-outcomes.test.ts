@@ -45,6 +45,14 @@ test("a check's outcome is the row: agreement, a refusal, a loud defect or a wro
   assert.throws(() => benchmarkRun(check("not measured")), /not a recordable run/);
 });
 
+test("a whole program's decline is the same row whichever checkout ran it", () => {
+  const check = (root: string) => ({ outcome: "backend declined", first: "first line", report: { refusals: [], disagreements: [], aborts: [],
+    error: { message: `a whole program is compared whole, and lowering changed what its module evaluation runs at ${root}/benchmarks/cases/startup-builtins/case.ts:8:14, ${root}/benchmarks/cases/startup-builtins/case.ts:11:1, refused as listed above` } } }) as unknown as DecodedCheck;
+  const row = benchmarkRun(check("/home/someone/.cache/nts-pool/7"));
+  assert.deepEqual(row, benchmarkRun(check("/srv/full-check/tree")));
+  assert.deepEqual(row, { kind: "refused", diagnostic: "a whole program is compared whole, and lowering changed what its module evaluation runs at <path>:8:14, <path>:11:1, refused as listed above" });
+});
+
 test("the shared ratchet: a loud defect that persists reproduces; better is accepted; worse or different is red", () => {
   assert.deepEqual(compareBenchmarkRun(aborted, aborted), { word: "reproduces", ok: true, loud: false });
   assert.equal(compareBenchmarkRun(aborted, { kind: "agrees" }).word, "FIXED");

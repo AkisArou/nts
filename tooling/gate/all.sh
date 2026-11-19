@@ -2744,6 +2744,7 @@ step "jvm" jvm
 step "dex" dex
 step "on-device" on_device
 step "bench-agree" ./tooling/gate/bench-agree.sh
+step "launch-agree" ./tooling/gate/launch-agree.sh
 step "program-oracles" program_oracles
 step "examples" ./tooling/gate/gate.sh
 step "rc" ./tooling/gate/rc.sh

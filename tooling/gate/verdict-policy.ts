@@ -11,6 +11,19 @@ export const PROGRAM_DISAGREEMENTS: Readonly<Record<string, string>> = Object.fr
   "a-quiet-getter-beside-a-raising-one-in-an-access-family-control": "the JVM declines it, as it does on main (NTS4001: interface field accessor dispatch through getters requires JVM stateful interfaces); C, LLVM and C with rc agree",
 });
 
+/** The refusal a listed launch row must still decline with: its diagnostic's code and the start of its message, and the task that removes it. */
+export type LaunchDecline = { readonly code: string; readonly refusal: string; readonly task: number };
+
+/**
+ * Launch rows whose whole program is refused by name, kept visible until the
+ * task named beside each lands (`launch-agree`, tooling/differential/launch-agree.ts).
+ * Shrink only: a listed case must still decline with exactly that refusal, and
+ * one that agrees is red until its entry goes.
+ */
+export const LAUNCH_DECLINES: Readonly<Record<string, LaunchDecline>> = Object.freeze({
+  "startup-builtins": Object.freeze({ code: "NTS1001", refusal: "`JSON.stringify` of an erased value", task: 886 }),
+});
+
 /**
  * Programs that run on another platform. An Apple or Windows interop project
  * builds on this host and runs on a Mac or a Windows machine; with none

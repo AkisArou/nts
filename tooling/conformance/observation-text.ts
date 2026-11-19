@@ -25,6 +25,15 @@ export function stableRuntimeAbortOutput(output: string): string {
   return host[1] + (host[2] === undefined ? "" : ": " + normalizeGeneratedNumbers(host[2]));
 }
 
+/** A diagnostic's absolute source paths name the checkout that ran it, not an
+ * observation: every location keeps its line and column, under `<path>`. A
+ * whole program's decline names each place lowering cut module evaluation
+ * this way (tooling/differential/src/whole_program.rs).
+ */
+export function stableSourceLocations(text: string): string {
+  return text.replace(/(?:\/|[A-Za-z]:[\\/])[^\s"'<>,]+(?=:\d+:\d+)/g, "<path>");
+}
+
 /** Refusal paths name the materialized scratch project, not an observation.
  * A validator's own `at`, line and column fields are deliberately retained.
  */

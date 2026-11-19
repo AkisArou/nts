@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { mergeLineRecord, parseLineRecord, serializeLineRecord, type LineRecordFormat } from "../census/line-record.ts";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
-import { normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
+import { normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput, stableSourceLocations } from "../conformance/observation-text.ts";
 import { inventory } from "../records/pending.ts";
 import type { DecodedCheck } from "../differential/check-report-types.ts";
 
@@ -97,7 +97,7 @@ export function mergeRunRecord(contents: string, updates: ReadonlyMap<string, Be
 export function benchmarkRun(record: DecodedCheck): BenchmarkRun | null {
   const report = record.report, refusal = (stage: string) => report?.refusals.find(one => one.stage === stage);
   const diagnostic = (one: { code: string; message: string } | undefined, otherwise: string) =>
-    normalizeGeneratedNumbers(stableCheckText(one ? `${one.code} ${one.message}` : otherwise));
+    normalizeGeneratedNumbers(stableSourceLocations(stableCheckText(one ? `${one.code} ${one.message}` : otherwise)));
   switch (record.outcome) {
     case "pending": case "oracle budget exceeded": return null;
     case "agrees": case "agrees on what it compared": return { kind: "agrees" };

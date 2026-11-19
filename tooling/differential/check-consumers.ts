@@ -18,11 +18,13 @@ import type {CheckConsumer, DecodedCheck} from "./check-report-types.ts";
 import {pendingContradiction, recordPath} from "./oracle-records.ts";
 import {pendingLine} from "../records/pending.ts";
 import {readFileSync} from "node:fs";
-import {PROGRAM_DISAGREEMENTS} from "../gate/verdict-policy.ts";
+import {LAUNCH_DECLINES,PROGRAM_DISAGREEMENTS} from "../gate/verdict-policy.ts";
+import {launchMarkerOf} from "../bench/launch-marker.ts";
+import {declineText,launchColumns,launchesAccounted,launchFailure} from "./launch-agree.ts";
 import {parseRunRecord,pendingRuns,runsRecord,type RunBackend} from "../bench/run-outcomes.ts";
 import {finishBenchmarks,type RunPlan} from "../bench/run-recording.ts";
 
-type Mode = "programs" | "rc" | "benchmarks" | "compiled-web";
+type Mode = "programs" | "rc" | "benchmarks" | "launches" | "compiled-web";
 type Entry = {name: string; project: string; consumer: CheckConsumer; backend?: string; fixture?: string};
 type Completed = {entry: Entry; record: DecodedCheck; disposition: number};
 type Incomplete = {entry: Entry; error: unknown};
@@ -36,6 +38,10 @@ function entries(mode: Mode, only: string | undefined, scratch: string): Entry[]
     ?openProgramOracleResults(JSON.parse(process.env.NTS_PROGRAM_ORACLE),oracleRecipeIdentity()):undefined;
   if (mode === "compiled-web") return ["jvm", "c", "llvm"].map(backend => ({name: backend, backend,
     project: join(COMPILED_WEB,"tsconfig.json"), consumer: "program"}));
+  // Each launch row's whole program on every backend: the row, as its marker's
+  // owner reads it, is the case; its column, the backend.
+  if (mode === "launches") return launchColumns(entries("benchmarks", only, scratch), only,
+    entry => launchMarkerOf(ROOT, join(entry.fixture!, "case.ts")) !== null);
   const benchmarks = mode === "benchmarks", area = benchmarks ? BENCHMARKS : PROGRAMS;
   const result: Entry[] = [];
   for (const directory of readdirSync(join(ROOT, area), {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -59,6 +65,7 @@ function entries(mode: Mode, only: string | undefined, scratch: string): Entry[]
 
 function completedFailure(row: Completed, mode: Mode): boolean {
   // A compiled-axis probe requires an actual comparison in every column.
+  if (mode === "launches") return launchFailure(row) !== undefined;
   return row.disposition === 1 || (mode === "compiled-web" && row.disposition !== 0);
 }
 
@@ -77,6 +84,7 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
   for (const row of failed) {
     const timeout = row.record.timeout;
     if (timeout) { console.log(`TIMEOUT  ${row.entry.name} (${timeout.stage}): ${timeout.reason}`); continue; }
+    if (mode === "launches") { console.log(`DIS  ${row.entry.name} [${row.entry.backend}]: ${launchFailure(row)}`); for (const answer of row.record.answers) console.log(answer); continue; }
     console.log(`DIS  ${row.entry.name}: ${row.record.first}`);
     for (const answer of row.record.answers) console.log(answer);
     const reason = namedDisagreement(row, mode);
@@ -86,6 +94,10 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
   for (const row of incomplete) console.log(`${row.error instanceof CaseBudgetError?"ORACLE BUDGET":"NOT MEASURED"} ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
   if (mode === "compiled-web") {
     console.log(`  ${agreed} of ${completed.length} compiled Web-platform columns compared and agreed`);
+  } else if (mode === "launches") {
+    console.log(`  ${agreed} of ${completed.length} launch-row columns compared whole and agreed with node`);
+    for (const row of completed.filter(row => LAUNCH_DECLINES[row.entry.name] !== undefined && !completedFailure(row, mode) && row.disposition !== 4))
+      console.log(`  refused by name, as listed: ${row.entry.name} [${row.entry.backend}]: ${declineText(LAUNCH_DECLINES[row.entry.name]!)}`);
   } else {
     console.log(mode === "rc" ? `${agreed} of ${agreed + failed.length} pass under reference counting`
       : `${agreed} of ${agreed + failed.length} agree with node`);
@@ -143,7 +155,10 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
   }
   if (failures > 0) return 1;
   const compared = completed.filter(row => (row.disposition === 0 && row.entry.consumer !== "refusal") || namedDisagreement(row, mode)).length;
-  if (compared === 0) { console.log("  no example was compared, which is not agreement"); return 1; }
+  // A launch row with no record yet is compared once the full check records
+  // it; a listed one is refused by name. Neither is a run that compared nothing.
+  const accounted = mode === "launches" && launchesAccounted(completed);
+  if (compared === 0 && !accounted) { console.log("  no example was compared, which is not agreement"); return 1; }
   return 0;
 }
 
@@ -172,9 +187,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const recordPending = mode === "benchmarks" && rest[0] === "--record-pending";
   if (recordPending) rest.shift();
   const [only, ...extra] = rest;
-  const selected = (["programs", "rc", "benchmarks", "compiled-web"] as const).find(candidate => candidate === mode);
+  const selected = (["programs", "rc", "benchmarks", "launches", "compiled-web"] as const).find(candidate => candidate === mode);
   if (!selected || extra.length || (recordPending && only)) {
-    process.exitCode = reportCheckFailure(new Error("usage: check-consumers.ts programs|rc|compiled-web [fixture] | benchmarks [--record-pending | fixture]"));
+    process.exitCode = reportCheckFailure(new Error("usage: check-consumers.ts programs|rc|launches|compiled-web [fixture] | benchmarks [--record-pending | fixture]"));
   } else {
     await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true,owned:oracleCommandOptions(process.env,{NTS_BACKEND:'backend',NTS_BIN:'text',NTS_PROGRAM_ORACLE:'text'})});
     process.exitCode = await runBatch(selected, only, recordPending);

@@ -87,6 +87,8 @@ import { selectRange, SelectionInfrastructureError, selectionInfrastructure, ste
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
+import { STEPS } from "./step-table.mjs";
+import { programOracleConsumers } from "./program-oracle-consumers.ts";
 import { moduleGraph } from "./module-closure.ts";
 import {readerObservationDependency,readerObservationIndex,readerDependencyIndex} from './reader-observations.ts';
 import {removedProjectMatches} from './project-discovery.ts';
@@ -321,6 +323,8 @@ export const LANDING = {
   dex: { form: "after" },
   "on-device": { form: "after" },
   "bench-agree": { form: "after" },
+  // The launch rows' whole programs on every backend: a few small programs.
+  "launch-agree": { form: "fixtures", corpora: ["the bench cases"] },
   addons: { form: "after" },
   divergence: { form: "after" },
   interop: { form: "after" },
@@ -378,6 +382,7 @@ export const ASKS = {
   "c-compiles": ["valid", "does every runtime project's emitted C compile, including web-platform"],
   types: ["valid", "is the snapshot's type table consistent"],
   "bench-agree": ["answers", "does every backend build and agree on the benchmarks"],
+  "launch-agree": ["answers", "does each launch row's whole program print what node prints and end as node ends, on C, LLVM and the JVM"],
   memory: ["answers", "does counting leak or free twice, measured by live objects"],
   "example-refusals": ["valid", "is every example's recorded refusal row still exactly what lowering prints"],
   blockers: ["valid", "does every blocker still refuse with its `// expect:` line"],
@@ -943,7 +948,7 @@ export const RULES = [
     name: "a benchmark's recorded oracle population",
     wide: true,
     when: p => /^results\/oracle-counts\/benchmarks\/cases\/[^/]+\.json$/.test(p) || p === "results/oracle-counts/_generator.json",
-    steps: ["bench-agree"],
+    steps: ["bench-agree", "launch-agree"],
     arms: [],
   },
   {
@@ -1518,7 +1523,7 @@ const CORPORA = [
   { name: "the blockers", member: /^tests\/refusals\/[^/]+\//, dirs: () => kids("tests/refusals"), steps: ["blockers", "integrity"] },
   { name: "the outcomes", member: /^tests\/outcomes\/[^/]+\//, dirs: () => kids("tests/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
   { name: "the runtime modules", wide: true, member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "types", "jvm-verifies", "divergence"] },
-  { name: "the bench cases", wide: true, member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "dex", "expect-ir"] },
+  { name: "the bench cases", wide: true, member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "launch-agree", "dex", "expect-ir"] },
   { name: "the memory cases", wide: true, member: /^tests\/memory\/[^/]+\//, dirs: () => kids("tests/memory"), steps: ["memory"] },
 ];
 function kids(dir) {
@@ -2307,8 +2312,9 @@ export function interopOwed(rules) {
 
 /** A backend cannot run without this run's measured reference population. */
 export function withTypeScriptOracles(steps) {
-  if(steps.some(step=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(step))&&!steps.includes('program-oracles')){
-    steps=[...steps];steps.splice(steps.findIndex(step=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(step)),0,'program-oracles');
+  const consumers=programOracleConsumers(STEPS);
+  if(steps.some(step=>consumers.includes(step))&&!steps.includes('program-oracles')){
+    steps=[...steps];steps.splice(steps.findIndex(step=>consumers.includes(step)),0,'program-oracles');
   }
   if(!steps.some(step=>["typescript-c","typescript-llvm","typescript-jvm"].includes(step))||steps.includes("typescript-oracles"))return steps;
   const result=[...steps];

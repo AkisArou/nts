@@ -96,7 +96,11 @@ marker is an error. The `startup` group's rows are launch-to-exit rows.
   throughput rows. That checksum holds the executable `nts build` ships; the
   case's `case.ts` is also a whole program to the differential, recorded as a
   `program` row and compared whole with node by `nts check`
-  ([cli](../../docs/reference/cli.md#nts-check)). A non-zero exit or signal is `ABORTED`, a launch past its
+  ([cli](../../docs/reference/cli.md#nts-check)), on C, LLVM and the JVM, by
+  the gate's `launch-agree` step at every landing that touches a case. A row
+  refused by name stays listed in `LAUNCH_DECLINES`
+  (`tooling/gate/verdict-policy.ts`), with the refusal it must still decline
+  with, until its task lands. A non-zero exit or signal is `ABORTED`, a launch past its
   bound `TIMED_OUT`, launches of one column that print different output
   `INVALID`. A record reader derives the value, spread and checksum again from
   the launches; a missing, short or inconsistent launch list is refused.
