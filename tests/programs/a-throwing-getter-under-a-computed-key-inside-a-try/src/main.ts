@@ -1,6 +1,6 @@
 // A throwing accessor under a computed key (`get [kV]`, `set [kW]`), reached
-// inside a `try` one call below, plainly and as a throwing override of a quiet
-// base getter read through the base.
+// inside a `try` one call below: plainly, as a throwing override of a quiet base
+// getter read through the base, and through a type parameter bounded by the class.
 //
 // The throw analysis found an access's accessor through the symbol of the
 // access's last child, which for `r[kV]` is the key expression: its symbol is
@@ -8,9 +8,12 @@
 // read as one that cannot raise. Lowering resolves the same access by receiver
 // type and key, and called it with no raising copy: on #843's gate the program
 // printed 0, 10, 20 and then ended with "uncaught RangeError: big" where node
-// answers -1, and the control agreed. Main is wrong on all three exports
-// here, and on the control's `override` too: a throwing override read through a
-// quiet base is #843's other fix. Found by the round-3 review of #843.
+// answers -1, and the control agreed. Through `T extends Box` the receiver's
+// type is the parameter, which has no record of the key, and the same fallback
+// answered until the lookup read a parameter at its bound. Main is wrong on all
+// four exports here, and on the control's `override` too: a throwing override
+// read through a quiet base is #843's other fix. Found by the round-3 and
+// round-4 reviews of #843.
 //
 // The one-difference control is
 // programs/a-throwing-getter-under-a-computed-key-inside-a-try-control: the
@@ -77,6 +80,10 @@ function readBase(r: Base): number {
   return r[kV];
 }
 
+function readBounded<T extends Box>(r: T): number {
+  return r[kV];
+}
+
 function write(r: Sink, x: number): number {
   r[kW] = x;
   return r.s;
@@ -100,4 +107,11 @@ export function override(n: number): number {
 export function setter(n: number): number {
   const r = new Sink();
   return attempt(() => write(r, n & 7));
+}
+
+// The same getter read through a type parameter bounded by its class, which the
+// analysis of `readBounded`'s one body answers for at the bound.
+export function bounded(n: number): number {
+  const r = new Box(n & 7);
+  return attempt(() => readBounded(r));
 }

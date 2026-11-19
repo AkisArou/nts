@@ -836,6 +836,47 @@ impl FuncBuilder<'_> {
         self.snapshot.polymorphic_this_constraint(ty).unwrap_or(ty)
     }
 
+    /// The object types a value of `ty` may be, for a question **every one of them**
+    /// must answer, such as "which accessors can this access run".
+    ///
+    /// A type parameter is read at its constraint, the polymorphic `this` included
+    /// ([`Self::class_behind`]'s hop), a union at each arm and an intersection at each
+    /// member. The constraint is what lets one analysis of a generic body speak for
+    /// every copy lowering makes of it: `read<T extends Box>`'s copy for a subclass
+    /// reaches the subclass's override, which the override edges answer for from
+    /// `Box`'s. Anything else (a primitive, an array, an unconstrained parameter)
+    /// contributes nothing, and an empty answer means the type has no say.
+    ///
+    /// The walk is bounded, as `receivers::through_a_constraint`'s loop is: a cyclic
+    /// constraint is an error the checker has already reported.
+    pub(super) fn object_types_a_value_may_be(&self, ty: TypeId) -> Vec<TypeId> {
+        let mut objects = Vec::new();
+        let mut seen = rustc_hash::FxHashSet::default();
+        let mut pending = vec![ty];
+        while let Some(at) = pending.pop() {
+            if seen.len() >= 64 || !seen.insert(at) {
+                continue;
+            }
+            match self
+                .snapshot
+                .types
+                .get(at.0 as usize)
+                .map(|record| &record.kind)
+            {
+                Some(TypeKind::TypeParameter {
+                    constraint: Some(constraint),
+                    ..
+                }) => pending.push(*constraint),
+                Some(TypeKind::Union(members) | TypeKind::Intersection(members)) => {
+                    pending.extend(members.iter().rev());
+                }
+                Some(TypeKind::Object { .. }) => objects.push(at),
+                _ => {}
+            }
+        }
+        objects
+    }
+
     /// Whether a type is a call signature rather than something with fields.
     pub(super) fn is_a_signature(&self, ty: TypeId) -> bool {
         self.snapshot

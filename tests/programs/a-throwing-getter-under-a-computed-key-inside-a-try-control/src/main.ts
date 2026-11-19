@@ -61,6 +61,10 @@ function readBase(r: Base): number {
   return r.v;
 }
 
+function readBounded<T extends Box>(r: T): number {
+  return r.v;
+}
+
 function write(r: Sink, x: number): number {
   r.w = x;
   return r.s;
@@ -84,4 +88,11 @@ export function override(n: number): number {
 export function setter(n: number): number {
   const r = new Sink();
   return attempt(() => write(r, n & 7));
+}
+
+// The same getter read through a type parameter bounded by its class, which the
+// analysis of `readBounded`'s one body answers for at the bound.
+export function bounded(n: number): number {
+  const r = new Box(n & 7);
+  return attempt(() => readBounded(r));
 }

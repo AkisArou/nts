@@ -421,8 +421,7 @@ pub(super) fn walk_one_declaration(
         // the other of the two walks that answer "what can raise here". One
         // fact, two walks, and they disagreed until a program that compiles
         // was run by hand.
-        if probe.reads_an_accessor(at) {
-            let symbols = probe.accessor_symbols_run_by(at);
+        if let Some(symbols) = probe.accessor_symbols_run_by(at) {
             if symbols.is_empty() {
                 reached.push(Reached::Elsewhere);
             }
@@ -1059,8 +1058,7 @@ pub(super) fn a_call_that_can_raise(
     // first child is, through [`FuncBuilder::accessor_symbols_run_by`]. See
     // [`FuncBuilder::an_accessor_that_can_raise`] -- the same question, asked where
     // the builder has the set rather than the caller.
-    if probe.reads_an_accessor(call) {
-        let symbols = probe.accessor_symbols_run_by(call);
+    if let Some(symbols) = probe.accessor_symbols_run_by(call) {
         return symbols.is_empty() || symbols.iter().any(|symbol| throwing.any.contains(symbol));
     }
     // `f.call(r)` can raise what `f` can ([`FuncBuilder::through_call_or_apply`]).
