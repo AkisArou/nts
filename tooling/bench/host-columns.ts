@@ -447,12 +447,18 @@ async function buildNts(root: string, nts: { binary: string; sha256: string; ver
   return { binary: built[0]!, recipe: { ...recipe, build: build as unknown as Json, artifactSha256: sha256(built[0]!) } };
 }
 
-/** The nts that builds launch rows: beside nts-bench, and not linked before the commit it measures. */
+/** What the nts binary is built from: a change here relinks it. */
+export const NTS_SOURCES = ["compiler", "runtime", "build", "tooling/cli", "Cargo.toml", "Cargo.lock"] as const;
+/**
+ * The nts that builds launch rows: beside nts-bench, and not linked before the
+ * last commit, up to the measured one, that changed what it is built from.
+ */
 export function ntsIdentity(root: string, binary: string, commit: string): { binary: string; sha256: string; version: string } {
   if (!existsSync(binary)) throw new ToolingInstrumentError("tooling-setup", `launch rows build with ${binary}, which does not exist; build the workspace with cargo build --release`);
-  const committed = Number(execFileSync("git", gitArguments(["log", "-1", "--format=%ct", commit]), { cwd: root, encoding: "utf8" }).trim());
+  const changed = execFileSync("git", gitArguments(["log", "-1", "--format=%H %ct", commit, "--", ...NTS_SOURCES]), { cwd: root, encoding: "utf8" }).trim();
+  const [source, committed] = changed.split(" ");
   const linked = Math.floor(statSync(binary).mtimeMs / 1000);
-  if (!(linked >= committed)) throw new ToolingInstrumentError("tooling-setup", `${binary} was linked before ${commit.slice(0, 12)}; rebuild it with cargo build --release`);
+  if (!(linked >= Number(committed))) throw new ToolingInstrumentError("tooling-setup", `${binary} was linked before ${source?.slice(0, 12)}, the last change to its sources at ${commit.slice(0, 12)}; rebuild it with cargo build --release`);
   const version = spawnSync(binary, ["version"], { encoding: "utf8" });
   if (version.status !== 0) throw new ToolingInstrumentError("tooling-setup", `${binary} version failed: ${version.stderr}`);
   return { binary, sha256: sha256(binary), version: version.stdout.trim() };

@@ -5,7 +5,11 @@ import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { parse } from "acorn";
 import { typedTimer } from "./typed-timer.ts";
-import { parseMeasurement, buildCommand, buildFailure, coldStartup, launchCpu } from "./host-columns.ts";
+import { parseMeasurement, buildCommand, buildFailure, coldStartup, launchCpu, ntsIdentity } from "./host-columns.ts";
+import { copyFileSync, utimesSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import { gitArguments } from "../gate/git-arguments/main.ts";
 import { buildLauncher } from "./launcher.ts";
 import { LAUNCH_PROTOCOL } from "./launch-cell.ts";
 import { join } from "node:path";
@@ -107,4 +111,16 @@ test("the cold-startup arm is one launch of the launch timer, under its named pr
   assert.equal((await coldStartup(cold, "/bin/sh", [script], "5000000000000000", "case-bun") as Record<string, unknown>).status, "INVALID");
   writeFileSync(script, "exit 1\n");
   assert.equal((await coldStartup(cold, "/bin/sh", [script], "4000000000000000", "case-aot") as Record<string, unknown>).status, "ABORTED");
+});
+
+test("launch rows refuse an nts that is missing or linked before its sources' last change", t => {
+  const dir = testScratch(t, "nts-identity"), root = fileURLToPath(new URL("../..", import.meta.url));
+  const commit = execFileSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).trim();
+  const nts = join(dir, "nts");
+  assert.throws(() => ntsIdentity(root, nts, commit), /does not exist/);
+  copyFileSync("/bin/true", nts);
+  utimesSync(nts, new Date("2000-01-01T00:00:00Z"), new Date("2000-01-01T00:00:00Z"));
+  assert.throws(() => ntsIdentity(root, nts, commit), /linked before .* the last change to its sources/);
+  utimesSync(nts, new Date(), new Date());
+  assert.equal(ntsIdentity(root, nts, commit).binary, nts);
 });
