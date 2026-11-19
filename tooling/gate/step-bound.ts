@@ -102,7 +102,11 @@ const LIMIT_ORDER: readonly ProgressLimit[] = ["execution_s", "stall_s", "lifecy
  * excuse itself for ever. Given the run's step lifecycle, used time with no
  * step running counts towards `lifecycle_s` until the next step event: work
  * no step bounds -- setup, the release build, the time after the last step --
- * cannot spin unseen, and a build slowed by higher ranks is not held for it. `wall_s` alone counts everything.
+ * cannot spin unseen, and a build slowed by higher ranks is not held for it.
+ * cpu.pressure `some` also counts contention among the work's own tasks: a
+ * multi-threaded spinner outside steps that oversubscribes the CPUs it may
+ * use loses as much as it runs, accrues neither stall nor lifecycle time, and
+ * only a CPU bound holds it; a run whose CPU bound has no basis has none. `wall_s` alone counts everything.
  */
 export class ProgressBound {
   #start: number;

@@ -790,25 +790,35 @@ export function reservationPriority(priority: Priority, env: NodeJS.ProcessEnv =
  */
 function outrankedIn(dir: string, self: LedgerEntry): boolean {
   const admitted = liveReservations(dir), {priority} = reservationOrder(self, admitted);
-  return readEntries(dir, "waiting").some(entry => rank(reservationOrder(entry, admitted).priority) < rank(priority)
-    && entry.fits !== false && alive(entry.waiter) && alive(entry.owner));
+  return readEntries(dir, "waiting").some(entry => outranks(entry, admitted, priority));
 }
 
-/** A request of a group's own that waits in the ledger, and what is queued ahead of it. */
-export type LedgerWait = { id: string; what: string; priority: Priority; since: string;
-  /** The first live request queued ahead of it, or null when it waits only for room. */
+/** A live waiting request a job of `priority` yields to: one of higher priority that could fit were every admitted job to end. */
+function outranks(entry: LedgerEntry, admitted: ReadonlyMap<string, LedgerEntry>, priority: Priority): boolean {
+  return rank(reservationOrder(entry, admitted).priority) < rank(priority) && entry.fits !== false && alive(entry.waiter) && alive(entry.owner);
+}
+
+/** What a group of work waits for in the ledger: a request of its own, with what is queued ahead of it, or one it yields to. */
+export type LedgerWait = { kind: "memory" | "priority"; id: string; what: string; priority: Priority; since: string;
+  /** Of its own request, the first live request queued ahead of it that holds it back (one that could never fit holds nobody), or null when it waits only for room. */
   behind: { id: string; what: string; priority: Priority } | null };
 
 /**
- * The request of the work in cgroup `group` that waits in the ledger, as an
- * observer outside that work reads it (the full check's run bound,
+ * What the work in cgroup `group`, at `priority`, waits for in the ledger, as
+ * an observer outside that work reads it (the full check's run bound,
  * full-check/measure-command.ts), or null. A request is the group's own when
  * its waiter or owner runs in the group, its measure lies in it, or it grows
- * a reservation that does. Only such a wait excuses the work: being outranked
- * while it holds memory is no wait, for the request it yields to may wait on
- * that very memory.
+ * a reservation that does.
+ *
+ * `memory`: a request of its own waits, one that could fit were every
+ * admitted job to end; one that could not waits for memory nobody reserved,
+ * which nothing bounds, and excuses nothing. `priority`: it yields to the
+ * requests that outrank it (`outranks`), and none of them could fit even were
+ * the group's admitted reservations to end: they wait on other work's
+ * memory, which has its own bound. While one of them waits on the group's
+ * own memory, the group is no more excused than a hung holder would be.
  */
-export function ledgerWait(dir: string, group: string): LedgerWait | null {
+export function ledgerWait(dir: string, group: string, priority: Priority, env: NodeJS.ProcessEnv = process.env): LedgerWait | null {
   const admitted = liveReservations(dir);
   const waiting = readEntries(dir, "waiting").filter(entry => alive(entry.waiter) && alive(entry.owner))
     .map(entry => ({ entry, order: reservationOrder(entry, admitted) }))
@@ -816,11 +826,26 @@ export function ledgerWait(dir: string, group: string): LedgerWait | null {
   const inGroup = (entry: LedgerEntry) => (entry.measure.cgroup !== null && within(entry.measure.cgroup.path, group))
     || [entry.waiter.pid, entry.owner.pid].some(pid => { const own = cgroupOf(pid); return own !== null && within(own, group); });
   const ours = (entry: LedgerEntry) => inGroup(entry) || (entry.grows !== null && admitted.has(entry.grows) && inGroup(admitted.get(entry.grows)!));
-  const at = waiting.findIndex(({ entry }) => ours(entry));
-  if (at < 0) return null;
-  const { entry, order } = waiting[at]!, ahead = waiting.slice(0, at).find(({ entry }) => !ours(entry));
-  return { id: entry.id, what: entry.what, priority: order.priority, since: entry.since,
-    behind: ahead ? { id: ahead.entry.id, what: ahead.entry.what, priority: ahead.order.priority } : null };
+  const at = waiting.findIndex(({ entry }) => ours(entry) && entry.fits !== false);
+  if (at >= 0) {
+    const { entry, order } = waiting[at]!, ahead = waiting.slice(0, at).find(({ entry }) => !ours(entry) && entry.fits !== false);
+    return { kind: "memory", id: entry.id, what: entry.what, priority: order.priority, since: entry.since,
+      behind: ahead ? { id: ahead.entry.id, what: ahead.entry.what, priority: ahead.order.priority } : null };
+  }
+  const yields = waiting.filter(({ entry }) => !ours(entry) && outranks(entry, admitted, priority));
+  if (!yields.length) return null;
+  // What each request it yields to would have, were the group's admitted reservations to end.
+  const host = hostObservations(env), { availableBytes } = host.memory();
+  let table: Table | undefined;
+  const read = () => table ??= processTable();
+  const accounts = accountsOf(admitted, (entry, exclude) => measuredParts(entry, read, exclude, host, false), read, host);
+  const theirs = [...admitted.values()].filter(entry => inGroup(entry));
+  const freed = theirs.reduce((sum, entry) => sum + accounts.get(entry.id)!.used, 0);
+  const others = [...admitted.values()].filter(entry => !inGroup(entry))
+    .map(entry => ({ entry: { ...entry, ...reservationOrder(entry, admitted) }, ...accounts.get(entry.id)! }));
+  if (yields.some(({ entry }) => availableBytes + freed - pendingFor(others, entry) - SYSTEM_FLOOR_BYTES >= entry.bytes)) return null;
+  const { entry, order } = yields[0]!;
+  return { kind: "priority", id: entry.id, what: entry.what, priority: order.priority, since: entry.since, behind: null };
 }
 
 /**

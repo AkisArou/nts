@@ -4,17 +4,19 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // **The run is held when it stops progressing, never because it was slowed.**
 // The bound (step-bound.ts's ProgressBound) samples the run's slice every
 // second: its CPU (cpu.stat), the time its tasks were runnable while higher
-// ranks had the CPUs (cpu.pressure), its own requests waiting in the
-// machine's memory ledger (memory-ledger.ts's ledgerWait), and its runner's
-// step lifecycle (run-lifecycle.ts). Its own waits and CPU lost to other work
-// spend nothing; being outranked while it holds memory is no wait, for the
-// request it yields to may wait on that memory. The run is held when it has
+// ranks had the CPUs (cpu.pressure), its waits in the machine's memory ledger
+// (memory-ledger.ts's ledgerWait), and its runner's step lifecycle
+// (run-lifecycle.ts). Its ledger waits and CPU lost to other work spend
+// nothing. A wait is its own request, one that could fit were every admitted
+// job to end, or a yield to higher-ranked requests that wait on other work's
+// memory; a yield to one that waits on the run's own memory is no wait, nor is
+// a request that waits for memory nobody reserved. The run is held when it has
 // stalled -- neither run, been runnable nor waited -- for its stall bound;
 // when no step has run, started or finished for its lifecycle bound, outside
 // its waits and lost CPU, which catches a spinner no step bounds; or when it has used its
 // CPU bound, the backstop a slowed run cannot reach. There is no wall bound:
-// the only waits it excuses are its own requests, which end when the work
-// they wait on ends, and that work has its own bound. What it measured is kept
+// every wait it excuses ends when the admitted work it waits on ends, and
+// that work has its own bound. What it measured is kept
 // in the run folder while it runs (MEASUREMENT_PROGRESS), for
 // `service.ts --status`.
 import { spawn } from "node:child_process";
@@ -46,7 +48,7 @@ export type MeasurementProgress = Omit<ProgressState, "expired"> & {
   version: 1; writer: ProcessIdentity; live: boolean; updated_at: string; bounds: RunBounds;
   /** The run slice's cgroup. */
   group: string;
-  /** The run's own ledger request that waits, what is queued ahead of it, and since when this observer has seen it. */
+  /** The run's ledger wait: its own request and what is queued ahead of it, or the request it yields to; and since when this observer has seen it. */
   waiting: (LedgerWait & { observed_since: string }) | null;
   held: string | null;
 };
@@ -120,7 +122,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
   // The wait named now holds until the next sample. A ledger that cannot be
   // read excuses nothing.
   const wait = (): LedgerWait | null => {
-    try { const found = ledgerWait(ledger, group); ledgerFailure = undefined; return found; }
+    try { const found = ledgerWait(ledger, group, "full-check", process.env); ledgerFailure = undefined; return found; }
     catch (error) {
       const failure = `full check run bound cannot read the memory ledger: ${String(error)}`;
       if (failure !== ledgerFailure) console.error(failure);
@@ -136,9 +138,9 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
   };
   const sample = () => {
     const now = host.now(), found = wait();
-    state = bound.observe(now, found === null ? undefined : "memory", cpu(), steps());
+    state = bound.observe(now, found?.kind, cpu(), steps());
     waiting = found === null ? null
-      : waiting?.id === found.id && waiting.behind?.id === found.behind?.id ? waiting : { ...found, observed_since: new Date(host.wallNow()).toISOString() };
+      : waiting?.kind === found.kind && waiting.id === found.id && waiting.behind?.id === found.behind?.id ? waiting : { ...found, observed_since: new Date(host.wallNow()).toISOString() };
     if (state.expired) expire(runBoundReason(state, bounds));
     if (expired || now - written >= RECEIPT_MS) { receipt(!expired); written = now; }
   };

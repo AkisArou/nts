@@ -342,12 +342,16 @@ is spent by the same owner as a step's (`ProgressBound`). Every second it reads:
 - the run slice's CPU (`cpu.stat`);
 - the time its tasks were runnable while the CPUs ran other work
   (`cpu.pressure`);
-- its own requests waiting in the memory ledger (`ledgerWait`);
+- its waits in the memory ledger (`ledgerWait`);
 - its runner's step lifecycle ([`run-lifecycle.ts`](../tooling/gate/run-lifecycle.ts)).
 
-Its own waits and CPU lost to other work spend nothing. Being outranked while
-it holds memory is no wait: the request it yields to may wait on that very
-memory. IO and memory pressure are not progress. The run is held when any of
+Its ledger waits and CPU lost to other work spend nothing. A ledger wait is
+its own request that could fit were every admitted job to end, or a yield to
+higher-ranked requests that could not fit even were the run's own reservations
+to end, because they wait on other work's memory. A yield to a request that
+waits on the run's own memory is no wait: a hung holder would excuse itself
+for ever. Nor is a request that could never fit, which waits for memory nobody
+reserved. IO and memory pressure are not progress. The run is held when any of
 these is reached:
 
 - **Stall bound.** It has *stalled* (neither run, been runnable nor waited) for
@@ -363,12 +367,12 @@ these is reached:
   steps' baseline CPU. This is the backstop a slowed run cannot reach. A run
   with a step that has no baseline and no green run behind it has no CPU bound.
 
-There is no wall bound: the only waits it excuses are its own requests, which
-end when the work they wait on ends, and that work has its own bound. The run
+There is no wall bound: every wait it excuses ends when the admitted work it
+waits on ends, and that work has its own bound. The run
 folder's `measurement-progress.json` is kept up to date while the run lasts.
 `service.ts --status` shows from it what the run has run, lost and stalled
-against its bounds, and its own waiting request with what is queued ahead of it
-and since when, so a wait that never ends is seen while it lasts. The held
+against its bounds, and its ledger wait (its own request with what is queued
+ahead of it, or the request it yields to) and since when, so a wait that never ends is seen while it lasts. The held
 reason names the bound and the measured progress. The controller owns this bound, including for
 historical runners, and stops the measurement's whole slice when it expires. Tooling and measurement slices
 are created explicitly before their first member, with `BindsTo` and `After`
@@ -2536,8 +2540,9 @@ death; an absent timestamp remains explicit after forced termination.
 - **The full check's run bound measures progress, not wall time.** A run is
   held when it has stalled outside its own waits for its stall bound, when no
   step has run, started or finished for its lifecycle bound, or when it has
-  used its CPU bound. Only its own ledger requests excuse it, never being
-  outranked while it holds memory; CPU that higher ranks take spends nothing.
+  used its CPU bound. Its own fitting requests and yields to requests waiting
+  on other work's memory excuse it, never a yield to a request waiting on its
+  own memory; CPU that higher ranks take spends nothing.
   No wall bound remains; the live progress receipt makes an endless wait
   visible in the status
   ([log](records/notebooks/decisions-log.md#the-full-checks-run-bound-measures-progress-11-19)).

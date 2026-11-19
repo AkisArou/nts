@@ -3946,9 +3946,12 @@ pressure are not progress, because an IO hang could excuse itself for ever.
 The wall bound and the scope's RuntimeMaxSec are removed. Review found two
 liveness gaps, and both are closed:
 
-- Only the run's own waiting ledger requests excuse it. An excuse for being
-  outranked would be circular: a hung holder of memory that a higher-ranked
-  request waits on would excuse itself for ever.
+- A yield to a higher-ranked request excuses the run only while that request
+  could not fit even were the run's own reservations to end. A bare excuse for
+  being outranked would be circular: a hung holder of memory that a
+  higher-ranked request waits on would excuse itself for ever. Its own request
+  excuses it only if it could fit were every admitted job to end; one that
+  could not waits for memory nobody reserved, which nothing bounds.
 - A lifecycle bound in the same owner holds a spinner outside every step's own
   bound: in setup, in the release build, or after the last step. Without it,
   only the CPU bound would hold that spinner, after hours. The runner publishes
@@ -3958,8 +3961,8 @@ liveness gaps, and both are closed:
   release build fits. A build outranked for the CPUs is not held for it.
 
 As the coordinator's guard asked, the run's progress receipt is kept live, and
-`service.ts --status` names the run's own waiting request, what is queued
-ahead of it, and since when.
+`service.ts --status` names the run's ledger wait (its own request and what is
+queued ahead of it, or the request it yields to) and since when.
 
 ## Memory stages 1 and 2 start on their own instruments (11-19)
 

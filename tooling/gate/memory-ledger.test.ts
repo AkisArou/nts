@@ -763,8 +763,10 @@ test("a reservation is outranked while a live request of higher priority waits, 
   assert.equal(full.outranked(), false);
 });
 
-test("an observer outside a run reads only the run's own waiting request, and what is queued ahead of it", t => {
-  const dir = join(testScratch(t, "memory-ledger-run-wait"), "ledger"), run = "/fixture.slice/nts-run.slice";
+test("an observer outside a run reads its own fitting request, and a yield only to requests that wait on other work's memory", t => {
+  const root = testScratch(t, "memory-ledger-run-wait"), run = "/fixture.slice/nts-run.slice";
+  const machine = (availableKiB: number) => ownMemory(root, { availableKiB });
+  const env = machine(2 * 2 ** 20 + 128 * 1024), dir = env.NTS_MEMORY_LEDGER;
   for (const state of ["waiting", "admitted"]) mkdirSync(join(dir, state), { recursive: true });
   const me = processIdentity(process.pid)!, dead = { ...me, start: "0" };
   let seq = 0;
@@ -774,15 +776,23 @@ test("an observer outside a run reads only the run's own waiting request, and wh
     writeFileSync(join(dir, state, `${entry.id}.json`), JSON.stringify(entry));
     return entry;
   };
-  assert.equal(ledgerWait(dir, run), null, "an empty ledger holds nobody");
+  const read = () => ledgerWait(dir, run, "full-check", env);
+  assert.equal(read(), null, "an empty ledger holds nobody");
   put("waiting", { what: "a request whose waiter has exited", priority: "landing", waiter: dead });
-  const landing = put("waiting", { what: "gate run of a landing", priority: "landing", fits: true });
+  put("waiting", { what: "a landing request that could never fit", priority: "landing", fits: false });
   const runs = put("admitted", { what: "gate run of the full check", priority: "full-check", measure: { tree: false, cgroup: { path: `${run}/nts-run-w.slice`, inode: "1" } } });
-  assert.equal(ledgerWait(dir, run), null, "outranked while it holds memory, the run waits for nothing of its own");
-  const growth = put("waiting", { what: "gate run of the full check", priority: "full-check", grows: runs.id, measure: { tree: false, cgroup: null } });
-  assert.deepEqual(ledgerWait(dir, run), { id: growth.id, what: growth.what, priority: "full-check", since: growth.since,
+  assert.equal(read(), null, "neither a dead request nor one that could never fit is yielded to");
+  const growth = put("waiting", { what: "gate run of the full check", priority: "full-check", grows: runs.id, measure: { tree: false, cgroup: null }, fits: false });
+  assert.equal(read(), null, "its own request that could not fit were every admitted job to end waits for memory nobody reserved: no excuse");
+  const landing = put("waiting", { what: "gate run of a landing", priority: "landing", fits: true });
+  // 128 MiB beyond the floor, and the run holds nothing it could give back: the landing waits on other work.
+  assert.deepEqual(read(), { kind: "priority", id: landing.id, what: landing.what, priority: "landing", since: landing.since, behind: null });
+  machine(2 * 2 ** 20 + 2 * 2 ** 20);
+  assert.equal(read(), null, "a request it yields to that the run's own end would let in is no excuse");
+  writeFileSync(join(dir, "waiting", `${growth.id}.json`), JSON.stringify({ ...growth, fits: true }));
+  assert.deepEqual(read(), { kind: "memory", id: growth.id, what: growth.what, priority: "full-check", since: growth.since,
     behind: { id: landing.id, what: landing.what, priority: "landing" } }, "its own growth, queued behind the landing");
-  assert.equal(ledgerWait(dir, hostObservations({}).ownCgroup())?.behind, null, "a request whose waiter runs in the group is its own; it waits for room");
+  assert.equal(ledgerWait(dir, hostObservations({}).ownCgroup(), "full-check", env)?.kind, "memory", "a request whose waiter runs in the group is its own");
 });
 
 test("an entry an older admit.ts wrote, version 1 without a growth, counts as a reservation of its own", async t => {

@@ -142,7 +142,7 @@ test("a run outranked for CPU by a weighted spinner, but progressing, is never h
 });
 
 test("a run whose own request waits behind a never-released higher-ranked one is not held, and the status names that request and since when",async t=>{
-  const m=measured(t,"own-wait",{stall:2},()=>["tail","-f","/dev/null"]),ledger=m.memory.NTS_MEMORY_LEDGER;
+  const m=measured(t,"own-wait",{stall:3},()=>["tail","-f","/dev/null"]),ledger=m.memory.NTS_MEMORY_LEDGER;
   const landing=entry({what:"a landing that never ends",priority:"landing"});
   putWaiting(ledger,landing);
   m.start();
@@ -155,7 +155,7 @@ test("a run whose own request waits behind a never-released higher-ranked one is
   assert.ok(live,"the live measurement is found by its commit");
   assert.deepEqual([live.progress.waiting?.id,live.progress.waiting?.behind?.id],[own.id,landing.id]);
   const status=fullCheckStatus(readState("/nonexistent"),{main:null,verified:null,unverified:null,landedAt:()=>"",controller:null,count:null,measurement:live,now:new Date(live.progress.updated_at)});
-  assert.match(statusText(status),new RegExp(`^measuring: ${m.run}: ran \\d+ cpu-s in \\d+ s, stalled \\d+ of 2 s, lost \\d+ s to higher-ranked CPU work, waited memory \\d+ s; `
+  assert.match(statusText(status),new RegExp(`^measuring: ${m.run}: ran \\d+ cpu-s in \\d+ s, stalled \\d+ of 3 s, lost \\d+ s to higher-ranked CPU work, waited memory \\d+ s; `
     +`its request gate run of the full check \\(${own.id}\\) waits behind a landing that never ends \\(landing, ${landing.id}\\) since \\S+, \\d+ min$`,"m"));
 });
 
@@ -183,6 +183,37 @@ test("a run holding memory at no CPU, which a higher-ranked request waits on, is
   const admitted=await landing;
   assert.equal(admitted.bytes,512*MiB,"the request that waited on the holder's memory goes ahead");
   admitted.release();await admitted.closed;
+});
+
+test("a run that yields to a higher-ranked request waiting on other work's memory is not held, however long it yields",async t=>{
+  const MiB=2**20,floor=2*GiB/1024;
+  const admit=fileURLToPath(new URL("../gate/admit.ts",import.meta.url));
+  const hold=(marker:string)=>[process.execPath,"-e",
+    "globalThis.held=Buffer.alloc(512*2**20,1);require('fs').writeFileSync(process.argv[1],'');require('child_process').spawnSync('tail',['-f','/dev/null'])",marker];
+  // The run holds an admitted reservation it does not use, and is idle, as a yielding runner is.
+  const m=measured(t,"yield",{stall:3},()=>[process.execPath,admit,"--bytes","100M","--priority","full-check","--what","an idle run","--","tail","-f","/dev/null"],
+    {availableKiB:floor+2*GiB/1024});
+  const ledger=m.memory.NTS_MEMORY_LEDGER,machine=join(dirname(m.runs),"machine"),marker=join(m.run,"unrelated-holding");
+  // Other work, outside the run, holds 512 MiB at an agent's rank.
+  const other=`nts-test-full-check-other-${randomUUID()}`;
+  t.after(()=>{spawnTest("systemctl",["--user","stop",other],{encoding:"utf8"});});
+  const started=spawnTest("systemd-run",["--user",`--unit=${other}`,...toolingSliceArgs(process.env,"agent"),"--collect","--quiet","-p","LimitCORE=0","-p","RuntimeMaxSec=120s",
+    ...Object.entries(m.memory).map(([key,value])=>`--setenv=${key}=${value}`),
+    process.execPath,admit,"--bytes","600M","--priority","agent","--what","an unrelated holder","--",...hold(marker)],{encoding:"utf8"});
+  assert.equal(started.status,0,started.stderr);
+  await waitFor("the unrelated holder to hold its memory",()=>existsSync(marker));
+  m.start();
+  await waitFor("the run's reservation",()=>readLedger(ledger).admitted.some(row=>row.what==="an idle run"),{stopped:m.stopped});
+  // The kernel's view with the other work's 512 MiB in use: 128 MiB beyond the floor.
+  ownMemory(machine,{availableKiB:floor+128*1024});
+  const ending=new AbortController();t.after(()=>ending.abort());
+  const agent=reserve({bytes:512*MiB,what:"an agent's job behind the other work",priority:"agent"},{env:{...m.memory},everyMs:10,signal:ending.signal});
+  agent.catch(()=>{});
+  await waitFor("the run to yield past its stall bound",()=>(m.progress()?.waited_s.priority??0)>6,{stopped:m.stopped});
+  assert.equal(existsSync(join(m.run,"measurement-hold.txt")),false,m.output());
+  const progress=m.progress()!;
+  assert.deepEqual([progress.waiting?.kind,progress.waiting?.what,progress.stalled_s<3],["priority","an agent's job behind the other work",true],JSON.stringify(progress));
+  assert.ok(readLedger(ledger).waiting.some(row=>row.priority==="agent"&&row.fits===true),"the agent's job could fit were every admitted job to end");
 });
 
 test("a run that spins after its last step is held at its lifecycle bound, with no step progress named",t=>{
