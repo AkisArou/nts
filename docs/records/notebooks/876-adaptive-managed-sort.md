@@ -128,3 +128,63 @@ Times in µs; ratios are native / engine. Verdicts are the tool’s recorded ver
 | sort-objects-runs | 47.1106 | 33.9529 | 42.0249 | 80.8227 | 24.99 → 13.59 | 20.39 → 19.80 | False |
 | sort-objects-shuffled | 305.0387 | 226.6259 | 275.1915 | 91.1442 | 13.59 → 13.65 | 20.14 → 19.80 | False |
 | string-sort-control | 0.2308 | 0.1041 | 0.0816 | 0.1329 | 13.65 → 16.58 | 20.16 → 20.79 | False |
+
+## Adaptive base before galloping
+
+Base `8ce7701cea5bd904bd39b533d2b2d611d44a9de8`, shipping RC, fixed inputs and the pinned Node engine. Counts are calibrated, empty-bracket-subtracted user instructions per call, on CPU 0 outside the measurement pair without a timing lock. Native instruction band: one basis point (0.01%). Filtered engine lanes were not run; their timing comparisons are reported separately.
+
+| Row | Backend | Original instructions | Base instructions | Base / original | Verdict |
+|---|---|---:|---:|---:|---|
+| array-copying-methods | C | 482832 | 482832 | 1.000000 | WITHIN BAND |
+| array-copying-methods | LLVM | 538832 | 538832 | 1.000000 | WITHIN BAND |
+| clbg-k-nucleotide | C | 17432320 | 17425740 | 0.999623 | IMPROVED |
+| clbg-k-nucleotide | LLVM | 17424398 | 17417796 | 0.999621 | IMPROVED |
+| jetstream-wsl | C | -- | -- | — | REFUSED |
+| jetstream-wsl | LLVM | -- | -- | — | REFUSED |
+| map-entries-top-k | C | 414057 | 390052 | 0.942025 | IMPROVED |
+| map-entries-top-k | LLVM | 415503 | 404962 | 0.974631 | IMPROVED |
+| sort-objects | C | 1411192 | 500957 | 0.354989 | IMPROVED |
+| sort-objects | LLVM | 1501920 | 531558 | 0.353919 | IMPROVED |
+| sort-objects-runs | C | 1672921 | 779833 | 0.466151 | IMPROVED |
+| sort-objects-runs | LLVM | 1723222 | 805414 | 0.467388 | IMPROVED |
+| sort-objects-shuffled | C | 1829354 | 1499396 | 0.819631 | IMPROVED |
+| sort-objects-shuffled | LLVM | 1877546 | 1648821 | 0.878179 | IMPROVED |
+| string-sort-control | C | 2995 | 2438 | 0.814023 | IMPROVED |
+| string-sort-control | LLVM | 3077 | 2544 | 0.826779 | IMPROVED |
+
+The object row includes all sixteen sorts, not only its first disordered pass. The comparison census instruments emitted comparator entries separately from timing. Each object row sorts 4,096 elements per work call; the string control sorts six.
+
+| Row | Original comparisons | Base comparisons | Original per element | Base per element |
+|---|---:|---:|---:|---:|
+| sort-objects | 17101 | 5545 | 4.175049 | 1.353760 |
+| sort-objects-shuffled | 27592 | 27558 | 6.736328 | 6.728027 |
+| sort-objects-runs | 18472 | 7302 | 4.509766 | 1.782715 |
+| string-sort-control | 11 | 10 | 1.833333 | 1.666667 |
+
+The ordered 65-element negative control returns the same result with both compilers. The original executes 256 comparisons and fails the N−1 bound; the adaptive base executes 64 and passes it. Both run with RC, poisoning, ASan/UBSan and zero live objects and bytes. Thus the optimization assertion distinguishes the change even though the preservation fixtures already agreed with Node before it.
+
+| Raw evidence under the scratch root | SHA-256 |
+|---|---|
+| `count-base.log` | `1cbe84367bd95dfc069b9d7db4a0b5d598fa21090455a21416565fcaa2333f03` |
+| `base/comparison-census/counts.json` | `60f19e96b04345d443a9953ccdaa019c13d5d6227de80af1b4328bc2fddea8ed` |
+| `optimization-control/result.json` | `6f122346ff1f7dc67f486aee833fca74067dbefd8858f361078e1b147e37695a` |
+| `base-probes.log` | `d55d9cd1d4ef7ce3d13cc0ae94385546973cad181aff10035c8fdf69011af8d9` |
+
+### Original profile and count provenance
+
+All paths below are relative to `/home/akisarou/.cache/nts-scratch/876/`. The saved ELF binaries bind sampled addresses to the disassembly, independently of later writes to `target/bench/`.
+
+| Evidence | SHA-256 |
+|---|---|
+| `count-before-pinned.log` | `8c179b581c3a3eab865d93639edd91bf34904ba5b65aebb8dce401f76e9dc91c` |
+| `count-memory-before.log` | `cc253cc4438c15a00f597c2af3d3d8672b96114a1d88633dd04cda2b2b6abb98` |
+| `count-controls-before.log` | `728bc40aa1204b1b810fdf315aab43aa08be5510ff5374f5e87d0a9f5537b8cd` |
+| `operations-before.log` | `71046a3b389e6f97abca467aff1125f5ff5b2325a7d7a513dd37ee364a869d07` |
+| `before/nts.perf.data` | `70f9362070cfd3a7bdbab94b8f7972a903a97a6bb0e1ee07ac48ea92dbe0cdbc` |
+| `before/ntsllvm.perf.data` | `1c0059ddeb6dcdb3736d80c4b8a38c1bc3fc733d677a88b00d98bba0b163c367` |
+| `before/sort-objects.nts` | `41d01bbdbda202128fd56f58972a658f521d3f2afb8079a9312bd93690279b98` |
+| `before/sort-objects.ntsllvm` | `f5ac19b95358aa58ba80fe385c2598e7421bb55ba058c909a6a38538beb26db7` |
+| `before/c.dis` | `2792ef19c8310a50a42c61d14e92a00003ed46e2fc9badd06e517536ab56e045` |
+| `before/llvm.dis` | `f9a130ebceb3a6823b022082794bb3749c639c3606a619d45f7504fc4e739250` |
+| `before/c.samples` | `d6f907e9a8ef162c8ff13684c0be3a99c321d49c74ac189203c56ec45728ba41` |
+| `before/llvm.samples` | `82baee92b48a8677a130ad6f75dfe3e13c28ab656987b2159c720621a6cf5f4f` |

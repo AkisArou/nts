@@ -671,7 +671,9 @@ impl Sort<'_, '_> {
                 )?;
                 s.advance(out, stride);
                 let present = s.both_present(a, stop_a, b, stop_b);
-                let streak = s.binary(BinOp::Max, s.var(wins_a), s.var(wins_b));
+                // Taking one side resets the other's streak, so one is zero.
+                // The usual galloping OR test needs no max comparison/select.
+                let streak = s.binary(BinOp::BitOr, s.var(wins_a), s.var(wins_b));
                 let ready = s.binary(BinOp::Ge, streak, s.var(threshold));
                 let gallop = s.b.bool_join(present, ready, false, &s.origin);
                 s.branch(
