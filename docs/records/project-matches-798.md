@@ -554,3 +554,25 @@ issue scratch. The table and JSON include each arm's log/time paths and hashes:
 | --- | --- |
 | `heap-coalesced-table.json` | `b570faa0af9ed56ddb6fcac09c6e81c06f3401ae11cf08aacdcf4b1e9fd4c097` |
 | `snapshot-selection-equivalence.json` | `8b94a08877994daeaf93abb858e00837e7c9384816880621bfc3e1caf641f9be` |
+
+## Reconciliation with main after #837
+
+All 41 commits rebase without conflict onto main
+`78265f88bacefa9bf011eb2e335a7fa84dc0ff13`. The four producer-owner files
+are byte-identical to the measured canonical cohort. Cited source commits,
+including the measured `7aecbd46a0d214233cb334dfc804f8b9088e3fce`, are pinned
+under `refs/cited/`; the original `46b4d5ca09` citation ref remains intact.
+No commits were squashed.
+
+As directed, the results record first takes main's exact blob; the canonical
+writer then regenerates it against the rebased committed source. Both real
+writer runs produce SHA-256
+`b7f4aec6288ce5162a838a05c1adc47fea95bf914b5b6fd788be44ee5959527b`.
+The owning catalog refresh and host audit pass on the new tree: 2111 sources,
+343 entry closures and 420 reads. The output is generated, with no manual JSON
+edit or wire-version change.
+
+| Raw file under `~/.cache/nts-scratch/798/` | SHA-256 |
+| --- | --- |
+| `rebased-real-producer.json` | `764e6fc3153c0c668ece983b01b01bfffaf36727831142094dfe3a20d1d594f9` |
+| `nts-798-new-main-publish.log` | `21358dae6fa27798b72d8245815496d4b55505ceb0cdb0b75e619b509dabb22e` |
