@@ -99,6 +99,36 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
 }
 
 #[test]
+fn adaptive_sort_runs_mutations_and_throws_agree_with_node() {
+    let source = format!(
+        "{}\nfor (const seed of [0,1,2,3,7,15,31,32,63,64,65,127,128,255,256,511,512,1023]) {{\n\
+         console.log(ordered(seed)); console.log(reversed(seed));\n\
+         console.log(reversedEqual(seed)); console.log(unevenRuns(seed));\n\
+         console.log(shuffled(seed)); console.log(throwing(seed));\n\
+         console.log(mutating(seed)); console.log(mutatingThrow(seed));\n\
+         console.log(copied(seed)); console.log(copiedMutating(seed));\n\
+         console.log(copiedThrow(seed));\n}}\n",
+        include_str!("../../../../tests/programs/adaptive-sort/src/main.ts")
+    );
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("adaptive-sort-oracle");
+    std::fs::create_dir_all(&dir).expect("oracle scratch");
+    let input = dir.join("main.ts");
+    std::fs::write(&input, &source).expect("oracle source");
+    let expected = std::process::Command::new("node")
+        .arg(input)
+        .output()
+        .expect("node oracle");
+    assert!(expected.status.success(), "{:?}", expected.stderr);
+    assert!(expected.stderr.is_empty(), "{:?}", expected.stderr);
+    let Some((status, stdout, stderr)) = run_whole("adaptive-sort", &source) else {
+        return;
+    };
+    assert_eq!(status, 0, "adaptive sort executes: {stderr}");
+    assert!(stderr.is_empty(), "{stderr}");
+    assert_eq!(stdout.as_bytes(), expected.stdout);
+}
+
+#[test]
 fn a_clean_run_evaluates_the_module_then_drains_the_loop() {
     let Some((status, stdout, stderr)) = run_whole(
         "clean",
