@@ -485,6 +485,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_array_sort_writeback_ref",
+        returns: "void",
+        params: &["ptr", "ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_array_splice",
         returns: "ptr",
         params: &["ptr", "double", "double"],
