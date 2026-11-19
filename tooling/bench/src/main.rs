@@ -981,8 +981,8 @@ fn run_launch_case(
         "launch instrument failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let launch: serde_json::Value =
-        serde_json::from_slice(&output.stdout).context("invalid launch row frame")?;
+    let launch = String::from_utf8(output.stdout).context("launch row frame is not UTF-8")?;
+    serde_json::from_str::<serde_json::Value>(&launch).context("invalid launch row frame")?;
     Ok(Measurements {
         workload: Some(workload::Workload::whole_program()),
         source_capture: Some(source_capture),
@@ -1419,9 +1419,11 @@ struct Measurements {
     bun: Option<Measured>,
     /// A launch case's whole row, every column timed by the one launch timer
     /// (`host-columns.ts --launch`). Its cells are the row; `results`, `node`
-    /// and `bun` stay empty.
+    /// and `bun` stay empty. Kept as the frame's own JSON text: the record
+    /// authority derives each cell's spread again from its launches and
+    /// compares exactly, and a parse here would round its floats.
     #[serde(default)]
-    launch: Option<serde_json::Value>,
+    launch: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

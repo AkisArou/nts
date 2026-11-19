@@ -143,9 +143,12 @@ function launchRaw(cells: Record<string, Cell>) {
     lanes: null, cases: ["startup-hello"], spoiled: [], failed: [],
     measured: [{ shown: "startup-hello", workload: { roots: ["module__init"], numeric: null }, source_capture: null,
       results: [null, null, null, null, null, null], absences: { outcomes: {} }, node: null, bun: null,
-      launch: { kind: "launch", floor: { median: 300 }, provenance: { protocol: LAUNCH_PROTOCOL },
-        cells: Object.fromEntries(SESSION_COLUMNS.map((column) => [column, cells[column] ?? absent("NOT_PROVIDED", "No hand-written reference for a launch case")])) } }],
+      launch: JSON.stringify(launchFrame(cells)) }],
   };
+}
+function launchFrame(cells: Record<string, Cell>) {
+  return { kind: "launch", floor: { median: 300 }, provenance: { protocol: LAUNCH_PROTOCOL },
+    cells: Object.fromEntries(SESSION_COLUMNS.map((column) => [column, cells[column] ?? absent("NOT_PROVIDED", "No hand-written reference for a launch case")])) };
 }
 
 test("the producer keeps a launch row's cells: an abort stays ABORTED, and output unlike node's is not timed", () => {
@@ -155,9 +158,10 @@ test("the producer keeps a launch row's cells: an abort stays ABORTED, and outpu
   assert.equal(row.cells["nts C"]!.status, "ABORTED");
   assert.equal(row.cells["nts LLVM"]!.status, "OK");
   // Every session column is the launch row's own: a column it omits is refused, not filled in.
-  const { "nts f64": _omitted, ...short } = launchRaw({ node: cellOf(40_000) }).measured[0]!.launch.cells;
+  const frame = launchFrame({ node: cellOf(40_000) });
+  delete frame.cells["nts f64"];
   const omitting = launchRaw({});
-  omitting.measured[0]!.launch.cells = short as typeof omitting.measured[0]["launch"]["cells"];
+  omitting.measured[0]!.launch = JSON.stringify(frame);
   assert.throws(() => fromNts(meta(), omitting), /launch row omits column nts f64/);
   assert.deepEqual((row.conditions as Record<string, Json>).launchFloor, { median: 300 });
   const wrong = launchCell({ ...details(380, (l) => { for (const one of l) one.stdoutSha256 = other; }), warmups: [], stdoutSha256: other }, {}, "");

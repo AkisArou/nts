@@ -216,7 +216,8 @@ export function fromNts(
         ),
       ]),
     );
-    const launch = m?.launch === undefined || m?.launch === null ? null : object(m.launch);
+    // The frame's own JSON text, which no other parser has rounded (main.rs's Measurements.launch).
+    const launch = m?.launch === undefined || m?.launch === null ? null : object(JSON.parse(string(m.launch)));
     if (launch) {
       assert.equal(launch.kind, LAUNCH_KIND, "unknown launch row kind");
       const launchCells = object(launch.cells);
