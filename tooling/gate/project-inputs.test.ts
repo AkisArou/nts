@@ -11,7 +11,7 @@ import {OracleFilesystem,validateHostObservations} from '../differential/oracle-
 import {projectInputs,projectInputOwner} from './project-inputs.ts';
 import {testScratch} from './test-scratch.ts';
 import {moduleGraph,closeModuleGraphOwners} from './module-closure.ts';
-import {validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import {captureReaderObservations,validateReaderSourceObservations,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {projectConfig} from './reader-inputs/main.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -49,6 +49,52 @@ test('compiled Programs retain the emitter nearest-config probes while type chec
     assert.throws(()=>validateReaderSourceObservations({...compiled,observations:probe},root),/fileExists changed: .*src\/tsconfig.json/);
     const changed=owner.describe([projectConfig(config,'compiled-program')]);assert.ok(changed.files.includes('src/tsconfig.json'));
     assert.ok(!owner.describe([projectConfig(config,'type-check')]).files.includes('src/tsconfig.json'));
+  }finally{owner.close();}
+});
+
+test('compiled binding facts equal the union of Program and emitter answers, with all causes and conflicts retained',t=>{
+  const root=testScratch(t,'project-binding-union');mkdirSync(join(root,'src'));
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');
+  writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[]},"include":["src/*.ts"]}');
+  writeFileSync(join(root,'src/main.ts'),'export {};');
+  const source=join(root,'src/main.ts'),config=join(root,'tsconfig.json');
+  const program=projectInputs([{kind:'config',path:'tsconfig.json'}],root),emitter=new OracleFilesystem();
+  assert.equal(emitter.realpath(source),source);assert.equal(emitter.projectFor(source),config);emitter.readBytes(config);
+  const separate=[captureReaderObservations(root,program.observations),captureReaderObservations(root,emitter.captured())];
+  const key=(row:{observation:{kind:string;path:string}})=>JSON.stringify([row.observation.kind,row.observation.path]);
+  const expected=new Map<string,{observation:(typeof separate)[number][number]['observation'];causes:Set<string>}>();
+  for(const rows of separate)for(const row of rows){
+    const previous=expected.get(key(row));if(previous)assert.deepEqual(row.observation.value,previous.observation.value);
+    const merged=previous??{observation:row.observation,causes:new Set<string>()};
+    for(const cause of row.causes)merged.causes.add(JSON.stringify(cause));expected.set(key(row),merged);
+  }
+  const owner=moduleGraph({sourceRoot:root});
+  try{
+    const snapshot=owner.describe([projectConfig(pathToFileURL(config),'compiled-program')]);
+    const rows=snapshot.observations.filter(row=>row.protocol==='project'&&!row.capability&&!row.environment&&!row.dependency&&!row.selectorOnly);
+    assert.equal(rows.length,expected.size,'one typed fact per Program owner, with no answer discarded');
+    assert.deepEqual(rows.map(key).sort(),[...expected.keys()].sort());
+    for(const row of rows){const union=expected.get(key(row))!;assert.deepEqual(row.observation.value,union.observation.value);assert.deepEqual(row.causes.map(cause=>JSON.stringify(cause)).sort(),[...union.causes].sort());}
+    const shared=rows.find(row=>row.observation.kind==='runtimeKind'&&row.observation.path===join(root,'src'))!;
+    assert.ok(shared.causes.some(cause=>cause.kind==='entries'&&cause.path===join(root,'src')));
+    assert.ok(shared.causes.some(cause=>cause.kind==='fileExists'&&cause.path===join(root,'src/tsconfig.json')));
+    assert.equal(shared.observationOnly,undefined,'an actual emitter probe retains its ordinary authority');
+    const conflicting=emitter.captured().map(row=>row.kind==='realpath'&&row.path===source?{...row,value:join(root,'elsewhere.ts')}:row);
+    assert.throws(()=>captureReaderObservations(root,[...program.observations,...conflicting]),/realpath changed/);
+  }finally{owner.close();}
+});
+
+test('binding coalescing retains each distinct compiled Program owner',t=>{
+  const root=testScratch(t,'project-binding-owners');mkdirSync(join(root,'src'));
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');writeFileSync(join(root,'src/main.ts'),'export {};');
+  const text='{"compilerOptions":{"types":[]},"include":["src/*.ts"]}';
+  for(const name of ['tsconfig.json','first.json','second.json'])writeFileSync(join(root,name),text);
+  const owner=moduleGraph({sourceRoot:root});
+  try{
+    const snapshot=owner.describe(['first.json','second.json'].map(path=>projectConfig(pathToFileURL(join(root,path)),'compiled-program')));
+    const facts=snapshot.observations.filter(row=>row.observation.kind==='realpath'&&row.observation.path===join(root,'src/main.ts'));
+    assert.equal(facts.length,2,'each Program keeps its own binding answer');
+    assert.deepEqual(snapshot.projectMatches.map(match=>match.request.path).sort(),['first.json','second.json']);
   }finally{owner.close();}
 });
 

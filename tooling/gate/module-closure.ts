@@ -194,6 +194,30 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured,...(observationOnly?{observationOnly:true as const}:{})});
       }
     };
+    /** The Program and its emitter probes own one set of typed answers. One
+     * capture merges their shared binding facts and unions the actual causes;
+     * capturing twice retains a second copy of the same source identities. */
+    function observeCompiledProject(context:Context,reader:string,project:ProjectInputs,request:ProjectRequest,config:string):void{
+      const modules=project.modules.map(row=>row.path).filter(path=>! /\.d\.[cm]?ts$/.test(path)),lookups=new OracleFilesystem(),ancestorLookups:string[]=[];
+      for(const module of modules){
+        const physical=lookups.realpath(resolve(root,module));if(!inside(root,physical))throw Error('compiled project module resolves outside source: '+module);
+        const nearest=lookups.projectFor(physical);
+        if(nearest){
+          if(!inside(root,nearest))throw Error('compiled project nearest config is outside source: '+nearest+' ('+module+')');
+          lookups.readBytes(nearest);
+        }else ancestorLookups.push(module);
+      }
+      const local:HostObservation[]=[];
+      const environment:ProjectEnvironmentAbsence={kind:'project-environment-absence',source:root,programs:[{request:structuredClone(request),config,imports:[],types:[],ownerLookups:ancestorLookups}]};
+      for(const observation of lookups.captured()){
+        if(inside(root,observation.path)){local.push(observation);continue;}
+        if(!projectOwnerAncestorAbsence(root,observation)||lookups.runtimeKind(observation.path)!==null)
+          throw Error('compiled project owner lookup has no genuine ancestor absence: '+observation.path);
+        for(const fact of [observation,{kind:'runtimeKind' as const,path:observation.path,value:null}])
+          observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',observation:structuredClone(fact),environment,causes:[{kind:fact.kind,path:fact.path}]});
+      }
+      observe(context,reader,'project',[...project.observations,...local],new Set(project.matchingEntries));
+    }
     function optionalPresence(context:Context,reader:string,path:string,inspectionOnly=false,observationOnly=false):boolean{
       metadataParents(root,path,'optional file');
       let stat:ReturnType<typeof lstatSync>|undefined;
@@ -368,7 +392,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         }
         if(kind!=='generated-project'||request.kind==='generated')visit(context,path,false,true,false);
         const project=projectRead(request,{entry:context.entry,dataNamespaces:context.namespaces});
-        observe(context,reader,'project',project.observations,new Set(project.matchingEntries));
+        if(role!=='compiled-program')observe(context,reader,'project',project.observations,new Set(project.matchingEntries));
         for(const match of project.matches)projectMatches.push({...structuredClone(match),reader,context:{entry:context.entry,dataNamespaces:structuredClone(context.namespaces)}});
         // Selection forces the reader's steps; a materializing consumer refuses
         // before any source-parent check; an unasked graph keeps its reads.
@@ -378,6 +402,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           if(options.unavailableInputs==='refuse')throw new InstalledPackageReachUnavailable(rows);
           unavailableInputs.push(...rows);
         }
+        if(role==='compiled-program')observeCompiledProject(context,reader,project,request,entry);
         for(const fact of project.dependencyObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
           observation:structuredClone(fact.observation),dependency:structuredClone(fact.dependency),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
         for(const fact of captureReaderObservations(root,project.pinObservations)){
@@ -396,27 +421,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const compiled:Context={entry:context.entry,namespaces:context.namespaces,entered:new Set(),host:new Set(),owned:new Set(),projects:context.projects,data:context.data,
           projectRole:role,compiledImports:new Map(project.modules.map(row=>[row.path,row.imports]))};
         for(const entry of new Set([...project.roots,...project.modules.map(row=>row.path)]))visit(compiled,resolve(root,entry),true,true,false);
-        if(role==='compiled-program'){
-          const modules=project.modules.map(row=>row.path).filter(path=>! /\.d\.[cm]?ts$/.test(path)),lookups=new OracleFilesystem(),ancestorLookups:string[]=[];
-          for(const module of modules){
-            const physical=lookups.realpath(resolve(root,module));if(!inside(root,physical))throw Error('compiled project module resolves outside source: '+module);
-            const nearest=lookups.projectFor(physical);
-            if(nearest){
-              if(!inside(root,nearest))throw Error('compiled project nearest config is outside source: '+nearest+' ('+module+')');
-              lookups.readBytes(nearest);
-            }else ancestorLookups.push(module);
-          }
-          const local:HostObservation[]=[];
-          const environment:ProjectEnvironmentAbsence={kind:'project-environment-absence',source:root,programs:[{request:structuredClone(request),config:entry,imports:[],types:[],ownerLookups:ancestorLookups}]};
-          for(const observation of lookups.captured()){
-            if(inside(root,observation.path)){local.push(observation);continue;}
-            if(!projectOwnerAncestorAbsence(root,observation)||lookups.runtimeKind(observation.path)!==null)
-              throw Error('compiled project owner lookup has no genuine ancestor absence: '+observation.path);
-            for(const fact of [observation,{kind:'runtimeKind' as const,path:observation.path,value:null}])
-              observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',observation:structuredClone(fact),environment:structuredClone(environment),causes:[{kind:fact.kind,path:fact.path}]});
-          }
-          observe(context,reader,'project',local);
-        }
+
         return;
       }
       if (!lstatSync(path).isDirectory()) {
