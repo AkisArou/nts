@@ -669,3 +669,28 @@ removing the 448 shifts alone removes the whole cost.
 | `kernel-profile/map-entries-top-k-ntsllvm.csv` | `8dcd65a97da46c00fd35a70bf6924facb61d36bbe8bf66206bda0ec9bd335add` |
 | `kernel-profile/map-entries-top-k-ntsllvm.data` | `f1146f8d88187e690d2f5f7e6ecc9996c7d60acd2a6dc6ad1bb75efe4120a6f2` |
 | `kernel-profile/map-entries-top-k-ntsllvm.annotate` | `4334ffb558a6c751380ed6b3e547c2fdf10398cb2a7acf5398e17cdb228060c0` |
+
+## Memory floors and unsigned cursor proof
+
+The current release kernel `1c7d86625f` passes all 78 existing memory
+cases: every reference-count and allocation floor, unchanged answers,
+and zero leaks. Raw output is
+`/home/akisarou/.cache/nts-scratch/876/memory-kernel.log`, SHA-256
+`d7e80de961cb4aba098f5bfd30d1f3ed2b3befbe2dff7a2d443fb28343f899c1`.
+
+The coordinator approved an unsigned 32-bit cursor contract, with exclusive
+backward ends and i64 power arithmetic. The proof uses JavaScript's full
+u32 length domain. Today's physical dense-allocation cap is narrower:
+`NTS_MAX_LENGTH=2147483646` in `runtime/c/nts_runtime.h`, enforced by
+`nts_array_allocate`. No runtime-limit policy changes here.
+
+The boundary controls execute the production arithmetic emitter templates
+with checked unsigned operations, including values around 2³¹ and 2³²−1,
+without allocating element buffers. Bounded advancement subtracts before
+adding, and backward positions use an exclusive end. Midpoint controls
+check the widened coordinates and the at-most-32 power bound. A HIR guard
+requires all generated sort memory indices to use at most 32 bits in raw
+and prepared programs; the wide values are only power coordinates.
+
+The matched policy arms will distinguish the width contract, minrun maxima
+32/64, bounds-based/count-based binary insertion, and galloping on/off.

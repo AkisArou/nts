@@ -79,6 +79,29 @@ fn managed_sorts_merge_uint32_indices_but_numeric_sorts_keep_values() {
                 })
                 .count();
             assert_eq!(managed_stores, 0, "{name}: no managed permutation store");
+            for op in &func.values {
+                if &op.origin.location != sort_origin {
+                    continue;
+                }
+                if let OpKind::ArrayGet { index, .. } | OpKind::ArraySet { index, .. } = op.kind {
+                    assert!(
+                        matches!(func.values[index.0 as usize].ty, HirType::Int { bits, .. } if bits <= 32),
+                        "{name}: array addressing uses the u32 domain, not wide power coordinates: {:?}",
+                        func.values[index.0 as usize].ty
+                    );
+                }
+            }
+            for op in &func.values {
+                if &op.origin.location != sort_origin {
+                    continue;
+                }
+                if let OpKind::ArrayGet { index, .. } | OpKind::ArraySet { index, .. } = op.kind {
+                    assert!(
+                        matches!(func.values[index.0 as usize].ty, HirType::Int { bits, .. } if bits <= 32),
+                        "{name}: memory cursors stay within the u32 index contract"
+                    );
+                }
+            }
             assert_eq!(
                 func.values
                     .iter()

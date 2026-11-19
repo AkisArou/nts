@@ -10,14 +10,61 @@ use super::{
 };
 
 type Built<T = ()> = Result<T, Diagnostic>;
+// JavaScript permits lengths through u32::MAX. Dense allocations currently
+// stop at NTS_MAX_LENGTH=2147483646 (runtime/c/nts_runtime.h); the cursor proof
+// uses the full JavaScript limit, independently of that physical cap. Backward
+// cursors are exclusive ends, so neither direction needs a negative sentinel.
 const INDEX: HirType = HirType::Int {
-    bits: 64,
-    signed: true,
-};
-const SLOT: HirType = HirType::Int {
     bits: 32,
     signed: false,
 };
+const SLOT: HirType = INDEX;
+const WIDE: HirType = HirType::Int {
+    bits: 64,
+    signed: true,
+};
+
+/// Emit the bounded expression itself, also evaluated by the boundary proof.
+/// Subtract before adding: start+step can exceed u32 even though the result fits.
+fn bounded_advance<V: Copy>(
+    start: V,
+    step: V,
+    limit: V,
+    mut emit: impl FnMut(BinOp, V, V) -> V,
+) -> V {
+    let remaining = emit(BinOp::Sub, limit, start);
+    let step = emit(BinOp::Min, step, remaining);
+    emit(BinOp::Add, start, step)
+}
+
+/// Offset from a forward start or a backward exclusive end. Callers prove
+/// offset < the remaining run length before a backward element is read.
+fn run_position<V: Copy>(
+    start: V,
+    offset: V,
+    one: V,
+    forward: bool,
+    mut emit: impl FnMut(BinOp, V, V) -> V,
+) -> V {
+    if forward {
+        emit(BinOp::Add, start, offset)
+    } else {
+        let last = emit(BinOp::Sub, start, one);
+        emit(BinOp::Sub, last, offset)
+    }
+}
+
+fn doubled_midpoints<V: Copy>(
+    start: V,
+    middle: V,
+    end: V,
+    mut emit: impl FnMut(BinOp, V, V) -> V,
+) -> (V, V) {
+    (
+        emit(BinOp::Add, start, middle),
+        emit(BinOp::Add, middle, end),
+    )
+}
 
 impl FuncBuilder<'_> {
     pub(super) fn sort_managed(
@@ -68,7 +115,7 @@ impl Sort<'_, '_> {
     fn push(&mut self, kind: OpKind, ty: HirType) -> ValueId {
         self.b.push(kind, ty, self.origin.clone())
     }
-    fn int(&mut self, n: i64) -> ValueId {
+    fn int(&mut self, n: u32) -> ValueId {
         self.push(OpKind::ConstInt(i128::from(n)), INDEX)
     }
     fn boolean(&mut self, n: bool) -> ValueId {
@@ -78,13 +125,20 @@ impl Sort<'_, '_> {
         let ty = if op.is_comparison() {
             HirType::Bool
         } else {
-            INDEX
+            self.b.values[lhs.0 as usize].ty.clone()
         };
         self.push(OpKind::Binary { op, lhs, rhs }, ty)
     }
-    fn offset(&mut self, value: ValueId, by: i64) -> ValueId {
-        let by = self.int(by);
-        self.binary(BinOp::Add, value, by)
+    fn offset(&mut self, value: ValueId, by: i32) -> ValueId {
+        let ty = self.b.values[value.0 as usize].ty.clone();
+        let amount = self.push(OpKind::ConstInt(i128::from(by.unsigned_abs())), ty);
+        self.binary(if by < 0 { BinOp::Sub } else { BinOp::Add }, value, amount)
+    }
+    fn position(&mut self, start: ValueId, offset: ValueId, forward: bool) -> ValueId {
+        let one = self.int(1);
+        run_position(start, offset, one, forward, |op, a, b| {
+            self.binary(op, a, b)
+        })
     }
     fn var(&self, name: u32) -> ValueId {
         self.b.bindings[&name]
@@ -97,7 +151,7 @@ impl Sort<'_, '_> {
         self.bind(name, value);
         name
     }
-    fn advance(&mut self, name: u32, by: i64) {
+    fn advance(&mut self, name: u32, by: i32) {
         let next = self.offset(self.var(name), by);
         self.bind(name, next);
     }
@@ -331,8 +385,8 @@ impl Sort<'_, '_> {
             },
             |_| Ok(()),
         )?;
-        let minimum_end = self.binary(BinOp::Add, start, minrun);
-        let minimum_end = self.binary(BinOp::Min, minimum_end, self.length);
+        let minimum_end =
+            bounded_advance(start, minrun, self.length, |op, a, b| self.binary(op, a, b));
         let finish = self.binary(BinOp::Max, minimum_end, self.var(end));
         self.binary_insert(start, self.var(end), finish)?;
         Ok(finish)
@@ -372,7 +426,7 @@ impl Sort<'_, '_> {
                     |s| s.binary(BinOp::Lt, s.var(low), s.var(high)),
                     |s| {
                         let span = s.binary(BinOp::Sub, s.var(high), s.var(low));
-                        // 0 <= span < 2^31: unsigned halving is exact and
+                        // 0 <= span < 2^32: unsigned halving is exact and
                         // avoids signed division's rounding correction.
                         let one = s.int(1);
                         let half = s.binary(BinOp::UShr, span, one);
@@ -417,11 +471,15 @@ impl Sort<'_, '_> {
     /// the midpoints to keep odd run lengths exact; this is powersort's node
     /// power, not a floating-point approximation of its logarithm.
     fn power(&mut self, start: ValueId, middle: ValueId, end: ValueId) -> Built<ValueId> {
-        let a = self.binary(BinOp::Add, start, middle);
-        let b = self.binary(BinOp::Add, middle, end);
+        let start = self.push(OpKind::Convert(start), WIDE);
+        let middle = self.push(OpKind::Convert(middle), WIDE);
+        let end = self.push(OpKind::Convert(end), WIDE);
+        let length = self.push(OpKind::Convert(self.length), WIDE);
+        let two = self.push(OpKind::ConstInt(2), WIDE);
+        let (a, b) = doubled_midpoints(start, middle, end, |op, a, b| self.binary(op, a, b));
         let a = self.variable(a);
         let b = self.variable(b);
-        let zero = self.int(0);
+        let zero = self.push(OpKind::ConstInt(0), WIDE);
         let power = self.variable(zero);
         let no = self.boolean(false);
         let done = self.variable(no);
@@ -433,24 +491,23 @@ impl Sort<'_, '_> {
             },
             |s| {
                 s.advance(power, 1);
-                let both = s.binary(BinOp::Ge, s.var(a), s.length);
+                let both = s.binary(BinOp::Ge, s.var(a), length);
                 s.branch(
                     both,
                     &[a, b, done],
                     |s| {
-                        let next_a = s.binary(BinOp::Sub, s.var(a), s.length);
-                        let next_b = s.binary(BinOp::Sub, s.var(b), s.length);
+                        let next_a = s.binary(BinOp::Sub, s.var(a), length);
+                        let next_b = s.binary(BinOp::Sub, s.var(b), length);
                         s.bind(a, next_a);
                         s.bind(b, next_b);
                         Ok(())
                     },
                     |s| {
-                        let different = s.binary(BinOp::Ge, s.var(b), s.length);
+                        let different = s.binary(BinOp::Ge, s.var(b), length);
                         s.bind(done, different);
                         Ok(())
                     },
                 )?;
-                let two = s.int(2);
                 let next_a = s.binary(BinOp::Mul, s.var(a), two);
                 let next_b = s.binary(BinOp::Mul, s.var(b), two);
                 s.bind(a, next_a);
@@ -461,19 +518,18 @@ impl Sort<'_, '_> {
         Ok(self.var(power))
     }
 
-    /// Stack powers increase strictly. A runtime array has length below 2^31,
-    /// so powers are at most 31 and 32 rows (base,power), including the
-    /// zero-power sentinel, suffice. All cursors and doubled midpoints are
-    /// nonnegative and below 4*N < 2^33; int64 is
-    /// exact even on the terminating power-loop iteration. The scratch holds
-    /// only the smaller run, at most floor(N/2) uint32 indices.
+    /// Positive powers increase strictly and are at most 32 for N<=u32::MAX.
+    /// The 33 rows include a zero-power sentinel; one further slot remembers
+    /// min-gallop. Midpoints and the final doubling stay below 4*N < 2^34,
+    /// so power arithmetic is i64. Stored node powers fit u32 exactly.
+    /// Smaller-run scratch needs at most floor(N/2) u32 slots.
     fn merge_runs(&mut self, first_end: ValueId, minrun: ValueId) -> Built {
         let two = self.int(2);
         let capacity = self.binary(BinOp::Div, self.length, two);
         let scratch = self.allocate(capacity);
-        let capacity = self.int(65);
+        let capacity = self.int(67);
         let stack = self.allocate(capacity);
-        let threshold_slot = self.int(64);
+        let threshold_slot = self.int(66);
         let seven = self.int(7);
         self.put(stack, threshold_slot, seven);
         let zero = self.int(0);
@@ -483,6 +539,7 @@ impl Sort<'_, '_> {
         // Row zero is a zero-power sentinel. Real node powers are positive;
         // a final zero-power boundary drains the stack through the same merge
         // kernel as ordinary boundaries, without duplicating comparator code.
+        let power_zero = self.push(OpKind::ConstInt(0), WIDE);
         let top = self.variable(one);
         let base = self.variable(zero);
         let end = self.variable(first_end);
@@ -496,7 +553,7 @@ impl Sort<'_, '_> {
             |s| {
                 let more = s.binary(BinOp::Lt, s.var(end), s.length);
                 let next = s.variable(s.var(end));
-                let power = s.variable(zero);
+                let power = s.variable(power_zero);
                 s.branch(
                     more,
                     &[next, power],
@@ -515,7 +572,8 @@ impl Sort<'_, '_> {
                         let row = s.offset(s.var(top), -1);
                         let slot = s.binary(BinOp::Mul, row, two);
                         let power_slot = s.offset(slot, 1);
-                        let previous_power = s.get_index(stack, power_slot);
+                        let previous_power = s.get(stack, power_slot);
+                        let previous_power = s.push(OpKind::Convert(previous_power), WIDE);
                         s.binary(BinOp::Gt, previous_power, s.var(power))
                     },
                     |s| {
@@ -626,12 +684,7 @@ impl Sort<'_, '_> {
         let (a, b, out, stop_a, stop_b) = if low {
             (zero, middle, base, n, end)
         } else {
-            let a = self.offset(middle, -1);
-            let b = self.offset(n, -1);
-            let out = self.offset(end, -1);
-            let stop_a = self.offset(base, -1);
-            let stop_b = self.int(-1);
-            (a, b, out, stop_a, stop_b)
+            (middle, n, end, base, zero)
         };
         let a = self.variable(a);
         let b = self.variable(b);
@@ -639,7 +692,7 @@ impl Sort<'_, '_> {
         let wins_a = self.variable(zero);
         let wins_b = self.variable(zero);
         // The power stack's extra slot retains min-gallop across merges.
-        let threshold_slot = self.int(64);
+        let threshold_slot = self.int(66);
         let remembered = self.get_index(stack, threshold_slot);
         let threshold = self.variable(remembered);
         let names = [a, b, out, wins_a, wins_b, threshold];
@@ -647,8 +700,11 @@ impl Sort<'_, '_> {
             &names,
             |s| s.both_present(a, stop_a, b, stop_b),
             |s| {
-                let first_item = s.get(first, s.var(a));
-                let second_item = s.get(second, s.var(b));
+                let first_at = s.position(s.var(a), zero, low);
+                let second_at = s.position(s.var(b), zero, low);
+                let first_item = s.get(first, first_at);
+                let second_item = s.get(second, second_at);
+                let output_at = s.position(s.var(out), zero, low);
                 let greater = s.greater(first_item, second_item)?;
                 let take_a = if low {
                     let no = s.boolean(false);
@@ -660,14 +716,14 @@ impl Sort<'_, '_> {
                     take_a,
                     &[a, b, wins_a, wins_b],
                     |s| {
-                        s.put(s.order, s.var(out), first_item);
+                        s.put(s.order, output_at, first_item);
                         s.advance(a, stride);
                         s.advance(wins_a, 1);
                         s.bind(wins_b, zero);
                         Ok(())
                     },
                     |s| {
-                        s.put(s.order, s.var(out), second_item);
+                        s.put(s.order, output_at, second_item);
                         s.advance(b, stride);
                         s.advance(wins_b, 1);
                         s.bind(wins_a, zero);
@@ -734,7 +790,7 @@ impl Sort<'_, '_> {
             let remaining = self.binary(BinOp::Sub, n, self.var(a));
             self.copy(scratch, self.var(a), self.order, self.var(out), remaining)
         } else {
-            let remaining = self.offset(self.var(b), 1);
+            let remaining = self.var(b);
             let begin = self.binary(BinOp::Sub, self.var(out), self.var(b));
             self.copy(scratch, zero, self.order, begin, remaining)
         }
@@ -755,35 +811,32 @@ impl Sort<'_, '_> {
         low: bool,
         first: bool,
     ) -> Built {
-        let pivot = self.get(other, self.var(other_cursor));
+        let zero = self.int(0);
+        let pivot_at = self.position(self.var(other_cursor), zero, low);
+        let pivot = self.get(other, pivot_at);
         let available = if low {
             self.binary(BinOp::Sub, boundary, self.var(cursor))
         } else {
             self.binary(BinOp::Sub, self.var(cursor), boundary)
         };
         let n = self.gallop(source, self.var(cursor), available, pivot, low, first)?;
-        let stride = if low { 1 } else { -1 };
-        let zero = self.int(0);
         let at = self.variable(zero);
         self.loop_while(
             &[at],
             |s| s.binary(BinOp::Lt, s.var(at), n),
             |s| {
-                let step = s.int(stride);
-                let offset = s.binary(BinOp::Mul, s.var(at), step);
-                let from = s.binary(BinOp::Add, s.var(cursor), offset);
-                let to = s.binary(BinOp::Add, s.var(out), offset);
+                let from = s.position(s.var(cursor), s.var(at), low);
+                let to = s.position(s.var(out), s.var(at), low);
                 let item = s.get(source, from);
                 s.put(s.order, to, item);
                 s.advance(at, 1);
                 Ok(())
             },
         )?;
-        let step = self.int(stride);
-        let distance = self.binary(BinOp::Mul, n, step);
-        let next = self.binary(BinOp::Add, self.var(cursor), distance);
+        let movement = if low { BinOp::Add } else { BinOp::Sub };
+        let next = self.binary(movement, self.var(cursor), n);
         self.bind(cursor, next);
-        let next = self.binary(BinOp::Add, self.var(out), distance);
+        let next = self.binary(movement, self.var(out), n);
         self.bind(out, next);
         let seven = self.int(7);
         let productive = self.binary(BinOp::Ge, n, seven);
@@ -838,8 +891,7 @@ impl Sort<'_, '_> {
                         s.bind(left, count);
                         let more = s.binary(BinOp::Lt, count, n);
                         s.bind(open, more);
-                        let two = s.int(2);
-                        let next = s.binary(BinOp::Mul, count, two);
+                        let next = bounded_advance(count, count, n, |op, a, b| s.binary(op, a, b));
                         s.bind(probe, next);
                         Ok(())
                     },
@@ -858,7 +910,7 @@ impl Sort<'_, '_> {
             |s| s.binary(BinOp::Lt, s.var(left), s.var(right)),
             |s| {
                 let span = s.binary(BinOp::Sub, s.var(right), s.var(left));
-                // The bracket is a nonnegative span below 2^31.
+                // The bracket is a nonnegative span below 2^32.
                 let one = s.int(1);
                 let half = s.binary(BinOp::UShr, span, one);
                 let mid = s.binary(BinOp::Add, s.var(left), half);
@@ -888,7 +940,7 @@ impl Sort<'_, '_> {
         low: bool,
         first: bool,
     ) -> Built<ValueId> {
-        let at = self.binary(if low { BinOp::Add } else { BinOp::Sub }, start, at);
+        let at = self.position(start, at, low);
         let item = self.get(source, at);
         let greater = if first {
             self.greater(item, pivot)?
@@ -901,5 +953,100 @@ impl Sort<'_, '_> {
         } else {
             greater
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::{BinOp, bounded_advance, doubled_midpoints, run_position};
+
+    fn checked_cursor(op: BinOp, a: u32, b: u32) -> u32 {
+        match op {
+            BinOp::Add => a.checked_add(b).expect("cursor addition fits u32"),
+            BinOp::Sub => a
+                .checked_sub(b)
+                .expect("cursor subtraction stays nonnegative"),
+            BinOp::Min => a.min(b),
+            _ => unreachable!("cursor proof only uses add, sub and min"),
+        }
+    }
+
+    #[test]
+    fn emitted_cursor_bounds_cover_both_javascript_length_boundaries() {
+        // Execute the production arithmetic emitters with checked u32
+        // operations. These are scalar proof controls, with no element buffer
+        // allocation, including at lengths the current dense runtime refuses.
+        for n in [
+            0,
+            1,
+            2,
+            63,
+            64,
+            65,
+            (1 << 31) - 2,
+            (1 << 31) - 1,
+            1 << 31,
+            (1 << 31) + 1,
+            u32::MAX - 1,
+            u32::MAX,
+        ] {
+            for start in [0, n / 2, n.saturating_sub(65), n.saturating_sub(1), n] {
+                for step in [0, 1, 2, 32, 64, n / 2, n] {
+                    let end = bounded_advance(start, step, n, checked_cursor);
+                    let exact = (u64::from(start) + u64::from(step)).min(u64::from(n));
+                    assert_eq!(u64::from(end), exact, "minrun at {start}/{n}, step {step}");
+                    assert!((start..=n).contains(&end));
+                }
+                let probe = bounded_advance(start, start, n, checked_cursor);
+                assert_eq!(u64::from(probe), (2 * u64::from(start)).min(u64::from(n)));
+            }
+            if n == 0 {
+                continue;
+            }
+            for at in [0, n / 2, n - 1] {
+                assert_eq!(run_position(0, at, 1, true, checked_cursor), at);
+                assert_eq!(run_position(n, at, 1, false, checked_cursor), n - 1 - at);
+            }
+            // The final active forward cursor advances to the exclusive end,
+            // never past it; backward cursors stop at zero, not u32::MAX.
+            assert_eq!(checked_cursor(BinOp::Add, n - 1, 1), n);
+            assert_eq!(checked_cursor(BinOp::Sub, 1, 1), 0);
+        }
+    }
+
+    #[test]
+    fn emitted_midpoints_and_power_stack_cover_u32_maximum_length() {
+        for n in [2_u32, 65, (1 << 31) - 1, 1 << 31, u32::MAX - 1, u32::MAX] {
+            let n = u64::from(n);
+            for (start, middle, end) in [(0, 1, n), (0, n / 2, n), (n - 2, n - 1, n)] {
+                let (mut a, mut b) = doubled_midpoints(start, middle, end, |op, x, y| {
+                    assert_eq!(op, BinOp::Add);
+                    x.checked_add(y).expect("doubled midpoint fits i64")
+                });
+                let mut power = 0;
+                loop {
+                    power += 1;
+                    let different = if a >= n {
+                        a -= n;
+                        b -= n;
+                        false
+                    } else {
+                        b >= n
+                    };
+                    a = a.checked_mul(2).expect("power scaling fits i64");
+                    b = b.checked_mul(2).expect("power scaling fits i64");
+                    assert!(a < 4 * n && b < 4 * n);
+                    assert!(power <= 32, "first differing digit within u32 domain");
+                    if different {
+                        break;
+                    }
+                }
+                // 32 positive powers plus the zero-power sentinel use 66
+                // u32 slots; slot 66 is exclusively the galloping threshold.
+                assert!(2 * (power + 1) <= 66);
+            }
+        }
     }
 }
