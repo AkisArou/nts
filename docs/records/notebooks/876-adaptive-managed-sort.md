@@ -188,3 +188,118 @@ All paths below are relative to `/home/akisarou/.cache/nts-scratch/876/`. The sa
 | `before/llvm.dis` | `f9a130ebceb3a6823b022082794bb3749c639c3606a619d45f7504fc4e739250` |
 | `before/c.samples` | `d6f907e9a8ef162c8ff13684c0be3a99c321d49c74ac189203c56ec45728ba41` |
 | `before/llvm.samples` | `82baee92b48a8677a130ad6f75dfe3e13c28ab656987b2159c720621a6cf5f4f` |
+
+## Three-variant locked sitting: rejected candidates
+
+The original compiler, adaptive base without galloping, and galloping candidate
+were run together on CPU 4 under one lock. Each cell is the median of six
+invocations; each invocation uses the normal best-of-five native harness.
+Invocation order alternates, output checksums agree, and sibling 5 user/nice
+CPU counters do not advance across each row. Shipping RC, ThinLTO,
+x86-64-v3, and 32-byte loop alignment match the original benchmark build.
+The JSON preserves every sample, binary SHA-256, load and available-memory
+observations. Ratios here compare variants only within this sitting; they
+do not compare absolute times with earlier engine sittings.
+
+Original is `a33eacb74dc1ead6b9e182221c9862564298e102`; base is
+`8ce7701cea5bd904bd39b533d2b2d611d44a9de8`; galloping is
+`9e55e732406f2bb9296c2aafeda6c7a6b7548536`. A 3% descriptive timing
+threshold labels the following table, independently of the much tighter
+instruction band. Neither candidate meets the acceptance criteria.
+
+| Row | Backend | Original µs | Base µs | Galloping µs | Base / original | Galloping / original | Galloping / base | Verdict |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| sort-objects | C | 59.140798 | 51.033164 | 48.403604 | 0.862910 | 0.818447 | 0.948473 | base gain; galloping gain |
+| sort-objects | LLVM | 63.212653 | 54.317675 | 51.548281 | 0.859285 | 0.815474 | 0.949015 | base gain; galloping gain |
+| sort-objects-runs | C | 69.626851 | 75.275130 | 59.442107 | 1.081122 | 0.853724 | 0.789665 | base LOSS; galloping gain |
+| sort-objects-runs | LLVM | 71.539524 | 78.880819 | 62.649819 | 1.102619 | 0.875737 | 0.794234 | base LOSS; galloping gain |
+| sort-objects-shuffled | C | 187.818762 | 188.417436 | 186.549378 | 1.003188 | 0.993241 | 0.990086 | base within 3%; galloping within 3% |
+| sort-objects-shuffled | LLVM | 188.427282 | 204.857390 | 207.258119 | 1.087196 | 1.099937 | 1.011719 | base LOSS; galloping LOSS |
+| map-entries-top-k | C | 17.645381 | 16.957027 | 18.487534 | 0.960990 | 1.047727 | 1.090258 | base gain; galloping LOSS |
+| map-entries-top-k | LLVM | 17.975379 | 18.202150 | 19.212319 | 1.012616 | 1.068813 | 1.055497 | base within 3%; galloping LOSS |
+| string-sort-control | C | 0.132063 | 0.110396 | 0.113487 | 0.835931 | 0.859336 | 1.028000 | base gain; galloping gain |
+| string-sort-control | LLVM | 0.133430 | 0.110269 | 0.111185 | 0.826413 | 0.833285 | 1.008315 | base gain; galloping gain |
+| array-copying-methods | C | 23.921520 | 23.946315 | 24.112822 | 1.001037 | 1.007997 | 1.006953 | base within 3%; galloping within 3% |
+| array-copying-methods | LLVM | 25.011908 | 24.982880 | 24.893234 | 0.998839 | 0.995255 | 0.996412 | base within 3%; galloping within 3% |
+
+Galloping reduces the two-run case by about 21% versus the adaptive base,
+but increases map top-k by 9.0% on C and 5.5% on LLVM. Shuffled LLVM is
+10.0% slower than the original; removing galloping alone still leaves an
+8.7% loss. The unchanged array-copy control has byte-identical base and
+galloping binaries; its small timing differences show sitting noise.
+
+### Candidate counts, including losses
+
+Native instruction band: one basis point (0.01%). Counts are calibrated, empty-bracket subtracted user instructions per call, outside CPUs 4–5 without a timing lock. JIT count repeats are informational. Filtered lanes were not run, as shown in the raw logs.
+
+| Row | Backend | Original | Adaptive base | Galloping candidate | Galloping / original | Verdict |
+|---|---|---:|---:|---:|---:|---|
+| array-copying-methods | C | 482832 | 482832 | 482832 | 1.000000 | PASS |
+| array-copying-methods | LLVM | 538832 | 538832 | 538831 | 0.999998 | PASS |
+| awfy-towers | C | 941646 | -- | 941646 | 1.000000 | PASS |
+| awfy-towers | LLVM | 908822 | -- | 908821 | 0.999999 | PASS |
+| clbg-k-nucleotide | C | 17432320 | 17425740 | 17425768 | 0.999624 | IMPROVED |
+| clbg-k-nucleotide | LLVM | 17424398 | 17417796 | 17417866 | 0.999625 | IMPROVED |
+| cyclic-churn | C | 2375872 | -- | 2375872 | 1.000000 | PASS |
+| cyclic-churn | LLVM | 2377860 | -- | 2377856 | 0.999998 | PASS |
+| event-state | C | 1700 | -- | -- | — | native refused / not measured |
+| event-state | LLVM | 1698 | -- | -- | — | native refused / not measured |
+| immutable-update | C | 2031897 | -- | 2031902 | 1.000002 | PASS |
+| immutable-update | LLVM | 2033945 | -- | 2033964 | 1.000009 | PASS |
+| jetstream-wsl | C | -- | -- | -- | — | native refused / not measured |
+| jetstream-wsl | LLVM | -- | -- | -- | — | native refused / not measured |
+| json-build-append | C | 222777 | -- | 222777 | 1.000000 | PASS |
+| json-build-append | LLVM | 222778 | -- | 222777 | 0.999996 | PASS |
+| json-stringify-doc | C | 27212376 | -- | 27212313 | 0.999998 | PASS |
+| json-stringify-doc | LLVM | 27037193 | -- | 27037192 | 1.000000 | PASS |
+| map-entries-top-k | C | 414057 | 390052 | 415485 | 1.003449 | REGRESSED |
+| map-entries-top-k | LLVM | 415503 | 404962 | 427380 | 1.028585 | REGRESSED |
+| module-loop-retained | C | 262197 | -- | 262197 | 1.000000 | PASS |
+| module-loop-retained | LLVM | 262197 | -- | 262197 | 1.000000 | PASS |
+| objects | C | 27684 | -- | -- | — | native refused / not measured |
+| objects | LLVM | 27684 | -- | -- | — | native refused / not measured |
+| pipeline | C | 239558 | -- | 239557 | 0.999996 | PASS |
+| pipeline | LLVM | 239555 | -- | 239558 | 1.000013 | PASS |
+| record-word-counts | C | 152641 | -- | 152641 | 1.000000 | PASS |
+| record-word-counts | LLVM | 154112 | -- | 154112 | 1.000000 | PASS |
+| release-acyclic | C | 1832669 | -- | 1832669 | 1.000000 | PASS |
+| release-acyclic | LLVM | 1832669 | -- | 1832665 | 0.999998 | PASS |
+| sort-objects | C | 1411192 | 500957 | 507513 | 0.359634 | IMPROVED |
+| sort-objects | LLVM | 1501920 | 531558 | 537520 | 0.357889 | IMPROVED |
+| sort-objects-runs | C | 1672921 | 779833 | 698638 | 0.417616 | IMPROVED |
+| sort-objects-runs | LLVM | 1723222 | 805414 | 716917 | 0.416033 | IMPROVED |
+| sort-objects-shuffled | C | 1829354 | 1499396 | 1615404 | 0.883046 | IMPROVED |
+| sort-objects-shuffled | LLVM | 1877546 | 1648821 | 1815709 | 0.967065 | IMPROVED |
+| string-sort-control | C | 2995 | 2438 | 2436 | 0.813356 | IMPROVED |
+| string-sort-control | LLVM | 3077 | 2544 | 2539 | 0.825154 | IMPROVED |
+| tree-teardown | C | 597515 | -- | 597515 | 1.000000 | PASS |
+| tree-teardown | LLVM | 597516 | -- | 597516 | 1.000000 | PASS |
+
+Comparator census: same work(seed), same object shape and seeded inputs. Calls divided by all 4,096 element-sorts (six elements for the string control).
+
+| Row | Original calls/element | Adaptive base calls/element | Galloping calls/element |
+|---|---:|---:|---:|
+| sort-objects | 4.175049 | 1.353760 | 1.353760 |
+| sort-objects-shuffled | 6.736328 | 6.728027 | 6.737061 |
+| sort-objects-runs | 4.509766 | 1.782715 | 1.112305 |
+| string-sort-control | 1.833333 | 1.666667 | 1.666667 |
+
+At `work(0)`, the galloping object row has 4,096 retains, 4,387 releases,
+298 allocations, zero live objects and bytes on both C and LLVM. Those
+4,096 retains are exactly the immutable snapshots, one per element-sort;
+write-back contributes none. Map top-k has the same counts with and without
+galloping: 1,646 retains, 2,057 releases and 215 allocations. Its regression
+is not additional managed ownership traffic. Galloping increases its
+comparisons only from 1,258 to 1,265. Binary insertion accounts for 873
+of the base variant’s comparisons on this row.
+
+| Evidence under the scratch root | SHA-256 |
+|---|---|
+| `paired-sort.json` | `eb12dd0cc845262b73e14b7479ad7ced037d9af73594b8c01532ffd58905a217` |
+| `count-gallop.log` | `e54c1338705d2fcc17dafcdea1829876735dee1c5af8a397f6dc053fcb83b7c9` |
+| `gallop/operations/counts.json` | `978c5b5b9927db0bfcc3390570d62ed70b29f0b41494359b229b1ddc9f67b370` |
+| `map-census.json` | `6d9105170aaaf1fbb6d771229c4830e0cbcfd26735784cc441fe92813f9b74b3` |
+| `gallop/comparison-census/counts.json` | `2562178ca86d926aab2c3da768387889d58316bd3d2abf9bbe2256d735e5cb88` |
+| `gallop/comparison-census-llvm/counts.json` | `f90fa177e0617d4795f8c8986496913b9a9493c488af04d8b99ac34474f1f19c` |
+| `gallop/nts.perf.data` | `0d2792cde62ced0cde66c1e52b495df9c21063b3e8df0014940e19629a7e4bad` |
+| `gallop/ntsllvm.perf.data` | `ad17c0735bd0d84d3890d31a2dee484efc2a2f9103634ac7af05e657c8af479f` |

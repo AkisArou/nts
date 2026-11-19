@@ -289,7 +289,9 @@ impl Sort<'_, '_> {
             pair,
             &[end],
             |s| {
-                let descending = s.greater_at((s.order, start), (s.order, next))?;
+                // Everything at or beyond start is still the identity
+                // permutation: completed runs only write their own prefix.
+                let descending = s.greater(start, next)?;
                 s.advance(end, 1);
                 let yes = s.boolean(true);
                 let open = s.variable(yes);
@@ -301,21 +303,23 @@ impl Sort<'_, '_> {
                     },
                     |s| {
                         let previous = s.offset(s.var(end), -1);
-                        let less = s.greater_at((s.order, previous), (s.order, s.var(end)))?;
+                        let less = s.greater(previous, s.var(end))?;
                         let same = s.binary(BinOp::Eq, less, descending);
-                        s.branch(
-                            same,
-                            &[end, open],
-                            |s| {
-                                s.advance(end, 1);
-                                Ok(())
-                            },
-                            |s| {
-                                let no = s.boolean(false);
-                                s.bind(open, no);
-                                Ok(())
-                            },
-                        )
+                        // Advance independently of the comparison. A
+                        // conditional increment makes the next load's address
+                        // wait for the previous comparator result.
+                        s.advance(end, 1);
+                        s.bind(open, same);
+                        Ok(())
+                    },
+                )?;
+                s.branch(
+                    s.var(open),
+                    &[end],
+                    |_| Ok(()),
+                    |s| {
+                        s.advance(end, -1);
+                        Ok(())
                     },
                 )?;
                 s.branch(
@@ -359,7 +363,8 @@ impl Sort<'_, '_> {
             &[at],
             |s| s.binary(BinOp::Lt, s.var(at), end),
             |s| {
-                let pivot = s.get(s.order, s.var(at));
+                // The unprocessed suffix has not been permuted yet.
+                let pivot = s.var(at);
                 let low = s.variable(start);
                 let high = s.variable(s.var(at));
                 s.loop_while(
