@@ -716,3 +716,505 @@ control changes the dependency representation. Galloping-disabled controls
 keep the same policy and constant-fold the galloping entry condition away.
 Each source arm is committed and its commit observed before an all-release
 build and instruction counts. All archived arms are then timed together.
+
+## Matched unsigned width and run-policy experiment
+
+The six u32 arms differ only in the named factor: minrun normalization at
+32 or 64, bounds-based or remaining-count insertion search, and galloping
+on or off. The i64 single-kernel candidate and the original main compiler
+are the other two arms. Each source is committed and HEAD observed before
+its plain workspace release build. Pinned Node v26.13.0, shipping native
+flags, RC provider, calibrated empty-bracket-subtracted user instructions
+on CPU 0, outside reserved CPUs 4–5, no timing lock for instruction counts.
+The native count band is 0.01%; JIT spread is informational.
+
+| Arm | Commit | Source SHA-256 |
+|---|---|---|
+| u32-r64-bounds-gallop | `15ee696551c47f6018eb897d227d52cc93519f84` | `b126995b9514e1688f35f3efede88ac4f345aea2b8b3cd6c56d32ea480e2c270` |
+| u32-r32-bounds-gallop | `4b78e63432cffa5bd23ab76fc1acfa18f4b7c0ec` | `632243b644616ff24f3c7c04c3a58738537f0732a8910f62695782f2178e90be` |
+| u32-r64-count-gallop | `7c623aa0e5bb0b5de61fd0987800373ea0318b78` | `7639974a59497b5937f77f6801bff314a7c60c7a9a80bf0cf35741f29c346770` |
+| u32-r32-count-gallop | `392c220ca10071e0ffb1d6741d1beab17b416402` | `b81099d55e841e6e2b8dc186c5cbf65040247e173930c0459883ed92f6e320f1` |
+| u32-r64-bounds-plain | `9f7e4e3bcbcdaffa479ae9888041be6642926712` | `e3cc2c8e5c610211aaafe912960df5cbfab5b62fb1b2cf247eb68c50951955e3` |
+| u32-r32-count-plain | `d1ea2ce912a82867c39a4441f251d23ecd1d6e06` | `d60469d0b47cca95367ac49e1c709a0dc9c20ce92df6f83bfb4e6f112f7c09cf` |
+
+The count-search r64 arm's first pass completed six rows, then the final
+string control's Node oracle did not complete. The failed log and raw
+observations are preserved. Only that control was retried; it completed
+and agreed. The earlier six rows were retained, not repeated or selected.
+An initial archive attempt encountered nonregular counter-control FIFOs;
+the archiver now copies regular evidence files and leaves FIFOs alone.
+Neither evidence-copying failure changed product source or a verdict.
+
+| Row | Backend | Arm | Original instructions | Arm instructions | / original | / u32 reference | Verdict vs original |
+|---|---|---|---:|---:|---:|---:|---|
+| array-copying-methods | C | u32-r64-bounds-gallop | 482832 | 482832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | C | u32-r32-bounds-gallop | 482832 | 482832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | C | u32-r64-count-gallop | 482832 | 482832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | C | u32-r32-count-gallop | 482832 | 482832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | C | u32-r64-bounds-plain | 482832 | 482832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | C | u32-r32-count-plain | 482832 | 482832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | LLVM | u32-r64-bounds-gallop | 538832 | 538832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | LLVM | u32-r32-bounds-gallop | 538832 | 538832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | LLVM | u32-r64-count-gallop | 538832 | 538832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | LLVM | u32-r32-count-gallop | 538832 | 538831 | 0.999998 | 0.999998 | within band |
+| array-copying-methods | LLVM | u32-r64-bounds-plain | 538832 | 538832 | 1.000000 | 1.000000 | within band |
+| array-copying-methods | LLVM | u32-r32-count-plain | 538832 | 538833 | 1.000002 | 1.000002 | within band |
+| clbg-k-nucleotide | C | u32-r64-bounds-gallop | 17432320 | 17425096 | 0.999586 | 1.000000 | gain |
+| clbg-k-nucleotide | C | u32-r32-bounds-gallop | 17432320 | 17425096 | 0.999586 | 1.000000 | gain |
+| clbg-k-nucleotide | C | u32-r64-count-gallop | 17432320 | 17425425 | 0.999604 | 1.000019 | gain |
+| clbg-k-nucleotide | C | u32-r32-count-gallop | 17432320 | 17425426 | 0.999605 | 1.000019 | gain |
+| clbg-k-nucleotide | C | u32-r64-bounds-plain | 17432320 | 17425329 | 0.999599 | 1.000013 | gain |
+| clbg-k-nucleotide | C | u32-r32-count-plain | 17432320 | 17425432 | 0.999605 | 1.000019 | gain |
+| clbg-k-nucleotide | LLVM | u32-r64-bounds-gallop | 17424398 | 17417472 | 0.999603 | 1.000000 | gain |
+| clbg-k-nucleotide | LLVM | u32-r32-bounds-gallop | 17424398 | 17417472 | 0.999603 | 1.000000 | gain |
+| clbg-k-nucleotide | LLVM | u32-r64-count-gallop | 17424398 | 17417524 | 0.999605 | 1.000003 | gain |
+| clbg-k-nucleotide | LLVM | u32-r32-count-gallop | 17424398 | 17417486 | 0.999603 | 1.000001 | gain |
+| clbg-k-nucleotide | LLVM | u32-r64-bounds-plain | 17424398 | 17417580 | 0.999609 | 1.000006 | gain |
+| clbg-k-nucleotide | LLVM | u32-r32-count-plain | 17424398 | 17417499 | 0.999604 | 1.000002 | gain |
+| map-entries-top-k | C | u32-r64-bounds-gallop | 414057 | 387673 | 0.936279 | 1.000000 | gain |
+| map-entries-top-k | C | u32-r32-bounds-gallop | 414057 | 390131 | 0.942216 | 1.006340 | gain |
+| map-entries-top-k | C | u32-r64-count-gallop | 414057 | 389602 | 0.940938 | 1.004976 | gain |
+| map-entries-top-k | C | u32-r32-count-gallop | 414057 | 391569 | 0.945689 | 1.010050 | gain |
+| map-entries-top-k | C | u32-r64-bounds-plain | 414057 | 380853 | 0.919808 | 0.982408 | gain |
+| map-entries-top-k | C | u32-r32-count-plain | 414057 | 384898 | 0.929577 | 0.992842 | gain |
+| map-entries-top-k | LLVM | u32-r64-bounds-gallop | 415503 | 394244 | 0.948836 | 1.000000 | gain |
+| map-entries-top-k | LLVM | u32-r32-bounds-gallop | 415503 | 396487 | 0.954234 | 1.005689 | gain |
+| map-entries-top-k | LLVM | u32-r64-count-gallop | 415503 | 396354 | 0.953914 | 1.005352 | gain |
+| map-entries-top-k | LLVM | u32-r32-count-gallop | 415503 | 397895 | 0.957622 | 1.009261 | gain |
+| map-entries-top-k | LLVM | u32-r64-bounds-plain | 415503 | 387478 | 0.932552 | 0.982838 | gain |
+| map-entries-top-k | LLVM | u32-r32-count-plain | 415503 | 387627 | 0.932910 | 0.983216 | gain |
+| sort-objects | C | u32-r64-bounds-gallop | 1411192 | 471453 | 0.334081 | 1.000000 | gain |
+| sort-objects | C | u32-r32-bounds-gallop | 1411192 | 474029 | 0.335907 | 1.005464 | gain |
+| sort-objects | C | u32-r64-count-gallop | 1411192 | 470500 | 0.333406 | 0.997979 | gain |
+| sort-objects | C | u32-r32-count-gallop | 1411192 | 472579 | 0.334879 | 1.002388 | gain |
+| sort-objects | C | u32-r64-bounds-plain | 1411192 | 466981 | 0.330912 | 0.990514 | gain |
+| sort-objects | C | u32-r32-count-plain | 1411192 | 469249 | 0.332520 | 0.995325 | gain |
+| sort-objects | LLVM | u32-r64-bounds-gallop | 1501920 | 484827 | 0.322805 | 1.000000 | gain |
+| sort-objects | LLVM | u32-r32-bounds-gallop | 1501920 | 487312 | 0.324459 | 1.005126 | gain |
+| sort-objects | LLVM | u32-r64-count-gallop | 1501920 | 485173 | 0.323035 | 1.000714 | gain |
+| sort-objects | LLVM | u32-r32-count-gallop | 1501920 | 487025 | 0.324268 | 1.004534 | gain |
+| sort-objects | LLVM | u32-r64-bounds-plain | 1501920 | 479354 | 0.319161 | 0.988711 | gain |
+| sort-objects | LLVM | u32-r32-count-plain | 1501920 | 480672 | 0.320038 | 0.991430 | gain |
+| sort-objects-runs | C | u32-r64-bounds-gallop | 1672921 | 673797 | 0.402767 | 1.000000 | gain |
+| sort-objects-runs | C | u32-r32-bounds-gallop | 1672921 | 670812 | 0.400982 | 0.995570 | gain |
+| sort-objects-runs | C | u32-r64-count-gallop | 1672921 | 674267 | 0.403048 | 1.000698 | gain |
+| sort-objects-runs | C | u32-r32-count-gallop | 1672921 | 670863 | 0.401013 | 0.995646 | gain |
+| sort-objects-runs | C | u32-r64-bounds-plain | 1672921 | 732094 | 0.437614 | 1.086520 | gain |
+| sort-objects-runs | C | u32-r32-count-plain | 1672921 | 729269 | 0.435926 | 1.082327 | gain |
+| sort-objects-runs | LLVM | u32-r64-bounds-gallop | 1723222 | 681611 | 0.395545 | 1.000000 | gain |
+| sort-objects-runs | LLVM | u32-r32-bounds-gallop | 1723222 | 678313 | 0.393631 | 0.995161 | gain |
+| sort-objects-runs | LLVM | u32-r64-count-gallop | 1723222 | 682514 | 0.396069 | 1.001325 | gain |
+| sort-objects-runs | LLVM | u32-r32-count-gallop | 1723222 | 678862 | 0.393949 | 0.995967 | gain |
+| sort-objects-runs | LLVM | u32-r64-bounds-plain | 1723222 | 746633 | 0.433277 | 1.095395 | gain |
+| sort-objects-runs | LLVM | u32-r32-count-plain | 1723222 | 743814 | 0.431641 | 1.091259 | gain |
+| sort-objects-shuffled | C | u32-r64-bounds-gallop | 1829354 | 1417368 | 0.774792 | 1.000000 | gain |
+| sort-objects-shuffled | C | u32-r32-bounds-gallop | 1829354 | 1461009 | 0.798648 | 1.030790 | gain |
+| sort-objects-shuffled | C | u32-r64-count-gallop | 1829354 | 1432179 | 0.782888 | 1.010450 | gain |
+| sort-objects-shuffled | C | u32-r32-count-gallop | 1829354 | 1471720 | 0.804503 | 1.038347 | gain |
+| sort-objects-shuffled | C | u32-r64-bounds-plain | 1829354 | 1332806 | 0.728566 | 0.940339 | gain |
+| sort-objects-shuffled | C | u32-r32-count-plain | 1829354 | 1367945 | 0.747775 | 0.965130 | gain |
+| sort-objects-shuffled | LLVM | u32-r64-bounds-gallop | 1877546 | 1531933 | 0.815923 | 1.000000 | gain |
+| sort-objects-shuffled | LLVM | u32-r32-bounds-gallop | 1877546 | 1568977 | 0.835653 | 1.024181 | gain |
+| sort-objects-shuffled | LLVM | u32-r64-count-gallop | 1877546 | 1546930 | 0.823911 | 1.009790 | gain |
+| sort-objects-shuffled | LLVM | u32-r32-count-gallop | 1877546 | 1578840 | 0.840906 | 1.030619 | gain |
+| sort-objects-shuffled | LLVM | u32-r64-bounds-plain | 1877546 | 1462453 | 0.778917 | 0.954646 | gain |
+| sort-objects-shuffled | LLVM | u32-r32-count-plain | 1877546 | 1478986 | 0.787723 | 0.965438 | gain |
+| string-sort-control | C | u32-r64-bounds-gallop | 2995 | 2392 | 0.798664 | 1.000000 | gain |
+| string-sort-control | C | u32-r32-bounds-gallop | 2995 | 2392 | 0.798664 | 1.000000 | gain |
+| string-sort-control | C | u32-r64-count-gallop | 2995 | 2392 | 0.798664 | 1.000000 | gain |
+| string-sort-control | C | u32-r32-count-gallop | 2995 | 2392 | 0.798664 | 1.000000 | gain |
+| string-sort-control | C | u32-r64-bounds-plain | 2995 | 2374 | 0.792654 | 0.992475 | gain |
+| string-sort-control | C | u32-r32-count-plain | 2995 | 2395 | 0.799666 | 1.001254 | gain |
+| string-sort-control | LLVM | u32-r64-bounds-gallop | 3077 | 2443 | 0.793955 | 1.000000 | gain |
+| string-sort-control | LLVM | u32-r32-bounds-gallop | 3077 | 2443 | 0.793955 | 1.000000 | gain |
+| string-sort-control | LLVM | u32-r64-count-gallop | 3077 | 2455 | 0.797855 | 1.004912 | gain |
+| string-sort-control | LLVM | u32-r32-count-gallop | 3077 | 2455 | 0.797855 | 1.004912 | gain |
+| string-sort-control | LLVM | u32-r64-bounds-plain | 3077 | 2444 | 0.794280 | 1.000409 | gain |
+| string-sort-control | LLVM | u32-r32-count-plain | 3077 | 2449 | 0.795905 | 1.002456 | gain |
+
+The unchanged C++ and pinned Node counter controls are also retained.
+C++ movement outside its 0.01% band is labeled as a control movement,
+not attributed to the NTS compiler. Node repeat spread is informational.
+Filtered JVM, Java, Bun and ScriptC columns were not measured here.
+
+| Row | Column | Arm | Original | Arm | / original | Condition/verdict |
+|---|---|---|---:|---:|---:|---|
+| array-copying-methods | C++ | u32-r64-bounds-gallop | 295759 | 295759 | 1.000000 | within band |
+| array-copying-methods | C++ | u32-r32-bounds-gallop | 295759 | 295760 | 1.000003 | within band |
+| array-copying-methods | C++ | u32-r64-count-gallop | 295759 | 295759 | 1.000000 | within band |
+| array-copying-methods | C++ | u32-r32-count-gallop | 295759 | 295760 | 1.000003 | within band |
+| array-copying-methods | C++ | u32-r64-bounds-plain | 295759 | 295758 | 0.999997 | within band |
+| array-copying-methods | C++ | u32-r32-count-plain | 295759 | 295759 | 1.000000 | within band |
+| array-copying-methods | node | u32-r64-bounds-gallop | 2318228 | 2318542 | 1.000135 | JIT spread, informational |
+| array-copying-methods | node | u32-r32-bounds-gallop | 2318228 | 2318751 | 1.000226 | JIT spread, informational |
+| array-copying-methods | node | u32-r64-count-gallop | 2318228 | 2319937 | 1.000737 | JIT spread, informational |
+| array-copying-methods | node | u32-r32-count-gallop | 2318228 | 2345594 | 1.011805 | JIT spread, informational |
+| array-copying-methods | node | u32-r64-bounds-plain | 2318228 | 2318878 | 1.000280 | JIT spread, informational |
+| array-copying-methods | node | u32-r32-count-plain | 2318228 | 2319365 | 1.000490 | JIT spread, informational |
+| clbg-k-nucleotide | C++ | u32-r64-bounds-gallop | 7805117 | 7806113 | 1.000128 | worse control, outside band |
+| clbg-k-nucleotide | C++ | u32-r32-bounds-gallop | 7805117 | 7806114 | 1.000128 | worse control, outside band |
+| clbg-k-nucleotide | C++ | u32-r64-count-gallop | 7805117 | 7806113 | 1.000128 | worse control, outside band |
+| clbg-k-nucleotide | C++ | u32-r32-count-gallop | 7805117 | 7806132 | 1.000130 | worse control, outside band |
+| clbg-k-nucleotide | C++ | u32-r64-bounds-plain | 7805117 | 7805117 | 1.000000 | within band |
+| clbg-k-nucleotide | C++ | u32-r32-count-plain | 7805117 | 7805118 | 1.000000 | within band |
+| clbg-k-nucleotide | node | u32-r64-bounds-gallop | 36398076 | 35026035 | 0.962305 | JIT spread, informational |
+| clbg-k-nucleotide | node | u32-r32-bounds-gallop | 36398076 | 34935848 | 0.959827 | JIT spread, informational |
+| clbg-k-nucleotide | node | u32-r64-count-gallop | 36398076 | 35184819 | 0.966667 | JIT spread, informational |
+| clbg-k-nucleotide | node | u32-r32-count-gallop | 36398076 | 34795130 | 0.955961 | JIT spread, informational |
+| clbg-k-nucleotide | node | u32-r64-bounds-plain | 36398076 | 35517812 | 0.975816 | JIT spread, informational |
+| clbg-k-nucleotide | node | u32-r32-count-plain | 36398076 | 34986101 | 0.961207 | JIT spread, informational |
+| map-entries-top-k | C++ | u32-r64-bounds-gallop | 376413 | 376217 | 0.999479 | lower control, outside band |
+| map-entries-top-k | C++ | u32-r32-bounds-gallop | 376413 | 376413 | 1.000000 | within band |
+| map-entries-top-k | C++ | u32-r64-count-gallop | 376413 | 376623 | 1.000558 | worse control, outside band |
+| map-entries-top-k | C++ | u32-r32-count-gallop | 376413 | 376406 | 0.999981 | within band |
+| map-entries-top-k | C++ | u32-r64-bounds-plain | 376413 | 375945 | 0.998757 | lower control, outside band |
+| map-entries-top-k | C++ | u32-r32-count-plain | 376413 | 376575 | 1.000430 | worse control, outside band |
+| map-entries-top-k | node | u32-r64-bounds-gallop | 778585 | 692655 | 0.889633 | JIT spread, informational |
+| map-entries-top-k | node | u32-r32-bounds-gallop | 778585 | 697684 | 0.896092 | JIT spread, informational |
+| map-entries-top-k | node | u32-r64-count-gallop | 778585 | 893685 | 1.147832 | JIT spread, informational |
+| map-entries-top-k | node | u32-r32-count-gallop | 778585 | 729764 | 0.937295 | JIT spread, informational |
+| map-entries-top-k | node | u32-r64-bounds-plain | 778585 | 902139 | 1.158690 | JIT spread, informational |
+| map-entries-top-k | node | u32-r32-count-plain | 778585 | 694680 | 0.892234 | JIT spread, informational |
+| sort-objects | C++ | u32-r64-bounds-gallop | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | C++ | u32-r32-bounds-gallop | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | C++ | u32-r64-count-gallop | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | C++ | u32-r32-count-gallop | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | C++ | u32-r64-bounds-plain | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | C++ | u32-r32-count-plain | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | node | u32-r64-bounds-gallop | 1497315 | 1496679 | 0.999575 | JIT spread, informational |
+| sort-objects | node | u32-r32-bounds-gallop | 1497315 | 1677825 | 1.120556 | JIT spread, informational |
+| sort-objects | node | u32-r64-count-gallop | 1497315 | 1505018 | 1.005145 | JIT spread, informational |
+| sort-objects | node | u32-r32-count-gallop | 1497315 | 1498341 | 1.000685 | JIT spread, informational |
+| sort-objects | node | u32-r64-bounds-plain | 1497315 | 1677510 | 1.120345 | JIT spread, informational |
+| sort-objects | node | u32-r32-count-plain | 1497315 | 1491177 | 0.995901 | JIT spread, informational |
+| sort-objects-runs | C++ | u32-r64-bounds-gallop | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | C++ | u32-r32-bounds-gallop | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | C++ | u32-r64-count-gallop | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | C++ | u32-r32-count-gallop | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | C++ | u32-r64-bounds-plain | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | C++ | u32-r32-count-plain | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | node | u32-r64-bounds-gallop | 1562565 | 1554658 | 0.994940 | JIT spread, informational |
+| sort-objects-runs | node | u32-r32-bounds-gallop | 1562565 | 1358899 | 0.869659 | JIT spread, informational |
+| sort-objects-runs | node | u32-r64-count-gallop | 1562565 | 1734147 | 1.109808 | JIT spread, informational |
+| sort-objects-runs | node | u32-r32-count-gallop | 1562565 | 1557286 | 0.996622 | JIT spread, informational |
+| sort-objects-runs | node | u32-r64-bounds-plain | 1562565 | 1554370 | 0.994755 | JIT spread, informational |
+| sort-objects-runs | node | u32-r32-count-plain | 1562565 | 1563242 | 1.000433 | JIT spread, informational |
+| sort-objects-shuffled | C++ | u32-r64-bounds-gallop | 855387 | 855387 | 1.000000 | within band |
+| sort-objects-shuffled | C++ | u32-r32-bounds-gallop | 855387 | 855385 | 0.999998 | within band |
+| sort-objects-shuffled | C++ | u32-r64-count-gallop | 855387 | 855387 | 1.000000 | within band |
+| sort-objects-shuffled | C++ | u32-r32-count-gallop | 855387 | 855387 | 1.000000 | within band |
+| sort-objects-shuffled | C++ | u32-r64-bounds-plain | 855387 | 855387 | 1.000000 | within band |
+| sort-objects-shuffled | C++ | u32-r32-count-plain | 855387 | 855387 | 1.000000 | within band |
+| sort-objects-shuffled | node | u32-r64-bounds-gallop | 4541688 | 6585620 | 1.450038 | JIT spread, informational |
+| sort-objects-shuffled | node | u32-r32-bounds-gallop | 4541688 | 6507890 | 1.432923 | JIT spread, informational |
+| sort-objects-shuffled | node | u32-r64-count-gallop | 4541688 | 11818419 | 2.602208 | JIT spread, informational |
+| sort-objects-shuffled | node | u32-r32-count-gallop | 4541688 | 11858302 | 2.610990 | JIT spread, informational |
+| sort-objects-shuffled | node | u32-r64-bounds-plain | 4541688 | 6010823 | 1.323478 | JIT spread, informational |
+| sort-objects-shuffled | node | u32-r32-count-plain | 4541688 | 5946286 | 1.309268 | JIT spread, informational |
+| string-sort-control | C++ | u32-r64-bounds-gallop | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | C++ | u32-r32-bounds-gallop | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | C++ | u32-r64-count-gallop | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | C++ | u32-r32-count-gallop | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | C++ | u32-r64-bounds-plain | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | C++ | u32-r32-count-plain | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | node | u32-r64-bounds-gallop | 5802 | 5842 | 1.006894 | JIT spread, informational |
+| string-sort-control | node | u32-r32-bounds-gallop | 5802 | 330 | 0.056877 | JIT spread, informational |
+| string-sort-control | node | u32-r64-count-gallop | 5802 | 5680 | 0.978973 | JIT spread, informational |
+| string-sort-control | node | u32-r32-count-gallop | 5802 | 29573 | 5.097036 | JIT spread, informational |
+| string-sort-control | node | u32-r64-bounds-plain | 5802 | 9580 | 1.651155 | JIT spread, informational |
+| string-sort-control | node | u32-r32-count-plain | 5802 | 6152 | 1.060324 | JIT spread, informational |
+
+### Observable comparator work
+
+The C and LLVM instrumented comparator counts and checksums agree exactly
+for each arm. Element counts are all element-sorts in one work call:
+4,096 for object rows, six for the string control. Width and insertion
+search controls preserve comparator calls; changing run policy can change
+them, within the implementation-defined sort comparison sequence.
+
+| Row | Arm | Calls | Calls / element | / original calls |
+|---|---|---:|---:|---:|
+| sort-objects | u32-r64-bounds-gallop | 5545 | 1.353760 | 0.324250 |
+| sort-objects-shuffled | u32-r64-bounds-gallop | 27595 | 6.737061 | 1.000109 |
+| sort-objects-runs | u32-r64-bounds-gallop | 4556 | 1.112305 | 0.246644 |
+| string-sort-control | u32-r64-bounds-gallop | 10 | 1.666667 | 0.909091 |
+| sort-objects | u32-r32-bounds-gallop | 5561 | 1.357666 | 0.325186 |
+| sort-objects-shuffled | u32-r32-bounds-gallop | 27919 | 6.816162 | 1.011851 |
+| sort-objects-runs | u32-r32-bounds-gallop | 4435 | 1.082764 | 0.240093 |
+| string-sort-control | u32-r32-bounds-gallop | 10 | 1.666667 | 0.909091 |
+| sort-objects | u32-r64-count-gallop | 5545 | 1.353760 | 0.324250 |
+| sort-objects-shuffled | u32-r64-count-gallop | 27595 | 6.737061 | 1.000109 |
+| sort-objects-runs | u32-r64-count-gallop | 4556 | 1.112305 | 0.246644 |
+| string-sort-control | u32-r64-count-gallop | 10 | 1.666667 | 0.909091 |
+| sort-objects | u32-r32-count-gallop | 5561 | 1.357666 | 0.325186 |
+| sort-objects-shuffled | u32-r32-count-gallop | 27919 | 6.816162 | 1.011851 |
+| sort-objects-runs | u32-r32-count-gallop | 4435 | 1.082764 | 0.240093 |
+| string-sort-control | u32-r32-count-gallop | 10 | 1.666667 | 0.909091 |
+| sort-objects | u32-r64-bounds-plain | 5545 | 1.353760 | 0.324250 |
+| sort-objects-shuffled | u32-r64-bounds-plain | 27558 | 6.728027 | 0.998768 |
+| sort-objects-runs | u32-r64-bounds-plain | 7302 | 1.782715 | 0.395301 |
+| string-sort-control | u32-r64-bounds-plain | 10 | 1.666667 | 0.909091 |
+| sort-objects | u32-r32-count-plain | 5561 | 1.357666 | 0.325186 |
+| sort-objects-shuffled | u32-r32-count-plain | 27878 | 6.806152 | 1.010365 |
+| sort-objects-runs | u32-r32-count-plain | 7188 | 1.754883 | 0.389129 |
+| string-sort-control | u32-r32-count-plain | 10 | 1.666667 | 0.909091 |
+
+### One locked sitting: all eight variants
+
+CPU 4, sibling 5 idle; six invocations in alternating variant order per
+row, medians of each harness's best-five result, shipping flags and RC.
+Checksums agree across every variant. All attempts are checkpointed before
+checking sibling activity. The table retains every arm and losing ratio.
+The 3% labels describe wall-time movement; they are distinct from the
+0.01% instruction band. Engine acceptance is a separate full-memory
+sitting. Times and ratios must not be compared across sittings.
+
+| Row | Backend | Arm | µs | / original | / u32 reference | Verdict vs original |
+|---|---|---|---:|---:|---:|---|
+| sort-objects | C | main | 57.278342 | 1.000000 | 2.046395 | within 3% |
+| sort-objects | C | i64-r64-bounds-gallop | 28.297474 | 0.494034 | 1.010990 | gain |
+| sort-objects | C | u32-r64-bounds-gallop | 27.989877 | 0.488664 | 1.000000 | gain |
+| sort-objects | C | u32-r32-bounds-gallop | 28.028801 | 0.489344 | 1.001391 | gain |
+| sort-objects | C | u32-r64-count-gallop | 28.004918 | 0.488927 | 1.000537 | gain |
+| sort-objects | C | u32-r32-count-gallop | 28.082786 | 0.490286 | 1.003319 | gain |
+| sort-objects | C | u32-r64-bounds-plain | 30.514756 | 0.532745 | 1.090207 | gain |
+| sort-objects | C | u32-r32-count-plain | 31.697945 | 0.553402 | 1.132479 | gain |
+| sort-objects | LLVM | main | 61.240006 | 1.000000 | 2.217957 | within 3% |
+| sort-objects | LLVM | i64-r64-bounds-gallop | 29.890653 | 0.488090 | 1.082563 | gain |
+| sort-objects | LLVM | u32-r64-bounds-gallop | 27.610993 | 0.450865 | 1.000000 | gain |
+| sort-objects | LLVM | u32-r32-bounds-gallop | 27.911065 | 0.455765 | 1.010868 | gain |
+| sort-objects | LLVM | u32-r64-count-gallop | 28.048471 | 0.458009 | 1.015844 | gain |
+| sort-objects | LLVM | u32-r32-count-gallop | 27.949403 | 0.456391 | 1.012256 | gain |
+| sort-objects | LLVM | u32-r64-bounds-plain | 31.344432 | 0.511829 | 1.135216 | gain |
+| sort-objects | LLVM | u32-r32-count-plain | 32.232373 | 0.526329 | 1.167375 | gain |
+| sort-objects-shuffled | C | main | 184.253735 | 1.000000 | 1.037859 | within 3% |
+| sort-objects-shuffled | C | i64-r64-bounds-gallop | 182.776633 | 0.991983 | 1.029538 | within 3% |
+| sort-objects-shuffled | C | u32-r64-bounds-gallop | 177.532611 | 0.963522 | 1.000000 | gain |
+| sort-objects-shuffled | C | u32-r32-bounds-gallop | 167.086063 | 0.906826 | 0.941157 | gain |
+| sort-objects-shuffled | C | u32-r64-count-gallop | 183.618586 | 0.996553 | 1.034281 | within 3% |
+| sort-objects-shuffled | C | u32-r32-count-gallop | 175.188034 | 0.950798 | 0.986794 | gain |
+| sort-objects-shuffled | C | u32-r64-bounds-plain | 176.320715 | 0.956945 | 0.993174 | gain |
+| sort-objects-shuffled | C | u32-r32-count-plain | 171.598275 | 0.931315 | 0.966573 | gain |
+| sort-objects-shuffled | LLVM | main | 183.435795 | 1.000000 | 1.004235 | within 3% |
+| sort-objects-shuffled | LLVM | i64-r64-bounds-gallop | 187.967788 | 1.024706 | 1.029046 | within 3% |
+| sort-objects-shuffled | LLVM | u32-r64-bounds-gallop | 182.662131 | 0.995782 | 1.000000 | within 3% |
+| sort-objects-shuffled | LLVM | u32-r32-bounds-gallop | 175.414533 | 0.956272 | 0.960322 | gain |
+| sort-objects-shuffled | LLVM | u32-r64-count-gallop | 182.908737 | 0.997127 | 1.001350 | within 3% |
+| sort-objects-shuffled | LLVM | u32-r32-count-gallop | 177.914195 | 0.969899 | 0.974007 | gain |
+| sort-objects-shuffled | LLVM | u32-r64-bounds-plain | 181.425547 | 0.989041 | 0.993230 | within 3% |
+| sort-objects-shuffled | LLVM | u32-r32-count-plain | 179.764499 | 0.979986 | 0.984137 | within 3% |
+| sort-objects-runs | C | main | 67.918356 | 1.000000 | 1.745072 | within 3% |
+| sort-objects-runs | C | i64-r64-bounds-gallop | 39.180940 | 0.576883 | 1.006702 | gain |
+| sort-objects-runs | C | u32-r64-bounds-gallop | 38.920083 | 0.573042 | 1.000000 | gain |
+| sort-objects-runs | C | u32-r32-bounds-gallop | 39.110354 | 0.575844 | 1.004889 | gain |
+| sort-objects-runs | C | u32-r64-count-gallop | 38.481428 | 0.566584 | 0.988729 | gain |
+| sort-objects-runs | C | u32-r32-count-gallop | 38.231394 | 0.562902 | 0.982305 | gain |
+| sort-objects-runs | C | u32-r64-bounds-plain | 47.905849 | 0.705345 | 1.230877 | gain |
+| sort-objects-runs | C | u32-r32-count-plain | 47.596559 | 0.700791 | 1.222931 | gain |
+| sort-objects-runs | LLVM | main | 67.453974 | 1.000000 | 1.763901 | within 3% |
+| sort-objects-runs | LLVM | i64-r64-bounds-gallop | 39.620209 | 0.587367 | 1.036056 | gain |
+| sort-objects-runs | LLVM | u32-r64-bounds-gallop | 38.241371 | 0.566925 | 1.000000 | gain |
+| sort-objects-runs | LLVM | u32-r32-bounds-gallop | 37.989650 | 0.563194 | 0.993418 | gain |
+| sort-objects-runs | LLVM | u32-r64-count-gallop | 38.103189 | 0.564877 | 0.996387 | gain |
+| sort-objects-runs | LLVM | u32-r32-count-gallop | 38.160544 | 0.565727 | 0.997886 | gain |
+| sort-objects-runs | LLVM | u32-r64-bounds-plain | 48.668637 | 0.721509 | 1.272670 | gain |
+| sort-objects-runs | LLVM | u32-r32-count-plain | 48.326707 | 0.716440 | 1.263728 | gain |
+| map-entries-top-k | C | main | 17.137533 | 1.000000 | 1.026694 | within 3% |
+| map-entries-top-k | C | i64-r64-bounds-gallop | 16.576898 | 0.967286 | 0.993106 | gain |
+| map-entries-top-k | C | u32-r64-bounds-gallop | 16.691966 | 0.974001 | 1.000000 | within 3% |
+| map-entries-top-k | C | u32-r32-bounds-gallop | 16.491570 | 0.962307 | 0.987994 | gain |
+| map-entries-top-k | C | u32-r64-count-gallop | 16.768038 | 0.978439 | 1.004557 | within 3% |
+| map-entries-top-k | C | u32-r32-count-gallop | 16.422242 | 0.958262 | 0.983841 | gain |
+| map-entries-top-k | C | u32-r64-bounds-plain | 16.259936 | 0.948791 | 0.974117 | gain |
+| map-entries-top-k | C | u32-r32-count-plain | 16.145848 | 0.942134 | 0.967283 | gain |
+| map-entries-top-k | LLVM | main | 17.388525 | 1.000000 | 1.009695 | within 3% |
+| map-entries-top-k | LLVM | i64-r64-bounds-gallop | 17.816946 | 1.024638 | 1.034573 | within 3% |
+| map-entries-top-k | LLVM | u32-r64-bounds-gallop | 17.221554 | 0.990398 | 1.000000 | within 3% |
+| map-entries-top-k | LLVM | u32-r32-bounds-gallop | 16.946016 | 0.974552 | 0.984000 | within 3% |
+| map-entries-top-k | LLVM | u32-r64-count-gallop | 17.406807 | 1.001051 | 1.010757 | within 3% |
+| map-entries-top-k | LLVM | u32-r32-count-gallop | 17.051089 | 0.980594 | 0.990102 | within 3% |
+| map-entries-top-k | LLVM | u32-r64-bounds-plain | 16.909823 | 0.972470 | 0.981899 | within 3% |
+| map-entries-top-k | LLVM | u32-r32-count-plain | 16.802292 | 0.966286 | 0.975655 | gain |
+| string-sort-control | C | main | 0.128380 | 1.000000 | 1.143609 | within 3% |
+| string-sort-control | C | i64-r64-bounds-gallop | 0.111294 | 0.866910 | 0.991406 | gain |
+| string-sort-control | C | u32-r64-bounds-gallop | 0.112259 | 0.874425 | 1.000000 | gain |
+| string-sort-control | C | u32-r32-bounds-gallop | 0.112319 | 0.874896 | 1.000539 | gain |
+| string-sort-control | C | u32-r64-count-gallop | 0.108158 | 0.842479 | 0.963467 | gain |
+| string-sort-control | C | u32-r32-count-gallop | 0.108630 | 0.846158 | 0.967674 | gain |
+| string-sort-control | C | u32-r64-bounds-plain | 0.110875 | 0.863647 | 0.987674 | gain |
+| string-sort-control | C | u32-r32-count-plain | 0.108022 | 0.841420 | 0.962256 | gain |
+| string-sort-control | LLVM | main | 0.130451 | 1.000000 | 1.207521 | within 3% |
+| string-sort-control | LLVM | i64-r64-bounds-gallop | 0.110105 | 0.844038 | 1.019193 | gain |
+| string-sort-control | LLVM | u32-r64-bounds-gallop | 0.108032 | 0.828143 | 1.000000 | gain |
+| string-sort-control | LLVM | u32-r32-bounds-gallop | 0.107104 | 0.821029 | 0.991409 | gain |
+| string-sort-control | LLVM | u32-r64-count-gallop | 0.109231 | 0.837333 | 1.011097 | gain |
+| string-sort-control | LLVM | u32-r32-count-gallop | 0.109893 | 0.842408 | 1.017225 | gain |
+| string-sort-control | LLVM | u32-r64-bounds-plain | 0.108288 | 0.830104 | 1.002368 | gain |
+| string-sort-control | LLVM | u32-r32-count-plain | 0.106102 | 0.813347 | 0.982133 | gain |
+| array-copying-methods | C | main | 22.993489 | 1.000000 | 0.995877 | within 3% |
+| array-copying-methods | C | i64-r64-bounds-gallop | 23.211152 | 1.009466 | 1.005304 | within 3% |
+| array-copying-methods | C | u32-r64-bounds-gallop | 23.088693 | 1.004141 | 1.000000 | within 3% |
+| array-copying-methods | C | u32-r32-bounds-gallop | 23.132264 | 1.006035 | 1.001887 | within 3% |
+| array-copying-methods | C | u32-r64-count-gallop | 22.935465 | 0.997477 | 0.993364 | within 3% |
+| array-copying-methods | C | u32-r32-count-gallop | 23.039502 | 1.002001 | 0.997869 | within 3% |
+| array-copying-methods | C | u32-r64-bounds-plain | 23.028458 | 1.001521 | 0.997391 | within 3% |
+| array-copying-methods | C | u32-r32-count-plain | 22.951085 | 0.998156 | 0.994040 | within 3% |
+| array-copying-methods | LLVM | main | 22.682095 | 1.000000 | 0.996738 | within 3% |
+| array-copying-methods | LLVM | i64-r64-bounds-gallop | 22.592925 | 0.996069 | 0.992819 | within 3% |
+| array-copying-methods | LLVM | u32-r64-bounds-gallop | 22.756334 | 1.003273 | 1.000000 | within 3% |
+| array-copying-methods | LLVM | u32-r32-bounds-gallop | 22.618751 | 0.997207 | 0.993954 | within 3% |
+| array-copying-methods | LLVM | u32-r64-count-gallop | 22.608650 | 0.996762 | 0.993510 | within 3% |
+| array-copying-methods | LLVM | u32-r32-count-gallop | 22.554161 | 0.994360 | 0.991116 | within 3% |
+| array-copying-methods | LLVM | u32-r64-bounds-plain | 22.772553 | 1.003988 | 1.000713 | within 3% |
+| array-copying-methods | LLVM | u32-r32-count-plain | 22.858498 | 1.007777 | 1.004489 | within 3% |
+
+### Matched factor ratios
+
+Each cell is the named change divided by its otherwise matched control.
+Galloping ratios are enabled / disabled. Values above one lose time.
+
+| Row | Backend | u32 / i64 | r32 / r64 | count / bounds at r64 | r32 / r64 with count | count / bounds at r32 | galloping at reference | galloping at r32/count |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| sort-objects | nts | 0.989130 | 1.001391 | 1.000537 | 1.002780 | 1.001926 | 0.917257 | 0.885950 |
+| sort-objects | ntsllvm | 0.923733 | 1.010868 | 1.015844 | 0.996468 | 1.001374 | 0.880890 | 0.867122 |
+| sort-objects-shuffled | nts | 0.971309 | 0.941157 | 1.034281 | 0.954087 | 1.048490 | 1.006873 | 1.020920 |
+| sort-objects-shuffled | ntsllvm | 0.971774 | 0.960322 | 1.001350 | 0.972694 | 1.014250 | 1.006816 | 0.989707 |
+| sort-objects-runs | nts | 0.993342 | 1.004889 | 0.988729 | 0.993502 | 0.977526 | 0.812429 | 0.803239 |
+| sort-objects-runs | ntsllvm | 0.965199 | 0.993418 | 0.996387 | 1.001505 | 1.004498 | 0.785750 | 0.789637 |
+| map-entries-top-k | nts | 1.006941 | 0.987994 | 1.004557 | 0.979378 | 0.995796 | 1.026570 | 1.017119 |
+| map-entries-top-k | ntsllvm | 0.966583 | 0.984000 | 1.010757 | 0.979564 | 1.006200 | 1.018435 | 1.014807 |
+| string-sort-control | nts | 1.008668 | 1.000539 | 0.963467 | 1.004366 | 0.967153 | 1.012479 | 1.005631 |
+| string-sort-control | ntsllvm | 0.981168 | 0.991409 | 1.011097 | 1.006061 | 1.026040 | 0.997637 | 1.035731 |
+| array-copying-methods | nts | 0.994724 | 1.001887 | 0.993364 | 1.004536 | 0.995990 | 1.002616 | 1.003852 |
+| array-copying-methods | ntsllvm | 1.007233 | 0.993954 | 0.993510 | 0.997590 | 0.997144 | 0.999288 | 0.986686 |
+
+| Row | Backend | Accepted attempt | CPU-5 user+nice ticks before → after | Load before → after | Available GiB before → after |
+|---|---|---:|---|---|---|
+| sort-objects | nts | 1 | 8584 → 8584 | 13.29 → 12.80 | 16.201 → 18.091 |
+| sort-objects | ntsllvm | 1 | 8584 → 8584 | 12.80 → 12.56 | 18.096 → 17.869 |
+| sort-objects-shuffled | nts | 1 | 8584 → 8584 | 12.56 → 13.65 | 17.870 → 17.408 |
+| sort-objects-shuffled | ntsllvm | 1 | 8584 → 8584 | 13.65 → 13.42 | 17.412 → 16.717 |
+| sort-objects-runs | nts | 1 | 8584 → 8584 | 13.42 → 14.53 | 16.728 → 16.186 |
+| sort-objects-runs | ntsllvm | 1 | 8584 → 8584 | 14.53 → 13.79 | 16.167 → 16.142 |
+| map-entries-top-k | nts | 1 | 8584 → 8584 | 13.79 → 14.05 | 16.148 → 16.340 |
+| map-entries-top-k | ntsllvm | 1 | 8584 → 8584 | 14.05 → 13.50 | 16.347 → 16.669 |
+| string-sort-control | nts | 1 | 8584 → 8584 | 13.50 → 13.14 | 16.669 → 17.751 |
+| string-sort-control | ntsllvm | 1 | 8584 → 8584 | 13.14 → 12.89 | 17.751 → 17.257 |
+| array-copying-methods | nts | 1 | 8584 → 8584 | 12.89 → 12.31 | 17.257 → 19.033 |
+| array-copying-methods | ntsllvm | 1 | 8584 → 8584 | 12.31 → 9.86 | 19.033 → 19.643 |
+
+### Branch and stall counters from the same sitting
+
+All eight binaries then run hardware-stat groups and cycle sampling under
+the same reservation. Whole-harness counters include setup/calibration.
+Stall/recovery percentages overlap and must not be added together.
+
+| Row | Backend | Arm | IPC | Misses / 1k instructions | Stall cycles % | Recovery cycles % | Group running % | Sibling condition |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| map-entries-top-k | nts | i64-r64-bounds-gallop | 4.501 | 0.101 | 6.653 | 0.373 | 100 | idle |
+| map-entries-top-k | nts | main | 4.569 | 0.129 | 6.464 | 0.468 | 100 | idle |
+| map-entries-top-k | nts | u32-r32-bounds-gallop | 4.534 | 0.115 | 6.995 | 0.406 | 100 | idle |
+| map-entries-top-k | nts | u32-r32-count-gallop | 4.539 | 0.112 | 6.737 | 0.392 | 100 | idle |
+| map-entries-top-k | nts | u32-r32-count-plain | 4.562 | 0.117 | 6.573 | 0.378 | 100 | idle |
+| map-entries-top-k | nts | u32-r64-bounds-gallop | 4.421 | 0.136 | 7.248 | 0.459 | 100 | idle |
+| map-entries-top-k | nts | u32-r64-bounds-plain | 4.420 | 0.119 | 7.304 | 0.388 | 100 | idle |
+| map-entries-top-k | nts | u32-r64-count-gallop | 4.449 | 0.122 | 6.982 | 0.421 | 100 | idle |
+| map-entries-top-k | ntsllvm | i64-r64-bounds-gallop | 4.358 | 0.100 | 7.191 | 0.339 | 100 | idle |
+| map-entries-top-k | ntsllvm | main | 4.554 | 0.116 | 6.540 | 0.380 | 100 | idle |
+| map-entries-top-k | ntsllvm | u32-r32-bounds-gallop | 4.419 | 0.113 | 7.488 | 0.399 | 100 | idle |
+| map-entries-top-k | ntsllvm | u32-r32-count-gallop | 4.424 | 0.125 | 7.177 | 0.385 | 100 | idle |
+| map-entries-top-k | ntsllvm | u32-r32-count-plain | 4.394 | 0.125 | 7.139 | 0.384 | 100 | idle |
+| map-entries-top-k | ntsllvm | u32-r64-bounds-gallop | 4.319 | 0.130 | 7.562 | 0.408 | 100 | idle |
+| map-entries-top-k | ntsllvm | u32-r64-bounds-plain | 4.347 | 0.109 | 7.432 | 0.389 | 100 | idle |
+| map-entries-top-k | ntsllvm | u32-r64-count-gallop | 4.398 | 0.107 | 7.136 | 0.349 | 100 | idle |
+| sort-objects | nts | i64-r64-bounds-gallop | 3.118 | 0.223 | 18.595 | 0.384 | 100 | idle |
+| sort-objects | nts | main | 4.645 | 0.266 | 9.919 | 0.654 | 100 | idle |
+| sort-objects | nts | u32-r32-bounds-gallop | 3.128 | 0.262 | 18.883 | 0.440 | 100 | idle |
+| sort-objects | nts | u32-r32-count-gallop | 3.125 | 0.222 | 18.987 | 0.399 | 100 | idle |
+| sort-objects | nts | u32-r32-count-plain | 2.759 | 0.226 | 23.518 | 0.345 | 100 | idle |
+| sort-objects | nts | u32-r64-bounds-gallop | 3.081 | 0.269 | 19.096 | 0.464 | 100 | idle |
+| sort-objects | nts | u32-r64-bounds-plain | 2.836 | 0.220 | 22.835 | 0.347 | 100 | idle |
+| sort-objects | nts | u32-r64-count-gallop | 3.111 | 0.229 | 18.964 | 0.390 | 100 | idle |
+| sort-objects | ntsllvm | i64-r64-bounds-gallop | 3.206 | 0.216 | 17.834 | 0.384 | 100 | idle |
+| sort-objects | ntsllvm | main | 4.549 | 0.274 | 10.131 | 0.703 | 100 | idle |
+| sort-objects | ntsllvm | u32-r32-bounds-gallop | 3.218 | 0.194 | 18.881 | 0.357 | 100 | idle |
+| sort-objects | ntsllvm | u32-r32-count-gallop | 3.246 | 0.194 | 18.549 | 0.349 | 100 | idle |
+| sort-objects | ntsllvm | u32-r32-count-plain | 2.739 | 0.218 | 22.768 | 0.325 | 100 | idle |
+| sort-objects | ntsllvm | u32-r64-bounds-gallop | 3.218 | 0.199 | 18.770 | 0.363 | 100 | idle |
+| sort-objects | ntsllvm | u32-r64-bounds-plain | 2.827 | 0.212 | 22.079 | 0.322 | 100 | idle |
+| sort-objects | ntsllvm | u32-r64-count-gallop | 3.201 | 0.198 | 18.686 | 0.376 | 100 | idle |
+| sort-objects-shuffled | nts | i64-r64-bounds-gallop | 1.515 | 11.297 | 29.655 | 10.009 | 100 | idle |
+| sort-objects-shuffled | nts | main | 1.894 | 7.435 | 25.734 | 7.861 | 100 | idle |
+| sort-objects-shuffled | nts | u32-r32-bounds-gallop | 1.648 | 8.845 | 26.146 | 7.644 | 100 | idle |
+| sort-objects-shuffled | nts | u32-r32-count-gallop | 1.578 | 10.045 | 26.147 | 8.920 | 100 | idle |
+| sort-objects-shuffled | nts | u32-r32-count-plain | 1.498 | 4.462 | 33.993 | 4.017 | 100 | idle |
+| sort-objects-shuffled | nts | u32-r64-bounds-gallop | 1.506 | 10.730 | 28.098 | 9.080 | 100 | idle |
+| sort-objects-shuffled | nts | u32-r64-bounds-plain | 1.420 | 7.249 | 34.128 | 6.555 | 100 | idle |
+| sort-objects-shuffled | nts | u32-r64-count-gallop | 1.477 | 11.722 | 28.543 | 10.609 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | i64-r64-bounds-gallop | 1.833 | 8.017 | 23.923 | 8.270 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | main | 1.942 | 7.363 | 22.010 | 8.006 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | u32-r32-bounds-gallop | 1.712 | 8.313 | 24.061 | 7.884 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | u32-r32-count-gallop | 1.688 | 8.544 | 25.108 | 7.611 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | u32-r32-count-plain | 1.554 | 3.749 | 32.574 | 3.488 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | u32-r64-bounds-gallop | 1.579 | 9.896 | 26.295 | 9.307 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | u32-r64-bounds-plain | 1.515 | 6.048 | 32.437 | 5.747 | 100 | idle |
+| sort-objects-shuffled | ntsllvm | u32-r64-count-gallop | 1.609 | 9.726 | 26.909 | 8.768 | 100 | idle |
+
+### Count operations remain at the argued floor
+
+The first operation-driver compilation stopped before execution because
+the archive did not include the bundled `zmij` directory. The corrected
+command adds the existing support include directory and first checks that
+its runtime C/header bytes match every archived arm. Both driver scripts
+and the failed compilation log are retained.
+
+All six arms on both backends return checksum 66,980,960 with exactly
+4,096 retains, 4,387 releases, 298 allocations, zero live allocations and
+zero live bytes. The 4,096 element-sorts each retain one immutable snapshot
+edge to anchor arbitrary callbacks; permutation and unchanged-prefix
+write-back perform no element count moves. Width/minrun/search/galloping
+change comparisons and native work, not managed ownership traffic.
+
+### Raw evidence
+
+All paths below are relative to
+`/home/akisarou/.cache/nts-scratch/876/`. The evidence manifest names and
+hashes every source arm, count log, comparator census, archived provenance,
+operation count and timing/perf observation, including failed attempts.
+It is raw scratch evidence, not a published benchmark run record.
+
+Manifest: `/home/akisarou/.cache/nts-scratch/876/policy-evidence.json`, SHA-256 `4339d31c702b5a4eddffed23ed14341f0347b1533f4c1a616ec2154834665abb`.
+
+## Selected policy
+
+The selected arm is `u32-r32-bounds-gallop`: u32 ordinary cursors with
+exclusive backward ends, widened i64 power coordinates, minrun normalization
+at 32 (16–32 elements), bounds-based binary insertion and adaptive galloping.
+No counterfactual switches or disabled code remain in the selected source.
+
+In the matched sitting it runs sort-objects at 0.489344× original on C and
+0.455765× on LLVM; shuffled at 0.906826× / 0.956272×; the two-run control
+at 0.575844× / 0.563194×; map at 0.962307× / 0.974552×; and strings at
+0.874896× / 0.821029×. The unchanged array-copy control is 1.006035× /
+0.997207×, within the descriptive 3% timing band. Every selected native
+instruction row improves or remains within its 0.01% band.
+
+Minrun 32 wins shuffled by 5.9% C and 4.0% LLVM against the otherwise
+matched u32/r64 reference, while other guards stay within 3%. Count-based
+insertion has no consistent gain over bounds-based insertion and loses
+shuffled versus the matched bounds search. Galloping remains because it
+moves the partially ordered row: enabling it at r64 gives 0.812429× C
+and 0.785750× LLVM versus plain merging. Its shuffled and map rows remain
+within the 3% band against the plain control. The selected r32 arm further
+improves the shuffled and map guards.
+
+Instruction reductions do not imply proportional wall gains. In shuffled
+LLVM, narrowing alone reduces instructions by about 15%, but IPC drops
+from 1.833 to 1.579 and stall cycles rise from 23.923% to 26.295%; its wall
+ratio against the i64 kernel is only 0.971774×. R32 bounds search raises IPC
+to 1.712, lowers stalls to 24.061% and recovery cycles from 9.307% to 7.884%.
+C shows the same benefit from shorter insertion runs: IPC 1.506→1.648,
+stalls 28.098%→26.146%, recovery 9.080%→7.644%. The plain r64 arm has fewer
+branch misses but more stalled cycles (34.128% C, 32.437% LLVM), so branch
+misses alone do not explain the wall-time ordering. Map branch-miss rates
+remain tiny; reduced native work is its main improvement.

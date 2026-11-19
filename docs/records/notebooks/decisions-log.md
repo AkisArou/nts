@@ -4042,3 +4042,9 @@ prefix takes the counted reconciliation path. A throwing comparator never
 commits the permutation. `toSorted` uses its private result as its owner and
 applies cycles without another snapshot. The coordinator approved the design
 with shuffled, partially ordered and string controls and a galloping comparison.
+
+The matched policy experiment selects minrun normalization at 32, bounds-based
+binary insertion, and adaptive galloping. Ordinary cursors use u32 exclusive
+ends throughout JavaScript's length domain, independently of the current dense
+allocation cap; power coordinates widen to i64. The proof executes the emitter's
+arithmetic near both 2³¹ and 2³²−1 without allocating element buffers.

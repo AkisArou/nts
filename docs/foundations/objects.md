@@ -139,8 +139,10 @@ proved to hold integers, when it is `int32_t` or `int64_t` (`hir::elements`).
 input references and sort a uint32 permutation. Comparators borrow from that
 owner; scratch buffers contain indices, so partial merges never change the
 collector's edges. Strict descending runs reverse, short runs extend by stable
-binary insertion, and powersort orders the merges. All backends share this
-lowering and the same write-back contract.
+binary insertion to a computed minimum of 16–32 elements (the whole input
+below 32), and powersort orders the merges. Galloping skips winning spans in
+partially ordered merges. All backends share this lowering and the same
+write-back contract.
 
 After comparisons finish, an unchanged target prefix accepts the permutation
 without retaining or releasing elements. A changed prefix uses counted writes
