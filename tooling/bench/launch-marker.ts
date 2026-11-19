@@ -18,10 +18,12 @@ import { fileURLToPath } from "node:url";
 import { domainDeclaration } from "../differential/oracle-records.ts";
 import { dataDirectory } from "../gate/reader-inputs/main.ts";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
-import type { Sized } from "./peak-rss-cell.ts";
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
 const CASES = relative(SOURCE, fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/", import.meta.url))));
+
+/** Which case's workload a peak-RSS row calls once, and at what input. */
+export type Sized = { case: string; function: string; input: number };
 
 export type LaunchMarker = { metric: "launch-to-exit" } | ({ metric: "peak-rss" } & Sized);
 
@@ -61,6 +63,40 @@ function checkDomain(root: string, name: string, sized: Sized): void {
   if (domain.min !== undefined && sized.input < domain.min) refuse(name, `${at} is below ${sized.case}'s declared minimum ${domain.min}`);
   if (domain.max !== undefined && sized.input > domain.max) refuse(name, `${at} is above ${sized.case}'s declared maximum ${domain.max}`);
   if (domain.integer && !Number.isInteger(sized.input)) refuse(name, `${at} is not an integer, which ${sized.case}'s domain requires`);
+}
+
+/**
+ * The marker of the benchmark case that repository path `source` lies in, or
+ * null when it lies in none or its case has no marker: the file's presence
+ * routes a case, as nts-bench's is_launch_case does, and its content is
+ * checked whole by readLaunchMarker.
+ */
+export function launchMarkerOf(root: string, source: string): LaunchMarker | null {
+  const prefix = `${CASES}/`;
+  if (!source.startsWith(prefix)) return null;
+  const name = source.slice(prefix.length).split("/", 1)[0]!;
+  if (!CASE_NAME.test(name) || !existsSync(join(root, CASES, name, "launch.json"))) return null;
+  return readLaunchMarker(root, name);
+}
+
+/**
+ * Why a launch row has no per-call oracle (record-oracles.ts): its case.ts is
+ * a whole program with no exported workload, and what it prints is held to
+ * node's by its launch row's own checksum agreement (README.md, "Launch rows").
+ * One reason per metric: a metric without one does not typecheck.
+ */
+export function launchOracleReason(marker: LaunchMarker): string {
+  const row = "its stdout agrees with node's in its launch row (tooling/bench/README.md, \"Launch rows\")";
+  switch (marker.metric) {
+    case "launch-to-exit":
+      return `a launch-to-exit row: a whole program with no exported workload; ${row}`;
+    case "peak-rss":
+      return `a peak-RSS row of ${marker.case}'s ${marker.function}(${marker.input}): its calls are ${marker.case}'s oracle; ${row}`;
+    default: {
+      const unknown: never = marker;
+      throw new Error(`launch marker without an oracle reason: ${JSON.stringify(unknown)}`);
+    }
+  }
 }
 
 /** The marker of launch case `name`, checked whole. */

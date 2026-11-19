@@ -20,6 +20,7 @@ import {hostEnvironment} from './host-environment.ts';
 import {discardRunTemporary} from './run-temporary.ts';
 import {ownMemory} from './test-memory.ts';
 import {spawnTest} from './test-wait.ts';
+import {peakRssProgram} from '../bench/launch-marker.ts';
 import {toolingSlice,toolingSliceArgs} from './tooling-slice.ts';
 after(closeMemoryRun);
 const plan = { version: 1, backend: "c", source: "fixture.ts", entry: "/fixture.ts", source_digest: "source-digest", seed: null,
@@ -269,6 +270,72 @@ test('a plan of no cases is never measured: it names the no-oracle row or cases 
   await recordAll(root,output,never);
   assert.ok(lines.includes(`no-oracle ${source} exports no callable function`),lines.join('\n'));
   assert.deepEqual(JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8')).findings,[]);
+});
+
+/** A tree of benchmark cases: launch rows of both metrics, a work export, and a whole program with neither marker nor export. */
+function launchCases(root:string):void{
+  const put=(path:string,text:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),text);};
+  put('benchmarks/cases/startup/case.ts','console.log("hello");\n');put('benchmarks/cases/startup/launch.json','{"metric":"launch-to-exit"}');
+  put('benchmarks/cases/plain/case.ts','console.log("hello");\n');
+  put('benchmarks/cases/work/case.ts','export function work(n: number): number { return n; }\n');
+  put('benchmarks/cases/work/case.domains.json',JSON.stringify({version:1,functions:{work:{n:{min:0,max:14,integer:true,reason:'bounded'}}}}));
+  const sized={case:'work',function:'work',input:12};
+  put('benchmarks/cases/rss-work/case.ts',peakRssProgram(sized));put('benchmarks/cases/rss-work/launch.json',JSON.stringify({metric:'peak-rss',...sized}));
+  put('benchmarks/cases/broken/case.ts','console.log("hello");\n');put('benchmarks/cases/broken/launch.json','{"metric":"launch"}');
+}
+/** recordAll over `plans` in `root`, with a fake measurement that counts only what it is given. */
+function recordLaunchPlans(root:string,plans:object[]){
+  writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans}));
+  const output=join(root,'counts.json'),measured:string[]=[];
+  const measure=async(one:{source:string;case_count:number})=>{measured.push(one.source);return {cpu:[0.01,0.01],count:one.case_count};};
+  return {output,measured,run:()=>recordAll(root,output,measure as never)};
+}
+const launchPlan=(root:string,name:string,change:object={})=>({...plan,source:`benchmarks/cases/${name}/case.ts`,source_digest:'b'.repeat(32),repository_root:root,case_count:0,cases:[],driver:`driver of ${name}`,...change});
+const launchSummary=(root:string)=>JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8')).findings as {outcome:string;error:string}[];
+function withMeasurementCpu(t:{after(fn:()=>void):void}){
+  const saved=process.env.NTS_BENCH_CPUS;t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
+  process.env.NTS_BENCH_CPUS='4';
+}
+
+test('a launch row plans no per-call oracle: its marker records a no-oracle row with its metric\'s reason, and a work export is measured as before',async t=>{
+  const root=testScratch(t,'oracle-record-launch');withMeasurementCpu(t);launchCases(root);
+  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
+  const work=launchPlan(root,'work',{case_count:2,cases:plan.cases});
+  const {output,measured,run}=recordLaunchPlans(root,[launchPlan(root,'startup'),launchPlan(root,'rss-work'),work]);
+  await run();
+  assert.deepEqual(measured,['benchmarks/cases/work/case.ts'],'only the work export is measured');
+  assert.deepEqual(launchSummary(root),[]);
+  const rows=JSON.parse(readFileSync(output,'utf8')).rows as {kind:string;source:string;reason?:string;count?:number}[];
+  const startup="a launch-to-exit row: a whole program with no exported workload; its stdout agrees with node's in its launch row (tooling/bench/README.md, \"Launch rows\")";
+  const rss="a peak-RSS row of work's work(12): its calls are work's oracle; its stdout agrees with node's in its launch row (tooling/bench/README.md, \"Launch rows\")";
+  assert.deepEqual(rows.map(row=>[row.source,row.kind,row.reason??row.count]),[
+    ['benchmarks/cases/rss-work/case.ts','no-oracle',rss],['benchmarks/cases/startup/case.ts','no-oracle',startup],['benchmarks/cases/work/case.ts','measured',2]]);
+  assert.ok(lines.includes(`no-oracle benchmarks/cases/startup/case.ts ${startup}`),lines.join('\n'));
+  // A second pass reads the recorded rows back as no-oracle exceptions.
+  await run();
+  assert.deepEqual(JSON.parse(readFileSync(output,'utf8')).rows.length,3);
+});
+
+test('control: a whole program without a launch marker still names the no-oracle row or cases it needs, word for word',async t=>{
+  const root=testScratch(t,'oracle-record-launch-control');withMeasurementCpu(t);launchCases(root);
+  t.mock.method(console,'log',()=>{});
+  const {output,measured,run}=recordLaunchPlans(root,[launchPlan(root,'plain')]);
+  await assert.rejects(run(),/recording incomplete/);
+  assert.deepEqual(measured,[]);
+  assert.deepEqual(launchSummary(root).map(one=>[one.outcome,one.error]),[['not-measured','oracle not measured: benchmarks/cases/plain/case.ts plans no cases; record why with `record-oracles.ts no-oracle`, or give it cases']]);
+  assert.equal(existsSync(output),false,'nothing is published');
+});
+
+test('a launch row whose marker is malformed, or which plans cases, is not measured and says why',async t=>{
+  const root=testScratch(t,'oracle-record-launch-refused');withMeasurementCpu(t);launchCases(root);
+  t.mock.method(console,'log',()=>{});
+  const {output,measured,run}=recordLaunchPlans(root,[launchPlan(root,'broken'),launchPlan(root,'startup',{case_count:2,cases:plan.cases})]);
+  await assert.rejects(run(),/recording incomplete/);
+  assert.deepEqual(measured,[]);
+  assert.deepEqual(launchSummary(root).map(one=>[one.outcome,one.error]),[
+    ['not-measured','benchmarks/cases/broken/launch.json: unknown metric "launch"'],
+    ['not-measured','oracle not measured: benchmarks/cases/startup/case.ts plans 2 cases, but its launch.json makes it a launch row, whose case.ts is a whole program with no exported workload (tooling/bench/launch-marker.ts)']]);
+  assert.equal(existsSync(output),false,'nothing is published');
 });
 
 test("no-oracle records carry no numeric count and require an empty source identity", () => {

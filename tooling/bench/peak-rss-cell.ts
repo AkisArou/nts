@@ -4,6 +4,7 @@
 // and its value is derived only here, from the same launches that time it.
 import type { Cell } from "./run-record.ts";
 import { checkLaunchCell, launchSummary, readLaunch, type Launch } from "./launch-cell.ts";
+import type { Sized } from "./launch-marker.ts";
 
 /** The row kind whose cells rank by the peak resident set of their launches. */
 export const PEAK_RSS_KIND = "peak-rss";
@@ -11,8 +12,8 @@ export const PEAK_RSS_KIND = "peak-rss";
 /** A cell's peak resident set: the median of its timed launches' ru_maxrss, in bytes, and their interquartile ratio. */
 export type PeakRss = { bytes: number; spread: number };
 
-/** Which case's workload a peak-RSS row calls once, and at what input. */
-export type Sized = { case: string; function: string; input: number };
+/** Which case's workload a peak-RSS row calls once, and at what input: its marker's (launch-marker.ts). */
+export type { Sized };
 
 /**
  * Whether a column's work grows with its input across one case's rows in a

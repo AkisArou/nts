@@ -22,6 +22,7 @@ import {OracleBudgetError} from "./oracle-budget.ts";
 import {type OracleBudget} from "./oracle-runtime.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 import {installationRuntimeContent} from '../inputs/dependency-inputs.ts';
+import {launchMarkerOf,launchOracleReason} from '../bench/launch-marker.ts';
 
 import { GENERATOR, classifyBudget, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
   type BudgetRevision, type MarginBudget, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
@@ -453,6 +454,17 @@ export async function recordAll(evidence: string, output: string, measure = meas
     let measurement = measured.get(identity), margin: MarginBudget | undefined;
     try {
       if (failed.has(identity)) throw failed.get(identity);
+      // A launch row (its launch.json, read by its one owner) is a whole
+      // program: no per-call population, and the reason its metric gives.
+      const launch = launchMarkerOf(plan.repository_root ?? process.cwd(), plan.source);
+      if (launch) {
+        if (plan.case_count !== 0) throw new Error(`oracle not measured: ${plan.source} plans ${plan.case_count} cases, but its launch.json makes it a launch row, whose case.ts is a whole program with no exported workload (tooling/bench/launch-marker.ts)`);
+        const reason = launchOracleReason(launch);
+        table = addNoOracle(table, plan, reason);
+        exceptions.add(identity);
+        console.log("no-oracle", plan.source, reason);
+        continue;
+      }
       // A population of no cases has no oracle to prepare or run, so no count
       // can be measured: a no-oracle row, with its reason, is its record.
       if (plan.case_count === 0) throw new Error(`oracle not measured: ${plan.source} plans no cases; record why with \`record-oracles.ts no-oracle\`, or give it cases`);
