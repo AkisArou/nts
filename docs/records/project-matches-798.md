@@ -502,3 +502,55 @@ Additional raw evidence under `~/.cache/nts-scratch/798/`:
 | `canonical-projection-actual.json` | `8895ea1563c9ecc2a754a5c93fdeb787bb4eea0cc01a85a4072fdeceb7701ef9` |
 | `canonical-real-producer.json` | `cd4f75d5c73322bfa836acb1734c2e21cb2355537cd6f9b7b7436ad9e1376d80` |
 | `nts-798-canonical-publish2.log` | `fb2424f83712b670375e3ba498432f383bda5392e101df03229268138e86032e` |
+
+## Completed production-cap comparison
+
+All eight arms pass: main
+`ae4898abff477e6ddc33ca5af86a66f032c5ce88` versus coalesced tip
+`7aecbd46a0d214233cb334dfc804f8b9088e3fce`. Each file runs singly through
+the public `runScopedTooling` route with `memoryMax: 6144000000`, canonical
+`gateEnvironment`, a fresh owning installation-catalog refresh, the same GC
+instrumentation, and CPUs 0–3,6–31. The named batch admits each arm with the
+stable `tooling-focused` key. No heap or production limit changes. Every entry
+reports exactly 2248146944 bytes (2144 MiB) as its V8 heap limit, at startup and
+exit. Peak heap takes the maximum synchronous GC before/after object size,
+100 ms sample and exit value; GNU time measures maximum RSS.
+
+| Owner | Arm | Peak heap MiB | Max RSS KiB | Observation rows | Recorded native queries | Result |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| owed.test.mjs | main | 1986.82 | 2491032 | 1438046 | — | pass |
+| owed.test.mjs | tip | 906.31 | 1412060 | 589483 | 3814 | pass |
+| oracle-record-owed.test.ts | main | 1942.90 | 2414324 | 1438046 | — | pass |
+| oracle-record-owed.test.ts | tip | 776.99 | 1256528 | 589483 | 3814 | pass |
+| precise-changes.test.ts | main | 1943.22 | 2409440 | 1438046 | — | pass |
+| precise-changes.test.ts | tip | 813.73 | 1271384 | 589483 | 3814 | pass |
+| tooling/jvm/member-name.test.ts | main | 1940.98 | 2405144 | 1438046 | — | pass |
+| tooling/jvm/member-name.test.ts | tip | 825.80 | 1274440 | 589483 | 3814 | pass |
+
+Main predates the query-record column; the dash does not mean its compiler did
+no matching. Query counts are native request/match records before per-request
+replay deduplication. The intermediate tip already recorded 3814, and all are
+retained. Each entry's first Rust batch contains 57 snapshots. The coalesced tip
+uses less peak heap and RSS in all four pairs, removing 848563 observation rows
+relative to main without dropping required probes or native matches. Different
+authority/provenance and distinct private generated-config identities remain.
+
+The real-tree selection guard also passes. On the same committed tip, replaying
+the four old producer owners versus the new ones gives byte-identical complete
+`owed` rules, steps and interop answers for three actual main-history parent/
+commit ranges ending at `ae4898abff477e6ddc33ca5af86a66f032c5ce88`,
+`531d75a7e43c35907f596e090ed31067ceed835c` and
+`2bb09b0d4587d37418232ec3b31c244fe4c7a126`. They contain 13, 1 and 3 changed
+paths respectively. Both arms exercise 687 live capture calls, so the comparison
+does not merely reuse accepted fast records. An initial scratch caller omitted
+the explicit accepted-blob trust while adding `committedSource`; it was correctly
+refused before selection and corrected without changing production code.
+
+The temporary pool control tree was clean, had no commits beyond main, and was
+returned through the pool after all arms ended. Raw output remains in kept
+issue scratch. The table and JSON include each arm's log/time paths and hashes:
+
+| Raw file under `~/.cache/nts-scratch/798/` | SHA-256 |
+| --- | --- |
+| `heap-coalesced-table.json` | `b570faa0af9ed56ddb6fcac09c6e81c06f3401ae11cf08aacdcf4b1e9fd4c097` |
+| `snapshot-selection-equivalence.json` | `8b94a08877994daeaf93abb858e00837e7c9384816880621bfc3e1caf641f9be` |
