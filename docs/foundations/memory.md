@@ -489,6 +489,7 @@ never declared.
 | M4 | **Vendor mimalloc for the native heap if it wins the rows,** otherwise our own page allocator | Tried first in stage 6. Koka, Lean and CPython ship it. |
 | M5 | **No memory annotations in the language:** no user-visible arena, unique or acyclic markers | It extends decision 12. Go's explicit arenas stalled because they "do not compose well". |
 | M6 | **The cycle collector stays trial deletion for now.** Its next step is measurement only (per-phase counters, pause and retained-memory distributions, batch-size and candidate-filter controls); an exact tracing backstop waits until stages 2 and 3 have moved the allocation side | Even removing all collector work would leave the cycle-heavy row well behind node, because allocation and the program's own work remain. An exact tracing backstop needs precise roots for C and LLVM frames and a heap registry, the largest architecture change on offer. |
+| M7 | **A managed sort moves a permutation without counts when the target prefix still matches its snapshot; mutations use counted reconciliation.** `toSorted` permutes its private owner by cycles | Moving the same set of references creates no ownership. The snapshot keeps comparator arguments alive through mutations, collections and throws. See [arrays](objects.md#arrays) and the [decision log](../records/notebooks/decisions-log.md#adaptive-managed-sorting-11-19). |
 
 From the open-questions audit (10-28,
 [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)):

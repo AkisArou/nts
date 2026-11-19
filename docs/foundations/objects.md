@@ -135,6 +135,19 @@ boolean, a counted foreign object, or an unboxed 128-bit bigint. `number[]` is
 an array of doubles unless every array of that element type in the program is
 proved to hold integers, when it is `int32_t` or `int64_t` (`hir::elements`).
 
+**Sorting managed elements.** Comparator sorts keep a private owner of the
+input references and sort a uint32 permutation. Comparators borrow from that
+owner; scratch buffers contain indices, so partial merges never change the
+collector's edges. Strict descending runs reverse, short runs extend by stable
+binary insertion, and powersort orders the merges. All backends share this
+lowering and the same write-back contract.
+
+After comparisons finish, an unchanged target prefix accepts the permutation
+without retaining or releasing elements. A changed prefix uses counted writes
+from the snapshot, restoring slots removed by the comparator and preserving an
+appended tail. A throw performs no write-back. `toSorted` owns its private copy
+already and applies the permutation by cycles without another snapshot.
+
 **Reads and writes:**
 
 - **A bounds check unless it is proved away** (`hir::bounds`). Today a check
@@ -304,6 +317,10 @@ and [objects](../records/notebooks/studies/primitives-objects.md) studies.
 
 ## Decisions
 
+- **Managed comparator sorts permute indices under a private owner**, with
+  natural runs, stable binary insertion and powersort merges. Write-back moves
+  unchanged ownership and reconciles mutations with counts
+  ([log](../records/notebooks/decisions-log.md#adaptive-managed-sorting-11-19)).
 - **`globalThis`, `Proxy` with `Reflect`, and object integrity** (`freeze`,
   `seal`, `preventExtensions` and their predicates) are in scope, deferred, and
   each costs nothing where a program does not use it

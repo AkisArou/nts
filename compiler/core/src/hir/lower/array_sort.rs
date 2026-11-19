@@ -369,7 +369,6 @@ impl FuncBuilder<'_> {
     /// comparator says the right one is strictly less -- `compare(left,
     /// right) > 0`, which a NaN is not -- and the comparator is called only
     /// while both runs have one.
-    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn merge_pair(
         &mut self,
         id: NodeId,

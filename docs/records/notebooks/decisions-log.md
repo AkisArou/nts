@@ -4031,3 +4031,14 @@ match an earlier snapshot. The summary reports polling cadence, without
 promising periodic raw samples. This refines [the process-session decision](#cost-telemetry-records-changes-and-process-sessions-11-20).
 A write failure also poisons the shared process output for every session;
 no later record can append to its partial final row.
+## Adaptive managed sorting (11-19)
+
+Issue #876 keeps a counted owner of comparator inputs and sorts only uint32
+indices. Natural runs, strict descending reversal, stable binary insertion to
+minimum runs and powersort merge ordering replace fixed-width merge passes.
+The same lowering serves C, LLVM and the JVM. Completed sorts compare the target
+prefix with their snapshot before moving references without counts; a changed
+prefix takes the counted reconciliation path. A throwing comparator never
+commits the permutation. `toSorted` uses its private result as its owner and
+applies cycles without another snapshot. The coordinator approved the design
+with shuffled, partially ordered and string controls and a galloping comparison.

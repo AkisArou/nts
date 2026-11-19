@@ -172,7 +172,7 @@ impl Sort<'_, '_> {
         self.b.switch_to(taken);
         yes(self)?;
         self.jump(join, names.iter().map(|n| self.var(*n)).collect());
-        self.b.bindings = before.clone();
+        self.b.bindings.clone_from(&before);
         self.b.switch_to(other);
         no(self)?;
         self.jump(join, names.iter().map(|n| self.var(*n)).collect());
@@ -253,7 +253,7 @@ impl Sort<'_, '_> {
         )
     }
 
-    /// TimSort's minimum run in [32,64], or the whole input below 64. The
+    /// `TimSort`'s minimum run in [32,64], or the whole input below 64. The
     /// remainder bit avoids a final tiny run just above a power of two.
     fn minrun(&mut self) -> Built<ValueId> {
         let n = self.variable(self.length);
