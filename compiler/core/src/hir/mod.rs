@@ -7833,16 +7833,18 @@ fn why_a_callee_is_missing(program: &Program, callee: &str) -> String {
     // so the raising caller of a generic said "which nothing in this program
     // defines" where its ordinary twin named the instantiations -- the stream
     // `nextTick@raises` cascades, rootless only in their raising half.
+    // Each half names only its own instantiations: an ordinary call lists no
+    // `@raises` copy, and a raising call lists only those.
     let (stem, raising) = callee
         .strip_suffix(lower::RAISING_SUFFIX)
-        .map_or((callee, ""), |stem| (stem, lower::RAISING_SUFFIX));
+        .map_or((callee, false), |stem| (stem, true));
     let instantiated: Vec<&str> = program
         .funcs
         .iter()
         .filter(|func| {
             func.name.starts_with(stem)
                 && func.name[stem.len()..].starts_with('<')
-                && func.name.ends_with(raising)
+                && func.name.ends_with(lower::RAISING_SUFFIX) == raising
         })
         .map(|func| func.name.as_str())
         .take(3)
