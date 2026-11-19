@@ -372,8 +372,10 @@ impl Sort<'_, '_> {
                     |s| s.binary(BinOp::Lt, s.var(low), s.var(high)),
                     |s| {
                         let span = s.binary(BinOp::Sub, s.var(high), s.var(low));
-                        let two = s.int(2);
-                        let half = s.binary(BinOp::Div, span, two);
+                        // 0 <= span < 2^31: unsigned halving is exact and
+                        // avoids signed division's rounding correction.
+                        let one = s.int(1);
+                        let half = s.binary(BinOp::UShr, span, one);
                         let middle = s.binary(BinOp::Add, s.var(low), half);
                         let item = s.get(s.order, middle);
                         let after = s.greater(item, pivot)?;
@@ -460,8 +462,9 @@ impl Sort<'_, '_> {
     }
 
     /// Stack powers increase strictly. A runtime array has length below 2^31,
-    /// so powers are at most 31 and 32 rows (base,power) suffice. All cursors
-    /// and doubled midpoints are nonnegative and below 4*N < 2^33; int64 is
+    /// so powers are at most 31 and 32 rows (base,power), including the
+    /// zero-power sentinel, suffice. All cursors and doubled midpoints are
+    /// nonnegative and below 4*N < 2^33; int64 is
     /// exact even on the terminating power-loop iteration. The scratch holds
     /// only the smaller run, at most floor(N/2) uint32 indices.
     fn merge_runs(&mut self, first_end: ValueId, minrun: ValueId) -> Built {
@@ -474,74 +477,71 @@ impl Sort<'_, '_> {
         let seven = self.int(7);
         self.put(stack, threshold_slot, seven);
         let zero = self.int(0);
-        let top = self.variable(zero);
+        let one = self.int(1);
+        self.put(stack, zero, zero);
+        self.put(stack, one, zero);
+        // Row zero is a zero-power sentinel. Real node powers are positive;
+        // a final zero-power boundary drains the stack through the same merge
+        // kernel as ordinary boundaries, without duplicating comparator code.
+        let top = self.variable(one);
         let base = self.variable(zero);
         let end = self.variable(first_end);
         self.loop_while(
             &[top, base, end],
-            |s| s.binary(BinOp::Lt, s.var(end), s.length),
             |s| {
-                let next = s.next_run(s.var(end), minrun)?;
-                let power = s.power(s.var(base), s.var(end), next)?;
-                let yes = s.boolean(true);
-                let open = s.variable(yes);
-                s.loop_while(
-                    &[top, base, open],
+                let more = s.binary(BinOp::Lt, s.var(end), s.length);
+                let pending = s.binary(BinOp::Gt, s.var(top), one);
+                s.b.bool_join(more, pending, true, &s.origin)
+            },
+            |s| {
+                let more = s.binary(BinOp::Lt, s.var(end), s.length);
+                let next = s.variable(s.var(end));
+                let power = s.variable(zero);
+                s.branch(
+                    more,
+                    &[next, power],
                     |s| {
-                        let zero = s.int(0);
-                        let nonempty = s.binary(BinOp::Gt, s.var(top), zero);
-                        s.b.bool_join(nonempty, s.var(open), false, &s.origin)
+                        let finish = s.next_run(s.var(end), minrun)?;
+                        let boundary = s.power(s.var(base), s.var(end), finish)?;
+                        s.bind(next, finish);
+                        s.bind(power, boundary);
+                        Ok(())
                     },
+                    |_| Ok(()),
+                )?;
+                s.loop_while(
+                    &[top, base],
                     |s| {
                         let row = s.offset(s.var(top), -1);
-                        let two = s.int(2);
                         let slot = s.binary(BinOp::Mul, row, two);
                         let power_slot = s.offset(slot, 1);
                         let previous_power = s.get_index(stack, power_slot);
-                        let deeper = s.binary(BinOp::Gt, previous_power, power);
-                        s.branch(
-                            deeper,
-                            &[top, base, open],
-                            |s| {
-                                let previous = s.get_index(stack, slot);
-                                s.merge(scratch, stack, previous, s.var(base), s.var(end))?;
-                                s.bind(base, previous);
-                                s.bind(top, row);
-                                Ok(())
-                            },
-                            |s| {
-                                let no = s.boolean(false);
-                                s.bind(open, no);
-                                Ok(())
-                            },
-                        )
+                        s.binary(BinOp::Gt, previous_power, s.var(power))
+                    },
+                    |s| {
+                        s.advance(top, -1);
+                        let slot = s.binary(BinOp::Mul, s.var(top), two);
+                        let previous = s.get_index(stack, slot);
+                        s.merge(scratch, stack, previous, s.var(base), s.var(end))?;
+                        s.bind(base, previous);
+                        Ok(())
                     },
                 )?;
-                let two = s.int(2);
-                let slot = s.binary(BinOp::Mul, s.var(top), two);
-                let power_slot = s.offset(slot, 1);
-                s.put(stack, slot, s.var(base));
-                s.put(stack, power_slot, power);
-                s.advance(top, 1);
-                s.bind(base, s.var(end));
-                s.bind(end, next);
-                Ok(())
-            },
-        )?;
-        self.loop_while(
-            &[top, base],
-            |s| {
-                let zero = s.int(0);
-                s.binary(BinOp::Gt, s.var(top), zero)
-            },
-            |s| {
-                s.advance(top, -1);
-                let two = s.int(2);
-                let slot = s.binary(BinOp::Mul, s.var(top), two);
-                let previous = s.get_index(stack, slot);
-                s.merge(scratch, stack, previous, s.var(base), s.var(end))?;
-                s.bind(base, previous);
-                Ok(())
+                s.branch(
+                    more,
+                    &[top, base, end],
+                    |s| {
+                        let slot = s.binary(BinOp::Mul, s.var(top), two);
+                        let power_slot = s.offset(slot, 1);
+                        s.put(stack, slot, s.var(base));
+                        s.put(stack, power_slot, s.var(power));
+                        s.advance(top, 1);
+                        s.bind(base, s.var(end));
+                        s.bind(end, s.var(next));
+                        Ok(())
+                    },
+                    |_| Ok(()),
+                )
             },
         )
     }
@@ -675,12 +675,23 @@ impl Sort<'_, '_> {
                     },
                 )?;
                 s.advance(out, stride);
-                let present = s.both_present(a, stop_a, b, stop_b);
                 // Taking one side resets the other's streak, so one is zero.
                 // The usual galloping OR test needs no max comparison/select.
                 let streak = s.binary(BinOp::BitOr, s.var(wins_a), s.var(wins_b));
                 let ready = s.binary(BinOp::Ge, streak, s.var(threshold));
-                let gallop = s.b.bool_join(present, ready, false, &s.origin);
+                let no = s.boolean(false);
+                let gallop = s.variable(no);
+                s.branch(
+                    ready,
+                    &[gallop],
+                    |s| {
+                        let present = s.both_present(a, stop_a, b, stop_b);
+                        s.bind(gallop, present);
+                        Ok(())
+                    },
+                    |_| Ok(()),
+                )?;
+                let gallop = s.var(gallop);
                 s.branch(
                     gallop,
                     &names,
@@ -847,8 +858,9 @@ impl Sort<'_, '_> {
             |s| s.binary(BinOp::Lt, s.var(left), s.var(right)),
             |s| {
                 let span = s.binary(BinOp::Sub, s.var(right), s.var(left));
-                let two = s.int(2);
-                let half = s.binary(BinOp::Div, span, two);
+                // The bracket is a nonnegative span below 2^31.
+                let one = s.int(1);
+                let half = s.binary(BinOp::UShr, span, one);
                 let mid = s.binary(BinOp::Add, s.var(left), half);
                 let win = s.gallop_wins((source, start, mid), pivot, low, first)?;
                 s.branch(
