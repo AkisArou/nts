@@ -438,3 +438,67 @@ Additional raw evidence under `~/.cache/nts-scratch/798/`:
 | `fact-classification/classification.json` | `e8b6d0073dae2b09c9063021f527f0cb5c7e13e39475573aa2c6677dc82f6057` |
 | `fact-classification/duplicates.json` | `61e7136abdab7ae839b0a8356fa413cc1a332658ed90024d546108939e06d230` |
 | `nts-798-snapshot-target3.log` | `31241da34a592ea8b502b572cbd67b6e483a2f2c5cf294ea599f2a58e8da0aea` |
+
+## Canonical producer and authenticated multiplicity
+
+The canonical source checkpoint is
+`f182e59ae703138e4b885457296c61475feae573`. Its 24 Program-input controls
+and strict checking of six projects/1173 modules pass. In particular, reversing
+Program acquisition produces an identical complete snapshot, and distinct
+authority is validated in both encounter orders.
+
+The generated selector record changes under the canonical writer because the
+codec preserves occurrence order and multiplicity. Decoded target sets and all
+per-target role sets remain identical, as do the path/context/dependency/
+directory/optional/membership/byte-input pool sets. Role occurrences fall from
+1265864 to 604266. The wire version and schema stay unchanged. The earlier
+scratch identity assertion checked the declaration manifest rather than the
+generated record; the explicit generated-record comparison supersedes it.
+The coordinator accepted identical decoded roles plus a real owed-answer diff
+as the selection guard, while retaining exact producer authentication.
+
+The consumer audit finds no count-based selection. `owed.mjs` deduplicates
+typed dependencies by JSON value and unions step sets. `selectRustInputs`
+authenticates or supplies roles; the material/record parsers validate their
+shape and hashes. `verifyRustSelectorDerivation` compares complete canonical
+bytes, so a candidate-only sequence change must refuse. The records checker
+delegates to that verifier. The full check's Rust-selector family refreshes
+through the canonical writer, validates the bounded record, and binds source
+application by key; it does not interpret dependency cardinality.
+
+A shared two-target, two-Program fixture runs the actual four producer owners
+from `b476fd27c5ae890780c0c838d03fa06556ce7eae`, then the current producer.
+They retain 88 and 48 typed-dependency occurrences respectively, verify as
+derived against their own producers, and select identical targets for five
+source/config/nonmatching probes. A duplicated/permuted candidate with hashes
+recomputed selects identically under explicit fixture trust, but the mandatory
+verifier refuses it against the unchanged real producer. No verifier or codec
+logic was relaxed.
+
+Current normal, reversed Program acquisition, reversed snapshot capture and
+combined traversal all produce the same exact fixture record SHA-256:
+`dcdbfbc96f3984e0036ab2b5bdea0fb7a15e124412cce8b6f5d8bdcd55388730`.
+Every arm also runs its producer twice and compares bytes. An initial scratch
+hook stopped before the reversed arm because of a whitespace-anchor mismatch;
+the completed five-arm cohort reran after that instrumentation correction.
+
+The real-tree canonical writer also runs twice, producing identical bytes at
+`8caa784ce19707316b1dc4dd083db29f9606a60dea4e9184794d824547d968ca`.
+The installation catalog refresh and host audit (2104 sources, 340 closures,
+420 reads) pass. The preceding admission attempt ended before command execution
+on a departed-cgroup `ENOENT`; the coordinator recorded that infrastructure
+cause on #847. The unchanged retry completed. The record is generated only by
+its owning writer.
+
+Additional raw evidence under `~/.cache/nts-scratch/798/`:
+
+| File | SHA-256 |
+| --- | --- |
+| `nts-798-canonical-target.log` | `1a575a52317eb90a404048139e7e9b7acdb4f87f64112309f9954cd636d43b42` |
+| `snapshot-counterfactual.json` | `e06f14661411e996445bdad852b73822a4d24eb4b5d352da1a77c1f974d35e30` |
+| `canonical-producer/controls.json` | `a55e3a0d99fb68b91f923fc8c204d1dda6fbbb0d04c6334153de2d4db77619b6` |
+| `canonical-producer/provenance.json` | `38557fc496304d9c3a9de7152b482f3ff018e1172dfafae0b5dc8b19976e94ac` |
+| `typed-dependency-consumers.md` | `0f84e641b6c19ec4dd92c0c63d070dedeb9953ae66a5fadbe0bf58ac759f8c3f` |
+| `canonical-projection-actual.json` | `8895ea1563c9ecc2a754a5c93fdeb787bb4eea0cc01a85a4072fdeceb7701ef9` |
+| `canonical-real-producer.json` | `cd4f75d5c73322bfa836acb1734c2e21cb2355537cd6f9b7b7436ad9e1376d80` |
+| `nts-798-canonical-publish2.log` | `fb2424f83712b670375e3ba498432f383bda5392e101df03229268138e86032e` |

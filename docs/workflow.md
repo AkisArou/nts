@@ -1996,7 +1996,10 @@ death; an absent timestamp remains explicit after forced termination.
   one capture transaction. Equal answers retain the union of their causes;
   conflicting answers refuse. Typed facts share a detached authority descriptor
   only when it is identical; different authority or Program provenance retains
-  separate rows and validation. No capture survives its snapshot
+  separate rows and validation. No capture survives its snapshot. The producer
+  canonically orders capture owners, requests and role bags, and consumes
+  snapshots in Cargo inventory order. The codec retains its ordered byte
+  contract; verification still requires exact output from that producer
   ([alias log](records/notebooks/decisions-log.md#matched-source-deletions-use-committed-alias-identities-11-19),
   [capture log](records/notebooks/decisions-log.md#reader-context-program-capture-11-19)).
 - **Installed Program inputs owe their repository pins:** a declared config's

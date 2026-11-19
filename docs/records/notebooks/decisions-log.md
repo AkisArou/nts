@@ -3905,3 +3905,10 @@ provenance retain separate rows and validation. Native reads still run, and no
 Program or capture is cached across snapshots. This removes repeated per-target
 facts without dropping the necessary new nearest-config observations. The
 separate cost of retaining 57 snapshots remains with #857.
+
+The producer gives merged facts and role bags a canonical order and consumes
+snapshots in Cargo inventory order. It also orders key maps independently of
+acquisition. The wire codec still preserves its input sequence, and verification
+still authenticates the exact producer output. Old repeated and new coalesced
+producers select identically and each verify against their own output;
+candidate-only duplication or permutation remains a derivation mismatch.
