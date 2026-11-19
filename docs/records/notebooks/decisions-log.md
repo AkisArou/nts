@@ -3931,11 +3931,13 @@ memory stages 1 and 2 start once their own instruments exist, beside the
 remaining instruments, instead of after all of them
 ([plan](../../plan.md#foundations-in-order)). Stage 1's target rows already run
 nightly and are measured by instruction counts; stage 2 needs the memory
-census, which #835 landed. None of #838, #839, #836 or the differential fuzzer
-(Q-6) gates either stage. The nightly runs from 10-30 to 11-19 show every memory
-row flat against ScriptC while the targets of stages 1 and 3 are unmet
-(`sort-objects` 1.22x node, `cyclic-churn` 8.75x node, `release-acyclic` 2.33x
-node). Two of stage 1's mechanisms are already built: the count-free sort
+census, whose tool is on main (bd0ac043bd, part of #835); its rows are pending
+and are written after landing. None of #838, #839, #836 or the differential
+fuzzer (Q-6) gates either stage. The nightly runs from 10-30 to 11-19 show every
+memory row flat against ScriptC while the targets of stages 1 and 3 are unmet:
+in the 11-19 nightly (run 2026-11-19-ae4898abff47), `sort-objects` was 1.22x
+node, `cyclic-churn` 8.75x and `release-acyclic` 2.33x, and the node ratios
+swing widely from night to night. Two of stage 1's mechanisms are already built: the count-free sort
 (be0ca2e1b7, 10-27) and release specialized by physical layout (1612a840bb,
 10-27). Stage 1's first tasks are #876, the sort cost that remains on top of
 the count-free sort, and #877, the count inventory; #878 is re-cut from #877's
