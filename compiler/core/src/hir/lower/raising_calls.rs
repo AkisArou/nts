@@ -873,21 +873,12 @@ impl FuncBuilder<'_> {
                 .flat_map(access_families::Family::accessors)
                 .collect();
         }
-        if !matches!(
-            self.kind_of(node),
-            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
-        ) {
-            return Vec::new();
-        }
-        let Some(&member) = self.children(node).last() else {
-            return Vec::new();
-        };
-        let Some(symbol) = self.node(member).symbol else {
+        let Some(symbol) = self.the_accessed_member_symbol(node) else {
             return Vec::new();
         };
         self.snapshot
             .symbols
-            .get(symbol.0 as usize)
+            .get(symbol as usize)
             .map(|symbol| {
                 symbol
                     .declarations
@@ -904,6 +895,62 @@ impl FuncBuilder<'_> {
             .unwrap_or_default()
     }
 
+    /// The symbols of the accessors a member access runs, which is what the throw
+    /// analysis is keyed by: [`Self::accessors_run_by`] asked for symbols rather than
+    /// declarations, from the same derivation. Empty for an access that runs none.
+    pub(super) fn accessor_symbols_run_by(&self, node: NodeId) -> Vec<u32> {
+        if self.hierarchy.access_families.at(node).next().is_some() {
+            return self
+                .hierarchy
+                .access_families
+                .at(node)
+                .flat_map(access_families::Family::symbols)
+                .collect();
+        }
+        if !self.reads_an_accessor(node) {
+            return Vec::new();
+        }
+        self.the_accessed_member_symbol(node).into_iter().collect()
+    }
+
+    /// The symbol of the member a property or element access names.
+    ///
+    /// **Through the receiver's type and the member key first**, which is how lowering
+    /// resolves the same access (`accessor_callee`, through the hierarchy by type and
+    /// [`PropertyKey`](nts_semantic_schema::PropertyKey)): the type's own record of the
+    /// member names its declaration, inherited members included. Only where the type
+    /// has no record of the key does the member node's own symbol answer. Reading that
+    /// symbol first was right for `r.v`, whose name the checker resolves to the member,
+    /// and wrong for `r[kV]`, whose last child is the key expression: its symbol is the
+    /// `const kV`, so a throwing `get [kV]` was no accessor to either walk, and lowering
+    /// called it inside a `try` with no copy to name
+    /// (`tests/programs/a-throwing-getter-under-a-computed-key-inside-a-try`).
+    fn the_accessed_member_symbol(&self, node: NodeId) -> Option<u32> {
+        if !matches!(
+            self.kind_of(node),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+        ) {
+            return None;
+        }
+        if let Some((receiver, key)) = self.member_access_key(node)
+            && let Some(ty) = self.snapshot.node_types.get(&receiver)
+            && let Some(TypeKind::Object { properties }) = self
+                .snapshot
+                .types
+                .get(self.class_behind(*ty).0 as usize)
+                .map(|record| &record.kind)
+            && let Some(property) = properties.iter().find(|property| property.name == key)
+        {
+            // A field or a method is no accessor, and the type has said which.
+            return property
+                .declaration
+                .and_then(|declaration| self.hierarchy.accessor_symbols.get(&declaration))
+                .copied();
+        }
+        let member = *self.children(node).last()?;
+        self.node(member).symbol.map(|symbol| symbol.0)
+    }
+
     /// Whether a member access runs an **accessor**, and is therefore a call.
     pub(super) fn reads_an_accessor(&self, node: NodeId) -> bool {
         !self.accessors_run_by(node).is_empty()
@@ -911,25 +958,17 @@ impl FuncBuilder<'_> {
 
     /// Whether the accessor a member access runs can raise.
     ///
-    /// **The member's symbol, not the receiver's.** [`a_call_that_can_raise`](super::raising_reachability::a_call_that_can_raise) reads
+    /// **The member's symbols, not the receiver's** ([`Self::accessor_symbols_run_by`]). [`a_call_that_can_raise`](super::raising_reachability::a_call_that_can_raise) reads
     /// `children(call).first()`, which for a call is the callee and for an access is the
     /// *object* -- so an access answered about whatever `box` happens to be, which was
     /// harmless only while an accessor was refused before anything asked. A getter that
     /// cannot throw needs no copy and no flag test, and saying otherwise refused
     /// `return box.plain` beside the throwing one.
     fn an_accessor_that_can_raise(&self, access: NodeId) -> bool {
-        if self.hierarchy.access_families.at(access).next().is_some() {
-            return self
-                .hierarchy
-                .access_families
-                .at(access)
-                .flat_map(access_families::Family::symbols)
-                .any(|symbol| self.throwing.contains(&symbol));
-        }
-        self.children(access)
-            .last()
-            .and_then(|member| self.node(*member).symbol)
-            .is_none_or(|symbol| self.throwing.contains(&symbol.0))
+        // An accessor with no symbol to ask about is answered "can", as an unresolved
+        // callee is: a wrong "cannot" is the escape, a wrong "can" a refusal.
+        let symbols = self.accessor_symbols_run_by(access);
+        symbols.is_empty() || symbols.iter().any(|symbol| self.throwing.contains(symbol))
     }
 
     /// Whether an accessor is a binding's for an Objective-C property or a

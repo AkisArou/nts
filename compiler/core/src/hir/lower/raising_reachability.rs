@@ -422,24 +422,11 @@ pub(super) fn walk_one_declaration(
         // fact, two walks, and they disagreed until a program that compiles
         // was run by hand.
         if probe.reads_an_accessor(at) {
-            if probe.hierarchy.access_families.at(at).next().is_some() {
-                reached.extend(
-                    probe
-                        .hierarchy
-                        .access_families
-                        .at(at)
-                        .flat_map(access_families::Family::symbols)
-                        .map(Reached::Body),
-                );
-            } else {
-                reached.push(
-                    probe
-                        .children(at)
-                        .last()
-                        .and_then(|member| probe.node(*member).symbol)
-                        .map_or(Reached::Elsewhere, |member| Reached::Body(member.0)),
-                );
+            let symbols = probe.accessor_symbols_run_by(at);
+            if symbols.is_empty() {
+                reached.push(Reached::Elsewhere);
             }
+            reached.extend(symbols.into_iter().map(Reached::Body));
         }
         if matches!(
             kind,
@@ -1068,23 +1055,13 @@ pub(super) fn a_call_that_can_raise(
                 .contains(&probe.printers.targets[*target].symbol)
         });
     }
-    // **An accessor access asks about the member**, which is the last child; the first
-    // is the receiver. See [`FuncBuilder::an_accessor_that_can_raise`] -- the same
-    // question, asked where the builder has the set rather than the caller.
+    // **An accessor access asks about the accessors it runs**, not the receiver its
+    // first child is, through [`FuncBuilder::accessor_symbols_run_by`]. See
+    // [`FuncBuilder::an_accessor_that_can_raise`] -- the same question, asked where
+    // the builder has the set rather than the caller.
     if probe.reads_an_accessor(call) {
-        if probe.hierarchy.access_families.at(call).next().is_some() {
-            return probe
-                .hierarchy
-                .access_families
-                .at(call)
-                .flat_map(access_families::Family::symbols)
-                .any(|symbol| throwing.any.contains(&symbol));
-        }
-        return probe
-            .children(call)
-            .last()
-            .and_then(|member| probe.node(*member).symbol)
-            .is_none_or(|symbol| throwing.any.contains(&symbol.0));
+        let symbols = probe.accessor_symbols_run_by(call);
+        return symbols.is_empty() || symbols.iter().any(|symbol| throwing.any.contains(symbol));
     }
     // `f.call(r)` can raise what `f` can ([`FuncBuilder::through_call_or_apply`]).
     let Some(callee) = probe

@@ -94,6 +94,18 @@ pub(super) struct Hierarchy {
     pub(super) literal_methods: std::sync::Arc<literal_methods::Supplies>,
     /// A complete, shared contract for reads and writes through a field face.
     pub(super) access_families: std::sync::Arc<access_families::Families>,
+    /// The symbol each `get` and `set` declaration belongs to.
+    ///
+    /// **An access finds its accessor through the receiver's type, which names the
+    /// declaration, and the throw analysis is keyed by symbol**, so the step between
+    /// them is this map. The member's own node cannot be asked instead: in `r[kV]` the
+    /// last child is the key expression, whose symbol is the `const kV` that holds the
+    /// key, so a throwing `get [kV]` read as a getter that cannot raise while lowering,
+    /// resolving the same access by type and key, called it
+    /// (`tests/programs/a-throwing-getter-under-a-computed-key-inside-a-try`). Built
+    /// once, because a declaration's symbol is otherwise a scan of every symbol and
+    /// this is asked at every member access the walks visit.
+    pub(super) accessor_symbols: std::sync::Arc<rustc_hash::FxHashMap<NodeId, u32>>,
     /// Each instantiation of a declared generic interface, to the
     /// declaration's own type -- the one `faces` holds.
     ///
@@ -892,6 +904,28 @@ fn objc_state_chain(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<NodeId> {
     chain
 }
 
+/// See [`Hierarchy::accessor_symbols`].
+fn accessor_symbols(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+) -> rustc_hash::FxHashMap<NodeId, u32> {
+    let mut symbols = rustc_hash::FxHashMap::default();
+    for (at, record) in snapshot.symbols.iter().enumerate() {
+        let Ok(symbol) = u32::try_from(at) else {
+            continue;
+        };
+        for declaration in &record.declarations {
+            if matches!(
+                probe.kind_of(*declaration),
+                Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)
+            ) {
+                symbols.insert(*declaration, symbol);
+            }
+        }
+    }
+    symbols
+}
+
 pub(super) fn collect_hierarchy(
     snapshot: &LoweringSnapshot<'_>,
     foreign: &crate::hir::runtime::ForeignTable,
@@ -902,6 +936,7 @@ pub(super) fn collect_hierarchy(
     let mut probe = FuncBuilder::new(snapshot, foreign);
     let instantiations = crate::hir::generics::instantiations(snapshot);
     hierarchy.provided_errors = provided_error_identities(snapshot);
+    hierarchy.accessor_symbols = std::sync::Arc::new(accessor_symbols(snapshot, &probe));
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if !matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind)) {
@@ -989,6 +1024,7 @@ pub(super) fn collect_hierarchy(
     collect_interfaces(snapshot, &probe, &mut hierarchy, &instantiations);
     let probe_hierarchy = Hierarchy {
         cast_faces: hierarchy.cast_faces.clone(),
+        accessor_symbols: std::sync::Arc::clone(&hierarchy.accessor_symbols),
         ..Hierarchy::default()
     };
     probe.hierarchy = &probe_hierarchy;
