@@ -694,3 +694,25 @@ and prepared programs; the wide values are only power coordinates.
 
 The matched policy arms will distinguish the width contract, minrun maxima
 32/64, bounds-based/count-based binary insertion, and galloping on/off.
+
+## Unsigned focused proof
+
+Source `904a90d9a` passes Clippy, both scalar boundary-proof controls, the
+raw/prepared HIR index-width contract, all 23 C write-back checks, both
+C/LLVM forced-collection/throw/mutation suites under RC and NoGC with
+poisoning and ASan/UBSan, and the JVM fixture executed with Node agreement
+and `-Xverify:all`. The native fixtures cover 18 seeds and the JVM fixture
+executes all eleven exports for those seeds.
+
+The first focused attempts stopped before tests on documentation formatting
+and test function length; those were corrected. The final raw log is
+`/home/akisarou/.cache/nts-scratch/876/u32-focused-final.log`, SHA-256
+`e36640660fbcb6f2fd28c8c9a7e11270fe8b36479ab71b43a3c2f768a231a301`.
+
+The named policy arms use r64 for minrun normalization at 64 (returned runs
+32–64), and r32 for normalization at 32 (returned runs 16–32). Count-based
+upper-bound search has the same comparisons as bounds-based search; its
+control changes the dependency representation. Galloping-disabled controls
+keep the same policy and constant-fold the galloping entry condition away.
+Each source arm is committed and its commit observed before an all-release
+build and instruction counts. All archived arms are then timed together.
