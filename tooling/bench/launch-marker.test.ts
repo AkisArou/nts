@@ -66,10 +66,16 @@ test("control: a marker that is not exactly one of the two forms, or a peak-RSS 
   assert.throws(() => readLaunchMarker(root, "rss-trees"), /itself a launch row/);
 });
 
-test("every committed launch marker reads through its one reader: the startup rows are launch-to-exit", () => {
+test("every committed launch marker reads through its one reader: startup and the nine sized peak-RSS rows", () => {
   const cases = readdirSync(join(ROOT, "benchmarks/cases")).filter(name => existsSync(join(ROOT, "benchmarks/cases", name, "launch.json"))).sort();
   const markers = new Map(cases.map(name => [name, readLaunchMarker(ROOT, name)]));
   for (const name of ["startup-builtins", "startup-empty", "startup-hello"]) assert.deepEqual(markers.get(name), { metric: "launch-to-exit" }, name);
+  const rss = [
+    ...[10, 12, 14].map(input => `rss-clbg-binary-trees-${input}`),
+    ...[8192, 16384, 32768].map(input => `rss-clbg-fasta-${input}`),
+    ...[8192, 16384, 32768].map(input => `rss-clbg-k-nucleotide-${input}`),
+  ].sort();
+  assert.deepEqual([...markers].filter(([, marker]) => marker.metric === "peak-rss").map(([name]) => name), rss);
   // A committed peak-RSS row is named for its case and input, is a benchmark case, and is exactly its derived program.
   const all = benchmarkCases(ROOT);
   for (const [name, marker] of markers) {

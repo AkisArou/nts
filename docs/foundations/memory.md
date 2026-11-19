@@ -552,3 +552,15 @@ systems and about 70 sources, is [in the records](../records/notebooks/studies/m
 - `startup-empty`
 - `startup-hello`
 - `startup-builtins`
+
+### peak-rss
+
+- `rss-clbg-binary-trees-10`
+- `rss-clbg-binary-trees-12`
+- `rss-clbg-binary-trees-14`
+- `rss-clbg-fasta-8192`
+- `rss-clbg-fasta-16384`
+- `rss-clbg-fasta-32768`
+- `rss-clbg-k-nucleotide-8192`
+- `rss-clbg-k-nucleotide-16384`
+- `rss-clbg-k-nucleotide-32768`

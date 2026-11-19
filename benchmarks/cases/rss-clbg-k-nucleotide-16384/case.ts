@@ -1,0 +1,5 @@
+// The peak-RSS row of clbg-k-nucleotide at work(16384): the whole program,
+// derived from launch.json by tooling/bench/launch-marker.ts, which refuses
+// any other text. tooling/bench/README.md, "Peak-RSS rows", says how it is measured.
+import { work } from "../clbg-k-nucleotide/case.ts";
+console.log(work(16384));
