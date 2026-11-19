@@ -13,7 +13,7 @@ import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { LAUNCH_PROTOCOL, type Launch, type LaunchDetails } from "./launch-cell.ts";
 
 export const LAUNCH_SOURCE = fileInput(new URL("./launch.c", import.meta.url));
-/** A launch's own bounds: past either it is a recorded TIMED_OUT or a CPU-limit kill. */
+/** A launch's own bounds: past either, it is recorded as past its bound (TIMED_OUT). */
 export const LAUNCH_CPU_SECONDS = 120;
 export const LAUNCH_WALL_SECONDS = 180;
 
@@ -51,7 +51,8 @@ export function environmentDigest(environment: Record<string, string>): string {
 
 export type LaunchColumn = { label: string; argv: string[] };
 export type LaunchRequest = {
-  launcher: Launcher; cpu: number; cwd: string; environment: Record<string, string>;
+  /** The timed CPU, and its hyperthread sibling whose ticks each launch records (null: none named). */
+  launcher: Launcher; cpu: number; sibling: number | null; cwd: string; environment: Record<string, string>;
   columns: LaunchColumn[]; warmups: number; launches: number; out: string;
   /** Each launch's bounds; a sitting uses LAUNCH_CPU_SECONDS and LAUNCH_WALL_SECONDS. */
   bounds?: { cpuSeconds: number; wallSeconds: number };
@@ -59,7 +60,7 @@ export type LaunchRequest = {
 /** One column's sitting: its launches, the stdout they agreed on, and the first failing launch's stderr. */
 export type ColumnLaunches = { label: string; argv: string[]; details: LaunchDetails; stdout: string; stderr: string };
 export type Sitting = { protocol: typeof LAUNCH_PROTOCOL; cwd: string; environment: Record<string, string>;
-  environmentSha256: string; launcherSha256: string; cpu: number; columns: ColumnLaunches[] };
+  environmentSha256: string; launcherSha256: string; cpu: number; sibling: number | null; columns: ColumnLaunches[] };
 
 /** Parses the timer's output strictly; `read` supplies each launch's stdout and stderr bytes. */
 export function parseLaunches(text: string, request: Omit<LaunchRequest, "launcher" | "out" | "bounds">,
@@ -72,14 +73,16 @@ export function parseLaunches(text: string, request: Omit<LaunchRequest, "launch
   const environmentSha256 = environmentDigest(request.environment);
   const seen = request.columns.map(() => ({ warmups: [] as Launch[], launches: [] as Launch[], stdouts: new Map<string, string>(), stderr: "" }));
   for (const line of lines.slice(1, -1)) {
-    const match = /^L (\d+) (\d+) ([01]) (\d+) ([01]) (-?\d+) ([01]) (\d+) (\d+) (\d+)$/.exec(line);
+    const match = /^L (\d+) (\d+) ([01]) (\d+) ([01]) (-?\d+) ([01]) (\d+) (\d+) (\d+) (-1|\d+)$/.exec(line);
     if (!match) throw instrument(`malformed launch line: ${line}`);
-    const [column, round, warm, wall, exited, code, timedOut, user, system, rss] = match.slice(1).map(Number) as number[];
+    const [column, round, warm, wall, exited, code, timedOut, user, system, rss, sibling] = match.slice(1).map(Number) as number[];
+    if ((sibling === -1) !== (request.sibling === null)) throw instrument(`sibling ticks disagree with the request: ${line}`);
     if (column! >= request.columns.length || round! >= rounds || (warm === 1) !== (round! < request.warmups)) throw instrument(`launch out of its sitting: ${line}`);
     if (code! < 0) throw instrument(`launch ended neither by exit nor by signal: ${line}`);
     const stdout = read(column!, round!, "stdout"), stdoutSha256 = sha256(stdout);
     const launch: Launch = { wallNanoseconds: wall!, status: exited === 1 ? code! : null, signal: exited === 1 ? null : code!,
-      timedOut: timedOut === 1, userMicroseconds: user!, systemMicroseconds: system!, maxRssKib: rss!, stdoutSha256 };
+      timedOut: timedOut === 1, userMicroseconds: user!, systemMicroseconds: system!, maxRssKib: rss!,
+      siblingTicks: sibling === -1 ? null : sibling!, stdoutSha256 };
     if (!Number.isSafeInteger(launch.wallNanoseconds) || launch.wallNanoseconds <= 0) throw instrument(`launch time is not positive: ${line}`);
     const state = seen[column!]!;
     (warm === 1 ? state.warmups : state.launches).push(launch);
@@ -96,8 +99,17 @@ export function parseLaunches(text: string, request: Omit<LaunchRequest, "launch
   });
 }
 
-/** One sitting: every column launched in rotating rounds by the compiled timer. */
-export async function launchSitting(request: LaunchRequest): Promise<Sitting> {
+/** The timer's command line for one sitting whose request files are written. */
+export function launchArguments(request: LaunchRequest, files: { environmentFile: string; columnsFile: string; outputs: string }): string[] {
+  const bounds = request.bounds ?? { cpuSeconds: LAUNCH_CPU_SECONDS, wallSeconds: LAUNCH_WALL_SECONDS };
+  return ["--cpu", String(request.cpu), ...(request.sibling === null ? [] : ["--sibling", String(request.sibling)]),
+    "--cpu-seconds", String(bounds.cpuSeconds), "--wall-seconds", String(bounds.wallSeconds),
+    "--warmups", String(request.warmups), "--launches", String(request.launches), "--cwd", request.cwd,
+    "--env", files.environmentFile, "--columns", files.columnsFile, "--out", files.outputs];
+}
+
+/** Writes one sitting's request files and returns the timer's command line and its output directory. */
+export function prepareSitting(request: LaunchRequest): { args: string[]; outputs: string } {
   if (!isAbsolute(request.cwd) || !isAbsolute(request.out)) throw instrument("cwd and output must be absolute");
   for (const column of request.columns) if (!column.argv[0] || !isAbsolute(column.argv[0])) throw instrument(`column ${column.label} needs an absolute program`);
   rmSync(request.out, { recursive: true, force: true });
@@ -106,10 +118,12 @@ export async function launchSitting(request: LaunchRequest): Promise<Sitting> {
   const environmentFile = join(request.out, "environment"), columnsFile = join(request.out, "columns");
   writeFileSync(environmentFile, Object.keys(request.environment).sort().map(key => `${key}=${request.environment[key]}\0`).join(""));
   writeFileSync(columnsFile, request.columns.map(column => [column.label, String(column.argv.length), ...column.argv].map(part => `${part}\0`).join("")).join(""));
-  const bounds = request.bounds ?? { cpuSeconds: LAUNCH_CPU_SECONDS, wallSeconds: LAUNCH_WALL_SECONDS };
-  const args = ["--cpu", String(request.cpu), "--cpu-seconds", String(bounds.cpuSeconds), "--wall-seconds", String(bounds.wallSeconds),
-    "--warmups", String(request.warmups), "--launches", String(request.launches), "--cwd", request.cwd,
-    "--env", environmentFile, "--columns", columnsFile, "--out", outputs];
+  return { args: launchArguments(request, { environmentFile, columnsFile, outputs }), outputs };
+}
+
+/** One sitting: every column launched in rotating rounds by the compiled timer. */
+export async function launchSitting(request: LaunchRequest): Promise<Sitting> {
+  const { args, outputs } = prepareSitting(request);
   const { status, stdout, stderr } = await new Promise<{ status: number | null; stdout: string; stderr: string }>((done, reject) => {
     const child = spawn(request.launcher.binary, args, { stdio: ["ignore", "pipe", "pipe"] });
     let out = "", err = "";
@@ -121,5 +135,5 @@ export async function launchSitting(request: LaunchRequest): Promise<Sitting> {
   if (status !== 0) throw instrument(`exited ${status}: ${stderr.trim() || "(no reason)"}`);
   const columns = parseLaunches(stdout, request, (column, round, stream) => readFileSync(join(outputs, `${column}-${round}.${stream}`)));
   return { protocol: LAUNCH_PROTOCOL, cwd: request.cwd, environment: request.environment, environmentSha256: environmentDigest(request.environment),
-    launcherSha256: request.launcher.sourceSha256, cpu: request.cpu, columns };
+    launcherSha256: request.launcher.sourceSha256, cpu: request.cpu, sibling: request.sibling, columns };
 }

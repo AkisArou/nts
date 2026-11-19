@@ -17,8 +17,9 @@
 // A bad request, a failed spawn or an unreadable clock exits 2 with the
 // reason on stderr: an instrument error, never an observation.
 //
-// usage: nts-launch --cpu N --cpu-seconds S --wall-seconds W --warmups K
-//          --launches N --cwd DIR --env FILE --columns FILE --out DIR
+// usage: nts-launch --cpu N [--sibling M] --cpu-seconds S --wall-seconds W
+//          --warmups K --launches N --cwd DIR --env FILE --columns FILE
+//          --out DIR
 //
 // FILE formats are NUL-separated: --env holds KEY=VALUE entries; --columns
 // holds, per column, its label, its argument count in decimal, then its
@@ -26,7 +27,13 @@
 //
 //   nts-launch 1 cpu=<N> columns=<C> rounds=<R>
 //   L <column> <round> <warm 0|1> <wall ns> <exited 0|1> <status|signal>
-//     <timed out 0|1> <user us> <system us> <max rss KiB>
+//     <past a bound 0|1> <user us> <system us> <max rss KiB> <sibling ticks>
+//
+// A launch is past its bound when the wall bound killed it or its own CPU
+// time reached the CPU bound (the kernel's SIGXCPU, or its SIGKILL at the
+// hard limit). Sibling ticks are the user and nice clock ticks the timed
+// CPU's hyperthread sibling spent between the clock readings around the
+// launch, read from /proc/stat outside the window; -1 without --sibling.
 //   end <launches>
 //
 // Rounds rotate the column order (round r starts at column r mod C), so
@@ -80,7 +87,8 @@ static char *slurp(const char *path, size_t *length) {
     fail("out of memory reading", path);
   size_t read_so_far = 0;
   while (read_so_far < (size_t)at.st_size) {
-    ssize_t got = read(fd, bytes + read_so_far, (size_t)at.st_size - read_so_far);
+    ssize_t got =
+        read(fd, bytes + read_so_far, (size_t)at.st_size - read_so_far);
     if (got <= 0)
       fail("cannot read", path);
     read_so_far += (size_t)got;
@@ -121,11 +129,33 @@ static int64_t now_ns(void) {
   return (int64_t)at.tv_sec * 1000000000 + at.tv_nsec;
 }
 
+/* User plus nice ticks of `cpu` so far, from /proc/stat. */
+static long long program_ticks(long cpu) {
+  FILE *stat = fopen("/proc/stat", "re");
+  if (!stat)
+    fail("cannot read /proc/stat", strerror(errno));
+  char line[512], name[32];
+  snprintf(name, sizeof name, "cpu%ld ", cpu);
+  long long ticks = -1;
+  while (fgets(line, sizeof line, stat)) {
+    unsigned long long user, nice;
+    if (!strncmp(line, name, strlen(name)) &&
+        sscanf(line + strlen(name), "%llu %llu", &user, &nice) == 2) {
+      ticks = (long long)(user + nice);
+      break;
+    }
+  }
+  fclose(stat);
+  if (ticks < 0)
+    fail("/proc/stat does not name the sibling CPU", name);
+  return ticks;
+}
+
 static int open_output(const char *out, int column, int round,
                        const char *suffix) {
   char path[4096];
-  int written = snprintf(path, sizeof path, "%s/%d-%d.%s", out, column, round,
-                         suffix);
+  int written =
+      snprintf(path, sizeof path, "%s/%d-%d.%s", out, column, round, suffix);
   if (written < 0 || (size_t)written >= sizeof path)
     fail("output path too long", out);
   int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
@@ -135,8 +165,8 @@ static int open_output(const char *out, int column, int round,
 }
 
 int main(int argc, char **argv) {
-  long cpu = -1, cpu_seconds = -1, wall_seconds = -1, warmups = -1,
-       launches = -1;
+  long cpu = -1, sibling = -1, cpu_seconds = -1, wall_seconds = -1,
+       warmups = -1, launches = -1;
   const char *cwd = NULL, *env_file = NULL, *columns_file = NULL, *out = NULL;
   for (int i = 1; i < argc; i += 2) {
     if (i + 1 >= argc)
@@ -144,6 +174,8 @@ int main(int argc, char **argv) {
     const char *flag = argv[i], *value = argv[i + 1];
     if (!strcmp(flag, "--cpu"))
       cpu = whole(value, flag, 0);
+    else if (!strcmp(flag, "--sibling"))
+      sibling = whole(value, flag, 0);
     else if (!strcmp(flag, "--cpu-seconds"))
       cpu_seconds = whole(value, flag, 1);
     else if (!strcmp(flag, "--wall-seconds"))
@@ -184,7 +216,8 @@ int main(int argc, char **argv) {
   char *column_bytes = slurp(columns_file, &columns_length);
   static struct column columns[MAX_COLUMNS];
   int count = 0;
-  for (char *label; (label = field(column_bytes, columns_length, &columns_at));) {
+  for (char *label;
+       (label = field(column_bytes, columns_length, &columns_at));) {
     if (count == MAX_COLUMNS)
       fail("too many columns", NULL);
     char *arity = field(column_bytes, columns_length, &columns_at);
@@ -246,6 +279,7 @@ int main(int argc, char **argv) {
       if (setitimer(ITIMER_REAL, &bound, NULL))
         fail("cannot arm the wall bound", strerror(errno));
       pid_t child;
+      long long sibling_before = sibling < 0 ? 0 : program_ticks(sibling);
       int64_t began = now_ns();
       int spawned = posix_spawn(&child, columns[column].argv[0], &actions, NULL,
                                 columns[column].argv, environment);
@@ -267,21 +301,28 @@ int main(int argc, char **argv) {
         fail("cannot wait for a launch", strerror(errno));
       }
       int64_t ended = now_ns();
+      long long sibling_after = sibling < 0 ? -1 : program_ticks(sibling);
       struct itimerval off = {{0, 0}, {0, 0}};
       setitimer(ITIMER_REAL, &off, NULL);
       posix_spawn_file_actions_destroy(&actions);
       close(stdout_fd);
       close(stderr_fd);
       int exited = WIFEXITED(status);
-      int code = exited ? WEXITSTATUS(status)
-                        : WIFSIGNALED(status) ? WTERMSIG(status) : -1;
-      int64_t user = (int64_t)usage.ru_utime.tv_sec * 1000000 +
-                     usage.ru_utime.tv_usec;
-      int64_t system = (int64_t)usage.ru_stime.tv_sec * 1000000 +
-                       usage.ru_stime.tv_usec;
-      printf("L %d %ld %d %" PRId64 " %d %d %d %" PRId64 " %" PRId64 " %ld\n",
+      int code = exited                ? WEXITSTATUS(status)
+                 : WIFSIGNALED(status) ? WTERMSIG(status)
+                                       : -1;
+      int64_t user =
+          (int64_t)usage.ru_utime.tv_sec * 1000000 + usage.ru_utime.tv_usec;
+      int64_t system =
+          (int64_t)usage.ru_stime.tv_sec * 1000000 + usage.ru_stime.tv_usec;
+      if (!exited &&
+          (code == SIGXCPU || user + system >= (int64_t)cpu_seconds * 1000000))
+        timed_out = 1;
+      printf("L %d %ld %d %" PRId64 " %d %d %d %" PRId64 " %" PRId64
+             " %ld %lld\n",
              column, round, round < warmups, ended - began, exited, code,
-             timed_out, user, system, usage.ru_maxrss);
+             timed_out, user, system, usage.ru_maxrss,
+             sibling_after - sibling_before);
       total++;
     }
   }

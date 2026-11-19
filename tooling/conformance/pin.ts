@@ -13,9 +13,9 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //
 // # Why
 //
-// **A binary cannot state its own provenance**: `nts version` prints `nts
-// 0.0.0`, a schema version and its native frontend version, and no commit is embedded
-// anywhere. So "which compiler is this" was answered by a file name someone
+// **A binary cannot state all of its own provenance**: `nts version` names
+// the commit it was built from and whether its sources were edited then, but
+// not what those edits were. Before it named even the commit, "which compiler is this" was answered by a file name someone
 // typed -- and on 2026-09-28 a census's control was believed to be capture's
 // tip and was capture's parent, and its delta included capture. Nothing
 // caught it but the implausibility of the result. Only whatever builds a

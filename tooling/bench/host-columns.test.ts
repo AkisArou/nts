@@ -6,10 +6,7 @@ import { stripTypeScriptTypes } from "node:module";
 import { parse } from "acorn";
 import { typedTimer } from "./typed-timer.ts";
 import { parseMeasurement, buildCommand, buildFailure, coldStartup, launchCpu, ntsIdentity } from "./host-columns.ts";
-import { copyFileSync, utimesSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
-import { gitArguments } from "../gate/git-arguments/main.ts";
+import { chmodSync, utimesSync } from "node:fs";
 import { buildLauncher } from "./launcher.ts";
 import { LAUNCH_PROTOCOL } from "./launch-cell.ts";
 import { join } from "node:path";
@@ -102,7 +99,7 @@ test("the cold-startup arm is one launch of the launch timer, under its named pr
   const dir = testScratch(t, "cold-startup");
   const script = join(dir, "cold.sh");
   writeFileSync(script, '[ "$NTS_BENCH_STARTUP" = 1 ] || exit 7\necho "123.5 4000000000000000"\n');
-  const cold = { launcher: buildLauncher(join(dir, "bin"), String(launchCpu())), directory: join(dir, "cold"), cwd: dir };
+  const cold = { launcher: buildLauncher(join(dir, "bin"), String(launchCpu().cpu)), directory: join(dir, "cold"), cwd: dir };
   const observed = await coldStartup(cold, "/bin/sh", [script], "4000000000000000", "case-node") as Record<string, unknown>;
   assert.equal(observed.protocol, LAUNCH_PROTOCOL);
   assert.equal(observed.status, "OK");
@@ -113,14 +110,23 @@ test("the cold-startup arm is one launch of the launch timer, under its named pr
   assert.equal((await coldStartup(cold, "/bin/sh", [script], "4000000000000000", "case-aot") as Record<string, unknown>).status, "ABORTED");
 });
 
-test("launch rows refuse an nts that is missing or linked before its sources' last change", t => {
-  const dir = testScratch(t, "nts-identity"), root = fileURLToPath(new URL("../..", import.meta.url));
-  const commit = execFileSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).trim();
+test("launch rows refuse an nts that is missing, built from another commit or from uncommitted sources, whatever its mtime", t => {
+  const dir = testScratch(t, "nts-identity"), commit = "a".repeat(40), other = "b".repeat(40);
   const nts = join(dir, "nts");
-  assert.throws(() => ntsIdentity(nts, root, commit), /does not exist/);
-  copyFileSync("/bin/true", nts);
-  utimesSync(nts, new Date("2000-01-01T00:00:00Z"), new Date("2000-01-01T00:00:00Z"));
-  assert.throws(() => ntsIdentity(nts, root, commit), /linked before .* the last change to its sources/);
-  utimesSync(nts, new Date(), new Date());
-  assert.equal(ntsIdentity(nts, root, commit).binary, nts);
+  assert.throws(() => ntsIdentity(nts, commit), /does not exist/);
+  const built = (source: string) => {
+    writeFileSync(nts, `#!/bin/sh\necho "nts 0.0.0"\n${source}\n`);
+    chmodSync(nts, 0o755);
+    utimesSync(nts, new Date(), new Date()); // a fresh copy, as the nightly's: the mtime decides nothing
+  };
+  built(`echo "source commit ${other} (clean)"`);
+  assert.throws(() => ntsIdentity(nts, commit), /was built from bbbbbbbbbbbb, not the measured aaaaaaaaaaaa/);
+  built(`echo "source commit ${commit} (dirty)"`);
+  assert.throws(() => ntsIdentity(nts, commit), /uncommitted sources/);
+  built("");
+  assert.throws(() => ntsIdentity(nts, commit), /names no source commit/);
+  built(`echo "source commit ${commit} (clean)"`);
+  const identity = ntsIdentity(nts, commit);
+  assert.equal(identity.sourceCommit, commit);
+  assert.match(identity.version, /source commit a{40} \(clean\)/);
 });

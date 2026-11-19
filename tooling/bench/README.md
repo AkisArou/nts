@@ -49,20 +49,26 @@ marker is an error. The `startup` group's rows are launch rows.
 
 - **What is launched.** nts C and nts LLVM are the executables `nts build`
   makes, from a generated project whose config declares one `app.cli` product
-  per backend, with the `nts` beside `nts-bench` (refused when it was linked
-  before the measured commit). Node and Bun JIT run `case.ts` itself with no
+  per backend, with the `nts` beside `nts-bench`. That `nts` must name, in
+  `nts version`, the commit `nts-bench` was built from, built clean: both
+  embed their source commit and dirty flag at build time
+  (`tooling/cli/source_identity.rs`). Node and Bun JIT run `case.ts` itself with no
   flags; Bun AOT and ScriptC are built from it as for throughput rows. nts JVM
   is `NOT_RUN` and C++ and Java `NOT_PROVIDED`, each with its reason. A cell's
   details name its recipe, command, artifact digest and argv.
-- **The timer** (`launch.c`, driven by `launcher.ts`) pins itself to CPU 4 and
-  sets its CPU and core limits once; children inherit them, so no wrapper
-  process is inside the window. Each launch is `clock_gettime(MONOTONIC)`,
+- **The timer** (`launch.c`, built with clang and driven by `launcher.ts`;
+  C because the per-child `wait4` rusage it needs has no safe Rust binding
+  here, and the workspace forbids unsafe code) pins itself to CPU 4 and sets
+  its CPU and core limits once; children inherit them, so no wrapper process
+  is inside the window. Each launch is `clock_gettime(MONOTONIC)`,
   `posix_spawn`, `wait4` on that pid, `clock_gettime`. While a child runs the
   timer only waits. A child's stdout and stderr go to files opened before the
   clock starts and read after the sitting, so a child never blocks on output.
-  Each launch keeps its wall time, exit status or signal, whether it passed its
-  wall bound, and wait4's user and system time and peak RSS (an observation
-  only; size and RSS rows are their own instruments).
+  Each launch keeps its wall time, exit status or signal, whether it passed a
+  bound (the wall bound killed it, or its own CPU time reached the CPU bound),
+  wait4's user and system time and peak RSS (an observation only; size and
+  RSS rows are their own instruments), and the user and nice ticks of the
+  timed CPU's sibling 5 around it.
 - **One sitting per row.** Every column, and `/bin/true` as the timer's own
   floor, launch in rotating rounds (round r starts at column r): three warm-up
   rounds, which only warm the page cache, then 21 timed rounds. All columns

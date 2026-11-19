@@ -1,10 +1,10 @@
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import assert from "node:assert/strict";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { countDriver } from "./count-driver.ts";
 import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
-import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,7 +14,6 @@ import { absent } from "./run-producers.ts";
 import { COMPARATORS, SESSION_COLUMNS, type Cell, type Comparator, type Json } from "./run-record.ts";
 import { buildLauncher, launchEnvironment, launchSitting, type Launcher } from "./launcher.ts";
 import { LAUNCH_COUNT, LAUNCH_KIND, LAUNCH_WARMUPS, launchCell, launchSummary } from "./launch-cell.ts";
-import { gitArguments } from "../gate/git-arguments/main.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
 import { optionalFile } from "../gate/reader-inputs/main.ts";
 // Bun consults this configuration in the repository cwd used below.
@@ -251,7 +250,7 @@ export type Cold = { launcher: Launcher; directory: string; cwd: string };
 export async function coldStartup(cold: Cold, program: string, args: string[], checksum: string, label: string): Promise<Json> {
   const directory = join(cold.directory, label);
   const environment = launchEnvironment(directory, { NTS_BENCH_STARTUP: "1" });
-  const sitting = await launchSitting({ launcher: cold.launcher, cpu: launchCpu(), cwd: cold.cwd, environment,
+  const sitting = await launchSitting({ launcher: cold.launcher, ...launchCpu(), cwd: cold.cwd, environment,
     columns: [{ label, argv: [program, ...args] }], warmups: 0, launches: 1, out: join(directory, "sitting") });
   const column = sitting.columns[0]!, launch = column.details.launches[0]!;
   const printed = /^([0-9]+(?:\.[0-9]+)?)\s+([a-f0-9]{16})\s*$/.exec(column.stdout.trim());
@@ -266,10 +265,14 @@ export async function coldStartup(cold: Cold, program: string, args: string[], c
     launcherSha256: sitting.launcherSha256,
   };
 }
-/** The one CPU a launch sitting pins to: 4 under the measurement lock, else the first one a build may use. */
-export function launchCpu(): number {
+/**
+ * The one CPU a launch sitting pins to, and the sibling whose ticks it
+ * records: 4 and 5 under the measurement lock; else the first CPU a build may
+ * use, with no sibling to watch.
+ */
+export function launchCpu(): { cpu: number; sibling: number | null } {
   const cpus = affinity(true);
-  return Number(cpus.split(",")[0]);
+  return cpus === "4" && process.env.NTS_BENCH_CPUS ? { cpu: 4, sibling: 5 } : { cpu: Number(cpus.split(",")[0]), sibling: null };
 }
 export function buildFailure(receipt: Receipt): Cell {
   return absent(
@@ -422,7 +425,7 @@ const NTS_TARGETS = [{ column: "nts C", backend: "c" }, { column: "nts LLVM", ba
  * same `nts` the run measures, so the row times what a user would ship
  * (tooling/bench/README.md, "Launch rows").
  */
-async function buildNts(root: string, nts: { binary: string; sha256: string; version: string }, entry: string, directory: string,
+async function buildNts(root: string, nts: { binary: string; sha256: string; version: string; sourceCommit: string }, entry: string, directory: string,
   backend: "c" | "llvm"): Promise<{ binary: string; recipe: Json } | Cell> {
   const project = join(directory, `nts-${backend}`);
   rmSync(project, { recursive: true, force: true });
@@ -435,7 +438,7 @@ async function buildNts(root: string, nts: { binary: string; sha256: string; ver
   ].join("\n"));
   const output = join(project, "out"), command = ["build", join(project, "tsconfig.json"), "--out", output];
   const build = await execute(nts.binary, command, project, false, { NTS_NODE: process.execPath });
-  const recipe = { tool: "nts build", backend, product: "app.cli", command: [nts.binary, ...command], ntsSha256: nts.sha256, ntsVersion: nts.version,
+  const recipe = { tool: "nts build", backend, product: "app.cli", command: [nts.binary, ...command], ntsSha256: nts.sha256, ntsSourceCommit: nts.sourceCommit, ntsVersion: nts.version,
     config: readFileSync(join(project, "nts.config.ts"), "utf8") };
   if (build.status !== 0 || build.timeout) {
     const refusal = `${build.stderr}\n${build.stdout}`.split("\n").find((line) => /(?:declined:|\bNTS\d{4}\b|\bTS\d{4,}\b)/.test(line));
@@ -447,21 +450,20 @@ async function buildNts(root: string, nts: { binary: string; sha256: string; ver
   return { binary: built[0]!, recipe: { ...recipe, build: build as unknown as Json, artifactSha256: sha256(built[0]!) } };
 }
 
-/** What the nts binary is built from: a change here relinks it. */
-export const NTS_SOURCES = ["compiler", "runtime", "build", "tooling/cli", "Cargo.toml", "Cargo.lock"] as const;
 /**
- * The nts that builds launch rows: beside nts-bench, and not linked before the
- * last commit, up to the measured one, that changed what it is built from.
+ * The nts that builds launch rows: beside nts-bench, built from the very
+ * commit the run records (`nts version`'s source line, set by
+ * tooling/cli/source_identity.rs), from sources with no uncommitted edits.
  */
-export function ntsIdentity(binary: string, root: string, commit: string): { binary: string; sha256: string; version: string } {
+export function ntsIdentity(binary: string, commit: string): { binary: string; sha256: string; version: string; sourceCommit: string } {
   if (!existsSync(binary)) throw new ToolingInstrumentError("tooling-setup", `launch rows build with ${binary}, which does not exist; build the workspace with cargo build --release`);
-  const changed = execFileSync("git", gitArguments(["log", "-1", "--format=%H %ct", commit, "--", ...NTS_SOURCES]), { cwd: root, encoding: "utf8" }).trim();
-  const [source, committed] = changed.split(" ");
-  const linked = Math.floor(statSync(binary).mtimeMs / 1000);
-  if (!(linked >= Number(committed))) throw new ToolingInstrumentError("tooling-setup", `${binary} was linked before ${source?.slice(0, 12)}, the last change to its sources at ${commit.slice(0, 12)}; rebuild it with cargo build --release`);
   const version = spawnSync(binary, ["version"], { encoding: "utf8" });
   if (version.status !== 0) throw new ToolingInstrumentError("tooling-setup", `${binary} version failed: ${version.stderr}`);
-  return { binary, sha256: sha256(binary), version: version.stdout.trim() };
+  const source = /^source commit ([0-9a-f]{40}) \((clean|dirty)\)$/m.exec(version.stdout);
+  if (!source) throw new ToolingInstrumentError("tooling-setup", `${binary} names no source commit; rebuild it with cargo build --release`);
+  if (source[1] !== commit) throw new ToolingInstrumentError("tooling-setup", `${binary} was built from ${source[1]!.slice(0, 12)}, not the measured ${commit.slice(0, 12)}; rebuild the workspace with cargo build --release`);
+  if (source[2] !== "clean") throw new ToolingInstrumentError("tooling-setup", `${binary} was built from uncommitted sources; commit and rebuild`);
+  return { binary, sha256: sha256(binary), version: version.stdout.trim(), sourceCommit: source[1]! };
 }
 
 /**
@@ -478,7 +480,7 @@ export async function launchColumns(root: string, name: string, out: string, nts
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
   const entry = join(root, "benchmarks/cases", name, "case.ts");
-  const nts = ntsIdentity(ntsBinary, root, commit);
+  const nts = ntsIdentity(ntsBinary, commit);
   const cells: Record<string, Cell> = Object.fromEntries(SESSION_COLUMNS.map((column) => [column,
     column === "nts JVM" ? absent("NOT_RUN", "Startup rows measure native executables and the engines; the JVM's launch is not in this group")
       : column === "nts f64" ? absent("NOT_RUN", "The unspecialized control prices number specialization in throughput; a launch row has no such build")
@@ -507,7 +509,7 @@ export async function launchColumns(root: string, name: string, out: string, nts
   const floor = { column: "floor", argv: ["/bin/true"], extra: {} };
   const launcher = buildLauncher(join(directory, "launcher"), affinity(false));
   const environment = launchEnvironment(join(directory, "environment"));
-  const sitting = await launchSitting({ launcher, cpu: launchCpu(), cwd: root, environment, warmups: LAUNCH_WARMUPS, launches: LAUNCH_COUNT,
+  const sitting = await launchSitting({ launcher, ...launchCpu(), cwd: root, environment, warmups: LAUNCH_WARMUPS, launches: LAUNCH_COUNT,
     columns: [...columns, floor].map(({ column, argv }) => ({ label: column, argv })), out: join(directory, "sitting") });
   for (const [index, { column, argv, extra }] of columns.entries()) {
     const observed = sitting.columns[index]!;
@@ -520,7 +522,7 @@ export async function launchColumns(root: string, name: string, out: string, nts
     floor: { argv: floor.argv, ...launchSummary(measuredFloor.details.launches.map((launch) => launch.wallNanoseconds)),
       launch: measuredFloor.details as unknown as Json },
     provenance: { protocol: sitting.protocol, cwd: root, environment: sitting.environment, environmentSha256: sitting.environmentSha256,
-      launcherSha256: sitting.launcherSha256, cpu: sitting.cpu, pins: pins.declaration, builds: pins.builds as unknown as Json, nts: { sha256: nts.sha256, version: nts.version } },
+      launcherSha256: sitting.launcherSha256, cpu: sitting.cpu, sibling: sitting.sibling, pins: pins.declaration, builds: pins.builds as unknown as Json, nts: { sha256: nts.sha256, version: nts.version, sourceCommit: nts.sourceCommit } },
   };
 }
 runAsCommand(import.meta.url,async()=>{

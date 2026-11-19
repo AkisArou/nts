@@ -10,7 +10,7 @@ import {
 
 const pin = "a".repeat(40), digest = "b".repeat(64), out = "c".repeat(64), other = "d".repeat(64), env = "e".repeat(64);
 const launch = (wallNanoseconds: number, change: Partial<Launch> = {}): Launch => ({
-  wallNanoseconds, status: 0, signal: null, timedOut: false, userMicroseconds: 100, systemMicroseconds: 50, maxRssKib: 1500,
+  wallNanoseconds, status: 0, signal: null, timedOut: false, userMicroseconds: 100, systemMicroseconds: 50, maxRssKib: 1500, siblingTicks: 0,
   stdoutSha256: out, ...change,
 });
 function details(base: number, change: (launches: Launch[]) => void = () => {}): LaunchDetails {

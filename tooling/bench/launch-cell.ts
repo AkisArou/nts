@@ -24,6 +24,8 @@ export type Launch = {
   systemMicroseconds: number;
   /** wait4's own ru_maxrss for this child: an observation only, not a row. */
   maxRssKib: number;
+  /** User and nice ticks on the timed CPU's sibling around this launch; null when none was named. */
+  siblingTicks: number | null;
   stdoutSha256: string;
 };
 
@@ -51,7 +53,7 @@ function count(value: unknown, at: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) fail(at, "expected a whole number");
   return value;
 }
-const LAUNCH_KEYS = ["wallNanoseconds", "status", "signal", "timedOut", "userMicroseconds", "systemMicroseconds", "maxRssKib", "stdoutSha256"];
+const LAUNCH_KEYS = ["wallNanoseconds", "status", "signal", "timedOut", "userMicroseconds", "systemMicroseconds", "maxRssKib", "siblingTicks", "stdoutSha256"];
 
 /** One launch as recorded, strictly: a missing or malformed field is an instrument error. */
 export function readLaunch(value: unknown, at: string): Launch {
@@ -68,7 +70,8 @@ export function readLaunch(value: unknown, at: string): Launch {
     wallNanoseconds, status, signal, timedOut: o.timedOut,
     userMicroseconds: count(o.userMicroseconds, at + ".userMicroseconds"),
     systemMicroseconds: count(o.systemMicroseconds, at + ".systemMicroseconds"),
-    maxRssKib: count(o.maxRssKib, at + ".maxRssKib"), stdoutSha256: o.stdoutSha256,
+    maxRssKib: count(o.maxRssKib, at + ".maxRssKib"),
+    siblingTicks: o.siblingTicks === null ? null : count(o.siblingTicks, at + ".siblingTicks"), stdoutSha256: o.stdoutSha256,
   };
 }
 
@@ -93,7 +96,7 @@ export function launchCell(details: LaunchDetails, extra: Record<string, Json>, 
   const keep = { launch: details as unknown as Json, ...extra };
   const failed = (status: Cell["status"], reason: string): Cell =>
     ({ status, nanoseconds: null, spread: null, checksum: null, verified: false, reason, details: keep });
-  if (all.some(launch => launch.timedOut)) return failed("TIMED_OUT", "A launch passed its wall bound");
+  if (all.some(launch => launch.timedOut)) return failed("TIMED_OUT", "A launch passed its wall or CPU bound");
   const bad = all.find(launch => launch.status !== 0);
   if (bad) return failed("ABORTED", (bad.signal !== null ? `Killed by signal ${bad.signal}` : `Exited ${bad.status}`) + (stderr.trim() ? `: ${stderr.trim()}` : ""));
   if (all.some(launch => launch.stdoutSha256 !== details.stdoutSha256)) return failed("INVALID", "Launches of one column printed different output");
