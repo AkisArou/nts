@@ -307,7 +307,7 @@ impl Sort<'_, '_> {
         )
     }
 
-    /// `TimSort`'s minimum run in [32,64], or the whole input below 64. The
+    /// `TimSort`'s minimum run in [16,32], or the whole input below 32. The
     /// remainder bit avoids a final tiny run just above a power of two.
     fn minrun(&mut self) -> Built<ValueId> {
         let n = self.variable(self.length);
@@ -316,7 +316,7 @@ impl Sort<'_, '_> {
         self.loop_while(
             &[n, remainder],
             |s| {
-                let limit = s.int(64);
+                let limit = s.int(32);
                 s.binary(BinOp::Ge, s.var(n), limit)
             },
             |s| {
