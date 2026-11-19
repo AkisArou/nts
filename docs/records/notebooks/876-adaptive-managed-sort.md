@@ -303,3 +303,63 @@ of the base variant’s comparisons on this row.
 | `gallop/comparison-census-llvm/counts.json` | `f90fa177e0617d4795f8c8986496913b9a9493c488af04d8b99ac34474f1f19c` |
 | `gallop/nts.perf.data` | `0d2792cde62ced0cde66c1e52b495df9c21063b3e8df0014940e19629a7e4bad` |
 | `gallop/ntsllvm.perf.data` | `ad17c0735bd0d84d3890d31a2dee484efc2a2f9103634ac7af05e657c8af479f` |
+
+## Branch and stall counter control
+
+A separate joint-lock sitting samples each of the three variants on the four
+required rows, C and LLVM. One normal native harness invocation per cell;
+CPU 4, shipping flags as above. All six user-mode events are one hardware
+group at 100% running: cycles, instructions, branches, branch misses,
+`cycle_activity.stalls_total`, and `int_misc.recovery_cycles`. These are
+whole-harness ratios, including calibration and setup, not calibrated
+per-call instruction counts. Stall and recovery events overlap and must
+not be added. The six-invocation paired sitting above decides wall-time
+regressions; these single invocations help explain them.
+
+| Row | Backend | Variant | µs | / main | IPC | Misses / 1k instructions | Branch miss % | Stall cycles % | Recovery cycles % |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| sort-objects | C | before | 60.262 | 1.000 | 4.566 | 0.265 | 0.128 | 10.530 | 0.647 |
+| sort-objects | C | base | 52.656 | 0.874 | 1.853 | 0.210 | 0.098 | 31.239 | 0.218 |
+| sort-objects | C | gallop | 49.489 | 0.821 | 1.985 | 0.255 | 0.116 | 29.776 | 0.282 |
+| sort-objects | LLVM | before | 66.081 | 1.000 | 4.418 | 0.304 | 0.148 | 10.961 | 0.714 |
+| sort-objects | LLVM | base | 55.353 | 0.838 | 1.856 | 0.191 | 0.094 | 31.679 | 0.198 |
+| sort-objects | LLVM | gallop | 51.603 | 0.781 | 1.978 | 0.228 | 0.109 | 29.249 | 0.253 |
+| sort-objects-shuffled | C | before | 187.528 | 1.000 | 1.883 | 7.459 | 3.527 | 26.021 | 7.839 |
+| sort-objects-shuffled | C | base | 186.282 | 0.993 | 1.526 | 6.018 | 3.248 | 30.736 | 5.517 |
+| sort-objects-shuffled | C | gallop | 185.524 | 0.989 | 1.670 | 9.127 | 4.346 | 26.701 | 8.666 |
+| sort-objects-shuffled | LLVM | before | 190.465 | 1.000 | 1.893 | 7.397 | 3.722 | 23.018 | 7.755 |
+| sort-objects-shuffled | LLVM | base | 204.884 | 1.076 | 1.548 | 5.932 | 3.506 | 30.063 | 5.386 |
+| sort-objects-shuffled | LLVM | gallop | 208.540 | 1.095 | 1.684 | 8.524 | 4.480 | 25.118 | 7.886 |
+| sort-objects-runs | C | before | 70.685 | 1.000 | 4.601 | 0.292 | 0.132 | 10.032 | 0.772 |
+| sort-objects-runs | C | base | 75.150 | 1.063 | 1.995 | 0.205 | 0.090 | 28.358 | 0.243 |
+| sort-objects-runs | C | gallop | 60.047 | 0.849 | 2.249 | 0.230 | 0.094 | 25.389 | 0.302 |
+| sort-objects-runs | LLVM | before | 71.561 | 1.000 | 4.608 | 0.270 | 0.132 | 9.635 | 0.723 |
+| sort-objects-runs | LLVM | base | 79.214 | 1.107 | 1.960 | 0.227 | 0.103 | 28.867 | 0.260 |
+| sort-objects-runs | LLVM | gallop | 62.595 | 0.875 | 2.197 | 0.253 | 0.106 | 25.614 | 0.325 |
+| map-entries-top-k | C | before | 17.620 | 1.000 | 4.557 | 0.111 | 0.048 | 6.691 | 0.445 |
+| map-entries-top-k | C | base | 16.614 | 0.943 | 4.452 | 0.098 | 0.042 | 6.892 | 0.354 |
+| map-entries-top-k | C | gallop | 17.980 | 1.020 | 4.387 | 0.208 | 0.091 | 7.390 | 0.595 |
+| map-entries-top-k | LLVM | before | 17.446 | 1.000 | 4.569 | 0.116 | 0.051 | 6.580 | 0.356 |
+| map-entries-top-k | LLVM | base | 17.502 | 1.003 | 4.354 | 0.128 | 0.059 | 7.396 | 0.396 |
+| map-entries-top-k | LLVM | gallop | 18.907 | 1.084 | 4.276 | 0.215 | 0.096 | 7.851 | 0.619 |
+
+Base shuffled LLVM loses despite fewer branch misses per instruction than
+main. Its lower IPC and higher stall fraction point at serialized load and
+cursor dependencies. Galloping raises shuffled branch misses while reducing
+the stall fraction. Map top-k has very few branch misses in every variant;
+its galloping overhead is mainly extra instructions and control work, not
+a large branch-recovery fraction.
+
+The object-row profile places the largest remaining loop share in natural
+run discovery. In both backends the generated native loop conditionally
+adds zero or one to its cursor after the comparator returns. The next
+iteration’s address therefore depends on that result. The correction
+advances unconditionally, then excludes the first mismatching element
+after exit. Run discovery and the insertion pivot also read the original
+snapshot directly: the unprocessed permutation suffix is still identity.
+This preserves the same comparator arguments and call order.
+
+| Evidence under the scratch root | SHA-256 |
+|---|---|
+| `variant-perf.json` | `18204f2ef6400c44ca3348b34c82428201cdab57644090c52f02aa1fe75af39c` |
+| `variant-perf.py` | `fca17e5df48636e5a07c948f21e3f1ab46cfae4093790faf6136d0be2201e7a0` |
