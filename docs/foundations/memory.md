@@ -545,6 +545,9 @@ systems and about 70 sources, is [in the records](../records/notebooks/studies/m
 - `record-word-counts`
 - `release-acyclic`
 - `sort-objects`
+- `sort-objects-runs`
+- `sort-objects-shuffled`
+- `string-sort-control`
 - `tree-teardown`
 
 ### startup

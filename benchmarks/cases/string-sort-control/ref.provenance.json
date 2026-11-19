@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "nts-authored"
+    },
+    "ref.java": {
+      "kind": "nts-authored"
+    }
+  }
+}

@@ -360,6 +360,9 @@ and [objects](../records/notebooks/studies/primitives-objects.md) studies.
 - `growth-grown`
 - `pipeline`
 - `sort-objects`
+- `sort-objects-runs`
+- `sort-objects-shuffled`
+- `string-sort-control`
 
 ### objects
 
