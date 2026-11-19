@@ -6518,6 +6518,13 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/lower/array_sort/managed.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/core/src/hir/lower/assertions.rs",
       "declarations": {
         "imports": [],

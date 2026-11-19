@@ -1218,3 +1218,263 @@ stalls 28.098%→26.146%, recovery 9.080%→7.644%. The plain r64 arm has fewer
 branch misses but more stalled cycles (34.128% C, 32.437% LLVM), so branch
 misses alone do not explain the wall-time ordering. Map branch-miss rates
 remain tiny; reduced native work is its main improvement.
+
+## Full-memory instruction census before JVM correction
+
+Selected source at `a2d395798d92e0f3bdebf098f3d28a9894a6f6d6`, pinned
+Node v26.13.0, shipping native flags and RC, calibrated net user instructions
+per work call on CPU 0 outside CPUs 4–5 without the measurement lock. The
+18 memory rows and k-nucleotide run in one census. The native instruction
+band is 0.01%; JIT spread is informational. Filtered JVM, Java, Bun and
+ScriptC count columns were not requested. Every final native ELF for the
+seven changed/control rows is byte-identical to the selected policy arm
+in the eight-variant timing matrix.
+
+Restoring a saved source initially preserved its old timestamp, and Cargo
+reused the last plain-control artifacts. This was caught before any final
+measurement. The source timestamp was refreshed and a real all-workspace
+release build completed; both the cached-build log and fresh-build log are
+retained. The final native ELF identity checks prove which policy ran.
+
+| Row | Backend | Original | Final | / original | Verdict |
+|---|---|---:|---:|---:|---|
+| array-copying-methods | C | 482832 | 482832 | 1.000000 | within band |
+| array-copying-methods | LLVM | 538832 | 538832 | 1.000000 | within band |
+| awfy-towers | C | 941646 | 941646 | 1.000000 | within band |
+| awfy-towers | LLVM | 908822 | 908821 | 0.999999 | within band |
+| clbg-k-nucleotide | C | 17432320 | 17425096 | 0.999586 | gain |
+| clbg-k-nucleotide | LLVM | 17424398 | 17417471 | 0.999602 | gain |
+| cyclic-churn | C | 2375872 | 2375872 | 1.000000 | within band |
+| cyclic-churn | LLVM | 2377860 | 2377856 | 0.999998 | within band |
+| event-state | C | 1700 | 1700 | 1.000000 | within band |
+| event-state | LLVM | 1698 | 1698 | 1.000000 | within band |
+| immutable-update | C | 2031897 | 2031902 | 1.000002 | within band |
+| immutable-update | LLVM | 2033945 | 2033945 | 1.000000 | within band |
+| json-build-append | C | 222777 | 222777 | 1.000000 | within band |
+| json-build-append | LLVM | 222778 | 222777 | 0.999996 | within band |
+| json-stringify-doc | C | 27212376 | 27212310 | 0.999998 | within band |
+| json-stringify-doc | LLVM | 27037193 | 27037191 | 1.000000 | within band |
+| map-entries-top-k | C | 414057 | 390131 | 0.942216 | gain |
+| map-entries-top-k | LLVM | 415503 | 396487 | 0.954234 | gain |
+| module-loop-retained | C | 262197 | 262197 | 1.000000 | within band |
+| module-loop-retained | LLVM | 262197 | 262197 | 1.000000 | within band |
+| objects | C | 27684 | 27684 | 1.000000 | within band |
+| objects | LLVM | 27684 | 27684 | 1.000000 | within band |
+| pipeline | C | 239558 | 239558 | 1.000000 | within band |
+| pipeline | LLVM | 239555 | 239558 | 1.000013 | within band |
+| record-word-counts | C | 152641 | 152641 | 1.000000 | within band |
+| record-word-counts | LLVM | 154112 | 154112 | 1.000000 | within band |
+| release-acyclic | C | 1832669 | 1832669 | 1.000000 | within band |
+| release-acyclic | LLVM | 1832669 | 1832669 | 1.000000 | within band |
+| sort-objects | C | 1411192 | 474029 | 0.335907 | gain |
+| sort-objects | LLVM | 1501920 | 487311 | 0.324459 | gain |
+| sort-objects-runs | C | 1672921 | 670811 | 0.400982 | gain |
+| sort-objects-runs | LLVM | 1723222 | 678313 | 0.393631 | gain |
+| sort-objects-shuffled | C | 1829354 | 1461009 | 0.798648 | gain |
+| sort-objects-shuffled | LLVM | 1877546 | 1568980 | 0.835655 | gain |
+| string-sort-control | C | 2995 | 2392 | 0.798664 | gain |
+| string-sort-control | LLVM | 3077 | 2443 | 0.793955 | gain |
+| tree-teardown | C | 597515 | 597515 | 1.000000 | within band |
+| tree-teardown | LLVM | 597516 | 597516 | 1.000000 | within band |
+
+| Row | Control | Original | Final | / original | Condition/verdict |
+|---|---|---:|---:|---:|---|
+| array-copying-methods | C++ | 295759 | 295759 | 1.000000 | within band |
+| array-copying-methods | node | 2318228 | 2310306 | 0.996583 | JIT spread, informational |
+| awfy-towers | C++ | 347328 | 347328 | 1.000000 | within band |
+| awfy-towers | node | 1148510 | 1148562 | 1.000045 | JIT spread, informational |
+| clbg-k-nucleotide | C++ | 7805117 | 7806113 | 1.000128 | worse control, outside band |
+| clbg-k-nucleotide | node | 36398076 | 35250861 | 0.968481 | JIT spread, informational |
+| cyclic-churn | C++ | 529773 | 529773 | 1.000000 | within band |
+| cyclic-churn | node | 282612 | 315264 | 1.115536 | JIT spread, informational |
+| event-state | C++ | 13757 | 13757 | 1.000000 | within band |
+| event-state | node | 39151 | 39338 | 1.004776 | JIT spread, informational |
+| immutable-update | C++ | 557192 | 557192 | 1.000000 | within band |
+| immutable-update | node | 2578497 | 3525646 | 1.367326 | JIT spread, informational |
+| json-build-append | C++ | -- | -- | — | unavailable |
+| json-build-append | node | 823273 | 556326 | 0.675749 | JIT spread, informational |
+| json-stringify-doc | C++ | -- | -- | — | unavailable |
+| json-stringify-doc | node | 42337038 | 42340883 | 1.000091 | JIT spread, informational |
+| map-entries-top-k | C++ | 376413 | 376623 | 1.000558 | worse control, outside band |
+| map-entries-top-k | node | 778585 | 903350 | 1.160246 | JIT spread, informational |
+| module-loop-retained | C++ | -- | -- | — | unavailable |
+| module-loop-retained | node | 136203 | 144513 | 1.061012 | JIT spread, informational |
+| objects | C++ | 27659 | 27659 | 1.000000 | within band |
+| objects | node | 115007 | 115021 | 1.000122 | JIT spread, informational |
+| pipeline | C++ | 232103 | 232103 | 1.000000 | within band |
+| pipeline | node | 25135777 | 25252181 | 1.004631 | JIT spread, informational |
+| record-word-counts | C++ | 295481 | 295481 | 1.000000 | within band |
+| record-word-counts | node | 269972 | 264503 | 0.979742 | JIT spread, informational |
+| release-acyclic | C++ | 4230170 | 4230111 | 0.999986 | within band |
+| release-acyclic | node | 1840107 | 1312892 | 0.713487 | JIT spread, informational |
+| sort-objects | C++ | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | node | 1497315 | 1495978 | 0.999107 | JIT spread, informational |
+| sort-objects-runs | C++ | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | node | 1562565 | 1555988 | 0.995791 | JIT spread, informational |
+| sort-objects-shuffled | C++ | 855387 | 855387 | 1.000000 | within band |
+| sort-objects-shuffled | node | 4541688 | 11670961 | 2.569741 | JIT spread, informational |
+| string-sort-control | C++ | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | node | 5802 | 5937 | 1.023268 | JIT spread, informational |
+| tree-teardown | C++ | 3236823 | 3236823 | 1.000000 | within band |
+| tree-teardown | node | 1393354 | 1393165 | 0.999864 | JIT spread, informational |
+
+## Failed full-memory timed sitting: JVM method size
+
+This sitting is **failed**, not acceptance evidence. The unchanged cross-backend
+work guard marks all four sorting rows INVALID because JVM execution is over
+20 times native execution. Map JVM also regresses sharply, without crossing
+that guard. No guard or VM policy was changed. All 19 rows are unspoiled.
+
+One locked CPU-4 sitting includes all 18 memory rows and k-nucleotide,
+with sibling 5 quiet, shipping native flags and RC, and the pinned Node,
+Bun JIT, Bun AOT and ScriptC engines. All rows, losses, unavailable cells,
+repeat spreads, load and memory conditions are retained below. Ratios are
+within this sitting; no absolute times are compared across sittings.
+
+The automatic results-only commit was dropped from branch 876, and the
+immutable JSON lives only in issue scratch. The nightly remains the
+publisher of benchmark run records.
+
+### final-bench/sitting.json
+
+Source `a2d395798d92e0f3bdebf098f3d28a9894a6f6d6`; 2026-11-19T17:21:35.798Z to 2026-11-19T17:39:33.340Z.
+
+Times in µs; ratios are native / engine. Verdicts are the tool’s recorded verdicts, including losses and ties.
+
+| Row | Backend | µs | / node | / Bun JIT | / Bun AOT | / ScriptC | Native repeat spread |
+|---|---|---:|---:|---:|---:|---:|---:|
+| array-copying-methods | nts C | 24.3606 | 0.330 WON | 0.410 WON | 0.453 WON | 0.728 WON | 1.0163× |
+| array-copying-methods | nts LLVM | 25.7520 | 0.348 WON | 0.434 WON | 0.479 WON | 0.770 WON | 1.0044× |
+| array-copying-methods | nts JVM | 33.3112 | 0.451 WON | 0.561 WON | 0.620 WON | 0.996 TIE | 1.0375× |
+| awfy-towers | nts C | 36.9391 | 0.969 SHORT | 1.566 LOSS | 1.003 TIE | 0.382 WON | 1.0266× |
+| awfy-towers | nts LLVM | 35.0157 | 0.918 SHORT | 1.484 LOSS | 0.951 TIE | 0.362 WON | 1.0115× |
+| awfy-towers | nts JVM | 29.9383 | 0.785 WON | 1.269 LOSS | 0.813 WON | 0.310 WON | 1.0179× |
+| clbg-k-nucleotide | nts C | 1072.3869 | 0.576 WON | 0.654 WON | 0.877 WON | 0.910 WON | 1.0155× |
+| clbg-k-nucleotide | nts LLVM | 1065.5404 | 0.572 WON | 0.650 WON | 0.871 WON | 0.904 WON | 1.0207× |
+| clbg-k-nucleotide | nts JVM | 1218.5394 | 0.655 WON | 0.743 WON | 0.996 TIE | 1.033 TIE | 1.0604× |
+| cyclic-churn | nts C | 98.2534 | 9.378 LOSS | 8.728 LOSS | 9.938 LOSS | 1.941 LOSS | 1.0179× |
+| cyclic-churn | nts LLVM | 94.8523 | 9.053 LOSS | 8.426 LOSS | 9.594 LOSS | 1.874 LOSS | 1.0779× |
+| cyclic-churn | nts JVM | 10.9316 | 1.043 LOSS | 0.971 SHORT | 1.106 LOSS | 0.216 WON | 1.0503× |
+| event-state | nts C | 0.1057 | 0.074 WON | 0.623 WON | 0.837 WON | 0.776 WON | 1.0178× |
+| event-state | nts LLVM | 0.1081 | 0.076 WON | 0.637 WON | 0.856 WON | 0.793 WON | 1.0137× |
+| event-state | nts JVM | 0.1050 | 0.074 WON | 0.619 WON | 0.831 WON | 0.770 WON | 1.0253× |
+| immutable-update | nts C | 75.9193 | 0.761 WON | 0.621 WON | 0.773 WON | 2.023 LOSS | 1.0115× |
+| immutable-update | nts LLVM | 75.4769 | 0.756 WON | 0.617 WON | 0.768 WON | 2.011 LOSS | 1.0242× |
+| immutable-update | nts JVM | 82.7224 | 0.829 SHORT | 0.677 WON | 0.842 WON | 2.204 LOSS | 1.0339× |
+| json-build-append | nts C | 8.0048 | 0.534 WON | 1.067 LOSS | 0.480 WON | 0.359 WON | 1.0330× |
+| json-build-append | nts LLVM | 8.3837 | 0.559 WON | 1.118 LOSS | 0.503 WON | 0.376 WON | 1.0187× |
+| json-build-append | nts JVM | 13.0999 | 0.874 SHORT | 1.746 LOSS | 0.786 WON | 0.588 WON | 1.0349× |
+| json-stringify-doc | nts C | 1110.4454 | 0.582 WON | 0.593 WON | 0.511 WON | 0.484 WON | 1.0186× |
+| json-stringify-doc | nts LLVM | 1189.3446 | 0.624 WON | 0.635 WON | 0.548 WON | 0.519 WON | 1.0250× |
+| json-stringify-doc | nts JVM | 1189.1667 | 0.624 WON | 0.635 WON | 0.548 WON | 0.519 WON | 1.0528× |
+| map-entries-top-k | nts C | 16.2607 | 0.611 WON | 0.688 WON | 0.743 WON | 1.197 LOSS | 1.0301× |
+| map-entries-top-k | nts LLVM | 16.9656 | 0.637 WON | 0.718 WON | 0.775 WON | 1.249 LOSS | 1.0196× |
+| map-entries-top-k | nts JVM | 267.8714 | 10.062 LOSS | 11.340 LOSS | 12.239 LOSS | 19.726 LOSS | 1.0530× |
+| module-loop-retained | nts C | 9.0374 | 1.939 LOSS | 2.707 LOSS | 3.512 LOSS | 1.371 LOSS | 1.0133× |
+| module-loop-retained | nts LLVM | 8.8699 | 1.903 LOSS | 2.657 LOSS | 3.446 LOSS | 1.345 LOSS | 1.0215× |
+| module-loop-retained | nts JVM | 1.7512 | 0.376 WON | 0.525 WON | 0.680 WON | 0.266 WON | 1.0089× |
+| objects | nts C | 1.7388 | 0.142 WON | 0.770 WON | 0.737 WON | 1.012 TIE | 1.0064× |
+| objects | nts LLVM | 1.7199 | 0.141 WON | 0.762 WON | 0.729 WON | 1.001 TIE | 1.0181× |
+| objects | nts JVM | 1.8868 | 0.154 WON | 0.836 SHORT | 0.799 WON | 1.098 LOSS | 1.0152× |
+| pipeline | nts C | 28.6755 | 0.198 WON | 0.178 WON | 0.269 WON | 1.119 LOSS | 1.0564× |
+| pipeline | nts LLVM | 29.0097 | 0.200 WON | 0.180 WON | 0.272 WON | 1.132 LOSS | 1.0148× |
+| pipeline | nts JVM | 55.4225 | 0.382 WON | 0.344 WON | 0.519 WON | 2.163 LOSS | 1.0676× |
+| record-word-counts | nts C | 5.2789 | 0.539 WON | 1.106 LOSS | 1.692 LOSS | 0.263 WON | 1.0269× |
+| record-word-counts | nts LLVM | 5.4441 | 0.556 WON | 1.141 LOSS | 1.745 LOSS | 0.271 WON | 1.0591× |
+| record-word-counts | nts JVM | 6.6384 | 0.678 WON | 1.391 LOSS | 2.128 LOSS | 0.330 WON | 1.0453× |
+| release-acyclic | nts C | 101.7625 | 1.471 LOSS | 2.226 LOSS | 2.285 LOSS | 2.268 LOSS | 1.0161× |
+| release-acyclic | nts LLVM | 104.8975 | 1.516 LOSS | 2.294 LOSS | 2.356 LOSS | 2.338 LOSS | 1.0132× |
+| release-acyclic | nts JVM | 42.8411 | 0.619 WON | 0.937 SHORT | 0.962 TIE | 0.955 TIE | 1.0978× |
+| sort-objects | nts C | INVALID | on sort-objects, nts JVM ran in 774.61 us against 29.62 us for nts C -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects | nts LLVM | INVALID | on sort-objects, nts JVM ran in 774.61 us against 29.62 us for nts C -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects | nts JVM | INVALID | on sort-objects, nts JVM ran in 774.61 us against 29.62 us for nts C -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects-runs | nts C | INVALID | on sort-objects-runs, nts JVM ran in 886.65 us against 40.46 us for nts LLVM -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects-runs | nts LLVM | INVALID | on sort-objects-runs, nts JVM ran in 886.65 us against 40.46 us for nts LLVM -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects-runs | nts JVM | INVALID | on sort-objects-runs, nts JVM ran in 886.65 us against 40.46 us for nts LLVM -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects-shuffled | nts C | INVALID | on sort-objects-shuffled, nts JVM ran in 4.27 ms against 175.31 us for nts C -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects-shuffled | nts LLVM | INVALID | on sort-objects-shuffled, nts JVM ran in 4.27 ms against 175.31 us for nts C -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| sort-objects-shuffled | nts JVM | INVALID | on sort-objects-shuffled, nts JVM ran in 4.27 ms against 175.31 us for nts C -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| string-sort-control | nts C | INVALID | on string-sort-control, nts JVM ran in 2.80 us against 112.7 ns for nts LLVM -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| string-sort-control | nts LLVM | INVALID | on string-sort-control, nts JVM ran in 2.80 us against 112.7 ns for nts LLVM -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| string-sort-control | nts JVM | INVALID | on string-sort-control, nts JVM ran in 2.80 us against 112.7 ns for nts LLVM -- both are this compiler's backends, so they compile the same work and cannot differ by that much. One of them is doing a different amount of it: check the problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s `volatile`, and `ref.java`'s. | — | — | — | — |
+| tree-teardown | nts C | 30.0016 | 0.485 WON | 0.543 WON | 0.844 WON | 0.986 TIE | 1.1257× |
+| tree-teardown | nts LLVM | 31.4758 | 0.509 WON | 0.569 WON | 0.885 WON | 1.034 TIE | 1.1122× |
+| tree-teardown | nts JVM | 31.7890 | 0.514 WON | 0.575 WON | 0.894 WON | 1.044 TIE | 1.0051× |
+
+| Row | Node µs | Bun JIT µs | Bun AOT µs | ScriptC µs | Load before → after | Available GiB before → after | Spoiled |
+|---|---:|---:|---:|---:|---|---:|---|
+| array-copying-methods | 73.9270 | 59.3657 | 53.7693 | 33.4406 | 120.60 → 112.05 | 12.08 → 14.54 | False |
+| awfy-towers | 38.1237 | 23.5926 | 36.8261 | 96.7292 | 107.88 → 56.33 | 14.36 → 16.14 | False |
+| clbg-k-nucleotide | 1861.6383 | 1640.2768 | 1223.0534 | 1179.0446 | 56.33 → 23.91 | 16.39 → 17.27 | False |
+| cyclic-churn | 10.4769 | 11.2573 | 9.8868 | 50.6187 | 23.91 → 16.10 | 17.04 → 16.89 | False |
+| event-state | 1.4282 | 0.1697 | 0.1264 | 0.1363 | 16.10 → 13.81 | 16.86 → 18.47 | False |
+| immutable-update | 99.8234 | 122.2497 | 98.2308 | 37.5318 | 13.81 → 12.04 | 18.32 → 14.43 | False |
+| json-build-append | 14.9943 | 7.5013 | 16.6616 | 22.2844 | 12.04 → 10.85 | 15.09 → 14.78 | False |
+| json-stringify-doc | 1906.9631 | 1871.8400 | 2170.9678 | 2293.4628 | 10.85 → 13.00 | 14.96 → 15.18 | False |
+| map-entries-top-k | 26.6214 | 23.6212 | 21.8868 | 13.5797 | 13.00 → 12.30 | 15.14 → 13.79 | False |
+| module-loop-retained | 4.6616 | 3.3384 | 2.5736 | 6.5928 | 12.30 → 13.78 | 14.48 → 13.05 | False |
+| objects | 12.2258 | 2.2581 | 2.3606 | 1.7178 | 13.78 → 16.43 | 12.64 → 14.73 | False |
+| pipeline | 144.9647 | 161.0419 | 106.7881 | 25.6289 | 16.43 → 30.48 | 14.43 → 12.80 | False |
+| record-word-counts | 9.7919 | 4.7718 | 3.1191 | 20.1094 | 30.48 → 37.32 | 12.99 → 11.56 | False |
+| release-acyclic | 69.1943 | 45.7170 | 44.5285 | 44.8627 | 37.32 → 45.84 | 11.45 → 8.83 | False |
+| sort-objects | INVALID | INVALID | INVALID | INVALID | 45.84 → 36.49 | 8.60 → 12.18 | False |
+| sort-objects-runs | INVALID | INVALID | INVALID | INVALID | 36.49 → 39.91 | 12.26 → 11.92 | False |
+| sort-objects-shuffled | INVALID | INVALID | INVALID | INVALID | 39.91 → 35.12 | 12.00 → 13.80 | False |
+| string-sort-control | INVALID | INVALID | INVALID | INVALID | 35.12 → 35.19 | 13.41 → 14.10 | False |
+| tree-teardown | 61.8711 | 55.2972 | 35.5469 | 30.4370 | 35.19 → 31.17 | 14.12 → 13.31 | False |
+
+| Raw evidence under `/home/akisarou/.cache/nts-scratch/876/` | SHA-256 |
+|---|---|
+| `final-release-cached.log` | `0b5fe2277fd2b29cc111b76604c482f8ec516047dbc0954657203c5614f4e4db` |
+| `final-release.log` | `e891f377279e74c5bf75772f940cf5667089cce53d681f2eee859d27ef64cca4` |
+| `final-count.log` | `ee9fb20adc4a72136322ee099a8cbfbf3801f053cc418c62305ebedc06c96eb3` |
+| `final-timed.log` | `9c51b92185254c54298394e48555ab4738e6ae3d4e7a7941fe833a474ed370c4` |
+| `final-bench/count-provenance.json` | `6fbdb83066e4f80749b601c5f8290c829deb1ce2c6389623134d6fdf83feec48` |
+| `final-bench/time-provenance.json` | `6f6ca20f2852b592a3fc8ab1e4646fe4e5214d086fe7c0406b2fc43df874e309` |
+| `final-bench/sitting.json` | `626bb3da7d8d7bbe67f44eef4b08bbec459c42a078f32f7be873a25dee328c1c` |
+| `final-bench/sitting-raw.json` | `e6f05f1e792b61e23e89919fc1d5332ef24e1cb2e0978fcae26ce749d03c53e9` |
+| `final-bench/session.journal` | `2737d8f73dcaecb84936b3288ec7c5628b1942a82f3e3b91c87756f90a79d7fb` |
+| `final-bench.py` | `25bf3d1a06d67221fab66bd6a4cdcc61d6ee0e0572f9bfd60a90c2e9244ed840` |
+| `final-timed.py` | `fc978529710b089fc44115904b46bc88e09ac441ff663938a7d8abeb80cb0558` |
+| `final-timed.status` | `4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865` |
+| `final-bench/time-launch.json` | `8a7a8167becd3421c491f68688e2b9e9ba89f03b9a6a728c8d71e9a883ea54df` |
+| `record-final-bench.py` | `a5647b76199528170a44c6552bc8cfca70df9183619035437369c687806ff574` |
+
+### Raw measurements behind the invalid sorting rows
+
+These ratios are computed from the retained raw observations, not restored
+as valid cells or substituted for the guard's verdict. Every entry remains
+INVALID and cannot establish acceptance. The benchmark policy additionally
+requires 0.80× against Node/Bun JIT; a ratio below one may still be SHORT.
+
+| Row | Backend | µs | / Node | / Bun JIT | / Bun AOT | / ScriptC | Verdict |
+|---|---|---:|---:|---:|---:|---:|---|
+| sort-objects | C | 29.617415 | 0.551143 | 0.893486 | 0.771303 | 0.379307 | INVALID: JVM/native disparity |
+| sort-objects | LLVM | 29.814188 | 0.554805 | 0.899422 | 0.776427 | 0.381827 | INVALID: JVM/native disparity |
+| sort-objects | JVM | 774.610008 | 14.414534 | 23.368116 | 20.172555 | 9.920334 | INVALID: JVM/native disparity |
+| sort-objects-runs | C | 41.095919 | 0.663825 | 0.950425 | 0.700269 | 0.455507 | INVALID: JVM/native disparity |
+| sort-objects-runs | LLVM | 40.462276 | 0.653590 | 0.935771 | 0.689472 | 0.448484 | INVALID: JVM/native disparity |
+| sort-objects-runs | JVM | 886.652135 | 14.322159 | 20.505604 | 15.108437 | 9.827658 | INVALID: JVM/native disparity |
+| sort-objects-shuffled | C | 175.310525 | 0.504442 | 0.690025 | 0.619811 | 1.901585 | INVALID: JVM/native disparity |
+| sort-objects-shuffled | LLVM | 183.131885 | 0.526948 | 0.720810 | 0.647463 | 1.986423 | INVALID: JVM/native disparity |
+| sort-objects-shuffled | JVM | 4273.610045 | 12.296975 | 16.821002 | 15.109357 | 46.355644 | INVALID: JVM/native disparity |
+| string-sort-control | C | 0.114551 | 0.460703 | 1.020686 | 1.293846 | 0.816975 | INVALID: JVM/native disparity |
+| string-sort-control | LLVM | 0.112683 | 0.453188 | 1.004037 | 1.272741 | 0.803649 | INVALID: JVM/native disparity |
+| string-sort-control | JVM | 2.798739 | 11.255966 | 24.937571 | 31.611449 | 19.960465 | INVALID: JVM/native disparity |
+
+The initial classfile inspection finds map's topWords bytecode growing
+1,422→10,020 bytes and its whole-number variant 1,357→9,881. The installed
+JDK has DontCompileHugeMethods=true by default. The next diagnostic holds
+classfiles and work constant and changes only that compilation flag, with
+compilation logs, before any corrective compiler design is implemented.
+
+The landing dry run also found the new managed.rs reader absent from the
+Rust input manifest. The coordinator approved its empty imports/assets row;
+it grants no runtime input paths and changes no selector policy.
+
+| Additional evidence under the scratch root | SHA-256 |
+|---|---|
+| `jvm-map-method-sizes.json` | `a2a18e04d683ce687eb874c240f32d2aa3c3873d7f74274f03ad9c09bc1ed4dc` |
+| `class-method-sizes.py` | `b1596fd3b0e32516dadd8303ebf433374df3af955c55ba781df43422b9660f49` |
+| `sort-reader.patch` | `b1be9da7b024d2bb77b0065dfefe51f6106ba32ec49c594b1bcc5f31264cdad5` |
+| `final-timed-retention.log` | `b26bcf8258d06ac073f3cc17b2be942827fd9b19295496e3a64537c9a7d24a95` |
