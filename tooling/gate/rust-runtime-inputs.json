@@ -9833,6 +9833,16 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/programs/module-evaluation/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/advanced/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "programs/an-unlowerable-initializer-is-cut-from-module-evaluation/tsconfig.json"
           }
         ]
       }
@@ -14049,6 +14059,13 @@
       }
     },
     {
+      "source": "tooling/differential/src/whole_program.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "tooling/differential/tests/jvm_sabotage.rs",
       "declarations": {
         "imports": [],
@@ -14082,6 +14099,22 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/programs/unions/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/tests/whole_program.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "installation-inputs",
+            "path": "../../.."
           }
         ]
       }

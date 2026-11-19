@@ -6,3 +6,6 @@ mod scratch;
 
 #[path = "jvm_sabotage.rs"]
 mod jvm_sabotage;
+
+#[path = "whole_program.rs"]
+mod whole_program;

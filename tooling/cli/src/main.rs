@@ -251,6 +251,9 @@ fn print_check_text(report: &nts_differential::Report) -> Result<()> {
         );
         return Ok(());
     }
+    if report.programs == 1 {
+        return print_whole_program(report);
+    }
     if report.functions == 0 {
         println!(
             "nothing to check: no exported function has scalar arguments \
@@ -365,6 +368,32 @@ fn print_check_json(measured: Result<nts_differential::Report>) -> Result<()> {
             Err(error)
         }
     }
+}
+
+/// A program with no case to call, compared whole: its stdout and its exit
+/// status, each run once.
+fn print_whole_program(report: &nts_differential::Report) -> Result<()> {
+    for abort in &report.aborts {
+        println!("  the compiled program aborted: {abort}");
+    }
+    for (native, engine) in report.disagreements.iter().take(20) {
+        println!("  nts  {native}");
+        println!("  node {engine}");
+    }
+    if report.agreed() {
+        println!("compared the whole program: the same stdout and exit status as node");
+        return Ok(());
+    }
+    if report.timeouts > 0 {
+        bail!("TIMED OUT: the whole program did not finish; nothing was compared")
+    }
+    if !report.aborts.is_empty() {
+        bail!("the compiled program aborted, which node did not")
+    }
+    if report.refused > 0 {
+        bail!("the compiled program declined at run time; nothing was compared")
+    }
+    bail!("the whole program's stdout or exit status differs from node's")
 }
 
 /// `nts bind-gir Gtk-4.0 --out types [--gir-dir <dir>]... [--header|--package|--define NS:value]...`

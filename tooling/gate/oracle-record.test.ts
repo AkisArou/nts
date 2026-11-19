@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { addRecord, canonicalDriver, completeRows, noOracleRecord, oracleUnplannedRevision, planAll, recordAll, runOracleArm, STDERR_TAIL_BYTES, validateSourcePlan } from "../differential/record-oracles.ts";
+import { addRecord, canonicalDriver, completeRows, noOracleRecord, oracleUnplannedRevision, planAll, programAnswerOf, recordAll, runOracleArm, STDERR_TAIL_BYTES, validateSourcePlan } from "../differential/record-oracles.ts";
 import { parseShard, readRecords } from "../differential/oracle-records.ts";
 import { oracleExecutionLimits } from "../differential/oracle-execution.ts";
 import { fileURLToPath } from "node:url";
@@ -72,6 +72,13 @@ test("checked-in fixture records promise complete measured identities", () => {
       assert.equal("complete" in row, false);
       assert.match(row.source_digest ?? "", /^[0-9a-f]{32}$/);
       assert.ok(typeof row.reason === "string" && row.reason.trim().length > 0);
+      continue;
+    }
+    if (row.kind === "program") {
+      assert.equal("count" in row, false);
+      assert.match(row.source_digest ?? "", /^[0-9a-f]{32}$/);
+      assert.match(row.stdout_sha256 ?? "", /^[0-9a-f]{64}$/);
+      assert.ok(Number.isSafeInteger(row.stdout_bytes) && Number.isSafeInteger(row.exit_code));
       continue;
     }
     if (row.kind === "budget") {
@@ -250,7 +257,8 @@ test('an oracle run that measured nothing keeps the end of its stderr, in whole 
   assert.ok(said.endsWith(tail!)&&said.split('\n').includes(tail!.split('\n')[0]!),'whole lines, the last one last');
 });
 
-test('a plan of no cases is never measured: it names the no-oracle row or cases it needs, and its no-oracle row records it',async t=>{
+const answer={stdout_sha256:'c'.repeat(64),stdout_bytes:6,exit_code:0};
+test('a plan of no cases is a whole program: its program row records node\'s answer, and a no-oracle row stays its exception',async t=>{
   const root=testScratch(t,'oracle-record-empty'),saved=process.env.NTS_BENCH_CPUS;
   t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
   process.env.NTS_BENCH_CPUS='4';
@@ -258,18 +266,39 @@ test('a plan of no cases is never measured: it names the no-oracle row or cases 
   const source='tests/programs/empty/main.ts';mkdirSync(join(root,'tests/programs/empty'),{recursive:true});writeFileSync(join(root,source),'export const x=1;');
   const empty={...plan,source,source_digest:'a'.repeat(32),repository_root:root,case_count:0,cases:[],driver:'empty driver'};
   writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans:[empty]}));
-  const output=join(root,'counts.json'),never=async()=>assert.fail('a population of no cases was measured');
-  await assert.rejects(recordAll(root,output,never),/recording incomplete/);
-  const [finding]=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8')).findings;
-  assert.equal(finding.outcome,'not-measured');
-  assert.equal(finding.error,`oracle not measured: ${source} plans no cases; record why with \`record-oracles.ts no-oracle\`, or give it cases`);
-  assert.equal(readFileSync(finding.detail,'utf8'),finding.error+'\n');
-  assert.equal(existsSync(output),false,'nothing is published');
-  // The control differs in one thing: the table holds the plan's no-oracle row.
+  const output=join(root,'counts.json'),never=async()=>assert.fail('a population of no cases was measured by calls');
+  const whole:string[]=[];
+  await recordAll(root,output,never,async one=>{whole.push(one.source);return {cpu:[0.01,0.01],answer};});
+  assert.deepEqual(whole,[source]);
+  const [row]=JSON.parse(readFileSync(output,'utf8')).rows;
+  assert.deepEqual([row.kind,row.source_digest,row.stdout_sha256,row.stdout_bytes,row.exit_code,'count' in row],['program','a'.repeat(32),answer.stdout_sha256,6,0,false]);
+  assert.ok(lines.includes(`program c ${source} 0 6 0.01,0.01`),lines.join('\n'));
+  // The control differs in one thing: the table holds the plan's no-oracle row,
+  // which stays the explicit exception, and nothing runs.
   writeFileSync(output,JSON.stringify({version:1,rows:[noOracleRecord(empty,'exports no callable function')]})+'\n');
-  await recordAll(root,output,never);
+  await recordAll(root,output,never,async()=>assert.fail('a no-oracle exception was run whole'));
   assert.ok(lines.includes(`no-oracle ${source} exports no callable function`),lines.join('\n'));
   assert.deepEqual(JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8')).findings,[]);
+});
+
+test('a whole program has one answer: two runs that differ, or a driver that did not reach its exit line, are not an answer',()=>{
+  const run=(stdout:string,status:number,results=`exit ${status}\n`)=>({results,stdout:Buffer.from(stdout),status});
+  assert.deepEqual(programAnswerOf('s',[run('hello\n',0),run('hello\n',0)]),
+    {stdout_sha256:createHash('sha256').update('hello\n').digest('hex'),stdout_bytes:6,exit_code:0});
+  assert.equal(programAnswerOf('s',[run('',1),run('',1)]).exit_code,1,'an uncaught throw is an answer');
+  assert.throws(()=>programAnswerOf('s',[run('hello\n',0),run('hellO\n',0)]),/unstable oracle/);
+  assert.throws(()=>programAnswerOf('s',[run('a',0),run('a',1)]),/unstable oracle/);
+  assert.throws(()=>programAnswerOf('s',[run('a',0,''),run('a',0)]),/did not|but wrote/);
+});
+
+test('a program row records an answer beside its source, never a count, and only it carries one',()=>{
+  const id={source:'tests/programs/whole/src/main.ts',signature:'1'.repeat(64),keys:{c:'2'.repeat(32)},cases_sha256:'3'.repeat(64),driver_sha256:'4'.repeat(64)};
+  const program={kind:'program',...id,source_digest:'5'.repeat(32),stdout_sha256:'6'.repeat(64),stdout_bytes:3,exit_code:1};
+  const parsed=parseShard({version:1,fixture:'tests/programs/whole',rows:[program]},'tests/programs/whole');
+  assert.deepEqual(parsed.rows[0],program);
+  for(const change of [{count:0},{complete:true},{reason:'why'},{exit_code:256},{stdout_sha256:'short'}])
+    assert.throws(()=>parseShard({version:1,fixture:'tests/programs/whole',rows:[{...program,...change}]},'tests/programs/whole'),/oracle records/,JSON.stringify(change));
+  assert.throws(()=>parseShard({version:1,fixture:'tests/programs/whole',rows:[{kind:'measured',...id,complete:true,count:1,exit_code:0}]},'tests/programs/whole'),/only a program row/);
 });
 
 /** A tree of benchmark cases: launch rows of both metrics, a work export, and a whole program with neither marker nor export. */
@@ -286,9 +315,10 @@ function launchCases(root:string):void{
 /** recordAll over `plans` in `root`, with a fake measurement that counts only what it is given. */
 function recordLaunchPlans(root:string,plans:object[]){
   writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans}));
-  const output=join(root,'counts.json'),measured:string[]=[];
+  const output=join(root,'counts.json'),measured:string[]=[],whole:string[]=[];
   const measure=async(one:{source:string;case_count:number})=>{measured.push(one.source);return {cpu:[0.01,0.01],count:one.case_count};};
-  return {output,measured,run:()=>recordAll(root,output,measure as never)};
+  const measureWhole=async(one:{source:string})=>{whole.push(one.source);return {cpu:[0.01,0.01],answer};};
+  return {output,measured,whole,run:()=>{measured.length=0;whole.length=0;return recordAll(root,output,measure as never,measureWhole as never);}};
 }
 const launchPlan=(root:string,name:string,change:object={})=>({...plan,source:`benchmarks/cases/${name}/case.ts`,source_digest:'b'.repeat(32),repository_root:root,case_count:0,cases:[],driver:`driver of ${name}`,...change});
 const launchSummary=(root:string)=>JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8')).findings as {outcome:string;error:string}[];
@@ -297,33 +327,30 @@ function withMeasurementCpu(t:{after(fn:()=>void):void}){
   process.env.NTS_BENCH_CPUS='4';
 }
 
-test('a launch row plans no per-call oracle: its marker records a no-oracle row with its metric\'s reason, and a work export is measured as before',async t=>{
+test('a launch row is a whole program by construction: every metric records a program row, and a work export is measured as before',async t=>{
   const root=testScratch(t,'oracle-record-launch');withMeasurementCpu(t);launchCases(root);
-  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
+  t.mock.method(console,'log',()=>{});
   const work=launchPlan(root,'work',{case_count:2,cases:plan.cases});
-  const {output,measured,run}=recordLaunchPlans(root,[launchPlan(root,'startup'),launchPlan(root,'rss-work'),work]);
+  const {output,measured,whole,run}=recordLaunchPlans(root,[launchPlan(root,'startup'),launchPlan(root,'rss-work'),work]);
   await run();
-  assert.deepEqual(measured,['benchmarks/cases/work/case.ts'],'only the work export is measured');
+  assert.deepEqual(measured,['benchmarks/cases/work/case.ts'],'only the work export is measured by calls');
+  assert.deepEqual(whole,['benchmarks/cases/startup/case.ts','benchmarks/cases/rss-work/case.ts'],'each launch row runs whole');
   assert.deepEqual(launchSummary(root),[]);
-  const rows=JSON.parse(readFileSync(output,'utf8')).rows as {kind:string;source:string;reason?:string;count?:number}[];
-  const startup="a launch-to-exit row: a whole program with no exported workload; its stdout agrees with node's in its launch row (tooling/bench/README.md, \"Launch rows\")";
-  const rss="a peak-RSS row of work's work(12): its calls are work's oracle; its stdout agrees with node's in its launch row (tooling/bench/README.md, \"Launch rows\")";
-  assert.deepEqual(rows.map(row=>[row.source,row.kind,row.reason??row.count]),[
-    ['benchmarks/cases/rss-work/case.ts','no-oracle',rss],['benchmarks/cases/startup/case.ts','no-oracle',startup],['benchmarks/cases/work/case.ts','measured',2]]);
-  assert.ok(lines.includes(`no-oracle benchmarks/cases/startup/case.ts ${startup}`),lines.join('\n'));
-  // A second pass reads the recorded rows back as no-oracle exceptions.
+  const rows=JSON.parse(readFileSync(output,'utf8')).rows as {kind:string;source:string;count?:number;exit_code?:number}[];
+  assert.deepEqual(rows.map(row=>[row.source,row.kind,row.count??row.exit_code]),[
+    ['benchmarks/cases/rss-work/case.ts','program',0],['benchmarks/cases/startup/case.ts','program',0],['benchmarks/cases/work/case.ts','measured',2]]);
+  // A second pass measures again and keeps one row per source.
   await run();
   assert.deepEqual(JSON.parse(readFileSync(output,'utf8')).rows.length,3);
 });
 
-test('control: a whole program without a launch marker still names the no-oracle row or cases it needs, word for word',async t=>{
+test('control: a whole program without a launch marker is recorded the same way, since the population routes it, not the marker',async t=>{
   const root=testScratch(t,'oracle-record-launch-control');withMeasurementCpu(t);launchCases(root);
   t.mock.method(console,'log',()=>{});
-  const {output,measured,run}=recordLaunchPlans(root,[launchPlan(root,'plain')]);
-  await assert.rejects(run(),/recording incomplete/);
-  assert.deepEqual(measured,[]);
-  assert.deepEqual(launchSummary(root).map(one=>[one.outcome,one.error]),[['not-measured','oracle not measured: benchmarks/cases/plain/case.ts plans no cases; record why with `record-oracles.ts no-oracle`, or give it cases']]);
-  assert.equal(existsSync(output),false,'nothing is published');
+  const {output,measured,whole,run}=recordLaunchPlans(root,[launchPlan(root,'plain')]);
+  await run();
+  assert.deepEqual([measured,whole],[[],['benchmarks/cases/plain/case.ts']]);
+  assert.deepEqual(JSON.parse(readFileSync(output,'utf8')).rows.map((row:{kind:string})=>row.kind),['program']);
 });
 
 test('a launch row whose marker is malformed, or which plans cases, is not measured and says why',async t=>{

@@ -93,7 +93,10 @@ marker is an error. The `startup` group's rows are launch-to-exit rows.
   within its bound and printed the same stdout. The value is the median of the
   21 timed launches, the spread the ratio of their upper to lower quartile, the
   checksum the stdout's SHA-256 prefix. Node's output is the oracle, as for
-  throughput rows. A non-zero exit or signal is `ABORTED`, a launch past its
+  throughput rows. That checksum holds the executable `nts build` ships; the
+  case's `case.ts` is also a whole program to the differential, recorded as a
+  `program` row and compared whole with node by `nts check`
+  ([cli](../../docs/reference/cli.md#nts-check)). A non-zero exit or signal is `ABORTED`, a launch past its
   bound `TIMED_OUT`, launches of one column that print different output
   `INVALID`. A record reader derives the value, spread and checksum again from
   the launches; a missing, short or inconsistent launch list is refused.

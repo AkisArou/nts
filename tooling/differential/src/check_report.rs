@@ -92,7 +92,9 @@ pub enum Status {
     /// The source has no recorded oracle population yet, so nothing was
     /// compared; the full check records it after landing.
     Pending,
-    /// The source declares no export the differential harness can drive.
+    /// The source declares no export the differential harness can drive,
+    /// and is not compared as a whole program either: its `no-oracle` row
+    /// says why.
     Nothing,
     /// Every generated case was compared and agreed.
     Agrees,
@@ -222,7 +224,8 @@ impl std::fmt::Display for Failure {
 }
 
 /// Serialized report schema. A new incompatible shape increments this version.
-pub const VERSION: u32 = 2;
+/// Version 3 is a typed oracle budget error; version 4 counts whole programs.
+pub const VERSION: u32 = 4;
 
 impl Report {
     /// The disposition of this measured source population.
@@ -230,7 +233,7 @@ impl Report {
     pub fn status(&self) -> Status {
         if self.pending.is_some() {
             Status::Pending
-        } else if self.functions == 0 {
+        } else if self.functions == 0 && self.programs == 0 {
             Status::Nothing
         } else if self.node_received != self.expected {
             Status::NotMeasured
@@ -280,6 +283,7 @@ impl Report {
             "status": self.status(),
             "counts": {
                 "functions": self.functions,
+                "programs": self.programs,
                 "expected": self.expected,
                 "compared": self.checked,
                 "unavailable": self.unavailable,

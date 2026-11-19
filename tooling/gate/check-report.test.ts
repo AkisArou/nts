@@ -186,3 +186,28 @@ test('a planner past its bound answers a shared reference with a plan budget: re
   assert.equal(consumerExit({...decoded,budget:{recorded:false,value:decoded.budget!.value}},'benchmark'),1);
   assert.throws(()=>parseJsonReport(JSON.stringify({...value,error:{...value.error,budget:{recorded:true,value:{...budget,phase:'link'}}}}),1),/invalid budget phase/);
 });
+
+test("version four counts a whole program: one comparison of a source with no case to call", () => {
+  const whole = (status: string, changes: Partial<CheckCounts> = {}) => ({...report(status, {functions: 0, expected: 1, compared: 1, ...changes}),
+    version: 4, incomplete: [], oracle: {expected: 1, received: 1, complete: true},
+    counts: {programs: 1, functions: 0, expected: 1, compared: 1, unavailable: 0, runtime_declined: 0, timeouts: 0, approximated: 0, disagreements: 0, aborts: 0, ...changes}});
+  const agreed = decodeCheck("json-v1", 0, JSON.stringify(whole("agrees")));
+  assert.equal(agreed.outcome, Outcome.AGREES);
+  assert.equal(agreed.report?.counts?.programs, 1);
+  assert.equal(consumerExit(agreed, "benchmark"), 0);
+  // The control: one line different is a disagreement, never agreement.
+  const differs = whole("disagrees", {disagreements: 1});
+  differs.disagreements.push({compiled: "output 1: TWO", node: "output 1: two"});
+  assert.equal(decodeCheck("json-v1", 1, JSON.stringify(differs)).outcome, Outcome.DISAGREES);
+  assert.equal(consumerExit(decodeCheck("json-v1", 1, JSON.stringify(differs)), "program"), 1);
+  // A report that compared no whole program keeps the counts earlier versions recorded.
+  const calls = {...report(), version: 4, incomplete: [], counts: {...report().counts, programs: 0}};
+  assert.equal("programs" in decodeCheck("json-v1", 0, JSON.stringify(calls)).report!.counts!, false);
+  const nothing = {...report("nothing", {functions: 0, expected: 0, compared: 0}), version: 4, incomplete: [],
+    counts: {...report().counts, functions: 0, expected: 0, compared: 0, programs: 0}, oracle: {expected: 0, received: 0, complete: true}};
+  assert.equal(decodeCheck("json-v1", 0, JSON.stringify(nothing)).outcome, Outcome.NOTHING);
+  for (const counts of [{programs: 2}, {functions: 1}])
+    assert.throws(() => decodeCheck("json-v1", 0, JSON.stringify({...whole("agrees"), counts: {...whole("agrees").counts, ...counts}})));
+  const old = {...report(), version: 2, incomplete: [], counts: {...report().counts, programs: 1}};
+  assert.throws(() => decodeCheck("json-v1", 0, JSON.stringify(old)), /count fields/);
+});

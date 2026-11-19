@@ -445,6 +445,13 @@ pub struct Lowered {
 }
 
 impl Lowered {
+    /// Report `diagnostic`, a change lowering made to what module evaluation
+    /// runs, and record where ([`Program::module_evaluation_cuts`]).
+    pub(crate) fn cut_module_evaluation(&mut self, diagnostic: Diagnostic) {
+        self.program.module_evaluation_cuts.push(diagnostic.primary);
+        self.diagnostics.push(diagnostic);
+    }
+
     /// Whether anything was refused.
     #[must_use]
     pub fn is_complete(&self) -> bool {

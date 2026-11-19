@@ -50,6 +50,7 @@ test('a recorded budget is retried without treating its missing count as zero',(
   assert.equal(hasOracleWork({kind:'budget'}),true);
   assert.equal(hasOracleWork({kind:'measured',count:4}),true);
   assert.equal(hasOracleWork({kind:'measured',count:0}),false);
+  assert.equal(hasOracleWork({kind:'program'}),true,'a whole program is run whole');
   assert.equal(hasOracleWork({kind:'no-oracle'}),false);
 });
 

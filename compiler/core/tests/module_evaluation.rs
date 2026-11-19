@@ -27,10 +27,19 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
 fn prepared() -> hir::Prepared {
+    prepared_program("module-evaluation")
+}
+
+fn prepared_program(name: &str) -> hir::Prepared {
+    prepared_at(&format!("../../tests/programs/{name}"))
+}
+
+fn prepared_at(relative: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/programs/module-evaluation/tsconfig.json")
+        .join(relative)
+        .join("tsconfig.json")
         .canonicalize_utf8()
-        .expect("tests/programs/module-evaluation is checked in");
+        .unwrap_or_else(|_| panic!("{relative} is checked in"));
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
@@ -182,5 +191,57 @@ fn an_exported_literal_constant_is_a_global() {
         (literal.initial - 50.0).abs() < f64::EPSILON,
         "the constant is the global's initial value, not something `module#init` assigns: {}",
         literal.initial,
+    );
+}
+
+/// Where the cut statement is, as a fact of the program and not only a
+/// sentence: a whole-program comparison (`tooling/differential`) runs the
+/// program only when evaluation runs every statement its source does.
+#[test]
+fn a_cut_statement_is_recorded_as_a_change_to_module_evaluation() {
+    let prepared = prepared();
+    assert!(
+        !prepared.program.module_evaluation_cuts.is_empty(),
+        "the refused statement was cut from module evaluation"
+    );
+    for cut in &prepared.program.module_evaluation_cuts {
+        assert!(
+            prepared
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.primary == *cut),
+            "each cut is also a diagnostic at the same place: {cut:?}"
+        );
+    }
+}
+
+/// The control: a refusal no evaluation reaches -- an exported generic no
+/// call instantiates -- is a diagnostic and changes nothing evaluation runs.
+#[test]
+fn a_refusal_evaluation_never_reaches_cuts_nothing() {
+    let prepared = prepared_program("advanced");
+    assert!(
+        !prepared.diagnostics.is_empty(),
+        "`advanced` still refuses its uninstantiated generic exports"
+    );
+    assert_eq!(prepared.program.module_evaluation_cuts, Vec::new());
+}
+
+/// An initializer lowering refuses is skipped by evaluation, so it is a cut,
+/// though no statement was excised: `refused_initializers` marks its binding,
+/// and `lower_module_binding` stores nothing for it.
+#[test]
+fn a_refused_module_initializer_is_recorded_as_a_cut() {
+    let prepared =
+        prepared_at("tests/programs/an-unlowerable-initializer-is-cut-from-module-evaluation");
+    assert!(
+        has(&prepared, "module#init"),
+        "the rest of evaluation still runs"
+    );
+    assert_eq!(
+        prepared.program.module_evaluation_cuts.len(),
+        1,
+        "the one refused initializer: {:?}",
+        prepared.diagnostics
     );
 }

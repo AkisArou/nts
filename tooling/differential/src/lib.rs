@@ -58,6 +58,7 @@ mod oracle_records;
 mod oracle_run;
 mod output;
 mod source_contracts;
+mod whole_program;
 
 /// Inputs chosen to hit the places TypeScript and C disagree.
 ///
@@ -523,16 +524,25 @@ fn c_type(ty: &HirType) -> String {
     .to_owned()
 }
 
+/// What a check measures.
+enum Population {
+    /// The recorded per-call population.
+    Calls(oracle_coverage::Coverage),
+    /// No case to call: the source is compared as a whole program.
+    Program(oracle_coverage::ProgramCoverage),
+}
+
 /// The recorded oracle population a check measures, or the report of one that
-/// measures nothing: no exported function to drive, or a source whose fixture
-/// has no oracle record yet. That one is pending, not measured at landing; the
-/// full check records its population, and checks it from then on.
+/// measures nothing: a source whose `no-oracle` row is its exception, or one
+/// whose fixture has no oracle record yet. That one is pending, not measured
+/// at landing; the full check records its population, and checks it from then
+/// on.
 fn population(
     entry: &Utf8Path,
     backend: Backend,
     testable: &[Testable],
     refusals: &[check_report::Refusal],
-) -> Result<ControlFlow<Report, oracle_coverage::Coverage>> {
+) -> Result<ControlFlow<Report, Population>> {
     let resolution = oracle_coverage::resolve(entry, backend, testable).map_err(|error| {
         with_failure(
             error,
@@ -551,7 +561,12 @@ fn population(
         oracle_coverage::Resolution::Recorded(_) if testable.is_empty() => {
             ControlFlow::Break(nothing(None))
         }
-        oracle_coverage::Resolution::Recorded(coverage) => ControlFlow::Continue(coverage),
+        oracle_coverage::Resolution::Recorded(coverage) => {
+            ControlFlow::Continue(Population::Calls(coverage))
+        }
+        oracle_coverage::Resolution::Program(program) => {
+            ControlFlow::Continue(Population::Program(program))
+        }
     })
 }
 
@@ -586,15 +601,19 @@ pub fn check_with_oracle(
     let refusals: Vec<check_report::Refusal> =
         check.prepared.diagnostics.iter().map(Into::into).collect();
     let coverage = match population(&check.entry, backend, testable, &refusals)? {
-        ControlFlow::Continue(coverage) => coverage,
+        ControlFlow::Continue(Population::Calls(coverage)) => coverage,
+        ControlFlow::Continue(Population::Program(program)) => {
+            return whole_program::check(
+                &check,
+                backend,
+                tsconfig,
+                &program,
+                oracle_manifest,
+                refusals,
+            );
+        }
         ControlFlow::Break(report) => {
-            if let Some(manifest) = oracle_manifest {
-                let prepared = oracle_emit::read_prepared(manifest, &check.entry, tsconfig)
-                    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
-                oracle_emit::finish_snapshot(&prepared)
-                    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
-            }
-            return Ok(report);
+            return compared_nothing(report, oracle_manifest, &check.entry, tsconfig);
         }
     };
 
@@ -688,6 +707,23 @@ pub fn check_with_oracle(
     case_costs::event(
         serde_json::json!({"event":"report", "functions":report.functions, "checked":report.checked, "expected":report.expected, "refused":report.refused, "timeouts":report.timeouts, "aborts":report.aborts.len(), "disagreements":report.disagreements.len()}),
     );
+    Ok(report)
+}
+
+/// A report that compared nothing, once a supplied oracle image's original
+/// facts have been replayed: an unused image still proves it was not stale.
+fn compared_nothing(
+    report: Report,
+    oracle_manifest: Option<&Utf8Path>,
+    entry: &Utf8Path,
+    tsconfig: &Utf8Path,
+) -> Result<Report> {
+    if let Some(manifest) = oracle_manifest {
+        let prepared = oracle_emit::read_prepared(manifest, entry, tsconfig)
+            .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+        oracle_emit::finish_snapshot(&prepared)
+            .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+    }
     Ok(report)
 }
 
@@ -1767,6 +1803,13 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
              \x20   nts_leave();\n",
         );
     }
+    // A whole program (`whole_program`): no case follows, and the program
+    // ends as the shipped `main` ends it, once nothing is runnable and no
+    // timer is pending. Virtual time reaches each deadline in order; the
+    // compiled-call allowance bounds a loop that never falls quiet.
+    if testable.is_empty() {
+        main.push_str("    nts_test_host_run(UINT32_MAX);\n");
+    }
     let mut baselined = false;
     for (one, at, tuple) in interleaved(testable) {
         {
@@ -2376,6 +2419,36 @@ fn run_native(
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
 ) -> Result<Run> {
+    let backend = Backend::from_environment()?;
+    let binary = build_native(dir, program, sources, testable)?;
+    // Restarted past whatever ends it. A case can trap -- an out-of-range index
+    // is the program keeping the promise its `!` made -- and without this, one
+    // such case costs every case after it. Node answers `undefined` for the same
+    // input, so the two had nothing to compare there anyway; what matters is
+    // that the *rest* of the program still gets checked.
+    let _execution = case_costs::span("program.total");
+    let cases = results(testable);
+    collect_restarting(dir, &cases, refused, aborts, timeouts, |from, path| {
+        case_costs::measure("program.attempt", || {
+            let mut command = bounded_native(binary.as_str());
+            command
+                .env("NTS_DIFF_RESULTS", path.as_str())
+                .arg(from.to_string());
+            call_activity::run(command, path, from, cases.len(), call_limits(backend)?)
+        })
+    })
+}
+
+/// The native harness binary for `testable`, linked in `dir`: the program,
+/// its runtime, the deterministic host and a `main` that evaluates the module
+/// and then calls each case. With no cases it evaluates the module alone,
+/// which is how a whole program runs (`whole_program`).
+fn build_native(
+    dir: &Utf8Path,
+    program: &hir::Program,
+    sources: &[nts_diagnostics::SourceFile],
+    testable: &[Testable],
+) -> Result<Utf8PathBuf> {
     // Which backend renders the program.
     //
     // `NTS_BACKEND` runs the whole differential -- every example, every case,
@@ -2499,23 +2572,7 @@ fn run_native(
             FailureKind::NativeBuild,
         ));
     }
-
-    // Restarted past whatever ends it. A case can trap -- an out-of-range index
-    // is the program keeping the promise its `!` made -- and without this, one
-    // such case costs every case after it. Node answers `undefined` for the same
-    // input, so the two had nothing to compare there anyway; what matters is
-    // that the *rest* of the program still gets checked.
-    let _execution = case_costs::span("program.total");
-    let cases = results(testable);
-    collect_restarting(dir, &cases, refused, aborts, timeouts, |from, path| {
-        case_costs::measure("program.attempt", || {
-            let mut command = bounded_native(binary.as_str());
-            command
-                .env("NTS_DIFF_RESULTS", path.as_str())
-                .arg(from.to_string());
-            call_activity::run(command, path, from, cases.len(), call_limits(backend)?)
-        })
-    })
+    Ok(binary)
 }
 
 /// The `n` of a results file's `done <n>` line, if it has one.
@@ -2761,6 +2818,71 @@ fn run_jvm(
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
 ) -> Result<Run> {
+    let built = build_jvm(dir, program, sources, testable)?;
+    // The shadow observes this per-call run; a whole program has no such run.
+    let shadow = artifact_shadow::jvm(dir, &built.emitted, &built.jar, &built.cases);
+    let execution = case_costs::span("program.total");
+    let expected = results(testable);
+    let total = expected.len();
+    let run = collect_restarting(dir, &expected, refused, aborts, timeouts, |from, path| {
+        case_costs::measure("program.attempt", || {
+            call_activity::run(
+                built.command(path, from),
+                path,
+                from,
+                total,
+                call_limits(Backend::Jvm)?,
+            )
+        })
+    });
+    drop(execution);
+    artifact_shadow::finish_jvm(shadow, &run, refused, aborts, *timeouts);
+    run
+}
+
+/// A JVM harness: the program's classes, the runtime jar, and the cases file
+/// `nts.rt.Check` reads. A whole program (`whole_program`) runs the same
+/// classes through `nts.rt.NtsMain` instead.
+struct JvmBuild {
+    classpath: String,
+    cases: Utf8PathBuf,
+    emitted: nts_codegen_jvm::Emitted,
+    jar: Utf8PathBuf,
+}
+
+impl JvmBuild {
+    /// The bounded `java` that runs the cases from `from`, its results to `path`.
+    fn command(&self, path: &Utf8Path, from: usize) -> std::process::Command {
+        let mut command = bounded_jvm();
+        command
+            .env("NTS_DIFF_RESULTS", path.as_str())
+            .arg("-cp")
+            .arg(&self.classpath)
+            .arg("nts.rt.Check")
+            .arg(self.cases.as_str())
+            .arg(from.to_string());
+        command
+    }
+
+    /// The bounded `java` that runs the program as a whole, through the
+    /// shipped entry `nts build` launches (`nts.rt.NtsMain`).
+    fn program(&self) -> std::process::Command {
+        let mut command = bounded_jvm();
+        command
+            .arg("-cp")
+            .arg(&self.classpath)
+            .arg("nts.rt.NtsMain")
+            .arg(nts_codegen_jvm::body::PROGRAM.replace('/', "."));
+        command
+    }
+}
+
+fn build_jvm(
+    dir: &Utf8Path,
+    program: &hir::Program,
+    sources: &[nts_diagnostics::SourceFile],
+    testable: &[Testable],
+) -> Result<JvmBuild> {
     let emitted = case_costs::measure("jvm.emit", || nts_codegen_jvm::emit(program));
     require_emitted(&emitted.diagnostics, sources)?;
     let jar = case_costs::measure("jvm.toolchain", || write_jvm_artifacts(dir, &emitted))?;
@@ -2852,34 +2974,12 @@ fn run_jvm(
     let cases_path = dir.join("cases.txt");
     std::fs::write(&cases_path, cases)?;
 
-    let classpath = format!("{dir}:{jar}");
-    let shadow = artifact_shadow::jvm(dir, &emitted, &jar, &cases_path);
-    let execution = case_costs::span("program.total");
-    let expected = results(testable);
-    let total = expected.len();
-    let run = collect_restarting(
-        dir,
-        &expected,
-        refused,
-        aborts,
-        timeouts,
-        move |from, path| {
-            case_costs::measure("program.attempt", || {
-                let mut command = bounded_jvm();
-                command
-                    .env("NTS_DIFF_RESULTS", path.as_str())
-                    .arg("-cp")
-                    .arg(&classpath)
-                    .arg("nts.rt.Check")
-                    .arg(cases_path.as_str())
-                    .arg(from.to_string());
-                call_activity::run(command, path, from, total, call_limits(Backend::Jvm)?)
-            })
-        },
-    );
-    drop(execution);
-    artifact_shadow::finish_jvm(shadow, &run, refused, aborts, *timeouts);
-    run
+    Ok(JvmBuild {
+        classpath: format!("{dir}:{jar}"),
+        cases: cases_path,
+        emitted,
+        jar,
+    })
 }
 
 /// Whether a pool value is one the parameter's proved type can hold.
@@ -3012,7 +3112,12 @@ fn growth(complaint: &str) -> Option<String> {
 /// The Node oracle driver imports the source and writes one result per case
 /// into `NTS_DIFF_RESULTS`, in exactly the order of the compiled arm.
 /// A source throw or rejection is recorded separately from a returned value.
+/// The node driver for a population: its cases, or, for a population of no
+/// cases, the whole program (`whole_program::driver`).
 fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
+    if testable.is_empty() {
+        return whole_program::driver(import);
+    }
     driver_cases(import, &interleaved(testable), engine)
 }
 
@@ -3207,6 +3312,60 @@ fn run_node_cases(
     .map(|(run, _)| run)
 }
 
+/// A driver ready to run under the sealed oracle image: its file, its own
+/// results channel, and the loader state that proves the image served it.
+struct NodeLaunch {
+    command: std::process::Command,
+    results: Utf8PathBuf,
+    loader: oracle_emit::ExecutionState,
+}
+
+impl NodeLaunch {
+    fn new(dir: &Utf8Path, driver_text: &str, emitted: &oracle_emit::Prepared) -> Result<Self> {
+        let path = dir.join("check_driver.mjs");
+        std::fs::write(&path, driver_text)?;
+        let results = dir.join("results-node.txt");
+        let _ = std::fs::remove_file(&results);
+        // This path is never reused; nested children append to the same execution.
+        let loader = oracle_emit::execution_state(emitted)?;
+        oracle_emit::capture_execution_driver(emitted, &loader.path, &path)?;
+        let mut command = oracle_emit::node_command();
+        command
+            .args(&emitted.args)
+            .arg("--no-warnings")
+            .arg(&path)
+            .env("NTS_DIFF_RESULTS", &results)
+            .env("NTS_ORACLE_EMIT_STATUS", &loader.path)
+            .env("NTS_ORACLE_EMIT_MANIFEST", &emitted.manifest)
+            .env(
+                "NTS_ORACLE_SNAPSHOT",
+                serde_json::to_string(&emitted.snapshot)?,
+            );
+        Ok(Self {
+            command: without_colour(command),
+            results,
+            loader,
+        })
+    }
+
+    /// Run it under the oracle's supervisor, and prove the image loaded it.
+    fn run(mut self, entry: &Utf8Path) -> Result<oracle_run::Finished> {
+        let mut held = None;
+        let output = case_costs::child("oracle.execute", || {
+            let finished = oracle_run::execute(&self.command, entry)?;
+            held = Some((finished.status, finished.resident_peak_bytes));
+            Ok::<_, anyhow::Error>(finished.output)
+        })?;
+        oracle_emit::ensure_loaded(&mut self.loader)?;
+        let (status, resident_peak_bytes) = held.context("oracle execution left no status")?;
+        Ok(oracle_run::Finished {
+            output,
+            status,
+            resident_peak_bytes,
+        })
+    }
+}
+
 /// The run, and the most the oracle's own resident scope held: a
 /// measurement beside the answer, never part of it or of its status.
 fn execute_node_driver(
@@ -3217,37 +3376,21 @@ fn execute_node_driver(
     coverage: &oracle_coverage::Coverage,
     emitted: &oracle_emit::Prepared,
 ) -> Result<(Run, Option<u64>)> {
-    let path = dir.join("check_driver.mjs");
-    std::fs::write(&path, driver_text)?;
+    // The shadow reads the driver the launch writes.
+    let launch = NodeLaunch::new(dir, driver_text, emitted)?;
     let shadow = sources.and_then(|sources| artifact_shadow::oracle(dir, sources, emitted));
-    let results_path = dir.join("results-node.txt");
-    let _ = std::fs::remove_file(&results_path);
-    // This path is never reused; nested children append to the same execution.
-    let mut loader_state = oracle_emit::execution_state(emitted)?;
-    oracle_emit::capture_execution_driver(emitted, &loader_state.path, &path)?;
-    let mut command = oracle_emit::node_command();
-    command
-        .args(&emitted.args)
-        .arg("--no-warnings")
-        .arg(&path)
-        .env("NTS_DIFF_RESULTS", &results_path)
-        .env("NTS_ORACLE_EMIT_STATUS", &loader_state.path)
-        .env("NTS_ORACLE_EMIT_MANIFEST", &emitted.manifest)
-        .env(
-            "NTS_ORACLE_SNAPSHOT",
-            serde_json::to_string(&emitted.snapshot)?,
-        );
+    let results_path = launch.results.clone();
     let mut status = serde_json::Value::Null;
     let mut completion = serde_json::Value::Null;
     let mut resident_peak_bytes = None;
-    let result = case_costs::child("oracle.execute", || {
-        let finished = oracle_run::execute(&without_colour(command), entry)?;
-        status = finished.status;
-        resident_peak_bytes = finished.resident_peak_bytes;
-        Ok::<_, anyhow::Error>(finished.output)
-    })
+    let result = launch
+        .run(entry)
+        .map(|finished| {
+            status = finished.status;
+            resident_peak_bytes = finished.resident_peak_bytes;
+            finished.output
+        })
     .and_then(|output| {
-        oracle_emit::ensure_loaded(&mut loader_state)?;
         let mut rows = std::fs::read(&results_path)
             .map(|bytes| lines(&bytes))
             .unwrap_or_default();
@@ -3320,12 +3463,28 @@ pub fn execute_oracle_plan(
         bail!("oracle execution plan identity is invalid");
     }
     let prepared = oracle_emit::read_prepared(manifest, entry, project)?;
+    std::fs::create_dir_all(directory)?;
+    // A population of no cases is a whole program: its answer is what it
+    // printed and how it ended, not rows.
+    if count == 0 {
+        return match whole_program::execute(directory, entry, text("driver")?, &prepared) {
+            Ok((answer, resident_peak_bytes)) => {
+                Ok(serde_json::json!({"version":1,"provisional":true,
+                "program":{"stdout":answer.stdout,"exitCode":answer.exit_code},
+                "residentPeakBytes":resident_peak_bytes}))
+            }
+            Err(error) => match error.downcast_ref::<oracle_coverage::BudgetExceeded>() {
+                Some(budget) => Ok(serde_json::json!({"version":1,"provisional":true,
+                    "budget":budget.budget,"recorded":budget.recorded})),
+                None => Err(error),
+            },
+        };
+    }
     let coverage = oracle_coverage::Coverage {
         count,
         key: text("case_key")?.to_owned(),
         budget: oracle_coverage::recorded_budget(entry, text("backend")?, text("case_key")?)?,
     };
-    std::fs::create_dir_all(directory)?;
     let (run, resident_peak_bytes) = match execute_node_driver(
         directory,
         entry,
@@ -3382,6 +3541,9 @@ fn lines(bytes: &[u8]) -> Vec<String> {
 pub struct Report {
     /// Exported functions with scalar arguments and a scalar result.
     pub functions: usize,
+    /// Whole programs compared: 1 for a source with no case to call, which
+    /// runs once on each side and is compared whole (`whole_program`), else 0.
+    pub programs: usize,
     /// Cases both sides reached.
     pub checked: usize,
     /// Cases the pool asked for. Larger than `checked` when a side ran out of
@@ -3550,6 +3712,7 @@ fn report(
     }
     Report {
         functions: testable.len(),
+        programs: 0,
         checked: checked + answered_where_we_threw,
         expected: results.len(),
         refused: refused.len() - answered_where_we_threw,

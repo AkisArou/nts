@@ -644,8 +644,10 @@ fn refused_initializers(
             Some(want) => probe.lower_expecting(*initializer, want),
             None => probe.lower_expression(*initializer),
         };
+        // A refused initializer is one evaluation skips: its binding keeps
+        // its zero (`lower_module_binding`).
         if let Err(diagnostic) = result {
-            lowered.diagnostics.push(diagnostic);
+            lowered.cut_module_evaluation(diagnostic);
             refused.insert(*symbol);
         }
     }
@@ -670,7 +672,11 @@ pub(super) fn lower_module_initializer(
         &shared.module.roles.lazy,
         &shared.naming.initialization,
     );
-    lowered.diagnostics.extend(refusals);
+    // A module-scope construct evaluation cannot run, or a read of a binding
+    // before its module ran: each changes what evaluation runs.
+    for refusal in refusals {
+        lowered.cut_module_evaluation(refusal);
+    }
 
     if let Some((file, mut statements)) = initializer {
         // And the same for whole statements, for the same reason at a larger
@@ -715,7 +721,7 @@ pub(super) fn lower_module_initializer(
                 // and that is a decision about every refusal, not this one.
                 let origin = diagnostic.primary;
                 lowered.diagnostics.push(diagnostic);
-                lowered.diagnostics.push(Diagnostic::error(
+                lowered.cut_module_evaluation(Diagnostic::error(
                 "NTS1001",
                 "module evaluation, which the refusal above loses in full and so will not run; \
                  the program still builds, and every module-scope value it would have computed \
@@ -750,7 +756,8 @@ pub(super) fn lower_module_initializer(
                         module_evaluate_name(at),
                         diagnostic.message.clone(),
                     ));
-                lowered.diagnostics.push(diagnostic);
+                // The lazy module's evaluation, lost whole.
+                lowered.cut_module_evaluation(diagnostic);
             }
         }
         builder.harvest(wanted, &mut lowered.arrivals);
@@ -899,7 +906,7 @@ fn drop_the_unlowerable(
                 reassigned.join(", ")
             ),
         };
-        lowered.diagnostics.push(Diagnostic::error(
+        lowered.cut_module_evaluation(Diagnostic::error(
             "NTS1005",
             format!(
                 "this statement, which module evaluation therefore skips{leaving}; the \

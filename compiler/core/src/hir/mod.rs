@@ -3801,6 +3801,18 @@ pub struct Program {
     /// X, which was refused above` — it names the callee rather than the root,
     /// which is still a place to go and is what the cascade was built to say.
     pub uncompiled: Vec<Uncompiled>,
+    /// Where lowering changed what module evaluation runs: a module-scope
+    /// statement it skipped or cut, an initializer it did not compile,
+    /// evaluation it dropped whole, a module-scope construct it refused, or a
+    /// read of a binding before its module ran. Each is also a diagnostic;
+    /// this says which of them reach evaluation, which the codes do not
+    /// (`NTS1003` is a function's cascade as often as a statement's).
+    ///
+    /// Empty when evaluation runs every statement its source does. A program
+    /// run whole (`tooling/differential`'s whole-program mode) is compared only
+    /// then: a refusal no evaluation reaches cannot change what it prints, and
+    /// one reached through a call stops the run with its own `nts: refused`.
+    pub module_evaluation_cuts: Vec<nts_diagnostics::Location>,
 }
 
 /// Whether an absent function lost a body or only explains a missing declaration.
@@ -6510,11 +6522,16 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
                 global.name
             )
         };
-        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+        let diagnostic = nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!("`{name}` cannot be compiled because {why}"),
             origin.location,
-        ));
+        );
+        if lower::evaluates_module_scope(&name) {
+            lowered.cut_module_evaluation(diagnostic);
+        } else {
+            lowered.diagnostics.push(diagnostic);
+        }
         lowered
             .program
             .uncompiled
@@ -7669,6 +7686,7 @@ fn excise_from_initializer(
             Some(cause @ Doom::Reads(_)) => cause.because(),
             None => "depends on a refused call".to_owned(),
         };
+        // The drop that follows is the cut (`drop_callers_of_refused`).
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
@@ -7701,7 +7719,7 @@ fn excise_from_initializer(
             .globals
             .get(global as usize)
             .map_or_else(|| global.to_string(), |global| global.name.clone());
-        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+        lowered.cut_module_evaluation(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
                 "the initializer of `{name}` was not compiled because it {}; the rest of \
@@ -7713,7 +7731,7 @@ fn excise_from_initializer(
     }
 
     for (cause, origin) in cuts.statements {
-        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+        lowered.cut_module_evaluation(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
                 "this module-scope statement was dropped because it {}; the rest of the \
@@ -7965,11 +7983,18 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             // refusal the reader cannot find: an interface method with no
             // implementer says so, and everything else still reads as before.
             let why = why_a_callee_is_missing(&lowered.program, &callee);
-            lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            let diagnostic = nts_diagnostics::Diagnostic::error(
                 "NTS1003",
                 format!("`{caller}` cannot be compiled because it calls `{callee}`, {why}"),
                 origin.location,
-            ));
+            );
+            // Module evaluation itself, which excision above could not cut:
+            // dropped whole.
+            if lower::evaluates_module_scope(&caller) {
+                lowered.cut_module_evaluation(diagnostic);
+            } else {
+                lowered.diagnostics.push(diagnostic);
+            }
             // **And recorded, not only reported.** The comment above already
             // knew the symptom -- "`emit-c` says *no function of that name was
             // compiled*, which reads as an export-table problem" -- and the

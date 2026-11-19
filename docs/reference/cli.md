@@ -145,9 +145,30 @@ and compares the answers.
   declined, cases that timed out, and cases matched only within the tolerance.
   It ends with `agreed on every case`, or `agreed on every case it compared: <n>
   of <m>`.
+- **A program with nothing to call is compared whole.** When no exported
+  function qualifies, the program runs once under node and once on the
+  backend, and the two must print the same stdout, byte for byte, and end with
+  the same exit status; stderr is not compared. An uncaught throw ends both
+  with status 1, which is an answer. A signal is an abort, a refusal the
+  program reports at run time compares nothing, and a run past the
+  compiled-call allowance is a timeout. A fixture records node's answer as a
+  `program` row (stdout digest, length and exit status, beside its source
+  digest); a `no-oracle` row is the only way to leave one uncompared.
+- **Which program runs whole.** On C and LLVM, the check's own build: the
+  program with the deterministic host (virtual time, one thread), whose `main`
+  evaluates the module and runs the loop until nothing is runnable and no
+  timer is pending. It is not the executable `nts build` ships, whose `main`
+  installs the libuv host. On the JVM, the shipped entry `nts.rt.NtsMain` on
+  the same classes. What the deterministic host cannot run as the shipped
+  program would is refused by name before anything runs: any refusal that
+  changes what module evaluation runs (a clock, `process.exit`, a construct a
+  called function needs), and native code or another platform's loop. A
+  refusal no evaluation reaches, such as an exported generic nothing
+  instantiates, changes nothing the program prints, and it is compared. The shipped executable is held to node by each launch row's checksum
+  agreement ([benchmarks](../../tooling/bench/README.md)).
 - **Exit status:** 1 on a disagreement, an abort that is not the program
   declining its input, or when no case could be compared; 0 otherwise,
-  including `nothing to check` when no function qualifies.
+  including `nothing to check` when a `no-oracle` row exempts the program.
 - Needs `node` on `PATH`.
 
 ## Emitting

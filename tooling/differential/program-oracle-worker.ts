@@ -62,12 +62,14 @@ try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infin
         const planText=planned.plan,plan=JSON.parse(planText) as {driver:string;case_count:number};
         const file=join(scratch,'plan.json');writeFileSync(file,planText);
         const result=JSON.parse(execute([file,resultHash(planText),owner.manifest,scratch])) as
-          {version:number;provisional:boolean;rows:string[];stdout:number[];stderr:number[];budget?:OracleBudget&{phase:'prepare'|'execute'};residentPeakBytes?:number|null};
+          {version:number;provisional:boolean;rows:string[];stdout:number[];stderr:number[];program?:{stdout:number[];exitCode:number};budget?:OracleBudget&{phase:'prepare'|'execute'};residentPeakBytes?:number|null};
         if(Number.isSafeInteger(result.residentPeakBytes)&&result.residentPeakBytes!>0)oraclePeakBytes=result.residentPeakBytes!;
         if(result.version!==1||result.provisional!==true)throw Error('program oracle supervisor returned no provisional answer');
-        answer=result.budget?{version:1,subject:task.subject,project:task.project,entry:task.entry,kind:'budget',driverSha256:resultHash(plan.driver),budget:result.budget}
-          :{version:1,subject:task.subject,project:task.project,entry:task.entry,kind:'calls',driverSha256:resultHash(plan.driver),count:plan.case_count,
-            rows:result.rows,stdout:result.stdout,stderr:result.stderr,replay:owner};
+        const identity={version:1 as const,subject:task.subject,project:task.project,entry:task.entry,driverSha256:resultHash(plan.driver)};
+        // A plan of no cases ran whole: its answer is what it printed and its status.
+        answer=result.budget?{...identity,kind:'budget',budget:result.budget}
+          :plan.case_count===0?{...identity,kind:'program',stdout:result.program!.stdout,exitCode:result.program!.exitCode}
+          :{...identity,kind:'calls',count:plan.case_count,rows:result.rows,stdout:result.stdout,stderr:result.stderr,replay:owner};
       }
     }else{
       const observation=observeOutcomeNode(owner,task.entry,dirname(task.project));

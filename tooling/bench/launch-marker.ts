@@ -79,26 +79,6 @@ export function launchMarkerOf(root: string, source: string): LaunchMarker | nul
   return readLaunchMarker(root, name);
 }
 
-/**
- * Why a launch row has no per-call oracle (record-oracles.ts): its case.ts is
- * a whole program with no exported workload, and what it prints is held to
- * node's by its launch row's own checksum agreement (README.md, "Launch rows").
- * One reason per metric: a metric without one does not typecheck.
- */
-export function launchOracleReason(marker: LaunchMarker): string {
-  const row = "its stdout agrees with node's in its launch row (tooling/bench/README.md, \"Launch rows\")";
-  switch (marker.metric) {
-    case "launch-to-exit":
-      return `a launch-to-exit row: a whole program with no exported workload; ${row}`;
-    case "peak-rss":
-      return `a peak-RSS row of ${marker.case}'s ${marker.function}(${marker.input}): its calls are ${marker.case}'s oracle; ${row}`;
-    default: {
-      const unknown: never = marker;
-      throw new Error(`launch marker without an oracle reason: ${JSON.stringify(unknown)}`);
-    }
-  }
-}
-
 /** The marker of launch case `name`, checked whole. */
 export function readLaunchMarker(root: string, name: string): LaunchMarker {
   const directory = join(root, CASES, name), path = join(directory, "launch.json");

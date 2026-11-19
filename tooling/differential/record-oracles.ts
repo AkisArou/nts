@@ -22,10 +22,10 @@ import {OracleBudgetError} from "./oracle-budget.ts";
 import {type OracleBudget} from "./oracle-runtime.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 import {installationRuntimeContent} from '../inputs/dependency-inputs.ts';
-import {launchMarkerOf,launchOracleReason} from '../bench/launch-marker.ts';
+import {launchMarkerOf} from '../bench/launch-marker.ts';
 
 import { GENERATOR, classifyBudget, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
-  type BudgetRevision, type MarginBudget, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
+  type BudgetRevision, type MarginBudget, type ProgramAnswer, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
   tsconfig?: string;
   source_exports?: string[];
@@ -243,6 +243,25 @@ export function noOracleRecord(plan: Plan, reason: string): Row {
   return { kind: "no-oracle", ...identity(plan), source_digest: plan.source_digest, reason,
     ...(plan.input_domain === undefined ? {} : { input_domain: plan.input_domain }) };
 }
+/**
+ * A whole program's row: a population of no cases, and what node answered for
+ * it, identical in both measured runs (tooling/differential/src/whole_program.rs).
+ */
+export function addProgramRecord(table: Table, plan: Plan, cpu: number[], answer: ProgramAnswer): Table {
+  validateSourcePlan(plan);
+  if (table.version !== 1 || plan.case_count !== 0 || plan.cases.length !== 0 || plan.seed !== null || !plan.source_digest) throw new Error("a program row records a whole program: a population of no cases, with its source identity");
+  if (cpu.length !== 2 || cpu.some(n => !Number.isFinite(n) || n < 0 || n * 2 > oracleExecutionLimits(plan.source).cpuSeconds)) throw new Error("CPU budget needs at least twice both measured runs");
+  if (!/^[0-9a-f]{64}$/.test(answer.stdout_sha256) || !Number.isSafeInteger(answer.stdout_bytes) || answer.stdout_bytes < 0
+    || !Number.isSafeInteger(answer.exit_code) || answer.exit_code < 0 || answer.exit_code > 255) throw new Error("invalid whole-program answer");
+  const id = identity(plan), old = table.rows.find(row => row.source === id.source && row.signature === id.signature);
+  if (old?.kind === "program" && old.source_digest === plan.source_digest
+    && (old.stdout_sha256 !== answer.stdout_sha256 || old.stdout_bytes !== answer.stdout_bytes || old.exit_code !== answer.exit_code)) {
+    throw new Error(`node answers ${plan.source} differently on ${plan.backend} than its recorded program row: one whole program has one answer`);
+  }
+  const row: Row = { kind: "program", ...id, keys: { ...old?.keys, ...id.keys }, source_digest: plan.source_digest,
+    stdout_sha256: answer.stdout_sha256, stdout_bytes: answer.stdout_bytes, exit_code: answer.exit_code };
+  return withRow(table, plan, row);
+}
 function addNoOracle(table: Table, plan: Plan, reason: string): Table {
   const row = noOracleRecord(plan, reason), old = table.rows.find(r => r.source === row.source && r.signature === row.signature);
   row.keys = { ...old?.keys, ...row.keys };
@@ -375,8 +394,13 @@ export function failureText(failure: Error, tail: string): string {
  * unfinished run measured nothing. Each failure carries the end of the
  * child's stderr.
  */
+/**
+ * One supervised oracle run, its evidence kept beside it. A per-call driver
+ * must exit 0; a whole program's status is its answer (`anyStatus`), so only
+ * a signal or a supervisor stop makes it unmeasured. Returns the exit status.
+ */
 export async function runOracleArm(dir: string, arm: number, command: string, args: string[],
-  options: { source: string; env: NodeJS.ProcessEnv; limits?: OracleLimits }, proven: () => void = () => {}): Promise<void> {
+  options: { source: string; env: NodeJS.ProcessEnv; limits?: OracleLimits; anyStatus?: boolean }, proven: () => void = () => {}): Promise<number> {
   const stderr = join(dir, `${arm}.stderr`);
   try {
     // The resident owner and CPU supervisor prove a case's budget stop.
@@ -388,15 +412,20 @@ export async function runOracleArm(dir: string, arm: number, command: string, ar
     proven();
     if (execution.budget) throw new OracleBudgetError(execution.budget);
     const run = execution.run;
-    if (run.status !== 0 || run.error || run.hung || run.runaway) throw new ToolingInstrumentError('tooling-setup', `oracle not measured: ${options.source}: ${run.hung ?? run.runaway ?? run.error ?? run.signal ?? run.status}`);
+    if (run.error || run.hung || run.runaway || typeof run.status !== "number" || (!options.anyStatus && run.status !== 0)) throw new ToolingInstrumentError('tooling-setup', `oracle not measured: ${options.source}: ${run.hung ?? run.runaway ?? run.error ?? run.signal ?? run.status}`);
+    return run.status;
   } catch (error) {
     throw new OracleRunFailure(error instanceof Error ? error : new Error(String(error)), stderrTail(stderr));
   }
 }
 
-async function measureDriver(plan: Plan, evidence: string, identity: string, preparation?:OraclePreparation[]) {
-  const cpu: number[] = [];
-  let delivered = -1;
+/** One run of a plan's driver, as the recorder sees it. */
+type Arm = { results: string; stdout: Buffer; status: number; cpu: number };
+/**
+ * Run `plan`'s driver twice on CPU 4, each under its own prepared image, with
+ * a CPU stamp at every line it emits; `read` turns each run into its answer.
+ */
+async function measureArms(plan: Plan, evidence: string, identity: string, preparation: OraclePreparation[] | undefined, anyStatus: boolean): Promise<Arm[]> {
   const dir = join(evidence, identity);
   mkdirSync(dir, { recursive: true });
   const original = "function emit(line) { writeSync(resultsFd, line); }";
@@ -404,7 +433,7 @@ async function measureDriver(plan: Plan, evidence: string, identity: string, pre
   const driver = plan.driver.replace(original, 'const cpuFd = openSync(process.env.NTS_CPU_EVENTS,"w");\nfunction emit(line) { writeSync(resultsFd,line); const u=process.cpuUsage(); writeSync(cpuFd,JSON.stringify({line,cpu_us:u.user+u.system})+"\\n"); }');
   const script = join(dir, "driver.mjs");
   writeFileSync(script, driver);
-  let baseline: string | undefined;
+  const arms: Arm[] = [];
   for (const arm of [0, 1]) {
     const results = join(dir, `${arm}.results`), timings = join(dir, `${arm}.cpu.jsonl`);
     writeFileSync(results, "");
@@ -417,33 +446,55 @@ async function measureDriver(plan: Plan, evidence: string, identity: string, pre
     atomic(join(dir, `${arm}.oracle.json`), prepared);
     const env: NodeJS.ProcessEnv = { ...process.env, ...prepared.env, NTS_DIFF_RESULTS: results, NTS_CPU_EVENTS: timings, NO_COLOR: "1" };
     delete env.FORCE_COLOR; delete env.CLICOLOR_FORCE;
-    await runOracleArm(dir, arm, "taskset", ["-c", "4", process.execPath, ...prepared.args, script], {source:plan.source,env}, () => {
+    const status = await runOracleArm(dir, arm, "taskset", ["-c", "4", process.execPath, ...prepared.args, script], {source:plan.source,env,anyStatus}, () => {
       finish();
       const loader=oracleLoaderReady(oracle);
       if(!loader.ready)throw new Error(`oracle not measured: ${plan.source}: ${loader.why}`);
     });
-    const text = readFileSync(results, "utf8");
-    delivered = completeRows(text, plan.case_count).length;
-    if (baseline !== undefined && baseline !== text) throw new Error(`unstable oracle: ${plan.source}`);
-    baseline = text;
     const stamps = readFileSync(timings, "utf8").trimEnd().split("\n").map(line => JSON.parse(line));
-    cpu.push(stamps.at(-1).cpu_us / 1e6);
+    arms.push({ results: readFileSync(results, "utf8"), stdout: readFileSync(join(dir, `${arm}.stdout`)), status, cpu: stamps.at(-1).cpu_us / 1e6 });
     }finally{try{finish();}finally{if(prepared)closeOracleExecution(prepared);}}
   }
-  return { cpu, count: delivered };
-
+  return arms;
 }
-export async function recordAll(evidence: string, output: string, measure = measureDriver) {
+
+async function measureDriver(plan: Plan, evidence: string, identity: string, preparation?:OraclePreparation[]) {
+  const arms = await measureArms(plan, evidence, identity, preparation, false);
+  for (const arm of arms) if (arm.results !== arms[0]!.results) throw new Error(`unstable oracle: ${plan.source}`);
+  return { cpu: arms.map(arm => arm.cpu), count: completeRows(arms[0]!.results, plan.case_count).length };
+}
+
+/**
+ * A whole program's answer: what it printed and how it ended, the same in
+ * both runs, with the driver's own `exit` line agreeing with the status.
+ */
+async function measureProgram(plan: Plan, evidence: string, identity: string, preparation?:OraclePreparation[]) {
+  const arms = await measureArms(plan, evidence, identity, preparation, true);
+  return { cpu: arms.map(arm => arm.cpu), answer: programAnswerOf(plan.source, arms) };
+}
+
+/** The one answer two runs of a whole program gave, or why it is not one. */
+export function programAnswerOf(source: string, arms: readonly { results: string; stdout: Buffer; status: number }[]): ProgramAnswer {
+  const answers = arms.map(arm => {
+    if (arm.results.trimEnd().split("\n").at(-1) !== `exit ${arm.status}`) throw new Error(`oracle not measured: ${source}: the whole-program driver ended with status ${arm.status} but wrote ${JSON.stringify(arm.results)}`);
+    return { stdout_sha256: createHash("sha256").update(arm.stdout).digest("hex"), stdout_bytes: arm.stdout.length, exit_code: arm.status };
+  });
+  if (answers.length !== 2 || JSON.stringify(answers[0]) !== JSON.stringify(answers[1])) throw new Error(`unstable oracle: ${source}: a whole program answered differently in its two runs`);
+  return answers[0]!;
+}
+export async function recordAll(evidence: string, output: string, measure = measureDriver, measureWhole = measureProgram) {
   if (process.env.NTS_BENCH_CPUS !== "4") throw new Error("record under tooling/gate/with-lock.sh --wait --key record-oracles; measured children use CPU 4");
   const manifest = json(join(evidence, "plans.json")) as Manifest;
   let table: Table = existsSync(output) ? json(output) : { version: 1, rows: [] };
   const measured = new Map<string, { cpu: number[]; count: number }>();
+  const programs = new Map<string, { cpu: number[]; answer: ProgramAnswer }>();
   const failed = new Map<string, Error>();
   const exceptions = new Set<string>();
   const findings: { source: string; backend: string; driver_sha256: string; outcome: 'timeout'|'memory-cap'|'margin'|'not-measured'; error: string; detail: string }[] = [];
   let preparations:Record<string,OraclePreparation>|undefined;
   if(measure===measureDriver){
-    const unique=new Map(manifest.plans.filter(plan=>plan.case_count>0).map(plan=>[digest(plan.driver),plan]));
+    const exempt=(plan:Plan)=>table.rows.some(row=>row.kind==="no-oracle"&&row.source===plan.source&&row.keys[plan.backend]===plan.case_key&&row.source_digest===plan.source_digest&&plan.case_count===0);
+    const unique=new Map(manifest.plans.filter(plan=>!exempt(plan)).map(plan=>[digest(plan.driver),plan]));
     const requests=[...unique].flatMap(([identity,plan])=>[0,1].map(arm=>({key:identity+':'+arm,options:{entry:plan.entry,project:plan.tsconfig,directory:join(evidence,identity,`${arm}.emit`)}})));
     preparations=await prepareOracles(requests,{directory:join(evidence,'preparation'),toolchain:oracleToolchainLocation(),workers:1,env:process.env,memoryBytes:ORACLE_COMPILE_MEMORY_BYTES,report:message=>console.error(message)});
   }
@@ -454,31 +505,36 @@ export async function recordAll(evidence: string, output: string, measure = meas
     let measurement = measured.get(identity), margin: MarginBudget | undefined;
     try {
       if (failed.has(identity)) throw failed.get(identity);
-      // A launch row (its launch.json, read by its one owner) is a whole
-      // program: no per-call population, and the reason its metric gives.
-      const launch = launchMarkerOf(plan.repository_root ?? process.cwd(), plan.source);
-      if (launch) {
-        if (plan.case_count !== 0) throw new Error(`oracle not measured: ${plan.source} plans ${plan.case_count} cases, but its launch.json makes it a launch row, whose case.ts is a whole program with no exported workload (tooling/bench/launch-marker.ts)`);
-        const reason = launchOracleReason(launch);
-        table = addNoOracle(table, plan, reason);
-        exceptions.add(identity);
-        console.log("no-oracle", plan.source, reason);
-        continue;
-      }
-      // A population of no cases has no oracle to prepare or run, so no count
-      // can be measured: a no-oracle row, with its reason, is its record.
-      if (plan.case_count === 0) throw new Error(`oracle not measured: ${plan.source} plans no cases; record why with \`record-oracles.ts no-oracle\`, or give it cases`);
-      if (measurement === undefined) {
-        measurement = await measure(plan, evidence, identity, preparations?[preparations[identity+':0']!,preparations[identity+':1']!]:undefined);
-        measured.set(identity, measurement);
-      }
-      // Every case delivered within the bound, but a run past half of it: a
-      // margin row, which names what each run used and holds no count.
-      const bound = oracleExecutionLimits(plan.source).cpuSeconds;
-      if (measurement.count === plan.case_count && measurement.cpu.some(seconds => seconds * 2 > bound)) margin = marginBudget(measurement.cpu, bound);
-      else {
-        table = addRecord(table, plan, measurement.cpu, measurement.count);
-        console.log("recorded", plan.backend, plan.source, measurement.count, measurement.cpu);
+      // A launch row (its launch.json, read whole by its one owner) is a whole
+      // program by construction, whatever its metric: it plans no cases.
+      if (launchMarkerOf(plan.repository_root ?? process.cwd(), plan.source) && plan.case_count !== 0) throw new Error(`oracle not measured: ${plan.source} plans ${plan.case_count} cases, but its launch.json makes it a launch row, whose case.ts is a whole program with no exported workload (tooling/bench/launch-marker.ts)`);
+      // A population of no cases is a whole program: node's answer, the same
+      // in both runs, is its record (tooling/differential/src/whole_program.rs).
+      if (plan.case_count === 0) {
+        let program = programs.get(identity);
+        if (program === undefined) {
+          program = await measureWhole(plan, evidence, identity, preparations?[preparations[identity+':0']!,preparations[identity+':1']!]:undefined);
+          programs.set(identity, program);
+        }
+        const bound = oracleExecutionLimits(plan.source).cpuSeconds;
+        if (program.cpu.some(seconds => seconds * 2 > bound)) margin = marginBudget(program.cpu, bound);
+        else {
+          table = addProgramRecord(table, plan, program.cpu, program.answer);
+          console.log("program", plan.backend, plan.source, program.answer.exit_code, program.answer.stdout_bytes, program.cpu);
+        }
+      } else {
+        if (measurement === undefined) {
+          measurement = await measure(plan, evidence, identity, preparations?[preparations[identity+':0']!,preparations[identity+':1']!]:undefined);
+          measured.set(identity, measurement);
+        }
+        // Every case delivered within the bound, but a run past half of it: a
+        // margin row, which names what each run used and holds no count.
+        const bound = oracleExecutionLimits(plan.source).cpuSeconds;
+        if (measurement.count === plan.case_count && measurement.cpu.some(seconds => seconds * 2 > bound)) margin = marginBudget(measurement.cpu, bound);
+        else {
+          table = addRecord(table, plan, measurement.cpu, measurement.count);
+          console.log("recorded", plan.backend, plan.source, measurement.count, measurement.cpu);
+        }
       }
     } catch (error) {
       const run = error instanceof OracleRunFailure ? error : undefined;
@@ -511,12 +567,12 @@ export async function recordAll(evidence: string, output: string, measure = meas
     console.log("PLAN BUDGET", one.backend, one.source, one.budget.reason);
   }
   const summary = { complete_unique_drivers: measured.size, failed_unique_drivers: failed.size, unplanned: manifest.unplanned ?? [],
-    recorded_populations: table.rows.filter(row => row.kind === "measured").length, no_oracle_unique_drivers: exceptions.size,
+    recorded_populations: table.rows.filter(row => row.kind === "measured").length, recorded_programs: table.rows.filter(row => row.kind === "program").length, no_oracle_unique_drivers: exceptions.size,
     worst_node_cpu_s_to_done: Math.max(0, ...[...measured.values()].flatMap(m => m.cpu)), findings,
-    preparation_failures: manifest.failures, measurements: Object.fromEntries(measured) };
+    preparation_failures: manifest.failures, measurements: Object.fromEntries(measured), programs: Object.fromEntries(programs) };
   const summaryPath=join(evidence,"measurement-summary.json");
   atomic(summaryPath, summary);
-  const {findings:_findings,preparation_failures:_preparationFailures,measurements:_measurements,unplanned:_unplanned,...counts}=summary;
+  const {findings:_findings,preparation_failures:_preparationFailures,measurements:_measurements,programs:_programs,unplanned:_unplanned,...counts}=summary;
   console.log(JSON.stringify({...counts,failed_populations:findings.length,preparation_failures:manifest.failures.length,plan_budgets:(manifest.unplanned??[]).length,summary:summaryPath}));
   if (findings.some(finding=>finding.outcome==='not-measured') || manifest.failures.length) throw new ToolingInstrumentError('tooling-setup',"recording incomplete; review every not-measured project before submitting; "+summaryPath);
   writeTable(output, table);

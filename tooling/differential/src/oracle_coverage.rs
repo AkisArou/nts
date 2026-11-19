@@ -28,9 +28,20 @@ pub(super) struct Coverage {
 /// What the checked-in records promise for one source on one backend.
 pub(super) enum Resolution {
     /// A recorded population, which the check measures and holds to its row.
+    /// An empty one is a `no-oracle` row's explicit exception.
     Recorded(Coverage),
+    /// A population of no cases: the source is a whole program, compared
+    /// whole (`whole_program`) and held to its `program` row's answer.
+    Program(ProgramCoverage),
     /// No row names the source yet.
     Pending(Pending),
+}
+
+/// What a whole program's records promise: node's answer, or the budget a
+/// run stopped at, which the check retries; neither outside the corpora.
+pub(super) struct ProgramCoverage {
+    pub(super) recorded: Option<super::whole_program::Recorded>,
+    pub(super) budget: Option<Value>,
 }
 
 pub(super) fn source_digest(entry: &Utf8Path) -> Result<String> {
@@ -61,6 +72,7 @@ pub(super) fn resolve(
     let (ids, signature) = super::oracle_population(cases);
     let key = super::oracle_case_key(backend, &ids, &signature)?;
     let count = ids.len();
+    let mut program = None;
     if let Some((root, source)) = root_and_source(entry) {
         let command = record_command(&source);
         let table = super::oracle_records::read(&root, &source)
@@ -79,8 +91,35 @@ pub(super) fn resolve(
                 command,
             }));
         }
+        if count == 0 {
+            let table = table.as_ref().context("oracle records vanished")?;
+            let row = table["rows"].as_array().and_then(|rows| {
+                rows.iter()
+                    .find(|row| row["source"] == source && row["keys"][backend.name()] == key)
+            });
+            if row.is_some_and(|row| row["kind"] == "no-oracle") {
+                return Ok(Resolution::Recorded(Coverage {
+                    count,
+                    key,
+                    budget: None,
+                }));
+            }
+            program = row
+                .filter(|row| row["kind"] == "program")
+                .map(program_answer)
+                .transpose()?;
+        }
     }
     let budget = recorded_budget(entry, backend.name(), &key)?;
+    if count == 0 {
+        if let Some(budget) = &budget {
+            eprintln!("ORACLE BUDGET (recorded, retrying): {entry}: {budget}");
+        }
+        return Ok(Resolution::Program(ProgramCoverage {
+            recorded: program,
+            budget,
+        }));
+    }
     if let Some(budget) = &budget {
         if budget["outcome"] == "margin" {
             eprintln!("ORACLE MARGIN (recorded, no count): {entry}: {budget}");
@@ -195,6 +234,25 @@ fn recorded(
     Ok(true)
 }
 
+/// A `program` row's recorded answer, which `validate` has already held to
+/// its shape.
+fn program_answer(row: &Value) -> Result<super::whole_program::Recorded> {
+    Ok(super::whole_program::Recorded {
+        stdout_sha256: row["stdout_sha256"]
+            .as_str()
+            .context("program row has no stdout digest")?
+            .to_owned(),
+        stdout_bytes: row["stdout_bytes"]
+            .as_u64()
+            .and_then(|bytes| usize::try_from(bytes).ok())
+            .context("program row has no stdout length")?,
+        exit_code: row["exit_code"]
+            .as_i64()
+            .and_then(|code| i32::try_from(code).ok())
+            .context("program row has no exit status")?,
+    })
+}
+
 fn record_command(source: &str) -> String {
     let path = source.split('/').take(3).collect::<Vec<_>>().join("/");
     let quoted = if path
@@ -253,6 +311,23 @@ fn validate(
         );
         return Ok(());
     }
+    if row["kind"] == "program" {
+        ensure!(
+            generated == 0
+                && row["source_digest"] == digest
+                && row.get("count").is_none()
+                && row["stdout_sha256"]
+                    .as_str()
+                    .is_some_and(|text| text.len() == 64
+                        && text.bytes().all(|byte| byte.is_ascii_hexdigit()))
+                && row["stdout_bytes"].is_u64()
+                && row["exit_code"]
+                    .as_i64()
+                    .is_some_and(|code| (0..=255).contains(&code)),
+            "oracle not measured: program identity changed for {source} ({backend}); re-record it explicitly"
+        );
+        return Ok(());
+    }
     if row["kind"] == "budget" {
         ensure!(
             row.get("count").is_none()
@@ -263,6 +338,12 @@ fn validate(
         super::oracle_records::validate_budget(&row["budget"], false)?;
         return Ok(());
     }
+    ensure!(
+        generated > 0 || row["kind"] != "measured",
+        "oracle not measured: {source} ({backend}) plans no cases, so it is a whole program, \
+         which a `program` row records; delete {} so the full check records it",
+        super::oracle_records::record_path(source).unwrap_or_else(|_| source.to_owned())
+    );
     ensure!(
         row["kind"] == "measured"
             && row["complete"] == true
@@ -426,6 +507,31 @@ mod tests {
         assert!(validate(&table, "jsx", "c", "empty", 1, "digest").is_err());
         table["rows"][0]["count"] = json!(0);
         assert!(validate(&table, "jsx", "c", "empty", 0, "digest").is_err());
+    }
+
+    #[test]
+    fn a_program_row_binds_its_source_and_answer_and_replaces_a_numeric_zero() {
+        let mut table = json!({"version":1,"rows":[{"kind":"program","source":"tests/programs/whole/src/main.ts",
+            "keys":{"c":"empty"},"source_digest":"digest","stdout_sha256":"a".repeat(64),
+            "stdout_bytes":12,"exit_code":0}]});
+        let source = "tests/programs/whole/src/main.ts";
+        validate(&table, source, "c", "empty", 0, "digest").unwrap();
+        assert!(validate(&table, source, "c", "empty", 0, "changed").is_err());
+        assert!(validate(&table, source, "c", "empty", 1, "digest").is_err());
+        assert_eq!(
+            program_answer(&table["rows"][0]).unwrap(),
+            super::super::whole_program::Recorded {
+                stdout_sha256: "a".repeat(64),
+                stdout_bytes: 12,
+                exit_code: 0
+            }
+        );
+        table["rows"][0]["exit_code"] = json!(-1);
+        assert!(validate(&table, source, "c", "empty", 0, "digest").is_err());
+        let zero = json!({"version":1,"rows":[{"kind":"measured","source":source,
+            "keys":{"c":"empty"},"complete":true,"count":0}]});
+        let refused = validate(&zero, source, "c", "empty", 0, "digest").unwrap_err();
+        assert!(refused.to_string().contains("whole program"), "{refused}");
     }
 
     #[test]

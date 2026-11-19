@@ -41,7 +41,7 @@ function auditOracleRefresh(file: string, fixture: string, before: string, after
     if (JSON.stringify(row) === JSON.stringify(replacement)) continue;
     const gained = planned(row, replacement);
     if (gained.length) { improved.push(`${row.source} planned on ${gained.join(", ")}`); continue; }
-    assert.ok(row.kind === "budget" && (replacement.kind === "measured" || replacement.kind === "budget" && (JSON.stringify(row.revision) !== JSON.stringify(replacement.revision) || JSON.stringify(row.budget)!==JSON.stringify(replacement.budget))), "only a budget -> measured improvement or changed budget identity/classification may replace a recorded row");
+    assert.ok(row.kind === "budget" && (replacement.kind === "measured" || replacement.kind === "program" || replacement.kind === "budget" && (JSON.stringify(row.revision) !== JSON.stringify(replacement.revision) || JSON.stringify(row.budget)!==JSON.stringify(replacement.budget))), "only a budget -> measured improvement (or -> program, for a whole program) or changed budget identity/classification may replace a recorded row");
     improved.push(row.source + " budget -> " + replacement.kind);
   }
   for (const row of now.rows.filter(one => !was.rows.some(other => same(one, other)))) {

@@ -9,11 +9,16 @@ export const FAILURE_KINDS = ["capture", "typecheck", "source_plan", "preparatio
 export type FailureKind = typeof FAILURE_KINDS[number];
 export const COUNT_NAMES = ["functions", "expected", "compared", "unavailable", "runtime_declined",
   "timeouts", "approximated", "disagreements", "aborts"] as const;
-export type CheckCounts = Record<typeof COUNT_NAMES[number], number>;
+/**
+ * The counts of a report. `programs`, from report version 4, is 1 for a
+ * source compared as a whole program; a report that compared none omits it,
+ * so its identity is the one earlier versions recorded.
+ */
+export type CheckCounts = Record<typeof COUNT_NAMES[number], number> & { programs?: 1 };
 export interface CheckRefusal { stage: "lowering" | "backend" | "typecheck"; code: string; message: string; }
 export interface CheckFailure { kind: FailureKind; source: string | null; message: string; budget?:{recorded:boolean;value:OracleBudget}; }
 export interface CheckReport {
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   status: CheckStatus;
   counts: CheckCounts | null;
   oracle: { expected: number; received: number; complete: boolean } | null;

@@ -59,9 +59,9 @@ export function sweepOracleTask(directory:string):ProgramOracleTask{
   return {subject:'gate/jvm-sweep',project:join(project,'tsconfig.json'),entry,mode:'calls',program:false,observations:fs.captured()};
 }
 
-/** A recorded budget is work to retry, never an empty population. */
+/** A recorded budget is work to retry, and a whole program is run whole. */
 export function hasOracleWork(row:{kind:string;count?:number}):boolean{
-  return row.kind==='budget'||row.kind==='measured'&&!!row.count;
+  return row.kind==='budget'||row.kind==='program'||row.kind==='measured'&&!!row.count;
 }
 /**
  * The entry each fixture's program oracle plans: its row's, or its plan

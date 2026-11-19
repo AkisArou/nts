@@ -69,7 +69,8 @@ export function parseCheckStops(value: unknown) {
 /** Validate the full versioned shape and the independently derivable disposition. */
 export function parseJsonReport(input: string, exitStatus: number | null): CheckReport {
   const value = object(JSON.parse(input), 'check JSON must be an object');
-  assert.ok(value.version === 1 || value.version === 2 || value.version === 3, 'unsupported check report version');
+  // 3 is a typed oracle budget error; 4 counts whole programs.
+  assert.ok(value.version === 1 || value.version === 2 || value.version === 3 || value.version === 4, 'unsupported check report version');
   const version = value.version;
   exactKeys(value, ['version', 'status', 'counts', 'oracle', 'refusals', 'disagreements', 'aborts', 'error', ...(version >= 2 ? ['incomplete'] : [])], 'check report fields');
   const incomplete = version >= 2 ? parseCheckStops(value.incomplete) : [];
@@ -123,8 +124,12 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
     return { version, ...(version >= 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: null };
   }
   const rawCounts = object(value.counts, 'missing check counts');
-  exactKeys(rawCounts, COUNT_NAMES, 'check count fields');
+  exactKeys(rawCounts, version >= 4 ? [...COUNT_NAMES, 'programs'] : COUNT_NAMES, 'check count fields');
+  // A whole program is one comparison of a source with no case to call.
+  const programs = version >= 4 ? integer(rawCounts.programs, 'invalid check count: programs') : 0;
+  assert.ok(programs <= 1, 'a check compares at most one whole program');
   const counts: CheckCounts = {
+    ...(programs === 1 ? {programs: 1 as const} : {}),
     functions: integer(rawCounts.functions, 'invalid check count: functions'),
     expected: integer(rawCounts.expected, 'invalid check count: expected'),
     compared: integer(rawCounts.compared, 'invalid check count: compared'),
@@ -147,7 +152,7 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
   const complete = received === expected;
   assert.equal(expected, counts.expected, 'oracle and source populations differ');
   assert.equal(rawOracle.complete, complete, 'oracle completion contradicts its counts');
-  const derived = counts.functions === 0 ? 'nothing'
+  const derived = counts.functions === 0 && programs === 0 ? 'nothing'
     : !complete ? 'not_measured'
     : counts.disagreements > 0 ? 'disagrees'
     : counts.aborts > 0 ? 'aborted'
@@ -155,7 +160,8 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
     : counts.unavailable === counts.expected && counts.expected > 0 ? 'all_unavailable'
     : counts.compared === 0 ? (counts.runtime_declined === counts.expected && counts.expected > 0 ? 'all_declined' : 'not_measured')
     : counts.compared === counts.expected ? 'agrees' : 'partial';
-  if (counts.functions === 0) assert.equal(counts.expected, 0, 'an empty export inventory has cases');
+  assert.ok(programs === 0 || counts.functions === 0, 'a whole program is a source with no case to call');
+  if (counts.functions === 0) assert.equal(counts.expected, programs, 'an empty export inventory has cases');
   if (counts.functions > 0) assert.ok(counts.expected > 0, 'a declared export has an empty population');
   assert.equal(status, derived, 'check disposition contradicts its structured fields');
   return { version, ...(version >= 2 ? {incomplete} : {}), status, counts, oracle: { expected, received, complete }, refusals, disagreements, aborts, error: null };

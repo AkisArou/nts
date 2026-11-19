@@ -33,9 +33,15 @@ export type OracleIdentityInputs = { source: string; signature: string;
   input_domain?: RecordedDomain; source_digest?: string;
   keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
 };
-export type OracleRow = OracleIdentityInputs & { kind: "measured" | "no-oracle" | "budget"; populations?: Populations;
+/**
+ * What node answered for a whole program -- a population of no cases, run
+ * once and compared whole (tooling/differential/src/whole_program.rs): its
+ * stdout's SHA-256 and length, and its exit status.
+ */
+export type ProgramAnswer = { stdout_sha256: string; stdout_bytes: number; exit_code: number };
+export type OracleRow = OracleIdentityInputs & { kind: "measured" | "no-oracle" | "budget" | "program"; populations?: Populations;
   budget?: BudgetClassification; revision?: {entry:string;node:string;producer:string;policy:string};
-  count?: number; complete?: true; node_cpu_s?: number[]; reason?: string };
+  count?: number; complete?: true; node_cpu_s?: number[]; reason?: string } & Partial<ProgramAnswer>;
 /** What a budget row's provenance names: the entry, Node, the producer and the policy it was measured under. */
 export type BudgetRevision = { entry: string; node: string; producer: string; policy: string };
 /**
@@ -143,10 +149,17 @@ function parseBudget(value:unknown):BudgetClassification{
   return {version:2,phase:raw.phase as OracleBudget['phase'],outcome:raw.outcome as RecordedBudget['outcome'],bound:raw.bound,signal:raw.signal as string|null};
 }
 
+/** A whole program's recorded answer, checked whole: an exit status is a byte. */
+export function programAnswer(raw: Object_): ProgramAnswer {
+  const exit = integer(raw.exit_code, "program exit status");
+  if (exit > 255) fail("program exit status must be a byte");
+  return { stdout_sha256: hash(raw.stdout_sha256, 64, "program stdout digest"), stdout_bytes: integer(raw.stdout_bytes, "program stdout length"), exit_code: exit };
+}
+
 export function parseRow(value: unknown): OracleRow {
   const raw = object(value, "row");
-  fields(raw, ["kind", "source", "signature", "input_domain", "populations", "keys", "cases_sha256", "driver_sha256", "count", "complete", "node_cpu_s", "source_digest", "reason", "budget", "revision"], "row");
-  if (raw.kind !== "measured" && raw.kind !== "no-oracle" && raw.kind !== "budget") fail("unknown oracle row kind "+String(raw.kind));
+  fields(raw, ["kind", "source", "signature", "input_domain", "populations", "keys", "cases_sha256", "driver_sha256", "count", "complete", "node_cpu_s", "source_digest", "reason", "budget", "revision", "stdout_sha256", "stdout_bytes", "exit_code"], "row");
+  if (raw.kind !== "measured" && raw.kind !== "no-oracle" && raw.kind !== "budget" && raw.kind !== "program") fail("unknown oracle row kind "+String(raw.kind));
   const source = text(raw.source, "row source"); fixtureOf(source);
   const keys = Object.fromEntries(Object.entries(object(raw.keys, "backend keys")).map(([name, value]) => {
     if (!BACKENDS.has(name)) fail(`unknown backend key ${name}`);
@@ -176,11 +189,18 @@ export function parseRow(value: unknown): OracleRow {
     if(row.budget.phase==='plan')fail('a planned row cannot carry a plan budget');
     const revision=object(raw.revision,'budget revision');fields(revision,['entry','node','producer','policy'],'budget revision');
     row.revision={entry:hash(revision.entry,64,'entry revision'),node:hash(revision.node,64,'Node revision'),producer:hash(revision.producer,64,'producer revision'),policy:hash(revision.policy,64,'policy revision')};
+  } else if (raw.kind === "program") {
+    // A whole program's answer is its identity beside its source: no count,
+    // and no per-call population to promise.
+    if (["count", "complete", "node_cpu_s", "populations", "reason", "input_domain"].some(key => key in raw)) fail("a program row records an answer, not a count");
+    row.source_digest = hash(raw.source_digest, 32, "source_digest");
+    Object.assign(row, programAnswer(raw));
   } else {
     if ("count" in raw || "complete" in raw || "node_cpu_s" in raw) fail("no-oracle row cannot claim measurements");
     row.source_digest = hash(raw.source_digest, 32, "source_digest"); row.reason = text(raw.reason, "no-oracle reason");
   }
   if(raw.kind!=='budget'&&('budget' in raw||'revision' in raw))fail('only a budget row has budget provenance');
+  if(raw.kind!=='program'&&['stdout_sha256','stdout_bytes','exit_code'].some(key=>key in raw))fail('only a program row records a whole program\'s answer');
   return row;
 }
 

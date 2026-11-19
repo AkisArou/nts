@@ -288,6 +288,9 @@ pub(super) struct ProgramReference {
     pub(super) stdout: Vec<u8>,
     #[serde(default)]
     pub(super) stderr: Vec<u8>,
+    /// A whole program's exit status: present on a `program` answer only.
+    #[serde(default, rename = "exitCode")]
+    pub(super) exit_code: Option<i32>,
     pub(super) replay: Option<Prepared>,
     pub(super) budget: Option<Value>,
 }
