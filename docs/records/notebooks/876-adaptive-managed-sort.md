@@ -419,3 +419,42 @@ native function text sizes, excluding runtime helpers, are:
 | `cursor/comparison-census/counts.json` | `9ad977cf8034222e250b44503a84fa29c181aa289858b74dfb42d150584e731c` |
 | `cursor/comparison-census-llvm/counts.json` | `eaaa5b15c9d5b1e8c001c62ff923b48258d76cd92efe9301eeb93bfa2024ed63` |
 | `variant-code-size.json` | `838a7e271ec12bdd1cec37c26054e07e7452ec970129d6a3f99a1b31f94a2268` |
+
+## Cursor wall-time control
+
+One CPU-4 lock, six alternating invocations of each archived variant per
+row, sibling 5 user/nice unchanged, matching output checksums, shipping RC
+and native flags as above. The original/base/galloping binaries are exactly
+the earlier variants; cursor is kernel `194bfbea12`, record `9142a21217`.
+The JSON binds every cell to its ELF SHA-256 and preserves every sample,
+load and memory observation. The later source edit does not affect these
+archived binaries. All times are µs. The same descriptive 3% timing threshold
+labels each variant/main ratio; instruction guards are reported separately.
+
+| Row | Backend | Main µs | Base µs | Galloping µs | Cursor µs | Base / main | Galloping / main | Cursor / main | Cursor / galloping |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| sort-objects | C | 59.332421 | 51.124662 | 48.103613 | 28.992671 | 0.8617 gain | 0.8107 gain | 0.4886 gain | 0.6027 gain |
+| sort-objects | LLVM | 63.658864 | 54.197696 | 51.526803 | 31.460108 | 0.8514 gain | 0.8094 gain | 0.4942 gain | 0.6106 gain |
+| sort-objects-runs | C | 70.063208 | 74.995762 | 59.363698 | 40.044581 | 1.0704 LOSS | 0.8473 gain | 0.5715 gain | 0.6746 gain |
+| sort-objects-runs | LLVM | 71.670494 | 79.017400 | 62.410249 | 41.336407 | 1.1025 LOSS | 0.8708 gain | 0.5768 gain | 0.6623 gain |
+| sort-objects-shuffled | C | 189.819961 | 189.337505 | 186.789416 | 184.246778 | 0.9975 within 3% | 0.9840 within 3% | 0.9706 within 3% | 0.9864 within 3% |
+| sort-objects-shuffled | LLVM | 189.729320 | 205.995298 | 208.513034 | 209.529222 | 1.0857 LOSS | 1.0990 LOSS | 1.1044 LOSS | 1.0049 within 3% |
+| map-entries-top-k | C | 17.901716 | 17.142060 | 18.589616 | 18.618733 | 0.9576 gain | 1.0384 LOSS | 1.0401 LOSS | 1.0016 within 3% |
+| map-entries-top-k | LLVM | 18.021814 | 18.353718 | 19.454672 | 19.709008 | 1.0184 within 3% | 1.0795 LOSS | 1.0936 LOSS | 1.0131 within 3% |
+| string-sort-control | C | 0.133487 | 0.111351 | 0.114543 | 0.108868 | 0.8342 gain | 0.8581 gain | 0.8156 gain | 0.9504 gain |
+| string-sort-control | LLVM | 0.134444 | 0.110868 | 0.112129 | 0.112574 | 0.8246 gain | 0.8340 gain | 0.8373 gain | 1.0040 within 3% |
+| array-copying-methods | C | 24.130819 | 24.014745 | 24.176817 | 24.193765 | 0.9952 within 3% | 1.0019 within 3% | 1.0026 within 3% | 1.0007 within 3% |
+| array-copying-methods | LLVM | 25.506405 | 25.505420 | 25.430288 | 25.478640 | 1.0000 within 3% | 0.9970 within 3% | 0.9989 within 3% | 1.0019 within 3% |
+
+The cursor correction removes about 40% of the galloping candidate’s object
+wall time with identical comparator counts and only 2–5% fewer instructions.
+This is direct evidence for the sampled loop-carried address dependency.
+Both object backends improve about 51% against main in this sitting.
+Shuffled LLVM and map top-k still fail: this candidate does not meet the
+whole-task acceptance criteria. The single-kernel/search candidate is being
+measured next; galloping remains provisional until the guards pass.
+
+| Evidence under the scratch root | SHA-256 |
+|---|---|
+| `paired-cursor.json` | `b2e7804ab666fcc50fa82d25017a25afe059f6986f77ea56db898e3d4d17fa4e` |
+| `paired-cursor.py` | `7a067b9226ae16b027c87f0990e5c73df1ee8c4ad086de2bc38e6fe46a2dc260` |
