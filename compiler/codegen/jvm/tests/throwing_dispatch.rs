@@ -1,6 +1,8 @@
-//! The existing outcome and its one-change throwing-base control, unchanged.
-//! This observes one normal capture/preparation and the actual backend surface;
-//! it does not equate adapters or waive distinct dispatch bodies.
+//! The existing outcome and its one-change throwing-base control, unchanged,
+//! and a quiet override whose one body fills both of its slots
+//! (`quiet-override`). This observes one normal capture/preparation and the
+//! actual backend surface; it does not equate adapters or waive distinct
+//! dispatch bodies.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::scratch;
@@ -39,82 +41,94 @@ fn materialise() -> (scratch::StdScratchDir, PathBuf) {
     (scratch, project)
 }
 
-fn assert_slot_names(program: &nts_core::hir::Program) -> usize {
+fn layout<'p>(program: &'p nts_core::hir::Program, name: &str) -> &'p nts_core::hir::Layout {
+    program
+        .layouts
+        .iter()
+        .find(|layout| layout.name == name)
+        .unwrap()
+}
+
+/// The raising and ordinary slots of `step`, read off `holder`'s entries, and
+/// the owned facts both receivers publish them by: the member identity, the
+/// ordinary relation and each slot's declared JVM member.
+fn assert_slot_names(
+    program: &nts_core::hir::Program,
+    base: &str,
+    holder: &str,
+    raising_body: &str,
+) -> (usize, usize) {
     let facts = nts_codegen_jvm::JvmProgram::new(program);
-    let child = program
-        .layouts
+    let base = layout(program, base);
+    let child = layout(program, holder);
+    // The raising slot is the one the owned facts mark raising, since a quiet
+    // body fills it under the same name as the ordinary slot it pairs with.
+    let (raising, member) = program
+        .raising_members
         .iter()
-        .find(|layout| layout.name == "Child")
+        .find(|(slot, _)| {
+            child
+                .methods
+                .get(usize::try_from(**slot).unwrap())
+                .and_then(Option::as_deref)
+                == Some(raising_body)
+        })
+        .map(|(slot, member)| (usize::try_from(*slot).unwrap(), member))
         .unwrap();
-    let base = program
-        .layouts
-        .iter()
-        .find(|layout| layout.name == "Base")
-        .unwrap();
-    let raising = child
-        .methods
-        .iter()
-        .position(|entry| entry.as_deref() == Some("Child#step@raises"))
-        .unwrap();
-    let ordinary = child
-        .methods
-        .iter()
-        .position(|entry| entry.as_deref() == Some("Child#step"))
-        .unwrap();
+    assert_eq!(member.member, "step");
+    let ordinary = usize::try_from(
+        member
+            .ordinary_slot
+            .expect("the owned ordinary relation survives whichever body fills the raising slot"),
+    )
+    .unwrap();
     assert_ne!(raising, ordinary);
-    assert_eq!(base.methods[raising].as_deref(), Some("Base#step"));
-    assert_eq!(base.methods[ordinary].as_deref(), Some("Base#step"));
     assert_eq!(
-        program
-            .raising_members
-            .get(&u32::try_from(raising).unwrap())
-            .map(|member| member.member.as_str()),
-        Some("step")
+        child.methods[ordinary].as_deref(),
+        Some(format!("{holder}#step").as_str())
     );
-    assert_eq!(
-        program.raising_members[&u32::try_from(raising).unwrap()].ordinary_slot,
-        Some(u32::try_from(ordinary).unwrap()),
-        "the owned ordinary relation survives a quiet body filling both slots"
-    );
+    // A receiver publishes a slot only where it holds an entry for it: the
+    // holder holds both, and a base whose body pruning removed holds none.
+    let expected = [
+        (ordinary, "step".to_owned()),
+        (raising, facts.dispatch_name(raising).unwrap()),
+    ];
     for receiver in [base, child] {
-        assert_eq!(
-            nts_codegen_jvm::hierarchy::declared_member(&facts, receiver, ordinary)
-                .unwrap()
-                .as_deref(),
-            Some("step")
-        );
-        assert_eq!(
-            nts_codegen_jvm::hierarchy::declared_member(&facts, receiver, raising)
-                .unwrap()
-                .as_deref(),
-            Some(facts.dispatch_name(raising).unwrap().as_str())
-        );
+        for (slot, member) in &expected {
+            let declared =
+                nts_codegen_jvm::hierarchy::declared_member(&facts, receiver, *slot).unwrap();
+            match receiver.methods.get(*slot).and_then(Option::as_ref) {
+                Some(_) => assert_eq!(declared.as_deref(), Some(member.as_str())),
+                None => assert_eq!(declared, None, "{} holds no slot {slot}", receiver.name),
+            }
+        }
     }
     assert_eq!(
-        nts_codegen_jvm::hierarchy::slot_member(&facts, raising, "Base#step").unwrap(),
+        nts_codegen_jvm::hierarchy::slot_member(&facts, raising, raising_body).unwrap(),
         facts.dispatch_name(raising).unwrap()
     );
     assert_eq!(
-        nts_codegen_jvm::hierarchy::slot_member(&facts, ordinary, "Base#step").unwrap(),
+        nts_codegen_jvm::hierarchy::slot_member(&facts, ordinary, &format!("{holder}#step"))
+            .unwrap(),
         "step"
     );
-    raising
+    (raising, ordinary)
 }
 
-fn assert_emitted_slots(emitted: &nts_codegen_jvm::Emitted, raising_name: &str) {
-    for name in ["Base", "Child"] {
+fn assert_emitted_slots(emitted: &nts_codegen_jvm::Emitted, classes: &[&str], members: &[&str]) {
+    for name in classes {
         let class = emitted
             .classes
             .iter()
             .find(|class| class.binary_name == format!("nts/gen/{name}"))
             .unwrap();
         let class = nts_jvm_emitter::read::class_file(&class.bytes).unwrap();
-        for member in ["step", raising_name] {
+        for member in members {
             assert!(
                 class
                     .methods
                     .iter()
-                    .any(|method| method.name == member && method.descriptor == "(D)D"),
+                    .any(|method| method.name == *member && method.descriptor == "(D)D"),
                 "{name}.{member}(D)D absent"
             );
         }
@@ -207,18 +221,50 @@ fn the_throwing_override_and_its_throwing_base_control_both_emit() {
         "the one-change throwing-base control is missing: {:?}",
         emitted.diagnostics
     );
-    let raising = assert_slot_names(&prepared.program);
+    // Since #843 a call through `Base` asks `Child`'s override too, so
+    // `Base#step` can raise and its raising slot is never its quiet ordinary
+    // body. Here every call is specialised to `Child`, so the copy that slot
+    // would hold is pruned and the slot is empty.
+    let (raising, ordinary) =
+        assert_slot_names(&prepared.program, "Base", "Child", "Child#step@raises");
+    let base = layout(&prepared.program, "Base");
+    assert_eq!(base.methods[ordinary].as_deref(), Some("Base#step"));
+    assert_ne!(base.methods[raising].as_deref(), Some("Base#step"));
     assert!(
         written("Child"),
         "the actual subject class must not disappear: {:?}",
         emitted.diagnostics
     );
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    assert_emitted_slots(
-        &emitted,
-        &nts_codegen_jvm::JvmProgram::new(&prepared.program)
-            .dispatch_name(raising)
-            .unwrap(),
-    );
+    let raising_name = nts_codegen_jvm::JvmProgram::new(&prepared.program)
+        .dispatch_name(raising)
+        .unwrap();
+    assert_emitted_slots(&emitted, &["Child"], &["step", &raising_name]);
+    assert_emitted_slots(&emitted, &["Base"], &["step"]);
     assert_missing_slot_fact_conflicts(&prepared.program);
+}
+
+/// A quiet override under a base that can throw has no raising copy, so its
+/// one body fills both slots, and the class publishes it under both members.
+#[test]
+fn a_quiet_override_fills_both_of_its_slots_with_one_body() {
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/quiet-override/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("checked-in fixture");
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .expect("one ordinary snapshot of the quiet override");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = common::prepare(&snapshot).expect("valid JVM host-GC prepared HIR");
+    let (raising, ordinary) = assert_slot_names(&prepared.program, "Loud", "Quiet", "Quiet#step");
+    let quiet = layout(&prepared.program, "Quiet");
+    assert_eq!(quiet.methods[raising], quiet.methods[ordinary]);
+    let emitted = nts_codegen_jvm::emit(&prepared.program);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let raising_name = nts_codegen_jvm::JvmProgram::new(&prepared.program)
+        .dispatch_name(raising)
+        .unwrap();
+    assert_emitted_slots(&emitted, &["Quiet"], &["step", &raising_name]);
 }

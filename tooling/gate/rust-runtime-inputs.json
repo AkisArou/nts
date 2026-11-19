@@ -4286,6 +4286,11 @@
           {
             "kind": "conservative",
             "path": "../../../../tests/outcomes/a-throwing-override-escapes-a-try-through-a-base-that-cannot-throw"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "quiet-override/tsconfig.json"
           }
         ]
       }
