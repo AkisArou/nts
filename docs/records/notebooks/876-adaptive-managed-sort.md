@@ -560,3 +560,112 @@ The narrower-index design was sent for coordinator review before editing.
 | `kernel-native/ntsllvm.dis` | `c801cb3109132d21a0945cdf4b867559969f4238e8e452593b3d1107e7499dd0` |
 | `paired-kernel-spoiled.log` | `9e70021792a3bdf1aa4141cff0ac308038fe59781dcac84cd19691809d125c6d` |
 | `paired-kernel-initial.py` | `53ba4d59c899abf38e13d1d53d3c558524b11462b45fa3356bf6c254d81487c3` |
+
+## Complete five-variant repeat
+
+All twelve rows completed under one CPU-4 lock; no row has sibling-5
+user/nice activity. Six alternating invocations per archived variant,
+matching checksums, shipping RC and native flags. Each row retains load,
+available memory, all samples and each ELF hash in the JSON. Ratios below
+are within this sitting; times must not be compared with earlier sittings.
+The descriptive 3% threshold labels wall-time movement. The final engine
+acceptance sitting is still required.
+
+| Row | Backend | Variant | Main µs | Variant µs | / main | / preceding variant | Verdict vs main |
+|---|---|---|---:|---:|---:|---:|---|
+| sort-objects | C | base | 57.085559 | 49.760160 | 0.871677 | 0.871677 | gain |
+| sort-objects | C | gallop | 57.085559 | 47.425918 | 0.830787 | 0.953090 | gain |
+| sort-objects | C | cursor | 57.085559 | 29.214409 | 0.511765 | 0.616001 | gain |
+| sort-objects | C | kernel | 57.085559 | 28.629583 | 0.501521 | 0.979982 | gain |
+| sort-objects | LLVM | base | 60.265874 | 50.890118 | 0.844427 | 0.844427 | gain |
+| sort-objects | LLVM | gallop | 60.265874 | 48.191268 | 0.799644 | 0.946967 | gain |
+| sort-objects | LLVM | cursor | 60.265874 | 29.158335 | 0.483828 | 0.605054 | gain |
+| sort-objects | LLVM | kernel | 60.265874 | 28.818665 | 0.478192 | 0.988351 | gain |
+| sort-objects-runs | C | base | 67.628220 | 70.324995 | 1.039876 | 1.039876 | LOSS |
+| sort-objects-runs | C | gallop | 67.628220 | 55.080960 | 0.814467 | 0.783234 | gain |
+| sort-objects-runs | C | cursor | 67.628220 | 36.719472 | 0.542961 | 0.666645 | gain |
+| sort-objects-runs | C | kernel | 67.628220 | 37.265024 | 0.551028 | 1.014857 | gain |
+| sort-objects-runs | LLVM | base | 68.914908 | 77.246216 | 1.120893 | 1.120893 | LOSS |
+| sort-objects-runs | LLVM | gallop | 68.914908 | 61.097228 | 0.886560 | 0.790941 | gain |
+| sort-objects-runs | LLVM | cursor | 68.914908 | 39.983225 | 0.580183 | 0.654420 | gain |
+| sort-objects-runs | LLVM | kernel | 68.914908 | 40.144182 | 0.582518 | 1.004026 | gain |
+| sort-objects-shuffled | C | base | 183.618320 | 184.815358 | 1.006519 | 1.006519 | within 3% |
+| sort-objects-shuffled | C | gallop | 183.618320 | 181.300004 | 0.987374 | 0.980979 | within 3% |
+| sort-objects-shuffled | C | cursor | 183.618320 | 173.135769 | 0.942911 | 0.954968 | gain |
+| sort-objects-shuffled | C | kernel | 183.618320 | 181.752109 | 0.989836 | 1.049766 | within 3% |
+| sort-objects-shuffled | LLVM | base | 174.309735 | 188.094622 | 1.079083 | 1.079083 | LOSS |
+| sort-objects-shuffled | LLVM | gallop | 174.309735 | 192.439224 | 1.104007 | 1.023098 | LOSS |
+| sort-objects-shuffled | LLVM | cursor | 174.309735 | 190.418975 | 1.092417 | 0.989502 | LOSS |
+| sort-objects-shuffled | LLVM | kernel | 174.309735 | 176.398837 | 1.011985 | 0.926372 | within 3% |
+| map-entries-top-k | C | base | 16.014177 | 15.412017 | 0.962398 | 0.962398 | gain |
+| map-entries-top-k | C | gallop | 16.014177 | 16.772470 | 1.047351 | 1.088272 | LOSS |
+| map-entries-top-k | C | cursor | 16.014177 | 16.766733 | 1.046993 | 0.999658 | LOSS |
+| map-entries-top-k | C | kernel | 16.014177 | 15.396570 | 0.961434 | 0.918281 | gain |
+| map-entries-top-k | LLVM | base | 17.774964 | 18.073679 | 1.016805 | 1.016805 | within 3% |
+| map-entries-top-k | LLVM | gallop | 17.774964 | 19.219889 | 1.081290 | 1.063419 | LOSS |
+| map-entries-top-k | LLVM | cursor | 17.774964 | 19.213673 | 1.080940 | 0.999677 | LOSS |
+| map-entries-top-k | LLVM | kernel | 17.774964 | 18.022727 | 1.013939 | 0.938016 | within 3% |
+| string-sort-control | C | base | 0.130001 | 0.108063 | 0.831247 | 0.831247 | gain |
+| string-sort-control | C | gallop | 0.130001 | 0.111132 | 0.854854 | 1.028399 | gain |
+| string-sort-control | C | cursor | 0.130001 | 0.106348 | 0.818050 | 0.956948 | gain |
+| string-sort-control | C | kernel | 0.130001 | 0.111693 | 0.859165 | 1.050260 | gain |
+| string-sort-control | LLVM | base | 0.127645 | 0.106324 | 0.832966 | 0.832966 | gain |
+| string-sort-control | LLVM | gallop | 0.127645 | 0.107133 | 0.839303 | 1.007608 | gain |
+| string-sort-control | LLVM | cursor | 0.127645 | 0.108042 | 0.846425 | 1.008485 | gain |
+| string-sort-control | LLVM | kernel | 0.127645 | 0.108130 | 0.847115 | 1.000815 | gain |
+| array-copying-methods | C | base | 22.373444 | 22.474478 | 1.004516 | 1.004516 | within 3% |
+| array-copying-methods | C | gallop | 22.373444 | 22.637748 | 1.011813 | 1.007265 | within 3% |
+| array-copying-methods | C | cursor | 22.373444 | 22.775063 | 1.017951 | 1.006066 | within 3% |
+| array-copying-methods | C | kernel | 22.373444 | 22.740358 | 1.016400 | 0.998476 | within 3% |
+| array-copying-methods | LLVM | base | 23.265954 | 23.117872 | 0.993635 | 0.993635 | within 3% |
+| array-copying-methods | LLVM | gallop | 23.265954 | 23.357907 | 1.003952 | 1.010383 | within 3% |
+| array-copying-methods | LLVM | cursor | 23.265954 | 23.141636 | 0.994657 | 0.990741 | within 3% |
+| array-copying-methods | LLVM | kernel | 23.265954 | 22.954582 | 0.986617 | 0.991917 | within 3% |
+
+Map LLVM remains unresolved: its kernel median is 1.4% slower than main in
+this sitting, despite 2.7% fewer instructions. Its previous incomplete
+sitting's quiet map row was 1.6% faster. The gain is not established by
+these two observations. Shuffled LLVM is within the descriptive timing
+band, while all of the earlier adaptive variants lose it. Galloping's
+final decision must retain the partially ordered benefit and pass map,
+shuffled and string guards on the final representation.
+
+### Fresh shuffled and map profiles
+
+These four profiles follow the paired timings under the same lock, with
+`cpu_core/cycles/u`, period 50,003. Hardware-stat event groups run at
+100%; metrics are whole-harness values including calibration/setup.
+Stall and recovery events overlap, so their percentages are not additive.
+
+| Row | Backend | IPC | Branch misses / 1k instructions | Stall cycles % | Recovery cycles % | Index-wrap idiom sample % |
+|---|---|---:|---:|---:|---:|---:|
+| sort-objects-shuffled | C | 1.512 | 11.344 | 29.682 | 10.045 | 0.000 |
+| sort-objects-shuffled | LLVM | 1.840 | 7.957 | 23.888 | 8.252 | 1.320 |
+| map-entries-top-k | C | 4.537 | 0.096 | 6.519 | 0.350 | 0.360 |
+| map-entries-top-k | LLVM | 4.388 | 0.097 | 7.062 | 0.319 | 0.780 |
+
+The index-wrap classifier matches `shl $0x20`, `sar $0x20` and
+`sar $0x1e` native idioms. LLVM's 448 static occurrences in shuffled work
+have only 1.32% of global cycle samples; their static number is not their
+cycle share. The ordinary merge and binary-insertion loops remain much
+larger, about one third and two fifths of the profile respectively. The
+hot LLVM merge has extra cursor/index extensions, address scaling and
+spills versus C; narrowing is a representation proposal, not a claim that
+removing the 448 shifts alone removes the whole cost.
+
+| Evidence under the scratch root | SHA-256 |
+|---|---|
+| `paired-kernel-retry.json` | `4ad42dc48f72aad55ee3a1d67e1befe75763c8fa93c3ec3b72bb72b390a5dacc` |
+| `paired-kernel-retry.py` | `b7a8a3fa35c7cdf703ffeb3d4b1d7e7d01e6e402203ce572a780912f54d7c38b` |
+| `kernel-profile/sort-objects-shuffled-nts.csv` | `01f0c0440bcf8e4ffa73a67afab1eb5cee8d0f956a631e5bc5e2bc665bc670db` |
+| `kernel-profile/sort-objects-shuffled-nts.data` | `c23c9a0825ff4b5b610fee86aa594b1d283cedc8c3b27d5f4d875e6ef058c6b2` |
+| `kernel-profile/sort-objects-shuffled-nts.annotate` | `307a12587d243a8e76e1f7653c197e4e3d00a1be5d5dc7946e1ef147afe55fe8` |
+| `kernel-profile/sort-objects-shuffled-ntsllvm.csv` | `46a2fcc1c0cbbe1aed639415bc71c0e50af42d6bb69f318837208c473b43dc16` |
+| `kernel-profile/sort-objects-shuffled-ntsllvm.data` | `3f2ec8f5f9a19dbc6f23e7d775979f38ae3b35ed02df125ad86514e3ba6bebe9` |
+| `kernel-profile/sort-objects-shuffled-ntsllvm.annotate` | `6397d2638f37e32a18ab63925a550c1ec7ca1c026254aab891bc1215b14fffb7` |
+| `kernel-profile/map-entries-top-k-nts.csv` | `0e7de0cfef1c3ef4389493bf975acff262b0138a3b3b533f2b31e67bf0b014d6` |
+| `kernel-profile/map-entries-top-k-nts.data` | `527e23215428344d60586f46f18180006c295a15f394c8ab4d80c0477c8de2a7` |
+| `kernel-profile/map-entries-top-k-nts.annotate` | `f20d6626bfb98033821e5ca8e0da4ad199f941de0bd83d78950b4d96a0b28c27` |
+| `kernel-profile/map-entries-top-k-ntsllvm.csv` | `8dcd65a97da46c00fd35a70bf6924facb61d36bbe8bf66206bda0ec9bd335add` |
+| `kernel-profile/map-entries-top-k-ntsllvm.data` | `f1146f8d88187e690d2f5f7e6ecc9996c7d60acd2a6dc6ad1bb75efe4120a6f2` |
+| `kernel-profile/map-entries-top-k-ntsllvm.annotate` | `4334ffb558a6c751380ed6b3e547c2fdf10398cb2a7acf5398e17cdb228060c0` |
