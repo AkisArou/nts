@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {fileInput} from '../gate/reader-inputs/main.ts';
 import {refreshLine,listedIn} from './pending.ts';
 import {testScratch} from '../gate/test-scratch.ts';
-import {censusCompiler,censusInventory,censusInputScope,acceptedCensusRecords,memoryPrograms,censusIdentities,censusRecord,checkMemoryCensuses,parseCensusRecord,validateCensus,censusSourceKey,CENSUS_RECORD_VERSION,CENSUS_WIRE_KINDS} from './memory-census.ts';
+import {censusCompiler,censusInventory,censusInputScope,acceptedCensusRecords,memoryPrograms,censusIdentities,censusRecord,checkMemoryCensuses,parseCensusRecord,validateCensus,censusSourceKey,CENSUS_RECORD_VERSION,CENSUS_STORE,CENSUS_WIRE_KINDS} from './memory-census.ts';
 import {memoryCensusFamily} from './memory-census-record-family.ts';
 import {createRecorder} from './recorder-core.ts';
 import {projectInputOwner} from '../gate/project-inputs.ts';
@@ -35,6 +35,8 @@ test('missing observations are pending; source and producer changes re-request t
  const accepted=new Map([['tree-teardown',hash(parseCensusRecord(measured,'tree-teardown'))]]);
  put('benchmarks/common/shared.ts','export const value=2');assert.deepEqual(checkMemoryCensuses(root,()=>{},{accepted}),memoryPrograms(root));put('compiler/core/src/hir/memory/census.rs','new producer');assert.deepEqual(checkMemoryCensuses(root,()=>{},{accepted}),memoryPrograms(root));
  put(censusRecord('tree-teardown'),JSON.stringify({...measured,program:'cyclic-churn'}));assert.throws(()=>checkMemoryCensuses(root,()=>{}),/foreign/);
+ const outside=join(root,CENSUS_STORE,'outside-group.json');writeFileSync(outside,JSON.stringify({...measured,program:'outside-group'}));
+ assert.throws(()=>checkMemoryCensuses(root,()=>{},{accepted}),/foreign memory census record: outside-group\.json/,'a record for a program outside the memory group stays red');rmSync(outside);
  put(censusRecord('tree-teardown'),JSON.stringify({...measured,observation:observation(),observation_sha256:'b'.repeat(64)}));assert.throws(()=>checkMemoryCensuses(root,()=>{}),/forged/);
  const forged=observation();forged.census.by_home.push({kind:'heap',sites:1,contexts:1} as never);assert.throws(()=>validateCensus(forged),/forged/);
 });

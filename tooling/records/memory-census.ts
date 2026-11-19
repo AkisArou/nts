@@ -25,7 +25,8 @@ import type {InputSnapshot,ReaderObservation} from '../gate/module-closure.ts';
 import {provenanceOf} from '../conformance/pin-provenance.ts';
 const ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const pathOf=(url:URL)=>relative(ROOT,fileURLToPath(url));
-const STORE=pathOf(conservativeDirectory(new URL('../../results/memory-census/',import.meta.url)));
+/** The census store, repository-relative. Fixtures name it from this declaration. */
+export const CENSUS_STORE=pathOf(conservativeDirectory(new URL('../../results/memory-census/',import.meta.url)));
 const ACCEPTED=acceptedRevisionData(new URL('../../results/memory-census/',import.meta.url));
 const CASES=pathOf(dataDirectory(new URL('../../benchmarks/cases/',import.meta.url)));
 // Selection owns this instrument's exact static recipe. Compiler implementation
@@ -35,7 +36,7 @@ export const CENSUS_RECIPE_INPUTS=[fileInput(new URL('./memory-census.ts',import
 const GENERATED_CONFIG=pathOf(fileInput(new URL('../../tsconfig.fixtures.json',import.meta.url)));
 export const CENSUS_RECORD_VERSION=2;
 export const CENSUS_VERSION=1;
-export const censusRecord=(name:string)=>{assert.match(name,/^[a-z0-9]+(?:-[a-z0-9]+)*$/);return `${STORE}/${name}.json`;};
+export const censusRecord=(name:string)=>{assert.match(name,/^[a-z0-9]+(?:-[a-z0-9]+)*$/);return `${CENSUS_STORE}/${name}.json`;};
 const sha=(text:string|Uint8Array)=>createHash('sha256').update(text).digest('hex');
 const hash=(value:unknown)=>sha(JSON.stringify(value));
 const hex=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
@@ -167,7 +168,7 @@ export function censusCompiler(root:string,binary:string|undefined):CensusCompil
 export type CensusCheckOptions={accepted?:ReadonlyMap<string,string>;inputs?:CensusInputScope;compiler?:CensusCompiler|null};
 export function censusInventory(root:string,options:CensusCheckOptions={}):{pending:string[];refresh:string[]}{
  const names=memoryPrograms(root),identities=(options.inputs??censusInputScope(root)).read(names),pending:string[]=[],refresh:string[]=[];let accepted=options.accepted;
- const store=join(root,STORE);if(existsSync(store))for(const file of readdirSync(store))assert.ok(names.some(name=>`${name}.json`===file),`foreign memory census record: ${file}`);
+ const store=join(root,CENSUS_STORE);if(existsSync(store))for(const file of readdirSync(store))assert.ok(names.some(name=>`${name}.json`===file),`foreign memory census record: ${file}`);
  for(const name of names){const file=censusRecord(name),path=join(root,file);let stale=!existsSync(path),measured:CensusRecord|undefined;
   if(!stale){const row=measured=parseCensusRecord(JSON.parse(readFileSync(path,'utf8')),name);stale=hash(row.identity)!==hash(identities.get(name));if(stale){accepted??=acceptedCensuses(root);assert.equal(accepted.get(name),hash(row),'foreign memory census source or recipe identity: '+name);}}
   if(stale)pending.push(name);else if(!options.compiler||measured!.compiler_commit!==options.compiler.compiler_commit||measured!.compiler_sha256!==options.compiler.compiler_sha256)refresh.push(name);

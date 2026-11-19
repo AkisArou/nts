@@ -16,7 +16,7 @@ import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from "./record-numbers.ts";
 import "../bench/run-record.test.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {writeRecords} from "../differential/oracle-records.ts";
-import {CENSUS_PRODUCER_INPUTS} from "../records/memory-census.ts";
+import {CENSUS_PRODUCER_INPUTS,CENSUS_STORE,memoryPrograms} from "../records/memory-census.ts";
 
 test("record numbering preserves named collisions and refuses new or stale allowances",()=>{
   const names=KNOWN_DUPLICATE_RECORDS.flatMap(number=>[number+"-first.md",number+"-second.md"]);
@@ -43,9 +43,12 @@ test("the real records step validates benchmark evidence and its rendered table"
     const compilerInputs=CENSUS_PRODUCER_INPUTS.map(url=>relative(source,fileURLToPath(url))).filter(path=>path.startsWith('compiler/')).sort();
     const stagedCompiler=existsSync(join(root,'compiler'))?readdirSync(join(root,'compiler'),{withFileTypes:true,recursive:true}).filter(entry=>entry.isFile()).map(entry=>relative(root,join(entry.parentPath,entry.name))).sort():[];
     assert.deepEqual(stagedCompiler,compilerInputs,'only the production-declared census projection is staged under compiler/');
-    // The copied CLI includes selector assets, but this benchmark-only repository
-    // declares no Rust harness. Its private mutation retains that genuine negative.
+    // The copied CLI includes selector assets and the census store, but this
+    // benchmark-only repository declares no Rust harness and no memory group.
+    // Its private mutation retains those genuine negatives.
     for(const path of [RUST_RUNTIME_DECLARATIONS,RUST_SELECTOR_RECORD])rmSync(join(root,path),{force:true});
+    rmSync(join(root,CENSUS_STORE),{recursive:true,force:true});
+    assert.deepEqual(memoryPrograms(root),[],'the fixture declares an empty census population');
     assert.deepEqual(readdirSync(join(root,'docs/records')),[],'the record-number control starts with no production records');
     writeFileSync(join(root,"docs/primitives.md"),"fixture\n");
     assert.deepEqual(readdirSync(join(root,"results/benchmarks/runs")),[]);
@@ -76,6 +79,10 @@ test("the real records step validates benchmark evidence and its rendered table"
     const path=publishRun(root,run),page=join(root,"results/benchmarks/full.md");
     const original=readFileSync(path,"utf8"),rendered=readFileSync(page,"utf8");
     const good=call();assert.equal(good.status,0,good.stderr);
+    // The census guard still refuses a record outside the fixture's population.
+    const outside=join(root,CENSUS_STORE,'foreign.json');mkdirSync(dirname(outside),{recursive:true});writeFileSync(outside,'{}\n');
+    const foreign=call();assert.equal(foreign.status,1);assert.match(foreign.stderr,/foreign memory census record: foreign\.json/);
+    rmSync(join(root,CENSUS_STORE),{recursive:true,force:true});
     writeFileSync(path,"{broken");assert.equal(call().status,1);
     const forged=JSON.parse(original);forged.rows[0].verdicts["nts C"].node.kind="LOSS";
     writeFileSync(path,JSON.stringify(forged));const verdict=call();assert.equal(verdict.status,1);assert.match(verdict.stderr,/recorded verdict/);
