@@ -458,3 +458,105 @@ measured next; galloping remains provisional until the guards pass.
 |---|---|
 | `paired-cursor.json` | `b2e7804ab666fcc50fa82d25017a25afe059f6986f77ea56db898e3d4d17fa4e` |
 | `paired-cursor.py` | `7a067b9226ae16b027c87f0990e5c73df1ee8c4ad086de2bc38e6fe46a2dc260` |
+
+## Single merge-kernel candidate
+
+Kernel `1c7d86625f`, record `029873836d`. The pinned count conditions and
+0.01% native instruction band above apply. All four comparator censuses
+match the cursor candidate exactly on C and LLVM, including checksums.
+
+| Row | Backend | Original | Kernel | / original | / cursor | Verdict vs original |
+|---|---|---:|---:|---:|---:|---|
+| array-copying-methods | C | 482832 | 482832 | 1.000000 | 1.000000 | WITHIN BAND |
+| array-copying-methods | LLVM | 538832 | 538832 | 1.000000 | 1.000000 | WITHIN BAND |
+| clbg-k-nucleotide | C | 17432320 | 17425360 | 0.999601 | 0.999986 | IMPROVED |
+| clbg-k-nucleotide | LLVM | 17424398 | 17417996 | 0.999633 | 0.999998 | IMPROVED |
+| map-entries-top-k | C | 414057 | 391714 | 0.946039 | 0.938320 | IMPROVED |
+| map-entries-top-k | LLVM | 415503 | 404439 | 0.973372 | 0.945295 | IMPROVED |
+| sort-objects | C | 1411192 | 475402 | 0.336880 | 0.985502 | IMPROVED |
+| sort-objects | LLVM | 1501920 | 518164 | 0.345001 | 0.983368 | IMPROVED |
+| sort-objects-runs | C | 1672921 | 680407 | 0.406718 | 1.001582 | IMPROVED |
+| sort-objects-runs | LLVM | 1723222 | 699506 | 0.405929 | 1.001424 | IMPROVED |
+| sort-objects-shuffled | C | 1829354 | 1468231 | 0.802595 | 0.919662 | IMPROVED |
+| sort-objects-shuffled | LLVM | 1877546 | 1807381 | 0.962629 | 1.008566 | IMPROVED |
+| string-sort-control | C | 2995 | 2413 | 0.805676 | 0.994641 | IMPROVED |
+| string-sort-control | LLVM | 3077 | 2520 | 0.818980 | 0.987461 | IMPROVED |
+
+### Unchanged counter-control columns
+
+These columns were run by the count owner even with native lanes filtered.
+Every movement is retained below. Node is the same pinned v26.13.0; its
+count spread is informational. C++'s displayed instruction band is 0.01%.
+The saved C++ timed ELF binaries for map top-k and k-nucleotide are byte
+identical across original, cursor and kernel. The observed C++ counter
+movement is not attributed to an NTS compiler change. This identity check
+does not establish identity of every transient count-bracket artifact.
+
+| Row | Column | Original | Cursor | Kernel | Kernel / original | Condition/verdict |
+|---|---|---:|---:|---:|---:|---|
+| array-copying-methods | C++ | 295759 | 295759 | 295759 | 1.000000 | within band |
+| array-copying-methods | node | 2318228 | 2320268 | 2353402 | 1.015173 | JIT spread: informational |
+| clbg-k-nucleotide | C++ | 7805117 | 7805117 | 7806113 | 1.000128 | WORSE control: outside band |
+| clbg-k-nucleotide | node | 36398076 | 34973878 | 34944029 | 0.960052 | JIT spread: informational |
+| map-entries-top-k | C++ | 376413 | 376315 | 376630 | 1.000576 | WORSE control: outside band |
+| map-entries-top-k | node | 778585 | 791779 | 879272 | 1.129320 | JIT spread: informational |
+| sort-objects | C++ | 733449 | 733449 | 733449 | 1.000000 | within band |
+| sort-objects | node | 1497315 | 1517237 | 1568420 | 1.047488 | JIT spread: informational |
+| sort-objects-runs | C++ | 479914 | 479914 | 479914 | 1.000000 | within band |
+| sort-objects-runs | node | 1562565 | 1561662 | 1555882 | 0.995723 | JIT spread: informational |
+| sort-objects-shuffled | C++ | 855387 | 855387 | 855387 | 1.000000 | within band |
+| sort-objects-shuffled | node | 4541688 | 7202371 | 11973954 | 2.636455 | JIT spread: informational |
+| string-sort-control | C++ | 1700 | 1700 | 1700 | 1.000000 | within band |
+| string-sort-control | node | 5802 | 9935 | 6052 | 1.043089 | JIT spread: informational |
+
+### Incomplete five-variant sitting
+
+The first attempt completed eleven rows, then stopped on a sibling-5
+user tick during the final LLVM array-copy control. Its final incomplete
+row did not save timing samples. The failed condition records CPU-5
+user/nice changing 8,360→8,361 ticks, load 10.45→47.43 and available memory
+17,259,100→12,446,572 KiB. This attempt is incomplete and is not used as
+the final acceptance sitting. All eleven completed rows are retained here,
+including losses; their per-row user/nice counters were unchanged. A full
+repeat checkpoints every row before assessing sibling activity.
+
+Times are µs, medians of six alternating invocations. Archived binaries,
+shipping flags, checksums, memory/load conditions and hashes are in the log.
+Ratio labels use the descriptive 3% threshold, not the instruction band.
+
+| Row | Backend | Main µs | Base µs | Galloping µs | Cursor µs | Kernel µs | Kernel / main | Kernel / cursor |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| sort-objects | C | 54.384762 | 46.210297 | 43.919254 | 26.721423 | 26.278626 | 0.4832 gain | 0.9834 within 3% |
+| sort-objects | LLVM | 59.286498 | 50.069941 | 47.281684 | 28.641411 | 28.479013 | 0.4804 gain | 0.9943 within 3% |
+| sort-objects-runs | C | 63.633322 | 68.705309 | 54.001275 | 36.136636 | 36.420451 | 0.5723 gain | 1.0079 within 3% |
+| sort-objects-runs | LLVM | 63.346970 | 72.773406 | 56.830048 | 37.603797 | 37.236113 | 0.5878 gain | 0.9902 within 3% |
+| sort-objects-shuffled | C | 173.043447 | 173.225853 | 170.133163 | 166.314327 | 172.034371 | 0.9942 within 3% | 1.0344 LOSS |
+| sort-objects-shuffled | LLVM | 181.420209 | 197.636198 | 197.820033 | 198.579554 | 182.748508 | 1.0073 within 3% | 0.9203 gain |
+| map-entries-top-k | C | 15.932301 | 15.347993 | 16.627939 | 16.738706 | 15.489808 | 0.9722 within 3% | 0.9254 gain |
+| map-entries-top-k | LLVM | 16.980275 | 17.147479 | 17.688080 | 17.879392 | 16.713716 | 0.9843 within 3% | 0.9348 gain |
+| string-sort-control | C | 0.122079 | 0.102082 | 0.105833 | 0.100517 | 0.105446 | 0.8637 gain | 1.0490 LOSS |
+| string-sort-control | LLVM | 0.132539 | 0.109701 | 0.109705 | 0.110906 | 0.112892 | 0.8518 gain | 1.0179 within 3% |
+| array-copying-methods | C | 23.888096 | 23.781903 | 23.673974 | 23.744244 | 24.003486 | 1.0048 within 3% | 1.0109 within 3% |
+
+### Index-width follow-up under review
+
+The builder currently uses signed 64-bit cursors throughout because
+powersort's doubled midpoint arithmetic needs more than 31 bits. Ordinary
+array indices need no such width: the runtime enforces length below 2³¹.
+The sampled search and addressing path and new disassembly motivate
+separating those representations. Both native functions vectorize copies,
+but the kernel LLVM shuffled `work` contains 448 shift instructions that
+restore signed-32 wrapping in address arithmetic; the C function has none
+of those shifts. This static count is not a dynamic cycle attribution.
+The current kernel shuffled instruction gap is 1,807,381 versus 1,468,231.
+The narrower-index design was sent for coordinator review before editing.
+
+| Evidence under the scratch root | SHA-256 |
+|---|---|
+| `count-kernel.log` | `103ebb46a20b69fddd1e82ab85380187265f66ded9d2cae83c07e1eb8170a386` |
+| `kernel/comparison-census/counts.json` | `50179805eac58844a7db51a32ec8dfb852949f18eba9f78857ec39a8531f6eb1` |
+| `kernel/comparison-census-llvm/counts.json` | `316850ae65d3343e6030d251e6393b09d5cfcfbf8f780f5fc2673d56f4399624` |
+| `kernel-native/nts.dis` | `3615c76a62436eb88a99b095b21ca3cb10d0b1e6283fe9a5a0ed9a5410f3fbf6` |
+| `kernel-native/ntsllvm.dis` | `c801cb3109132d21a0945cdf4b867559969f4238e8e452593b3d1107e7499dd0` |
+| `paired-kernel-spoiled.log` | `9e70021792a3bdf1aa4141cff0ac308038fe59781dcac84cd19691809d125c6d` |
+| `paired-kernel-initial.py` | `53ba4d59c899abf38e13d1d53d3c558524b11462b45fa3356bf6c254d81487c3` |
