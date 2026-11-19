@@ -3943,10 +3943,22 @@ measured CPU. The CPU bound is justified separately: a spinner never stalls,
 and outranking lowers CPU per wall second, never in total. IO and memory
 pressure are not progress, because an IO hang could excuse itself for ever.
 
-The wall bound and the scope's RuntimeMaxSec are removed. Every wait the bound
-excuses ends when the work it waits on ends, and that work has its own bound.
+The wall bound and the scope's RuntimeMaxSec are removed. Review found two
+liveness gaps, and both are closed:
+
+- Only the run's own waiting ledger requests excuse it. An excuse for being
+  outranked would be circular: a hung holder of memory that a higher-ranked
+  request waits on would excuse itself for ever.
+- A lifecycle bound in the same owner holds a spinner outside every step's own
+  bound: in setup, in the release build, or after the last step. Without it,
+  only the CPU bound would hold that spinner, after hours. The runner publishes
+  its step starts and finishes (run-lifecycle.ts), and time with no step
+  running and no step event, outside the run's own waits, is bounded by the
+  stall bound, at least 45 minutes so that a cold release build fits.
+
 As the coordinator's guard asked, the run's progress receipt is kept live, and
-`service.ts --status` names the request a run waits behind and since when.
+`service.ts --status` names the run's own waiting request, what is queued
+ahead of it, and since when.
 
 ## Memory stages 1 and 2 start on their own instruments (11-19)
 

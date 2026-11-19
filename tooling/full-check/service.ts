@@ -1473,8 +1473,8 @@ export type FullCheckStatus = {
   /**
    * The measurement running now, as its run bound measures it
    * (measure-command.ts): its run folder, what it has run, lost and stalled,
-   * its bounds, and the ledger wait it is in, with the request it waits
-   * behind and for how long; null with none running.
+   * its bounds, and its own ledger request that waits, with the request queued
+   * ahead of it and for how long; null with none running.
    */
   measurement: (MeasurementProgress & { run: string; waited_now_s: number | null }) | null;
   main: string | null;
@@ -1533,13 +1533,14 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
 
 const minutes = (seconds: number) => `${Math.round(seconds / 60)} min`;
 
-/** The live measurement in a line: its progress against its bounds, and what it waits behind. */
+/** The live measurement in a line: its progress against its bounds, and what its own waiting request is queued behind. */
 export function measurementText(m: NonNullable<FullCheckStatus["measurement"]>): string {
   const waits = Object.entries(m.waited_s).filter(([, value]) => value > 0).map(([kind, value]) => `${kind} ${Math.round(value)} s`);
   return `${m.run}: ran ${m.cpu_s.toFixed(0)}${m.bounds.cpu_s === null ? "" : ` of ${m.bounds.cpu_s}`} cpu-s in ${Math.round(m.wall_s)} s, `
-    + `stalled ${Math.round(m.stalled_s)} of ${m.bounds.stall_s} s, lost ${Math.round(m.cpu_lost_s)} s to higher-ranked CPU work`
-    + `${waits.length ? `, waited ${waits.join(", ")}` : ""}`
-    + `${m.waiting ? `; waiting ${m.waiting.kind === "memory" ? "for memory as" : "behind"} ${m.waiting.what} (${m.waiting.priority}, ${m.waiting.id}) since ${m.waiting.observed_since}${m.waited_now_s === null ? "" : `, ${minutes(m.waited_now_s)}`}` : ""}`;
+    + `stalled ${Math.round(m.stalled_s)} of ${m.bounds.stall_s} s${m.bounds.lifecycle_s === null ? "" : `, outside steps ${Math.round(m.outside_s)} of ${m.bounds.lifecycle_s} s`}`
+    + `, lost ${Math.round(m.cpu_lost_s)} s to higher-ranked CPU work${waits.length ? `, waited ${waits.join(", ")}` : ""}`
+    + `${m.waiting ? `; its request ${m.waiting.what} (${m.waiting.id}) waits ${m.waiting.behind ? `behind ${m.waiting.behind.what} (${m.waiting.behind.priority}, ${m.waiting.behind.id})` : "for room"}`
+      + ` since ${m.waiting.observed_since}${m.waited_now_s === null ? "" : `, ${minutes(m.waited_now_s)}`}` : ""}`;
 }
 
 /**

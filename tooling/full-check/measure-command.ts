@@ -4,15 +4,19 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // **The run is held when it stops progressing, never because it was slowed.**
 // The bound (step-bound.ts's ProgressBound) samples the run's slice every
 // second: its CPU (cpu.stat), the time its tasks were runnable while higher
-// ranks had the CPUs (cpu.pressure), and its waits in the machine's memory
-// ledger, its own requests and those of higher rank it yields to
-// (memory-ledger.ts's ledgerWait). Waits and CPU lost to other work spend
-// nothing. The run is held when it has stalled -- neither run, been
-// runnable nor waited -- for its stall bound, or when it has used its CPU
-// bound, which a spinning run reaches and a slowed one cannot. There is no
-// wall bound: each wait it excuses ends when the work it waits on ends, and
-// that work has its own bound. What it measured is kept in the run folder
-// while it runs (MEASUREMENT_PROGRESS), for `service.ts --status`.
+// ranks had the CPUs (cpu.pressure), its own requests waiting in the
+// machine's memory ledger (memory-ledger.ts's ledgerWait), and its runner's
+// step lifecycle (run-lifecycle.ts). Its own waits and CPU lost to other work
+// spend nothing; being outranked while it holds memory is no wait, for the
+// request it yields to may wait on that memory. The run is held when it has
+// stalled -- neither run, been runnable nor waited -- for its stall bound;
+// when no step has run, started or finished for its lifecycle bound, outside
+// its waits, which catches a spinner no step bounds; or when it has used its
+// CPU bound, the backstop a slowed run cannot reach. There is no wall bound:
+// the only waits it excuses are its own requests, which end when the work
+// they wait on ends, and that work has its own bound. What it measured is kept
+// in the run folder while it runs (MEASUREMENT_PROGRESS), for
+// `service.ts --status`.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -23,22 +27,26 @@ import { populated, waitForEmptyCgroup } from "../gate/scopes/step-scope.ts";
 import { stopToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 import { hostObservations } from "../gate/host-observations.ts";
 import { LEDGER_DIR, LEDGER_ENV, ledgerWait, processIdentity, type LedgerWait, type ProcessIdentity } from "../gate/memory-ledger.ts";
-import { ProgressBound, progressSummary, type CpuSample, type ProgressState } from "../gate/step-bound.ts";
+import { ProgressBound, progressSummary, type CpuSample, type ProgressState, type StepLifecycle } from "../gate/step-bound.ts";
+import { readRunLifecycle } from "../gate/run-lifecycle.ts";
 
-import {infrastructureProbe,type InfrastructureProbe} from "../gate/infrastructure-probe.ts";
 
 export const MEASUREMENT_HOLD = "measurement-hold.txt";
 export const MEASUREMENT_PROGRESS = "measurement-progress.json";
 const SAMPLE_MS = 1000;
 const RECEIPT_MS = 5000;
 
-/** A run's bounds: stalled seconds, and CPU seconds, or null when no measured run gives its CPU a basis. */
-export type RunBounds = { stall_s: number; cpu_s: number | null };
+/** A run's bounds: stalled seconds; seconds with no step progress, or null for
+ * a runner that publishes no lifecycle; and CPU seconds, or null when no
+ * measured run gives its CPU a basis. */
+export type RunBounds = { stall_s: number; lifecycle_s: number | null; cpu_s: number | null };
 
 /** What a measurement has measured, kept up to date while it runs. */
 export type MeasurementProgress = Omit<ProgressState, "expired"> & {
   version: 1; writer: ProcessIdentity; live: boolean; updated_at: string; bounds: RunBounds;
-  /** The ledger wait the run is in, and since when this observer has seen it. */
+  /** The run slice's cgroup. */
+  group: string;
+  /** The run's own ledger request that waits, what is queued ahead of it, and since when this observer has seen it. */
   waiting: (LedgerWait & { observed_since: string }) | null;
   held: string | null;
 };
@@ -50,8 +58,9 @@ export function readMeasurementProgress(run: string): MeasurementProgress | null
   let value: MeasurementProgress;
   try { value = JSON.parse(readFileSync(join(run, MEASUREMENT_PROGRESS), "utf8")) as MeasurementProgress; }
   catch { return null; }
-  return value?.version === 1 && typeof value.live === "boolean" && [value.wall_s, value.cpu_s, value.stalled_s, value.cpu_lost_s, value.used_s].every(finite)
-    && finite(value.bounds?.stall_s) && (value.bounds.cpu_s === null || finite(value.bounds.cpu_s)) && typeof value.writer?.pid === "number" ? value : null;
+  const optional = (bound: unknown) => bound === null || finite(bound);
+  return value?.version === 1 && typeof value.live === "boolean" && [value.wall_s, value.cpu_s, value.stalled_s, value.cpu_lost_s, value.used_s, value.outside_s].every(finite)
+    && finite(value.bounds?.stall_s) && optional(value.bounds.lifecycle_s) && optional(value.bounds.cpu_s) && typeof value.writer?.pid === "number" ? value : null;
 }
 
 /** Whether the measurement that wrote `progress` is still running. */
@@ -61,22 +70,20 @@ export function measuring(progress: MeasurementProgress): boolean {
   return now !== null && now.boot === progress.writer.boot && now.start === progress.writer.start;
 }
 
-export function measurementGroup(slice:string,probe:InfrastructureProbe=infrastructureProbe):string{
-  return probe({purpose:"read the measurement cgroup for cleanup",command:"systemctl",args:["--user","show",slice,"-p","ControlGroup","--value"]}).stdout.trim();
-}
-
 /** The reason a run stopped at a bound records. */
 export function runBoundReason(state: ProgressState, bounds: RunBounds): string {
-  const why = state.expired === "cpu_s" ? `used its CPU bound of ${bounds.cpu_s} cpu-s` : `made no progress outside waits for its stall bound of ${bounds.stall_s} s`;
+  const why = state.expired === "cpu_s" ? `used its CPU bound of ${bounds.cpu_s} cpu-s`
+    : state.expired === "lifecycle_s" ? `made no step progress for its lifecycle bound of ${bounds.lifecycle_s} s: no step ran, started or finished for ${Math.round(state.outside_s)} s outside its waits`
+    : `made no progress outside waits for its stall bound of ${bounds.stall_s} s`;
   return `full check run ${why}: ${progressSummary(state)}`;
 }
 
 const positive = (value: number) => Number.isFinite(value) && value > 0;
-const validBounds = (bounds: RunBounds) => positive(bounds.stall_s) && (bounds.cpu_s === null || positive(bounds.cpu_s));
+const validBounds = (bounds: RunBounds) => positive(bounds.stall_s) && [bounds.lifecycle_s, bounds.cpu_s].every(bound => bound === null || positive(bound));
 
 async function measure(bounds: RunBounds, run: string, slice: string, command: string[]): Promise<number> {
   if (!toolingSlice({ NTS_TOOLING_SLICE: slice }) || !isAbsolute(run) || !validBounds(bounds) || !command.length) {
-    throw new Error("a full-check measurement needs a run, its own slice and positive stall and CPU bounds");
+    throw new Error("a full-check measurement needs a run, its own slice and positive bounds");
   }
   const unit = `nts-full-check-measure-${randomUUID()}`;
   const host = hostObservations(process.env), ledger = process.env[LEDGER_ENV] ?? LEDGER_DIR;
@@ -95,12 +102,13 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
     catch (error) { console.error("full check run bound could not stop its slice:", error); }
   };
   let group = "", state: ProgressState | undefined, waiting: MeasurementProgress["waiting"] = null, written = -Infinity;
-  const bound = new ProgressBound({ stall_s: bounds.stall_s, ...(bounds.cpu_s === null ? {} : { cpu_s: bounds.cpu_s }) }, host.now());
+  const bound = new ProgressBound({ stall_s: bounds.stall_s, ...(bounds.lifecycle_s === null ? {} : { lifecycle_s: bounds.lifecycle_s }),
+    ...(bounds.cpu_s === null ? {} : { cpu_s: bounds.cpu_s }) }, host.now());
   const receipt = (live: boolean) => {
     if (!state) return;
-    const { wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, waited_s } = state;
-    const progress: MeasurementProgress = { version: 1, writer, live, updated_at: new Date(host.wallNow()).toISOString(), bounds,
-      wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, waited_s, waiting, held };
+    const { wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s } = state;
+    const progress: MeasurementProgress = { version: 1, writer, live, updated_at: new Date(host.wallNow()).toISOString(), bounds, group,
+      wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s, waiting, held };
     try {
       const file = join(run, MEASUREMENT_PROGRESS);
       writeFileSync(`${file}.next`, JSON.stringify(progress) + "\n");
@@ -112,7 +120,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
   // The wait named now holds until the next sample. A ledger that cannot be
   // read excuses nothing.
   const wait = (): LedgerWait | null => {
-    try { const found = ledgerWait(ledger, group, "full-check"); ledgerFailure = undefined; return found; }
+    try { const found = ledgerWait(ledger, group); ledgerFailure = undefined; return found; }
     catch (error) {
       const failure = `full check run bound cannot read the memory ledger: ${String(error)}`;
       if (failure !== ledgerFailure) console.error(failure);
@@ -120,11 +128,17 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
       return null;
     }
   };
+  // Before its runner publishes a lifecycle, no step has run: setup counts.
+  const steps = (): StepLifecycle | undefined => {
+    if (bounds.lifecycle_s === null) return undefined;
+    const published = readRunLifecycle(run);
+    return { events: published?.events ?? 0, running: published?.running.length ?? 0 };
+  };
   const sample = () => {
     const now = host.now(), found = wait();
-    state = bound.observe(now, found?.kind, cpu());
+    state = bound.observe(now, found === null ? undefined : "memory", cpu(), steps());
     waiting = found === null ? null
-      : waiting?.id === found.id && waiting.kind === found.kind ? waiting : { ...found, observed_since: new Date(host.wallNow()).toISOString() };
+      : waiting?.id === found.id && waiting.behind?.id === found.behind?.id ? waiting : { ...found, observed_since: new Date(host.wallNow()).toISOString() };
     if (state.expired) expire(runBoundReason(state, bounds));
     if (expired || now - written >= RECEIPT_MS) { receipt(!expired); written = now; }
   };
@@ -176,7 +190,8 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
 }
 
 runAsCommand(import.meta.url,async()=>{
-  const [, , stall, cpu, run, slice, ...command] = process.argv;
-  try { process.exitCode = await measure({ stall_s: Number(stall), cpu_s: cpu === "none" ? null : Number(cpu) }, run!, slice!, command); }
+  const [, , stall, lifecycle, cpu, run, slice, ...command] = process.argv;
+  const optional = (value: string | undefined) => value === "none" ? null : Number(value);
+  try { process.exitCode = await measure({ stall_s: Number(stall), lifecycle_s: optional(lifecycle), cpu_s: optional(cpu) }, run!, slice!, command); }
   catch (error) { console.error(error); process.exitCode = 1; }
 });

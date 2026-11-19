@@ -9,7 +9,6 @@ import {gateCapabilities} from './environment.ts';
 import {commentsOnly} from './comment-changes.ts';
 import {toolIdentity,artifactShadow} from './artifact-shadow.ts';
 import {typecheck,precheckProgram} from '../census/generate/precheck.ts';
-import {measurementGroup} from '../full-check/measure-command.ts';
 import type {FunctionSpec} from '../census/generate/model.ts';
 
 const result=(change:Partial<ProbeResult>={}):ProbeResult=>({pid:71,output:['','',''],stdout:'answer',stderr:'',status:0,signal:null,...change});
@@ -59,9 +58,7 @@ test('capability and system-manager questions use supplied answers and propagate
     assert.ok(args.includes('--capabilities'));return result({stdout:JSON.stringify({format:[]})});
   });
   assert.deepEqual(gateCapabilities('/owned/tree',['format'],null,answer),[{step:'format',capabilities:[]}]);
-  assert.equal(measurementGroup('owned.slice',answer),'/owned/group');
   named(()=>gateCapabilities('/owned/tree',['format'],null,infrastructureProbes(timeout)),'gate capability declarations');
-  named(()=>measurementGroup('owned.slice',infrastructureProbes(timeout)),'measurement cgroup');
 });
 
 test('a lexer answer may retain the ordinary gate, while its broken instrument cannot silently fall back',()=>{

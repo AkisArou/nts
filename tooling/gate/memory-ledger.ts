@@ -790,36 +790,37 @@ export function reservationPriority(priority: Priority, env: NodeJS.ProcessEnv =
  */
 function outrankedIn(dir: string, self: LedgerEntry): boolean {
   const admitted = liveReservations(dir), {priority} = reservationOrder(self, admitted);
-  return readEntries(dir, "waiting").some(entry => outranks(entry, admitted, priority));
+  return readEntries(dir, "waiting").some(entry => rank(reservationOrder(entry, admitted).priority) < rank(priority)
+    && entry.fits !== false && alive(entry.waiter) && alive(entry.owner));
 }
 
-/** A live waiting request a job of `priority` yields to: one of higher priority that could fit were every admitted job to end. */
-function outranks(entry: LedgerEntry, admitted: ReadonlyMap<string, LedgerEntry>, priority: Priority): boolean {
-  return rank(reservationOrder(entry, admitted).priority) < rank(priority) && entry.fits !== false && alive(entry.waiter) && alive(entry.owner);
-}
-
-/** What a group of work waits for in the ledger, and the request it waits on. */
-export type LedgerWait = { kind: "memory" | "priority"; id: string; what: string; priority: Priority; since: string };
+/** A request of a group's own that waits in the ledger, and what is queued ahead of it. */
+export type LedgerWait = { id: string; what: string; priority: Priority; since: string;
+  /** The first live request queued ahead of it, or null when it waits only for room. */
+  behind: { id: string; what: string; priority: Priority } | null };
 
 /**
- * What the work in cgroup `group`, at `priority`, waits for in the ledger, as
- * an observer outside that work reads it (the full check's run bound,
- * full-check/measure-command.ts), or null. `memory`: a live request of its own
- * waits, one whose waiter or owner runs in the group, whose measure lies in
- * it, or that grows a reservation that does. `priority`: a request it yields
- * to waits (`outranks`, the rule its runner yields by). Its own wait is named
- * first.
+ * The request of the work in cgroup `group` that waits in the ledger, as an
+ * observer outside that work reads it (the full check's run bound,
+ * full-check/measure-command.ts), or null. A request is the group's own when
+ * its waiter or owner runs in the group, its measure lies in it, or it grows
+ * a reservation that does. Only such a wait excuses the work: being outranked
+ * while it holds memory is no wait, for the request it yields to may wait on
+ * that very memory.
  */
-export function ledgerWait(dir: string, group: string, priority: Priority): LedgerWait | null {
-  const admitted = liveReservations(dir), waiting = readEntries(dir, "waiting").sort(queueOrder);
+export function ledgerWait(dir: string, group: string): LedgerWait | null {
+  const admitted = liveReservations(dir);
+  const waiting = readEntries(dir, "waiting").filter(entry => alive(entry.waiter) && alive(entry.owner))
+    .map(entry => ({ entry, order: reservationOrder(entry, admitted) }))
+    .sort((a, b) => queueOrder({ priority: a.order.priority, seq: a.entry.seq, order: a.order.order }, { priority: b.order.priority, seq: b.entry.seq, order: b.order.order }));
   const inGroup = (entry: LedgerEntry) => (entry.measure.cgroup !== null && within(entry.measure.cgroup.path, group))
     || [entry.waiter.pid, entry.owner.pid].some(pid => { const own = cgroupOf(pid); return own !== null && within(own, group); });
   const ours = (entry: LedgerEntry) => inGroup(entry) || (entry.grows !== null && admitted.has(entry.grows) && inGroup(admitted.get(entry.grows)!));
-  const live = waiting.filter(entry => alive(entry.waiter) && alive(entry.owner));
-  const own = live.find(ours), behind = own ? undefined : live.find(entry => !ours(entry) && outranks(entry, admitted, priority));
-  const found = own ?? behind;
-  return found === undefined ? null
-    : { kind: own ? "memory" : "priority", id: found.id, what: found.what, priority: reservationOrder(found, admitted).priority, since: found.since };
+  const at = waiting.findIndex(({ entry }) => ours(entry));
+  if (at < 0) return null;
+  const { entry, order } = waiting[at]!, ahead = waiting.slice(0, at).find(({ entry }) => !ours(entry));
+  return { id: entry.id, what: entry.what, priority: order.priority, since: entry.since,
+    behind: ahead ? { id: ahead.entry.id, what: ahead.entry.what, priority: ahead.order.priority } : null };
 }
 
 /**

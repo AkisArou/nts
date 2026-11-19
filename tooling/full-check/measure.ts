@@ -98,13 +98,18 @@ export type Gate = {
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
-/** The floor of a run's stall bound, and, over the machine's width, of its CPU bound. */
+/** The floor of a run's stall bound; over the machine's width, of its CPU bound; and thrice, of its lifecycle bound. */
 export const RUN_BOUND_FLOOR_S = 15 * 60;
 
 /**
  * A run's bounds (measure-command.ts). Its stall bound is three times the last
  * canonical green run's wall, at least fifteen minutes; before there is one,
- * three times the longest measured step's wall. Its CPU bound is three times
+ * three times the longest measured step's wall. Its lifecycle bound, the time
+ * with no step running and no step event outside its own waits, is its stall
+ * bound, at least three times that floor: a cold release build (about twenty
+ * minutes), which runs before any step, fits a run whose steps are short. A
+ * runner that publishes no lifecycle (run-lifecycle.ts) has none; the launch
+ * drops it then. Its CPU bound is three times
  * that same run's measured CPU, at least fifteen minutes of the whole machine
  * (a cold release build fits); without that run's measured CPU, three times
  * the summed baseline CPU of the requested steps. A requested step with no
@@ -133,8 +138,9 @@ export function fullCheckBound(lastGreen: RunRecord | undefined, steps: readonly
   wall ??= Math.max(0, ...steps.map(step => costs.get(step)?.wall ?? 0));
   if (cpu === undefined && steps.every(step => costs.has(step))) cpu = steps.reduce((sum, step) => sum + costs.get(step)!.cpu, 0);
   if (!Number.isSafeInteger(width) || width <= 0) throw new Error(`a full-check CPU bound needs the machine's width, not ${String(width)}`);
+  const stall_s = Math.ceil(Math.max(RUN_BOUND_FLOOR_S, 3 * wall));
   return {
-    stall_s: Math.ceil(Math.max(RUN_BOUND_FLOOR_S, 3 * wall)),
+    stall_s, lifecycle_s: Math.max(stall_s, 3 * RUN_BOUND_FLOOR_S),
     cpu_s: cpu === undefined ? null : Math.ceil(Math.max(RUN_BOUND_FLOOR_S * width, 3 * cpu)),
   };
 }
@@ -200,12 +206,16 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
         if (named.status !== 0 || named.error || named.signal) return named;
         slice = toolingSlice({ NTS_TOOLING_SLICE: readFileSync(receipt, "utf8") })!;
       } else slice = newToolingSlice(false, launcher);
+      // A runner older than its step lifecycle publishes none to bound.
+      if (!existsSync(join(layout.tree, "tooling/gate/run-lifecycle.ts"))) bounds = { ...bounds, lifecycle_s: null };
       const measure = fileURLToPath(new URL("./measure-command.ts", import.meta.url));
-      log(`full check run bounds: stalled ${bounds.stall_s} s, ${bounds.cpu_s === null ? "no CPU bound (no measured basis)" : `CPU ${bounds.cpu_s} cpu-s`}; logs ${run}`);
+      log(`full check run bounds: stalled ${bounds.stall_s} s, ${bounds.lifecycle_s === null ? "no lifecycle bound (the runner publishes none)" : `no step progress ${bounds.lifecycle_s} s`}, `
+        + `${bounds.cpu_s === null ? "no CPU bound (no measured basis)" : `CPU ${bounds.cpu_s} cpu-s`}; logs ${run}`);
       return candidateCommand(selected.node, {
         tree: layout.tree, run, owned: { ...owned, NTS_TOOLING_SLICE: slice }, standalone: true,
         command: ['sh', pinned, '--environment-ready', commit],
-      }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(bounds.stall_s), bounds.cpu_s === null ? "none" : String(bounds.cpu_s), run, slice] });
+      }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(bounds.stall_s), bounds.lifecycle_s === null ? "none" : String(bounds.lifecycle_s),
+        bounds.cpu_s === null ? "none" : String(bounds.cpu_s), run, slice] });
       });
     } finally { if (out !== undefined) closeSync(out); lock.close(); }
   };

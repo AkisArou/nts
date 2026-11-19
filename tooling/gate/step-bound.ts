@@ -61,8 +61,12 @@ export function stepBoundWait(state: {
  * `some` total), both in microseconds since the cgroup began. */
 export type CpuSample = { usageUsec: number; waitingUsec: number };
 
+/** A run's steps as its runner reports them (run-lifecycle.ts): how many
+ * step events (a start or a finish) it has had, and how many steps run now. */
+export type StepLifecycle = { events: number; running: number };
+
 /** The limits a bound holds work to, in seconds (cpu: CPU seconds). */
-export type ProgressLimits = { execution_s?: number; wall_s?: number; stall_s?: number; cpu_s?: number };
+export type ProgressLimits = { execution_s?: number; wall_s?: number; stall_s?: number; lifecycle_s?: number; cpu_s?: number };
 export type ProgressLimit = keyof ProgressLimits;
 
 /** What a bound has measured so far, and the limit that expired, if one has. */
@@ -76,11 +80,13 @@ export type ProgressState = {
   cpu_s: number;
   /** Time some of the work was runnable while the CPUs ran other work. */
   cpu_lost_s: number;
+  /** Given step lifecycles: time outside declared waits with no step running, since the last step event. */
+  outside_s: number;
   waited_s: Partial<Record<BoundWait, number>>;
   expired: ProgressLimit | undefined;
 };
 
-const LIMIT_ORDER: readonly ProgressLimit[] = ["execution_s", "stall_s", "cpu_s", "wall_s"];
+const LIMIT_ORDER: readonly ProgressLimit[] = ["execution_s", "stall_s", "lifecycle_s", "cpu_s", "wall_s"];
 
 /**
  * **The one bound owner** of gate work: a step's execution budget
@@ -93,14 +99,18 @@ const LIMIT_ORDER: readonly ProgressLimit[] = ["execution_s", "stall_s", "cpu_s"
  * nothing either; the rest is used, and what of it the work did not run is
  * stalled. Without CPU samples every undeclared second is used, as a step's
  * budget is. IO and memory pressure are not progress: a hung IO wait would
- * excuse itself for ever. `wall_s` alone counts everything.
+ * excuse itself for ever. Given the run's step lifecycle, time outside any
+ * step and outside declared waits counts towards `lifecycle_s` until the next
+ * step event: work no step bounds -- setup, the release build, the time after
+ * the last step -- cannot spin unseen. `wall_s` alone counts everything.
  */
 export class ProgressBound {
   #start: number;
   #last: number;
   #wait: BoundWait | undefined;
   #cpu: CpuSample | undefined;
-  #state: Omit<ProgressState, "expired" | "waited_s"> = { wall_s: 0, used_s: 0, stalled_s: 0, cpu_s: 0, cpu_lost_s: 0 };
+  #steps: StepLifecycle | undefined;
+  #state: Omit<ProgressState, "expired" | "waited_s"> = { wall_s: 0, used_s: 0, stalled_s: 0, cpu_s: 0, cpu_lost_s: 0, outside_s: 0 };
   #waited: Partial<Record<BoundWait, number>> = {};
   readonly limits: Readonly<ProgressLimits>;
 
@@ -112,8 +122,8 @@ export class ProgressBound {
   }
 
   /** The interval since the last observation, then what holds from `nowMs` on. */
-  observe(nowMs: number, waiting?: BoundWait, cpu?: CpuSample): ProgressState {
-    const elapsed = Math.max(0, nowMs - this.#last) / 1000, state = this.#state, before = this.#cpu;
+  observe(nowMs: number, waiting?: BoundWait, cpu?: CpuSample, steps?: StepLifecycle): ProgressState {
+    const elapsed = Math.max(0, nowMs - this.#last) / 1000, state = this.#state, before = this.#cpu, earlier = this.#steps;
     const ran = cpu && before ? Math.max(0, cpu.usageUsec - before.usageUsec) / 1e6 : 0;
     state.cpu_s += ran;
     if (this.#wait) this.#waited[this.#wait] = (this.#waited[this.#wait] ?? 0) + elapsed;
@@ -121,10 +131,15 @@ export class ProgressBound {
       const lost = Math.min(elapsed, Math.max(0, cpu.waitingUsec - before.waitingUsec) / 1e6), active = elapsed - lost;
       state.cpu_lost_s += lost; state.used_s += active; state.stalled_s += active - Math.min(active, ran);
     } else state.used_s += elapsed;
+    if (steps) {
+      if (!this.#wait && (earlier?.running ?? 0) === 0) state.outside_s += elapsed;
+      if (earlier && steps.events !== earlier.events) state.outside_s = 0;
+      this.#steps = steps;
+    }
     if (cpu) this.#cpu = cpu;
     this.#last = nowMs; this.#wait = waiting;
     state.wall_s = Math.max(0, nowMs - this.#start) / 1000;
-    const measured: Record<ProgressLimit, number> = { execution_s: state.used_s, stall_s: state.stalled_s, cpu_s: state.cpu_s, wall_s: state.wall_s };
+    const measured: Record<ProgressLimit, number> = { execution_s: state.used_s, stall_s: state.stalled_s, lifecycle_s: state.outside_s, cpu_s: state.cpu_s, wall_s: state.wall_s };
     const expired = LIMIT_ORDER.find(limit => this.limits[limit] !== undefined && measured[limit] >= this.limits[limit]!);
     return { ...state, waited_s: { ...this.#waited }, expired };
   }

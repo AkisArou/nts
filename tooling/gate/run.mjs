@@ -101,6 +101,7 @@ import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstr
 import {GateScopes} from "./scopes/step-scope.ts";
 import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
+import {RunLifecycleFeed} from "./run-lifecycle.ts";
 import {ProgressBound, stepBound, stepBoundReason, stepBoundWait} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
@@ -456,6 +457,8 @@ function stepEnv(step, slots, scope) {
 
 /** @type {RunDiagnostics|undefined} */
 let diagnostics;
+/** The run's step lifecycle, published for the full check's run bound (run-lifecycle.ts). @type {RunLifecycleFeed|undefined} */
+let lifecycle;
 /** @type {string|undefined} */
 let diagnosticsFailure;
 function finish(name, verdict, reason, extra = {}) {
@@ -1308,6 +1311,7 @@ function start(step, slots, rider = false) {
   const owned = { child, slots, started, rider, elastic, scope, draining: false, overBound: false, peakCharge: undefined,
     charge: 0, extra: 0, want: 0, grown: 0 };
   running.set(step.name, owned);
+  lifecycle?.started(step.name);
   // **Past its bound the step is stopped through its own scope** and held: its
   // log stays, and it is neither a pass nor a red verdict about the change.
   // Killed again until it exits: a kill reaches only what its scope holds.
@@ -1367,6 +1371,7 @@ function start(step, slots, rider = false) {
     let stepDiagnostics;
     try{stepDiagnostics=diagnostics?.endStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);cleanupError=`step host observation failed: ${error}`;stop(cleanupError);}
     running.delete(step.name);
+    lifecycle?.finished(step.name);
     const wall = (Date.now() - started) / 1000;
     let gnuTime,measurement;
     try { gnuTime=parseGnuTime(readFileSync(timeFile,'utf8')); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;}
@@ -1779,6 +1784,7 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
   },
 });
 mkdirSync(RUN_DIR, { recursive: true });
+lifecycle = new RunLifecycleFeed(RUN_DIR);
 try{
   diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,startedAt:host.wallNow(),
     emit:row=>appendFileSync(join(RUN_DIR,'diagnostics.jsonl'),JSON.stringify(row)+'\n'),

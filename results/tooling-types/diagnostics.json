@@ -957,6 +957,7 @@
         "tooling/gate/run-diagnostics.test.ts",
         "tooling/gate/run-diagnostics.ts",
         "tooling/gate/run-directory.test.ts",
+        "tooling/gate/run-lifecycle.ts",
         "tooling/gate/run-temporary.test.ts",
         "tooling/gate/run-temporary.ts",
         "tooling/gate/run.mjs",
@@ -1519,7 +1520,7 @@
         "tooling/unicode-cases/regexp.ts": 8,
         "tooling/unicode-cases/url-hosts.ts": 2
       },
-      "source": "sha256:c7d470a1a09953b0d3c7b74de0c84606d95442bd72618a6dc8a96c03dfcbf87d"
+      "source": "sha256:6d030ccd9b8a3c0bb3822881340141e1b3b779c9f58588b9bbb21f0700f22ed3"
     }
   }
 }

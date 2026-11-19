@@ -15,6 +15,7 @@ import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
 import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, ProgressBound, landingCeiling, progressSummary, stepBound, stepBoundReason, stepBoundWait, unmeasuredSteps } from "./step-bound.ts";
 import { instrumentPolicy } from "./step-result.ts";
+import { readRunLifecycle } from "./run-lifecycle.ts";
 import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
 import { spawnTest } from "./test-wait.ts";
@@ -92,6 +93,21 @@ test("a run that neither runs nor waits stalls and is held at its stall bound, a
   const spun = spinning.observe(100_000, "memory", cpu(100));
   assert.deepEqual([spun.expired, spun.stalled_s], ["cpu_s", 0]);
   assert.equal(progressSummary(spinning.observe(101_000, undefined, cpu(101))), "in 101 s it ran 101.0 cpu-s, lost 0 s to higher-ranked CPU work, waited 1 s for memory and stalled 0 s");
+});
+
+test("time outside any step, with no step event and outside its waits, spends a run's lifecycle bound; a step event resets it", () => {
+  const steps = (events: number, running: number) => ({ events, running });
+  const bound = new ProgressBound({ stall_s: 100, lifecycle_s: 5 }, 0);
+  bound.observe(0, undefined, cpu(0), steps(0, 0));
+  // Setup and the release build run before any step: they count.
+  assert.equal(bound.observe(3000, undefined, cpu(3), steps(1, 1)).outside_s, 0, "the first step started");
+  assert.equal(bound.observe(60_000, undefined, cpu(60), steps(1, 1)).outside_s, 0, "a running step is the step bound's to bound");
+  assert.equal(bound.observe(61_000, "memory", cpu(61), steps(2, 0)).outside_s, 0, "it finished");
+  assert.equal(bound.observe(100_000, undefined, cpu(61), steps(2, 0)).outside_s, 0, "the run's own wait spends nothing");
+  // After the last step, the runner spins: every second is CPU, and no step moves.
+  const spun = bound.observe(105_000, undefined, cpu(66), steps(2, 0));
+  assert.deepEqual([spun.expired, spun.outside_s, spun.stalled_s], ["lifecycle_s", 5, 0]);
+  assert.equal(new ProgressBound({ execution_s: 2 }, 0).observe(5000).outside_s, 0, "without a lifecycle nothing is outside a step");
 });
 
 test("a stated bound wins; otherwise three times the step's work and the run's over their slots, above a floor", () => {
@@ -198,7 +214,7 @@ fi
   assert.ok(existsSync(join(run, "summary.json")), `the runner wrote no summary (exit ${result.status}):\n${result.stdout}${result.stderr}`);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as { verdict: string; steps: Row[]; interrupted: unknown; scope_cleanup: { state: string } };
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
-  return { result, summary, format: step("format"), records: step("records") };
+  return { result, summary, run, format: step("format"), records: step("records") };
 }
 
 test("a step past its bound is stopped through its scope and held, its log kept, and the run finishes", t => {
@@ -219,8 +235,9 @@ test("a step past its bound is stopped through its scope and held, its log kept,
   assert.equal(summary.scope_cleanup.state, "complete");
 });
 
-test("a step within its bound is untouched", t => {
-  const { result, summary, records } = runFixture(t, "records", { records: 30 });
+test("a step within its bound is untouched, and the runner publishes its step lifecycle", t => {
+  const { result, summary, records, run } = runFixture(t, "records", { records: 30 });
+  assert.deepEqual(readRunLifecycle(run), { version: 1, events: 2, running: [] }, "it started and finished, for the full check's lifecycle bound");
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(summary.verdict, "green");
   assert.equal(records.verdict, "PASS");
