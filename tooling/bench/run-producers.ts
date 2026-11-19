@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {readBuildDetails} from './build-details.ts';
+import { EXECUTABLE_SIZE_KIND, checkExecutableSizeCell } from "./executable-size-cell.ts";
 import { LAUNCH_KIND, checkLaunchCell } from "./launch-cell.ts";
 import { PEAK_RSS_KIND, checkPeakRssCell, type Sized } from "./peak-rss-cell.ts";
 import {
@@ -69,11 +70,12 @@ function measured(value: unknown, legacy = false): Cell {
  * absent one its reason; a peak-RSS row's cell also its peak RSS, derived
  * from the same launches. Anything else is an instrument error.
  */
-function launchCell(value: unknown, at: string, peak: boolean): Cell {
+function launchCell(value: unknown, at: string, peak: boolean, size = false): Cell {
   const o = object(value);
-  assert.deepEqual(Object.keys(o).sort(), ["checksum", "details", "nanoseconds", ...(peak ? ["peakRss"] : []), "reason", "spread", "status", "verified"], at + ": malformed launch cell");
+  assert.deepEqual(Object.keys(o).sort(), ["checksum", "details", ...(size ? ["executableSize"] : []), "nanoseconds", ...(peak ? ["peakRss"] : []), "reason", "spread", "status", "verified"], at + ": malformed launch cell");
   const cell = { ...(o as unknown as Cell), details: clean(o.details) };
-  if (peak) checkPeakRssCell(cell, at);
+  if (size) checkExecutableSizeCell(cell, at);
+  else if (peak) checkPeakRssCell(cell, at);
   else if (cell.status === "OK") checkLaunchCell(cell, at);
   if (cell.status !== "OK") assert.ok(cell.nanoseconds === null && cell.spread === null && !cell.verified && typeof cell.reason === "string", at + ": an absent launch cell carries a timing");
   return cell;
@@ -119,15 +121,16 @@ function row(
   identity: string | null,
   eligible: boolean,
   peak = false,
+  sizeOracle?: Cell,
 ): Row {
   // A peak-RSS row's cells all say whether they have a peak RSS; an invalidated one has none.
-  const invalid = (why: string, c: Cell): Cell => ({ ...absent("INVALID", why, c), ...(peak ? { peakRss: null } : {}) });
-  if (cells.node.status !== "OK")
+  const invalid = (why: string, c: Cell): Cell => ({ ...absent("INVALID", why, c), ...(peak ? { peakRss: null } : {}), ...(sizeOracle ? { executableSize: null } : {}) });
+  if ((sizeOracle ?? cells.node).status !== "OK")
     for (const [column, c] of Object.entries(cells))
       if (c.status === "OK")
         cells[column] = invalid("Node oracle did not complete; timing is unverified", c);
   const answers = new Set(
-    Object.values(cells)
+    [...Object.values(cells), ...(sizeOracle ? [sizeOracle] : [])]
       .filter((c) => c.status === "OK" && c.verified)
       .map((c) => c.checksum),
   );
@@ -231,16 +234,17 @@ export function fromNts(
     );
     // The frame's own JSON text, which no other parser has rounded (main.rs's Measurements.launch).
     const launch = m?.launch === undefined || m?.launch === null ? null : object(JSON.parse(string(m.launch)));
-    const peak = launch?.kind === PEAK_RSS_KIND;
+    const peak = launch?.kind === PEAK_RSS_KIND, size = launch?.kind === EXECUTABLE_SIZE_KIND;
+    const sizeOracle = size ? launchCell(launch!.oracle, name + "/oracle", false) : undefined;
     if (launch) {
-      assert.ok(launch.kind === LAUNCH_KIND || peak, "unknown launch row kind");
-      assert.deepEqual(Object.keys(launch).sort(), ["cells", "floor", "kind", "provenance", ...(peak ? ["sized"] : [])], `launch row ${name}: malformed frame`);
+      assert.ok(launch.kind === LAUNCH_KIND || peak || size, "unknown launch row kind");
+      assert.deepEqual(Object.keys(launch).sort(), ["cells", "floor", "kind", ...(size ? ["oracle"] : []), "provenance", ...(peak ? ["sized"] : [])], `launch row ${name}: malformed frame`);
       // Every launch row was built and timed at the run's own commit.
       assert.equal(object(launch.provenance).commit, meta.sourceCommit, `launch row ${name} was measured at another commit than its run`);
       const launchCells = object(launch.cells);
       for (const column of meta.columns) {
         assert.ok(Object.hasOwn(launchCells, column), "launch row omits column " + column);
-        cells[column] = launchCell(launchCells[column], name + "/" + column, peak);
+        cells[column] = launchCell(launchCells[column], name + "/" + column, peak, size);
       }
     } else if (m) {
       const measuredCells = values(m.results),
@@ -307,7 +311,7 @@ export function fromNts(
     }
     if (failure?.kind === "invalid")
       for (const [column, c] of Object.entries(cells))
-        if (c.status === "OK") cells[column] = { ...absent("INVALID", string(failure.reason), c), ...(peak ? { peakRss: null } : {}) };
+        if (c.status === "OK") cells[column] = { ...absent("INVALID", string(failure.reason), c), ...(peak ? { peakRss: null } : {}), ...(size ? { executableSize: null } : {}) };
     const result=row(
       name,
       cells,
@@ -316,13 +320,15 @@ export function fromNts(
         machine: object(raw.conditions ?? {})[name] ?? null,
         sourceCapture: m?.source_capture ?? null,
         hostProvenance: object(m?.hosts ?? {}).provenance ?? null,
+        ...(sizeOracle ? { sizeOracle: clean(sizeOracle) } : {}),
         ...(launch ? { launchFloor: clean(launch.floor), launchProvenance: clean(launch.provenance) } : {}),
       },
       identities[name] ?? workloadIdentity(m?.source_capture, m?.workload),
       Boolean(identities[name] ?? m?.source_capture) && !values(raw.spoiled).includes(name),
-      peak,
+      peak, sizeOracle,
     );
     if (launch && peak) Object.assign(result, { kind: PEAK_RSS_KIND, sized: sized(launch.sized) });
+    else if (size) result.kind = EXECUTABLE_SIZE_KIND;
     else if (launch) result.kind = LAUNCH_KIND;
     const builds=object(raw.builds??{})[name];
     if(builds!==undefined)result.builds=readBuildDetails(builds);

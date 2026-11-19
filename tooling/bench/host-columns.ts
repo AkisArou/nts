@@ -16,6 +16,8 @@ import { buildLauncher, launchEnvironment, launchSitting, type Launcher } from "
 import { gitArguments } from "../gate/git-arguments/main.ts";
 import { requireCoveredDepInfo, requireSourceDigest } from "./source-identity.ts";
 import { LAUNCH_COUNT, LAUNCH_KIND, LAUNCH_WARMUPS, launchCell, launchSummary } from "./launch-cell.ts";
+import { executableSize, sizeToolchain, verifySizeArtifacts, type SizeObservation } from "./executable-size.ts";
+import { EXECUTABLE_SIZE_KIND } from "./executable-size-cell.ts";
 import { readLaunchMarker } from "./launch-marker.ts";
 import { PEAK_RSS_KIND, peakRssCell, type Sized } from "./peak-rss-cell.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
@@ -420,7 +422,7 @@ export async function hostColumns(
   };
 }
 /** A launch row: every column's cells, the launcher's own floor in the same sitting, and what built them; a peak-RSS row also its sized workload. */
-export type LaunchRow = { kind: typeof LAUNCH_KIND | typeof PEAK_RSS_KIND; cells: Record<string, Cell>; floor: Json; provenance: Json; sized?: Sized };
+export type LaunchRow = { kind: typeof LAUNCH_KIND | typeof PEAK_RSS_KIND | typeof EXECUTABLE_SIZE_KIND; cells: Record<string, Cell>; floor: Json; provenance: Json; sized?: Sized; oracle?: Cell };
 const NTS_TARGETS = [{ column: "nts C", backend: "c" }, { column: "nts LLVM", backend: "llvm" }] as const;
 
 /**
@@ -430,7 +432,7 @@ const NTS_TARGETS = [{ column: "nts C", backend: "c" }, { column: "nts LLVM", ba
  * (tooling/bench/README.md, "Launch rows").
  */
 async function buildNts(root: string, nts: { binary: string; sha256: string; version: string; sourceDigest: string }, entry: string, directory: string,
-  backend: "c" | "llvm"): Promise<{ binary: string; recipe: Json } | Cell> {
+  backend: "c" | "llvm", tools?: ReturnType<typeof sizeToolchain>): Promise<{ binary: string; recipe: Json } | Cell> {
   const project = join(directory, `nts-${backend}`);
   rmSync(project, { recursive: true, force: true });
   mkdirSync(project, { recursive: true });
@@ -441,9 +443,9 @@ async function buildNts(root: string, nts: { binary: string; sha256: string; ver
     "",
   ].join("\n"));
   const output = join(project, "out"), command = ["build", join(project, "tsconfig.json"), "--out", output];
-  const build = await execute(nts.binary, command, project, false, { NTS_NODE: process.execPath });
+  const build = await execute(nts.binary, command, project, false, { NTS_NODE: process.execPath, ...(tools ? { CC: tools.clang.path } : {}) });
   const recipe = { tool: "nts build", backend, product: "app.cli", command: [nts.binary, ...command], ntsSha256: nts.sha256, ntsSourceDigest: nts.sourceDigest, ntsVersion: nts.version,
-    config: readFileSync(join(project, "nts.config.ts"), "utf8") };
+    config: readFileSync(join(project, "nts.config.ts"), "utf8"), ...(tools ? { clang: tools.clang } : {}) };
   if (build.status !== 0 || build.timeout) {
     const refusal = `${build.stderr}\n${build.stdout}`.split("\n").find((line) => /(?:declined:|\bNTS\d{4}\b|\bTS\d{4,}\b)/.test(line));
     return refusal && !build.timeout ? absent("REFUSED", refusal.trim(), { build: build as unknown as Json, recipe }) : { ...buildFailure(build), details: { build: build as unknown as Json, recipe } as Json };
@@ -484,7 +486,8 @@ export async function launchColumns(root: string, name: string, out: string, nts
   // The session's commit, as begin recorded it; the checkout must still be it, clean.
   const head = spawnSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).stdout.trim();
   if (head !== commit) throw new ToolingInstrumentError("tooling-setup", `the checkout moved to ${head.slice(0, 12)} during a session measuring ${commit.slice(0, 12)}`);
-  const marker = readLaunchMarker(root, name), peak = marker.metric === "peak-rss";
+  const marker = readLaunchMarker(root, name), peak = marker.metric === "peak-rss", size = marker.metric === "executable-size";
+  const tools = size ? sizeToolchain() : undefined;
   await reserveJob({ key: "bench-host-columns", what: `benchmark launch row for ${name}` });
   const pins = pinnedComparators(root), directory = join(out, name + ".launch");
   rmSync(directory, { recursive: true, force: true });
@@ -500,7 +503,7 @@ export async function launchColumns(root: string, name: string, out: string, nts
         : absent("NOT_PROVIDED", "Pinned comparator artifact is not installed")]));
   const columns: { column: string; argv: string[]; extra: Record<string, Json> }[] = [];
   for (const { column, backend } of NTS_TARGETS) {
-    const built = await buildNts(root, nts, entry, directory, backend);
+    const built = await buildNts(root, nts, entry, directory, backend, tools);
     if ("status" in built) cells[column] = built;
     else columns.push({ column, argv: [built.binary], extra: { recipe: built.recipe } });
   }
@@ -518,6 +521,16 @@ export async function launchColumns(root: string, name: string, out: string, nts
     else columns.push({ column: "ScriptC", argv: pins.scriptc.argvPrefix ? [scriptc.binary, entry] : [scriptc.binary],
       extra: { build: scriptc.build as unknown as Json, artifactSha256: sha256(scriptc.binary) } });
   }
+  const sizes = new Map<string, SizeObservation>();
+  if (tools) for (const { column, argv } of columns) {
+    if (column === "node" || column === "Bun JIT") continue;
+    const productDirectory = join(directory, column.replaceAll(" ", "-"));
+    mkdirSync(productDirectory, { recursive: true });
+    sizes.set(column, executableSize(argv[0]!, productDirectory, tools,
+      column.startsWith("nts ") ? "nts runtime linked into the product; native dependencies disclosed by ELF and loader closure"
+        : column === "Bun AOT" ? "Bun runtime embedded by bun build --compile --aot; dynamic dependencies disclosed separately"
+        : "ScriptC runtime linked by its native build; Node islands off; dynamic dependencies disclosed separately"));
+  }
   const floor = { column: "floor", argv: ["/bin/true"], extra: {} };
   const launcher = buildLauncher(join(directory, "launcher"), affinity(false));
   const environment = launchEnvironment(join(directory, "environment"));
@@ -527,10 +540,32 @@ export async function launchColumns(root: string, name: string, out: string, nts
     const observed = sitting.columns[index]!;
     cells[column] = launchCell(observed.details, { ...extra, argv, cwd: root, stdout: observed.stdout }, observed.stderr);
   }
+  const oracle = size ? cells.node! : undefined;
+  if (size) {
+    // Output verification still uses node. It is an oracle, not a standalone
+    // executable-size comparator: the engines ship no product for this source.
+    const checksum = oracle?.status === "OK" ? oracle.checksum : null;
+    const stripped = sizes.size ? await launchSitting({ launcher, ...launchCpu(), cwd: root, environment, warmups: 0, launches: 1,
+      columns: [...sizes].map(([label, observation]) => ({ label, argv: [observation.stripped.path, ...columns.find(column => column.column === label)!.argv.slice(1)] })), out: join(directory, "stripped-sitting") }) : null;
+    for (const [index, [column, observation]] of [...sizes].entries()) {
+      verifySizeArtifacts(observation);
+      const original = cells[column]!, one = stripped!.columns[index]!.details.launches[0]!;
+      if (original.status === "OK" && (one.status !== 0 || one.timedOut || one.stdoutSha256.slice(0, 16) !== original.checksum))
+        throw new ToolingInstrumentError("tooling-setup", `${name}/${column}: stripped executable failed or changed output`);
+      cells[column] = { ...original, executableSize: original.status === "OK" ? { ...observation, strippedLaunch: one } : null };
+    }
+    for (const column of Object.keys(cells)) {
+      if (column === "node" || column === "Bun JIT") cells[column] = absent("NOT_PROVIDED", "This engine runs source; it produces no standalone executable for this product", cells[column]);
+      else if (cells[column]!.status === "OK" && (!checksum || cells[column]!.checksum !== checksum))
+        cells[column] = absent("INVALID", "Node oracle did not complete or product output disagrees", cells[column]);
+      if (cells[column]!.status !== "OK") cells[column] = { ...cells[column]!, executableSize: null };
+    }
+  }
   if (peak) for (const column of Object.keys(cells)) cells[column] = peakRssCell(cells[column]!, `${name}/${column}`);
   const measuredFloor = sitting.columns.at(-1)!;
   return {
-    kind: peak ? PEAK_RSS_KIND : LAUNCH_KIND,
+    kind: size ? EXECUTABLE_SIZE_KIND : peak ? PEAK_RSS_KIND : LAUNCH_KIND,
+    ...(oracle ? { oracle } : {}),
     ...(marker.metric === "peak-rss" ? { sized: { case: marker.case, function: marker.function, input: marker.input } } : {}),
     cells,
     floor: { argv: floor.argv, ...launchSummary(measuredFloor.details.launches.map((launch) => launch.wallNanoseconds)),

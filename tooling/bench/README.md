@@ -15,7 +15,7 @@ comparator regresses, with at least one established pair. Individual comparator
 flags remain visible as observations. Absolute times are information only.
 `node tooling/records/summary.ts benchmarks` prints the same model as JSON, with
 each backend's ratios to the C++ and Java references beside it; the benchmark
-summary contract is version 2 and its definition is
+summary contract is version 4 and its definition is
 that file's header.
 
 The standing engine columns are node, Bun JIT, Bun AOT and ScriptC. `comparators.json`
@@ -46,7 +46,7 @@ A case directory holding `launch.json` is a launch row: its `case.ts` is a
 whole program with no exported workload, launched by the launch timer below.
 The marker's one reader is `launch-marker.ts`. Exactly
 `{"metric":"launch-to-exit"}` makes each cell the time from process launch to
-exit; the peak-RSS form is in "Peak-RSS rows" below. Any other content of the
+exit; `{"metric":"executable-size"}` selects the size instrument, and the peak-RSS form is in "Peak-RSS rows" below. Any other content of the
 marker is an error. The `startup` group's rows are launch-to-exit rows.
 
 - **What is launched.** nts C and nts LLVM are the executables `nts build`
@@ -107,6 +107,49 @@ marker is an error. The `startup` group's rows are launch-to-exit rows.
 - **The row** carries `kind: "launch"`; throughput rows carry no kind, and a
   row's own best comes only from rows of its kind. The floor and the sitting's
   provenance are in the row's conditions. `--count` does not count launch rows.
+
+# Executable-size rows
+
+A launch case with `{"metric":"executable-size"}` in `launch.json` records
+whole-file bytes from the same product that the launch timer runs. The
+`executable-size` group names hello world, the JSON/builtins program, and
+FlightPlanner, the largest benchmark by case-local TypeScript source bytes.
+FlightPlanner calls its original workload once; a refusal stays visible rather
+than substituting a smaller program. New cases and cells land pending; build
+records and the nightly immutable run writer measure them after landing.
+
+The headline is **as-shipped executable bytes**: exactly the file `nts build`
+makes, with whatever runtime it links into that file. The same rule holds for
+Bun AOT and ScriptC. Shared libraries, including libc and any shared runtime,
+are listed separately with their resolved paths, whole-file bytes and SHA256;
+those bytes are never silently added to any column. The product's ELF
+interpreter and DT_NEEDED names disclose its linkage. Static dependencies are
+already part of its file bytes. Bun AOT embeds Bun's runtime. Node and Bun JIT
+produce no standalone product for this source, so their size cells are absent
+with that reason; node still verifies each product's output. JVM, references
+and missing or failed comparators retain their own absent reasons.
+
+`executable-size.ts` consumes the timed executable once, before cleanup. It
+copies it privately, applies `llvm-strip --strip-all` to the copy, and measures
+that file too. It never rebuilds or changes the shipped product. The same
+clang driver selected by the nts build recipe resolves its own installed
+`llvm-strip`; strip must be beside clang and match its LLVM major.minor.
+No host-strip fallback is allowed. Both tools' paths, versions and SHA256 and
+the strip arguments are retained. The stripped product must execute and match
+the original and node output. A missing, empty, non-ELF or malformed artifact,
+a failed strip or an inconsistent receipt is an instrument error, never a size.
+
+`kind: "executable-size"` cells retain the launch observations and a strictly
+checked `executableSize` receipt (`executable-file-bytes-v1`). Both shipped and
+stripped views have separate within-run ratios, bar verdicts and own-best
+histories; `full.md` shows both, including losses. Bytes have spread 1; timing
+noise supplies no size allowance. Stripped histories additionally require the
+same strip version and SHA256 in both columns. Both histories require the
+same effective build recipe (flags, product and backend; paths and untimed CPU
+masks are normalized). Shipped histories do not depend on strip identity. Dynamic closure size is disclosed separately in either view.
+The record readers derive and check both sets of verdicts. A review sitting's
+run JSON stays in kept scratch, cited by path and SHA256; only the nightly
+writer publishes the official run after landing.
 
 # Peak-RSS rows
 

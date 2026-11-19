@@ -17,6 +17,23 @@ import { ownMemory, withoutHanded } from "../gate/test-memory.ts";
 /** The record the compile checks name in their lines; the comparison itself never reads it. */
 const RECORD_FILE = "results/benchmarks/c/outcomes.tsv";
 
+test("executable-size whole programs enter the ordinary build inventory pending on every backend", async () => {
+  const { benchmarkCases } = await import("./build-records.ts");
+  const { benchmarkInventory, parseBenchmarkRecord } = await import("./outcomes.ts");
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const cases = benchmarkCases(root), products = ["size-hello", "size-json", "size-flight-planner"].map(name => "benchmarks/cases/" + name);
+  for (const path of products) assert.ok(cases.includes(path), path);
+  for (const backend of ["c", "llvm", "jvm"]) {
+    const parsed = parseBenchmarkRecord(readFileSync(join(root, "results/benchmarks", backend, "outcomes.tsv"), "utf8"));
+    // Model the pre-record inventory even after the nightly writer adds these
+    // products. Other identities remain the record's own.
+    const record = { ...parsed, rows: parsed.rows.filter(row => !products.includes(row.path)) };
+    const expected = [...record.rows.map(({ path, scope, source, driver }) => ({ path, scope, source, driver })),
+      ...products.map(path => ({ path, scope: "compile" as const, source: "a".repeat(64), driver: "b".repeat(64) }))];
+    assert.deepEqual(benchmarkInventory(record, expected).map(row => row.path).sort(), [...products].sort());
+  }
+});
+
 test("compile children use the canonical ambient environment and retain its owned handoff", async t => {
   const { compileEnvironment } = await import("./compile-producer.ts");
   const root = testScratch(t, "benchmark-record-environment");
@@ -379,6 +396,7 @@ test("a launch case is a benchmark case: its compile cells are enumerated and la
     ...[8192, 16384, 32768].map(input => `benchmarks/cases/rss-clbg-fasta-${input}`),
     ...[8192, 16384, 32768].map(input => `benchmarks/cases/rss-clbg-k-nucleotide-${input}`),
     "benchmarks/cases/startup-builtins", "benchmarks/cases/startup-empty", "benchmarks/cases/startup-hello",
+    "benchmarks/cases/size-hello", "benchmarks/cases/size-json", "benchmarks/cases/size-flight-planner",
   ].sort());
   for (const backend of ["c", "llvm", "jvm"]) {
     const record = parseBenchmarkRecord(readFileSync(join(root, "results/benchmarks", backend, "outcomes.tsv"), "utf8"));

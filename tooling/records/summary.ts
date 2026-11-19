@@ -12,7 +12,7 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // parsers their writers and checks use, and measures nothing. A record that
 // does not parse is an error, never a partial summary.
 //
-// # The contracts: benchmarks version 3, conformance version 1
+// # The contracts: benchmarks version 4, conformance version 1
 //
 // Every summary is an object with, as the landing and full checks' status
 // (`--json`) has,
@@ -49,6 +49,8 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //   rows      by case name, each
 //             { name, kind,
 //               sized: { case, function, input } (peak-RSS rows only),
+//               executableSize: { cells: { <column>: { shippedBytes, strippedBytes, sharedLibraryBytes } | null },
+//                 strippedVerdicts: { <backend>: { <comparator>: { kind, ratio, tolerance } } } } (size rows only),
 //               growth: { <column>: GROWS | FLAT | UNESTABLISHED } (peak-RSS rows only),
 //               cells: { <column>: { status, nanoseconds, spread, verified, reason, peakRss } },
 //               backends: { <backend>: {
@@ -72,6 +74,13 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // nanoseconds. Its growth says, per column, whether its time rose at every
 // larger input of its case in this run; a comparison where either
 // column does not grow is SUSPECT, with its ratio, and is never ranked.
+//
+// An executable-size row adds executableSize only on that kind: whole-file
+// shippedBytes and strippedBytes, with sharedLibraryBytes disclosed separately,
+// or null without a size. Primary ratios and own-best values rank shipped
+// bytes; strippedVerdicts ranks stripped bytes independently. Both byte views
+// have spread 1. The full run retains linkage, artifact and strip identities;
+// full.md also shows strip-compatible own-best comparisons for the stripped view.
 //
 // The comparators are node, Bun JIT, Bun AOT and ScriptC; the columns are the
 // run's standing ones, the three backends', the C++ and Java references' and
@@ -174,7 +183,7 @@ import {NO_RUN} from './recorder-core.ts';
 
 export const KINDS = ["benchmarks", "conformance"] as const;
 export type Kind = typeof KINDS[number];
-export const VERSIONS = { benchmarks: 3, conformance: 1 } as const satisfies Record<Kind, number>;
+export const VERSIONS = { benchmarks: 4, conformance: 1 } as const satisfies Record<Kind, number>;
 
 /** Each backend by the name `--backend` and results/ give it, and its column in a benchmark run. */
 const COLUMN = { c: "nts C", llvm: "nts LLVM", jvm: "nts JVM" } as const satisfies Record<string, BackendColumn>;
@@ -218,6 +227,13 @@ export function benchmarkSummary(root: string) {
     rows: (model?.rows ?? []).map(({ row, backends, llvmVersusC }) => ({
       name: row.name,
       kind: row.kind ?? "throughput",
+      ...(row.kind === "executable-size" ? { executableSize: {
+        cells: Object.fromEntries(COLUMNS.map(column => {
+          const size = row.cells[column]!.executableSize;
+          return [column, size ? { shippedBytes: size.shipped.bytes, strippedBytes: size.stripped.bytes, sharedLibraryBytes: size.sharedLibraryBytes } : null];
+        })),
+        strippedVerdicts: Object.fromEntries(BACKENDS.map(backend => [backend, row.strippedVerdicts![COLUMN[backend]]])),
+      } } : {}),
       ...(row.sized ? { sized: row.sized, growth: Object.fromEntries(COLUMNS.map(column => [column, row.growth![column]])) } : {}),
       cells: Object.fromEntries(COLUMNS.map(column => {
         const { status, nanoseconds, spread, verified, reason, peakRss } = row.cells[column]!;

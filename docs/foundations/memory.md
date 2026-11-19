@@ -564,3 +564,9 @@ systems and about 70 sources, is [in the records](../records/notebooks/studies/m
 - `rss-clbg-k-nucleotide-8192`
 - `rss-clbg-k-nucleotide-16384`
 - `rss-clbg-k-nucleotide-32768`
+
+### executable-size
+
+- `size-hello`
+- `size-json`
+- `size-flight-planner`

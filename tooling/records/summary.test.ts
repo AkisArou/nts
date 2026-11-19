@@ -21,6 +21,8 @@ import { serializeTest262Record } from "../census/test262-record.ts";
 import { serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
 import { testScratch } from "../gate/test-scratch.ts";
 import { benchmarkSummary, conformanceSummary } from "./summary.ts";
+import { LAUNCH_COUNT, LAUNCH_PROTOCOL, LAUNCH_WARMUPS, launchCell, type Launch } from "../bench/launch-cell.ts";
+import { EXECUTABLE_SIZE_PROTOCOL, type ExecutableSize } from "../bench/executable-size-cell.ts";
 
 const SUMMARY = fileURLToPath(new URL("./summary.ts", import.meta.url));
 const current = "a".repeat(40), older = "c".repeat(40), digest = "b".repeat(64);
@@ -90,7 +92,7 @@ test("full.md retains standing values and shows ratio history with its allowance
 
 test("the benchmark summary is the newest complete run, from the model full.md renders", t => {
   const root = benchmarkTree(t), summary = benchmarkSummary(root);
-  assert.deepEqual([summary.version, summary.kind, summary.read], [3, "benchmarks", { root, commit: null }]);
+  assert.deepEqual([summary.version, summary.kind, summary.read], [4, "benchmarks", { root, commit: null }]);
   assert.ok(Number.isFinite(Date.parse(summary.at)) && summary.at === new Date(summary.at).toISOString(), summary.at);
   const newest = "2026-11-02-aaaaaaaaaaaa-newest";
   assert.deepEqual(summary.run, {
@@ -107,6 +109,7 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.ok(gaps.backends.c&&gaps.backends.llvm&&gaps.backends.jvm);
 
   assert.equal(fast.kind, "throughput");
+  assert.ok(!Object.hasOwn(fast, "executableSize"), "legacy summary row shapes stay unchanged");
   assert.ok(!("sized" in fast) && !("growth" in fast), "only peak-RSS rows name a sized workload");
   assert.deepEqual(fast.cells["nts C"], { status: "OK", nanoseconds: 80, spread: 1, verified: true, reason: null, peakRss: null });
   assert.deepEqual(fast.backends.c.versus, {
@@ -149,6 +152,37 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.deepEqual(summary.counts, { c: model.counts["nts C"], llvm: model.counts["nts LLVM"], jvm: model.counts["nts JVM"] });
 });
 
+test("size summary v4 retains both byte values, the separate dynamic closure and losing stripped verdicts", t => {
+  const root = testScratch(t, "summary-size"), base = run("size", "2026-11-02T12:00:00.000Z", current, [row("size-hello", {})]);
+  const one: Launch = { wallNanoseconds: 1000, status: 0, signal: null, timedOut: false, userMicroseconds: 100, systemMicroseconds: 0,
+    maxRssKib: 1000, siblingTicks: 0, stdoutSha256: digest };
+  const timed = launchCell({ protocol: LAUNCH_PROTOCOL, warmups: Array(LAUNCH_WARMUPS).fill(one), launches: Array(LAUNCH_COUNT).fill(one),
+    stdoutSha256: digest, environmentSha256: digest }, { recipe: { tool: "nts build", product: "app.cli", backend: "c", command: ["/nts", "build", "/config", "--out", "/out"], artifactSha256: digest }, argv: ["/product"] }, "");
+  const measured = (shipped: number, stripped: number): Cell => {
+    const executableSize: ExecutableSize = { protocol: EXECUTABLE_SIZE_PROTOCOL, shipped: { path: "/product", bytes: shipped, sha256: digest },
+      stripped: { path: "/copy", bytes: stripped, sha256: digest }, stripArguments: ["--strip-all", "/copy"],
+      clang: { path: "/llvm/clang", version: "clang version 23.1.5", sha256: digest },
+      strip: { path: "/llvm/llvm-strip", version: "LLVM version 23.1.5", sha256: digest }, interpreter: null, needed: [],
+      sharedLibraries: [], sharedLibraryBytes: 0, runtime: "embedded runtime and static libc", strippedLaunch: one };
+    return { ...timed, executableSize };
+  };
+  const sizeRow = base.rows[0]!;
+  sizeRow.kind = "executable-size";
+  sizeRow.conditions = { sizeOracle: timed as unknown as import("../bench/run-record.ts").Json };
+  sizeRow.cells = Object.fromEntries(COLUMNS.map(column => [column, { ...absent("NOT_PROVIDED", "no standalone product"), executableSize: null }]));
+  sizeRow.cells["nts C"] = measured(4000, 3000);
+  sizeRow.cells["Bun AOT"] = measured(2000, 1000);
+  publishRun(root, sealRun(base), false);
+  const summary = benchmarkSummary(root), size = summary.rows[0]!.executableSize;
+  assert.equal(summary.version, 4);
+  assert.ok(size);
+  assert.deepEqual(size.cells["nts C"], { shippedBytes: 4000, strippedBytes: 3000, sharedLibraryBytes: 0 });
+  assert.equal(size.cells.node, null);
+  assert.equal(size.strippedVerdicts.c!["Bun AOT"].ratio, 3);
+  assert.equal(size.strippedVerdicts.c!["Bun AOT"].kind, "LOSS");
+  assert.equal(summary.rows[0]!.backends.c!.versus["Bun AOT"].ratio, 2);
+});
+
 test("the page and the summary say the same thing: every count, verdict and ratio full.md prints is the summary's", t => {
   const summary = benchmarkSummary(benchmarkTree(t)), page = renderFull(runs()).split("\n");
   const ids = { "nts C": "c", "nts LLVM": "llvm", "nts JVM": "jvm" } as const;
@@ -187,7 +221,7 @@ test("numbers are numbers: no time, ratio or count is text", t => {
     const all = leaves(summary);
     const texts = all.filter(([, value]) => typeof value === "string" && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$|\d\s*(?:ns|µs|ms)\b|×/.test(value));
     assert.deepEqual(texts, [], `${summary.kind}: numbers rendered as text`);
-    assert.equal(summary.version, summary.kind==='benchmarks'?3:1);
+    assert.equal(summary.version, summary.kind==='benchmarks'?4:1);
     const measures = all.filter(([at]) => /\.(nanoseconds|spread|ratio|tolerance|references\.(C\+\+|Java))$/.test(at));
     const counts = all.filter(([at]) => /\.counts\.[^.]+\.[^.]+\.[^.]+$|\.outcomes\.[^.]+$|\.(cases|pending)$/.test(at));
     assert.ok(measures.length + counts.length > 20, `${summary.kind}: the walk found its numbers`);

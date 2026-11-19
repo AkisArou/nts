@@ -20,6 +20,7 @@ import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
 import { OWN_BEST_REGRESSION } from './own-best-marker.ts';
 import {readBuildDetails,describeBuilds,type BuildDetails} from './build-details.ts';
+import { EXECUTABLE_SIZE_KIND, checkExecutableSizeCell, readExecutableSize, sizeRecipeIdentity, stripIdentity, type ExecutableSize } from "./executable-size-cell.ts";
 import { LAUNCH_KIND, checkLaunchCell, launchSummary, readLaunch } from "./launch-cell.ts";
 import { GROWTHS, PEAK_RSS_KIND, checkPeakRssCell, peakRssGrowth, type Growth, type PeakRss, type Sized } from "./peak-rss-cell.ts";
 
@@ -58,6 +59,7 @@ export type Cell = {
   counted_reps?: number | null;
   /** Peak-RSS rows only: the peak resident set of the same launches that time the cell (peak-rss-cell.ts); null without a time. */
   peakRss?: PeakRss | null;
+  executableSize?: ExecutableSize | null;
 };
 export type Verdict = {
   /** SUSPECT: a peak-RSS comparison where either column has not shown its work grows with its input. */
@@ -72,7 +74,10 @@ export type Row = {
    * observation (launch-cell.ts); "peak-rss" when every cell is one ranked by
    * its launches' peak resident set (peak-rss-cell.ts).
    */
-  kind?: typeof LAUNCH_KIND | typeof PEAK_RSS_KIND;
+  kind?: typeof LAUNCH_KIND | typeof PEAK_RSS_KIND | typeof EXECUTABLE_SIZE_KIND;
+  /** Transient report/history projection; persisted size rows rank shipped bytes. */
+  sizeView?: "stripped";
+  strippedVerdicts?: Row["verdicts"];
   /** Peak-RSS rows only: the case workload the row calls once, and its input. */
   sized?: Sized;
   /** Peak-RSS rows only: each column's growth across its case's rows in this run, derived like the verdicts. */
@@ -177,10 +182,10 @@ function date(value: unknown, at: string): string {
   check(/^\d{4}-\d\d-\d\dT/.test(s) && Number.isFinite(Date.parse(s)), at + ": invalid timestamp");
   return s;
 }
-function cell(value: unknown, at: string, peak = false): Cell {
+function cell(value: unknown, at: string, peak = false, size = false): Cell {
   const o = obj(
     value,
-    ["status", "nanoseconds", "spread", "checksum", "verified", "reason", "details", ...(peak ? ["peakRss"] : [])],
+    ["status", "nanoseconds", "spread", "checksum", "verified", "reason", "details", ...(size ? ["executableSize"] : []), ...(peak ? ["peakRss"] : [])],
     at,
   );
   const status = text(o.status, at + ".status") as Cell["status"];
@@ -222,6 +227,7 @@ function cell(value: unknown, at: string, peak = false): Cell {
     verified,
     reason,
     details: json(o.details, at + ".details"),
+    ...(size ? { executableSize: o.executableSize === null ? null : readExecutableSize(o.executableSize, at + ".executableSize") } : {}),
     ...(peak ? { peakRss: peakRssValue(o.peakRss, at + ".peakRss") } : {}),
   };
 }
@@ -246,8 +252,12 @@ function growthValue(value: unknown, columns: readonly string[], at: string): Re
  * peak-RSS row's peak resident bytes, every other row's nanoseconds. Null
  * without a measurement. Every verdict, ratio and own-best reads it here.
  */
-export function measure(row: Pick<Row, "kind">, cell: Cell): { value: number; spread: number | null } | null {
+export function measure(row: Pick<Row, "kind" | "sizeView">, cell: Cell): { value: number; spread: number | null } | null {
   if (cell.status !== "OK") return null;
+  if (row.kind === EXECUTABLE_SIZE_KIND) {
+    check(cell.executableSize, "a measured size cell has no executable size");
+    return { value: row.sizeView === "stripped" ? cell.executableSize.stripped.bytes : cell.executableSize.shipped.bytes, spread: 1 };
+  }
   if (row.kind === PEAK_RSS_KIND) {
     check(cell.peakRss, "a measured peak-RSS cell has no peak RSS");
     return { value: cell.peakRss.bytes, spread: cell.peakRss.spread };
@@ -257,7 +267,7 @@ export function measure(row: Pick<Row, "kind">, cell: Cell): { value: number; sp
 /** Whether a cell's measurement may be ranked: on a peak-RSS row, only where its column grows with input. */
 const ranked = (row: Pick<Row, "kind" | "growth">, column: string): boolean =>
   row.kind !== PEAK_RSS_KIND || row.growth?.[column] === "GROWS";
-export function fastest(row: Pick<Row, "cells" | "kind">): { backend: string; cell: Cell } | null {
+export function fastest(row: Pick<Row, "cells" | "kind" | "sizeView">): { backend: string; cell: Cell } | null {
   const values = ["nts C", "nts LLVM", "nts JVM"].flatMap((backend) =>
     row.cells[backend]?.status === "OK" ? [{ backend, cell: row.cells[backend], value: measure(row, row.cells[backend])!.value }] : [],
   );
@@ -265,7 +275,7 @@ export function fastest(row: Pick<Row, "cells" | "kind">): { backend: string; ce
   return values[0] ? { backend: values[0].backend, cell: values[0].cell } : null;
 }
 export function verdict(
-  row: Pick<Row, "cells" | "kind" | "growth">,
+  row: Pick<Row, "cells" | "kind" | "growth" | "sizeView">,
   backend: Backend,
   comparator: Comparator,
 ): Verdict {
@@ -373,18 +383,26 @@ function decode(value: unknown, derive: boolean): RunRecord {
       r = obj(
         value,
         ["name", "workloadIdentity", "eligibleForBest", "conditions", "cells", "verdicts",
-          ...["builds", "kind", "sized", "growth"].filter(has)],
+          ...["builds", "kind", "sized", "growth", "strippedVerdicts"].filter(has)],
         at,
       );
     const name = text(r.name, at + ".name");
     check(inventory.includes(name), "orphan row " + name);
-    if (Object.hasOwn(r, "kind")) check(r.kind === LAUNCH_KIND || r.kind === PEAK_RSS_KIND, name + ": unknown row kind");
-    const launch = r.kind === LAUNCH_KIND, peak = r.kind === PEAK_RSS_KIND;
+    if (Object.hasOwn(r, "kind")) check(r.kind === LAUNCH_KIND || r.kind === PEAK_RSS_KIND || r.kind === EXECUTABLE_SIZE_KIND, name + ": unknown row kind");
+    const launch = r.kind === LAUNCH_KIND, peak = r.kind === PEAK_RSS_KIND, size = r.kind === EXECUTABLE_SIZE_KIND;
     // A peak-RSS row names its sized workload and records its growth; no other row does.
     check(Object.hasOwn(r, "sized") === peak && (peak || !Object.hasOwn(r, "growth")),
       name + ": a sized workload and its growth belong to peak-RSS rows only");
     const rawCells = obj(r.cells, columns, at + ".cells");
-    const cells = Object.fromEntries(columns.map((c) => [c, cell(rawCells[c], name + "/" + c, peak)]));
+    const cells = Object.fromEntries(columns.map((c) => [c, cell(rawCells[c], name + "/" + c, peak, size)]));
+    if (size) {
+      const oracle = cell(field(r.conditions as Json, "sizeOracle"), name + "/oracle");
+      checkLaunchCell(oracle, name + "/oracle");
+      for (const c of columns) {
+        checkExecutableSizeCell(cells[c]!, name + "/" + c);
+        if (cells[c]!.status === "OK") check(oracle.status === "OK" && cells[c]!.checksum === oracle.checksum, name + ": size output differs from node");
+      }
+    }
     if (launch) for (const c of columns) checkLaunchCell(cells[c]!, name + "/" + c);
     if (peak) for (const c of columns) checkPeakRssCell(cells[c]!, name + "/" + c);
     const answers = new Set(
@@ -406,6 +424,7 @@ function decode(value: unknown, derive: boolean): RunRecord {
       raw: r,
       row: {
         name,
+        ...(size ? { kind: EXECUTABLE_SIZE_KIND as typeof EXECUTABLE_SIZE_KIND } : {}),
         ...(launch ? { kind: LAUNCH_KIND as typeof LAUNCH_KIND } : {}),
         ...(peak ? { kind: PEAK_RSS_KIND as typeof PEAK_RSS_KIND, sized: sizedValue(r.sized, name + ".sized") } : {}),
         workloadIdentity,
@@ -431,6 +450,11 @@ function decode(value: unknown, derive: boolean): RunRecord {
         Object.fromEntries(COMPARATORS.map((c) => [c, verdict(row, b, c)])),
       ]),
     ) as Row["verdicts"];
+    if (row.kind === EXECUTABLE_SIZE_KIND) {
+      const stripped = { ...row, sizeView: "stripped" as const };
+      row.strippedVerdicts = Object.fromEntries(BACKENDS.map(b => [b, Object.fromEntries(COMPARATORS.map(c => [c, verdict(stripped, b, c)]))])) as Row["verdicts"];
+      if (!derive) check(isDeepStrictEqual(raw.strippedVerdicts, row.strippedVerdicts), "changed or missing stripped verdict: " + row.name);
+    } else check(!Object.hasOwn(raw, "strippedVerdicts"), "stripped verdicts belong to executable size rows only");
     if (!derive)
       check(
         isDeepStrictEqual(raw.verdicts, row.verdicts),
@@ -558,7 +582,7 @@ function priorRows(run: RunRecord, row: Row, runs: RunRecord[]): PriorRow[] {
         prior.machine.identity !== run.machine.identity || prior.harness.contract !== run.harness.contract) return [];
     const candidate = prior.rows.find((r) =>
       r.name === row.name && r.kind === row.kind && r.workloadIdentity === row.workloadIdentity && r.eligibleForBest);
-    return candidate && prior.compiler.commit ? [{ run: prior, row: candidate }] : [];
+    return candidate && prior.compiler.commit ? [{ run: prior, row: row.sizeView ? { ...candidate, sizeView: row.sizeView } : candidate }] : [];
   });
 }
 /** A verified, rankable measurement of one column on one row, with its spread. */
@@ -566,9 +590,11 @@ function verifiedMeasure(row: Row, column: string): { value: number; spread: num
   const cell = row.cells[column], measured = cell && cell.verified ? measure(row, cell) : null;
   return measured && measured.spread !== null && ranked(row, column) ? { value: measured.value, spread: measured.spread } : null;
 }
-function bestRatio(backend: Backend, comparator: Comparator, rows: PriorRow[]): OwnBest | null {
+function bestRatio(backend: Backend, comparator: Comparator, rows: PriorRow[], current?: Row): OwnBest | null {
   const found: OwnBest[] = [];
   for (const { run, row } of rows) {
+    if (current?.kind === EXECUTABLE_SIZE_KIND && [backend, comparator].some(c => sizeRecipeIdentity(current.cells[c]!) !== sizeRecipeIdentity(row.cells[c]!))) continue;
+    if (current?.sizeView === "stripped" && [backend, comparator].some(c => stripIdentity(current.cells[c]!) !== stripIdentity(row.cells[c]!))) continue;
     const mine = verifiedMeasure(row, backend), other = verifiedMeasure(row, comparator);
     if (!mine || !other) continue;
     const value = mine.value / other.value;
@@ -590,7 +616,7 @@ export function ownBest(
   comparator: Comparator,
   runs: RunRecord[],
 ): OwnBest | null {
-  return bestRatio(backend, comparator, priorRows(run, row, runs));
+  return bestRatio(backend, comparator, priorRows(run, row, runs), row);
 }
 export type OwnBestComparison = {
   currentRatio: number;
@@ -676,13 +702,13 @@ export function results(runs: RunRecord[]): Results | null {
       const backends = Object.fromEntries(
         BACKENDS.map((backend) => {
           const best = Object.fromEntries(COMPARATORS.map((comparator) => [
-            comparator, compareBest(row, backend, comparator, bestRatio(backend, comparator, history)),
+            comparator, compareBest(row, backend, comparator, bestRatio(backend, comparator, history, row)),
           ])) as BackendResult["ownBest"];
           const established = Object.values(best).filter((comparison): comparison is OwnBestComparison => comparison !== null);
           return [
             backend,
             {
-              versus: row.verdicts[backend],
+              versus: row.sizeView ? row.strippedVerdicts![backend] : row.verdicts[backend],
               references: Object.fromEntries(
                 REFERENCES.map((r) => [r, ratio(row, backend, r)]),
               ),
@@ -724,6 +750,7 @@ const size = (bytes: number) => bytes < 2 ** 20 ? (bytes / 1024).toFixed(1) + " 
 /** One measured cell as full.md and the console show it: a peak-RSS cell's memory beside its time, and its growth unless it grows. */
 function shown(row: Row, column: string): string {
   const cell = row.cells[column]!;
+  if (row.kind === EXECUTABLE_SIZE_KIND) return size(measure(row, cell)!.value);
   if (row.kind !== PEAK_RSS_KIND) return time(cell.nanoseconds!);
   const growth = row.growth?.[column];
   return size(cell.peakRss!.bytes) + " · " + time(cell.nanoseconds!) + (growth && growth !== "GROWS" ? " (" + growth + ")" : "");
@@ -766,6 +793,8 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
   const model = results(runs);
   if (!model) return "# Benchmark results\n\nNo complete run has been retained.\n";
   const { run } = model;
+  const strippedModel = results(runs.map(run => ({ ...run, rows: run.rows.filter(row => row.kind === EXECUTABLE_SIZE_KIND)
+    .map(row => ({ ...row, sizeView: "stripped" as const })) })));
   const counts = globalCounts(model);
   const header = `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json). Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best comparisons use each backend/comparator's best prior within-run ratio on the same machine, workload/input and harness contract. Only verified OK pairs are comparable. The change is current ratio / prior ratio; its allowance is max(1.05, the product of the four cell spreads). Noise factors below are current backend, current comparator, prior backend, prior comparator, in that order. Absolute times are information only. Missing comparisons are not established. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
   const tableFor = (rows: RowResult[]): string => {
@@ -843,7 +872,17 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
     return typeof median === "number" && rss !== null
       ? ["- " + row.name + ", floor: /bin/true peak RSS " + size(rss) + ", " + time(median) + " (the same sitting)"] : [];
   }));
-  if (!groups.length) return header + "\n" + tableFor(model.rows) + "\n\n" + notes.join("\n") + "\n";
+  notes.push(...run.rows.flatMap(row => row.kind !== EXECUTABLE_SIZE_KIND ? [] : Object.entries(row.cells).flatMap(([column, cell]) => {
+    const receipt = cell.executableSize;
+    if (!receipt) return [];
+    return ["- " + row.name + ", " + column + ": " + receipt.runtime + "; interpreter " + (receipt.interpreter ?? "none (static)") +
+      "; DT_NEEDED " + (receipt.needed.join(", ") || "none") + "; shared closure " + receipt.sharedLibraryBytes + " bytes (listed separately, never added to file bytes): " +
+      receipt.sharedLibraries.map(f => f.path + " (" + f.bytes + " bytes, SHA256 " + f.sha256 + ")").join(", ") +
+      "; strip " + receipt.strip.path + ", " + escape(receipt.strip.version) + ", SHA256 " + receipt.strip.sha256];
+  })));
+  const sizePreamble = "Executable size: headline as-shipped whole-file bytes from the timed build, including its embedded/linked runtime. Shared-library closure (including libc) is listed separately, never added to one column. The stripped view measures a private copy made with the build clang installation's llvm-strip, verified by executing it against the same output oracle. Both views face the bar independently; byte measurements have spread 1, and stripped own-best requires identical strip version and SHA256. Node/Bun JIT produce no standalone product and remain absent with reasons.\n\n";
+  if (!groups.length) return header + "\n" + (run.rows.some(row => row.kind === EXECUTABLE_SIZE_KIND) ? sizePreamble : "") + tableFor(model.rows) +
+    (strippedModel?.rows.length ? "\n\n## Executable size — stripped\n\n" + verdictCounts(strippedModel.rows).join("\n") + "\n\n" + tableFor(strippedModel.rows) : "") + "\n\n" + notes.join("\n") + "\n";
   const grouped = new Set<string>(), sections: string[] = [];
   const section = (title: string, declaredBy: string | null, rows: RowResult[]) => {
     const source = declaredBy ? `Declared by ${declaredBy}.\n\n` : "No foundation page names these rows.\n\n";
@@ -851,7 +890,9 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
       ? "Launch rows: each time is one process from launch to exit, the median of its timed launches (launch-to-exit-v1); the launch timer's own floor in the same sitting is noted per row.\n\n"
       : "";
     const peak = rows.some((row) => row.row.kind === PEAK_RSS_KIND) ? peakRssPreamble(run) : "";
-    sections.push(`## ${title}\n\n${source}${launch}${peak}${verdictCounts(rows).join("\n")}\n\n${tableFor(rows)}`);
+    const sizes = rows.filter(row => row.row.kind === EXECUTABLE_SIZE_KIND);
+    const stripped = strippedModel?.rows.filter(row => sizes.some(size => size.row.name === row.row.name)) ?? [];
+    sections.push(`## ${title}\n\n${source}${launch}${peak}${sizes.length ? sizePreamble + "### As shipped\n\n" : ""}${verdictCounts(rows).join("\n")}\n\n${tableFor(rows)}${stripped.length ? "\n\n### Stripped\n\n" + verdictCounts(stripped).join("\n") + "\n\n" + tableFor(stripped) : ""}`);
   };
   for (const group of groups) {
     const names = new Set(group.rows), rows = model.rows.filter((row) => names.has(row.row.name));
@@ -886,7 +927,7 @@ export function consoleHeader(): string {
   ].join("\t");
 }
 export function consoleRow(row: Row): string {
-  return [
+  const line = [
     row.name,
     ...COLUMNS.map((c) =>
       row.cells[c].status === "OK" ? shown(row, c) : row.cells[c].status,
@@ -898,6 +939,8 @@ export function consoleRow(row: Row): string {
       }),
     ),
   ].join("\t");
+  return row.kind === EXECUTABLE_SIZE_KIND && !row.sizeView
+    ? line + "\n" + consoleRow({ ...row, name: row.name + " (stripped)", sizeView: "stripped", verdicts: row.strippedVerdicts! }) : line;
 }
 function git(root: string, args: string[]): string {
   const r = spawnSync("git", gitArguments(args), { cwd: root, encoding: "utf8" });

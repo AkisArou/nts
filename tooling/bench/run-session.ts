@@ -78,6 +78,9 @@ export function begin(root: string, binary: string, sourceDigest: string): Metad
     new URL("./launch-cell.ts",import.meta.url),
     new URL("./launch-marker.ts",import.meta.url),
     new URL("./peak-rss-cell.ts",import.meta.url),
+    new URL("./executable-size-cell.ts",import.meta.url),
+    new URL("./executable-size.ts",import.meta.url),
+    new URL("./layouts-elf.ts",import.meta.url),
   ].map(input=>relative(SOURCE,fileURLToPath(input))).map((path) => ({ path, sha256: sha256(join(root, path)) }));
   const identity = createHash("sha256").update(JSON.stringify(files)).digest("hex");
   const bridge = spawnSync(

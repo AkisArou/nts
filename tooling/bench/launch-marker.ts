@@ -4,6 +4,9 @@
 //
 //   {"metric":"launch-to-exit"}
 //     a startup row: case.ts is the whole program, timed from launch to exit.
+//   {"metric":"executable-size"}
+//     a product-size row: the same whole-program build, ranked by shipped
+//     and privately stripped executable bytes, with its dynamic closure stated.
 //   {"metric":"peak-rss","case":"<case>","function":"<name>","input":<number>}
 //     a peak-RSS row: case.ts is exactly peakRssProgram()'s text, calling that
 //     case's workload once at an input inside its declared domain
@@ -25,7 +28,7 @@ const CASES = relative(SOURCE, fileURLToPath(dataDirectory(new URL("../../benchm
 /** Which case's workload a peak-RSS row calls once, and at what input. */
 export type Sized = { case: string; function: string; input: number };
 
-export type LaunchMarker = { metric: "launch-to-exit" } | ({ metric: "peak-rss" } & Sized);
+export type LaunchMarker = { metric: "launch-to-exit" } | { metric: "executable-size" } | ({ metric: "peak-rss" } & Sized);
 
 const refuse = (name: string, message: string): never => {
   throw new ToolingInstrumentError("tooling-setup", `${CASES}/${name}/launch.json: ${message}`);
@@ -91,9 +94,9 @@ export function readLaunchMarker(root: string, name: string): LaunchMarker {
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) return refuse(name, "is not an object");
   const o = value as Record<string, unknown>, keys = Object.keys(o).sort();
-  if (o.metric === "launch-to-exit") {
-    if (keys.length !== 1) refuse(name, 'a startup row\'s marker is exactly {"metric":"launch-to-exit"}');
-    return { metric: "launch-to-exit" };
+  if (o.metric === "launch-to-exit" || o.metric === "executable-size") {
+    if (keys.length !== 1) refuse(name, `the marker is exactly {"metric":"${o.metric}"}`);
+    return { metric: o.metric };
   }
   if (o.metric !== "peak-rss") return refuse(name, `unknown metric ${JSON.stringify(o.metric)}`);
   if (keys.join(",") !== "case,function,input,metric") refuse(name, 'a peak-RSS row\'s marker is exactly {"metric":"peak-rss","case":…,"function":…,"input":…}');
