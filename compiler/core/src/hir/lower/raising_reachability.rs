@@ -557,10 +557,17 @@ pub(super) fn walk_one_declaration(
     }
 }
 
-pub(super) fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwing {
+/// What each symbol's declarations write: whether one throws, and which
+/// symbols they call. One walk, because both are the same descent; the
+/// override edges of [`overriding_methods`] join the calls after it.
+fn what_each_symbol_writes(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+) -> (
+    rustc_hash::FxHashSet<u32>,
+    rustc_hash::FxHashMap<u32, Vec<Reached>>,
+) {
     let nested = |kind: Option<u16>| names_a_body(kind);
-    // What each symbol's declarations write: whether one throws, and which
-    // symbols they call. One walk, because both are the same descent.
     let mut throws: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
     let mut calls: rustc_hash::FxHashMap<u32, Vec<Reached>> = rustc_hash::FxHashMap::default();
     for (index, record) in snapshot.symbols.iter().enumerate() {
@@ -639,6 +646,11 @@ pub(super) fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder)
     for (overridden, by) in overriding_methods(snapshot, probe) {
         calls.entry(overridden).or_default().push(Reached::Body(by));
     }
+    (throws, calls)
+}
+
+pub(super) fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwing {
+    let (throws, calls) = what_each_symbol_writes(snapshot, probe);
     // **Twice, over one walk.** `any` counts every unresolved callee; `bodily`
     // counts only those the body did not receive as a parameter. One walk and two
     // closures rather than two walks, so the two sets cannot disagree about what
