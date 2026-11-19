@@ -812,11 +812,15 @@ export type LedgerWait = { kind: "memory" | "priority"; id: string; what: string
  *
  * `memory`: a request of its own waits, one that could fit were every
  * admitted job to end; one that could not waits for memory nobody reserved,
- * which nothing bounds, and excuses nothing. `priority`: it yields to the
- * requests that outrank it (`outranks`), and none of them could fit even were
- * the group's admitted reservations to end: they wait on other work's
- * memory, which has its own bound. While one of them waits on the group's
- * own memory, the group is no more excused than a hung holder would be.
+ * which nothing bounds, and excuses nothing. It excuses the group whatever it
+ * waits behind: a runner posts its own growth only for work it has started,
+ * which its steps' bounds end, and while it yields only draining growth.
+ * `priority`: it yields to the requests that outrank it (`outranks`), and the
+ * decision (`admissionPlan`) would admit none of them even were the group's
+ * reservations and requests to end: they wait on other work's memory, which
+ * has its own bound. While one of them waits on the group's own memory, the
+ * group is no more excused than a hung holder would be. Only an outranked
+ * group pays for that plan: it measures every admitted job.
  */
 export function ledgerWait(dir: string, group: string, priority: Priority, env: NodeJS.ProcessEnv = process.env): LedgerWait | null {
   const admitted = liveReservations(dir);
@@ -834,16 +838,18 @@ export function ledgerWait(dir: string, group: string, priority: Priority, env: 
   }
   const yields = waiting.filter(({ entry }) => !ours(entry) && outranks(entry, admitted, priority));
   if (!yields.length) return null;
-  // What each request it yields to would have, were the group's admitted reservations to end.
+  // Were the group's reservations and requests to end, would the decision of
+  // any request it yields to admit it? Then that request waits on the group.
   const host = hostObservations(env), { availableBytes } = host.memory();
   let table: Table | undefined;
   const read = () => table ??= processTable();
   const accounts = accountsOf(admitted, (entry, exclude) => measuredParts(entry, read, exclude, host, false), read, host);
-  const theirs = [...admitted.values()].filter(entry => inGroup(entry));
-  const freed = theirs.reduce((sum, entry) => sum + accounts.get(entry.id)!.used, 0);
-  const others = [...admitted.values()].filter(entry => !inGroup(entry))
-    .map(entry => ({ entry: { ...entry, ...reservationOrder(entry, admitted) }, ...accounts.get(entry.id)! }));
-  if (yields.some(({ entry }) => availableBytes + freed - pendingFor(others, entry) - SYSTEM_FLOOR_BYTES >= entry.bytes)) return null;
+  const freed = [...admitted.values()].filter(inGroup).reduce((sum, entry) => sum + accounts.get(entry.id)!.used, 0);
+  const others = new Map([...admitted].filter(([, entry]) => !inGroup(entry)));
+  const queued = waiting.map(({ entry }) => entry).filter(entry => !ours(entry));
+  const admits = (self: LedgerEntry) => admissionPlan({ admitted: others, waiting: queued.filter(entry => entry.id !== self.id), self: { ...self },
+    accounts, availableBytes: availableBytes + freed, liveUse: entry => usedOf(measuredParts(entry, read, NONE, host, false)) }).memoryFits;
+  if (yields.some(({ entry }) => admits(entry))) return null;
   const { entry, order } = yields[0]!;
   return { kind: "priority", id: entry.id, what: entry.what, priority: order.priority, since: entry.since, behind: null };
 }
@@ -1059,6 +1065,60 @@ function drawnOn(entry: LedgerEntry, admitted: ReadonlyMap<string, LedgerEntry>)
 }
 
 /** One decision, holding the lock: drop what is dead, then admit `self` or queue it. */
+/**
+ * The decision's plan for request `self`, among the other live `waiting`
+ * requests: what admitted jobs still promise it, the room that leaves, what
+ * each request draws on the reservation it draws on, and whether the queue
+ * admits `self` now (`memoryFits`). `decide` acts on it; `ledgerWait` asks it
+ * what would be admitted were a group's reservations to end. A live-use
+ * request's charge is set on `self` from `liveUse`, as the decision writes it.
+ */
+function admissionPlan(input: { admitted: ReadonlyMap<string, LedgerEntry>; waiting: readonly LedgerEntry[]; self: LedgerEntry;
+  accounts: ReadonlyMap<string, Account>; availableBytes: number; liveUse: (entry: LedgerEntry) => number }) {
+  const { admitted, waiting, self, accounts, availableBytes } = input;
+  // MemAvailable already excludes these waiting processes' live use. They
+  // ask only for the additional margin, not for memory they hold already.
+  const liveMargins = new Map<string, number>();
+  for (const entry of [...waiting, self]) if (entry.liveUse) {
+    const used = input.liveUse(entry);
+    const charged = peakReservation([Math.max(1, used)]);
+    if (entry.id === self.id) self.bytes = charged;
+    liveMargins.set(entry.id, Math.max(0, charged - used));
+  }
+  const usedBytes = [...admitted.keys()].reduce((sum, id) => sum + accounts.get(id)!.used, 0);
+  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry: {...entry, ...reservationOrder(entry, admitted)}, ...accounts.get(entry.id)! })), self);
+  const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
+  // What the queue could be given were every admitted job to end.
+  const freeBytes = availableBytes + usedBytes - SYSTEM_FLOOR_BYTES;
+  const everyone = [...waiting, self].map(entry => ({...entry, ...reservationOrder(entry, admitted)})).sort(queueOrder);
+  // What each request draws on the unused part of the reservation it draws
+  // on, in the queue's order: it asks the queue only for the rest.
+  const left = new Map<string, number>(), draws = new Map<string, number>();
+  for (const entry of everyone) {
+    const on = drawnOn(entry, admitted);
+    if (on === undefined) continue;
+    const account = accounts.get(on)!;
+    const owner = admitted.get(on)!;
+    const unused = left.get(on) ?? (owner.liveUse ? 0 : Math.max(0, owner.bytes - (owner.drained ?? 0) - account.lent - account.used));
+    const take = Math.min(entry.bytes, unused);
+    left.set(on, unused - take);
+    draws.set(entry.id, take);
+  }
+  const ask = (entry: LedgerEntry) => Math.max(0, (liveMargins.get(entry.id) ?? entry.bytes) - (draws.get(entry.id) ?? 0));
+  // What a request would hold beyond what it draws: a growth with its reservation's own part.
+  const whole = (entry: LedgerEntry) => {
+    const into = entry.grows === null ? undefined : admitted.get(entry.grows);
+    return ask(entry) + (into === undefined ? 0 : into.bytes - (into.drawn ?? 0));
+  };
+  const fits = whole(self) <= freeBytes;
+  // A request that could not fit now holds nobody behind it. One the
+  // reservation it draws on covers asks the queue nothing, so it waits behind
+  // nobody: a holder whose child needs memory never waits for itself.
+  const queue = everyone.filter(entry => ask(entry) > 0 && whole(entry) <= freeBytes).map(entry => ({ ...entry, bytes: ask(entry) }));
+  const plan = queuePlan(roomBytes,queue);
+  return { pendingBytes, roomBytes, everyone, draws, fits, plan, memoryFits: fits && (ask(self) === 0 || plan.admitted.has(self.id)) };
+}
+
 function decide(context: Context, self: LedgerEntry, registered: boolean, joint?: JointAdmission): { decision: Decision; registered: boolean } {
   const { dir, report } = context;
   for (const state of ["waiting", "admitted"] as const) mkdirSync(join(dir, state), { recursive: true });
@@ -1099,48 +1159,9 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
   let table: Table | undefined;
   const read = () => table ??= processTable();
   const accounts = accountsOf(admitted, (entry, exclude) => context.measure(entry, read, exclude, false), read, context.host);
-  // MemAvailable already excludes these waiting processes' live use. They
-  // ask only for the additional margin, not for memory they hold already.
-  const liveMargins = new Map<string, number>();
-  for (const entry of [...waiting, self]) if (entry.liveUse) {
-    const used = usedOf(context.measure(entry, read, NONE, false));
-    const charged = peakReservation([Math.max(1, used)]);
-    if (entry.id === self.id) self.bytes = charged;
-    liveMargins.set(entry.id, Math.max(0, charged - used));
-  }
-  const usedBytes = [...accounts.values()].reduce((sum, account) => sum + account.used, 0);
-  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry: {...entry, ...reservationOrder(entry, admitted)}, ...accounts.get(entry.id)! })), self);
-  const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
-  // What the queue could be given were every admitted job to end.
-  const freeBytes = availableBytes + usedBytes - SYSTEM_FLOOR_BYTES;
-  const everyone = [...waiting, self].map(entry => ({...entry, ...reservationOrder(entry, admitted)})).sort(queueOrder);
-  // What each request draws on the unused part of the reservation it draws
-  // on, in the queue's order: it asks the queue only for the rest.
-  const left = new Map<string, number>(), draws = new Map<string, number>();
-  for (const entry of everyone) {
-    const on = drawnOn(entry, admitted);
-    if (on === undefined) continue;
-    const account = accounts.get(on)!;
-    const owner = admitted.get(on)!;
-    const unused = left.get(on) ?? (owner.liveUse ? 0 : Math.max(0, owner.bytes - (owner.drained ?? 0) - account.lent - account.used));
-    const take = Math.min(entry.bytes, unused);
-    left.set(on, unused - take);
-    draws.set(entry.id, take);
-  }
-  const ask = (entry: LedgerEntry) => Math.max(0, (liveMargins.get(entry.id) ?? entry.bytes) - (draws.get(entry.id) ?? 0));
-  // What a request would hold beyond what it draws: a growth with its reservation's own part.
-  const whole = (entry: LedgerEntry) => {
-    const into = entry.grows === null ? undefined : admitted.get(entry.grows);
-    return ask(entry) + (into === undefined ? 0 : into.bytes - (into.drawn ?? 0));
-  };
-  const fits = whole(self) <= freeBytes;
-  // A request that could not fit now holds nobody behind it. One the
-  // reservation it draws on covers asks the queue nothing, so it waits behind
-  // nobody: a holder whose child needs memory never waits for itself.
-  const queue = everyone.filter(entry => ask(entry) > 0 && whole(entry) <= freeBytes).map(entry => ({ ...entry, bytes: ask(entry) }));
-  const plan = queuePlan(roomBytes,queue);
+  const { pendingBytes, roomBytes, everyone, draws, fits, plan, memoryFits } = admissionPlan({ admitted, waiting, self, accounts, availableBytes,
+    liveUse: entry => usedOf(context.measure(entry, read, NONE, false)) });
   const drawnBytes = draws.get(self.id) ?? 0;
-  const memoryFits = fits && (ask(self) === 0 || plan.admitted.has(self.id));
   const resourceBusy = memoryFits && joint !== undefined && !joint.acquire();
   const go = memoryFits && !resourceBusy;
   const backfilled = go && plan.backfilled.has(self.id);

@@ -3946,8 +3946,10 @@ pressure are not progress, because an IO hang could excuse itself for ever.
 The wall bound and the scope's RuntimeMaxSec are removed. Review found two
 liveness gaps, and both are closed:
 
-- A yield to a higher-ranked request excuses the run only while that request
-  could not fit even were the run's own reservations to end. A bare excuse for
+- A yield to higher-ranked requests excuses the run only while the ledger's
+  own decision (`admissionPlan`, shared with `decide`) would admit none of
+  them even were the run's reservations and requests to end. Testing each
+  request alone was wrong: the queue admits nothing behind a blocked head. A bare excuse for
   being outranked would be circular: a hung holder of memory that a
   higher-ranked request waits on would excuse itself for ever. Its own request
   excuses it only if it could fit were every admitted job to end; one that

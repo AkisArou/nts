@@ -8,9 +8,10 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // (memory-ledger.ts's ledgerWait), and its runner's step lifecycle
 // (run-lifecycle.ts). Its ledger waits and CPU lost to other work spend
 // nothing. A wait is its own request, one that could fit were every admitted
-// job to end, or a yield to higher-ranked requests that wait on other work's
-// memory; a yield to one that waits on the run's own memory is no wait, nor is
-// a request that waits for memory nobody reserved. The run is held when it has
+// job to end, or a yield to higher-ranked requests the ledger's decision
+// would not admit even were the run gone, which wait on other work's memory;
+// a yield to one that waits on the run's own memory is no wait, nor is a
+// request that waits for memory nobody reserved. The run is held when it has
 // stalled -- neither run, been runnable nor waited -- for its stall bound;
 // when no step has run, started or finished for its lifecycle bound, outside
 // its waits and lost CPU, which catches a spinner no step bounds; or when it has used its

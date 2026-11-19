@@ -347,8 +347,9 @@ is spent by the same owner as a step's (`ProgressBound`). Every second it reads:
 
 Its ledger waits and CPU lost to other work spend nothing. A ledger wait is
 its own request that could fit were every admitted job to end, or a yield to
-higher-ranked requests that could not fit even were the run's own reservations
-to end, because they wait on other work's memory. A yield to a request that
+higher-ranked requests that the ledger's own decision would not admit even
+were the run's reservations and requests to end, because they wait on other
+work's memory (a small request queued behind a blocked head included). A yield to a request that
 waits on the run's own memory is no wait: a hung holder would excuse itself
 for ever. Nor is a request that could never fit, which waits for memory nobody
 reserved. IO and memory pressure are not progress. The run is held when any of

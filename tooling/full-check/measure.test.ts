@@ -185,7 +185,7 @@ test("a run holding memory at no CPU, which a higher-ranked request waits on, is
   admitted.release();await admitted.closed;
 });
 
-test("a run that yields to a higher-ranked request waiting on other work's memory is not held, however long it yields",async t=>{
+for(const small of [false,true])test(`a run that yields to a higher-ranked request waiting on other work's memory${small?", with a small one queued behind it,":""} is not held, however long it yields`,async t=>{
   const MiB=2**20,floor=2*GiB/1024;
   const admit=fileURLToPath(new URL("../gate/admit.ts",import.meta.url));
   const hold=(marker:string)=>[process.execPath,"-e",
@@ -209,6 +209,12 @@ test("a run that yields to a higher-ranked request waiting on other work's memor
   const ending=new AbortController();t.after(()=>ending.abort());
   const agent=reserve({bytes:512*MiB,what:"an agent's job behind the other work",priority:"agent"},{env:{...m.memory},everyMs:10,signal:ending.signal});
   agent.catch(()=>{});
+  if(small){
+    // It would fit alone, but the queue admits nothing behind its blocked head, the run gone or not.
+    await waitFor("the agent's job to wait",()=>readLedger(ledger).waiting.some(row=>row.what==="an agent's job behind the other work"),{stopped:m.stopped});
+    reserve({bytes:32*MiB,what:"an agent's small job behind it",priority:"agent"},{env:{...m.memory},everyMs:10,signal:ending.signal}).catch(()=>{});
+    await waitFor("the small job to wait",()=>readLedger(ledger).waiting.some(row=>row.what==="an agent's small job behind it"),{stopped:m.stopped});
+  }
   await waitFor("the run to yield past its stall bound",()=>(m.progress()?.waited_s.priority??0)>6,{stopped:m.stopped});
   assert.equal(existsSync(join(m.run,"measurement-hold.txt")),false,m.output());
   const progress=m.progress()!;

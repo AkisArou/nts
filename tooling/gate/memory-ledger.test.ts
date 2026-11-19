@@ -795,6 +795,35 @@ test("an observer outside a run reads its own fitting request, and a yield only 
   assert.equal(ledgerWait(dir, hostObservations({}).ownCgroup(), "full-check", env)?.kind, "memory", "a request whose waiter runs in the group is its own");
 });
 
+test("a run yields to a queue the decision would not admit even were the run gone: a small request behind a blocked head waits on other work too", t => {
+  const root = testScratch(t, "memory-ledger-run-yield"), run = "/fixture.slice/nts-run.slice";
+  // 1 GiB beyond the floor, with an agent's large build holding 8 GiB.
+  const member = `${run}/nts-run-w.slice`;
+  const env = ownMemory(root, { availableKiB: 3 * 2 ** 20,
+    resident: { kind: "fixed", defaultBytes: 0, processes: { [process.pid]: 8 * GiB }, cgroups: { [member]: 0 }, members: { [member]: [] } } });
+  const dir = env.NTS_MEMORY_LEDGER;
+  for (const state of ["waiting", "admitted"]) mkdirSync(join(dir, state), { recursive: true });
+  const me = processIdentity(process.pid)!;
+  let seq = 0;
+  const put = (state: "waiting" | "admitted", fields: Partial<LedgerEntry>) => {
+    const entry = { version: 2, id: randomUUID(), seq: seq++, bytes: GiB, what: "job", priority: "agent", owner: me, waiter: me,
+      measure: { tree: true, cgroup: null }, since: new Date(Date.UTC(2026, 10, 17, 10, seq)).toISOString(), grows: null, fits: true, ...fields };
+    writeFileSync(join(dir, state, `${entry.id}.json`), JSON.stringify(entry));
+    return entry;
+  };
+  const read = () => ledgerWait(dir, run, "full-check", env);
+  put("admitted", { what: "gate run of the full check", priority: "full-check", bytes: 128 * 2 ** 20, measure: { tree: false, cgroup: { path: member, inode: "1" } } });
+  put("admitted", { what: "an agent's large build", bytes: 8 * GiB });
+  const landing = put("waiting", { what: "a landing behind an agent's large build", priority: "landing", bytes: 8 * GiB });
+  assert.equal(read()?.id, landing.id, "the head waits on other work's memory");
+  const small = put("waiting", { what: "an agent's small job", priority: "agent", bytes: 512 * 2 ** 20 });
+  assert.deepEqual(read(), { kind: "priority", id: landing.id, what: landing.what, priority: "landing", since: landing.since, behind: null },
+    "the small job fits alone, but the queue admits nothing behind its blocked head, the run gone or not");
+  rmSync(join(dir, "waiting", `${landing.id}.json`));
+  assert.equal(read(), null, "without the head, the small job would be admitted, so the run's yield is no wait");
+  assert.ok(small);
+});
+
 test("an entry an older admit.ts wrote, version 1 without a growth, counts as a reservation of its own", async t => {
   const f = fixture(t); // 20 available
   const owner = ownerProcess(t);
