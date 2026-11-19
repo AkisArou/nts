@@ -363,3 +363,59 @@ This preserves the same comparator arguments and call order.
 |---|---|
 | `variant-perf.json` | `18204f2ef6400c44ca3348b34c82428201cdab57644090c52f02aa1fe75af39c` |
 | `variant-perf.py` | `fca17e5df48636e5a07c948f21e3f1ab46cfae4093790faf6136d0be2201e7a0` |
+
+## Independent cursor candidate
+
+Kernel `194bfbea12`, recorded at `9142a21217`. The same pinned-engine
+instruction-count conditions as above apply: CPU 0 outside the timing pair,
+shipping RC and native flags, calibrated empty-bracket subtraction, native
+band 0.01%. Comparator calls match the galloping candidate exactly on both
+C and LLVM: object 5,545; shuffled 27,595; runs 4,556; strings 10.
+
+| Row | Backend | Original | Cursor | / original | / galloping | Verdict vs original |
+|---|---|---:|---:|---:|---:|---|
+| array-copying-methods | C | 482832 | 482832 | 1.000000 | 1.000000 | WITHIN BAND |
+| array-copying-methods | LLVM | 538832 | 538832 | 1.000000 | 1.000002 | WITHIN BAND |
+| clbg-k-nucleotide | C | 17432320 | 17425596 | 0.999614 | 0.999990 | IMPROVED |
+| clbg-k-nucleotide | LLVM | 17424398 | 17418029 | 0.999634 | 1.000009 | IMPROVED |
+| map-entries-top-k | C | 414057 | 417463 | 1.008226 | 1.004761 | REGRESSED |
+| map-entries-top-k | LLVM | 415503 | 427844 | 1.029701 | 1.001086 | REGRESSED |
+| sort-objects | C | 1411192 | 482396 | 0.341836 | 0.950510 | IMPROVED |
+| sort-objects | LLVM | 1501920 | 526928 | 0.350836 | 0.980295 | IMPROVED |
+| sort-objects-runs | C | 1672921 | 679332 | 0.406075 | 0.972366 | IMPROVED |
+| sort-objects-runs | LLVM | 1723222 | 698511 | 0.405352 | 0.974326 | IMPROVED |
+| sort-objects-shuffled | C | 1829354 | 1596490 | 0.872707 | 0.988291 | IMPROVED |
+| sort-objects-shuffled | LLVM | 1877546 | 1792031 | 0.954454 | 0.986959 | IMPROVED |
+| string-sort-control | C | 2995 | 2426 | 0.810017 | 0.995895 | IMPROVED |
+| string-sort-control | LLVM | 3077 | 2552 | 0.829379 | 1.005120 | IMPROVED |
+
+Map top-k still fails the instruction guard. Its wall-time control is pending.
+
+### Reducing generated merge control
+
+Candidate `1c7d86625f` keeps the same minimum runs and powersort merge order.
+A zero-power sentinel drains the pending stack through the same merge
+site as ordinary boundaries, removing the second emitted merge kernel.
+It tests the galloping streak before checking both run ends again; short
+streaks need only the ordinary loop’s exhaustion check. Nonnegative binary
+search spans below 2³¹ are halved with an unsigned shift rather than signed
+division, removing the sampled sign-correction chain. The stable bound,
+NaN handling, ownership paths and comparator arguments stay the same.
+
+The code-size hypothesis is separate from the measured cursor latency:
+large code alone does not prove an instruction-cache bottleneck. Exported
+native function text sizes, excluding runtime helpers, are:
+
+| Row | Backend | Original bytes | Base bytes | Galloping bytes | Galloping / base |
+|---|---|---:|---:|---:|---:|
+| sort-objects | C | 5299 | 20161 | 35150 | 1.743 |
+| sort-objects | LLVM | 5624 | 26049 | 47349 | 1.818 |
+| map-entries-top-k | C | 21931 | 43790 | 72822 | 1.663 |
+| map-entries-top-k | LLVM | 21676 | 49412 | 83683 | 1.694 |
+
+| Evidence under the scratch root | SHA-256 |
+|---|---|
+| `count-cursor.log` | `78aed1f09aaec565bb6e8dbcbfa909aab6d57cc682d2037743752477eb63c466` |
+| `cursor/comparison-census/counts.json` | `9ad977cf8034222e250b44503a84fa29c181aa289858b74dfb42d150584e731c` |
+| `cursor/comparison-census-llvm/counts.json` | `eaaa5b15c9d5b1e8c001c62ff923b48258d76cd92efe9301eeb93bfa2024ed63` |
+| `variant-code-size.json` | `838a7e271ec12bdd1cec37c26054e07e7452ec970129d6a3f99a1b31f94a2268` |
