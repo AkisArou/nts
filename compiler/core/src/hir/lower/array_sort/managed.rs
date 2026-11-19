@@ -463,8 +463,11 @@ impl Sort<'_, '_> {
         let two = self.int(2);
         let capacity = self.binary(BinOp::Div, self.length, two);
         let scratch = self.allocate(capacity);
-        let capacity = self.int(64);
+        let capacity = self.int(65);
         let stack = self.allocate(capacity);
+        let threshold_slot = self.int(64);
+        let seven = self.int(7);
+        self.put(stack, threshold_slot, seven);
         let zero = self.int(0);
         let top = self.variable(zero);
         let base = self.variable(zero);
@@ -496,7 +499,7 @@ impl Sort<'_, '_> {
                             &[top, base, open],
                             |s| {
                                 let previous = s.get_index(stack, slot);
-                                s.merge(scratch, previous, s.var(base), s.var(end))?;
+                                s.merge(scratch, stack, previous, s.var(base), s.var(end))?;
                                 s.bind(base, previous);
                                 s.bind(top, row);
                                 Ok(())
@@ -531,7 +534,7 @@ impl Sort<'_, '_> {
                 let two = s.int(2);
                 let slot = s.binary(BinOp::Mul, s.var(top), two);
                 let previous = s.get_index(stack, slot);
-                s.merge(scratch, previous, s.var(base), s.var(end))?;
+                s.merge(scratch, stack, previous, s.var(base), s.var(end))?;
                 s.bind(base, previous);
                 Ok(())
             },
@@ -562,7 +565,14 @@ impl Sort<'_, '_> {
         )
     }
 
-    fn merge(&mut self, scratch: ValueId, base: ValueId, middle: ValueId, end: ValueId) -> Built {
+    fn merge(
+        &mut self,
+        scratch: ValueId,
+        stack: ValueId,
+        base: ValueId,
+        middle: ValueId,
+        end: ValueId,
+    ) -> Built {
         let last = self.offset(middle, -1);
         let disorder = self.greater_at((self.order, last), (self.order, middle))?;
         self.branch(
@@ -575,114 +585,302 @@ impl Sort<'_, '_> {
                 s.branch(
                     lower,
                     &[],
-                    |s| s.merge_low(scratch, base, middle, end),
-                    |s| s.merge_high(scratch, base, middle, end),
+                    |s| s.merge_direction(scratch, stack, base, middle, end, true),
+                    |s| s.merge_direction(scratch, stack, base, middle, end, false),
                 )
             },
             |_| Ok(()),
         )
     }
 
-    fn merge_low(
+    /// One lowering for the two stable merge directions. Forward takes equal
+    /// left elements first; backward takes equal right elements last.
+    #[expect(clippy::too_many_lines, reason = "one stable merge in two directions")]
+    fn merge_direction(
         &mut self,
         scratch: ValueId,
+        stack: ValueId,
         base: ValueId,
         middle: ValueId,
         end: ValueId,
+        low: bool,
     ) -> Built {
-        let n = self.binary(BinOp::Sub, middle, base);
         let zero = self.int(0);
-        self.copy(self.order, base, scratch, zero, n)?;
-        let left = self.variable(zero);
-        let right = self.variable(middle);
-        let into = self.variable(base);
+        let (n, from) = if low {
+            (self.binary(BinOp::Sub, middle, base), base)
+        } else {
+            (self.binary(BinOp::Sub, end, middle), middle)
+        };
+        self.copy(self.order, from, scratch, zero, n)?;
+        let stride = if low { 1 } else { -1 };
+        let (first, second) = if low {
+            (scratch, self.order)
+        } else {
+            (self.order, scratch)
+        };
+        let (a, b, out, stop_a, stop_b) = if low {
+            (zero, middle, base, n, end)
+        } else {
+            let a = self.offset(middle, -1);
+            let b = self.offset(n, -1);
+            let out = self.offset(end, -1);
+            let stop_a = self.offset(base, -1);
+            let stop_b = self.int(-1);
+            (a, b, out, stop_a, stop_b)
+        };
+        let a = self.variable(a);
+        let b = self.variable(b);
+        let out = self.variable(out);
+        let wins_a = self.variable(zero);
+        let wins_b = self.variable(zero);
+        // The power stack's extra slot retains min-gallop across merges.
+        let threshold_slot = self.int(64);
+        let remembered = self.get_index(stack, threshold_slot);
+        let threshold = self.variable(remembered);
+        let names = [a, b, out, wins_a, wins_b, threshold];
         self.loop_while(
-            &[left, right, into],
+            &names,
+            |s| s.both_present(a, stop_a, b, stop_b),
             |s| {
-                let a = s.binary(BinOp::Lt, s.var(left), n);
-                let b = s.binary(BinOp::Lt, s.var(right), end);
-                s.b.bool_join(a, b, false, &s.origin)
-            },
-            |s| {
-                let a = s.get(scratch, s.var(left));
-                let b = s.get(s.order, s.var(right));
-                let right_first = s.greater(a, b)?;
+                let x = s.get(first, s.var(a));
+                let y = s.get(second, s.var(b));
+                let greater = s.greater(x, y)?;
+                let take_a = if low {
+                    let no = s.boolean(false);
+                    s.binary(BinOp::Eq, greater, no)
+                } else {
+                    greater
+                };
                 s.branch(
-                    right_first,
-                    &[left, right],
+                    take_a,
+                    &[a, b, wins_a, wins_b],
                     |s| {
-                        s.put(s.order, s.var(into), b);
-                        s.advance(right, 1);
+                        s.put(s.order, s.var(out), x);
+                        s.advance(a, stride);
+                        s.advance(wins_a, 1);
+                        s.bind(wins_b, zero);
                         Ok(())
                     },
                     |s| {
-                        s.put(s.order, s.var(into), a);
-                        s.advance(left, 1);
+                        s.put(s.order, s.var(out), y);
+                        s.advance(b, stride);
+                        s.advance(wins_b, 1);
+                        s.bind(wins_a, zero);
                         Ok(())
                     },
                 )?;
-                s.advance(into, 1);
+                s.advance(out, stride);
+                let present = s.both_present(a, stop_a, b, stop_b);
+                let streak = s.binary(BinOp::Max, s.var(wins_a), s.var(wins_b));
+                let ready = s.binary(BinOp::Ge, streak, s.var(threshold));
+                let gallop = s.b.bool_join(present, ready, false, &s.origin);
+                s.branch(
+                    gallop,
+                    &names,
+                    |s| {
+                        let first_won = s.binary(BinOp::Gt, s.var(wins_a), zero);
+                        s.branch(
+                            first_won,
+                            &[a, b, out, threshold],
+                            |s| {
+                                s.merge_gallop(
+                                    (first, a, stop_a),
+                                    (second, b),
+                                    out,
+                                    threshold,
+                                    low,
+                                    true,
+                                )
+                            },
+                            |s| {
+                                s.merge_gallop(
+                                    (second, b, stop_b),
+                                    (first, a),
+                                    out,
+                                    threshold,
+                                    low,
+                                    false,
+                                )
+                            },
+                        )?;
+                        s.bind(wins_a, zero);
+                        s.bind(wins_b, zero);
+                        Ok(())
+                    },
+                    |_| Ok(()),
+                )
+            },
+        )?;
+        self.put(stack, threshold_slot, self.var(threshold));
+        if low {
+            let remaining = self.binary(BinOp::Sub, n, self.var(a));
+            self.copy(scratch, self.var(a), self.order, self.var(out), remaining)
+        } else {
+            let remaining = self.offset(self.var(b), 1);
+            let begin = self.binary(BinOp::Sub, self.var(out), self.var(b));
+            self.copy(scratch, zero, self.order, begin, remaining)
+        }
+    }
+
+    fn both_present(&mut self, a: u32, stop_a: ValueId, b: u32, stop_b: ValueId) -> ValueId {
+        let first = self.binary(BinOp::Ne, self.var(a), stop_a);
+        let second = self.binary(BinOp::Ne, self.var(b), stop_b);
+        self.b.bool_join(first, second, false, &self.origin)
+    }
+
+    fn merge_gallop(
+        &mut self,
+        (source, cursor, stop): (ValueId, u32, ValueId),
+        (other, other_cursor): (ValueId, u32),
+        out: u32,
+        threshold: u32,
+        low: bool,
+        first: bool,
+    ) -> Built {
+        let pivot = self.get(other, self.var(other_cursor));
+        let available = if low {
+            self.binary(BinOp::Sub, stop, self.var(cursor))
+        } else {
+            self.binary(BinOp::Sub, self.var(cursor), stop)
+        };
+        let n = self.gallop(source, self.var(cursor), available, pivot, low, first)?;
+        let stride = if low { 1 } else { -1 };
+        let zero = self.int(0);
+        let at = self.variable(zero);
+        self.loop_while(
+            &[at],
+            |s| s.binary(BinOp::Lt, s.var(at), n),
+            |s| {
+                let step = s.int(stride);
+                let offset = s.binary(BinOp::Mul, s.var(at), step);
+                let from = s.binary(BinOp::Add, s.var(cursor), offset);
+                let to = s.binary(BinOp::Add, s.var(out), offset);
+                let item = s.get(source, from);
+                s.put(s.order, to, item);
+                s.advance(at, 1);
                 Ok(())
             },
         )?;
-        let remaining = self.binary(BinOp::Sub, n, self.var(left));
-        self.copy(
-            scratch,
-            self.var(left),
-            self.order,
-            self.var(into),
-            remaining,
+        let step = self.int(stride);
+        let distance = self.binary(BinOp::Mul, n, step);
+        let next = self.binary(BinOp::Add, self.var(cursor), distance);
+        self.bind(cursor, next);
+        let next = self.binary(BinOp::Add, self.var(out), distance);
+        self.bind(out, next);
+        let seven = self.int(7);
+        let productive = self.binary(BinOp::Ge, n, seven);
+        self.branch(
+            productive,
+            &[threshold],
+            |s| {
+                let lower = s.offset(s.var(threshold), -1);
+                let one = s.int(1);
+                let lower = s.binary(BinOp::Max, lower, one);
+                s.bind(threshold, lower);
+                Ok(())
+            },
+            |s| {
+                s.advance(threshold, 1);
+                Ok(())
+            },
         )
     }
 
-    fn merge_high(
+    /// Exponential probes bracket the first losing element, then binary search
+    /// completes the bound. Every probe is a borrowed original element and
+    /// every cursor stays inside the unconsumed run, even for an inconsistent
+    /// comparator. The strictness is the merge's stability rule in its direction.
+    fn gallop(
         &mut self,
-        scratch: ValueId,
-        base: ValueId,
-        middle: ValueId,
-        end: ValueId,
-    ) -> Built {
-        let n = self.binary(BinOp::Sub, end, middle);
+        source: ValueId,
+        start: ValueId,
+        n: ValueId,
+        pivot: ValueId,
+        low: bool,
+        first: bool,
+    ) -> Built<ValueId> {
         let zero = self.int(0);
-        self.copy(self.order, middle, scratch, zero, n)?;
-        let last_left = self.offset(middle, -1);
-        let last_right = self.offset(n, -1);
-        let last_out = self.offset(end, -1);
-        let left = self.variable(last_left);
-        let right = self.variable(last_right);
-        let into = self.variable(last_out);
+        let left = self.variable(zero);
+        let right = self.variable(n);
+        let one = self.int(1);
+        let probe = self.variable(one);
+        let yes = self.boolean(true);
+        let open = self.variable(yes);
         self.loop_while(
-            &[left, right, into],
+            &[left, right, probe, open],
+            |s| s.var(open),
             |s| {
-                let a = s.binary(BinOp::Ge, s.var(left), base);
-                let b = s.binary(BinOp::Ge, s.var(right), zero);
-                s.b.bool_join(a, b, false, &s.origin)
-            },
-            |s| {
-                let a = s.get(s.order, s.var(left));
-                let b = s.get(scratch, s.var(right));
-                let left_last = s.greater(a, b)?;
-                // Equal right elements go later: the mirror of left-first merge_low.
+                let count = s.binary(BinOp::Min, s.var(probe), n);
+                let at = s.offset(count, -1);
+                let win = s.gallop_wins((source, start, at), pivot, low, first)?;
                 s.branch(
-                    left_last,
-                    &[left, right],
+                    win,
+                    &[left, right, probe, open],
                     |s| {
-                        s.put(s.order, s.var(into), a);
-                        s.advance(left, -1);
+                        s.bind(left, count);
+                        let more = s.binary(BinOp::Lt, count, n);
+                        s.bind(open, more);
+                        let two = s.int(2);
+                        let next = s.binary(BinOp::Mul, count, two);
+                        s.bind(probe, next);
                         Ok(())
                     },
                     |s| {
-                        s.put(s.order, s.var(into), b);
-                        s.advance(right, -1);
+                        let bound = s.offset(count, -1);
+                        s.bind(right, bound);
+                        let no = s.boolean(false);
+                        s.bind(open, no);
                         Ok(())
                     },
-                )?;
-                s.advance(into, -1);
-                Ok(())
+                )
             },
         )?;
-        let remaining = self.offset(self.var(right), 1);
-        let begin = self.binary(BinOp::Sub, self.var(into), self.var(right));
-        self.copy(scratch, zero, self.order, begin, remaining)
+        self.loop_while(
+            &[left, right],
+            |s| s.binary(BinOp::Lt, s.var(left), s.var(right)),
+            |s| {
+                let span = s.binary(BinOp::Sub, s.var(right), s.var(left));
+                let two = s.int(2);
+                let half = s.binary(BinOp::Div, span, two);
+                let mid = s.binary(BinOp::Add, s.var(left), half);
+                let win = s.gallop_wins((source, start, mid), pivot, low, first)?;
+                s.branch(
+                    win,
+                    &[left, right],
+                    |s| {
+                        let next = s.offset(mid, 1);
+                        s.bind(left, next);
+                        Ok(())
+                    },
+                    |s| {
+                        s.bind(right, mid);
+                        Ok(())
+                    },
+                )
+            },
+        )?;
+        Ok(self.var(left))
+    }
+
+    fn gallop_wins(
+        &mut self,
+        (source, start, at): (ValueId, ValueId, ValueId),
+        pivot: ValueId,
+        low: bool,
+        first: bool,
+    ) -> Built<ValueId> {
+        let at = self.binary(if low { BinOp::Add } else { BinOp::Sub }, start, at);
+        let item = self.get(source, at);
+        let greater = if first {
+            self.greater(item, pivot)?
+        } else {
+            self.greater(pivot, item)?
+        };
+        Ok(if first == low {
+            let no = self.boolean(false);
+            self.binary(BinOp::Eq, greater, no)
+        } else {
+            greater
+        })
     }
 }

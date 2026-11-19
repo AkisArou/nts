@@ -126,7 +126,7 @@ fn adaptive_sorts_compare_a_natural_run_once_and_keep_snapshot_ownership() {
     native_sort_case(
         include_str!("../../../../tests/programs/adaptive-sort/src/main.ts"),
         ADAPTIVE_DRIVER,
-        "import * as m from './main.ts';\nfor(let i=0;i<32;i++) for(const name of ['ordered','reversed','reversedEqual','unevenRuns','shuffled','throwing','mutating','mutatingThrow','copied','copiedMutating','copiedThrow']) process.stdout.write(m[name](i)+'\\n');\n",
+        "import * as m from './main.ts';\nfor(const i of [0,1,2,3,7,15,31,32,63,64,65,127,128,255,256,511,512,1023]) for(const name of ['ordered','reversed','reversedEqual','unevenRuns','shuffled','throwing','mutating','mutatingThrow','copied','copiedMutating','copiedThrow']) process.stdout.write(m[name](i)+'\\n');\n",
         true,
     );
 }
@@ -246,11 +246,13 @@ int main(void) {
   typedef NtsString *(*Case)(double);
   static const Case cases[] = {ordered, reversed, reversedEqual, unevenRuns,
     shuffled, throwing, mutating, mutatingThrow, copied, copiedMutating, copiedThrow};
-  for (int seed = 0; seed < 32; seed++) {
+  static const int seeds[] = {0,1,2,3,7,15,31,32,63,64,65,127,128,255,256,511,512,1023};
+  for (uint32_t at = 0; at < sizeof(seeds) / sizeof(seeds[0]); at++) {
+    int seed = seeds[at];
     for (uint32_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
       comparisons = 0;
       NtsString *answer = cases[c](seed);
-      if (c < 2 && comparisons != (uint64_t)((seed & 127) + 64)) {
+      if (c < 2 && comparisons != (uint64_t)((seed & 1023) + 64)) {
         fprintf(stderr, "case %u seed %d compared %llu times\n", c, seed,
                 (unsigned long long)comparisons);
         return 5;

@@ -8,7 +8,7 @@ class Item {
 }
 
 function items(seed: number, shape: number): Item[] {
-  const n = (seed & 127) + 65;
+  const n = (seed & 1023) + 65;
   const s = (seed | 0) & 1023;
   const xs: Item[] = [];
   for (let i = 0; i < n; i++) {

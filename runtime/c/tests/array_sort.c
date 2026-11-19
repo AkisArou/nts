@@ -78,8 +78,13 @@ static void distinct_owner(unsigned mutation) {
 
 static void private_copy(void) {
   NtsArray *target = nts_array_new(&nts_desc_ref_acyclic, 0);
-  for (uint32_t i = 0; i < 8; i++)
-    nts_array_push_ref(target, item(i));
+  Item *original[8];
+  for (uint32_t i = 0; i < 8; i++) {
+    original[i] = i == 1 ? original[0] : item(i);
+    if (i == 1)
+      nts_retain((NtsHeader *)original[i]);
+    nts_array_push_ref(target, original[i]);
+  }
   NtsArray *order = nts_array_new(&order_descriptor, 8);
   /* Two cycles, an identity, then a three-cycle. */
   const uint32_t wanted[] = {1, 0, 3, 2, 4, 6, 7, 5};
@@ -93,9 +98,9 @@ static void private_copy(void) {
   bool correct = true;
   Item **slots = NTS_ITEMS(target, Item *);
   for (uint32_t i = 0; i < 8; i++)
-    correct &= slots[i]->id == wanted[i] && slots[i]->header.reserved == 1 &&
-               indices[i] == i;
-  check("cycles preserve each single owner and mark only private indices",
+    correct &= slots[i] == original[wanted[i]] &&
+               slots[i]->header.reserved == (wanted[i] < 2 ? 2u : 1u);
+  check("cycles preserve identity and repeated-reference multiplicity",
         correct);
   nts_release(&order->header);
   nts_release(&target->header);
