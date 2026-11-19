@@ -307,7 +307,7 @@ impl Sort<'_, '_> {
         )
     }
 
-    /// `TimSort`'s minimum run in [32,64], or the whole input below 64. The
+    /// `TimSort`'s minimum run in [16,32], or the whole input below 32. The
     /// remainder bit avoids a final tiny run just above a power of two.
     fn minrun(&mut self) -> Built<ValueId> {
         let n = self.variable(self.length);
@@ -316,7 +316,7 @@ impl Sort<'_, '_> {
         self.loop_while(
             &[n, remainder],
             |s| {
-                let limit = s.int(64);
+                let limit = s.int(32);
                 s.binary(BinOp::Ge, s.var(n), limit)
             },
             |s| {
@@ -420,29 +420,33 @@ impl Sort<'_, '_> {
                 // The unprocessed suffix has not been permuted yet.
                 let pivot = s.var(at);
                 let low = s.variable(start);
-                let high = s.variable(s.var(at));
+                let size = s.binary(BinOp::Sub, s.var(at), start);
+                let remaining = s.variable(size);
                 s.loop_while(
-                    &[low, high],
-                    |s| s.binary(BinOp::Lt, s.var(low), s.var(high)),
+                    &[low, remaining],
                     |s| {
-                        let span = s.binary(BinOp::Sub, s.var(high), s.var(low));
-                        // 0 <= span < 2^32: unsigned halving is exact and
-                        // avoids signed division's rounding correction.
+                        let zero = s.int(0);
+                        s.binary(BinOp::Gt, s.var(remaining), zero)
+                    },
+                    |s| {
                         let one = s.int(1);
-                        let half = s.binary(BinOp::UShr, span, one);
+                        let half = s.binary(BinOp::UShr, s.var(remaining), one);
                         let middle = s.binary(BinOp::Add, s.var(low), half);
                         let item = s.get(s.order, middle);
                         let after = s.greater(item, pivot)?;
                         s.branch(
                             after,
-                            &[low, high],
+                            &[low, remaining],
                             |s| {
-                                s.bind(high, middle);
+                                s.bind(remaining, half);
                                 Ok(())
                             },
                             |s| {
                                 let next = s.offset(middle, 1);
+                                let rest = s.binary(BinOp::Sub, s.var(remaining), half);
+                                let rest = s.offset(rest, -1);
                                 s.bind(low, next);
+                                s.bind(remaining, rest);
                                 Ok(())
                             },
                         )
