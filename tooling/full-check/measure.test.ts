@@ -166,7 +166,7 @@ test("a run holding memory at no CPU, which a higher-ranked request waits on, is
   const MiB=2**20,floor=2*GiB/1024;
   const m=measured(t,"circular",{stall:6},run=>[process.execPath,fileURLToPath(new URL("../gate/admit.ts",import.meta.url)),
     "--bytes","600M","--priority","full-check","--what","a hung holder","--",process.execPath,"-e",
-    "globalThis.held=Buffer.alloc(512*2**20,1);require('fs').writeFileSync(process.argv[1],'');setInterval(()=>{},2**30)",join(run,"holding")],
+    "globalThis.held=Buffer.alloc(512*2**20,1);require('fs').writeFileSync(process.argv[1],'');require('child_process').spawnSync('tail',['-f','/dev/null'])",join(run,"holding")],
     {availableKiB:floor+GiB/1024});
   const ledger=m.memory.NTS_MEMORY_LEDGER,machine=join(dirname(m.runs),"machine");
   m.start();
