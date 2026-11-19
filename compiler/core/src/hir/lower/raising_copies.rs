@@ -1,15 +1,15 @@
 //! Choose which bodies and dispatch slots get a raising copy and record the reason an eligible route is held.
 
 use super::{
-    Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, MemberKey, MethodAccessor, Naming,
-    NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared, Throwing, TypeId, TypeKind,
-    a_copy_can_contain, a_method_with_its_own_instances, a_value_held_callee,
+    Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, Member, MemberKey, MethodAccessor,
+    Naming, NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared, Throwing, TypeId,
+    TypeKind, a_copy_can_contain, a_method_with_its_own_instances, a_value_held_callee,
     calls_guarded_by_a_try, calls_in_the_body_of, close_over_callees,
     closure_bodies_that_can_raise, declared_base_class, function_behind_const,
     functions_used_as_values, instance_type_of, interface_member_of, is_generic_function,
     literal_methods, member_dispatch_key, members_filling, names_a_body, raising_body_calls,
     syntax, the_constructor_declared_by, the_function_of, the_inlined_chain,
-    the_method_at_or_above,
+    the_member_at_or_above,
 };
 
 /// A dispatch slot for the raising copy of an **overridden** member, and a copy for
@@ -620,7 +620,16 @@ fn the_methods_a_union_receiver_runs(
                 .get(probe.class_behind(*arm).0 as usize)?
                 .symbol
                 .map(|symbol| probe.denoted_symbol(symbol).0);
-            the_method_at_or_above(snapshot, probe, class, &key, false)
+            the_member_at_or_above(
+                snapshot,
+                probe,
+                class,
+                &key,
+                Member {
+                    kind: syntax::METHOD_DECLARATION,
+                    is_static: false,
+                },
+            )
         })
         .map(|method| probe.implementation_of(method))
         .collect()

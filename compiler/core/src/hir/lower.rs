@@ -162,10 +162,10 @@ use self::raising_copies::{
     without_the_raising_suffix,
 };
 use self::raising_reachability::{
-    Reached, Throwing, a_copy_can_contain, a_method_under_a_computed_key, a_value_held_callee,
-    calls_guarded_by_a_try, close_over_callees, closure_bodies_that_can_raise, names_a_body,
-    names_a_class_element, raising_body_calls, the_function_of, the_method_at_or_above,
-    throwing_symbols,
+    Member, Reached, Throwing, a_copy_can_contain, a_method_under_a_computed_key,
+    a_value_held_callee, calls_guarded_by_a_try, close_over_callees, closure_bodies_that_can_raise,
+    names_a_body, names_a_class_element, raising_body_calls, the_function_of,
+    the_member_at_or_above, throwing_symbols,
 };
 use self::receiver_binding::{A_GENERIC_DECLARATION_READING_THIS, binds_its_own_this};
 use self::representations::{

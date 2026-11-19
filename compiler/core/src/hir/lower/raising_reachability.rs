@@ -746,39 +746,65 @@ pub(super) fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder)
 /// The edge is per member key, so a method under a computed key (`[kRun]`)
 /// pairs with its override by the key's symbol, not by spelling. A static
 /// method pairs only with a static one, since the two never share a slot.
+///
+/// **An accessor pairs the same way, getter with getter and setter with
+/// setter.** `r.v` through a `Base` whose quiet `get v` a `Sub` overrides with
+/// a throwing one is the same dispatch, through the accessor's slot, and
+/// without the edge the read answered "cannot raise" and the override's
+/// `throw` escaped the `try` around it.
 fn overriding_methods(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Vec<(u32, u32)> {
     let is_static = |member: NodeId| a_static_member(probe, member);
-    let mut edges = Vec::new();
+    // Every symbol declaring each class member. **One member can have two**:
+    // `Base`'s `set w` is declared by two symbols, `r.w = x` reaches the one its
+    // name node does not denote, and an edge into the name's symbol alone left
+    // that write asking a symbol no override reached
+    // (`tests/programs/a-throwing-accessor-override-through-a-base`).
+    let mut members: Vec<(u32, NodeId, u16, NodeId)> = Vec::new();
+    let mut declaring: rustc_hash::FxHashMap<NodeId, Vec<u32>> = rustc_hash::FxHashMap::default();
     for (index, record) in snapshot.symbols.iter().enumerate() {
         let Ok(symbol) = u32::try_from(index) else {
             continue;
         };
-        for method in &record.declarations {
-            if probe.kind_of(*method) != Some(syntax::METHOD_DECLARATION) {
+        for member in &record.declarations {
+            let Some(kind) = probe
+                .kind_of(*member)
+                .filter(|kind| an_overridable_member(*kind))
+            else {
                 continue;
-            }
+            };
             let Some(class) = probe
-                .syntactic_parent(*method)
+                .syntactic_parent(*member)
                 .filter(|parent| probe.kind_of(*parent).is_some_and(declares_a_class))
             else {
                 continue;
             };
-            let Some(key) = probe.member_key(*method) else {
-                continue;
-            };
-            let overridden = the_method_at_or_above(
-                snapshot,
-                probe,
-                declared_base_class(snapshot, probe, class),
-                &key,
-                is_static(*method),
-            );
-            if let Some(overridden) = overridden
-                .and_then(|member| probe.name_node(member))
-                .and_then(|name| probe.node(name).symbol)
-            {
-                edges.push((probe.denoted_symbol(overridden).0, symbol));
-            }
+            declaring.entry(*member).or_default().push(symbol);
+            members.push((symbol, *member, kind, class));
+        }
+    }
+    let mut edges = Vec::new();
+    for (symbol, member, kind, class) in members {
+        let Some(key) = probe.member_key(member) else {
+            continue;
+        };
+        let overridden = the_member_at_or_above(
+            snapshot,
+            probe,
+            declared_base_class(snapshot, probe, class),
+            &key,
+            Member {
+                kind,
+                is_static: is_static(member),
+            },
+        );
+        // A member found at its own class is no override: `declared_base_class`
+        // answers a class with no heritage clause with its own name (#868,
+        // which removes this skip with its fix).
+        let Some(overridden) = overridden.filter(|found| *found != member) else {
+            continue;
+        };
+        for base in declaring.get(&overridden).into_iter().flatten() {
+            edges.push((*base, symbol));
         }
     }
     edges
@@ -791,17 +817,34 @@ fn a_static_member(probe: &FuncBuilder, member: NodeId) -> bool {
         .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
 }
 
-/// The method a class declares under `key`, or the nearest of its program bases
-/// that does: what a call to that member on an instance of the class runs.
-/// `class` is the class's symbol, as [`declared_base_class`] answers, so a chain
-/// is followed through imports. `None` where no program class on the chain
-/// declares it -- a provided base's member is the runtime's.
-pub(super) fn the_method_at_or_above(
+/// A class element a subclass can override: a method or either accessor.
+fn an_overridable_member(kind: u16) -> bool {
+    matches!(
+        kind,
+        syntax::METHOD_DECLARATION | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR
+    )
+}
+
+/// Which class element [`the_member_at_or_above`] looks for under a key: its
+/// syntax kind (a method, a getter or a setter) and whether it is static.
+#[derive(Clone, Copy)]
+pub(super) struct Member {
+    pub(super) kind: u16,
+    pub(super) is_static: bool,
+}
+
+/// The member a class declares under `key`, or the nearest of its program bases
+/// that does: what a call to that method, or a read or write of that accessor,
+/// on an instance of the class runs. `class` is the class's symbol, as
+/// [`declared_base_class`] answers, so a chain is followed through imports.
+/// `None` where no program class on the chain declares it -- a provided base's
+/// member is the runtime's.
+pub(super) fn the_member_at_or_above(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     class: Option<u32>,
     key: &super::PropertyKey,
-    wanted_static: bool,
+    wanted: Member,
 ) -> Option<NodeId> {
     let mut seen = rustc_hash::FxHashSet::default();
     let mut class = class;
@@ -814,8 +857,8 @@ pub(super) fn the_method_at_or_above(
                 continue;
             }
             let found = probe.children(*declaration).into_iter().find(|member| {
-                probe.kind_of(*member) == Some(syntax::METHOD_DECLARATION)
-                    && a_static_member(probe, *member) == wanted_static
+                probe.kind_of(*member) == Some(wanted.kind)
+                    && a_static_member(probe, *member) == wanted.is_static
                     && probe.member_key(*member).as_ref() == Some(key)
             });
             if found.is_some() {
