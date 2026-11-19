@@ -135,6 +135,9 @@ benchmarks/cases/printer-erased	{"outcome":{"kind":"pass"}}
 benchmarks/cases/record-word-counts	{"outcome":{"kind":"pass"}}
 benchmarks/cases/release-acyclic	{"outcome":{"kind":"pass"}}
 benchmarks/cases/sort-objects	{"outcome":{"kind":"pass"}}
+benchmarks/cases/startup-builtins	{"outcome":{"kind":"pass"}}
+benchmarks/cases/startup-empty	{"outcome":{"kind":"pass"}}
+benchmarks/cases/startup-hello	{"outcome":{"kind":"pass"}}
 benchmarks/cases/str-append-length	{"outcome":{"kind":"pass"}}
 benchmarks/cases/str-append-loop	{"outcome":{"kind":"pass"}}
 benchmarks/cases/str-compare	{"outcome":{"kind":"pass"}}
