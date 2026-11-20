@@ -11,7 +11,7 @@ type Holder={version:1;run:string;token:string;identity:string;pid:number};
 export type PinOwnerState='live'|'gone'|'unknown';
 export type PinOwnerObservation=(pid:number,identity:string)=>PinOwnerState;
 export type PinTiming={waitMs:number;heldMs:number};
-export type BinaryPin={paths:Record<string,string>;timing:PinTiming;release():void};
+export type BinaryPin={paths:Record<string,string>;bundleSha256:string;members:Record<string,string>;timing:PinTiming;release():void};
 type Options={root:string;hash:string;run:string;binaries:Readonly<Record<string,string>>;
   observe?:PinOwnerObservation;now?:()=>number;wallNow?:()=>number};
 const HASH=/^[0-9a-f]{64}$/;
@@ -83,52 +83,59 @@ function prune(root:string,observe:PinOwnerObservation):void{
 
 export function pinBinaries(options:Options):BinaryPin{
   if(!HASH.test(options.hash))throw Error('invalid binary pin hash '+options.hash);
-  const root=resolve(options.root),dir=join(root,options.hash),observe=options.observe??observePinOwner;
+  const root=resolve(options.root),observe=options.observe??observePinOwner;
   const identity=processIdentity(process.pid);
   if(!identity)throw Error('binary pin holder has no process identity');
   const row:Holder={version:1,run:resolve(options.run),token:randomUUID(),identity,pid:process.pid};
   const host=hostObservations(),now=options.now??(()=>host.now()),wallNow=options.wallNow??(()=>host.wallNow());
   mkdirSync(root,{recursive:true});
-  const staging=mkdtempSync(join(root,'.staging-')),paths:Record<string,string>={};
-  const lease=join(dir,'holders',row.token+'.json'),lock=join(root,'.lock');
-  let published=false;
+  const staging=mkdtempSync(join(root,'.staging-')),paths:Record<string,string>={},members:Record<string,string>={};
+  const lock=join(root,'.lock');let lease:string|undefined;
+  let published=false,stageOwned=true;
   try{
     for(const [name,source]of Object.entries(options.binaries)){
       if(!/^[a-zA-Z0-9_-]+$/.test(name))throw Error('invalid pinned binary name '+name);
       if(!existsSync(source))continue;
-      const to=join(staging,name);copyFileSync(source,to);chmodSync(to,0o555);paths[name]=join(dir,name);
+      const to=join(staging,name);copyFileSync(source,to);chmodSync(to,0o555);
+      members[name]=createHash('sha256').update(readFileSync(to)).digest('hex');
     }
-    if(!paths.nts||createHash('sha256').update(readFileSync(join(staging,'nts'))).digest('hex')!==options.hash)
+    if(members.nts!==options.hash)
       throw Error('compiler changed while staging binary pin');
+    const pairs=Object.entries(members).sort(([a],[b])=>a<b?-1:a>b?1:0);
+    const bundleSha256=createHash('sha256').update(JSON.stringify(pairs)).digest('hex'),dir=join(root,bundleSha256);
+    const leasePath=join(dir,'holders',row.token+'.json');lease=leasePath;
+    for(const name of Object.keys(members))paths[name]=join(dir,name);
     const started=now();let entered=started,ended=started;
     withLock(lock,()=>{
       entered=now();
       try{
+        // A new bundle is published complete. Existing immutable members are
+        // verified after leasing, outside the lock, and are never rewritten.
+        if(!existsSync(dir)){renameSync(staging,dir);stageOwned=false;}
         mkdirSync(join(dir,'holders'),{recursive:true});
-        for(const name of Object.keys(paths)){
-          // Content folders are immutable once published. Never replace an
-          // executable that another run may already be using.
-          if(!existsSync(paths[name]!))renameSync(join(staging,name),paths[name]!);
-        }
-        durableRecord(lease,row);published=true;
+        durableRecord(leasePath,row);published=true;
         const touched=new Date(wallNow());utimesSync(dir,touched,touched);
         prune(root,observe);
       }finally{ended=now();}
     });
+    for(const [name,digest]of pairs){
+      if(createHash('sha256').update(readFileSync(paths[name]!)).digest('hex')!==digest)
+        throw Error('pinned bundle member digest mismatch: '+paths[name]);
+    }
     let released=false;
-    return {paths,timing:{waitMs:entered-started,heldMs:ended-entered},release:()=>{
+    return {paths,bundleSha256,members,timing:{waitMs:entered-started,heldMs:ended-entered},release:()=>{
       if(released)return;
       withLock(lock,()=>{
-        const current=holder(lease);
-        if(JSON.stringify(current)!==JSON.stringify(row))throw Error('binary pin lease changed: '+lease);
-        rmSync(lease);released=true;
+        const current=holder(leasePath);
+        if(JSON.stringify(current)!==JSON.stringify(row))throw Error('binary pin lease changed: '+leasePath);
+        rmSync(leasePath);released=true;
         // Release must not make an old folder recent. The same retention rule
         // applies immediately after a run ends, including the last holder.
         prune(root,observe);
       });
     }};
   }catch(error){
-    if(published)withLock(lock,()=>{if(JSON.stringify(holder(lease))===JSON.stringify(row))rmSync(lease);});
+    if(published&&lease){const failedLease=lease;withLock(lock,()=>{if(JSON.stringify(holder(failedLease))===JSON.stringify(row))rmSync(failedLease);});}
     throw error;
-  }finally{rmSync(staging,{recursive:true,force:true});}
+  }finally{if(stageOwned)rmSync(staging,{recursive:true,force:true});}
 }

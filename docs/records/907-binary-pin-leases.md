@@ -7,6 +7,13 @@ exposing executable paths and retains every held folder plus ten recent
 unheld folders. A single cache-wide lock covers publication, lease changes,
 recency and pruning. Binary copying and hashing precede that lock.
 
+Bundle identity hashes the sorted executable name/digest pairs, including
+nts-only bundles. The run summary retains compiler provenance separately
+from the bundle and member digests. A suite-only change creates a distinct
+folder; identical bundles reuse one without rewriting members. Reuse checks
+each member's digest after acquiring the lease, outside the lock. A mismatch
+refuses without repairing or overwriting an executable another run may hold.
+
 ## Historical writers
 
 Lease-aware pins use the sibling namespace `nts-gate/bin-v2/<sha256>`, leaving

@@ -1526,6 +1526,7 @@ function pinBinaries() {
   pinned.planner=binaryPin.paths['oracle-plan'];
   identities.nts.pinned=pinned.nts;
   identities.nts.pin_lock=binaryPin.timing;
+  identities.nts.bundle={sha256:binaryPin.bundleSha256,members:binaryPin.members};
 }
 
 function identify(acquirePin = true) {

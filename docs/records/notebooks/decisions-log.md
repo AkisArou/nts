@@ -4075,4 +4075,8 @@ and is named by the hourly count. Terminal reports acquire no lease.
 The leased cache is the sibling `nts-gate/bin-v2` namespace, so a gate running
 historical count-only retention cannot delete its folders. Legacy `bin` folders
 are report-only leftovers under their `kept` rule; no age-based sweep owns them.
-
+The bundle identity covers every sorted executable name and SHA-256 pair,
+including an nts-only set. Companion-only changes get a new immutable folder.
+Compiler provenance retains its own digest; the summary also records bundle
+and member digests. Reuse verifies every member after leasing, outside the
+lock, and never overwrites a published executable.

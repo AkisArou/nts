@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {existsSync,mkdirSync,readFileSync,readdirSync,rmSync,statSync,utimesSync,writeFileSync} from 'node:fs';
+import {chmodSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync,statSync,utimesSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {binaryPinWarnings,pinBinaries,observePinOwner,type PinOwnerObservation} from './binary-pins.ts';
@@ -16,16 +16,17 @@ function fixture(t:TestContext){
   const cache=testScratch(t,'binary-pins'),root=join(cache,'nts-gate','bin-v2');mkdirSync(root,{recursive:true});
   const source=join(cache,'compiler');writeFileSync(source,'compiler');
   const hash=createHash('sha256').update('compiler').digest('hex');
+  const bundle=createHash('sha256').update(JSON.stringify([['nts',hash]])).digest('hex');
   const acquire=(observe?:PinOwnerObservation)=>pinBinaries({root,hash,run:join(cache,'run'),binaries:{nts:source},observe,now:()=>0,wallNow:()=>100_000});
   const age=(dir:string,time:number)=>utimesSync(dir,new Date(time),new Date(time));
   const seed=(n:number)=>Array.from({length:n},(_,i)=>{
     const dir=join(root,i.toString(16).padStart(64,'0'));mkdirSync(dir,{recursive:true});writeFileSync(join(dir,'nts'),'old compiler');age(dir,i*1000);return dir;
   });
-  return {cache,root,source,hash,acquire,age,seed};
+  return {cache,root,source,hash,bundle,acquire,age,seed};
 }
 
 test('oldest live pin survives eleven newer pins; next oldest unheld pin is pruned',t=>{
-  const f=fixture(t),held=f.acquire(),oldest=join(f.root,f.hash);f.age(oldest,0);
+  const f=fixture(t),held=f.acquire(),oldest=join(f.root,f.bundle);f.age(oldest,0);
   const newer=f.seed(11);
   // Twelve folders exist before a later run starts. Its publication and
   // retention transaction must preserve the old executable, without touching it.
@@ -41,7 +42,7 @@ test('oldest live pin survives eleven newer pins; next oldest unheld pin is prun
 });
 
 test('twelve folders with two held and ten unheld prune nothing',t=>{
-  const f=fixture(t),held=f.acquire(),oldest=join(f.root,f.hash);f.age(oldest,0);
+  const f=fixture(t),held=f.acquire(),oldest=join(f.root,f.bundle);f.age(oldest,0);
   const newer=f.seed(10);writeFileSync(f.source,'later compiler');
   const later=pinBinaries({root:f.root,hash:createHash('sha256').update('later compiler').digest('hex'),run:join(f.cache,'later'),
     binaries:{nts:f.source},now:()=>0,wallNow:()=>100_000});
@@ -63,7 +64,7 @@ test('the pre-lease count-only pruner cannot reach the sibling versioned cache',
   assert.equal(readdirSync(legacy).length,10,'the old code really pruned its own cache');
   assert.equal(readFileSync(held.paths.nts!,'utf8'),'compiler');
   for(const pin of newer)assert.equal(existsSync(pin),true,'legacy pruning cannot reach a v2 folder');
-  assert.equal(readdirSync(join(f.root,f.hash,'holders')).length,1);
+  assert.equal(readdirSync(join(f.root,f.bundle,'holders')).length,1);
   const counted=count({plan:'',local:[],remote:[],pulls:[],issues:[],recordCitations:[],worktrees:[],shared:f.cache,cache:f.cache,
     root:f.cache,main:null,verified:null,slices:[],activeUnits:[],now:0},{'nts-gate':{kind:'kept',why:'fixture'}});
   assert.equal(counted.notices?.filter(line=>line.includes('legacy gate pin')).length,10);
@@ -107,7 +108,7 @@ test('unknown, corrupt and future holder state protects its pin and count names 
 });
 
 test('release checks exact holder identity, is idempotent and preserves another holder',t=>{
-  const f=fixture(t),first=f.acquire(),second=f.acquire(),dir=join(f.root,f.hash,'holders');
+  const f=fixture(t),first=f.acquire(),second=f.acquire(),dir=join(f.root,f.bundle,'holders');
   assert.equal(readdirSync(dir).length,2);first.release();first.release();assert.equal(readdirSync(dir).length,1);
   const path=join(dir,readdirSync(dir)[0]!),original=readFileSync(path,'utf8');
   writeFileSync(path,original.replace('"version": 1','"version": 2'));
@@ -119,6 +120,32 @@ test('staging detects a changed compiler before publishing paths or a lease',t=>
   const f=fixture(t);writeFileSync(f.source,'different compiler');
   assert.throws(()=>f.acquire(),/compiler changed while staging/);
   assert.deepEqual(readdirSync(f.root),[]);
+});
+
+test('complete bundle identity separates suite-only changes and reuses identical immutable members',t=>{
+  const f=fixture(t),suite=join(f.cache,'suite');writeFileSync(suite,'suite one');
+  const acquire=(reverse=false)=>pinBinaries({root:f.root,hash:f.hash,run:join(f.cache,'run'),
+    binaries:reverse?{'nts-suite':suite,nts:f.source}:{nts:f.source,'nts-suite':suite},now:()=>0,wallNow:()=>100_000});
+  const first=acquire(),oldSuite=first.paths['nts-suite']!,before=statSync(oldSuite);
+  const pairs=Object.entries(first.members).sort(([a],[b])=>a<b?-1:a>b?1:0);
+  assert.equal(first.bundleSha256,createHash('sha256').update(JSON.stringify(pairs)).digest('hex'));
+  const same=acquire(true);assert.equal(same.bundleSha256,first.bundleSha256);assert.deepEqual(same.paths,first.paths);
+  assert.equal(statSync(oldSuite).ino,before.ino);assert.equal(statSync(oldSuite).mtimeMs,before.mtimeMs);
+  writeFileSync(suite,'suite two');const changed=acquire();
+  assert.notEqual(changed.bundleSha256,first.bundleSha256);assert.notEqual(changed.paths.nts,first.paths.nts);
+  assert.equal(changed.members.nts,first.members.nts,'compiler provenance remains its actual digest');
+  assert.equal(readFileSync(oldSuite,'utf8'),'suite one');assert.equal(readFileSync(changed.paths['nts-suite']!,'utf8'),'suite two');
+  same.release();changed.release();first.release();
+});
+
+test('reuse checks every member digest and never repairs or overwrites a mismatching executable',t=>{
+  const f=fixture(t),first=f.acquire(),path=first.paths.nts!;
+  chmodSync(path,0o755);writeFileSync(path,'corrupted pin');chmodSync(path,0o555);
+  const before=statSync(path);
+  assert.throws(()=>f.acquire(),/pinned bundle member digest mismatch/);
+  assert.equal(readFileSync(path,'utf8'),'corrupted pin');assert.equal(statSync(path).ino,before.ino);
+  assert.equal(readdirSync(join(f.root,first.bundleSha256,'holders')).length,1,'failed reuse releases only its own holder');
+  first.release();
 });
 
 const PIN_CHILD=generatedJavaScript(`import {readSync,readFileSync} from 'node:fs';

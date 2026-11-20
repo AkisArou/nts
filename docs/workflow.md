@@ -1237,7 +1237,11 @@ the tooling strict checker owns the source's type checking.
   sharing one run each other's compiled crates.
 - **Gate binaries stay while their runs hold them.** `tooling/gate/binary-pins.ts`
   publishes immutable executables in `~/.cache/nts-gate/bin-v2/<sha256>` and records
-  each run's holder under that folder's `holders/`. The holder binds its run,
+  each run's holder under that folder's `holders/`. The folder digest covers
+  the sorted executable names and content digests; compiler provenance remains
+  the compiler's own digest. The summary records both and every member digest.
+  Reuse verifies members while leased, outside the lock, and never rewrites them.
+  The holder binds its run,
   token and boot/PID/start identity. Copies and hashing happen outside the
   cache-wide owner lock; publication, holder acquisition, recency, reclamation
   and pruning share that lock. Retention keeps every held folder and the ten
