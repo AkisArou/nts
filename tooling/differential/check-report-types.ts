@@ -12,7 +12,8 @@ export const COUNT_NAMES = ["functions", "expected", "compared", "unavailable", 
 /**
  * The counts of a report. `programs`, from report version 4, is 1 for a
  * source compared as a whole program; a report that compared none omits it,
- * so its identity is the one earlier versions recorded.
+ * so its identity is the one earlier versions recorded. A stored report that
+ * counts one is stored at version 4, which defines the field.
  */
 export type CheckCounts = Record<typeof COUNT_NAMES[number], number> & { programs?: 1 };
 export interface CheckRefusal { stage: "lowering" | "backend" | "typecheck"; code: string; message: string; }

@@ -51,6 +51,35 @@ test("new outcome identities preserve fields independently of displayed prose", 
   assert.throws(() => sameCheckOutcome(was, { nts: was.nts }), /structured observation/);
 });
 
+test("every observation the writer stores is read back by the versioned reader as the same outcome", () => {
+  // What a fixture records is `{version: 1, check}` from checkOutcome; the
+  // stored reader decodes `check` at the version it names.
+  const stored = (now: ReturnType<typeof observe>) => ({ run: "check", version: 1, check: now.check, category: now.category, nts: now.nts });
+  const whole = { ...report("aborted", { functions: 0, expected: 1, compared: 1, aborts: 1 }), version: 4, incomplete: [] as [],
+    oracle: { expected: 1, received: 1, complete: true } };
+  whole.counts = { programs: 1, ...whole.counts };
+  whole.aborts.push("the program was killed by signal 11 without refusing anything");
+  const budget = { version: 3, status: "error", counts: null, oracle: null, refusals: [], disagreements: [], aborts: [], incomplete: [],
+    error: { kind: "oracle_budget", source: "tests/programs/slow/src/main.ts", message: "the oracle passed its bound",
+      budget: { recorded: true, value: { phase: "execute", outcome: "timeout", bound: 600, signal: "SIGKILL", reason: "cpu" } } } };
+  // Transport version 4 always counts programs; a report that compared none omits them.
+  const calls = { ...report(), version: 4, incomplete: [] as [], counts: { ...report().counts, programs: 0 } };
+  const hung = { ...report("not_measured", { compared: 1 }), version: 4, counts: { ...report("not_measured", { compared: 1 }).counts, programs: 0 },
+    incomplete: [{ kind: "hung", reason: "no progress for 30 s", case_index: 1 }] };
+  for (const [name, value, status] of [["whole program", whole, 1], ["oracle budget", budget, 1], ["calls", calls, 0], ["liveness", hung, 1]] as const) {
+    const now = observe(value, status), record = stored(now);
+    assert.doesNotThrow(() => validateStoredCheckOutcome(JSON.parse(JSON.stringify(record))), name);
+    assert.ok(sameCheckOutcome(JSON.parse(JSON.stringify(record)), now), name);
+  }
+  assert.equal(observe(whole, 1).check?.version, 4, "a whole program is stored at the version that counts programs");
+  assert.equal(observe(budget, 1).check?.version, 3, "a typed budget is stored at the version that defines it");
+  assert.equal(observe(hung, 1).check?.version, 2, "a liveness observation is stored at the version that defines it");
+  // A report version 1 expresses keeps the identity earlier versions recorded.
+  const old = observe(report());
+  assert.deepEqual(observe(calls).check, old.check);
+  assert.ok(sameCheckOutcome({ run: "check", version: 1, check: old.check }, observe(calls)));
+});
+
 test("only a version-zero stored record uses its original summary coverage", () => {
   const was = { run: "check", category: "wrong-answer",
     nts: "checked 2 cases across 1 function(s) | Error: 1 case(s) disagree between the compiled program and node" };

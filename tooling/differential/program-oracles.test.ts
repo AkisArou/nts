@@ -1,7 +1,7 @@
 import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
-import {mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {dirname,join,resolve} from 'node:path';
@@ -65,29 +65,39 @@ test('a plan budget is work to retry: its entry is planned again, once per fixtu
   assert.throws(()=>programOracleSources({rows:[row(measured,'measured',4)],unplanned:[plan('tests/programs/measured/src/other.ts')]}),/multiple source entries: tests\/programs\/measured/);
 });
 
-test('the measured example corpus names every type-directed emit project',()=>{
+test('the measured example corpus names every type-directed emit project, and names only those',()=>{
   const location=oracleToolchainLocation(),{compiler}=verifyToolchain(location),require=createRequire(join(location,'package.json'));
   const {API}:typeof import('typescript/sync')=require('typescript/sync'),ast:typeof import('typescript/ast')=require('typescript/ast');
-  const api=new API({cwd:REPOSITORY,tsserverPath:compiler}),needed=new Set<string>();
+  const api=new API({cwd:REPOSITORY,tsserverPath:compiler});
+  // Type-directed: decorator metadata or a const enum, which emit needs the checker for.
+  const typeDirected=(project:string):boolean=>{
+    const parsed=api.parseConfigFile(join(REPOSITORY,project,'tsconfig.json'));
+    assert.equal(parsed.errors.length,0,project);
+    if(parsed.options.emitDecoratorMetadata)return true;
+    return parsed.fileNames.some(file=>{
+      if(/\.d\.[cm]?ts$/.test(file))return false;
+      const lease=api.createSourceFile(file,readFileSync(file,'utf8'));
+      try{
+        let found=false;
+        const visit=(node:import('typescript/ast').Node):void=>{
+          if(ast.isEnumDeclaration(node)&&node.modifiers?.some(modifier=>modifier.kind===ast.SyntaxKind.ConstKeyword))found=true;
+          else if(!found)node.forEachChild(visit);
+        };
+        visit(lease.sourceFile);return found;
+      }finally{lease.dispose();}
+    });
+  };
   try{
+    // Which projects have oracle work depends on what the records hold, so the
+    // named list covers the measured ones rather than equalling them.
     const projects=new Set(programOracleSources(readRecords(REPOSITORY)).filter(source=>source.startsWith('tests/programs/')).map(fixtureOf));
-    for(const project of projects){
-      const parsed=api.parseConfigFile(join(REPOSITORY,project,'tsconfig.json'));
-      assert.equal(parsed.errors.length,0,project);
-      if(parsed.options.emitDecoratorMetadata)needed.add(project.split('/').at(-1)!);
-      for(const file of parsed.fileNames){
-        if(/\.d\.[cm]?ts$/.test(file))continue;
-        const lease=api.createSourceFile(file,readFileSync(file,'utf8'));
-        try{
-          const visit=(node:import('typescript/ast').Node):void=>{
-            if(ast.isEnumDeclaration(node)&&node.modifiers?.some(modifier=>modifier.kind===ast.SyntaxKind.ConstKeyword))needed.add(project.split('/').at(-1)!);
-            node.forEachChild(visit);
-          };
-          visit(lease.sourceFile);
-        }finally{lease.dispose();}
-      }
+    const unnamed=[...projects].filter(project=>!PROGRAM_EMIT_PROJECTS.includes(project.split('/').at(-1)!)&&typeDirected(project));
+    assert.deepEqual(unnamed,[],'a new type-directed project must be named before the standalone path can run it');
+    for(const name of PROGRAM_EMIT_PROJECTS){
+      const project='tests/programs/'+name;
+      assert.ok(existsSync(join(REPOSITORY,project,'tsconfig.json')),'a named type-directed project exists: '+name);
+      assert.ok(typeDirected(project),'a named project is type-directed: '+name);
     }
-    assert.deepEqual([...needed].sort(),[...PROGRAM_EMIT_PROJECTS].sort(),'a new type-directed project must be named before the standalone path can run it');
   }finally{api.close();}
 });
 

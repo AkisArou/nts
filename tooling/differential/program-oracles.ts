@@ -34,7 +34,7 @@ export const PROGRAM_WORKER_RECYCLE_BYTES=512*2**20;
 
 export const PROGRAM_EMIT_PROJECTS=Object.freeze([
   'a-declared-value-is-not-an-arrival-proof','a-typed-literal-assertion-keeps-its-value',
-  'an-enum-across-a-module','an-enum-member-read-by-its-name','enums','string-enum',
+  'an-enum-across-a-module','an-enum-member-read-by-its-name','classes','enums','string-enum',
 ]);
 export type ProgramOracleTask={subject:string;project:string;entry:string;mode:'calls'|'observation';program:boolean;observations:HostObservation[]};
 export const OUTCOME_CONTROLS=Object.freeze([

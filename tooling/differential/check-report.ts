@@ -280,10 +280,14 @@ export function checkOutcome(format: CheckFormat, status: number | null, stdout:
 
 function stableReport(report: CheckReport): CheckReport {
   const stable = (text: string) => stableCheckText(text).replace(/uniform slot \d+/g, 'uniform slot N');
-  // V2 adds liveness observations. A completed observation still has exactly
-  // the V1 record identity; changing transport alone never rewrites evidence.
+  // A report is stored at the lowest version that expresses it exactly, so a
+  // transport revision alone never rewrites evidence, and the stored reader
+  // decodes it at that version: 4 counts a whole program, 3 carries a typed
+  // budget, 2 a liveness observation, and 1 everything else.
   const {incomplete, ...v1} = report;
-  const compatible = incomplete?.length ? report : {...v1, version: 1 as const};
+  const version = report.counts?.programs !== undefined ? 4 as const : report.error?.budget !== undefined ? 3 as const
+    : incomplete?.length ? 2 as const : 1 as const;
+  const compatible = version === 1 ? {...v1, version} : {...report, version, incomplete: incomplete ?? []};
   return {
     ...compatible,
     refusals: report.refusals.map(one => ({...one, message: normalizeGeneratedNumbers(stable(one.message))})),
