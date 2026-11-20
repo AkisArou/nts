@@ -581,7 +581,9 @@ fn reach_argument_members(
                 // getter. Its declaration names the supplier, not
                 // necessarily the closure invoked at run time.
                 reached.push(Reached::Elsewhere);
-                if a_callee_with_a_body(snapshot, probe, symbol) {
+                if let Some(symbol) = symbol
+                    && a_callee_with_a_body(snapshot, probe, symbol)
+                {
                     reached.push(Reached::Body(symbol));
                 }
             }

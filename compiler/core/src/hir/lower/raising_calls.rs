@@ -16,7 +16,7 @@ use super::{
 /// no invented callee or throwing edge to the analysis.
 pub(super) enum ArgumentMembers {
     Named(Vec<NodeId>),
-    Stored(u32),
+    Stored(Option<u32>),
     Unresolved,
 }
 
@@ -1082,22 +1082,25 @@ impl FuncBuilder<'_> {
                     else {
                         return ArgumentMembers::Unresolved;
                     };
-                    let Some(declaration) = properties
-                        .iter()
-                        .find(|property| property.name == key)
-                        .and_then(|property| property.declaration)
+                    let Some(property) = properties.iter().find(|property| property.name == key)
                     else {
                         return ArgumentMembers::Unresolved;
                     };
-                    let Some(symbol) = self.member_symbol(declaration) else {
-                        return ArgumentMembers::Unresolved;
-                    };
+                    let declaration = property.declaration;
+                    let symbol =
+                        declaration.and_then(|declaration| self.member_symbol(declaration));
+                    // Storage has a callable value and an ABI even when a mapped
+                    // property has no authored declaration or supplier symbol.
                     if self.literal_member_is_storage(object, &key)
-                        || matches!(self.kind_of(declaration), Some(syntax::GET_ACCESSOR))
+                        || declaration.is_some_and(|declaration| {
+                            self.kind_of(declaration) == Some(syntax::GET_ACCESSOR)
+                        })
                     {
                         ArgumentMembers::Stored(symbol)
-                    } else {
+                    } else if let (Some(declaration), Some(_)) = (declaration, symbol) {
                         ArgumentMembers::Named(vec![self.implementation_of(declaration)])
+                    } else {
+                        ArgumentMembers::Unresolved
                     }
                 } else {
                     ArgumentMembers::Named(
