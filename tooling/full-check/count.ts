@@ -445,7 +445,7 @@ export function count(input: CountInput, keep: Record<string, Keep> = readKeep()
   worktreeLines(input, red);
   cacheLines(input, keep, red, removable,notes,notices);
   sliceLines(input, red, notes, stoppable);
-  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, notices, removable, stoppable };
+  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, ...(notices.length?{notices}:{}), removable, stoppable };
 }
 
 /**
