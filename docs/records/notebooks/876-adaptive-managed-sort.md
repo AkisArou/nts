@@ -2110,3 +2110,97 @@ shell's `JAVA_HOME` and `ANDROID_HOME`. The tree's own offline linker refreshed
 the catalog; the launcher now supplies both SDK paths and the full host PATH.
 All of those logs remain in the issue scratch. The namespace-failing run was
 stopped through its own `nts-876-final-here-3` unit before changing sources.
+
+### Namespace equivalence
+
+The corrected compiler implementation is `00b6553f52cd5667c582e24f76413a78aa5f329d`;
+`1422bf55f5eed7624b368ca299cb5df5a92be225` only formats its core test guard.
+The all-workspace release rebuild passed. All 38 C/LLVM executable images
+match the measured helper version in allocated sections, addresses and sizes,
+including ABI/ISA notes; only the build-ID note is excluded. Their loader
+headers and program-header geometry also match. Twenty-six complete ELF files
+are byte-identical; the remaining twelve have renamed symbol metadata.
+
+For each of the five JVM benchmark programs, every method's complete `Code`
+attribute, descriptor and access flags matches the measured helper version.
+Normalizing exactly the seven renamed helper-name UTF-8 constants makes the
+whole Program class constant pool and its remaining bytes identical. All
+companion classes are byte-identical. Each still has one shared seven-method
+family, 4,899 helper bytecode bytes, and a largest method of 2,363 bytes.
+The name constants save 49 class-file bytes per program; no work changed.
+The class-file totals below exclude the runtime jar.
+The earlier timed standings and native profiles therefore remain evidence for
+this executable payload. No new timed sitting is presented for a symbol rename.
+
+| Program | Previous Program.class bytes | Corrected bytes | Corrected bytes, all emitted classes |
+|---|---:|---:|---:|
+| sort-objects | 13401 | 13352 | 14556 |
+| sort-objects-shuffled | 14589 | 14540 | 15744 |
+| sort-objects-runs | 13687 | 13638 | 14842 |
+| map-entries-top-k | 15471 | 15422 | 16764 |
+| string-sort-control | 12213 | 12164 | 12992 |
+
+The instruction recount used the same pinned Node 26.13.0 producer and native
+flags, on CPU 0 outside CPUs 4-5, without the timing lock. Its native observed
+band is 0.01%. Ratios below compare against the previously measured split
+helper compiler, not a new wall-time sitting. Small count increases
+and decreases are retained; every native row is within the band.
+
+| Row | Previous C | Corrected C | Ratio / verdict | Previous LLVM | Corrected LLVM | Ratio / verdict |
+|---|---:|---:|---|---:|---:|---|
+| array-copying-methods | 482832 | 482832 | 1.000000 FLAT | 538832 | 538832 | 1.000000 FLAT |
+| awfy-towers | 941646 | 941646 | 1.000000 FLAT | 908821 | 908821 | 1.000000 FLAT |
+| clbg-k-nucleotide | 17425499 | 17425500 | 1.000000 FLAT | 17417574 | 17417575 | 1.000000 FLAT |
+| cyclic-churn | 2375872 | 2375872 | 1.000000 FLAT | 2377856 | 2377856 | 1.000000 FLAT |
+| event-state | 1700 | 1700 | 1.000000 FLAT | 1698 | 1698 | 1.000000 FLAT |
+| immutable-update | 2031902 | 2031898 | 0.999998 FLAT | 2033945 | 2033945 | 1.000000 FLAT |
+| json-build-append | 222777 | 222776 | 0.999996 FLAT | 222776 | 222777 | 1.000004 FLAT |
+| json-stringify-doc | 27212312 | 27212313 | 1.000000 FLAT | 27037192 | 27037133 | 0.999998 FLAT |
+| map-entries-top-k | 387301 | 387301 | 1.000000 FLAT | 398771 | 398770 | 0.999997 FLAT |
+| module-loop-retained | 262197 | 262197 | 1.000000 FLAT | 262197 | 262196 | 0.999996 FLAT |
+| objects | 27684 | 27684 | 1.000000 FLAT | 27684 | 27684 | 1.000000 FLAT |
+| pipeline | 239558 | 239558 | 1.000000 FLAT | 239558 | 239557 | 0.999996 FLAT |
+| record-word-counts | 152641 | 152641 | 1.000000 FLAT | 154112 | 154112 | 1.000000 FLAT |
+| release-acyclic | 1832674 | 1832669 | 0.999997 FLAT | 1832669 | 1832669 | 1.000000 FLAT |
+| sort-objects | 468806 | 468806 | 1.000000 FLAT | 480865 | 480865 | 1.000000 FLAT |
+| sort-objects-runs | 669658 | 669658 | 1.000000 FLAT | 674744 | 674744 | 1.000000 FLAT |
+| sort-objects-shuffled | 1425253 | 1425253 | 1.000000 FLAT | 1531948 | 1531948 | 1.000000 FLAT |
+| string-sort-control | 2401 | 2401 | 1.000000 FLAT | 2465 | 2465 | 1.000000 FLAT |
+| tree-teardown | 597515 | 597515 | 1.000000 FLAT | 597516 | 597516 | 1.000000 FLAT |
+
+The first recount completed eighteen rows and rejected cyclic-churn's Node
+calibration: the observed empty probe counted 8,789,042 instructions and the
+one-operation probe 4,165,848, a negative net of -4,623,194. This is an invalid
+calibration, with no row verdict. A focused default-engine retry passed;
+the table combines those eighteen rows with that one retry. No successful
+row was repeated. JIT instruction spread remains informational.
+
+The negative probe CSVs were read but mistakenly not copied before the retry
+overwrote them. The complete observed readback is retained explicitly as a
+transcript in `namespace-final/failed-cyclic-churn-probes/read-transcript.txt`;
+no original-byte identity or original CSV hash is claimed. The first failed
+census log and successful retry log are retained separately.
+
+After that successful retry, the artifact adapter initially iterated the class
+parser's envelope instead of its `methods` field and stopped before a verdict.
+The corrected continuation used analysis-only mode: it did not repeat counts.
+The corrected scratch script, earlier versions, traceback and successful
+artifact results are all retained. A subsequent Rust-half inner attempt found
+one rustfmt layout change caused by the shorter prefix; the test-only formatting
+commit above fixes it. No algorithm, runtime helper or gate rule changed.
+
+The corrected-name `inner.ts --no-agree` passed:
+
+```
+PASS  fmt              5s
+  PASS  clang-format     1s
+  PASS  clippy          55s
+  PASS  build           30s
+  PASS  tests          498s
+green: queue it with node tooling/landing/check.ts <commit>
+```
+
+The complete five-lane agreement run recorded above predates this metadata-only
+rename; it is not described as a second full agreement run.
+
+Raw namespace proof manifest: `/home/akisarou/.cache/nts-scratch/876/namespace-final-evidence.json`, SHA-256 `e28422d80329944d559c42ecffd5e9dd2a7590fff8262d5ee43c0644a64c8686`.
