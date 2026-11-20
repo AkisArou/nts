@@ -266,7 +266,7 @@ export class Pool {
       const mine = trees.find(t => t.branch === branch);
       // Asked for again, a landed task's tree is held: its task goes on there.
       if (mine) {
-        this.setPresence(mine,'attached','resume');
+        this.setPresence(mine,'attached');
         if(mine.state==='landed')this.forget(branch);
         this.inputs(mine.path);
         return this.trees().find(t=>t.name===mine.name)!;
@@ -297,7 +297,7 @@ export class Pool {
     return tree;
   }
 
-  private setPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh'|'resume'='existing'):void{
+  private setPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh'='existing'):void{
     if(!tree.branch||tree.state!=='held'&&tree.state!=='landed')throw Error('worker presence requires a held task branch: '+tree.path);
     assertWorkerPresenceWritable(tree.path);
     // Use the lease owner's predicate, including its fail-closed default.
@@ -307,7 +307,7 @@ export class Pool {
     const lock=GateResource.tryAcquire(tree.path+'.lock');
     if(!lock)throw Error('tree resource lock is held: '+tree.path);
     try{
-      if(state==='attached'&&transition!=='fresh'&&(tree.state==='held'||transition==='resume'))this.admitLease(tree.path,true);
+      if(state==='attached'&&transition!=='fresh')this.admitLease(tree.path,true);
       if(state==='detached'){
         const users=this.users(tree.path);
         if(users.length)throw Error('cannot detach '+tree.branch+': '+using(users));
