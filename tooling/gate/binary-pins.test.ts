@@ -214,6 +214,19 @@ test('future corruption diagnostics are never overwritten by a failed reuse',t=>
   first.release();
 });
 
+test('malformed and future corruption diagnostics also protect old unheld folders from pruning',t=>{
+  const f=fixture(t),dirs=f.seed(13);
+  for(const [i,bytes]of ['{"version":2}','malformed'].entries()){
+    writeFileSync(join(dirs[i]!,'.corrupt-v1.json'),bytes);f.age(dirs[i]!,i*1000);
+  }
+  const held=f.acquire();
+  for(const dir of dirs.slice(0,2))assert.equal(existsSync(dir),true);
+  assert.equal(existsSync(dirs[2]!),false,'known ordinary unheld state still prunes');
+  const report=binaryPinDiagnostics(f.root);
+  for(const dir of dirs.slice(0,2))assert.ok(report.warnings.some(line=>line.includes(dir)));
+  held.release();
+});
+
 const PAUSED_PIN_CHILD=generatedJavaScript(`const {pinBinaries}=await import(process.argv[1]);
 pinBinaries({root:process.argv[2],hash:process.argv[3],run:process.argv[4],binaries:{nts:process.argv[5]},now:()=>0,wallNow:()=>100000});`);
 

@@ -1260,6 +1260,7 @@ the tooling strict checker owns the source's type checking.
   malformed and older unnamed stages remain protected warnings. A detected
   member mismatch records a versioned corruption diagnostic and does not refresh
   recency. The count reports corruption without hashing payloads under the lock.
+  Malformed or future diagnostics protect the bundle from retention deletion.
   The sibling legacy `nts-gate/bin` root remains isolated from these leases:
   historical gates can prune only their own root. Both roots have `kept` rules;
   no existing age-based sweep proves a legacy run gone. The count reports legacy

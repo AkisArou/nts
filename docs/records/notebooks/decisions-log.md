@@ -4094,4 +4094,5 @@ publisher lifecycle of [gate binary leases](#gate-binary-pins-follow-run-leases-
 Detected member corruption publishes a versioned diagnostic prepared outside the
 cache lock. Neither failed verification nor diagnostic publication refreshes
 recency, and count names the diagnostic without hashing executable bytes under
-the lock. Malformed and future diagnostic versions are never overwritten.
+the lock. Malformed and future diagnostic versions are never overwritten or
+removed by retention.

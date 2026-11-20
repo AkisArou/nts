@@ -146,7 +146,11 @@ export function binaryPinDiagnostics(root:string,observe:PinOwnerObservation=obs
 
 function prune(root:string,observe:PinOwnerObservation):void{
   stagingDiagnostics(root,observe,true);
-  const unheld=pins(root).filter(dir=>!inspect(dir,observe,true).held)
+  const unheld=pins(root).filter(dir=>{
+    if(inspect(dir,observe,true).held)return false;
+    try{readCorruption(join(dir,CORRUPT));return true;}
+    catch{return false;} // Malformed/future state is read-only, including deletion.
+  })
     .map(dir=>({dir,time:lstatSync(dir).mtimeMs})).sort((a,b)=>b.time-a.time||a.dir.localeCompare(b.dir));
   // Held folders do not consume the ten recently used, unheld cache slots.
   for(const old of unheld.slice(10))rmSync(old.dir,{recursive:true,force:true});

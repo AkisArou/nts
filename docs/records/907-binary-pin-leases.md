@@ -95,7 +95,9 @@ versioned metadata without hashing executable bytes. Failed verification never
 refreshes the bundle's recency, including when publishing the diagnostic changes
 directory metadata. Corruption controls verify repeated refusal, unchanged
 executable inode/content and recency, named count warnings, and preservation of
-future diagnostic versions.
+future diagnostic versions. Malformed and future diagnostics also protect the
+unheld bundle from retention deletion; a neighboring ordinary old bundle remains
+eligible for pruning.
 
 ## Publication durability
 
