@@ -127,6 +127,12 @@ pub(super) struct Hierarchy {
     /// keyed by what values have, so a site in a generic body names each
     /// instance its copies make.
     pub(super) template_instances: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
+    /// Each type parameter, to every source type some copy of its generic binds it
+    /// to (`Sources`): function copies, generic methods' own instances and class
+    /// instantiations. What a value of the parameter may be outside any one copy
+    /// ([`FuncBuilder::object_types_a_value_may_be`]), which the throw analysis asks
+    /// of a generic body it reads once for all its copies.
+    pub(super) parameter_sources: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
     /// Declared-face and actual source-supplier storage after reservations,
     /// computed once before bodies.
     /// Anonymous schemas may reserve entries only to alias one of these rows.
@@ -1028,7 +1034,8 @@ pub(super) fn collect_hierarchy(
         ..Hierarchy::default()
     };
     probe.hierarchy = &probe_hierarchy;
-    hierarchy.template_instances = template_instances(snapshot, &instantiations);
+    (hierarchy.template_instances, hierarchy.parameter_sources) =
+        template_instances(snapshot, &instantiations);
     collect_anonymous_objects(snapshot, &probe, &mut hierarchy);
     // After both, because it edits `declares`: a member that becomes storage
     // must not also be numbered a slot. Before the slot loop for the same

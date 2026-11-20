@@ -1,5 +1,6 @@
 //! Choose which bodies and dispatch slots get a raising copy and record the reason an eligible route is held.
 
+use super::raising_calls::ArgumentMembers;
 use super::{
     Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, Member, MemberKey, MethodAccessor,
     Naming, NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared, Throwing, TypeId,
@@ -570,7 +571,17 @@ pub(super) fn raising_callees_of(
     if !probe.printers.at(node).is_empty() || !probe.iterators.at(node).is_empty() {
         return callees;
     }
-    if let Some(callee) = a_raising_callee_of(snapshot, probe, node) {
+    // A call on a receiver a copy binds runs what each argument declares, not the
+    // bound's member the checker resolved ([`FuncBuilder::members_run_at_each_argument`]).
+    if let Some(groups) = probe
+        .members_run_at_each_argument(node)
+        .filter(|_| probe.kind_of(node) == Some(syntax::CALL_EXPRESSION))
+    {
+        callees.extend(groups.into_iter().flat_map(|group| match group {
+            ArgumentMembers::Named(members) => members,
+            ArgumentMembers::Stored(_) | ArgumentMembers::Unresolved => Vec::new(),
+        }));
+    } else if let Some(callee) = a_raising_callee_of(snapshot, probe, node) {
         callees.push(callee);
         callees.extend(the_methods_a_union_receiver_runs(snapshot, probe, node));
     } else {
@@ -1315,6 +1326,11 @@ pub(super) fn a_value_held_call(
     }
     if literal_methods::stored_call(probe, call) {
         return true;
+    }
+    if let Some(groups) = probe.members_run_at_each_argument(call) {
+        return groups
+            .iter()
+            .any(|group| matches!(group, ArgumentMembers::Stored(_)));
     }
     let Some(callee) = probe
         .children(call)

@@ -61,38 +61,53 @@ pub(super) fn is_an_instantiation(
 }
 
 /// Each type a generic body names, to every instance a copy of the body makes
-/// of it: what [`Hierarchy::template_instances`](super::Hierarchy::template_instances) holds. Read off every copy's
-/// `Substitution` -- generic functions, their value fallbacks, and class
-/// instantiations.
+/// of it: what [`Hierarchy::template_instances`](super::Hierarchy::template_instances) holds. And
+/// each type parameter, to every source type a copy binds it to: what
+/// [`Hierarchy::parameter_sources`](super::Hierarchy::parameter_sources) holds. Both
+/// are read off every copy -- generic functions, their value fallbacks, and class
+/// instantiations -- so the two cannot list different copies.
 pub(super) fn template_instances(
     snapshot: &SemanticSnapshot,
     instantiations: &rustc_hash::FxHashMap<SymbolId, Vec<crate::hir::generics::Instantiation>>,
-) -> rustc_hash::FxHashMap<TypeId, Vec<TypeId>> {
+) -> (
+    rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
+    rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
+) {
     let functions = crate::hir::generics::function_instantiations(snapshot);
     let mut by_template: rustc_hash::FxHashMap<TypeId, Vec<TypeId>> =
         rustc_hash::FxHashMap::default();
-    let substitutions = functions
+    let mut by_parameter: rustc_hash::FxHashMap<TypeId, Vec<TypeId>> =
+        rustc_hash::FxHashMap::default();
+    let copies = functions
         .copies
         .values()
         .flatten()
-        .map(|copy| &copy.substitution)
+        .map(|copy| (&copy.substitution, &copy.sources))
         .chain(
             functions
                 .value_fallbacks
                 .values()
-                .map(|copy| &copy.substitution),
+                .map(|copy| (&copy.substitution, &copy.sources)),
         )
-        .chain(instantiations.values().flatten().map(|i| &i.substitution));
-    for substitution in substitutions {
+        .chain(
+            instantiations
+                .values()
+                .flatten()
+                .map(|instance| (&instance.substitution, &instance.sources)),
+        );
+    for (substitution, sources) in copies {
         for (template, instance) in substitution.instances() {
             by_template.entry(template).or_default().push(instance);
         }
+        for (parameter, source) in sources {
+            by_parameter.entry(*parameter).or_default().push(*source);
+        }
     }
-    for instances in by_template.values_mut() {
+    for instances in by_template.values_mut().chain(by_parameter.values_mut()) {
         instances.sort_unstable();
         instances.dedup();
     }
-    by_template
+    (by_template, by_parameter)
 }
 
 pub(super) fn uninstantiated(

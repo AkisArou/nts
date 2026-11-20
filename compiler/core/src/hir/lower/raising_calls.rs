@@ -10,6 +10,16 @@ use super::{
     planned_callee, raising_callees_of, syntax,
 };
 
+/// How one instantiated receiver supplies the member a generic body invokes.
+/// A stored callable uses the closure entry, rather than a named method copy.
+/// Unresolved is retained so lowering refuses that copy's call; it contributes
+/// no invented callee or throwing edge to the analysis.
+pub(super) enum ArgumentMembers {
+    Named(Vec<NodeId>),
+    Stored(u32),
+    Unresolved,
+}
+
 impl FuncBuilder<'_> {
     /// The first call anywhere inside `node`, if there is one.
     ///
@@ -713,6 +723,15 @@ impl FuncBuilder<'_> {
     /// a closure aborts by name instead of losing the `throw`. Measured at **0
     /// reachable entries** across all 29 runtime corpora.
     pub(super) fn a_raising_body_carries_this_call(&self, id: NodeId) -> Result<(), Diagnostic> {
+        if !self.sources.is_empty()
+            && self.members_run_at_each_argument(id).is_some_and(|groups| {
+                groups
+                    .iter()
+                    .any(|group| matches!(group, ArgumentMembers::Unresolved))
+            })
+        {
+            return Err(self.unresolved_call(id));
+        }
         if !self.raises || self.tested_for_a_raise(id) || erased_calls::inline_method(self, id) {
             return Ok(());
         }
@@ -914,9 +933,11 @@ impl FuncBuilder<'_> {
     /// The type is every object type the receiver may be
     /// ([`Self::object_types_a_value_may_be`]): lowering resolves `r[kV]` in each copy
     /// of `read<T extends Box>` at the type it put there, and this one analysis has to
-    /// answer for all of them, which reading `T` at its bound does
+    /// answer for all of them, which reading `T` at its bound and at every argument a
+    /// copy binds does, and a copy's own builder at its argument alone
     /// (`tests/programs/a-throwing-getter-under-a-computed-key-inside-a-try`'s
-    /// `bounded`).
+    /// `bounded`, `tests/programs/a-type-argument-runs-its-own-members-inside-a-try`'s
+    /// `accessor`).
     ///
     /// Only where no such type records the key does the node's own symbol answer, and
     /// only for a dotted access, whose name the checker resolves to the member. An
@@ -984,6 +1005,164 @@ impl FuncBuilder<'_> {
             }
         }
         recorded.then_some(symbols)
+    }
+
+    /// What a member call or accessor access runs **at each type argument** its
+    /// receiver may be, where the receiver's type is a type parameter some copy of its
+    /// generic binds: one group per object type the receiver may be
+    /// ([`Self::object_types_a_value_may_be`]), holding the named member, stored callable,
+    /// or accessors recorded under the key. An unnameable object member is retained
+    /// as `Unresolved`, and lowering refuses the call with its existing diagnostic.
+    /// `None` for any other site, which the checker's resolution answers as before.
+    ///
+    /// **The checker resolves such a call at the bound, and a copy does not run the
+    /// bound.** `read<T extends Box>(r: T) { return r.m() }` resolves to `Box#m`;
+    /// lowering's copy for `T = Other` represents `r` as an `Other` and calls
+    /// `Other#m`, which `Other` declares whether or not it extends `Box`. Asked of
+    /// `Box#m`, the throw analysis gave `Other#m` no edge, no copy and no flag test,
+    /// and its `throw` ended the program from inside a `try` that compiled
+    /// (`outcomes/a-structural-type-argument-throws-past-its-bound`). So this one
+    /// derivation answers for lowering and the analysis alike: inside a copy (its
+    /// builder carries the copy's `sources`) only the copy's own argument, and
+    /// outside one the constraint and every argument a copy binds, which is one
+    /// reading of a generic body speaking for all its copies.
+    ///
+    /// **Grouped by type, because a copy runs one type's members.** A copy can carry
+    /// its call when nothing at its own argument can raise or everything there has a
+    /// copy; asked of all the arguments' members at once, the quiet `Box#m` of one
+    /// copy would cost `Other#m`'s copy its caller ([`a_copy_can_contain`](super::a_copy_can_contain)).
+    ///
+    /// Only parameters a copy binds, so the polymorphic `this` and a generic no copy
+    /// instantiates keep the checker's answer, and an access family's suppliers keep
+    /// theirs.
+    pub(super) fn members_run_at_each_argument(
+        &self,
+        node: NodeId,
+    ) -> Option<Vec<ArgumentMembers>> {
+        if self.hierarchy.access_families.at(node).next().is_some() {
+            return None;
+        }
+        let calls = matches!(self.kind_of(node), Some(syntax::CALL_EXPRESSION));
+        // Static calls still lower to the checker's bound (#915). Keep that
+        // same answer here until lowering selects the constructor argument.
+        if calls
+            && self
+                .snapshot
+                .call_targets
+                .get(&node)
+                .and_then(|target| target.callee)
+                .is_some_and(|declaration| {
+                    self.node(declaration)
+                        .modifiers
+                        .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+                })
+        {
+            return None;
+        }
+        let access = if calls {
+            self.children(node).first().copied()?
+        } else {
+            node
+        };
+        let (receiver, key) = self.member_access_key(access)?;
+        let ty = *self.snapshot.node_types.get(&receiver)?;
+        if !self.a_type_parameter_a_copy_binds(ty) {
+            return None;
+        }
+        let groups: Vec<_> = self
+            .object_types_a_value_may_be(ty)
+            .into_iter()
+            .map(|object| {
+                if calls {
+                    let Some(TypeKind::Object { properties }) = self
+                        .snapshot
+                        .types
+                        .get(object.0 as usize)
+                        .map(|record| &record.kind)
+                    else {
+                        return ArgumentMembers::Unresolved;
+                    };
+                    let Some(declaration) = properties
+                        .iter()
+                        .find(|property| property.name == key)
+                        .and_then(|property| property.declaration)
+                    else {
+                        return ArgumentMembers::Unresolved;
+                    };
+                    let Some(symbol) = self.member_symbol(declaration) else {
+                        return ArgumentMembers::Unresolved;
+                    };
+                    if self.literal_member_is_storage(object, &key)
+                        || matches!(self.kind_of(declaration), Some(syntax::GET_ACCESSOR))
+                    {
+                        ArgumentMembers::Stored(symbol)
+                    } else {
+                        ArgumentMembers::Named(vec![self.implementation_of(declaration)])
+                    }
+                } else {
+                    ArgumentMembers::Named(
+                        self.accessor_symbols_declared_on(object, &key)
+                            .into_iter()
+                            .flatten()
+                            .flat_map(|symbol| self.accessor_declarations_of(symbol))
+                            .collect(),
+                    )
+                }
+            })
+            .collect();
+        // Primitive and array arguments have no object member declaration here;
+        // their existing builtin/array lowering remains authoritative.
+        (!groups.is_empty()).then_some(groups)
+    }
+
+    /// Whether a value of `ty` may be a type parameter that a copy of its generic
+    /// binds: this builder's own copy, or any copy the program makes.
+    ///
+    /// **Never the polymorphic `this`.** A copy can bind it -- a generic method's
+    /// instance pins its receiver's class -- but only to its class or a subclass,
+    /// whose members the override edges already answer for from the class's own,
+    /// and the class's methods are lowered as written for every other receiver. Read
+    /// at its copies, `this._read(n)` in `Readable#read` named `Readable#_read` and
+    /// two subclasses' overrides as separate callees, and its refusal changed cause
+    /// in `runtime/node/http` and `process` for no change in what runs.
+    fn a_type_parameter_a_copy_binds(&self, ty: TypeId) -> bool {
+        let mut seen = rustc_hash::FxHashSet::default();
+        let mut pending = vec![ty];
+        while let Some(at) = pending.pop() {
+            if !seen.insert(at) {
+                continue;
+            }
+            match self
+                .snapshot
+                .types
+                .get(at.0 as usize)
+                .map(|record| &record.kind)
+            {
+                Some(TypeKind::TypeParameter { is_this: false, .. })
+                    if self.sources.contains_key(&at)
+                        || self.hierarchy.parameter_sources.contains_key(&at) =>
+                {
+                    return true;
+                }
+                Some(TypeKind::Union(members) | TypeKind::Intersection(members)) => {
+                    pending.extend(members.iter());
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// The symbol the throw analysis asks about a member declaration by: an accessor's
+    /// from [`Hierarchy::accessor_symbols`](super::Hierarchy::accessor_symbols), and a
+    /// method's through its name, as [`a_method_under_a_computed_key`] reads one.
+    pub(super) fn member_symbol(&self, member: NodeId) -> Option<u32> {
+        if let Some(symbol) = self.hierarchy.accessor_symbols.get(&member) {
+            return Some(*symbol);
+        }
+        self.node(self.name_node(member)?)
+            .symbol
+            .map(|symbol| self.denoted_symbol(symbol).0)
     }
 
     /// A symbol's `get` and `set` declarations, less an Objective-C binding's.
@@ -1086,6 +1265,18 @@ impl FuncBuilder<'_> {
             if self.foreign.contains_key(&(at.file.0, at.span.end)) {
                 return true;
             }
+        }
+        // A method a copy's argument declares, rather than the bound's the checker
+        // named: inside a copy, that copy's own ([`Self::members_run_at_each_argument`]).
+        if let Some(groups) = self.members_run_at_each_argument(call) {
+            return groups.iter().any(|group| match group {
+                ArgumentMembers::Named(members) => members
+                    .iter()
+                    .filter_map(|member| self.member_symbol(*member))
+                    .any(|symbol| self.throwing.contains(&symbol)),
+                ArgumentMembers::Stored(_) => true,
+                ArgumentMembers::Unresolved => false,
+            });
         }
         let Some(callee) = self.children(call).first().copied() else {
             return false;

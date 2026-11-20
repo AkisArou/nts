@@ -839,22 +839,35 @@ impl FuncBuilder<'_> {
     /// The object types a value of `ty` may be, for a question **every one of them**
     /// must answer, such as "which accessors can this access run".
     ///
-    /// A type parameter is read at its constraint, the polymorphic `this` included
-    /// ([`Self::class_behind`]'s hop), a union at each arm and an intersection at each
-    /// member. The constraint is what lets one analysis of a generic body speak for
-    /// every copy lowering makes of it: `read<T extends Box>`'s copy for a subclass
-    /// reaches the subclass's override, which the override edges answer for from
-    /// `Box`'s. Anything else (a primitive, an array, an unconstrained parameter)
-    /// contributes nothing, and an empty answer means the type has no say.
+    /// A union is read at each arm and an intersection at each member. A type
+    /// parameter is read **at the copy's argument** inside a copy of its generic
+    /// (`self.sources`), which is the type lowering put there; and outside any copy at
+    /// its constraint and at every argument the program's copies bind it to
+    /// ([`Hierarchy::parameter_sources`](super::Hierarchy::parameter_sources)). The
+    /// polymorphic `this` is read at its class alone ([`Self::class_behind`]'s hop),
+    /// wherever it is bound: it is that class or a subclass, which the override edges
+    /// answer for.
     ///
-    /// The walk is bounded, as `receivers::through_a_constraint`'s loop is: a cyclic
-    /// constraint is an error the checker has already reported.
+    /// **The arguments and not only the constraint**, because a copy calls what its
+    /// argument declares and an argument need not descend from the bound: with
+    /// `class Other` matching `Box` structurally, `read<T extends Box>`'s copy for
+    /// `Other` reads `Other`'s accessor, which no override edge from `Box`'s reaches
+    /// (`outcomes/a-structural-type-argument-throws-past-its-bound`). So one analysis
+    /// of a generic body speaks for every copy lowering makes of it, and each copy's
+    /// builder answers for itself alone. A subclass argument's override is answered
+    /// both ways, as the override edges answer it from `Box`'s. Anything else (a
+    /// primitive, an array, an unconstrained parameter no copy binds) contributes
+    /// nothing, and an empty answer means the type has no say.
+    ///
+    /// Every reachable type is visited once, including cycles. There is no size
+    /// cutoff: truncating the argument set silently misses throws from later copies
+    /// (`programs/a-type-argument-throw-analysis-visits-every-copy`).
     pub(super) fn object_types_a_value_may_be(&self, ty: TypeId) -> Vec<TypeId> {
         let mut objects = Vec::new();
         let mut seen = rustc_hash::FxHashSet::default();
         let mut pending = vec![ty];
         while let Some(at) = pending.pop() {
-            if seen.len() >= 64 || !seen.insert(at) {
+            if !seen.insert(at) {
                 continue;
             }
             match self
@@ -864,9 +877,29 @@ impl FuncBuilder<'_> {
                 .map(|record| &record.kind)
             {
                 Some(TypeKind::TypeParameter {
-                    constraint: Some(constraint),
+                    constraint,
+                    is_this,
                     ..
-                }) => pending.push(*constraint),
+                }) => {
+                    // Inside a copy the parameter *is* the type it was bound to,
+                    // and outside one it may be its constraint or any type a copy
+                    // binds it to: what a copy's body runs is found at the
+                    // argument, whatever its class's hierarchy. Not the
+                    // polymorphic `this`, which is its class or a subclass
+                    // wherever it is bound, and is read at the class.
+                    if *is_this {
+                        pending.extend(*constraint);
+                        continue;
+                    }
+                    if let Some(source) = self.sources.get(&at) {
+                        pending.push(*source);
+                        continue;
+                    }
+                    if let Some(sources) = self.hierarchy.parameter_sources.get(&at) {
+                        pending.extend(sources.iter().rev());
+                    }
+                    pending.extend(*constraint);
+                }
                 Some(TypeKind::Union(members) | TypeKind::Intersection(members)) => {
                     pending.extend(members.iter().rev());
                 }

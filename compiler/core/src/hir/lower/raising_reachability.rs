@@ -1,5 +1,6 @@
 //! Collect the body-level graph of throws, handlers, and potential raising callees.
 
+use super::raising_calls::ArgumentMembers;
 use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, FuncBuilder, HirType, NodeId, NodeKind, SemanticSnapshot,
     a_parameter_pattern_can_throw, a_reaction_site, a_value_held_call, access_families,
@@ -543,8 +544,49 @@ pub(super) fn walk_one_declaration(
                 // with-only-a-finally` said, in the words its own
                 // header had promised.
             );
+            // **And the method each type argument declares**, where a copy binds the
+            // receiver: the copy for `T = Other` of `read<T extends Box>` calls
+            // `Other#m`, which the checker's `Box#m` above is no edge to when `Other`
+            // matches `Box` only structurally. One edge per argument the program's
+            // copies bind, so the declaration answers for every copy it has
+            // ([`FuncBuilder::members_run_at_each_argument`]).
+            if kind == Some(syntax::CALL_EXPRESSION)
+                && let Some(groups) = probe.members_run_at_each_argument(at)
+            {
+                reach_argument_members(snapshot, probe, groups, reached);
+            }
         }
         pending.extend(children_that_run(probe, at));
+    }
+}
+
+/// Add the actual supplies of a generic receiver without inventing an edge for
+/// an unresolved member (that copy is refused when lowered).
+fn reach_argument_members(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    groups: Vec<ArgumentMembers>,
+    reached: &mut Vec<Reached>,
+) {
+    for group in groups {
+        match group {
+            ArgumentMembers::Named(members) => reached.extend(
+                members
+                    .into_iter()
+                    .filter_map(|member| probe.member_symbol(member))
+                    .map(Reached::Body),
+            ),
+            ArgumentMembers::Stored(symbol) => {
+                // The stored value can be replaced, or returned by a
+                // getter. Its declaration names the supplier, not
+                // necessarily the closure invoked at run time.
+                reached.push(Reached::Elsewhere);
+                if a_callee_with_a_body(snapshot, probe, symbol) {
+                    reached.push(Reached::Body(symbol));
+                }
+            }
+            ArgumentMembers::Unresolved => {} // Refused before emitting a call.
+        }
     }
 }
 
@@ -993,11 +1035,6 @@ pub(super) fn a_copy_can_contain(
     // cannot dispatch that one at the raising slot: asked here, it made
     // `fixed@raises` a copy that then refused
     // (`tests/programs/a-closed-call-recovers-an-erased-parameter`, 9 refusals to 10).
-    if a_value_held_call(snapshot, probe, call)
-        || probe.reason_without_a_leaf(call) == Some(A_FUNCTION_WRITTEN_AS_A_VALUE)
-    {
-        return value_held_is_carried;
-    }
     // **A read or write through an access family runs whichever supplier's accessor
     // the receiver has**, dispatched at the family's raising slot, which
     // `fill_raising_member_slots` fills with the ordinary entry for a supplier that
@@ -1007,6 +1044,29 @@ pub(super) fn a_copy_can_contain(
     // `writableWebTarget` its copy through `value.writable` on a
     // `TransformWebStreamLike`, and a closure in `pipeline` held the raising gate off
     // in six `runtime/node` modules.
+    // **At each type argument on its own**, for a receiver a copy binds: a copy runs one
+    // argument's members, so it carries the call when nothing there can raise or every
+    // one there has a copy. Asked of every argument's members together, the quiet
+    // `Box#m` of one copy took `read`'s copy from the `Other#m` of another
+    // ([`FuncBuilder::members_run_at_each_argument`]).
+    if let Some(groups) = probe.members_run_at_each_argument(call) {
+        return groups.iter().all(|group| match group {
+            ArgumentMembers::Named(members) => {
+                members.iter().all(|member| {
+                    !probe
+                        .member_symbol(*member)
+                        .is_some_and(|symbol| throwing.any.contains(&symbol))
+                }) || members.iter().all(|member| eligible.contains(member))
+            }
+            ArgumentMembers::Stored(_) => value_held_is_carried,
+            ArgumentMembers::Unresolved => true, // Refused before emitting a call.
+        });
+    }
+    if a_value_held_call(snapshot, probe, call)
+        || probe.reason_without_a_leaf(call) == Some(A_FUNCTION_WRITTEN_AS_A_VALUE)
+    {
+        return value_held_is_carried;
+    }
     if probe.reads_an_accessor(call) && probe.hierarchy.access_families.at(call).next().is_some() {
         return probe
             .hierarchy
@@ -1065,6 +1125,18 @@ pub(super) fn a_call_that_can_raise(
     // the builder has the set rather than the caller.
     if let Some(symbols) = probe.accessor_symbols_run_by(call) {
         return symbols.is_empty() || symbols.iter().any(|symbol| throwing.any.contains(symbol));
+    }
+    // A method a copy's argument declares, rather than the bound's the checker named
+    // ([`FuncBuilder::members_run_at_each_argument`]).
+    if let Some(groups) = probe.members_run_at_each_argument(call) {
+        return groups.iter().any(|group| match group {
+            ArgumentMembers::Named(members) => members
+                .iter()
+                .filter_map(|member| probe.member_symbol(*member))
+                .any(|symbol| throwing.any.contains(&symbol)),
+            ArgumentMembers::Stored(_) => true,
+            ArgumentMembers::Unresolved => false,
+        });
     }
     // `f.call(r)` can raise what `f` can ([`FuncBuilder::through_call_or_apply`]).
     let Some(callee) = probe
