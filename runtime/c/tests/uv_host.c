@@ -423,6 +423,73 @@ static void post_supplied_task(void *state) {
   nts_post_from_any_thread(*(NtsTask *)state);
 }
 
+/* A activates while the owner's detached foreign batch is running. B is
+ * queued after that batch was taken, before the wakeup target is published. */
+static unsigned inherited_runs;
+static unsigned inherited_drops;
+
+static void inherited_b(void *state) {
+  (void)state;
+  inherited_runs++;
+  note("B");
+}
+
+static void inherited_drop(void *state) {
+  (void)state;
+  inherited_drops++;
+}
+
+static void activating_foreign_a(void *state) {
+  (void)state;
+  note("A");
+  NtsTask task = {inherited_b, inherited_drop, NULL};
+  uv_thread_t worker;
+  if (uv_thread_create(&worker, post_supplied_task, &task) != 0 ||
+      uv_thread_join(&worker) != 0) {
+    abort();
+  }
+  nts_post_delayed(reaction("t"), 0, false);
+}
+
+static void activation_inside_a_foreign_batch_wakes_inherited_posts(void) {
+  for (unsigned lazy = 0; lazy != 2; lazy++) {
+    bool agrees = true;
+    bool closes = true;
+    inherited_drops = 0;
+    for (unsigned repeat = 0; repeat != 100; repeat++) {
+      trace[0] = '\0';
+      inherited_runs = 0;
+      if (!lazy) {
+        uv_loop_init(&loop);
+      }
+      nts_uv_host_install(lazy ? NULL : &loop);
+      NtsTask task = {activating_foreign_a, NULL, NULL};
+      uv_thread_t worker;
+      if (uv_thread_create(&worker, post_supplied_task, &task) != 0 ||
+          uv_thread_join(&worker) != 0) {
+        abort();
+      }
+      nts_uv_host_run();
+      agrees = agrees && inherited_runs == 1 &&
+               (strcmp(trace, "A -> t -> B") == 0 ||
+                strcmp(trace, "A -> B -> t") == 0);
+      nts_uv_host_shutdown();
+      closes = (uv_loop_close(lazy ? uv_default_loop() : &loop) == 0) && closes;
+    }
+    printf("inherited posts (%s): %s, dropped %u\n", lazy ? "lazy" : "explicit",
+           trace, inherited_drops);
+    check(lazy ? "100 activations inside foreign batches deliver B once"
+               : "explicit-loop batch activation control delivers B once",
+          agrees);
+    check(lazy ? "inherited lazy posts are never dropped"
+               : "explicit-loop control never drops inherited posts",
+          inherited_drops == 0);
+    check(lazy ? "inherited-post lazy loops close"
+               : "inherited-post explicit loops close",
+          closes);
+  }
+}
+
 static void complete_pending(void *state) {
   (void)state;
   note("completion");
@@ -620,6 +687,7 @@ int main(int argc, char **argv) {
   a_lazy_task_activates_once_and_keeps_checkpoints();
   a_lazy_timer_activates_once();
   a_foreign_post_before_activation_runs_without_a_loop();
+  activation_inside_a_foreign_batch_wakes_inherited_posts();
   pending_work_can_be_the_first_activation();
   a_queued_promise_joins_without_a_backend();
   foreign_posts_race_activation_without_loss_or_duplication();
