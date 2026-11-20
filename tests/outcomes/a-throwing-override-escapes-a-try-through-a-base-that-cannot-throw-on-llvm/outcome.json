@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 5,
+      "expected": 5,
+      "compared": 5,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 2,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 5,
+      "received": 5,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "throughBaseAsAValue 0 nts: uncaught 27",
+        "node": "throughBaseAsAValue 0 bff0000000000000"
+      },
+      {
+        "compiled": "throughABaseThatCanThrowAsAValue 0 nts: uncaught 27",
+        "node": "throughABaseThatCanThrowAsAValue 0 bff0000000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 5 compared, 5 expected, 2 disagreements",
+  "node": null,
+  "measured_with": "bee35ab3febd5f1c",
+  "source": "measured"
+}

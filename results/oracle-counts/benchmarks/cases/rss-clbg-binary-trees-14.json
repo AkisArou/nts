@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/rss-clbg-binary-trees-14",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "benchmarks/cases/rss-clbg-binary-trees-14/case.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "a0b4021eb4b006120e0992fd755dbe2acc3102ae313685aa480993bc37e1b4ba",
+      "source_digest": "20b53ac8bbc267b04ab532011fa5820f",
+      "stdout_sha256": "732f665700409aa9c0d5baec834b68c38da9681e70ad9da7111f4f3b85c9f028",
+      "stdout_bytes": 11,
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throwing-getter-under-a-computed-key-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throwing-getter-under-a-computed-key-inside-a-try/src/main.ts",
+      "signature": "2304ab49df50d0ca05c040fc60c6f3df6051be6654b312047f893e0161d4075a",
+      "keys": {
+        "c": "d2dcb0b44a67613383a10232084c7a63",
+        "jvm": "31dff04280971f3da66e236b87e4959a",
+        "llvm": "5a8ec39efacada776126fad781a16ac6"
+      },
+      "cases_sha256": "dd792074e76af4c53247ee43f5c29fc984fe53eaff610826fe4f5a3da7d97fdc",
+      "driver_sha256": "2392a0e9e45503d7fe2f73d2350d2cc7fd9e56cb4c8e85ba89fd34d94ffa9676",
+      "populations": {
+        "bounded": {
+          "count": 29,
+          "cases_sha256": "e0c292c5201e47d768771953c85b368ee1d1d746635ad3f8e2d13abf43b05bb0"
+        },
+        "getter": {
+          "count": 29,
+          "cases_sha256": "9027668bf1328d6fa707706901b932f760529576e73a377eddf0276063aed665"
+        },
+        "override": {
+          "count": 29,
+          "cases_sha256": "cb4a35cdf8a6fb0c74efc89c69226070c9f576d985de71e3e66e1d8ebcde5934"
+        },
+        "setter": {
+          "count": 29,
+          "cases_sha256": "2afc37b4b9e92fc966e1210404f70a084630f64cc812dd1624fd4fddd683df05"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}

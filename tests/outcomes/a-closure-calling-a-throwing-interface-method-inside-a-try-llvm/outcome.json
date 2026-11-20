@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "aborted",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 0,
+      "unavailable": 0,
+      "runtime_declined": 29,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 29
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+      "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build"
+    ],
+    "error": null
+  },
+  "run": "check",
+  "category": "aborted",
+  "nts": "nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build",
+  "node": null,
+  "measured_with": "bee35ab3febd5f1c",
+  "source": "measured"
+}

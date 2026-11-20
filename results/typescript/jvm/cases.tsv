@@ -3861,7 +3861,7 @@ tests/typescript/generic-routes-controls/narrowing-typeof-unions-control.ts	{"ki
 tests/typescript/generic-routes/callbacks-comparer-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/generic-routes/callbacks-field-deferred.ts	{"kind":"pass"}
 tests/typescript/generic-routes/callbacks-mapper-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/generic-routes/callbacks-method-specializations.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/generic-routes/callbacks-method-specializations.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/generic-routes/classes-box-erased.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/generic-routes/classes-box-primitives.ts	{"kind":"pass"}
 tests/typescript/generic-routes/classes-box-references.ts	{"kind":"pass"}
@@ -3955,14 +3955,14 @@ tests/typescript/generics/interface-member-over-union.ts	{"kind":"refused","diag
 tests/typescript/generics/intersection-merge.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/generics/keyof-constraint.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/generics/map-of-arrays.ts	{"kind":"pass"}
-tests/typescript/generics/method-over-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/generics/method-over-boolean.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/generics/method-over-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/generics/method-over-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/generics/method-over-boolean.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/generics/method-over-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/generics/method-over-function.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/generics/method-over-nested.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/generics/method-over-number.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/generics/method-over-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/generics/method-over-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/generics/method-over-nested.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/generics/method-over-number.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/generics/method-over-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/generics/method-over-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/generics/over-null-and-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/generics/override-generic-method.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS4001","where":"none"}]}
 tests/typescript/generics/recursive-type.ts	{"kind":"invalid-hir","validator":"StoreType { func: \"flatten<str>\", what: \"an array element\", expected: Managed(String), found: Int { bits: 32, signed: true } }"}
@@ -4606,7 +4606,7 @@ tests/typescript/instanceof-routes-controls/custom-bound-inherited-hook-control.
 tests/typescript/instanceof-routes-controls/custom-bound-live-prototype-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/instanceof-routes-controls/custom-bound-target-hook-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/instanceof-routes-controls/custom-getter-typed-return-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/instanceof-routes-controls/custom-object-generic-throw-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1001","where":"harness"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/instanceof-routes-controls/custom-object-generic-throw-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/instanceof-routes-controls/custom-ordinary-constructor-parameter-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/instanceof-routes-controls/custom-ordinary-receiver-tuple-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/instanceof-routes-controls/custom-rebound-generic-target-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}

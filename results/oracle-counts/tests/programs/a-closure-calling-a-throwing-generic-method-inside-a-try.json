@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-calling-a-throwing-generic-method-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-calling-a-throwing-generic-method-inside-a-try/src/main.ts",
+      "signature": "6f364cbe5e9b7b250b9755420d8fc655903d3e9dcf65d4ecd15344730a775f6f",
+      "keys": {
+        "c": "60a2a84f0fde988c79b53b8cfed300af",
+        "jvm": "8df431d0152f5cfb696af86d80d2ee96",
+        "llvm": "056a30bc4392306577a23f8b6fb53c20"
+      },
+      "cases_sha256": "97886d4dc742f3543bee0e6fa8c71dde9405a94575f6d087838dec07cef8d803",
+      "driver_sha256": "506fa978c3fb348f32556cdf3fed318dd0f63b8badbd40305abe5a150c72d5e4",
+      "populations": {
+        "first": {
+          "count": 29,
+          "cases_sha256": "c3612970d88fb4beeed557a0573ea79b52c2da9c6108ff091a6d338a7418699f"
+        },
+        "level": {
+          "count": 29,
+          "cases_sha256": "54eb770e455b047636111be30e9b4da288f15e639bedc8c9baf5917607c860a2"
+        },
+        "picked": {
+          "count": 29,
+          "cases_sha256": "168acdfbd726487642f03a1eb5929588c279a2eaa5b542ebbf5f8e52fa3aaa1c"
+        },
+        "read": {
+          "count": 29,
+          "cases_sha256": "dbe61929e263a00c923285bff0c63549df81bbc4c0a4f4825f91a246f42f23e5"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}

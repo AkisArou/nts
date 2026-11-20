@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throwing-override-under-a-computed-key-through-a-base",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throwing-override-under-a-computed-key-through-a-base/src/main.ts",
+      "signature": "1ebb7998fa56672de8f48888a755ddf0bb72678f346a406a7a09b06bba259e7f",
+      "keys": {
+        "c": "45423fad43fbe4dd62c91f554bc5a87e",
+        "jvm": "a136778473a8a871ef0a0665f9199573",
+        "llvm": "08b76545e97ff96e89587e764727d23a"
+      },
+      "cases_sha256": "deb18d4348f7bf129885f9f66e051750ff19bf939118f0e3c9659df1e0373c9a",
+      "driver_sha256": "80feac1dc6d532e50c645f0b1adc9cec883be293159e3105f13208f184eefccd",
+      "populations": {
+        "computed": {
+          "count": 29,
+          "cases_sha256": "2b2d79643d38f0aeb48e99e3215ae81384c29176f03a27b41439b769ed72e56b"
+        },
+        "named": {
+          "count": 29,
+          "cases_sha256": "31aac11acdbec785e6008de1fa4b5dece4f89cda374ccc2dc021f37e45040310"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

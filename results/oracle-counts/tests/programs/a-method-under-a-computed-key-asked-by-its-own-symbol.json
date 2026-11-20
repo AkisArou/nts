@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-under-a-computed-key-asked-by-its-own-symbol",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-under-a-computed-key-asked-by-its-own-symbol/src/main.ts",
+      "signature": "e4eb80f606c108051bd8944fe2991d4433cc20a9cb5f2872bc6fa67266867e51",
+      "keys": {
+        "c": "5cced233a149be21151e06511eac7725",
+        "jvm": "27b095bdc3de4bae96d98c1211698e81",
+        "llvm": "425117bcabfae8c94948350eeda71b8f"
+      },
+      "cases_sha256": "849102a7a186632458d49328de04d53109db4a1ee4ec66d2640f7505c3a80eba",
+      "driver_sha256": "bf2e15ae8a4e74eb5e202f0766004fe31de1f808c7c89a4eaf746d6ef31d00e6",
+      "populations": {
+        "aborted": {
+          "count": 29,
+          "cases_sha256": "57a0c7963cafb36bc00d8296a04e8406dd0f2519851aeb0fb9dce3a88b0b837a"
+        },
+        "read": {
+          "count": 29,
+          "cases_sha256": "dbe61929e263a00c923285bff0c63549df81bbc4c0a4f4825f91a246f42f23e5"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

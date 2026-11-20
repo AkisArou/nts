@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/rss-clbg-k-nucleotide-32768",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "benchmarks/cases/rss-clbg-k-nucleotide-32768/case.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "f7445d6cef29c0e0b5fcfea0b1ad4b99a6a56cb1a2e0d6beb13527fc31623b29",
+      "source_digest": "3bc609c9e657e236cb81556a8d3daa50",
+      "stdout_sha256": "bc379e9ae43677b65433fe5d98e64ddb252f830d4d9908ea1ab3014944c7b911",
+      "stdout_bytes": 11,
+      "exit_code": 0
+    }
+  ]
+}

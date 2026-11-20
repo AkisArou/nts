@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "check": {
+    "version": 4,
+    "incomplete": [],
+    "status": "aborted",
+    "counts": {
+      "programs": 1,
+      "functions": 0,
+      "expected": 1,
+      "compared": 1,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 1
+    },
+    "oracle": {
+      "expected": 1,
+      "received": 1,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [
+      "the program was killed by signal 11 without refusing anything -- a crash, not a declined case"
+    ],
+    "error": null
+  },
+  "run": "check",
+  "category": "aborted",
+  "nts": "the program was killed by signal 11 without refusing anything -- a crash, not a declined case",
+  "node": null,
+  "measured_with": "bee35ab3febd5f1c",
+  "source": "measured"
+}

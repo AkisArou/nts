@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-whole-program-prints-its-lines",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "tests/programs/a-whole-program-prints-its-lines/src/main.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "69deca330eb3aad85fff93f60ac8009e888a5a1de8e09dab8d4bda2b3a2509ab",
+      "source_digest": "6d0a66b132b5cada8c33895cee9423fc",
+      "stdout_sha256": "ad1aa9ba10a4f9b3f5bbe35a879c2bd99da35885f7ae84bfbb404c64537f8329",
+      "stdout_bytes": 87,
+      "exit_code": 0
+    }
+  ]
+}

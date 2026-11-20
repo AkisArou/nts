@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/rss-clbg-fasta-32768",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "benchmarks/cases/rss-clbg-fasta-32768/case.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "0f104cf59a1cf71a6eb0896f7e4b3c48af9c39bab8b13e109151c527fa5d329a",
+      "source_digest": "00f1e7dd7af0d0c3e542ebfd578253e1",
+      "stdout_sha256": "4b0e0c0fcb56d6bb5cdf249a7c50b98c544ceed2679d29cf53a2e611e28e9674",
+      "stdout_bytes": 10,
+      "exit_code": 0
+    }
+  ]
+}

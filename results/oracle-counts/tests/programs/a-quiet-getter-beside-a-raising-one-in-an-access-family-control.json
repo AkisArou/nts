@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-quiet-getter-beside-a-raising-one-in-an-access-family-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-quiet-getter-beside-a-raising-one-in-an-access-family-control/src/main.ts",
+      "signature": "8f2e5309365835e56b378e587e72627ceef890bb31d9677b1ff45a563a6a1bf1",
+      "keys": {
+        "c": "c67e9346263b8b4f0f630b24333ad4f7",
+        "jvm": "21a200da5cf45a43fe0a947bfde4f861",
+        "llvm": "6b2fa37c4d563f4279ba6d0bbf3e2ad1"
+      },
+      "cases_sha256": "55259ab3c76099d179b3759d3faabdbcbf7ce7e8a8b7a28f5f9c0e234267d07c",
+      "driver_sha256": "1e839da0e23fc73c20a2c858ad5a64b5ebed888e4cdfdb6977f582cb85737cdd",
+      "populations": {
+        "checked": {
+          "count": 29,
+          "cases_sha256": "d25f5bd8ca7510ab1c3af669e494440f9d9b386741e775cfc7370c056721d3f5"
+        },
+        "read": {
+          "count": 29,
+          "cases_sha256": "dbe61929e263a00c923285bff0c63549df81bbc4c0a4f4825f91a246f42f23e5"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

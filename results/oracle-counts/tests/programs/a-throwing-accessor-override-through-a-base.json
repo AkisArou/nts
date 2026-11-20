@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throwing-accessor-override-through-a-base",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throwing-accessor-override-through-a-base/src/main.ts",
+      "signature": "da2b121beeb7b8937f75316dea75899d2dbb651c2ba8020fa1db744407147815",
+      "keys": {
+        "c": "ef98974f53222058b81ede102030e1c3",
+        "jvm": "3828cd76fe8418338a54fcee9b489a2e",
+        "llvm": "dcbcd39729489fdf5eceb414e3173ede"
+      },
+      "cases_sha256": "272d35ae88830f5003fb17ec3a5f4e5e19fca6665dd2316c88863c926a6b72fc",
+      "driver_sha256": "71fc11db4d53825df646e64e77bedaee774f707cdd89b7c77f9e4ee5479bb230",
+      "populations": {
+        "getter": {
+          "count": 29,
+          "cases_sha256": "9027668bf1328d6fa707706901b932f760529576e73a377eddf0276063aed665"
+        },
+        "setter": {
+          "count": 29,
+          "cases_sha256": "2afc37b4b9e92fc966e1210404f70a084630f64cc812dd1624fd4fddd683df05"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

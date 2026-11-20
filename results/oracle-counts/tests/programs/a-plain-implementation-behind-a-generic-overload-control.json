@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-plain-implementation-behind-a-generic-overload-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-plain-implementation-behind-a-generic-overload-control/src/main.ts",
+      "signature": "9b52b5aac9366f4c614d3e79834083a50679608a6b72959f8be87f9eec6fb60a",
+      "keys": {
+        "c": "15c4a9d96f3987fae36327dd54fdaa9f",
+        "jvm": "35048322935616e77827560240b05186",
+        "llvm": "d48df4787548ae73849d9ea371bb9e66"
+      },
+      "cases_sha256": "8645c055e88fe570c603d4ee78b258a7290c9e024c109737e6127a53e68439be",
+      "driver_sha256": "89b74e8555eaadb519e2c358dbb344087fde01954407668359734286bb26681f",
+      "populations": {
+        "fromObject": {
+          "count": 29,
+          "cases_sha256": "7a3b9bd8248d86d69121ad6c02621340bca4416d4d0772060ada8af34f039439"
+        },
+        "sized": {
+          "count": 29,
+          "cases_sha256": "10605eb750f97bc8a121467f03c9ad029ec286545c3ec8b7aaae5ecf2dd44c0a"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}
