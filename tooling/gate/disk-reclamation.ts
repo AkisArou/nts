@@ -164,6 +164,9 @@ export function targetLeftovers(tree:string):{root:string;writer:string}[]{
     root:join(target,name),writer:name==='tmp'?'compiler/test-support/scratch.rs (test scratch)':
       name.endsWith('-tests')?'compiler integration tests via compiler/test-support/scratch.rs':
       name==='gate-costs'?'tooling/gate/step-scheduling.ts':
+      name==='gate-scope-owner.json'||name==='gate-scope-owner.json.lock'?'tooling/gate/run.mjs; tooling/landing/run.ts':
+      name==='.gate-run.lock'?'tooling/gate/run.mjs':
+      name==='tooling-types.tsbuildinfo'?'tooling/tsconfig.json':
       /^\d+-/.test(name)?'historical issue #'+name.split('-')[0]+' probe/log; writer unknown':'unknown',
   }));
 }
@@ -256,9 +259,10 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       for(const name of ['nts-dev','clippy'] as const)if(isDirectory(join(target.target,name))&&marker(join(target.target,name),name)==='obsolete')add(target,join(target.target,name),'obsolete-profile',movedAt);
       if(!target.service){
         const leftovers=targetLeftovers(target.tree),cache=cargoCache(target.target);
-        for(const row of leftovers)keep(row.root,'unrecognized target content; writer: '+row.writer);
+        for(const row of leftovers)keep(row.root,'unrecognized target content; writer: '+row.writer,true);
         if(!leftovers.length&&cache)add(target,target.target,'free-build-output',movedAt);
         else for(const name of cargoProfiles){
+          if(name==='debug')continue; // The obsolete-profile owner already offered it.
           const output=join(target.target,name);
           if(!isDirectory(output))continue;
           // A successful owner marker proves the profile even where older

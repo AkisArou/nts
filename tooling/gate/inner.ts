@@ -148,7 +148,11 @@ function heavy(phase: Phase, command: string, args: readonly string[], env: Node
   const status=run(process.execPath, [ADMIT, "--key", phase.key, "--workers", String(phase.workers), "--at-most", String(most),
     "--memory-max", phase.memoryMax, "--what", `inner loop: ${phase.what}`, "--", ...bounded], child);
   const instrument=readStepInstrument(receipt,phase.key,attempt);
-  if(instrument?.kind==='disk-capacity')throw new DiskBuildAdmissionError(instrument.disk!);
+  if(instrument?.kind==='disk-capacity'){
+    const error=new DiskBuildAdmissionError(instrument.disk!);
+    error.message=instrument.reason;
+    throw error;
+  }
   return status;
 }
 

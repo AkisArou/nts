@@ -495,3 +495,11 @@ test('unproved profiles and unknown siblings are retained without displacing com
   assert.ok(report.kept.some(row=>row.root===profile&&row.reason.includes('neither Cargo cache identity nor a completion marker')),JSON.stringify(report));
   for(const tree of [a,b])assert.ok(report.kept.some(row=>row.root===join(tree,'target')&&row.reason==='two warm free targets retained'));
 });
+
+test('a tagless target offers debug only through obsolete-profile ownership',t=>{
+  const f=fixture(t),tree=f.tree('1'),debug=f.output(tree,'debug',16*GiB);
+  rmSync(join(tree,'target/CACHEDIR.TAG'));
+  const report=reclaimDisk(f.options);
+  assert.deepEqual(report.removed.map(row=>[row.root,row.kind]),[[debug,'obsolete-profile']],JSON.stringify(report));
+  assert.equal(report.kept.some(row=>row.root===debug),false,'one report cannot both remove and retain the same debug profile');
+});

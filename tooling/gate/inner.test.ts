@@ -126,8 +126,16 @@ if(args[0]==='test') {
     // The real admission runner is not under test. Its private stand-in runs
     // only fake cargo, while the real inner CLI builds its normal commands.
     writeFileSync(join(tree, "tooling/gate/admit.ts"), `import {spawnSync} from 'node:child_process';
+import {existsSync,readFileSync} from 'node:fs';
+import {durableRecord} from './durable-record.ts';
 const args=process.argv.slice(2),command=args.slice(args.indexOf('--')+1);
-process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1);
+const status=spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1;
+const receipt=process.env.NTS_GATE_STEP_RESULT;
+if(receipt&&existsSync(receipt)){
+  const result=JSON.parse(readFileSync(receipt,'utf8'));
+  if(result.kind==='disk-capacity')durableRecord(receipt,{...result,reason:result.reason+'\\nDisk reclamation:\\nkept /fixture/target/test-scratch: unrecognized target content; writer: unknown'});
+}
+process.exit(status);
 `);
     for (const args of [["init", "-q", "-b", "main"], ["add", "."], ["-c", "user.name=inner-test", "-c", "user.email=inner@example.invalid", "commit", "-qm", "fixture"]]) {
       const ran = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
@@ -148,6 +156,10 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
       const result=readStepInstrument(receipt,'inner','disk');assert.equal(result?.kind,'disk-capacity',ran.stdout+ran.stderr);
       assert.match(result!.reason,/disk build admission/);assert.equal(phases.some(args=>args[0]===diskPhase),false,'the refused Cargo phase never started');
       assert.doesNotMatch(ran.stdout,/red: fix it|FAIL\s+(?:clippy|build)/,'a capacity instrument is not reported as a product red');
+      if(diskPhase==='clippy'){
+        assert.match(result!.reason,/Disk reclamation:\nkept \/fixture\/target\/test-scratch/,'inner preserves the child receipt decisions');
+        assert.match(ran.stdout+ran.stderr,/kept \/fixture\/target\/test-scratch/,'the final refusal names the retained sibling');
+      }
       return;
     }
     assert.equal(readFileSync(calls+".clippy-target","utf8"),join(tree,"target/clippy"));
