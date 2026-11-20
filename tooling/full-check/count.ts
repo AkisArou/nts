@@ -109,7 +109,7 @@ export type CountInput = {
 export type Removable = { path: string; why: string };
 /** A slice the count found empty and bound to no active unit: the sweep stops it by name. */
 export type Stoppable = { unit: string; why: string };
-export type CountResult = { verdict: "PASS" | "FAIL" | "INSTRUMENT"; red: string[]; notes: string[]; removable: Removable[]; stoppable: Stoppable[] };
+export type CountResult = { verdict: "PASS" | "FAIL" | "INSTRUMENT"; red: string[]; notes: string[]; notices?: string[]; removable: Removable[]; stoppable: Stoppable[] };
 
 const EXEMPT = new Set(["main", "verified"]);
 const DAY = 86_400_000;
@@ -383,7 +383,7 @@ function issueScratch(entry:Entry,issue:number,context:Context,red:string[],note
   red.push(`${display(entry.path,context)}: issue #${issue} is not open and no committed record cites it; ${days(context.now-entry.mtimeMs)} days old; deletion awaits the user's decision`);
 }
 
-function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[],notes:string[]): void {
+function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[],notes:string[],notices:string[]): void {
   const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan, folderStat: input.folderStat,
     issues:input.issues,recordCitations:input.recordCitations };
   for (const entry of folders(input.cache, input.folderStat).filter(entry => /^nts(?:[-_.]|$)/.test(entry.name))) {
@@ -397,7 +397,7 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
   // Legacy writers have no leases. No age or absence of a new holder proves
   // that an old runner has ended, so upkeep reports these without sweeping.
   for(const pin of folders(join(input.cache,"nts-gate","bin"),input.folderStat)){
-    if(/^[0-9a-f]{64}$/.test(pin.name))red.push(`${display(pin.path,context)}: legacy gate pin without lease ownership; report only, deletion awaits the user's decision`);
+    if(/^[0-9a-f]{64}$/.test(pin.name))notices.push(`${display(pin.path,context)}: legacy gate pin without lease ownership; report only, deletion awaits the user's decision`);
   }
   red.push(...binaryPinWarnings(join(input.cache,"nts-gate","bin-v2"),input.pinOwnerObservation));
 }
@@ -440,12 +440,12 @@ function sliceLines(input: CountInput, red: string[], notes: string[], stoppable
 }
 
 export function count(input: CountInput, keep: Record<string, Keep> = readKeep()): CountResult {
-  const red: string[] = [], notes: string[] = [], removable: Removable[] = [], stoppable: Stoppable[] = [];
+  const red: string[] = [], notes: string[] = [], notices: string[] = [], removable: Removable[] = [], stoppable: Stoppable[] = [];
   branchLines(input, red, notes);
   worktreeLines(input, red);
-  cacheLines(input, keep, red, removable,notes);
+  cacheLines(input, keep, red, removable,notes,notices);
   sliceLines(input, red, notes, stoppable);
-  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, removable, stoppable };
+  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, notices, removable, stoppable };
 }
 
 /**
@@ -634,6 +634,7 @@ export function countLines(result: CountResult): string[] {
     `count: ${result.verdict} -- ${result.red.length} red line(s)`,
     ...result.red.map(line => `  red: ${line}`),
     ...result.notes.map(line => `  ${line}`),
+    ...(result.notices??[]).map(line=>`  notice: ${line}`),
   ];
 }
 

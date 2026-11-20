@@ -66,7 +66,8 @@ test('the pre-lease count-only pruner cannot reach the sibling versioned cache',
   assert.equal(readdirSync(join(f.root,f.hash,'holders')).length,1);
   const counted=count({plan:'',local:[],remote:[],pulls:[],issues:[],recordCitations:[],worktrees:[],shared:f.cache,cache:f.cache,
     root:f.cache,main:null,verified:null,slices:[],activeUnits:[],now:0},{'nts-gate':{kind:'kept',why:'fixture'}});
-  assert.equal(counted.red.filter(line=>line.includes('legacy gate pin')).length,10);
+  assert.equal(counted.notices?.filter(line=>line.includes('legacy gate pin')).length,10);
+  assert.equal(counted.verdict,'PASS','a legacy leftover awaiting a decision is a notice, not a failure');
   assert.deepEqual(counted.removable,[],'no existing age rule can prove a legacy holder gone');
   held.release();
 });
