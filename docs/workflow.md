@@ -1243,7 +1243,8 @@ the tooling strict checker owns the source's type checking.
   Reuse verifies members while leased, outside the lock, and never rewrites them.
   The holder binds its run,
   token and boot/PID/start identity. Copies and hashing happen outside the
-  cache-wide owner lock; publication, holder acquisition, recency, reclamation
+  cache-wide owner lock, as does complete holder-record preparation and flushing;
+  publication, holder acquisition, recency, reclamation
   and pruning share that lock. Retention keeps every held folder and the ten
   newest unheld folders. The runner releases after its workers, scopes and
   reservation drain on success, failure and signal. Terminal reporting never

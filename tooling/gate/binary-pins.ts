@@ -105,6 +105,9 @@ export function pinBinaries(options:Options):BinaryPin{
     const bundleSha256=createHash('sha256').update(JSON.stringify(pairs)).digest('hex'),dir=join(root,bundleSha256);
     const leasePath=join(dir,'holders',row.token+'.json');lease=leasePath;
     for(const name of Object.keys(members))paths[name]=join(dir,name);
+    // Complete and flush the holder privately, too. No fsync (which can wait
+    // for unrelated copying) belongs inside the cache's publication lock.
+    const stagedLease=join(staging,'holders',row.token+'.json');durableRecord(stagedLease,row);
     const started=now();let entered=started,ended=started;
     withLock(lock,()=>{
       entered=now();
@@ -112,8 +115,11 @@ export function pinBinaries(options:Options):BinaryPin{
         // A new bundle is published complete. Existing immutable members are
         // verified after leasing, outside the lock, and are never rewritten.
         if(!existsSync(dir)){renameSync(staging,dir);stageOwned=false;}
-        mkdirSync(join(dir,'holders'),{recursive:true});
-        durableRecord(leasePath,row);published=true;
+        else{
+          mkdirSync(join(dir,'holders'),{recursive:true});
+          renameSync(stagedLease,leasePath);
+        }
+        published=true;
         const touched=new Date(wallNow());utimesSync(dir,touched,touched);
         prune(root,observe);
       }finally{ended=now();}
