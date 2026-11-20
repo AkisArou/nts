@@ -571,12 +571,11 @@ static void count_completion(void *state) {
   count_callback(state);
   nts_pending_end();
 }
-static void count_iteration(void) {
+static void count_schedule(void) {
   nts_post_task((NtsTask){count_callback, 0, 0});
   nts_post_delayed((NtsTask){count_callback, 0, 0}, 0, false);
   nts_pending_begin();
   nts_post_from_any_thread((NtsTask){count_completion, 0, 0});
-  nts_uv_host_run();
 }
 static int count_work(unsigned count, bool lazy) {
   if (!lazy) {
@@ -586,12 +585,17 @@ static int count_work(unsigned count, bool lazy) {
   if (!lazy) {
     /* Warm the queue/table storage and lazy DSO bindings in both the empty
      * and work arms. --activate measures first work separately. */
-    count_iteration();
+    count_schedule();
+    nts_uv_host_run();
     counted_callbacks = 0;
   }
   for (unsigned i = 0; i < count; i++) {
-    count_iteration();
+    count_schedule();
   }
+  /* The shipped standalone runner enters its outer loop once, rather than
+   * charging a process-boundary run/return to each task. Keep one run in the
+   * empty bracket too, so its entry check cancels in the subtraction. */
+  nts_uv_host_run();
   nts_uv_host_shutdown();
   int closed = lazy ? (count ? uv_loop_close(uv_default_loop()) : 0)
                     : uv_loop_close(&loop);
