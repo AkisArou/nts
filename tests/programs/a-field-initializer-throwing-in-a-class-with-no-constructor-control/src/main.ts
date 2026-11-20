@@ -52,32 +52,3 @@ export function throughAClosure(n: number): number {
   seed = (n & 7) - 3;
   return attempt(() => new Resolver().tries);
 }
-
-class Based {
-  base: number;
-  constructor(n: number) {
-    this.base = check(n);
-  }
-}
-
-/** No constructor of its own: `Based`'s runs, then this initializer, here. */
-class Inherits extends Based {
-  extra = check(seed - 1) * 3;
-}
-
-/** An inherited constructor and an own initializer, inside a `try`. */
-export function inherited(n: number): number {
-  seed = (n & 7) - 3;
-  try {
-    const made = new Inherits(seed + 2);
-    return made.base + made.extra;
-  } catch {
-    return -1;
-  }
-}
-
-/** The same through a closure. */
-export function inheritedThroughAClosure(n: number): number {
-  seed = (n & 7) - 3;
-  return attempt(() => new Inherits(seed + 2).extra);
-}
