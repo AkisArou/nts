@@ -828,7 +828,11 @@ exec /usr/bin/gcc "$@"
         ["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]
     );
     for (index, arg) in args.iter().enumerate() {
-        if arg.ends_with(".a") || (arg.starts_with("-l") && arg != "-lm") {
+        if Path::new(arg)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("a"))
+            || (arg.starts_with("-l") && arg != "-lm")
+        {
             assert!(index < math, "library follows scoped libm: {args:?}");
         }
     }
@@ -876,7 +880,10 @@ exec /usr/bin/gcc "$@"
     while let Some(arg) = iter.next() {
         if arg == "-o" {
             iter.next();
-        } else if !arg.ends_with(".o") {
+        } else if !Path::new(arg)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("o"))
+        {
             flags.push(arg.clone());
         }
     }
