@@ -203,9 +203,9 @@ test('a landed hold still needs admission when taken again',t=>{
   assert.equal(p.take('884').state,'held');assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
 });
 
-test('a reclaimed landed hold still needs admission when attached again',t=>{
+for(const action of ['take','attach'] as const)test('a reclaimed landed hold reserves its admitted promise before another take: '+action,t=>{
   let busy=false;
-  const {p,s,observe}=pool(t,2,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]});
+  const {p,s,observe}=pool(t,3,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]});
   const tree=p.take('884'),target=join(tree.path,'target');
   mkdirSync(target);writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
   for(const name of ['nts-dev','clippy'] as const){const output=join(target,name);mkdirSync(output);completeBuild(tree.path,name,output);}
@@ -216,12 +216,16 @@ test('a reclaimed landed hold still needs admission when attached again',t=>{
   assert.equal(existsSync(target),false);
   observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});p.take('885');
   const file=workerPresenceFile(tree.path),record=readFileSync(file,'utf8'),inode=lstatSync(file).ino;
-  assert.throws(()=>p.attach('884'),PoolFull);
+  assert.throws(()=>p[action]('884'),PoolFull);
   assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'landed');
   assert.equal(readFileSync(file,'utf8'),record);assert.equal(lstatSync(file).ino,inode);
   assert.equal(p.capacity.snapshot(p.dir).availableBytes,0,'the other task keeps its admitted promise');
   observe({freeBytes:DISK_MARGIN_BYTES+2*COLD_TARGET_BYTES,freeInodes:1000});
-  assert.equal(p.attach('884').presence!.state,'attached');
+  assert.equal(p[action]('884').presence!.state,'attached');
+  assert.throws(()=>p.take('886'),PoolFull,'the admitted remainder is already reserved before the worker commits');
+  assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'held');
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
+  assert.equal(p.room().reservedBytes,2*COLD_TARGET_BYTES,'both lease owners count the restored promise immediately');
   writeFileSync(join(tree.path,'resumed.txt'),'resumed task work\n');
   s.git(['add','resumed.txt'],tree.path);s.git(['commit','-qm','resume task'],tree.path);
   assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'held');
