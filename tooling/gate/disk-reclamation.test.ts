@@ -24,6 +24,9 @@ const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
 function fixture(t:TestContext){
   const s=scratchRepo(t,'disk-reclamation');
   s.commit({'.gitignore':'target/\nlocal/\n','Cargo.toml':'[workspace]\n[profile.nts-dev]\ndebug=0\n'},'build policy');
+  // Reclamation order is a supplied fact, never the seconds fixture setup
+  // happened to cross while the machine ran other checks.
+  s.env.GIT_COMMITTER_DATE='@1000000000 +0000';
   const dir=join(s.dir,'pool');mkdirSync(dir);
   const env=ownMemory(join(s.dir,'observations'),{disk:{freeBytes:44*GiB,freeInodes:1000}});
   const original=hostObservations(env),outputs=new Map<string,number>();
