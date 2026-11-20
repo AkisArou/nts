@@ -121,6 +121,7 @@ Measured lock intervals exclude copying, hashing and member verification.
 | --- | --- | ---: | ---: |
 | Holder fsync inside lock | `366cf321a828b52240de48d8a090ef1a46e739f9` | 1191.483 | 619.084 |
 | Complete staging outside lock | `df4ec629b7f557eb6fbcacc6c49bff725c92dd9e` | 404.654 | 2.165 |
+| Owned staging reclamation and confirmed recency | `5da0a8fa09e7ec5eb28de83a0279e8b5ca6a94c4` | 109.374 | 18.075 |
 
 The first arm exceeded the requested one-second wait bound. Moving complete
 holder preparation and flushing outside the lock removed that serialized IO;
@@ -149,3 +150,26 @@ Raw evidence is retained under `/home/akisarou/.cache/nts-scratch/907/`:
 | `sabotage.json` | `c94228dcec6aebcdf06b1be91983e1567d1a67bb2245c22d6956411db520228f` |
 | `sabotage.log` | `0af168488eab28b0b6996ec2f619d0a31493762cab0b09513674f3bf2941477e` |
 | `sabotage.mjs` | `aa9f91b027f04cb33832ee4e77602a5c16c1033f05e5dbeff86f3e6ab831786a` |
+
+The review rerun used 79,303,256-byte payloads. Its timing totals
+include both publication and verified-recency lock acquisitions for each run.
+All twenty-four bundles survived while held and ten remained after release.
+
+Review sabotage separately disabled staging reclamation and restored failed-use
+recency updates; each intended control failed, and exact saved-copy restoration
+made it pass. Count-only sabotage was repeated on the same committed owner.
+
+Additional retained review evidence:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `review-measurement-commit.log` | `01d1b0df5e0ed8f97a766c6b19c6862320768124b73860659fe3e2e75009b142` |
+| `review-concurrent-starts.json` | `0b7f1fbf844b20d9316891595f1ad19d550bec026f882f6612d5e95c22d900b1` |
+| `review-concurrent.log` | `16e2735d6496f0df5f619b15c7fc9bcae6be44235cb321bd7db45dfbb16e2758` |
+| `review-concurrent-starts.mjs` | `b25b28e9aefb7d641068bb139a2b18cc0f23364fdc2d18f5bd2193e1490f5c05` |
+| `review-pin-child.mjs` | `f5e03365ba76b72bcff7c277be6075e1ee5a8cdb8f92b3418004e44ade905203` |
+| `review-sabotage.json` | `14caacb2310d46093886ef3cd3cc1a4412fc357372431f99471eb4f924d75ae3` |
+| `review-sabotage.log` | `dc929105ac81597c0c21adc189520ce83dcff4e9fb8a0c1c72a751645870a555` |
+| `review-sabotage.mjs` | `1c4c0bf06cd08ca43a6174feb089263c92f4a6f4f3dc441f5d9da0751da889e8` |
+| `review-focused.log` | `3c763a66cfe31090fd6bc0bb78012d8624d2c1b1d7546c504f5e58534d6a0d16` |
+| `review-tooling.log` | `f0ccef814d5282e9ae0f41ce798bee1457b048e224f6e7c86846f703e239f105` |
