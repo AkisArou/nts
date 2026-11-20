@@ -3984,3 +3984,20 @@ swing widely from night to night. Two of stage 1's mechanisms are already built:
 10-27). Stage 1's first tasks are #876, the sort cost that remains on top of
 the count-free sort, and #877, the count inventory; #878 is re-cut from #877's
 result.
+
+## Doctest compilation belongs to admitted preparation (11-20)
+
+For #890, the coordinator approved preparing the selected doctest Cargo graph
+through the shared compiler build owner with `-- --list`, in the same
+`nts-dev` profile and target used by execution. A release build does not prepare
+those artifacts. Pinned preparation and landing own this compilation; a direct
+selection uses the same admitted owner before step scopes. The preparation
+receipt binds source, selected crates, profile and target, and execution requires
+fresh Cargo artifacts. Unselected doctests perform no preparation. The build's
+disk claim includes `nts-dev` and merges with that target's existing claims.
+
+This extends [the existing build lifetime](#pinned-preparation-owns-only-its-build-11-13)
+without carrying its reservation into the gate. A scheduled build is itself warm
+after pinned preparation, so moving the compile there would only relocate the
+reservation mismatch. No reservation formula, measured allowance or runaway
+boundary changes.

@@ -786,8 +786,9 @@ shell frontend step, the workspace replay and the doctest step call the same
 invocation owner. An executing inner invocation without those prepared
 capabilities refuses before Cargo starts and names the contributor command.
 Compile-only `--no-run` invocations need no runtime preparation.
-The admitted compiler preparation prepares selected doctests in that same target and `nts-dev`
-profile with the doctest route's `-- --list` mode. It compiles Cargo libraries
+The admitted compiler preparation builds selected doctest prerequisites in
+that same target and `nts-dev` profile with the doctest route's `-- --list`
+mode. It compiles Cargo libraries
 and dev dependencies while rustdoc only lists examples. The executing doctest
 step requires the successful build receipt for its source, selected crates,
 profile and target, and requires every Cargo artifact to be fresh. A doctests-only
@@ -795,7 +796,8 @@ selection prepares those prerequisites without building compiler binaries.
 Pinned runs and landing prepare them inside their existing shared build
 lifetime. Direct selections use that same admitted build owner before taking
 step scopes; retries retain the receipt. The scheduled build and doctests
-reuse the prepared artifacts. A selection without doctests performs no doctest preparation. The
+reuse the prepared artifacts. A selection without doctests performs no
+doctest preparation. The
 build's disk claim includes `nts-dev`, shared with existing claims for that target.
 The complete seal verifier is a node-only leaf, `differential/oracle-seal/main.ts`,
 so checking preparation adds no launcher dependencies to the Rust test steps.
@@ -2299,13 +2301,19 @@ death; an absent timestamp remains explicit after forced termination.
   worker's own cap, so a verdict never depends on the history
   ([log](records/notebooks/decisions-log.md#reservations-are-measured-peaks-11-09)).
 - **Pinned preparation owns only its build.** `pinned.sh` runs its initial
-  release Cargo command through `admit.ts` with the whole-job `pinned-build`
+  shared compiler preparation through `admit.ts` with the whole-job `pinned-build`
   key and the selected target's scheduling history. That command's process
   ends before gate entry; the runner's normal admission retires the exited
   owner and reserves for itself. No reservation spans both phases, and the
   shell never passes the build handle to the gate. Preparation rusage starts
   after admission, so its duration excludes time waiting for memory
   ([log](records/notebooks/decisions-log.md#pinned-preparation-owns-only-its-build-11-13)).
+- **Doctests execute an already prepared Cargo graph.** The shared build
+  owner compiles their selected libraries and dev dependencies in `nts-dev`
+  before step scopes. Execution requires the matching successful receipt and
+  fresh artifacts. Compiler changes cannot charge a cold library build to the
+  warm doctest step. Selection still decides whether preparation is owed
+  ([log](records/notebooks/decisions-log.md#doctest-compilation-belongs-to-admitted-preparation-11-20)).
 - **Proof jobs have stable history keys**: `hir-compare`, `perf-count` and
   `test262-records` name the prepared-HIR corpus comparison, instruction
   counts and five test262 records. Issue numbers belong in labels and logs,
