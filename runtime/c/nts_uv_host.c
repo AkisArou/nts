@@ -431,6 +431,11 @@ static NtsHostPumpResult nts_uv_start_pump(void *state) {
   return nts_uv_active ? nts_uv_pump_one(state) : NTS_HOST_PUMP_IDLE;
 }
 
+static uv_loop_t *nts_uv_native_loop(void *state) {
+  (void)state;
+  return nts_uv_host_loop();
+}
+
 static const NtsHost nts_uv_host = {
     .post_task = nts_uv_post_task,
     .post_delayed = nts_uv_post_delayed,
@@ -441,6 +446,7 @@ static const NtsHost nts_uv_host = {
     .pump_one = nts_uv_pump_one,
     .pending = nts_uv_pending_change,
     .state = 0,
+    .loop = nts_uv_native_loop,
 };
 
 static void nts_uv_activate(void) {

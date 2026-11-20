@@ -1001,6 +1001,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_host_activate", None, None, Raising::NoRaise),
     ("nts_host_checkpoint_end", None, None, Raising::NoRaise),
     ("nts_host_install", None, None, Raising::NoRaise),
+    ("nts_host_loop", None, None, Raising::NoRaise),
     (
         "nts_hresult_clear",
         Some(&[

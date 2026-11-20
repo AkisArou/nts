@@ -10,5 +10,7 @@ static _Thread_local uv_loop_t *hosted_loop;
 void nts_node_set_loop(uv_loop_t *loop) { hosted_loop = loop; }
 
 uv_loop_t *nts_node_loop(void) {
-    return hosted_loop != NULL ? hosted_loop : uv_default_loop();
+    if (hosted_loop != NULL) return hosted_loop;
+    uv_loop_t *loop = nts_host_loop();
+    return loop != NULL ? loop : uv_default_loop();
 }

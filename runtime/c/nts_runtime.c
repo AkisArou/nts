@@ -11552,6 +11552,17 @@ void nts_host_activate(const NtsHost *host) {
   nts_env->host.pending = host->pending;
 }
 
+struct uv_loop_s *nts_host_loop(void) {
+  if (!nts_env->host_installed || !nts_env->host.loop) {
+    return NULL;
+  }
+  if (!nts_is_owner_thread()) {
+    fprintf(stderr, "nts: host loop from a thread that does not own it\n");
+    abort();
+  }
+  return nts_env->host.loop(nts_env->host.state);
+}
+
 /* A growable ring of tasks.
  *
  * A ring rather than a list because the drain is FIFO and the whole point is

@@ -45,6 +45,7 @@ fn callback_raises(owner: &str, target: &str) -> Option<bool> {
         | ("nts_key_eq", "nts_objc_key_equal")
         | ("nts_enqueue_microtask", "enqueue_microtask")
         | ("nts_pending_begin" | "nts_pending_end", "pending")
+        | ("nts_host_loop", "loop")
         | ("nts_is_owner_thread", "is_owner_thread")
         | ("nts_post_task", "post_task")
         | ("nts_post_delayed", "post_delayed")

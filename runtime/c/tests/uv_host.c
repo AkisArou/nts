@@ -534,11 +534,14 @@ static void transition_microtask(void *state, NtsTask task) {
   }
 }
 
+static uv_loop_t *transition_loop(void *state) { return (uv_loop_t *)state; }
+
 static void activation_keeps_the_foreign_contract_immutable(void) {
   NtsHost host = {.post_from_any_thread = transition_foreign,
                   .is_owner_thread = transition_owner,
                   .enqueue_microtask = transition_microtask,
-                  .state = &transition_state};
+                  .state = &transition_state,
+                  .loop = transition_loop};
   nts_host_install(&host);
   /* All immutable fields intentionally differ from the installed host. An
    * accidental full-vtable replacement fails this control. */
@@ -555,6 +558,8 @@ static void activation_keeps_the_foreign_contract_immutable(void) {
   check("activation preserves owner identity", nts_is_owner_thread());
   check("activation preserves state and foreign entry", preserved_foreign == 1);
   check("activation preserves checkpoint policy", preserved_microtasks == 1);
+  check("activation preserves the native loop accessor",
+        nts_host_loop() == (uv_loop_t *)&transition_state);
 }
 #endif
 

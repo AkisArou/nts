@@ -4061,6 +4061,8 @@ typedef enum NtsHostPumpResult {
 /* Scheduling and optional synchronous progress for an embedding host.
  * Scheduling, cancellation, accounting and thread queries do not run language
  * callbacks inline or raise language values. Only pump_one may run them. */
+struct uv_loop_s;
+
 typedef struct NtsHost {
   /* Run after the current task *and* after a complete checkpoint. That
    * ordering is what `setImmediate` is built on, so it is specified here
@@ -4104,6 +4106,11 @@ typedef struct NtsHost {
   void (*pending)(void *state, int delta);
 
   void *state;
+
+  /* Optional owner-thread access to the host's native I/O loop. Acquiring it
+   * may activate a lazy host. Immutable after installation; NULL for hosts
+   * that do not expose libuv. */
+  struct uv_loop_s *(*loop)(void *state);
 } NtsHost;
 
 /* An environment: one runtime's heap, queues, host and diagnostics.
@@ -4198,9 +4205,14 @@ void nts_host_install(const NtsHost *host);
  * installed host's owner identity. post_task, post_delayed, cancel_delayed,
  * pump_one and pending are read only by that owner; activation may replace
  * them once work requires a real loop. The foreign-post entry, owner query,
- * checkpoint policy and state remain immutable after installation, so a
- * foreign post may race this transition without reading a changing field. */
+ * checkpoint policy, loop accessor and state remain immutable after
+ * installation, so a foreign post may race this transition without reading a
+ * changing field. */
 void nts_host_activate(const NtsHost *host);
+
+/* Native runtime I/O asks its installed host before falling back to a loop.
+ * Host API only: NULL when no host exposes a loop. */
+struct uv_loop_s *nts_host_loop(void);
 
 /* Run a task with the checkpoint around it. Hosts call *this*, never
  * `task.run`, so a host cannot omit a checkpoint by forgetting. */

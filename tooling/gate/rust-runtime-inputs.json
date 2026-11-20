@@ -2531,6 +2531,50 @@
           {
             "kind": "file",
             "path": "../../../../tests/memory/collector_parse_rss.c"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/internal/loop.c"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/internal/nts_node.h"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/internal/shared.c"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/internal/shared.h"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/timers/timers.c"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/timers/nts_timers.h"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/fs/fs.c"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/fs/fs.h"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/crypto/crypto.c"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/crypto/nts_crypto.h"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../runtime/node/crypto/crypto_internal.h"
           }
         ]
       }

@@ -535,8 +535,8 @@ fn the_libuv_host_keeps_the_same_contract_as_the_deterministic_one() {
         &["-luv"],
     );
     assert!(
-        checks(&report) >= 39,
-        "expected at least 39 host checks, saw {}:\n{report}",
+        checks(&report) >= 40,
+        "expected at least 40 host checks, saw {}:\n{report}",
         checks(&report)
     );
 }
@@ -889,4 +889,87 @@ fn string_search_positions_keep_their_numeric_boundaries() {
         run_suite("string_positions", &[]),
         "string positions agree\n"
     );
+}
+
+/// Native Node primitives acquire the installed standalone host's loop, even
+/// when their I/O bypasses the language scheduling helpers.
+#[test]
+fn native_node_io_activates_the_standalone_host() {
+    let root = repository();
+    let runtime = root.join("runtime/c");
+    let native = root.join("runtime/node");
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-native-node-loop");
+    std::fs::create_dir_all(&out).expect("a build directory");
+    let main = out.join("main.c");
+    std::fs::write(&main, nts_codegen_c::standalone_main(true)).expect("standalone runner");
+    let fixture = runtime.join("tests/native_node_loop.c");
+    let binary = out.join("native-node-loop");
+    let deps = node_deps::native_io();
+    let compile = std::process::Command::new("clang")
+        .args([
+            "-std=c11",
+            "-D_GNU_SOURCE",
+            "-O1",
+            "-ffunction-sections",
+            "-fdata-sections",
+        ])
+        .arg("-I")
+        .arg(&runtime)
+        .arg("-I")
+        .arg(native.join("internal"))
+        .args(&deps.include_flags)
+        .arg(&main)
+        .arg(&fixture)
+        .arg(runtime.join("nts_runtime.c"))
+        .arg(runtime.join("nts_uv_host.c"))
+        .args(
+            [
+                "internal/loop.c",
+                "internal/shared.c",
+                "timers/timers.c",
+                "fs/fs.c",
+                "crypto/crypto.c",
+            ]
+            .iter()
+            .map(|source| native.join(source)),
+        )
+        .arg("-Wl,--gc-sections")
+        .args(&deps.link_flags)
+        .arg("-lm")
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .expect("clang should run");
+    assert!(
+        compile.status.success(),
+        "native I/O fixture did not compile:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    for case in ["control", "timer", "fs", "crypto"] {
+        let expected = std::process::Command::new("node")
+            .arg(runtime.join("tests/native_node_loop.mjs"))
+            .env("NTS_NATIVE_LOOP_CASE", case)
+            .env("NTS_NATIVE_LOOP_FILE", &fixture)
+            .output()
+            .expect("node should run");
+        assert!(
+            expected.status.success(),
+            "node {case}: {}",
+            String::from_utf8_lossy(&expected.stderr)
+        );
+        let actual = std::process::Command::new("timeout")
+            .arg("120")
+            .arg(&binary)
+            .env("NTS_NATIVE_LOOP_CASE", case)
+            .env("NTS_NATIVE_LOOP_FILE", &fixture)
+            .output()
+            .expect("native fixture should run");
+        assert!(
+            actual.status.success(),
+            "native {case}: {}",
+            String::from_utf8_lossy(&actual.stderr)
+        );
+        assert_eq!(actual.stdout, expected.stdout, "native {case}");
+    }
+    let _ = std::fs::remove_dir_all(&out);
 }
