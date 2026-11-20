@@ -118,10 +118,10 @@ a Chromium program, which takes it from Blink.
 On native targets the host provides the loop and timers through one
 interface, `NtsHost` in `runtime/c/nts_runtime.h`: posting a task, posting a
 delayed or repeating task and cancelling it, posting from another thread, the
-owner-thread test, and three optional entries: running one turn of the loop,
+owner-thread test, and optional entries: running one turn of the loop,
 counting operations the program still awaits (so a loop that ends when it runs
 out of work does not end early), and, for Blink alone, taking over the
-microtask queue.
+microtask queue, plus access to a native libuv loop for I/O primitives.
 
 | Target | The loop | Timers |
 |---|---|---|
@@ -139,13 +139,15 @@ I/O, so promise ordering is reproducible.
 
 A standalone libuv runner installs its host with a null loop. The first
 task, timer, pending operation or request for the backend creates the default
-loop and its handles. An unused host runs and shuts down without creating
-them. A foreign completion posted before activation stays queued and can run
+loop and its handles. Native Node I/O asks the installed host for that loop;
+a Node-API addon uses its explicit hosted loop first. An unused host runs and
+shuts down without creating them. A foreign completion posted before activation stays queued and can run
 on the owner without creating a loop. Explicit loops, including the GTK,
 CoreFoundation and Win32 adapters, are installed eagerly.
 
 Activation replaces only callbacks read by the owner thread. The foreign-post
-entry, owner query, checkpoint policy and state stay fixed after installation.
+entry, owner query, checkpoint policy, native-loop accessor and state stay fixed
+after installation.
 The foreign queue's mutex publishes its wakeup target after the async handle
 is initialized; an earlier post needs no wakeup because the owner drains it
 before blocking. Task, timer and pending-operation callbacks then execute

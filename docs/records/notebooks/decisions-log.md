@@ -4101,9 +4101,11 @@ removed by retention.
 The standalone libuv host installs without creating a default loop or handles.
 Tasks, timers, pending operations and backend access activate it once. Explicit
 loops and GUI adapters remain eager. The runtime transitions only owner-thread
-callbacks, leaving the foreign entry, owner query, checkpoint policy and state
-immutable. The foreign queue's mutex publishes a wakeup function after async
-handle initialization, preserving posts before and during activation without
-an activation branch on each completion. ELF links retain libm only when live
-code needs it, with `--as-needed` scoped to that library. The measured launch
+callbacks, leaving the foreign entry, owner query, checkpoint policy, native-loop
+accessor and state immutable. Native Node I/O acquires that installed host loop;
+Node-API addons retain their explicit hosted-loop fast path. The foreign
+queue's mutex publishes a wakeup function after async handle initialization, preserving posts before and during activation without
+an activation branch on each completion. Supported dynamic ELF drivers retain
+libm only when live code needs it, with `--as-needed` scoped to that library.
+Static and Zig links retain their original flags. The measured launch
 cost and controls are recorded in [0870](../0870-native-launch.md).
