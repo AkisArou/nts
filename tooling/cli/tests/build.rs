@@ -964,16 +964,16 @@ fn late_static_dependency_flags_keep_live_math() {
     let project = fixture(
         "build-late-static-math",
         r#"
-import {defineConfig, app} from "@nts/config";
+import {defineConfig, library, target} from "@nts/config";
 export default defineConfig({products: {
-  c: app.cli({entry:"./src/main.ts", backend:"c"})
+  c: library.native({entry:"./src/main.ts", targets:[target.linux({backend:"c"})]})
 }, dependencies:{"linux-gnu":{from:"pkg-config", packages:["late-static"]}}});
 "#,
     );
     let entry = project.join("src/main.ts");
     std::fs::write(
         &entry,
-        "let sum = 0; for (let n = 0; n < 1000; n++) sum += Math.sin(n); console.log(sum > 0);",
+        "let sum = 0; for (let n = 0; n < 1000; n++) sum += Math.sin(n); console.log(sum > 0); export function answer(): number { return 42; }",
     )
     .expect("live runtime math");
     let oracle = Command::new("node")
@@ -983,7 +983,21 @@ export default defineConfig({products: {
     assert!(oracle.status.success(), "{oracle:?}");
     let pc = project.join("pc");
     std::fs::create_dir_all(&pc).expect("pkg-config directory");
-    for flags in ["", "-static"] {
+    // Keep DSO lookup dynamic in both arms; only the late -static differs.
+    // An executable's bundled libuv closure also carries -lm and could mask
+    // the omission, so use a library whose module evaluation prints the answer.
+    std::fs::write(project.join("load.c"),
+        "#include <dlfcn.h>\nint main(int n, char **v) { return n != 2 || !dlopen(v[1], RTLD_NOW); }\n")
+        .expect("library evaluation host");
+    let loader = project.join("load");
+    let compiled = Command::new("gcc")
+        .arg(project.join("load.c"))
+        .args(["-ldl", "-o"])
+        .arg(&loader)
+        .output()
+        .expect("building evaluation host");
+    assert!(compiled.status.success(), "{compiled:?}");
+    for flags in ["-Wl,-Bdynamic", "-static -Wl,-Bdynamic"] {
         std::fs::write(
             pc.join("late-static.pc"),
             format!(
@@ -995,7 +1009,7 @@ export default defineConfig({products: {
             Command::new(env!("CARGO_BIN_EXE_nts"))
                 .arg("build")
                 .arg(project.join("tsconfig.json"))
-                .env("CC", "gcc")
+                .env("CC", "gcc -fno-semantic-interposition")
                 .env("PKG_CONFIG_PATH", &pc),
         )
         .expect("building with dependency flags");
@@ -1005,7 +1019,7 @@ export default defineConfig({products: {
             String::from_utf8_lossy(&built.stdout),
             String::from_utf8_lossy(&built.stderr)
         );
-        let binary = project.join(".nts/build/c/linux-gnu-x86_64/c");
+        let binary = project.join(".nts/build/c/linux-gnu-x86_64/libc.so");
         let dynamic = Command::new("readelf")
             .arg("-d")
             .arg(&binary)
@@ -1013,8 +1027,9 @@ export default defineConfig({products: {
             .expect("reading dynamic dependencies");
         assert!(dynamic.status.success(), "{dynamic:?}");
         let has_math = String::from_utf8_lossy(&dynamic.stdout).contains("[libm.so.6]");
-        assert_eq!(has_math, flags.is_empty(), "{dynamic:?}");
-        let ran = Command::new(&binary)
+        assert!(has_math, "{dynamic:?}");
+        let ran = Command::new(&loader)
+            .arg(&binary)
             .output()
             .expect("running the math product");
         assert!(ran.status.success(), "{ran:?}");
