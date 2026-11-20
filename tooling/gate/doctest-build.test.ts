@@ -89,7 +89,7 @@ test('the first non-fresh artifact stops the owned Cargo graph, including its wa
   writeFileSync(join(bin,'rustup'),'#!/bin/sh\nprintf \'no overrides\\n\'\n',{mode:0o755});
   writeFileSync(join(bin,'cargo'),`#!${process.execPath}
 const {spawn}=require('node:child_process'),{join}=require('node:path');
-const child=spawn(process.execPath,['-e',"process.send('ready');setInterval(()=>{},1000);"],{stdio:['ignore','inherit','inherit','ipc']});
+const child=spawn(process.execPath,['-e',"process.on('message',()=>{});process.send('ready');"],{stdio:['ignore','inherit','inherit','ipc']});
 child.once('message',()=>console.log(JSON.stringify({reason:'compiler-artifact',filenames:[join(process.env.CARGO_TARGET_DIR,'nts-dev/libcold.rlib')],profile:{debuginfo:0},fresh:false})));
 // This graph cannot finish by itself. Its controller and child must both be stopped.
 `,{mode:0o755});
