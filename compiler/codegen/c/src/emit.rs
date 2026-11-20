@@ -372,6 +372,13 @@ pub fn main_for(shape: MainShape) -> String {
         autorelease_pool,
     } = shape;
     let run = host.run();
+    // Platform adapters attach to an existing loop. A program driving libuv
+    // itself asks for the default loop only when it first schedules work.
+    let loop_argument = if host == LoopHost::Libuv {
+        "NULL"
+    } else {
+        "uv_default_loop()"
+    };
     // The adapter attaches after libuv is installed and before module
     // evaluation, which is where a program starts the platform's loop, and
     // makes a callback returning to that loop a checkpoint. The flag must
@@ -422,7 +429,7 @@ pub fn main_for(shape: MainShape) -> String {
          int main(void) {{\n\
          \x20   nts_process_start();\n\
          {push}\
-         \x20   nts_uv_host_install(uv_default_loop());\n\
+         \x20   nts_uv_host_install({loop_argument});\n\
          {attach}\
          {evaluate}\
          \x20   /* Until nothing is runnable, no timer is pending, and no\n\

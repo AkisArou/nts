@@ -7540,9 +7540,16 @@ fn link_c(
                 // libm is part of libSystem there, and the zig-derived sysroot
                 // carries no separate `libm.tbd` for `-lm` to find.
                 ObjectFormat::MachO => command.arg("-Wl,-dead_strip"),
-                ObjectFormat::Elf | ObjectFormat::Coff => {
-                    command.args(["-Wl,--gc-sections", "-lm"])
-                }
+                // libm has no constructor contract: keep it only when live
+                // code needs a symbol from it. Scope this to libm, since other
+                // native libraries may be linked for their constructors.
+                ObjectFormat::Elf => command.args([
+                    "-Wl,--gc-sections",
+                    "-Wl,--push-state,--as-needed",
+                    "-lm",
+                    "-Wl,--pop-state",
+                ]),
+                ObjectFormat::Coff => command.args(["-Wl,--gc-sections", "-lm"]),
             };
             // **After our own objects and before `-o`.** A static archive is
             // consumed left to right by the linker, so a `-l` that precedes the
