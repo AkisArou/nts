@@ -1831,7 +1831,9 @@ if (!plan.includes("build")) identify();
 // 776 s instead of 363, and the difference read as the compiler.
 function settings() {
   // Report only classified values, never arbitrary discarded launcher data.
-  const context = JSON.parse(env[ENVIRONMENT_CONTEXT]);
+  const packet=env[ENVIRONMENT_CONTEXT];
+  if(!packet)throw new ToolingInstrumentError('tooling-setup','gate settings lost the canonical environment');
+  const context = JSON.parse(packet);
   const values = {...normalized.report.host,...normalized.report.ambient,...context.owned};
   const lines = Object.keys(values).sort().map(k => `    ${k}=${values[k] ?? "<unset>"}`);
   let cgroup = "";
