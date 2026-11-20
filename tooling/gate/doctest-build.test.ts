@@ -7,6 +7,7 @@ import {fixtureEnvironment} from './test-environment.ts';
 import {testScratch} from './test-scratch.ts';
 import {TEST_PROFILE_MANIFEST} from './test-profile.ts';
 import {assertDoctestPreparation} from './doctest-preparation.ts';
+import {ownMemory} from './test-memory.ts';
 
 test('listing doctests prepares the identical graph, including dev dependency features',t=>{
   const root=testScratch(t,'doctest-build'),target=join(root,'external-target');
@@ -50,6 +51,20 @@ test('listing doctests prepares the identical graph, including dev dependency fe
   run(true);
   const broken=spawnSync(process.execPath,[new URL('./doctests.ts',import.meta.url).pathname],{cwd:root,env,encoding:'utf8'});
   assert.equal(broken.status,1,broken.stdout+broken.stderr);assert.match(broken.stdout+broken.stderr,/FAILED/);
+  writeFileSync(subject,'pub fn invalid() -> u32 { "not a number" }\n');
+  const failedBuild=spawnSync(process.execPath,[new URL('./build.ts',import.meta.url).pathname,'--profile','nts-dev','--no-compiler'],{cwd:root,env,encoding:'utf8'});
+  assert.equal(failedBuild.status,101,failedBuild.stdout+failedBuild.stderr);
+  assert.throws(()=>assertDoctestPreparation(env,root),/doctests needs successful shared build preparation/,'failed preparation invalidates the earlier successful receipt');
+});
+
+test('release preparation claims its nts-dev output before starting Cargo',t=>{
+  const root=testScratch(t,'doctest-build-disk');
+  const env={...fixtureEnvironment(t),...ownMemory(join(root,'owned'),{disk:{freeBytes:45*2**30,freeInodes:100}}),
+    CARGO_TARGET_DIR:join(root,'target'),NTS_BUILD_DOCTESTS:'1',NTS_DOCTEST_PREPARATION:join(root,'prepared.json')};
+  const ran=spawnSync(process.execPath,[new URL('./build.ts',import.meta.url).pathname,'--profile','release'],{cwd:root,env,encoding:'utf8'});
+  assert.equal(ran.status,2,ran.stdout+ran.stderr);assert.match(ran.stderr,/disk build admission/);
+  assert.equal(existsSync(join(root,'target')),false,'disk refusal precedes any compiler output');
+  assert.equal(existsSync(env.NTS_DOCTEST_PREPARATION),false,'disk refusal leaves no successful receipt');
 });
 
 test('doctest execution refuses missing preparation before Cargo or disk admission',t=>{
