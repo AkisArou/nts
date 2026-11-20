@@ -189,6 +189,14 @@ const {fixture}=await import(${JSON.stringify(new URL('./run-fixture.ts',import.
 const cleanup=[],f=fixture({after(fn){cleanup.push(fn);}});f.control('rustfmt','pressure');
 const git=(...args)=>execFileSync('git',gitArguments(args),{cwd:f.tree,env:f.options([]).env,encoding:'utf8'}).trim();
 git('add','.');git('-c','user.name=retry control','-c','user.email=retry@example.invalid','commit','-qm','private here retry inputs');
+// The fixture's node_modules is its source's, with that source's pins copied:
+// the source's own catalog authenticates it, published where --here reads it.
+const {installationCatalogPath,installationCatalogState}=await import(${JSON.stringify(new URL('../inputs/dependency-inputs.ts',import.meta.url).href)});
+const {copyFileSync,rmSync}=await import('node:fs');const {dirname}=await import('node:path');
+const source=${JSON.stringify(fileURLToPath(new URL('../..',import.meta.url)))};
+const sourceShared=dirname(execFileSync('git',gitArguments(['rev-parse','--path-format=absolute','--git-common-dir']),{cwd:source,encoding:'utf8'}).trim());
+const catalog=installationCatalogPath(f.tree,f.tree);copyFileSync(installationCatalogPath(sourceShared,source),catalog);cleanup.push(()=>rmSync(catalog,{force:true}));
+assert.equal(installationCatalogState(f.tree,f.tree).state,'current');
 const commit=git('rev-parse','HEAD');let actualRun;
 const selection=landingSelection({owed:{steps:['build','rustfmt']},paths:[],catalogue:['build','rustfmt'],table:{build:{form:'as-is'},rustfmt:{form:'as-is'}},inCorpus:()=>false,rows:new Map(),cost:()=>({cpu:1,measured:true,source:'control'}),budget:{slots:24,frontends:24,seconds:600}});
 mock.module(rules,{namedExports:{...realRules,ruleSelect:()=>()=>({selection,kind:'other',interop:null,doctests:null})}});
