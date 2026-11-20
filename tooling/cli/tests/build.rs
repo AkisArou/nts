@@ -964,9 +964,9 @@ fn late_static_dependency_flags_keep_live_math() {
     let project = fixture(
         "build-late-static-math",
         r#"
-import {defineConfig, app, target} from "@nts/config";
+import {defineConfig, app} from "@nts/config";
 export default defineConfig({products: {
-  c: app.cli({entry:"./src/main.ts", targets:[target.linux({backend:"c"})]})
+  c: app.cli({entry:"./src/main.ts", backend:"c"})
 }, dependencies:{"linux-gnu":{from:"pkg-config", packages:["late-static"]}}});
 "#,
     );
