@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/startup-builtins",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "benchmarks/cases/startup-builtins/case.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "68fab72d4987955cebeed80d06abd0aaafd055feefbd158c03fabfd914d27024",
+      "source_digest": "ba3dfef4c26956f32e3f55d7db3a0abb",
+      "stdout_sha256": "0ed52dcc030d8269c977800d62857ed2fb5772865c96574b2d776e3b325f52f4",
+      "stdout_bytes": 50,
+      "exit_code": 0
+    }
+  ]
+}
