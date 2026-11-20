@@ -4106,8 +4106,8 @@ accessor and state immutable. Native Node I/O acquires that installed host loop;
 Node-API addons retain their explicit hosted-loop fast path. The foreign
 queue's mutex publishes a wakeup function after async handle initialization and
 signals any inherited queued posts, including those posted while an earlier
-detached foreign batch runs. This preserves posts before and during activation without
-an activation branch on each completion. Supported dynamic ELF drivers retain
+detached foreign batch runs. This preserves posts before and during activation
+without an activation branch on each completion. Supported dynamic ELF drivers retain
 libm only when live code needs it, with one scoped `--as-needed -lm` after
 every library input.
 Static and Zig links retain their original flags. The measured launch

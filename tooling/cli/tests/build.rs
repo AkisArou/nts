@@ -736,9 +736,9 @@ dependencies:{"linux-gnu":{from:"pkg-config", packages:["archive-math"]}}});
         project.join("src/main.ts"),
         "export function answer(): number { return 42; }",
     )
-    .unwrap();
-    std::fs::create_dir_all(project.join("native")).unwrap();
-    std::fs::create_dir_all(project.join("pc")).unwrap();
+    .expect("archive link fixture operation");
+    std::fs::create_dir_all(project.join("native")).expect("archive link fixture operation");
+    std::fs::create_dir_all(project.join("pc")).expect("archive link fixture operation");
     let caller = project.join("native/activate.c");
     std::fs::write(
         &caller,
@@ -751,15 +751,15 @@ __attribute__((constructor)) static void check_archive(void) {
 }
 ",
     )
-    .unwrap();
+    .expect("archive link fixture operation");
     let archive = project.join("libarchive-math.a");
     std::fs::write(project.join("pc/archive-math.pc"), format!(
-        "Name: archive-math\nDescription: archive with the first math reference\nVersion: 1\nLibs: {}\n", archive.display())).unwrap();
+        "Name: archive-math\nDescription: archive with the first math reference\nVersion: 1\nLibs: {}\n", archive.display())).expect("archive link fixture operation");
     std::fs::write(
         project.join("archive.c"),
         "#include <math.h>\ndouble from_archive(double x) { return sin(x) + cbrt(x); }\n",
     )
-    .unwrap();
+    .expect("archive link fixture operation");
     let object = project.join("archive.o");
     let compiled = Command::new("gcc")
         .args(["-O2", "-fPIC", "-c"])
@@ -767,14 +767,14 @@ __attribute__((constructor)) static void check_archive(void) {
         .arg("-o")
         .arg(&object)
         .output()
-        .unwrap();
+        .expect("archive link fixture operation");
     assert!(compiled.status.success(), "{compiled:?}");
     let archived = Command::new("ar")
         .arg("rcs")
         .arg(&archive)
         .arg(&object)
         .output()
-        .unwrap();
+        .expect("archive link fixture operation");
     assert!(archived.status.success(), "{archived:?}");
     let driver = project.join("gcc");
     std::fs::write(
@@ -786,8 +786,9 @@ done
 exec /usr/bin/gcc "$@"
 "#,
     )
-    .unwrap();
-    std::fs::set_permissions(&driver, std::fs::Permissions::from_mode(0o755)).unwrap();
+    .expect("archive link fixture operation");
+    std::fs::set_permissions(&driver, std::fs::Permissions::from_mode(0o755))
+        .expect("archive link fixture operation");
     let captured = project.join("link-args");
     let built = output_of(
         Command::new(env!("CARGO_BIN_EXE_nts"))
@@ -800,7 +801,7 @@ exec /usr/bin/gcc "$@"
             .env("NTS_LINK_ARGS", &captured)
             .env("PKG_CONFIG_PATH", project.join("pc")),
     )
-    .unwrap();
+    .expect("archive link fixture operation");
     assert!(
         built.status.success(),
         "{}{}",
@@ -808,7 +809,7 @@ exec /usr/bin/gcc "$@"
         String::from_utf8_lossy(&built.stderr)
     );
     let args: Vec<_> = std::fs::read_to_string(captured)
-        .unwrap()
+        .expect("archive link fixture operation")
         .lines()
         .map(str::to_owned)
         .collect();
@@ -818,7 +819,10 @@ exec /usr/bin/gcc "$@"
         1,
         "{args:?}"
     );
-    let math = args.iter().position(|arg| arg == "-lm").unwrap();
+    let math = args
+        .iter()
+        .position(|arg| arg == "-lm")
+        .expect("archive link fixture operation");
     assert_eq!(
         &args[math - 1..=math + 1],
         ["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]
@@ -834,26 +838,26 @@ exec /usr/bin/gcc "$@"
         .arg("-d")
         .arg(&library)
         .output()
-        .unwrap();
+        .expect("archive link fixture operation");
     assert!(
         dynamic.status.success()
             && String::from_utf8_lossy(&dynamic.stdout).contains("[libm.so.6]"),
         "{dynamic:?}"
     );
-    std::fs::write(project.join("load.c"), "#include <dlfcn.h>\nint main(int n,char **v){if(n!=2)return 2;void *p=dlopen(v[1],RTLD_NOW);return !p || dlclose(p)!=0;}\n").unwrap();
+    std::fs::write(project.join("load.c"), "#include <dlfcn.h>\nint main(int n,char **v){if(n!=2)return 2;void *p=dlopen(v[1],RTLD_NOW);return !p || dlclose(p)!=0;}\n").expect("archive link fixture operation");
     let loader = project.join("load");
     let compiled = Command::new("gcc")
         .arg(project.join("load.c"))
         .args(["-ldl", "-o"])
         .arg(&loader)
         .output()
-        .unwrap();
+        .expect("archive link fixture operation");
     assert!(compiled.status.success(), "{compiled:?}");
     assert!(
         Command::new(&loader)
             .arg(&library)
             .status()
-            .unwrap()
+            .expect("archive link fixture operation")
             .success()
     );
     // Same library flags, with only the native caller object: no dead runtime
@@ -865,7 +869,7 @@ exec /usr/bin/gcc "$@"
         .arg("-o")
         .arg(&caller_object)
         .output()
-        .unwrap();
+        .expect("archive link fixture operation");
     assert!(compiled.status.success(), "{compiled:?}");
     let mut flags = Vec::new();
     let mut iter = args.iter();
@@ -885,7 +889,7 @@ exec /usr/bin/gcc "$@"
             .arg("-o")
             .arg(&reduced)
             .output()
-            .unwrap()
+            .expect("archive link fixture operation")
     };
     let good = link(&flags);
     assert!(good.status.success(), "{good:?}");
@@ -893,15 +897,18 @@ exec /usr/bin/gcc "$@"
         Command::new(&loader)
             .arg(&reduced)
             .status()
-            .unwrap()
+            .expect("archive link fixture operation")
             .success()
     );
-    let math = flags.iter().position(|arg| arg == "-lm").unwrap();
+    let math = flags
+        .iter()
+        .position(|arg| arg == "-lm")
+        .expect("archive link fixture operation");
     let scope: Vec<_> = flags.drain(math - 1..=math + 1).collect();
     let archive_at = flags
         .iter()
         .position(|arg| arg.ends_with("libarchive-math.a"))
-        .unwrap();
+        .expect("archive link fixture operation");
     flags.splice(archive_at..archive_at, scope);
     let bad = link(&flags);
     assert!(

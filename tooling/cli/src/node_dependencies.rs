@@ -198,9 +198,8 @@ fn link_arguments(
             // The application's link owner emits math once after all inputs.
             // Even this archive closure may be followed by another library.
             continue;
-        } else {
-            arguments.push(flag.as_str());
         }
+        arguments.push(flag.as_str());
     }
     arguments
 }
