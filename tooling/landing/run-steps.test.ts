@@ -68,8 +68,8 @@ test("a step the rules narrowed runs narrowed: the touched crates' doc tests", a
 
 test('a doctests-only landing prepares before its execution, and retains preparation on retry',async t=>{
   const f=fixture(t);f.control('doctests','pressure');
-  copyModuleClosure(['tooling/gate/verdict-contract.ts'],f.tree);
-  writeFileSync(join(f.tree,'tooling/gate/verdict-contract.ts'),generatedJavaScript(`import {writeFileSync} from 'node:fs';writeFileSync(process.argv[2],JSON.stringify(${JSON.stringify(fixtureContract())}));`));
+  copyModuleClosure(['tooling/gate/verdict-contract.ts','tooling/gate/durable-record.ts'],f.tree);
+  writeFileSync(join(f.tree,'tooling/gate/verdict-contract.ts'),generatedJavaScript(`import {durableRecord} from './durable-record.ts';durableRecord(process.argv[2],${JSON.stringify(fixtureContract())});`));
   mkdirSync(join(f.target,PROFILE));
   for(const name of ['nts','nts-suite'])writeFileSync(join(f.target,PROFILE,name),'stale compiler from an earlier commit\n');
   const options=f.options(['doctests'],{doctests:'nts-core'}),ran=await runLanding(options);
