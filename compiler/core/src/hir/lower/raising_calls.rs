@@ -12,8 +12,8 @@ use super::{
 
 /// How one instantiated receiver supplies the member a generic body invokes.
 /// A stored callable uses the closure entry, rather than a named method copy.
-/// Unresolved is retained so lowering refuses that copy's call; it contributes
-/// no invented callee or throwing edge to the analysis.
+/// Unresolved retains an uncallable argument; ordinary member lowering supplies
+/// its diagnostic, without inventing a callee or throwing edge here.
 pub(super) enum ArgumentMembers {
     Named(Vec<NodeId>),
     Stored(Option<u32>),
@@ -723,15 +723,6 @@ impl FuncBuilder<'_> {
     /// a closure aborts by name instead of losing the `throw`. Measured at **0
     /// reachable entries** across all 29 runtime corpora.
     pub(super) fn a_raising_body_carries_this_call(&self, id: NodeId) -> Result<(), Diagnostic> {
-        if !self.sources.is_empty()
-            && self.members_run_at_each_argument(id).is_some_and(|groups| {
-                groups
-                    .iter()
-                    .any(|group| matches!(group, ArgumentMembers::Unresolved))
-            })
-        {
-            return Err(self.unresolved_call(id));
-        }
         if !self.raises || self.tested_for_a_raise(id) || erased_calls::inline_method(self, id) {
             return Ok(());
         }

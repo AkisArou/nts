@@ -1,5 +1,5 @@
 // Object.prototype.toString has no implementation in this lowering.
-// expect: this call was not resolved to a target
+// expect: a method `toString` with no declaration in the hierarchy
 class Printable {
   constructor(public n: number) {}
   toString(): string { return "own"; }
