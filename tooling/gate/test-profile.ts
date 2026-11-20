@@ -11,6 +11,8 @@ import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
 import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
 import {durableRecord} from './durable-record.ts';
+import {ownedProcessGroup} from './process-group.ts';
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 
 export const TEST_PROFILE='nts-dev';
 export const TEST_INCREMENTAL='1';
@@ -95,8 +97,18 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   assertTestInvocation(invocation);
   const release=new DiskCapacity({env:invocation.env}).beginBuild({root:cwd,target:resolve(invocation.profileDirectory,'..'),outputs:['nts-dev']});
   try{
-  const child=spawn(process.execPath,[CARGO_OWNER,...invocation.args],{cwd,env:invocation.env,stdio:['inherit','pipe','inherit']});
+  const child=spawn(process.execPath,[CARGO_OWNER,...invocation.args],{cwd,env:invocation.env,detached:true,stdio:['inherit','pipe','inherit']});
+  let group:ReturnType<typeof ownedProcessGroup>;
   let pending='',artifacts=0,buildFinished=false,problem:unknown;
+  const stop=()=>group?.signal('SIGKILL');
+  const statusPromise=new Promise<number>((done,reject)=>{
+    child.once('error',error=>reject(new ToolingInstrumentError('tooling-setup','Rust test profile: cannot start cargo',{cause:error})));
+    child.once('exit',()=>{try{stop();}catch(error){problem??=error;}});
+    child.once('close',(code,signal)=>{if(signal&&!problem)reject(new ToolingInstrumentError('tooling-setup','Rust test profile: cargo killed by '+signal));else done(code??2);});
+  });
+  const unregister=registerCommandCloser('Cargo test command',{cancel:stop,close:async()=>{await statusPromise;group?.assertEmpty();}});
+  try{
+  try{group=ownedProcessGroup(child);}catch(error){problem=error;}
   const artifactRows:unknown[]=[],buildScripts:unknown[]=[];
   const line=(text:string)=>{
     let value:unknown;
@@ -106,7 +118,7 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
       try{if(assertTestArtifact(invocation,event)){
         artifacts++;if(evidence?.requireFresh&&(event as {fresh?:unknown}).fresh!==true)fail('doctests compiled an artifact instead of reusing its build preparation');
         if(evidence?.artifacts)artifactRows.push(event);
-      }}catch(error){problem??=error;}
+      }}catch(error){if(!problem){problem=error;stop();}}
       if(event.reason==='build-script-executed'){
         const script=event as {package_id?:unknown;out_dir?:unknown};
         if(typeof script.package_id!=='string'||!script.package_id||typeof script.out_dir!=='string'||!isAbsolute(script.out_dir)
@@ -123,10 +135,8 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   };
   child.stdout.setEncoding('utf8');
   child.stdout.on('data',(chunk:string)=>{pending+=chunk;let end:number;while((end=pending.indexOf('\n'))>=0){line(pending.slice(0,end));pending=pending.slice(end+1);}});
-  const status=await new Promise<number>((done,reject)=>{
-    child.once('error',error=>reject(new ToolingInstrumentError('tooling-setup','Rust test profile: cannot start cargo',{cause:error})));
-    child.once('close',(code,signal)=>{if(signal)reject(new ToolingInstrumentError('tooling-setup','Rust test profile: cargo killed by '+signal));else done(code??2);});
-  });
+  const status=await statusPromise;
+  group?.assertEmpty();
   if(pending)line(pending);
   if(evidence?.artifacts)durableRecord(evidence.artifacts,{version:2,status,buildFinished,artifacts:artifactRows,buildScripts,
     invocation:{cwd:invocation.cwd,profileDirectory:invocation.profileDirectory,args:invocation.args},
@@ -136,6 +146,7 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   if(status===0&&!buildFinished)fail(route+' produced no build-finished evidence');
   if(evidence?.requireFresh)console.log('doctests: reused '+artifacts+' fresh Cargo artifacts; compiled 0');
   return status;
+  }finally{unregister();}
   }finally{release();}
 }
 

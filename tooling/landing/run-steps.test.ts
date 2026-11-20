@@ -14,6 +14,9 @@ import {fixture} from './run-fixture.ts';
 import {spawnTest} from "../gate/test-wait.ts";
 import {TEST_PROFILE_MANIFEST} from '../gate/test-profile.ts';
 import {withoutHanded} from '../gate/test-memory.ts';
+import {writeLandingVerdict,readLandingVerdict} from './verdict.ts';
+import {recordCosts} from './service.ts';
+import {costKey,readLandingCosts,type Selection} from './selection.ts';
 
 test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", async t => {
   const f = fixture(t);
@@ -62,11 +65,35 @@ test("a step the rules narrowed runs narrowed: the touched crates' doc tests", a
 
 test('a doctests-only landing prepares before its execution, and retains preparation on retry',async t=>{
   const f=fixture(t);f.control('doctests','pressure');
-  const ran=await runLanding(f.options(['doctests'],{doctests:'nts-core'}));
+  mkdirSync(join(f.target,PROFILE));
+  for(const name of ['nts','nts-suite'])writeFileSync(join(f.target,PROFILE,name),'stale compiler from an earlier commit\n');
+  const options=f.options(['doctests'],{doctests:'nts-core'}),ran=await runLanding(options);
   assert.equal(ran.state,'green',ran.message);
+  assert.deepEqual(ran.steps.map(row=>row.name),['doctests']);
+  assert.deepEqual(ran.binaries,{});
+  assert.equal(ran.steps[0]!.binaries,undefined);
+  assert.equal(ran.steps[0]!.preparation?.verdict,'PASS');
+  assert.match(ran.steps[0]!.preparation!.log!,/doctest-preparation\.log$/);
+  for(const name of ['nts','nts-suite'])assert.equal(readFileSync(join(f.target,PROFILE,name),'utf8'),'stale compiler from an earlier commit\n');
   assert.equal(ran.steps.find(row=>row.name==='doctests')?.attempt,2);
   assert.ok(existsSync(join(f.run,'doctest-build.json')));
   assert.equal(readFileSync(join(f.controls,'doctest-crates'),'utf8'),'nts-core\n');
+  const selection:Selection={owed:['doctests'],deferred:[],landing:[{step:'doctests',form:'as-is',seconds:1,cost:{cpu:1,measured:true,source:'fixture'}}],
+    budget:{slots:24,frontends:24,seconds:600},fits:true,estimate:{seconds:1,build:0,work:1,longest:1,longestStep:'doctests',fixed:0}};
+  const receipt=writeLandingVerdict(f.own,{commit:options.commit,tree:options.commit,submission:options.commit,landing:'doctests-only',base:options.commit,
+    selected:{selection,interop:null,doctests:'nts-core'},ran})!;
+  assert.deepEqual(receipt.steps.map(row=>row.outcome.name),['doctests']);assert.deepEqual(receipt.binaries,{});
+  assert.deepEqual(readLandingVerdict(f.own,options.commit,options.commit,ran.contract!,['doctests']).receipt,receipt);
+  recordCosts(f.own,ran,'other');assert.equal(readLandingCosts(join(f.own,'costs.json')).has(costKey('build','other')),false);
+});
+
+test('failed doctest-only preparation reports the selected step and never reports a compiler build',async t=>{
+  const f=fixture(t);f.control('build','fail');
+  const ran=await runLanding(f.options(['rustfmt','doctests'],{doctests:'nts-core'}));
+  assert.equal(ran.state,'red',ran.message);
+  assert.deepEqual(ran.steps.map(row=>row.name+' '+row.verdict),['doctests FAIL','rustfmt NOT RUN']);
+  assert.match(ran.steps[0]!.log!,/doctest-preparation\.log$/);
+  assert.deepEqual(f.calls(),[]);
 });
 
 test('a direct build and doctests selection compiles both profiles before step scopes',t=>{

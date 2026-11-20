@@ -69,6 +69,7 @@ export type StepResult = {
   instrument?: { kind?: string; verdict?: string; completedFailures?: number;disk?:DiskBuildRefusal };
   binaries?: BinaryIdentities;
   diagnostics?:StepDiagnostics;
+  preparation?:Pick<StepResult,'verdict'|'cpu'|'cpu_measure'|'wall'|'log'|'attempt'>;
 };
 export type Ran = { state: "green" | "red" | "held" | "cancelled"; message: string; run: string; steps: StepResult[]; pending: string[]; refresh: string[]; wall_s: number;
   rustRecords?:RustRecordDecisionAtRevision[];
@@ -272,6 +273,8 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
     // seconds between a build and its gate run held that run's growth for the
     // rest of the run (#615).
     let hold: Reservation | undefined,drain:Promise<void>|undefined,primary:{error:unknown}|undefined;
+    const preparationName=options.steps.includes('build')?'build':'doctests';
+    let doctestPreparation:StepResult['preparation'];
     const closeBuildHold=()=>drain??=(async()=>{
       const errors:unknown[]=[];
       try{hold?.release();}catch(error){errors.push(error);}
@@ -281,7 +284,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
     })();
     try {
       if (options.steps.includes("build")||options.steps.includes('doctests')) {
-        const log = join(run, "build.log");
+        const log = preparationLog(options,1);
         try {
           hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}` },
             { env: { ...launcher, ...owned },signal:options.signal, report: line => appendFileSync(log, `${line}\n`) });
@@ -290,22 +293,27 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
           options.signal?.throwIfAborted();
           appendFileSync(log, `${String(error)}\n`);
           const reason = `its memory was not reserved: ${(error as Error).message}`;
-          results.push({ name: "build", verdict: "INSTRUMENT", reason, log });
-          for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: "needs build, which is INSTRUMENT" });
-          return finish("held", `build: ${reason}`);
+          results.push({ name: preparationName, verdict: "INSTRUMENT", reason, log });
+          for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", reason: `needs ${preparationName} preparation, which is INSTRUMENT` });
+          return finish("held", `${preparationName}: ${reason}`);
         }
         for (let attempt = 1; ; attempt++) {
           options.signal?.throwIfAborted();
           const built = await buildCompiler(options, selected.node, launcher, { ...owned, ...hold.env }, attempt);
           if (built.verdict === "INSTRUMENT" && (!built.instrument||instrumentPolicy(built.instrument.kind)?.disposition==='retry') && attempt < (options.attempts ?? 3)) continue;
-          results.push(built);
+          if(built.verdict==='PASS'&&preparationName==='doctests'){
+            const {name:_name,binaries:_binaries,...evidence}=built;doctestPreparation=evidence;
+          }else results.push(built);
           if (built.verdict === "PASS") break;
-          for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: `needs build, which is ${built.verdict}` });
-          return built.verdict === "FAIL" ? finish("red", `build FAIL; log ${built.log}`) : finish("held", `build: ${built.reason}`);
+          for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", reason: `needs ${preparationName} preparation, which is ${built.verdict}` });
+          return built.verdict === "FAIL" ? finish("red", `${preparationName} FAIL; log ${built.log}`) : finish("held", `${preparationName}: ${built.reason}`);
         }
       }
       if (!rest.length) return finish("green", "green");
-      return await finishSteps(options, selected.node, launcher, owned, rest, results, finish, hold,closeBuildHold);
+      const ran=await finishSteps(options, selected.node, launcher, owned, rest, results, finish, hold,closeBuildHold);
+      const doctests=results.find(row=>row.name==='doctests');
+      if(doctests&&doctestPreparation)doctests.preparation=doctestPreparation;
+      return ran;
     } catch(error){primary={error};throw error;}
     finally {
       try{await closeBuildHold();}
@@ -380,12 +388,17 @@ async function buildCompiler(options: RunOptions, node: string, launcher: NodeJS
   try{
     release=new DiskCapacity({env:{...launcher,...owned}}).beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});
     return await buildCompilerAdmitted(options,node,launcher,owned,attempt);
-  }catch(error){options.signal?.throwIfAborted();return {name:'build',verdict:'INSTRUMENT',reason:String(error),log:join(options.run,'build.log'),
+  }catch(error){options.signal?.throwIfAborted();return {name:options.steps.includes('build')?'build':'doctests',verdict:'INSTRUMENT',reason:String(error),log:preparationLog(options,attempt),
     ...(error instanceof DiskBuildAdmissionError?{instrument:{kind:error.kind,verdict:'INSTRUMENT',disk:error.disk}}:{})};}
   finally{release?.();}
 }
+function preparationLog(options:RunOptions,attempt:number):string{
+  const name=options.steps.includes('build')?'build':'doctest-preparation';
+  return join(options.run,`${name}${attempt===1?'':'-'+attempt}.log`);
+}
 async function buildCompilerAdmitted(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): Promise<StepResult> {
-  const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
+  const compilerSelected=options.steps.includes('build'),name=compilerSelected?'build':'doctests';
+  const log = preparationLog(options,attempt), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const slots = machineBudget(cpus().length).slots;
   const command = options.build ?? [node, join(options.tree,relative(fileURLToPath(SOURCE_ROOT),fileURLToPath(BUILD_OWNER))), "--profile", PROFILE,
@@ -401,15 +414,15 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
   } catch { /* unmeasured */ }
   const measured = { ...(cpu !== undefined ? { cpu,cpu_measure:GNU_CPU_MEASURE } : {}), ...(wall !== undefined ? { wall } : {}), log };
   // Killed rather than failed: the machine's doing (an OOM kill), not the change's.
-  if (r.error || r.signal) return { name: "build", verdict: "INSTRUMENT", reason: `the build was ${r.signal ? `killed by ${r.signal}` : `not started: ${r.error?.message}`}`, ...measured };
-  if (r.status !== 0) return { name: "build", verdict: "FAIL", reason: `exit ${r.status}`, ...measured };
-  const binaries = Object.fromEntries(["nts", "nts-suite"].map(name => {
+  if (r.error || r.signal) return { name, verdict: "INSTRUMENT", reason: `the build was ${r.signal ? `killed by ${r.signal}` : `not started: ${r.error?.message}`}`, ...measured };
+  if (r.status !== 0) return { name, verdict: "FAIL", reason: `exit ${r.status}`, ...measured };
+  const binaries = compilerSelected?Object.fromEntries(["nts", "nts-suite"].map(name => {
     let hash: string | null = null;
     try { hash = createHash("sha256").update(readFileSync(join(options.target, PROFILE, name))).digest("hex"); }
     catch { /* A fixture's build may provide only one executable. */ }
     return [name, hash];
-  }));
-  return { name: "build", verdict: "PASS", ...measured, binaries };
+  })):undefined;
+  return { name, verdict: "PASS", ...measured, ...(binaries?{binaries}:{}) };
 }
 
 type Summary = { identities?: { commit?: string | null; nts?: { sha256?: string | null }; nts_suite?: { sha256?: string | null } };
@@ -428,7 +441,7 @@ async function runSteps(options: RunOptions, node: string, launcher: NodeJS.Proc
   if (summary.environment?.canonical !== true) return { held: "the run's environment was not canonical" };
   const rows = summary.steps.filter(row => steps.includes(row.name));
   for (const step of steps) if (!rows.some(row => row.name === step)) rows.push({ name: step, verdict: "NOT RUN", reason: "the runner did not report it" });
-  const binaries = summary.identities?.nts ? {
+  const binaries = options.steps.includes('build')&&summary.identities?.nts ? {
     nts: summary.identities.nts.sha256 ?? null, "nts-suite": summary.identities.nts_suite?.sha256 ?? null,
   } : undefined;
   return { rows: rows.map(row => ({ ...row, ...(row.log ? {} : { log: join(dir, `${row.name}.log`) }), ...(binaries ? { binaries } : {}) })) };

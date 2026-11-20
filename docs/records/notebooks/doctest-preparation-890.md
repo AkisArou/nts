@@ -5,6 +5,14 @@ release build. Shared preparation now runs the identical selected doctest Cargo
 graph with `-- --list`; execution requires its receipt and fresh artifacts.
 No reservation formula or runaway boundary changed.
 
+The preparation receipt binds working directory, target, profile and selected
+Cargo arguments; it does not identify a commit or source tree. Cargo freshness
+validates current inputs, and the first non-fresh artifact stops its owned command
+group. Doctest-graph compile failures in pinned preparation occur before the gate
+writes a summary, so the full-check reader holds the run without starting a bisect,
+as it already does for release-build failures. Direct preparation failure likewise
+holds the runner during setup.
+
 The paired scope controls used the same core-source comment and independent
 copies of this tree's measured warm history. The original step compiled eight
 workspace crates. It exceeded its reservation and grew enough to finish; this

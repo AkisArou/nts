@@ -790,9 +790,11 @@ The admitted compiler preparation builds selected doctest prerequisites in
 that same target and `nts-dev` profile with the doctest route's `-- --list`
 mode. It compiles Cargo libraries
 and dev dependencies while rustdoc only lists examples. The executing doctest
-step requires the successful build receipt for its source, selected crates,
-profile and target, and requires every Cargo artifact to be fresh. A doctests-only
-selection prepares those prerequisites without building compiler binaries.
+step requires the successful build receipt for its working directory, selected
+crates, profile and target. Cargo's freshness check validates current inputs;
+the first non-fresh artifact stops the Cargo command. A doctests-only
+selection prepares those prerequisites without building compiler binaries or
+reporting an unselected build step; its doctest result retains preparation evidence.
 Pinned runs and landing prepare them inside their existing shared build
 lifetime. Direct selections use that same admitted build owner before taking
 step scopes; retries retain the receipt. The scheduled build and doctests

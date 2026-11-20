@@ -5,9 +5,12 @@ import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fixtureEnvironment} from './test-environment.ts';
 import {testScratch} from './test-scratch.ts';
-import {TEST_PROFILE_MANIFEST} from './test-profile.ts';
+import {TEST_PROFILE_MANIFEST,testInvocation} from './test-profile.ts';
 import {assertDoctestPreparation} from './doctest-preparation.ts';
 import {ownMemory} from './test-memory.ts';
+import {randomUUID} from 'node:crypto';
+import {spawnTest} from './test-wait.ts';
+import {durableRecord} from './durable-record.ts';
 
 test('listing doctests prepares the identical graph, including dev dependency features',t=>{
   const root=testScratch(t,'doctest-build'),target=join(root,'external-target');
@@ -77,4 +80,29 @@ test('doctest execution refuses missing preparation before Cargo or disk admissi
   const root=testScratch(t,'doctest-unprepared');
   const ran=spawnSync(process.execPath,[new URL('./doctests.ts',import.meta.url).pathname],{cwd:root,env:fixtureEnvironment(t),encoding:'utf8'});
   assert.equal(ran.status,2,ran.stdout+ran.stderr);assert.match(ran.stderr,/doctests needs successful shared build preparation/);
+});
+
+test('the first non-fresh artifact stops the owned Cargo graph, including its waiting child',t=>{
+  const root=testScratch(t,'doctest-stop-cold'),bin=join(root,'bin'),target=join(root,'target');mkdirSync(bin);mkdirSync(target);
+  const profile=readFileSync(TEST_PROFILE_MANIFEST,'utf8').split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]'));
+  writeFileSync(join(root,'Cargo.toml'),'[workspace]\n'+profile);
+  writeFileSync(join(bin,'rustup'),'#!/bin/sh\nprintf \'no overrides\\n\'\n',{mode:0o755});
+  writeFileSync(join(bin,'cargo'),`#!${process.execPath}
+const {spawn}=require('node:child_process'),{join}=require('node:path');
+const child=spawn(process.execPath,['-e',"process.send('ready');setInterval(()=>{},1000);"],{stdio:['ignore','inherit','inherit','ipc']});
+child.once('message',()=>console.log(JSON.stringify({reason:'compiler-artifact',filenames:[join(process.env.CARGO_TARGET_DIR,'nts-dev/libcold.rlib')],profile:{debuginfo:0},fresh:false})));
+// This graph cannot finish by itself. Its controller and child must both be stopped.
+`,{mode:0o755});
+  const base=fixtureEnvironment(t),env={...base,PATH:bin+':'+base.PATH,CARGO_TARGET_DIR:target,CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
+    NTS_DOCTEST_PREPARATION:join(root,'prepared.json')};
+  const invocation=testInvocation('doctests-build',[],env,root);
+  durableRecord(env.NTS_DOCTEST_PREPARATION,{version:2,status:0,buildFinished:true,artifacts:[{}],buildNamespace:target,
+    invocation:{cwd:invocation.cwd,profileDirectory:invocation.profileDirectory,args:invocation.args}});
+  const unit='nts-test-doctest-stop-'+randomUUID();
+  t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{env:base,stdio:'ignore',encoding:'utf8'});});
+  const setenv=Object.entries(env).filter((row):row is [string,string]=>row[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value);
+  const ran=spawnTest('systemd-run',['--user','--unit='+unit,'--collect','--wait','--pipe','--quiet','-p','RuntimeMaxSec=30s','-p','LimitCORE=0','-p','Nice=19','-p','CPUAffinity=0-3 6-31',
+    '--working-directory='+root,...setenv,process.execPath,new URL('./doctests.ts',import.meta.url).pathname],{env:base,encoding:'utf8'});
+  assert.equal(ran.status,2,ran.stdout+ran.stderr);
+  assert.match(ran.stderr,/compiled an artifact instead of reusing its build preparation/);
 });

@@ -40,7 +40,8 @@ test('compiler and doctest-only preparation disk refusals drain without an immed
   const result=inUnit(t,f,steps);
   assert.equal(result.state,'held',result.message);assert.equal(result.steps[0]?.verdict,'INSTRUMENT',result.message);
   assert.equal(result.steps[0]?.instrument?.kind,'disk-capacity');assert.equal(result.steps[0]?.instrument?.disk?.shortBytes,2**30);
-  assert.deepEqual(result.steps.map(row=>row.verdict),['INSTRUMENT','NOT RUN']);assert.equal(result.steps[0]?.attempt,undefined);
+  assert.deepEqual(result.steps.map(row=>row.name+' '+row.verdict),steps.includes('build')?['build INSTRUMENT','tests NOT RUN']:['doctests INSTRUMENT']);
+  assert.equal(result.steps[0]?.attempt,undefined);
   }
 });
 

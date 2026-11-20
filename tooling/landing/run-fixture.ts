@@ -79,7 +79,7 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   const memory = gateFixtureMemory(join(own, "memory"),tree);
   declareOwnMembers(memory,[process.pid]);
   const build = join(own, "build.sh");
-  writeFileSync(build, `#!/bin/sh\n[ "$(cat ${JSON.stringify(join(controls, "build"))} 2>/dev/null)" = fail ] && { echo "error[E0308]: mismatched types"; exit 101; }\nmkdir -p "$CARGO_TARGET_DIR/${PROFILE}" && echo "nts $CARGO_INCREMENTAL" > "$CARGO_TARGET_DIR/${PROFILE}/nts" && chmod +x "$CARGO_TARGET_DIR/${PROFILE}/nts"\necho "   Compiling nts-core"\n`);
+  writeFileSync(build, `#!/bin/sh\n[ "$(cat ${JSON.stringify(join(controls, "build"))} 2>/dev/null)" = fail ] && { echo "error[E0308]: mismatched types"; exit 101; }\nif [ "$1" != --no-compiler ]; then\nmkdir -p "$CARGO_TARGET_DIR/${PROFILE}" && echo "nts $CARGO_INCREMENTAL" > "$CARGO_TARGET_DIR/${PROFILE}/nts" && chmod +x "$CARGO_TARGET_DIR/${PROFILE}/nts"\nfi\necho "   Compiling nts-core"\n`);
   chmodSync(build, 0o755);
   writeFileSync(build,readFileSync(build,'utf8')+`
 if [ "\${NTS_BUILD_DOCTESTS:-0}" = 1 ]; then
@@ -95,7 +95,7 @@ fi
 `);
   const control = (step: string, what: string) => writeFileSync(join(controls, step), what);
   const options = (steps: string[], extra: Partial<RunOptions> = {}): RunOptions => ({
-    tree, target, run, commit, steps, build: [build], env: { ...fixtureEnvironment(t), HOME: home },
+    tree, target, run, commit, steps, build: [build,...(steps.includes('build')?[]:['--no-compiler'])], env: { ...fixtureEnvironment(t), HOME: home },
     owned: { NTS_GATE_SLOTS: "4", ...memory }, ...extra,
   });
   return { own, tree, target, run, controls, control, options, memory, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };

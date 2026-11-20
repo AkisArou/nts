@@ -3992,8 +3992,11 @@ through the shared compiler build owner with `-- --list`, in the same
 `nts-dev` profile and target used by execution. A release build does not prepare
 those artifacts. Pinned preparation and landing own this compilation; a direct
 selection uses the same admitted owner before step scopes. The preparation
-receipt binds source, selected crates, profile and target, and execution requires
-fresh Cargo artifacts. Unselected doctests perform no preparation. The build's
+receipt binds working directory, selected crates, profile and target. Cargo's
+freshness check validates current inputs and stops at the first non-fresh artifact.
+A doctests-only landing retains preparation evidence on its selected doctest row,
+without compiler binary identities or an unselected build row. Unselected
+doctests perform no preparation. The build's
 disk claim includes `nts-dev` and merges with that target's existing claims.
 
 This extends [the existing build lifetime](#pinned-preparation-owns-only-its-build-11-13)
