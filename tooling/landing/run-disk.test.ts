@@ -34,26 +34,28 @@ function inUnit(t:TestContext,f:ReturnType<typeof fixture>,steps:string[],commit
   return terminal.result;
 }
 
-test('the actual landing build disk refusal drains its reservation without an immediate retry',t=>{
+test('compiler and doctest-only preparation disk refusals drain without an immediate retry',t=>{
+  for(const steps of [['build','tests'],['doctests']]){
   const f=fixture(t);ownMemory(join(f.own,'memory'),{disk:{freeBytes:45*2**30,freeInodes:100}});
-  const result=inUnit(t,f,['build','tests']);
+  const result=inUnit(t,f,steps);
   assert.equal(result.state,'held',result.message);assert.equal(result.steps[0]?.verdict,'INSTRUMENT',result.message);
   assert.equal(result.steps[0]?.instrument?.kind,'disk-capacity');assert.equal(result.steps[0]?.instrument?.disk?.shortBytes,2**30);
   assert.deepEqual(result.steps.map(row=>row.verdict),['INSTRUMENT','NOT RUN']);assert.equal(result.steps[0]?.attempt,undefined);
+  }
 });
 
-test('actual test-profile and doctest core steps preserve the disk cause through the gate and full-check reader',t=>{
+test('the actual test-profile core step preserves the disk cause through the gate and full-check reader',t=>{
   const f=fixture(t);
-  copyModuleClosure(['tooling/gate/test-profile.ts','tooling/gate/doctests.ts'],f.tree);
+  copyModuleClosure(['tooling/gate/test-profile.ts'],f.tree);
   const shell=join(f.tree,'tooling/gate/all.sh'),before=readFileSync(shell,'utf8');
-  writeFileSync(shell,before.replace('  case $control in',`  [ "$step" = tests ] && exec node "$(dirname "$0")/test-profile.ts" workspace\n  [ "$step" = doctests ] && exec node "$(dirname "$0")/doctests.ts"\n  case $control in`));
+  writeFileSync(shell,before.replace('  case $control in',`  [ "$step" = tests ] && exec node "$(dirname "$0")/test-profile.ts" workspace\n  case $control in`));
   for(const args of [['add','.'],['commit','-qm','private actual disk routes']]){
     const wrote=spawnTest('git',gitArguments(args),{cwd:f.tree,env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(wrote.status,0,wrote.stderr);
   }
   const head=spawnTest('git',gitArguments(['rev-parse','HEAD']),{cwd:f.tree,env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(head.status,0,head.stderr);
   ownMemory(join(f.own,'memory'),{disk:{freeBytes:45*2**30,freeInodes:100}});
-  const result=inUnit(t,f,['tests','doctests'],head.stdout.trim());
+  const result=inUnit(t,f,['tests'],head.stdout.trim());
   assert.equal(result.state,'held',result.message);
   for(const row of result.steps){assert.equal(row.verdict,'INSTRUMENT',JSON.stringify(row));assert.equal(row.instrument?.kind,'disk-capacity');}
-  const read=readSummary(f.run,head.stdout.trim(),['tests','doctests']);assert.deepEqual(read.steps,{tests:'HELD',doctests:'HELD'});assert.equal(verdictOf(read.steps),'held');
+  const read=readSummary(f.run,head.stdout.trim(),['tests']);assert.deepEqual(read.steps,{tests:'HELD'});assert.equal(verdictOf(read.steps),'held');
 });
