@@ -126,14 +126,10 @@ pub(super) fn link(
         .as_ref()
         .and_then(|words| words.first())
         .unwrap_or(&tools.program);
-    let exports = Utf8Path::new(driver).file_name() == Some("zig")
-        && node_deps::recipe_for(&artifacts.target)?.object_format == node_deps::ObjectFormat::Elf;
-    command.args(
-        artifacts
-            .link_flags
-            .iter()
-            .filter(|flag| !exports || flag.as_str() != "-Wl,--exclude-libs,ALL"),
-    );
+    let format = node_deps::recipe_for(&artifacts.target)?.object_format;
+    let exports =
+        Utf8Path::new(driver).file_name() == Some("zig") && format == node_deps::ObjectFormat::Elf;
+    command.args(link_arguments(&artifacts.link_flags, format, exports));
     if !exports {
         return Ok(());
     }
@@ -162,6 +158,23 @@ pub(super) fn link(
         super::native_paths::relative(&map, out)?
     ));
     Ok(())
+}
+
+fn link_arguments(flags: &[String], format: node_deps::ObjectFormat, exports: bool) -> Vec<&str> {
+    let mut arguments = Vec::new();
+    for flag in flags {
+        if exports && flag == "-Wl,--exclude-libs,ALL" {
+            continue;
+        }
+        if format == node_deps::ObjectFormat::Elf && flag == "-lm" {
+            // Keep its archive-order position: a preceding --as-needed -lm
+            // cannot resolve math first referenced by a later static archive.
+            arguments.extend(["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]);
+        } else {
+            arguments.push(flag.as_str());
+        }
+    }
+    arguments
 }
 
 pub(super) fn notices(artifacts: &Artifacts, out: &Utf8Path) -> Result<()> {
@@ -257,5 +270,56 @@ mod cache_tests {
         })
         .expect("the production XDG cache must resolve");
         assert_eq!(cache, PathBuf::from("/production/cache/nts/node-deps"));
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::link_arguments;
+    use nts_build::node_deps::ObjectFormat;
+    use std::process::Command;
+
+    #[test]
+    fn only_elf_libm_arguments_gain_scoped_as_needed() {
+        let flags: Vec<String> = [
+            "-lconstructor",
+            "uv.a",
+            "-lm",
+            "-ldl",
+            "-lm",
+            "-Wl,--exclude-libs,ALL",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        for format in [ObjectFormat::Elf, ObjectFormat::Macho, ObjectFormat::Coff] {
+            let mut command = Command::new("compiler");
+            command.args(link_arguments(&flags, format, false));
+            let actual: Vec<_> = command
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            let expected = if format == ObjectFormat::Elf {
+                [
+                    "-lconstructor",
+                    "uv.a",
+                    "-Wl,--push-state,--as-needed",
+                    "-lm",
+                    "-Wl,--pop-state",
+                    "-ldl",
+                    "-Wl,--push-state,--as-needed",
+                    "-lm",
+                    "-Wl,--pop-state",
+                    "-Wl,--exclude-libs,ALL",
+                ]
+                .map(str::to_owned)
+                .to_vec()
+            } else {
+                flags.clone()
+            };
+            assert_eq!(actual, expected, "{format:?}");
+        }
+        let exported = link_arguments(&flags, ObjectFormat::Elf, true);
+        assert!(!exported.contains(&"-Wl,--exclude-libs,ALL"));
+        assert!(exported.contains(&"-lconstructor"));
     }
 }
