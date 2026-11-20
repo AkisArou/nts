@@ -787,13 +787,14 @@ let tokenAddr = null;
 const grant = () => { if (tokenAddr) tok.grant(); };
 const account = () => tok.account();
 // Sampling never calls schedule(), grant(), or any other policy decision.
-const costClock = setInterval(() => caseCosts?.record({ event: "pool.state", memory: memoryState(),
+const recordPoolState = () => caseCosts?.record({ event: "pool.state", memory: memoryState(),
   used: { slots: used().slots, fe: used().fe }, slots: SLOTS, frontends: FRONTENDS, withhold,
   held: Object.fromEntries(tok.held), ...(tok.sized.size ? { sized: Object.fromEntries(tok.sized) } : {}),
   waiting: tok.waiting.map(w => ({ request:w.id, step:w.step, pid:w.pid, bytes:w.bytes })),
   running: [...running.keys()],
   fixed_grants: Object.fromEntries([...running].filter(([,r]) => !r.elastic).map(([name,r]) => [name,{ slots:r.slots, rider:r.rider }])),
-  runner_cpu: process.resourceUsage() }), 500);
+  runner_cpu: process.resourceUsage() });
+const costClock = setInterval(recordPoolState, 500);
 costClock.unref();
 
 // Only lower the others when a favoured step is in this run at all.
@@ -1804,6 +1805,7 @@ try{
   diagnostics.start();
 }catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);}
 caseCosts = new CaseCosts(RUN_DIR);
+recordPoolState();
 caseCosts.preparePhases(plan,env);
 identities.commit = git("rev-parse", "HEAD");
 const dirty = git("status", "--porcelain", "--untracked-files=no");

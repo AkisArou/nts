@@ -4004,3 +4004,30 @@ without carrying its reservation into the gate. A scheduled build is itself warm
 after pinned preparation, so moving the compile there would only relocate the
 reservation mismatch. No reservation formula, measured allowance or runaway
 boundary changes.
+
+## Cost telemetry records changes and process sessions (11-20)
+
+For #841 the coordinator approved writing the initial pool snapshot and only
+structural changes thereafter. Advancing sample epochs and runner rusage do
+not themselves change the pool. All token lifecycle events remain recorded.
+Compiler cost sessions append to one file per process with a session key on
+every row; readers accept the old per-session format and retain legacy logical
+file order when grouping interleaved sessions. The recorded compiler trace
+replay compares the complete derived summary exactly.
+
+The [baseline measurement](../841-gate-disk.md) showed that every check file in
+one real core run belonged to a different PID, and redundant pool snapshots
+were a small part of its disk footprint. The coordinator approved further
+worker-owned publication and lossless compressed-stream slices for those
+measured causes. Those follow separately from this session-format contract.
+
+## Pool snapshots resynchronize after every state observation (11-20)
+
+Review of #841 found that wait causes consume all events carrying pool state,
+including token events. A snapshot is therefore redundant only until another
+state-bearing event intervenes. That event invalidates the snapshot comparison,
+so a later poll can restore the reader's state even when its snapshot bytes
+match an earlier snapshot. The summary reports polling cadence, without
+promising periodic raw samples. This refines [the process-session decision](#cost-telemetry-records-changes-and-process-sessions-11-20).
+A write failure also poisons the shared process output for every session;
+no later record can append to its partial final row.

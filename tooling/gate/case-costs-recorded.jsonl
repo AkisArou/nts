@@ -1,0 +1,11 @@
+{"backend":"c","binary_sha":"bee35ab3febd5f1c021c15bcd405126ef96426522881bb5e19008a434b8785a4","cpu_measure":"getrusage-v1","cpu_resolution_s":1e-6,"event":"case","observation":"9598d626-ea34-46e2-b337-1447a7a0c5e0","pid":586929,"project":"/home/akisarou/.cache/nts/case-roots/8984519f42c28b21960362f9ea71b550ab61387c84135d2fe53b48de3561ed2d/tsconfig.json","rc":"0","step":"test262-jvm","version":2}
+{"epoch":1795160397.544701,"event":"begin","phase":"check.total"}
+{"epoch":1795160397.544724,"event":"begin","phase":"capture"}
+{"child_sys_s":0.0,"child_user_s":0.0,"epoch":1795160397.5736508,"event":"end","phase":"capture","self_sys_s":0.008239,"self_user_s":0.020484,"start_epoch":1795160397.544724,"wall_s":0.028926739}
+{"epoch":1795160397.5736663,"event":"begin","phase":"lower"}
+{"child_sys_s":0.0,"child_user_s":0.0,"epoch":1795160397.5752048,"event":"end","phase":"lower","self_sys_s":0.00018199999999999987,"self_user_s":0.0013500000000000005,"start_epoch":1795160397.5736663,"wall_s":0.001538566}
+{"epoch":1795160397.5752575,"event":"begin","phase":"prepare"}
+{"child_sys_s":0.0,"child_user_s":0.0,"epoch":1795160397.5761306,"event":"end","phase":"prepare","self_sys_s":0.0,"self_user_s":0.0008669999999999997,"start_epoch":1795160397.5752575,"wall_s":0.0008731}
+{"epoch":1795160397.5761425,"event":"begin","phase":"jvm.emit"}
+{"child_sys_s":0.0,"child_user_s":0.0,"epoch":1795160397.5769067,"event":"end","phase":"jvm.emit","self_sys_s":0.0007509999999999999,"self_user_s":0.0,"start_epoch":1795160397.5761425,"wall_s":0.000764068}
+{"child_peak_rss_kb":null,"child_sys_s":0.0,"child_user_s":0.0,"epoch":1795160397.576937,"event":"end","phase":"check.total","self_peak_rss_kb":29096,"self_sys_s":0.009237,"self_user_s":0.022761,"start_epoch":1795160397.544701,"wall_s":0.032235676}

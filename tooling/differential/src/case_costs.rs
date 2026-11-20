@@ -5,14 +5,61 @@
 //! children. It is read once at check completion; child peaks remain unknown.
 
 use std::cell::RefCell;
-use std::io::Write as _;
+use std::collections::HashMap;
+use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 thread_local! {
     static CONTEXT: RefCell<Option<Context>> = const { RefCell::new(None) };
 }
 static CASES: AtomicU64 = AtomicU64::new(0);
+type ProcessFile = Arc<Mutex<ProcessOutput<std::fs::File>>>;
+static FILES: LazyLock<Mutex<HashMap<std::path::PathBuf, ProcessFile>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[derive(Debug)]
+struct ProcessOutput<W> {
+    writer: W,
+    failed: bool,
+}
+
+impl<W: Write> ProcessOutput<W> {
+    fn write_record(&mut self, record: &[u8]) -> bool {
+        if self.failed {
+            return false;
+        }
+        // A partial write may leave an unfinished JSON row. No session may
+        // append to that suffix, even if the underlying writer later recovers.
+        self.failed = self.writer.write_all(record).is_err();
+        !self.failed
+    }
+}
+
+fn process_file_path(root: &std::path::Path) -> std::path::PathBuf {
+    root.join(format!("check-{}.jsonl", std::process::id()))
+}
+
+// The first session exclusively creates the process's file. Later sessions
+// borrow that acquired descriptor, never adopt an existing file by PID alone.
+fn process_file(path: std::path::PathBuf) -> Option<ProcessFile> {
+    let mut files = FILES.lock().ok()?;
+    if let Some(file) = files.get(&path) {
+        return Some(Arc::clone(file));
+    }
+    let file = std::fs::OpenOptions::new()
+        .append(true)
+        .create_new(true)
+        .open(&path)
+        .ok()?;
+    let file = Arc::new(Mutex::new(ProcessOutput {
+        writer: file,
+        failed: false,
+    }));
+    files.insert(path, Arc::clone(&file));
+    Some(file)
+}
 
 pub(crate) fn project_context() -> Option<String> {
     CONTEXT.with_borrow(|context| context.as_ref().map(|value| value.project.clone()))
@@ -20,7 +67,8 @@ pub(crate) fn project_context() -> Option<String> {
 
 #[derive(Debug)]
 struct Context {
-    file: std::fs::File,
+    file: ProcessFile,
+    session: u64,
     record: Vec<u8>,
     project: String,
     step: String,
@@ -99,13 +147,15 @@ fn self_peak_rss_kb() -> Option<u64> {
 pub(crate) fn event(mut value: serde_json::Value) {
     CONTEXT.with_borrow_mut(|context| {
         if let Some(context) = context.as_mut().filter(|context| !context.failed) {
-            // One file has one context. Readers take identity and resolution
-            // from its case header; phases carry only their own observations.
+            // A process appends all its sessions to one file. The session key
+            // separates nested and concurrent contexts without repeating their
+            // identity on every phase.
+            value["session"] = context.session.into();
             if value["event"] == "case" {
                 value["project"] = context.project.clone().into();
                 value["step"] = context.step.clone().into();
                 value["pid"] = std::process::id().into();
-                value["version"] = 2.into();
+                value["version"] = 3.into();
                 value["cpu_measure"] = "getrusage-v1".into();
                 value["cpu_resolution_s"] = 0.000_001.into();
             }
@@ -121,7 +171,11 @@ pub(crate) fn event(mut value: serde_json::Value) {
                 return;
             }
             context.record.push(b'\n');
-            if context.file.write_all(&context.record).is_err() {
+            if !context
+                .file
+                .lock()
+                .is_ok_and(|mut file| file.write_record(&context.record))
+            {
                 context.failed = true;
             }
         }
@@ -236,18 +290,11 @@ fn observed_command(command: Option<&str>, observation: Option<&str>) -> bool {
 fn session_at(root: &std::path::Path, project: &camino::Utf8Path, step: String) -> Session {
     let opened = || {
         std::fs::create_dir_all(root).ok()?;
-        let path = root.join(format!(
-            "check-{}-{}.jsonl",
-            std::process::id(),
-            CASES.fetch_add(1, Ordering::Relaxed)
-        ));
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .ok()?;
+        let path = process_file_path(root);
+        let file = process_file(path)?;
         Some(Context {
             file,
+            session: CASES.fetch_add(1, Ordering::Relaxed),
             record: Vec::new(),
             project: project.to_string(),
             step,
@@ -312,6 +359,106 @@ mod tests {
         ] {
             assert_eq!(parse_peak_rss_kb(status), None, "{status}");
         }
+    }
+
+    #[test]
+    fn a_partial_write_disables_the_shared_output_for_every_session() {
+        #[derive(Default)]
+        struct RecoveringWriter {
+            bytes: Vec<u8>,
+            calls: usize,
+        }
+        impl Write for RecoveringWriter {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.calls += 1;
+                match self.calls {
+                    1 => {
+                        self.bytes.extend_from_slice(&bytes[..3]);
+                        Ok(3)
+                    }
+                    2 => Err(std::io::Error::other("injected full disk")),
+                    _ => {
+                        self.bytes.extend_from_slice(bytes);
+                        Ok(bytes.len())
+                    }
+                }
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let first = Arc::new(Mutex::new(ProcessOutput {
+            writer: RecoveringWriter::default(),
+            failed: false,
+        }));
+        let second = Arc::clone(&first);
+        assert!(!first.lock().unwrap().write_record(b"first session\n"));
+        assert!(!second.lock().unwrap().write_record(b"second session\n"));
+        let output = first.lock().unwrap();
+        assert!(output.failed);
+        assert_eq!(output.writer.calls, 2, "no session retries a poisoned file");
+        assert_eq!(output.writer.bytes, b"fir");
+    }
+
+    #[test]
+    fn nested_and_parallel_sessions_share_one_process_file() {
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-case-costs-sessions");
+        let outer = session_at(&root, camino::Utf8Path::new("outer"), "examples".into());
+        {
+            let _inner = session_at(&root, camino::Utf8Path::new("inner"), "examples".into());
+            event(serde_json::json!({"event":"inner.observation"}));
+        }
+        event(serde_json::json!({"event":"outer.observation"}));
+        std::thread::scope(|scope| {
+            for project in ["parallel-a", "parallel-b"] {
+                let root = &root;
+                scope.spawn(move || {
+                    let _session =
+                        session_at(root, camino::Utf8Path::new(project), "examples".into());
+                    event(serde_json::json!({"event":"parallel.observation"}));
+                });
+            }
+        });
+        drop(outer);
+        let files: Vec<_> = std::fs::read_dir(&root).unwrap().collect();
+        assert_eq!(files.len(), 1, "all sessions append to their process file");
+        let path = process_file_path(&root);
+        let rows: Vec<serde_json::Value> = std::fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let headers: Vec<_> = rows.iter().filter(|row| row["event"] == "case").collect();
+        assert_eq!(headers.len(), 4);
+        for header in headers {
+            let session = header["session"].as_u64().unwrap();
+            let owned: Vec<_> = rows
+                .iter()
+                .filter(|row| row["session"] == session)
+                .collect();
+            assert_eq!(owned.iter().filter(|row| row["event"] == "case").count(), 1);
+            assert_eq!(
+                owned
+                    .iter()
+                    .filter(|row| row["event"] == "end" && row["phase"] == "check.total")
+                    .count(),
+                1
+            );
+            let project = header["project"].as_str().unwrap();
+            let observation = if project.starts_with("parallel-") {
+                "parallel.observation".to_string()
+            } else {
+                format!("{project}.observation")
+            };
+            assert_eq!(
+                owned
+                    .iter()
+                    .filter(|row| row["event"] == observation)
+                    .count(),
+                1
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -393,5 +540,19 @@ mod tests {
             "original failure"
         );
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn an_existing_process_file_is_not_adopted() {
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-case-costs-existing");
+        std::fs::create_dir_all(&root).unwrap();
+        let path = process_file_path(&root);
+        std::fs::write(&path, b"unowned observations\n").unwrap();
+        let session = session_at(&root, camino::Utf8Path::new("fixture"), "examples".into());
+        assert!(session.total.is_none());
+        event(serde_json::json!({"event":"not published"}));
+        drop(session);
+        assert_eq!(std::fs::read(&path).unwrap(), b"unowned observations\n");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

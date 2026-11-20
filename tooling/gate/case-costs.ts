@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {prepareChildObserver} from './child-rusage.ts';
 import {censusPhaseSummary} from './census-phase-summary.ts';
 import {CENSUS_PHASE_STEPS,readCensusPhaseFrame,type CensusPhaseFrame} from '../census/phase-costs.ts';
+import {caseCostSessions} from '../differential/case-cost-records.ts';
 
 /** The run's memory as run.mjs counts it: its reservation, what its running steps are counted for, and what waits. */
 export type MemoryState = {
@@ -180,18 +181,13 @@ function peakRss(value: unknown): number | null {
 
 function readChecks(root: string, errors: string[]) {
   const checks: Check[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isFile() || !/^check-\d+-\d+\.jsonl$/.test(entry.name)) continue;
+  for (const {name,rows} of caseCostSessions(root,errors)) {
     try {
-      const rows: Record<string, unknown>[] = [];
-      for (const line of readFileSync(join(root, entry.name), "utf8").split("\n").filter(Boolean)) {
-        try { rows.push(JSON.parse(line)); } catch { errors.push(`partial JSON: ${entry.name}`); }
-      }
       const first = rows.find(r => r.event === "case");
       const begin = rows.find(r => r.event === "begin" && r.phase === "check.total");
       const ends = rows.filter(r => r.event === "end");
       const last = ends.find(r => r.phase === "check.total");
-      if (!first || !begin || typeof begin.epoch !== "number") { errors.push(`no case start: ${entry.name}`); continue; }
+      if (!first || !begin || typeof begin.epoch !== "number") { errors.push(`no case start: ${name}`); continue; }
       const phases = ends.filter(r => typeof r.phase === "string" && typeof r.wall_s === "number").map(r => ({
         phase: r.phase as string, wall_s: r.wall_s as number,
         self_cpu_s: cpu(r, "self_user_s", "self_sys_s"), child_cpu_s: cpu(r, "child_user_s", "child_sys_s"),
@@ -204,7 +200,7 @@ function readChecks(root: string, errors: string[]) {
         child_peak_rss_kb: peakRss(last?.child_peak_rss_kb),
         phases, complete: Boolean(last),
       });
-    } catch (e) { errors.push(`${entry.name}: ${(e as Error).message}`); }
+    } catch (e) { errors.push(`${name}: ${(e as Error).message}`); }
   }
   return checks;
 }
@@ -326,12 +322,12 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       longest_checks: [...completed].sort((a, b) => b.wall_s - a.wall_s).slice(0, 10).map(c => ({ project: c.project, wall_s: c.wall_s })),
     };
   }
-  return { version: 1, raw_directory: root, queue_sample_interval_s: .5,
+  return { version: 1, raw_directory: root, pool_state_poll_interval_s: .5,
     status: errors.length || missingChecks || checks.some(c => !c.complete) ? "partial" : "complete",
     errors: errors.slice(0, 20), error_count: errors.length,
     notes: ["Phase/worker seconds overlap; step wall buckets are disjoint.",
       "Nested phase totals must not be added to their enclosing totals.",
-      "Wait causes use policy events and 500 ms state samples; transitions between observations are approximate.",
+      "Wait causes use policy events and pool states polled every 500 ms. Snapshots are written on change and after intervening state-bearing events; unchanged polls are omitted. Transitions between observations are approximate.",
       "CPU is process-wide self and waited children at the recorded resolution; new compiler records use getrusage microseconds, and absent CPU is unknown.",
       "Self peak RSS is Linux VmHWM in KiB at standalone check completion: lifetime process peak, excluding children; child peak RSS is currently unknown.",
       "RSS distributions count measured completed checks only; sums of per-check peaks are not simultaneous resident memory.",
@@ -346,6 +342,7 @@ export class CaseCosts {
   readonly events: Observation[] = [];
   readonly errors: string[] = [];
   available = true;
+  private poolState: string | undefined;
 
   constructor(runDirectory: string) {
     this.root = join(runDirectory, "costs");
@@ -360,6 +357,18 @@ export class CaseCosts {
   }
 
   record(event: { event: string; epoch?: number; [key: string]: unknown }): void {
+    if(event.event==='pool.state'){
+      // The sampling clock and process rusage advance even when the pool does
+      // nothing. Neither is a state transition. Token events remain lossless.
+      const {epoch: _epoch,runner_cpu: _cpu,...state}=event;
+      const key=JSON.stringify(state);
+      if(key===this.poolState)return;
+      this.poolState=key;
+    }else if(event.used){
+      // waitingBreakdown consumes every state-bearing event. A later snapshot
+      // must restore that reader's state even if it matches the last snapshot.
+      this.poolState=undefined;
+    }
     const row = { ...event, epoch: event.epoch ?? Date.now() / 1000 } as Observation;
     this.events.push(row);
     if (!this.available) return;

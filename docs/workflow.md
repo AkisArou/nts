@@ -1282,6 +1282,17 @@ the tooling strict checker owns the source's type checking.
   receipts preserve both bases; imported work records zero executed CPU and
   keeps its original measurement in `origin`. Combined summaries partition
   totals by basis. Separate build preparation still names its rusage basis.
+- **Cost telemetry records state changes.** The runner writes the initial pool
+  snapshot and only changed snapshots thereafter; sampling time and runner CPU
+  counters do not constitute a pool change. Every intervening event carrying
+  state invalidates the snapshot comparison, so the next poll can restore the
+  wait-cause reader's state. The summary names the polling cadence; it does not
+  promise periodic raw samples. Token lifecycle events remain
+  complete. Compiler checks append to one process-owned file with a distinct
+  session key on each row. Readers retain the legacy per-session file format
+  and group interleaved sessions before deriving `summary.json.case_costs`.
+  A failed process-file write disables that file for every session, preserving
+  a partial final row without appending other records to it.
 - **Census phase CPU explains the retained step total.** TypeScript and
   test262 backend steps publish disjoint materialization, native capture and
   checking, lowering and preparation, emission, host compilation and linking,
@@ -1548,6 +1559,14 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Cost observations retain session identity independently of files.** Pool
+  snapshots are written only on a structural change, excluding clock and rusage
+  changes, or to resynchronize after an intervening state-bearing event. Compiler
+  cost sessions append to one file per process, with an
+  explicit session key on every row. Readers group sessions in the legacy
+  logical-file order so phase populations and case ordering remain unchanged
+  ([log](records/notebooks/decisions-log.md#cost-telemetry-records-changes-and-process-sessions-11-20)).
 
 - Mutable Node resolution sessions belong to their prepared run, independently
   of reusable dependency images. One shared locator validates the captured

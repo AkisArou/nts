@@ -1,11 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CaseCosts, distribution, recordAggregatePeak, summarizeCosts, waitingBreakdown, waitCause, type Observation } from "./case-costs.ts";
 import {CgroupObservations,HostObservationError,CgroupDeparted,hostObservations,type CgroupFiles} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
+import {fileInput} from './reader-inputs/main.ts';
+
+const RECORDED_CHECK=fileInput(new URL('./case-costs-recorded.jsonl',import.meta.url));
 
 const epoch = 1_700_000_000;
 const step = { name: "examples", started_at: new Date(epoch * 1000).toISOString(), wall: 10 };
@@ -34,6 +37,96 @@ function checkFile(root: string, id: number, binary = "new", start = 1, duration
   ];
   writeFileSync(join(root, `check-${id}-0.jsonl`), rows.map(r => JSON.stringify(r)).join("\n") + (partial ? '\n{"unfinished":' : "\n"));
 }
+
+test('pool snapshots publish only structural changes, while every token event remains recorded',t=>{
+  const costs=new CaseCosts(fixture(t)),snapshot={event:'pool.state',...state(),held:{},waiting:[],running:[]};
+  for(let n=0;n<100;n++)costs.record({...snapshot,epoch:epoch+n,runner_cpu:{userCPUTime:n}});
+  assert.equal(costs.events.length,1,'an idle pool writes one snapshot, independent of clock and rusage');
+  costs.record({...snapshot,...state(false),epoch:epoch+100});
+  costs.record({...snapshot,...state(false),epoch:epoch+101});
+  costs.record({...snapshot,epoch:epoch+102});
+  assert.equal(costs.events.length,3,'a changed state and a return to the original state each publish once');
+  const token=event(103,'token.request',1);
+  costs.record(token);costs.record(token);
+  const rows=readFileSync(join(costs.root,'queue.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  assert.deepEqual(rows,costs.events);
+  assert.equal(rows.filter(row=>row.event==='pool.state').length,3);
+  assert.equal(rows.filter(row=>row.event==='token.request').length,2);
+  const summary=costs.summary([step]);
+  assert.ok('pool_state_poll_interval_s' in summary);
+  assert.equal(summary.pool_state_poll_interval_s,.5);
+  assert.ok(!('queue_sample_interval_s' in summary),'poll cadence is not a promise of recorded samples');
+});
+
+test('a restoring snapshot preserves wait causes after intervening token observations',t=>{
+  const costs=new CaseCosts(fixture(t)),full=state(true,24),short=state(false,24);
+  const snapshot=(at:number)=>({event:'pool.state',epoch:epoch+at,...full});
+  const rows=[snapshot(0),event(0,'token.request',1,full),snapshot(.5),
+    event(1,'token.request',2,short),event(1.2,'token.cancel',2,short),snapshot(1.5),snapshot(2)];
+  const minute={...step,wall:60},legacy=summarizeCosts(costs.root,rows,[minute]);
+  for(const row of rows)costs.record(row);
+  const recorded=readFileSync(join(costs.root,'queue.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line) as Observation);
+  assert.deepEqual(waitingBreakdown(recorded,minute),waitingBreakdown(rows,minute));
+  assert.deepEqual(costs.summary([minute]),legacy);
+  const waiting=waitingBreakdown(recorded,minute)!;
+  assert.equal(waiting.wall_s.memory_admission,.5);
+  assert.equal(waiting.wall_s.slot_tokens,59.5);
+});
+
+test('every state-bearing event invalidates snapshot dedupe, independently of its event name',t=>{
+  for(const kind of ['token.request','token.grant','token.release','token.cancel','pool.change','another.observation']){
+    const costs=new CaseCosts(fixture(t)),snapshot={event:'pool.state',...state(true,24)};
+    costs.record({...snapshot,epoch});
+    costs.record(event(1,kind,2,state(false,24)));
+    costs.record({...snapshot,epoch:epoch+1.5});
+    costs.record({event:'diagnostic',epoch:epoch+1.7});
+    costs.record({...snapshot,epoch:epoch+2});
+    const snapshots=costs.events.filter(row=>row.event==='pool.state');
+    assert.deepEqual(snapshots.map(row=>row.epoch),[epoch,epoch+1.5],kind);
+  }
+});
+
+test('interleaved process sessions retain the exact legacy summary of a recorded compiler trace',t=>{
+  const costs=new CaseCosts(fixture(t));
+  // One completed check from the measured green core 1dccb9d1090c. Reuse its
+  // actual floating-point phase/rusage observations, including unknown peaks.
+  const recorded=readFileSync(RECORDED_CHECK,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  const header=recorded[0];
+  const sessions=[0,1,2,10].map(id=>({id,rows:recorded.map(row=>row.event==='case'?{...row,pid:42,project:header.project+'/'+id}:row)}));
+  for(const {id,rows} of sessions)writeFileSync(join(costs.root,`check-42-${id}.jsonl`),rows.map(row=>JSON.stringify(row)).join('\n')+'\n');
+  const observedStep={name:header.step,started_at:new Date(recorded[1].epoch*1000).toISOString(),wall:10};
+  const polling=Array.from({length:20},(_,n)=>({event:'pool.state',epoch:Math.floor(recorded[1].epoch)+n/2,
+    ...state(n>=10),runner_cpu:{userCPUTime:n}}));
+  costs.events.push(...polling); // The old writer retained every clock sample.
+  const legacy=costs.summary([observedStep]);
+  costs.events.length=0;
+  for(const file of readdirSync(costs.root))rmSync(join(costs.root,file));
+  // All headers arrive before any phase; nested and concurrent sessions can
+  // interleave in the worker's stream. The session key owns attribution.
+  const compact=recorded.flatMap((_,index)=>sessions.map(({id,rows})=>({...rows[index],session:id})));
+  writeFileSync(join(costs.root,'check-42.jsonl'),compact.map(row=>JSON.stringify(row)).join('\n')+'\n');
+  for(const row of polling)costs.record(row);
+  assert.equal(costs.events.length,2,'only the initial state and changed memory state survive');
+  assert.deepEqual(costs.summary([observedStep]),legacy);
+  assert.ok('steps' in legacy);assert.equal((legacy.steps[header.step] as any).coverage.completed,4);
+});
+
+test('a truncated process stream retains completed and unfinished sessions separately',t=>{
+  const dir=fixture(t);checkFile(dir,42);checkFile(dir,43,'new',4,2,true);
+  const rows=[42,43].flatMap(id=>readFileSync(join(dir,`check-${id}-0.jsonl`),'utf8').split('\n').filter(line=>line&& !line.startsWith('{"unfinished":')).map(line=>({...JSON.parse(line),session:id})));
+  for(const id of [42,43])rmSync(join(dir,`check-${id}-0.jsonl`));
+  writeFileSync(join(dir,'check-42.jsonl'),rows.map(row=>JSON.stringify(row)).join('\n')+'\n{"session":43,');
+  const result=summarizeCosts(dir,[],[step]),data=result.steps.examples as any;
+  assert.equal(result.status,'partial');assert.equal(result.error_count,1);
+  assert.deepEqual([data.coverage.started,data.coverage.completed,data.coverage.incomplete],[2,1,1]);
+});
+
+test('unidentified compact rows never attach to another session',t=>{
+  const dir=fixture(t);writeFileSync(join(dir,'check-42.jsonl'),JSON.stringify({event:'case',project:'unowned'})+'\n');
+  const result=summarizeCosts(dir,[],[step]);
+  assert.equal(result.status,'partial');assert.match(result.errors[0]!,/invalid case session/);
+  assert.equal((result.steps.examples as any).coverage.started,0);
+});
 
 test('barrier traces retain overlapping policy lifetimes separately from admitted work',t=>{
   const rows=[event(0,'token.request',1),event(0,'token.grant',1),

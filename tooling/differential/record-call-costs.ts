@@ -5,6 +5,7 @@ import {mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import {basename, dirname, join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {parseJsonReport} from './check-report.ts';
+import {caseCostSessions} from './case-cost-records.ts';
 
 const hash = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const read = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
@@ -38,10 +39,11 @@ export function calibration(nativeRoot: string, jvmRoot: string, multiple: numbe
     }
     const seen = new Set<string>(), seals: Record<string, string> = {};
     let calls = 0, maximum = {cpu_ticks: 0, clock_ticks_per_second: 1, fixture: '', index: 0, includes_startup: false};
-    for (const name of readdirSync(join(area, 'costs')).filter(name => /^check-.*\.jsonl$/.test(name)).sort()) {
-      const path = join(area, 'costs', name);
-      const events = readFileSync(path, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-      const header = events[0], fixture = basename(header.project).replace(/\.tsconfig\.json$/, '');
+    const errors:string[]=[];
+    for (const {file:path,rows:events} of caseCostSessions(join(area,'costs'),errors)) {
+      const header = events[0];
+      assert.ok(header&&typeof header.project==='string','missing calibration case header');
+      const fixture = basename(header.project).replace(/\.tsconfig\.json$/, '');
       if (!rows.has(fixture)) continue;
       assert.equal(header.event, 'case'); assert.equal(header.step, 'bench-agree');
       assert.equal(header.binary_sha, summary.pin.sha); assert.equal(header.backend, sitting.backend);
@@ -50,19 +52,20 @@ export function calibration(nativeRoot: string, jvmRoot: string, multiple: numbe
       assert.equal(observed.length, rows.get(fixture).report.counts.compared, 'completed calls differ from validated comparisons');
       const indexes = new Set<number>();
       for (const event of observed) {
-        integer(event.cpu_ticks); integer(event.index); integer(event.clock_ticks_per_second);
-        assert.ok(event.clock_ticks_per_second > 0, 'missing CPU clock resolution');
+        const cpu_ticks=integer(event.cpu_ticks),index=integer(event.index),clock_ticks_per_second=integer(event.clock_ticks_per_second);
+        assert.ok(clock_ticks_per_second > 0, 'missing CPU clock resolution');
         assert.equal(event.cpu_scope, 'driver-process-all-threads-and-waited-children');
-        assert.equal(typeof event.includes_startup, 'boolean');
-        assert.ok(!indexes.has(event.index), 'duplicate completed call'); indexes.add(event.index);
-        const sample = {cpu_ticks: event.cpu_ticks, clock_ticks_per_second: event.clock_ticks_per_second,
-          fixture, index: event.index, includes_startup: event.includes_startup};
+        assert.ok(typeof event.includes_startup==='boolean');
+        assert.ok(!indexes.has(index), 'duplicate completed call'); indexes.add(index);
+        const sample = {cpu_ticks, clock_ticks_per_second,
+          fixture, index, includes_startup: event.includes_startup};
         if (sample.cpu_ticks / sample.clock_ticks_per_second > maximum.cpu_ticks / maximum.clock_ticks_per_second) maximum = sample;
       }
       calls += observed.length;
-      seals[`${arm}/costs/${name}`] = hash(path);
+      seals[`${arm}/costs/${basename(path)}`] = hash(path);
       seals[`${arm}/${fixture}.json`] = hash(join(area, `${fixture}.json`));
     }
+    assert.deepEqual(errors,[],'incomplete calibration observations');
     assert.equal(seen.size, rows.size, 'an accepted project lacks its CPU observations');
     const observedMax = maximum.cpu_ticks / maximum.clock_ticks_per_second;
     assert.ok(observedMax > 0 && calls > 0, 'no measurable completed calls');

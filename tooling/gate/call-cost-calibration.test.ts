@@ -24,6 +24,18 @@ test('calibration requires complete validated calls and derives each arm separat
   const value=calibration(root,root,8,300);
   assert.deepEqual(arms.map(arm=>(value.arms[arm] as {allowance_seconds:number}).allowance_seconds),[1,2,3,4]);
   const path=join(root,'c','costs','check-1-0.jsonl'),original=readFileSync(path,'utf8');
+  const compact=join(root,'c','costs','check-1.jsonl'),events=original.trim().split('\n').map(line=>JSON.parse(line));
+  unlinkSync(path);
+  writeFileSync(compact,events.map(row=>JSON.stringify({...row,session:0})).join('\n')+'\n');
+  const compactValue=calibration(root,root,8,300);
+  const withoutEvidence=(row:unknown)=>{const {evidence,...facts}=row as Record<string,unknown>;return facts;};
+  assert.deepEqual(withoutEvidence(compactValue.arms.c),withoutEvidence(value.arms.c));
+  const second=join(root,'c','second.json');
+  writeFileSync(second,readFileSync(join(root,'c','control.json'),'utf8').replace('"fixture":"control"','"fixture":"second"'));
+  writeFileSync(compact,[...events.map(row=>({...row,session:0})),...events.map(row=>({...row,session:1,...(row.event==='case'?{project:'second.tsconfig.json'}:{})}))].map(row=>JSON.stringify(row)).join('\n')+'\n');
+  const both=calibration(root,root,8,300).arms.c as {accepted_projects:number;completed_calls:number};
+  assert.equal(both.accepted_projects,2);assert.equal(both.completed_calls,2);
+  unlinkSync(second);unlinkSync(compact);writeFileSync(path,original);
   writeFileSync(path,original.replace('"cpu_ticks":10','"cpu_ticks":-1'));assert.throws(()=>calibration(root,root,8,300),/CPU sample/);
   writeFileSync(path,original.replace('"binary_sha":"verified-compiler"','"binary_sha":"another-compiler"'));assert.throws(()=>calibration(root,root,8,300));
   writeFileSync(path,original+original.split('\n')[1]+'\n');assert.throws(()=>calibration(root,root,8,300),/completed calls/);
