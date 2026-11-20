@@ -14,11 +14,23 @@ function doctests(env: Record<string, string | undefined>) {
     const capture = join(root, "args.json"), cargo = join(root, "cargo");
     const profile=readFileSync(new URL("../../Cargo.toml",import.meta.url),"utf8").split(/(?=^\[)/m).find(part=>part.startsWith("[profile.nts-dev]"));
     writeFileSync(join(root,"Cargo.toml"),"[workspace]\n"+profile);
-    writeFileSync(cargo, `#!${process.execPath}\nconst {durableRecord}=require(${JSON.stringify(new URL("./durable-record.ts",import.meta.url).pathname)});durableRecord(process.env.DOC_CAPTURE,{args:process.argv.slice(2),checkers:process.env.NTS_CHECKERS,incremental:process.env.CARGO_INCREMENTAL}); process.exit(7);\n`);
+    writeFileSync(cargo, `#!${process.execPath}
+const {durableRecord}=require(${JSON.stringify(new URL("./durable-record.ts",import.meta.url).pathname)});
+const {mkdirSync}=require('node:fs'),{join}=require('node:path'),args=process.argv.slice(2);
+if(args.includes('--list')){
+  mkdirSync(process.env.CARGO_TARGET_DIR,{recursive:true});
+  console.log(JSON.stringify({reason:'compiler-artifact',filenames:[join(process.env.CARGO_TARGET_DIR,'nts-dev/libnts_core.rlib')],profile:{debuginfo:0},fresh:false}));
+  console.log(JSON.stringify({reason:'build-finished',success:true}));
+}else{
+  durableRecord(process.env.DOC_CAPTURE,{args,checkers:process.env.NTS_CHECKERS,incremental:process.env.CARGO_INCREMENTAL});process.exit(7);
+}
+`);
     chmodSync(cargo, 0o755);
     writeFileSync(join(root,'rustup'),'#!/bin/sh\nprintf \'no overrides\\n\'\n',{mode:0o755});
-    const run = spawnSync(process.execPath, [new URL("./doctests.ts", import.meta.url).pathname], { cwd:root,encoding: "utf8",
-      env: { ...testEnvironment(), PATH: root, DOC_CAPTURE: capture, NTS_CHECKERS: "9", CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE: undefined, ...env } });
+    const environment={...testEnvironment(),PATH:root,DOC_CAPTURE:capture,NTS_CHECKERS:'9',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
+      CARGO_TARGET_DIR:join(root,'target'),NTS_BUILD_DOCTESTS:'1',NTS_DOCTEST_PREPARATION:join(root,'prepared.json'),...env};
+    const prepared=spawnSync(process.execPath,[new URL('./build.ts',import.meta.url).pathname,'--profile','nts-dev','--no-compiler'],{cwd:root,encoding:'utf8',env:environment});
+    const run=prepared.status===0?spawnSync(process.execPath,[new URL('./doctests.ts',import.meta.url).pathname],{cwd:root,encoding:'utf8',env:environment}):prepared;
     let called: unknown = null;
     try { called = JSON.parse(readFileSync(capture, "utf8")); } catch { /* cargo was not called */ }
     return { run, called };
