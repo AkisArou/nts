@@ -2204,3 +2204,22 @@ The complete five-lane agreement run recorded above predates this metadata-only
 rename; it is not described as a second full agreement run.
 
 Raw namespace proof manifest: `/home/akisarou/.cache/nts-scratch/876/namespace-final-evidence.json`, SHA-256 `e28422d80329944d559c42ecffd5e9dd2a7590fff8262d5ee43c0644a64c8686`.
+
+### Accepted memory-census refresh at final landing check
+
+The exact-commit `--here` on `57d25a89e2d3ab50c85caf9d842cd4fb00f5ed2d` completed red only in
+`records`; every other selected step passed. Its retained memory-census rows
+predated accepted-main refresh `0e8ba833a4`. The first rejected row was
+`array-copying-methods`: the check correctly refused an observation differing
+from the current accepted record. No candidate census row had been edited.
+
+The branch was rebased onto accepted main `05d4d2805500a2e3e760d3b120c0a2971a76ce65`
+to inherit all 15 refreshed observations, without recording, deleting or
+rewriting observations by hand. The rebase retained every task patch; the
+append-only decisions entry moved after the accepted entries. The compiler
+changes inherited from main are the constructor-initializer fix in four
+class-member/raising-analysis files, outside the managed-sort implementation.
+The next exact-commit check includes that base.
+
+Rejected-check logs and provenance: `/home/akisarou/.cache/nts-scratch/876/accepted-census-rebase-evidence.json`,
+SHA-256 `69c24fde995a59662d2da1c5aa4b171e96b88b63f4af27f082e0ac4adbe5cbc1`.
