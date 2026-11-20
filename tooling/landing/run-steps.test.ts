@@ -1,4 +1,4 @@
-import {fixtureEnvironment} from "../gate/test-environment.ts";
+import {assignTestValues,fixtureEnvironment} from "../gate/test-environment.ts";
 // A landing's steps (run.ts): the build first, the rest through the gate's own
 // runner, narrowed steps, failing builds and steps, a run inside another gate,
 // and memory pressure run again alone. Shared helpers are in run-fixture.ts.
@@ -13,6 +13,7 @@ import {launcherEnvironment,PROFILE,runLanding} from "./run.ts";
 import {fixture} from './run-fixture.ts';
 import {spawnTest} from "../gate/test-wait.ts";
 import {TEST_PROFILE_MANIFEST} from '../gate/test-profile.ts';
+import {withoutHanded} from '../gate/test-memory.ts';
 
 test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", async t => {
   const f = fixture(t);
@@ -80,7 +81,10 @@ fs.mkdirSync(path.join(target,doc?'nts-dev':'release'),{recursive:true});
 if(doc){console.log(JSON.stringify({reason:'compiler-artifact',filenames:[path.join(target,'nts-dev/deps/private')],profile:{test:false,debuginfo:0},fresh:false}));console.log(JSON.stringify({reason:'build-finished',success:true}));}
 else for(const name of ['nts','nts-suite'])fs.writeFileSync(path.join(target,'release',name),'#!/bin/sh\\nexit 0\\n',{mode:0o755});
 `,{mode:0o755});
-  const base=f.options([]).env!,planned=gateEnvironment(base,{run:f.run,owned:{...f.memory,NTS_GATE_STEPS:'build doctests',
+  const base=withoutHanded(f.options([]).env!);
+  assignTestValues(base,{NTS_GATE_STEP:undefined,NTS_GATE_STEP_ATTEMPT:undefined,NTS_GATE_STEP_RESULT:undefined,
+    NTS_GATE_STEP_MEMORY_BYTES:undefined,NTS_GATE_CASE_COSTS_DIR:undefined,NTS_MEMORY_HANDOVER:undefined});
+  const planned=gateEnvironment(base,{run:f.run,owned:{...f.memory,NTS_GATE_STEPS:'build doctests',
     NTS_GATE_SLOTS:'4',CARGO_TARGET_DIR:f.target,PATH:bin+':'+base.PATH,NTS_MEMORY_PRIORITY:'agent'}});
   const ran=spawnTest(process.execPath,[join(f.tree,'tooling/gate/run.mjs')],{cwd:f.tree,env:planned.env,encoding:'utf8'});
   assert.equal(ran.status,0,ran.stdout+ran.stderr);
