@@ -99,7 +99,7 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
 }
 
 /// Small control and every sorting phase must remain compilable by the
-/// default HotSpot policy. A valid but interpreted method is a regression.
+/// default `HotSpot` policy. A valid but interpreted method is a regression.
 #[test]
 fn adaptive_sort_methods_fit_the_default_jit_limit() {
     let dir = crate::scratch::StdScratchDir::path_in_std_target("sort-method-sizes");
