@@ -2093,3 +2093,20 @@ HIR as the measured source. No sorting policy or runtime code changed.
   Unchanged limitation: `wrong, both   typed-array-aliasing                             disagrees, 637 of 643 compared, 6 declined`.
 
 Raw final-inner evidence manifest: `/home/akisarou/.cache/nts-scratch/876/final-inner-evidence.json`, SHA-256 `1649fbfa0a3920c71e9cbec069d7afa2b3ed511f12d7970a97e67859ab9ab72b`.
+
+## JVM namespace audit correction
+
+The first complete landing-check attempt reached the selected checks and
+rejected the helper-family spelling in `jvm-members`: `¢nts$` belongs to
+the JVM member catalogue. It reported both the lowering source and its
+core guard. The ordinary HIR helper names now begin with `¢sort`, and the
+JVM emitter applies its own catalogue encoding. No gate exception or sort
+policy change is involved. The direct `node tooling/jvm/members.ts --check`
+then passed all 28 member sources.
+
+Earlier setup attempts ran no landing tests: one needed the tree's installation
+catalog republished after rebasing, and the next launcher lacked the login
+shell's `JAVA_HOME` and `ANDROID_HOME`. The tree's own offline linker refreshed
+the catalog; the launcher now supplies both SDK paths and the full host PATH.
+All of those logs remain in the issue scratch. The namespace-failing run was
+stopped through its own `nts-876-final-here-3` unit before changing sources.

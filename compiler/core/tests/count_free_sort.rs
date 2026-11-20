@@ -162,7 +162,7 @@ fn identical_comparators_share_helpers_and_keep_unsigned_addressing() {
                 } = &op.kind
                 {
                     name.strip_suffix("$run")
-                        .filter(|name| name.starts_with("¢nts$sort"))
+                        .filter(|name| name.starts_with("¢sort"))
                 } else {
                     None
                 }
@@ -176,7 +176,7 @@ fn identical_comparators_share_helpers_and_keep_unsigned_addressing() {
         for helper in program
             .funcs
             .iter()
-            .filter(|f| f.name.starts_with("¢nts$sort"))
+            .filter(|f| f.name.starts_with("¢sort"))
         {
             for op in &helper.values {
                 if let OpKind::ArrayGet { index, .. } | OpKind::ArraySet { index, .. } = op.kind {

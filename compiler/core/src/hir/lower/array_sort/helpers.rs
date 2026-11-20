@@ -61,7 +61,7 @@ impl Registry {
             return Rc::clone(family);
         }
         let family = Rc::new(Family {
-            name: format!("¢nts$sort{}", families.len()),
+            name: format!("¢sort{}", families.len()),
             contract,
             comparator: comparator.clone(),
             site,
