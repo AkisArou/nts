@@ -173,11 +173,7 @@ fn identical_comparators_share_helpers_and_keep_unsigned_addressing() {
             1,
             "same typed comparator shares one helper family"
         );
-        for helper in program
-            .funcs
-            .iter()
-            .filter(|f| f.name.starts_with("¢sort"))
-        {
+        for helper in program.funcs.iter().filter(|f| f.name.starts_with("¢sort")) {
             for op in &helper.values {
                 if let OpKind::ArrayGet { index, .. } | OpKind::ArraySet { index, .. } = op.kind {
                     assert!(
