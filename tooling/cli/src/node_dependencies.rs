@@ -170,9 +170,9 @@ pub(super) fn link(
 // even though its underlying lld supports them, so its dynamic policy stays
 // unchanged as well. Other native ELF drivers can scope libm alone.
 pub(super) fn scopes_math(command: &Command) -> bool {
-    !Path::new(command.get_program())
+    Path::new(command.get_program())
         .file_name()
-        .is_some_and(|name| name == "zig")
+        .is_none_or(|name| name != "zig")
         && !command.get_args().any(|arg| arg == "-static")
 }
 
