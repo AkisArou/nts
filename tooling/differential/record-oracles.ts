@@ -24,7 +24,7 @@ import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentE
 import {installationRuntimeContent} from '../inputs/dependency-inputs.ts';
 import {launchMarkerOf} from '../bench/launch-marker.ts';
 
-import { GENERATOR, classifyBudget, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
+import { GENERATOR, classifyBudget, fixtureOf, generatedBenchmarkProject, parseLegacyTable, readRecords, recordPath, writeRecords,
   type BudgetRevision, type MarginBudget, type ProgramAnswer, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
   tsconfig?: string;
@@ -292,8 +292,7 @@ export async function planAll(binary: string, root: string, evidence: string, rc
     if (!existsSync(join(dir, "case.ts"))) continue;
     if (existsSync(join(dir, "tsconfig.json"))) { configs.push(join(dir, "tsconfig.json")); fixtures.set(join(dir, "tsconfig.json"), `benchmarks/cases/${name}`); }
     else {
-      const config = join(evidence, `bench-${name}.json`);
-      atomic(config, { extends: join(root, "tsconfig.fixtures.json"), include: [join(dir, "case.ts")] });
+      const config = generatedBenchmarkProject(evidence, root, name);
       configs.push(config); fixtures.set(config, `benchmarks/cases/${name}`);
     }
   }
@@ -585,9 +584,7 @@ export function fixtureConfig(root: string, evidence: string, name: string): str
   const config = join(directory, "tsconfig.json");
   if (existsSync(config)) return config;
   if (!logical.startsWith("benchmarks/cases/") || !existsSync(join(directory, "case.ts"))) throw new Error(`missing fixture tsconfig: ${name}`);
-  const generated = join(evidence, `bench-${logical.split("/").at(-1)}.json`);
-  atomic(generated, { extends: join(root, "tsconfig.fixtures.json"), include: [join(directory, "case.ts")] });
-  return generated;
+  return generatedBenchmarkProject(evidence, root, logical.split("/").at(-1)!);
 }
 
 async function recordNamed(names: string[]) {

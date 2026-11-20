@@ -88,6 +88,28 @@ export function fixtureOf(source: string): string {
   }
   return source.split("/").slice(0, 3).join("/");
 }
+
+/**
+ * The project of a benchmark case that has no tsconfig of its own. Its config
+ * lives alone in a directory of its own under `directory`: the TypeScript
+ * parser lists a config's directory, and that listing is an oracle input, so
+ * no other file (evidence, a sibling's config) may ever appear beside it. The
+ * config is written once, through a temporary outside that directory.
+ */
+export function generatedBenchmarkProject(directory: string, root: string, name: string): string {
+  if (!/^[^/\\\x00-\x1f\x7f]+$/.test(name) || name === "." || name === "..") fail(`invalid benchmark case name ${JSON.stringify(name)}`);
+  const config = join(directory, "projects", name, "tsconfig.json");
+  const bytes = JSON.stringify({ extends: join(root, "tsconfig.fixtures.json"), include: [join(root, "benchmarks/cases", name, "case.ts")] }, null, 2) + "\n";
+  if (existsSync(config)) {
+    if (readFileSync(config, "utf8") !== bytes) fail(`generated benchmark project changed: ${config}`);
+    return config;
+  }
+  mkdirSync(dirname(config), { recursive: true });
+  const temporary = join(directory, "projects", `.${name}.${process.pid}.tmp`);
+  writeFileSync(temporary, bytes, { flag: "wx" });
+  renameSync(temporary, config);
+  return config;
+}
 export function recordPath(fixture: string): string {
   if (!/^(?:tests\/programs|benchmarks\/cases)\/[^/]+$/.test(fixture)
     || /[\x00-\x1f\x7f\\]/.test(fixture) || posix.normalize(fixture) !== fixture) fail(`invalid fixture ${JSON.stringify(fixture)}`);

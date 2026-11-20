@@ -10,7 +10,7 @@ import {availableParallelism} from 'node:os';
 import {REPOSITORY} from './oracle-services.ts';
 import {oracleRecipeIdentity} from './oracle-runtime.ts';
 import {OracleFilesystem,type HostObservation} from './oracle-filesystem.ts';
-import {readRecords,fixtureOf,type OracleTable} from './oracle-records.ts';
+import {readRecords,fixtureOf,generatedBenchmarkProject,type OracleTable} from './oracle-records.ts';
 import {createProgramOracleResults} from './oracle-result-publisher.ts';
 import {resultHash,type ProgramAnswer,type ProgramCapture} from './oracle-results.ts';
 import {programOracleDirectory} from './oracle-result-scope.ts';
@@ -88,11 +88,7 @@ export function programOracleTasks(directory:string):ProgramOracleTask[]{
     const benchmark=source.startsWith('benchmarks/cases/'),fixture=fixtureOf(source);
     let project=join(REPOSITORY,fixture,'tsconfig.json');
     const fs=new OracleFilesystem();
-    if(benchmark&&!fs.fileExists(project)){
-      const generated=join(directory,'inputs/benchmarks');mkdirSync(generated,{recursive:true});
-      project=join(generated,fixture.split('/').at(-1)!+'.tsconfig.json');
-      writeFileSync(project,JSON.stringify({extends:fileURLToPath(new URL('../../tsconfig.fixtures.json',import.meta.url)),include:[join(REPOSITORY,fixture,'case.ts')]}));
-    }
+    if(benchmark&&!fs.fileExists(project))project=generatedBenchmarkProject(join(directory,'inputs/benchmarks'),REPOSITORY,fixture.split('/').at(-1)!);
     tasks.push({subject:fixture,project,entry:join(REPOSITORY,source),mode:'calls',
       program:PROGRAM_EMIT_PROJECTS.includes(fixture.split('/').at(-1)!),observations:fs.captured()});
   }
