@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fixtureEnvironment} from './test-environment.ts';
@@ -23,17 +23,26 @@ test('listing doctests prepares the identical graph, including dev dependency fe
     NTS_DOCTEST_CRATES:'subject',NTS_DOCTEST_PREPARATION:join(root,'prepared.json'),NTS_BUILD_DOCTESTS:'1'};
   const run=(list:boolean)=>{
     const artifacts=join(root,list?'prepared.json':'executed.json');
-    const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'--artifacts',artifacts,list?'doctests-build':'doctests'],{cwd:root,env,encoding:'utf8'});
+    const command=list?[new URL('./build.ts',import.meta.url).pathname,'--profile','nts-dev','--no-compiler']
+      :[new URL('./test-profile.ts',import.meta.url).pathname,'--artifacts',artifacts,'doctests'];
+    const ran=spawnSync(process.execPath,command,{cwd:root,env,encoding:'utf8'});
     assert.equal(ran.status,0,ran.stdout+ran.stderr);
     const rows=JSON.parse(readFileSync(artifacts,'utf8')).artifacts as {fresh:boolean}[];
     assert.ok(rows.length);return {rows,output:ran.stdout+ran.stderr};
   };
   assert.ok(run(true).rows.some(row=>!row.fresh),'cold preparation compiles');
+  assert.equal(existsSync(join(target,'nts-dev/subject')),false,'preparation builds no compiler binary');
   assert.doesNotThrow(()=>assertDoctestPreparation(env,root));
   for(const changed of [{NTS_DOCTEST_PREPARATION:undefined},{NTS_DOCTEST_CRATES:'dependency'},{CARGO_TARGET_DIR:root}])
     assert.throws(()=>assertDoctestPreparation({...env,...changed},root),/doctests needs successful shared build preparation/);
   const reused=run(false);assert.ok(reused.rows.every(row=>row.fresh),'execution compiles no library');assert.match(reused.output,/1 passed/);
   assert.ok(run(false).rows.every(row=>row.fresh),'warm execution stays warm');
+  // Counterfactual: omit preparation after a source edit. Correct answers
+  // alone cannot prove that doctests avoided compiling the workspace.
+  writeFileSync(dependency,readFileSync(dependency,'utf8')+'\npub fn unprepared_change() {}\n');
+  const unprepared=spawnSync(process.execPath,[new URL('./doctests.ts',import.meta.url).pathname],{cwd:root,env,encoding:'utf8'});
+  assert.equal(unprepared.status,2,unprepared.stdout+unprepared.stderr);
+  assert.match(unprepared.stderr,/compiled an artifact instead of reusing its build preparation/);
   writeFileSync(dependency,readFileSync(dependency,'utf8')+'\npub fn changed() {}\n');
   assert.ok(run(true).rows.some(row=>!row.fresh),'changed dependency compiles in preparation');
   assert.ok(run(false).rows.every(row=>row.fresh),'changed dependency is fresh at execution');
