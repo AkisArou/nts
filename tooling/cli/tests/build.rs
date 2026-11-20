@@ -718,8 +718,16 @@ export default defineConfig({ products: {
 )]
 fn elf_dependency_archives_resolve_math_at_the_end_of_the_link() {
     use std::os::unix::fs::PermissionsExt as _;
-    if !cfg!(target_os = "linux") || !available() {
-        skip("Linux, node, clang, GCC, ar and pkg-config");
+    if !cfg!(target_os = "linux")
+        || !available()
+        || !["gcc", "ar", "pkg-config", "readelf"].iter().all(|tool| {
+            Command::new(tool)
+                .arg("--version")
+                .output()
+                .is_ok_and(|output| output.status.success())
+        })
+    {
+        skip("Linux, node, clang, nm, gcc, ar, pkg-config and readelf");
         return;
     }
     let project = fixture(
@@ -936,6 +944,82 @@ exec /usr/bin/gcc "$@"
         error.contains("undefined reference") && (error.contains("sin") || error.contains("cbrt")),
         "{error}"
     );
+}
+
+/// A dependency's late -static flag must not change the earlier libm policy.
+#[test]
+fn late_static_dependency_flags_keep_live_math() {
+    if !cfg!(target_os = "linux")
+        || !available()
+        || !["gcc", "pkg-config", "readelf"].iter().all(|tool| {
+            Command::new(tool)
+                .arg("--version")
+                .output()
+                .is_ok_and(|output| output.status.success())
+        })
+    {
+        skip("Linux, node, clang, nm, gcc, pkg-config and readelf");
+        return;
+    }
+    let project = fixture(
+        "build-late-static-math",
+        r#"
+import {defineConfig, app, target} from "@nts/config";
+export default defineConfig({products: {
+  c: app.cli({entry:"./src/main.ts", targets:[target.linux({backend:"c"})]})
+}, dependencies:{"linux-gnu":{from:"pkg-config", packages:["late-static"]}}});
+"#,
+    );
+    let entry = project.join("src/main.ts");
+    std::fs::write(
+        &entry,
+        "let sum = 0; for (let n = 0; n < 1000; n++) sum += Math.sin(n); console.log(sum > 0);",
+    )
+    .expect("live runtime math");
+    let oracle = Command::new("node")
+        .arg(&entry)
+        .output()
+        .expect("node oracle");
+    assert!(oracle.status.success(), "{oracle:?}");
+    let pc = project.join("pc");
+    std::fs::create_dir_all(&pc).expect("pkg-config directory");
+    for flags in ["", "-static"] {
+        std::fs::write(
+            pc.join("late-static.pc"),
+            format!(
+                "Name: late-static\nDescription: late linker policy\nVersion: 1\nLibs: {flags}\n"
+            ),
+        )
+        .expect("dependency linker flags");
+        let built = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("CC", "gcc")
+                .env("PKG_CONFIG_PATH", &pc),
+        )
+        .expect("building with dependency flags");
+        assert!(
+            built.status.success(),
+            "flags {flags:?}: {}{}",
+            String::from_utf8_lossy(&built.stdout),
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let binary = project.join(".nts/build/c/linux-gnu-x86_64/c");
+        let dynamic = Command::new("readelf")
+            .arg("-d")
+            .arg(&binary)
+            .output()
+            .expect("reading dynamic dependencies");
+        assert!(dynamic.status.success(), "{dynamic:?}");
+        let has_math = String::from_utf8_lossy(&dynamic.stdout).contains("[libm.so.6]");
+        assert_eq!(has_math, flags.is_empty(), "{dynamic:?}");
+        let ran = Command::new(&binary)
+            .output()
+            .expect("running the math product");
+        assert!(ran.status.success(), "{ran:?}");
+        assert_eq!(ran.stdout, oracle.stdout, "flags {flags:?}");
+    }
 }
 
 /// A bigint through an erased slot at the top level builds.
