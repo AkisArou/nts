@@ -17,6 +17,9 @@ import {withoutHanded} from '../gate/test-memory.ts';
 import {writeLandingVerdict,readLandingVerdict} from './verdict.ts';
 import {recordCosts} from './service.ts';
 import {costKey,readLandingCosts,type Selection} from './selection.ts';
+import {fixtureContract} from '../gate/verdict-contract-fixture.ts';
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
 
 test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", async t => {
   const f = fixture(t);
@@ -65,6 +68,8 @@ test("a step the rules narrowed runs narrowed: the touched crates' doc tests", a
 
 test('a doctests-only landing prepares before its execution, and retains preparation on retry',async t=>{
   const f=fixture(t);f.control('doctests','pressure');
+  copyModuleClosure(['tooling/gate/verdict-contract.ts'],f.tree);
+  writeFileSync(join(f.tree,'tooling/gate/verdict-contract.ts'),generatedJavaScript(`import {writeFileSync} from 'node:fs';writeFileSync(process.argv[2],JSON.stringify(${JSON.stringify(fixtureContract())}));`));
   mkdirSync(join(f.target,PROFILE));
   for(const name of ['nts','nts-suite'])writeFileSync(join(f.target,PROFILE,name),'stale compiler from an earlier commit\n');
   const options=f.options(['doctests'],{doctests:'nts-core'}),ran=await runLanding(options);
