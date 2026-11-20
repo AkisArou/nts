@@ -108,3 +108,27 @@ measured warm step samples. The cold compile moves to the existing whole-job
 | `/home/akisarou/.cache/nts-scratch/890/core-committed/build.log` | `0b5fe2277fd2b29cc111b76604c482f8ec516047dbc0954657203c5614f4e4db` |
 | `/home/akisarou/.cache/nts-scratch/890/target-before.tsv` | `758b67fb57e1ebe6258bc4fbad96940db040bf8afdf4ec3a78abcc0a73183dcd` |
 | `/home/akisarou/.cache/nts-scratch/890/target-after.tsv` | `07897c699cf3b3e8f237c9ad84ce63e44a5d0b3157142680f3cc16df5fde08c3` |
+
+## Review controls
+
+Doctest-only preparation is retained on the selected doctest result, with its
+own log and CPU basis. It adds no build outcome, compiler binary identity or
+build cost sample. A landing fixture seeds stale compiler binaries, prepares
+only doctests, retries execution, writes and rereads the portable verdict, and
+checks that its selected outcome is preserved without those compiler claims.
+Separate product-failure and disk-refusal controls name the selected doctest
+step before execution.
+
+The 52-test focused Cargo, landing and verdict suite passed. Its log also
+retains the host audit finding on the initial private contract publisher; the
+follow-up verifies the final durable publisher, strict types and host audit.
+The non-fresh artifact control starts a Cargo graph with a waiting child; the
+first non-fresh artifact terminates the owned group with the named freshness
+instrument, without waiting for the graph to complete. The prepared inner
+loop then passed formatting, Clippy, compiler build and backend tests.
+
+| Retained review proof | SHA-256 |
+|---|---|
+| `/home/akisarou/.cache/nts-scratch/890/review-focused-2.log` | `f83f264451c1d5def809abd0c7d9544fcbf275fa888513af8cff9c3cedf026c7` |
+| `/home/akisarou/.cache/nts-scratch/890/review-audit.log` | `d2da411a69d5aec6747a7d82ac9d74da24afdadd0a2175cc94a8e1f2797d3803` |
+| `/home/akisarou/.cache/nts-scratch/890/review-inner.log` | `d5d72484802b46163c1a09241f761a04f2c99d8991e49f4f0c1cf7d9d636df10` |
