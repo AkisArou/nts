@@ -112,7 +112,7 @@ for(const entry of readLedger(process.env.NTS_MEMORY_LEDGER).admitted){
   assert.equal(admittedEntry(process.env.NTS_MEMORY_LEDGER,entry.id),null,'a live build owner survives gate entry');
 }
 console.log('GATE after build owner exited');
-${docs?`const {assertDoctestPreparation}=await import('./tooling/gate/doctest-preparation.ts');assertDoctestPreparation({...process.env,NTS_DOCTEST_PREPARATION:${JSON.stringify(join(directory,'run/doctest-build.json'))}});`:''}
+${docs?`const {assertDoctestPreparation}=await import('./tooling/gate/doctest-preparation.ts');assertDoctestPreparation({CARGO_TARGET_DIR:process.env.CARGO_TARGET_DIR,NTS_DOCTEST_PREPARATION:${JSON.stringify(join(directory,'run/doctest-build.json'))}});`:''}
 JS
 `);
   git("init","-q");git("add",".");git("commit","-qm","candidate");const candidate=git("rev-parse","HEAD");

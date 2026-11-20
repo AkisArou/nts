@@ -1809,7 +1809,7 @@ let doctestSetupFailure;
 if(plan.includes('doctests')){
   const supplied=env.NTS_DOCTEST_PREPARATION,receipt=supplied??join(RUN_DIR,'doctest-build.json');
   try{
-    const preparationEnv={...env,CARGO_TARGET_DIR:target,NTS_BUILD_DOCTESTS:'1',NTS_DOCTEST_PREPARATION:receipt};
+    const preparationEnv=gateEnvironment(env,{run:RUN_DIR,owned:{CARGO_TARGET_DIR:target,NTS_BUILD_DOCTESTS:'1',NTS_DOCTEST_PREPARATION:receipt}}).env;
     // pinned.sh and landing prepare through this same build owner. A direct
     // selection (or an older launcher) admits that work before step scopes.
     if(!supplied&&!existsSync(receipt)){
