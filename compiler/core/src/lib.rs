@@ -40,5 +40,3 @@ pub const COMPILER_STACK_BYTES: usize = 8 * 1024 * 1024;
 #[cfg(test)]
 #[path = "../../test-support/scratch.rs"]
 mod scratch;
-
-// issue 890 committed cold graph control
