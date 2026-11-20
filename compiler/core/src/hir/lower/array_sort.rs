@@ -5,10 +5,14 @@ use super::{
     OpKind, Origin, Step, Terminator, TypeId, TypeKind, UniformArguments, ValueId, counted_helper,
 };
 
+mod helpers;
 mod managed;
+
+pub(super) use helpers::{Registry, lower_helpers};
 
 /// A `sort` comparator as the merge calls it: the function value, which body
 /// that reaches, and the parameters its arguments are coerced to.
+#[derive(Clone, Debug)]
 struct Comparator {
     node: NodeId,
     function: ValueId,

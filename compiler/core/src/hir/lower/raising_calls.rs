@@ -752,7 +752,7 @@ impl FuncBuilder<'_> {
     /// ([`Self::dispatches_to_a_raising_entry`]). One predicate, because the test
     /// and the dispatch disagreeing is a raise nobody looks for or a branch on a
     /// flag nobody sets.
-    fn tested_for_a_raise(&self, call: NodeId) -> bool {
+    pub(super) fn tested_for_a_raise(&self, call: NodeId) -> bool {
         !self.raising_suffix_of(call).is_empty() || self.dispatches_to_a_raising_entry(call)
     }
 

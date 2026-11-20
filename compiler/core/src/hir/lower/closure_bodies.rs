@@ -367,6 +367,8 @@ pub(super) fn lower_wanted_closures(
     lower_conversions(layout_collector, snapshot, shared, lowered, wanted);
     lower_reject_error(layout_collector, snapshot, shared, lowered, wanted);
     json::lower_writers(layout_collector, snapshot, shared, lowered, wanted);
+    super::array_sort::lower_helpers(layout_collector, snapshot, shared, lowered, wanted);
+    super::array_sort::lower_helpers(layout_collector, snapshot, shared, lowered, wanted);
 }
 
 /// The `const` aliases a closure's body reads, which both of its builders need.

@@ -132,3 +132,70 @@ fn managed_sorts_merge_uint32_indices_but_numeric_sorts_keep_values() {
         );
     }
 }
+
+#[test]
+fn identical_comparators_share_helpers_and_keep_unsigned_addressing() {
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/programs/adaptive-sort/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("adaptive fixture");
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .expect("adaptive snapshot");
+    let lowered = hir::lower::lower(&snapshot);
+    assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
+    let prepared = hir::prepare(&snapshot).expect("adaptive prepared HIR");
+    for program in [&lowered.program, &prepared.program] {
+        let shared = program
+            .funcs
+            .iter()
+            .find(|f| f.name == "sharedHelpers")
+            .expect("two sort sites");
+        let families: std::collections::BTreeSet<_> = shared
+            .values
+            .iter()
+            .filter_map(|op| {
+                if let OpKind::Call {
+                    callee: Callee::Direct(name),
+                    ..
+                } = &op.kind
+                {
+                    name.strip_suffix("$run")
+                        .filter(|name| name.starts_with("¢nts$sort"))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            families.len(),
+            1,
+            "same typed comparator shares one helper family"
+        );
+        for helper in program
+            .funcs
+            .iter()
+            .filter(|f| f.name.starts_with("¢nts$sort"))
+        {
+            assert!(helper.params.iter().all(|p| !p.name.is_empty()));
+            for op in &helper.values {
+                if let OpKind::ArrayGet { index, .. } | OpKind::ArraySet { index, .. } = op.kind {
+                    assert!(
+                        matches!(helper.values[index.0 as usize].ty,
+                        HirType::Int { bits, .. } if bits <= 32),
+                        "{} array cursor remains in the u32 domain",
+                        helper.name
+                    );
+                }
+                if let OpKind::ArraySet { value, .. } = op.kind {
+                    assert!(
+                        !matches!(helper.values[value.0 as usize].ty, HirType::Managed(_)),
+                        "{} stores indices, not counted elements",
+                        helper.name
+                    );
+                }
+            }
+        }
+    }
+}

@@ -142,7 +142,10 @@ collector's edges. Strict descending runs reverse, short runs extend by stable
 binary insertion to a computed minimum of 16–32 elements (the whole input
 below 32), and powersort orders the merges. Galloping skips winning spans in
 partially ordered merges. All backends share this lowering and the same
-write-back contract.
+write-back contract. Typed run, insertion, merge and galloping helpers share
+identical comparator contracts; the caller keeps ownership of all buffers.
+A raised callback result propagates across each helper call before any result
+is used or a permutation is committed.
 
 After comparisons finish, an unchanged target prefix accepts the permutation
 without retaining or releasing elements. A changed prefix uses counted writes

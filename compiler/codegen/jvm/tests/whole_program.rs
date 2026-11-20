@@ -98,6 +98,60 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
     ))
 }
 
+/// Small control and every sorting phase must remain compilable by the
+/// default HotSpot policy. A valid but interpreted method is a regression.
+#[test]
+fn adaptive_sort_methods_fit_the_default_jit_limit() {
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("sort-method-sizes");
+    std::fs::create_dir_all(&dir).expect("size fixture directory");
+    let source = format!(
+        "{}\nexport function sizeControl(seed: number): string {{ return tags(items(seed, 0)); }}\n",
+        include_str!("../../../../tests/programs/adaptive-sort/src/main.ts")
+    );
+    std::fs::write(dir.join("main.ts"), source).expect("size fixture source");
+    let fixtures = common::repository().join("tsconfig.fixtures.json");
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        format!(
+            "{{\"extends\": {:?}, \"files\": [\"main.ts\"]}}\n",
+            fixtures.display().to_string()
+        ),
+    )
+    .expect("size fixture config");
+    let config = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).expect("UTF-8 path");
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .expect("size fixture snapshot");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = common::prepare(&snapshot).expect("size fixture HIR");
+    let emitted = nts_codegen_jvm::emit(&prepared.program);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let class = emitted
+        .classes
+        .iter()
+        .find(|c| c.path() == "nts/gen/Program.class")
+        .expect("program class");
+    let parsed = nts_jvm_emitter::read::class_file(&class.bytes).expect("program methods");
+    let control = parsed
+        .methods
+        .iter()
+        .find(|m| m.name == "sizeControl")
+        .expect("small control");
+    assert!(control.code.as_ref().expect("control body").bytes.len() < 8000);
+    assert!(parsed.methods.iter().any(|m| m.name == "shuffled"));
+    for method in &parsed.methods {
+        if let Some(code) = &method.code {
+            assert!(
+                code.bytes.len() <= 8000,
+                "{} has {} bytecodes: default HotSpot skips methods above 8000",
+                method.name,
+                code.bytes.len()
+            );
+        }
+    }
+}
+
 #[test]
 fn adaptive_sort_runs_mutations_and_throws_agree_with_node() {
     let source = format!(
@@ -107,7 +161,10 @@ fn adaptive_sort_runs_mutations_and_throws_agree_with_node() {
          console.log(shuffled(seed)); console.log(throwing(seed));\n\
          console.log(mutating(seed)); console.log(mutatingThrow(seed));\n\
          console.log(copied(seed)); console.log(copiedMutating(seed));\n\
-         console.log(copiedThrow(seed));\n}}\n",
+         console.log(copiedThrow(seed));\n\
+         console.log(sharedHelpers(seed)); console.log(throwingInsertion(seed));\n\
+         console.log(separatedRunsControl(seed)); console.log(throwingMerge(seed));\n\
+         console.log(throwingGallop(seed)); console.log(nanComparator(seed));\n}}\n",
         include_str!("../../../../tests/programs/adaptive-sort/src/main.ts")
     );
     let dir = crate::scratch::StdScratchDir::path_in_std_target("adaptive-sort-oracle");

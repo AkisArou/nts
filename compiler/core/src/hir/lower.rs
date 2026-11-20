@@ -736,6 +736,8 @@ struct Shared {
     /// Each constructor whose base makes the instance, and the classes it is
     /// run for besides its own ([`constructor_targets`]).
     target_copies: rustc_hash::FxHashMap<NodeId, Vec<TypeId>>,
+    /// Typed comparator sorts share one generated helper family per contract.
+    sort_helpers: array_sort::Registry,
 }
 
 impl Shared {
@@ -809,6 +811,7 @@ impl Shared {
             class_instances,
             thenables,
             target_copies: constructor_targets(&probe),
+            sort_helpers: array_sort::Registry::default(),
         }
     }
 
@@ -833,6 +836,7 @@ impl Shared {
             copy.substitution,
             copy.suffix.clone(),
         );
+        builder.sort_helpers = self.sort_helpers.clone();
         builder.sources = copy.sources;
         if let Some((body, contract)) = selected_result {
             debug_assert_eq!(snapshot.implementation_of(contract.selected), body);
@@ -1783,6 +1787,8 @@ struct FuncBuilder<'a> {
     /// The `JSON.stringify` writers this body's calls name: harvested into
     /// [`Arrivals::json_writers`].
     json_writers: Vec<json::Writer>,
+    /// Program-wide typed sort helper requests, shared with other builders.
+    sort_helpers: array_sort::Registry,
     /// See [`Arrivals`]; drained by [`FuncBuilder::harvest`].
     arrivals: Arrivals,
 }
@@ -1880,6 +1886,7 @@ impl<'a> FuncBuilder<'a> {
             used_closures: Vec::new(),
             conversions: Vec::new(),
             json_writers: Vec::new(),
+            sort_helpers: array_sort::Registry::default(),
             arrivals: Arrivals::default(),
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),

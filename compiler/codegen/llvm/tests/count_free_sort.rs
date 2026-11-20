@@ -126,7 +126,7 @@ fn adaptive_sorts_compare_a_natural_run_once_and_keep_snapshot_ownership() {
     native_sort_case(
         include_str!("../../../../tests/programs/adaptive-sort/src/main.ts"),
         ADAPTIVE_DRIVER,
-        "import * as m from './main.ts';\nfor(const i of [0,1,2,3,7,15,31,32,63,64,65,127,128,255,256,511,512,1023]) for(const name of ['ordered','reversed','reversedEqual','unevenRuns','shuffled','throwing','mutating','mutatingThrow','copied','copiedMutating','copiedThrow']) process.stdout.write(m[name](i)+'\\n');\n",
+        "import * as m from './main.ts';\nfor(const i of [0,1,2,3,7,15,31,32,63,64,65,127,128,255,256,511,512,1023]) for(const name of ['ordered','reversed','reversedEqual','unevenRuns','shuffled','throwing','mutating','mutatingThrow','copied','copiedMutating','copiedThrow','sharedHelpers','throwingInsertion','separatedRunsControl','throwingMerge','throwingGallop','nanComparator']) process.stdout.write(m[name](i)+'\\n');\n",
         true,
     );
 }
@@ -231,6 +231,8 @@ extern NtsString *ordered(double), *reversed(double), *reversedEqual(double);
 extern NtsString *unevenRuns(double), *shuffled(double), *throwing(double);
 extern NtsString *mutating(double), *mutatingThrow(double), *copied(double);
 extern NtsString *copiedMutating(double), *copiedThrow(double);
+extern NtsString *sharedHelpers(double), *throwingInsertion(double);
+extern NtsString *separatedRunsControl(double), *throwingMerge(double), *throwingGallop(double), *nanComparator(double);
 extern void __real_nts_collect_cycles(void);
 static uint64_t comparisons;
 void __wrap_nts_collect_cycles(void) {
@@ -245,7 +247,8 @@ static void line(NtsString *s) {
 int main(void) {
   typedef NtsString *(*Case)(double);
   static const Case cases[] = {ordered, reversed, reversedEqual, unevenRuns,
-    shuffled, throwing, mutating, mutatingThrow, copied, copiedMutating, copiedThrow};
+    shuffled, throwing, mutating, mutatingThrow, copied, copiedMutating, copiedThrow,
+    sharedHelpers, throwingInsertion, separatedRunsControl, throwingMerge, throwingGallop, nanComparator};
   static const int seeds[] = {0,1,2,3,7,15,31,32,63,64,65,127,128,255,256,511,512,1023};
   for (uint32_t at = 0; at < sizeof(seeds) / sizeof(seeds[0]); at++) {
     int seed = seeds[at];

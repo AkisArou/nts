@@ -4,6 +4,9 @@
 //! their merges. The only managed owner is the immutable snapshot (toSorted's
 //! private result itself). No partially merged buffer has a managed edge.
 
+use std::rc::Rc;
+
+use super::helpers::{Family, Phase};
 use super::{
     ArrayFill, BinOp, Comparator, Diagnostic, FuncBuilder, HirType, ManagedType, NodeId, OpKind,
     Origin, Step, Terminator, ValueId,
@@ -14,11 +17,11 @@ type Built<T = ()> = Result<T, Diagnostic>;
 // stop at NTS_MAX_LENGTH=2147483646 (runtime/c/nts_runtime.h); the cursor proof
 // uses the full JavaScript limit, independently of that physical cap. Backward
 // cursors are exclusive ends, so neither direction needs a negative sentinel.
-const INDEX: HirType = HirType::Int {
+pub(super) const INDEX: HirType = HirType::Int {
     bits: 32,
     signed: false,
 };
-const SLOT: HirType = INDEX;
+pub(super) const SLOT: HirType = INDEX;
 const WIDE: HirType = HirType::Int {
     bits: 64,
     signed: true,
@@ -75,6 +78,7 @@ impl FuncBuilder<'_> {
         comparator: &Comparator,
         origin: &Origin,
     ) -> Built<ValueId> {
+        let family = self.sort_helpers.request(self, id, element, comparator);
         let raw_length = self.push(OpKind::Length(owner), HirType::NUMBER, origin.clone());
         let length = self.push(OpKind::Convert(raw_length), INDEX, origin.clone());
         let order = self.push(
@@ -94,24 +98,76 @@ impl FuncBuilder<'_> {
             comparator,
             length,
             order,
+            family,
         }
         .run()?;
         Ok(order)
     }
 }
 
-struct Sort<'a, 's> {
-    b: &'a mut FuncBuilder<'s>,
-    id: NodeId,
-    origin: Origin,
-    owner: ValueId,
-    element: HirType,
-    comparator: &'a Comparator,
-    length: ValueId,
-    order: ValueId,
+pub(super) struct Sort<'a, 's> {
+    pub(super) b: &'a mut FuncBuilder<'s>,
+    pub(super) id: NodeId,
+    pub(super) origin: Origin,
+    pub(super) owner: ValueId,
+    pub(super) element: HirType,
+    pub(super) comparator: &'a Comparator,
+    pub(super) length: ValueId,
+    pub(super) order: ValueId,
+    pub(super) family: Rc<Family>,
 }
 
 impl Sort<'_, '_> {
+    fn helper(&mut self, phase: Phase, extra: &[ValueId]) -> ValueId {
+        let mut args = vec![
+            self.owner,
+            self.order,
+            self.length,
+            self.comparator.function,
+        ];
+        args.extend_from_slice(extra);
+        self.family.call(self.b, phase, args, &self.origin)
+    }
+
+    fn next_run(&mut self, start: ValueId, minrun: ValueId) -> Built<ValueId> {
+        Ok(self.helper(Phase::Run, &[start, minrun]))
+    }
+
+    fn binary_insert(&mut self, start: ValueId, sorted: ValueId, end: ValueId) -> Built {
+        self.helper(Phase::Insert, &[start, sorted, end]);
+        Ok(())
+    }
+
+    fn merge(
+        &mut self,
+        scratch: ValueId,
+        stack: ValueId,
+        base: ValueId,
+        middle: ValueId,
+        end: ValueId,
+    ) -> Built {
+        self.helper(Phase::Merge, &[scratch, stack, base, middle, end]);
+        Ok(())
+    }
+
+    fn gallop(
+        &mut self,
+        source: ValueId,
+        start: ValueId,
+        n: ValueId,
+        pivot: ValueId,
+        low: bool,
+        first: bool,
+    ) -> Built<ValueId> {
+        Ok(self.helper(
+            Phase::Gallop {
+                forward: low,
+                first,
+            },
+            &[source, start, n, pivot],
+        ))
+    }
+
     fn push(&mut self, kind: OpKind, ty: HirType) -> ValueId {
         self.b.push(kind, ty, self.origin.clone())
     }
@@ -335,7 +391,7 @@ impl Sort<'_, '_> {
 
     /// Find a natural run, reversing only strict descending order. Equality
     /// (including a NaN comparator result) never reverses equal references.
-    fn next_run(&mut self, start: ValueId, minrun: ValueId) -> Built<ValueId> {
+    pub(super) fn build_next_run(&mut self, start: ValueId, minrun: ValueId) -> Built<ValueId> {
         let next = self.offset(start, 1);
         let end = self.variable(next);
         let pair = self.binary(BinOp::Lt, next, self.length);
@@ -411,7 +467,12 @@ impl Sort<'_, '_> {
         )
     }
 
-    fn binary_insert(&mut self, start: ValueId, sorted: ValueId, end: ValueId) -> Built {
+    pub(super) fn build_binary_insert(
+        &mut self,
+        start: ValueId,
+        sorted: ValueId,
+        end: ValueId,
+    ) -> Built {
         let at = self.variable(sorted);
         self.loop_while(
             &[at],
@@ -628,7 +689,7 @@ impl Sort<'_, '_> {
         )
     }
 
-    fn merge(
+    pub(super) fn build_merge(
         &mut self,
         scratch: ValueId,
         stack: ValueId,
@@ -861,7 +922,7 @@ impl Sort<'_, '_> {
     /// completes the bound. Every probe is a borrowed original element and
     /// every cursor stays inside the unconsumed run, even for an inconsistent
     /// comparator. The strictness is the merge's stability rule in its direction.
-    fn gallop(
+    pub(super) fn build_gallop(
         &mut self,
         source: ValueId,
         start: ValueId,

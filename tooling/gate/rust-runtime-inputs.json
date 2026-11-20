@@ -6518,6 +6518,13 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/lower/array_sort/helpers.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/core/src/hir/lower/array_sort/managed.rs",
       "declarations": {
         "imports": [],
@@ -8683,6 +8690,11 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/programs/count-free-sort/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/adaptive-sort/tsconfig.json"
           }
         ]
       }

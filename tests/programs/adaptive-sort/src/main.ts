@@ -131,3 +131,62 @@ export function copiedThrow(seed: number): string {
     return "caught:" + tags(xs);
   }
 }
+
+// Two sites with one typed comparator share a generated helper family.
+export function sharedHelpers(seed: number): string {
+  const xs = items(seed, 0);
+  const ys = items(seed, 4);
+  const compare = (a: Item, b: Item): number => a.key - b.key;
+  xs.sort(compare);
+  ys.sort(compare);
+  return tags(xs) + "|" + tags(ys);
+}
+
+// The fifth comparison is inside minimum-run insertion, after run detection.
+export function throwingInsertion(seed: number): string {
+  const xs = items(seed, 0);
+  let calls = 0;
+  try {
+    xs.sort((a, b) => {
+      if (++calls === 5) throw new RangeError("insertion");
+      return a.key - b.key;
+    });
+  } catch {
+    return "caught:" + tags(xs);
+  }
+  return "quiet:" + tags(xs);
+}
+
+function separatedRuns(seed: number, throwAt: number): string {
+  const n = (seed & 15) + 64;
+  const cut = (n / 2) | 0;
+  const xs: Item[] = [];
+  for (let i = 0; i < n; i++) {
+    xs.push(new Item((i < cut ? i + n - cut : i - cut) + (seed & 7), i));
+  }
+  let crosses = 0;
+  try {
+    xs.sort((a, b) => {
+      // Adjacent boundary comparisons belong to natural-run detection and
+      // the merge's ordered-boundary control, not the merge/search body.
+      if ((a.tag < cut) !== (b.tag < cut) && Math.abs(a.tag - b.tag) > 1) {
+        if (++crosses === throwAt) throw new RangeError("merge");
+      }
+      return a.key - b.key;
+    });
+  } catch {
+    return "caught:" + tags(xs);
+  }
+  return "quiet:" + tags(xs);
+}
+
+export function separatedRunsControl(seed: number): string { return separatedRuns(seed, 0); }
+export function throwingMerge(seed: number): string { return separatedRuns(seed, 1); }
+// Seven ordinary right wins enter the first galloping probe; it throws.
+export function throwingGallop(seed: number): string { return separatedRuns(seed, 8); }
+
+export function nanComparator(seed: number): string {
+  const xs = items(seed, 0);
+  xs.sort(() => NaN);
+  return tags(xs);
+}

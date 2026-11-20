@@ -4048,3 +4048,15 @@ binary insertion, and adaptive galloping. Ordinary cursors use u32 exclusive
 ends throughout JavaScript's length domain, independently of the current dense
 allocation cap; power coordinates widen to i64. The proof executes the emitter's
 arithmetic near both 2³¹ and 2³²−1 without allocating element buffers.
+
+## Typed sort helper methods (11-20)
+
+Adaptive comparator sorts use shared compiler-generated functions for run
+detection, insertion, merging and direction/stability-specialized galloping.
+Families are keyed by resolved element/callback types, dispatch entry,
+argument type, raise mode and substitution; equal contracts reuse one family.
+The source caller retains the snapshot, permutation, merge scratch and power
+stack. Helpers borrow those inputs and immediately propagate the existing
+raise flag to the caller's handler before write-back. Phase boundaries keep
+JVM methods under its default huge-method limit; native shipping compilation
+may inline the calls. Production VM flags remain unchanged.
