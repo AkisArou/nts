@@ -4072,4 +4072,7 @@ folders. Normal completion, failure and signal release only after resource
 drain. A killed process leaves reclamation to proof of its original identity's
 departure, never elapsed time. Unknown or invalid ownership protects its folder
 and is named by the hourly count. Terminal reports acquire no lease.
+The leased cache is the sibling `nts-gate/bin-v2` namespace, so a gate running
+historical count-only retention cannot delete its folders. Legacy `bin` folders
+are report-only leftovers under their `kept` rule; no age-based sweep owns them.
 

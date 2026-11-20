@@ -7,6 +7,22 @@ exposing executable paths and retains every held folder plus ten recent
 unheld folders. A single cache-wide lock covers publication, lease changes,
 recency and pruning. Binary copying and hashing precede that lock.
 
+## Historical writers
+
+Lease-aware pins use the sibling namespace `nts-gate/bin-v2/<sha256>`, leaving
+the old `nts-gate/bin` root unchanged. Full checks execute the gate at their
+selected revision, including older `verified` revisions. A historical gate's
+count-only prune never visits the sibling root. New gates never read old pins.
+The compatibility fixture executes the pre-fix pruning block against thirteen
+old folders and verifies it really removes three while leaving every v2 folder,
+its compiler bytes and live holder intact.
+
+`keep.json` classifies both roots as `kept`. That kind has no age-based sweep;
+none of the existing sweep kinds proves an old lease-less runner has ended.
+The hourly count therefore names each legacy content folder as a report-only
+leftover. These folders are never added to its removable list. Their removal
+awaits the user's decision after historical writers have ended.
+
 ## Consumer audit
 
 Repository searches covered `nts-gate/bin`, path joins containing `nts-gate`

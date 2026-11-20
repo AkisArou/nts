@@ -58,7 +58,8 @@
   } },
   "nts-agree": { "kind": "kept", "writer": "tooling/differential/agree.mjs", "why": "the differential's binaries and objects, by content" },
   "nts-gate": { "kind": "folders", "why": "the gate's own caches, pinned.sh's tree and target, and the logs of gates run by hand", "folders": {
-    "bin": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the binaries a run executes, by content" },
+    "bin": { "kind": "kept", "why": "legacy count-only gate pins; reported without automatic deletion because historical runners have no leases" },
+    "bin-v2": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the leased binaries a run executes, by content, isolated from legacy pruners" },
     "runs": { "kind": "logs", "who": "gates run by hand (all.sh, pinned.sh)", "writer": "tooling/gate/run.mjs", "why": "their logs" },
     "tree": { "kind": "kept", "writer": "tooling/gate/pinned.sh", "why": "pinned.sh's tree, at the commit it runs" },
     "target": { "kind": "kept", "writer": "tooling/gate/pinned.sh", "why": "pinned.sh's build of that tree" },

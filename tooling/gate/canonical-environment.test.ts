@@ -588,7 +588,7 @@ child.release();
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
   child.on('close',(code,signal)=>{terminal={code,signal};});
-  return {root,directory,memory,looked,unit,child,pins:join(base.HOME,'.cache/nts-gate/bin'),output:()=>output,terminal:()=>terminal};
+  return {root,directory,memory,looked,unit,child,pins:join(base.HOME,'.cache/nts-gate/bin-v2'),output:()=>output,terminal:()=>terminal};
 }
 function pinLeases(root:string):string[]{
   return readdirSync(root).filter(name=>/^[0-9a-f]{64}$/.test(name)).flatMap(name=>readdirSync(join(root,name,'holders')));

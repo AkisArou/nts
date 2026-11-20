@@ -1503,12 +1503,12 @@ function stop(why) {
 }
 
 // **The binaries every step runs are a copy named by their content**, made once
-// the build has passed: `<cache>/nts-gate/bin/<sha256>/`. A session relinking
+// the build has passed: `<cache>/nts-gate/bin-v2/<sha256>/`. A session relinking
 // `target/release/nts` halfway through a run cannot change the compiler between
 // two steps. Every step and later run of the same binary therefore uses the
 // same immutable executable identity, even when a worktree rebuilds its output.
 const pinned = {};
-const PIN_ROOT = join(env.XDG_CACHE_HOME ?? join(env.HOME ?? "/tmp", ".cache"), "nts-gate", "bin");
+const PIN_ROOT = join(env.XDG_CACHE_HOME ?? join(env.HOME ?? "/tmp", ".cache"), "nts-gate", "bin-v2");
 /** @type {import('./binary-pins.ts').BinaryPin | undefined} */
 let binaryPin;
 function pinBinaries() {

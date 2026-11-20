@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {existsSync,mkdirSync,readFileSync,readdirSync,utimesSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,readdirSync,rmSync,statSync,utimesSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {binaryPinWarnings,pinBinaries,observePinOwner,type PinOwnerObservation} from './binary-pins.ts';
@@ -13,7 +13,7 @@ import {generatedJavaScript} from './generated-javascript.ts';
 import {lockChild} from '../landing/lock-fixture.ts';
 
 function fixture(t:TestContext){
-  const cache=testScratch(t,'binary-pins'),root=join(cache,'nts-gate','bin');mkdirSync(root,{recursive:true});
+  const cache=testScratch(t,'binary-pins'),root=join(cache,'nts-gate','bin-v2');mkdirSync(root,{recursive:true});
   const source=join(cache,'compiler');writeFileSync(source,'compiler');
   const hash=createHash('sha256').update('compiler').digest('hex');
   const acquire=(observe?:PinOwnerObservation)=>pinBinaries({root,hash,run:join(cache,'run'),binaries:{nts:source},observe,now:()=>0,wallNow:()=>100_000});
@@ -48,6 +48,27 @@ test('twelve folders with two held and ten unheld prune nothing',t=>{
   for(const dir of [oldest,...newer])assert.equal(existsSync(dir),true);
   assert.equal(existsSync(later.paths.nts!),true);
   held.release();later.release();
+});
+
+test('the pre-lease count-only pruner cannot reach the sibling versioned cache',t=>{
+  const f=fixture(t),held=f.acquire(),newer=f.seed(11),legacy=join(f.cache,'nts-gate','bin');
+  mkdirSync(legacy,{recursive:true});
+  for(let i=0;i<12;i++){const dir=join(legacy,i.toString(16).padStart(64,'0'));mkdirSync(dir);writeFileSync(join(dir,'nts'),'legacy compiler');f.age(dir,i*1000);}
+  const hash='b'.repeat(64),dir=join(legacy,hash);mkdirSync(dir);f.age(dir,100_000);
+  // The count-only pruning block from run.mjs before #907. The fixture supplies
+  // its wall timestamp; every enumeration and removal is the original logic.
+  const all = readdirSync(legacy).map((n) => ({ n, t: statSync(join(legacy, n)).mtimeMs })).sort((a, b) => b.t - a.t);
+  utimesSync(dir, new Date(100_000), new Date(100_000));
+  for (const old of all.slice(10)) if (old.n !== hash) rmSync(join(legacy, old.n), { recursive: true, force: true });
+  assert.equal(readdirSync(legacy).length,10,'the old code really pruned its own cache');
+  assert.equal(readFileSync(held.paths.nts!,'utf8'),'compiler');
+  for(const pin of newer)assert.equal(existsSync(pin),true,'legacy pruning cannot reach a v2 folder');
+  assert.equal(readdirSync(join(f.root,f.hash,'holders')).length,1);
+  const counted=count({plan:'',local:[],remote:[],pulls:[],issues:[],recordCitations:[],worktrees:[],shared:f.cache,cache:f.cache,
+    root:f.cache,main:null,verified:null,slices:[],activeUnits:[],now:0},{'nts-gate':{kind:'kept',why:'fixture'}});
+  assert.equal(counted.red.filter(line=>line.includes('legacy gate pin')).length,10);
+  assert.deepEqual(counted.removable,[],'no existing age rule can prove a legacy holder gone');
+  held.release();
 });
 
 test('a provably gone PID is reclaimed and the old unheld folder pruned',t=>{

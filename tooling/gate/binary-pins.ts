@@ -70,7 +70,8 @@ function inspect(dir:string,observe:PinOwnerObservation,reclaim:boolean):{held:b
 
 /** Read-only upkeep diagnostics: uncertainty protects a pin and is named. */
 export function binaryPinWarnings(root:string,observe:PinOwnerObservation=observePinOwner):string[]{
-  return pins(root).flatMap(dir=>inspect(dir,observe,false).warnings);
+  if(!existsSync(root))return [];
+  return withLock(join(root,'.lock'),()=>pins(root).flatMap(dir=>inspect(dir,observe,false).warnings));
 }
 
 function prune(root:string,observe:PinOwnerObservation):void{

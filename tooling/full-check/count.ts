@@ -394,7 +394,12 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
     else red.push(...judgeFolder(entry, rule, context, removable,notes));
   }
   red.push(...nodeTestRoots(input, context));
-  red.push(...binaryPinWarnings(join(input.cache,"nts-gate","bin"),input.pinOwnerObservation));
+  // Legacy writers have no leases. No age or absence of a new holder proves
+  // that an old runner has ended, so upkeep reports these without sweeping.
+  for(const pin of folders(join(input.cache,"nts-gate","bin"),input.folderStat)){
+    if(/^[0-9a-f]{64}$/.test(pin.name))red.push(`${display(pin.path,context)}: legacy gate pin without lease ownership; report only, deletion awaits the user's decision`);
+  }
+  red.push(...binaryPinWarnings(join(input.cache,"nts-gate","bin-v2"),input.pinOwnerObservation));
 }
 
 /** The count's own interval: a slice younger than this may be a live run's, not a leftover. */

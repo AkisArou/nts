@@ -1236,7 +1236,7 @@ the tooling strict checker owns the source's type checking.
   tree, its state, the count's file and the runs. A tree's cargo target is its own: two trees
   sharing one run each other's compiled crates.
 - **Gate binaries stay while their runs hold them.** `tooling/gate/binary-pins.ts`
-  publishes immutable executables in `~/.cache/nts-gate/bin/<sha256>` and records
+  publishes immutable executables in `~/.cache/nts-gate/bin-v2/<sha256>` and records
   each run's holder under that folder's `holders/`. The holder binds its run,
   token and boot/PID/start identity. Copies and hashing happen outside the
   cache-wide owner lock; publication, holder acquisition, recency, reclamation
@@ -1248,6 +1248,10 @@ the tooling strict checker owns the source's type checking.
   identity or malformed or newer holder state protects the folder. The hourly
   count names unreclaimable leases. Lock wait and hold durations are observations
   in the run's compiler identity, never verdict inputs.
+  The sibling legacy `nts-gate/bin` root remains isolated from these leases:
+  historical gates can prune only their own root. Both roots have `kept` rules;
+  no existing age-based sweep proves a legacy run gone. The count reports legacy
+  content folders as leftovers without granting deletion.
 - **No evidence folders.** The landing check's and the full check's logs are
   the evidence; each keeps three days of them. A control or a bisect is a
   pinned compiler, not a tree: `node tooling/conformance/pin.ts <rev>` builds

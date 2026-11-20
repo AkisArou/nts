@@ -34,7 +34,7 @@ test("the compiler builds first in nts-dev, and the steps drive it through the g
     const [, profile, bin, incremental] = line.split(" ");
     assert.equal(profile, "nts-dev");
     assert.equal(incremental, "1");
-    assert.ok(bin!.startsWith(join(f.target, "..", "nts-gate/bin/")), bin);
+    assert.ok(bin!.startsWith(join(f.target, "..", "nts-gate/bin-v2/")), bin);
     assert.equal(readFileSync(bin!, "utf8"), "nts 1\n");
   }
   const summary = JSON.parse(readFileSync(join(f.run, "summary.json"), "utf8"));
