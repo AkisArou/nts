@@ -951,11 +951,14 @@ pub(super) fn a_copy_can_contain(
         // the same call walk independently.
         return true;
     }
-    // **A `new` with no constructor to call is no call at all**: its class's field
+    // **A `new` with no constructor to call is no call at all**: its chain's field
     // initializers run inline here, and the walk that asks this question yields
     // their calls beside it ([`an_inlined_construction`]), so each is answered for
-    // itself.
-    if an_inlined_construction(probe, call).is_some() {
+    // itself. One that inherits a constructor is a call to that constructor, asked
+    // below like any other.
+    if an_inlined_construction(probe, call)
+        .is_some_and(|construction| construction.constructor.is_none())
+    {
         return true;
     }
     if probe.iterators.closes_at(call).is_some() {

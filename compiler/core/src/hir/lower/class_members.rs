@@ -42,24 +42,35 @@ pub(super) fn the_constructor_declared_by(probe: &FuncBuilder, class: NodeId) ->
         .map(|at| probe.implementation_of(at))
 }
 
-/// The classes whose instance initializers a `new` runs **at its own site**: a
-/// program class that declares no constructor, extending nothing or a program class
-/// that declares none either, all the way up.
+/// What a `new` of a class that **declares no constructor of its own** runs: the
+/// nearest constructor up its chain, if any class there declares one, and then the
+/// field initializers of every class below that one, **inline, where the `new` is
+/// written**.
 ///
-/// `lower_new` has no function to call for one -- `hierarchy.constructor` answers
-/// nothing -- so it emits the chain's field initializers inline, in the body that
-/// writes the `new`. Their calls are therefore that body's calls, and every walk
-/// asking what a body calls has to see them there: `calls_under` yields them beside
-/// the `new`, and a `try` walks them as its own. Without that, `new Resolver()`
-/// with a throwing `v = check(seed)` had nothing to name -- no constructor, so no
-/// raising copy -- and every `try` around it refused, and a closure constructing
-/// one held the program's raising gate off (`runtime/node/dns`'s
-/// `getDefaultResolver`).
-///
-/// Nearest class first. `None` where any class in the chain writes a constructor
-/// (then a constructor runs, and is named), is ambient, or extends something that is
-/// not a program class (a provided error is built inline by other rules).
-pub(super) fn an_inlined_construction(probe: &FuncBuilder, call: NodeId) -> Option<Vec<NodeId>> {
+/// That is `lower_new`'s shape, and the specification's: an implicit constructor is
+/// `super(...args)` followed by the class's own initializers, and a chain with no
+/// constructor at all has only the initializers. Their calls are therefore the
+/// constructing body's calls, and every walk asking what a body calls has to see
+/// them there: `calls_under` yields them beside the `new`, and a `try` walks them as
+/// its own. Without that, a throwing initializer had nothing to name -- no
+/// constructor of the class, so no raising copy -- and every `try` around such a
+/// `new` refused, and a closure constructing one held the program's raising gate
+/// off (`runtime/node/dns`'s `getDefaultResolver`, whose `Resolver` inherits
+/// `ResolverBase`'s constructor).
+pub(super) struct InlinedConstruction {
+    /// Nearest class first: the classes whose initializers run at the site.
+    pub(super) chain: Vec<NodeId>,
+    /// The constructor the `new` calls before them, where a base declares one.
+    pub(super) constructor: Option<NodeId>,
+}
+
+/// [`InlinedConstruction`] for a `new`. `None` for anything else, for a class that
+/// declares its own constructor (whose body runs its initializers), and where the
+/// chain is ambient or leaves the program's classes.
+pub(super) fn an_inlined_construction(
+    probe: &FuncBuilder,
+    call: NodeId,
+) -> Option<InlinedConstruction> {
     if probe.kind_of(call) != Some(syntax::NEW_EXPRESSION) {
         return None;
     }
@@ -68,10 +79,11 @@ pub(super) fn an_inlined_construction(probe: &FuncBuilder, call: NodeId) -> Opti
     the_inlined_chain(probe, probe.referenced_declaration(reference.symbol)?)
 }
 
-/// [`an_inlined_construction`]'s chain, asked of the class: `Some` exactly where
-/// constructing `class` calls no constructor and runs these classes' initializers
-/// where the `new` is written.
-pub(super) fn the_inlined_chain(probe: &FuncBuilder, mut class: NodeId) -> Option<Vec<NodeId>> {
+/// [`an_inlined_construction`], asked of the class.
+pub(super) fn the_inlined_chain(
+    probe: &FuncBuilder,
+    mut class: NodeId,
+) -> Option<InlinedConstruction> {
     let mut chain = Vec::new();
     loop {
         if !probe.kind_of(class).is_some_and(declares_a_class)
@@ -80,16 +92,24 @@ pub(super) fn the_inlined_chain(probe: &FuncBuilder, mut class: NodeId) -> Optio
                 .node(class)
                 .modifiers
                 .contains(nts_semantic_schema::DeclarationModifiers::DECLARE)
-            || the_constructor_declared_by(probe, class).is_some()
         {
             return None;
+        }
+        if let Some(constructor) = the_constructor_declared_by(probe, class) {
+            return (!chain.is_empty()).then_some(InlinedConstruction {
+                chain,
+                constructor: Some(constructor),
+            });
         }
         chain.push(class);
         let extends = instance_type_of(probe.snapshot, class)
             .and_then(|ty| probe.snapshot.base_types.get(&ty))
             .is_some_and(|bases| !bases.is_empty());
         if !extends {
-            return Some(chain);
+            return Some(InlinedConstruction {
+                chain,
+                constructor: None,
+            });
         }
         let base = super::declared_base_class(probe.snapshot, probe, class)?;
         class = probe.referenced_declaration(nts_semantic_schema::SymbolId(base))?;

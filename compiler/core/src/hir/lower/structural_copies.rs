@@ -805,16 +805,17 @@ fn calls_under_constructing(
     into: &mut Vec<NodeId>,
     constructing: &mut Vec<NodeId>,
 ) {
-    // **A `new` with no constructor to call runs its class's field initializers
-    // here**, in the body that writes it ([`an_inlined_construction`]), so their
-    // calls are this body's calls -- after the `new` itself, whose arguments run
-    // first and which the walk still yields for the readers that ask about it.
-    if let Some(chain) = an_inlined_construction(probe, id) {
+    // **A `new` of a class with no constructor of its own runs its chain's field
+    // initializers here**, in the body that writes it ([`an_inlined_construction`]),
+    // so their calls are this body's calls -- after the `new` itself, whose
+    // arguments and any inherited constructor run first, and which the walk still
+    // yields for the readers that ask about it.
+    if let Some(construction) = an_inlined_construction(probe, id) {
         into.push(id);
         for child in children_that_run(probe, id) {
             calls_under_constructing(probe, child, into, constructing);
         }
-        for class in chain.into_iter().rev() {
+        for class in construction.chain.into_iter().rev() {
             if constructing.contains(&class) {
                 continue;
             }
