@@ -4060,3 +4060,16 @@ stack. Helpers borrow those inputs and immediately propagate the existing
 raise flag to the caller's handler before write-back. Phase boundaries keep
 JVM methods under its default huge-method limit; native shipping compilation
 may inline the calls. Production VM flags remain unchanged.
+
+## Gate binary pins follow run leases (11-20)
+
+Gate executable retention belongs to `tooling/gate/binary-pins.ts`. Each run
+holds a versioned lease bound to its run directory, unique token and process
+boot/PID/start identity. Publication and lease acquisition share the same
+cache-wide lock as recency, release and pruning; copying and hashing happen
+before the lock. Every held folder survives, alongside ten recent unheld
+folders. Normal completion, failure and signal release only after resource
+drain. A killed process leaves reclamation to proof of its original identity's
+departure, never elapsed time. Unknown or invalid ownership protects its folder
+and is named by the hourly count. Terminal reports acquire no lease.
+

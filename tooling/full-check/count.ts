@@ -1,3 +1,4 @@
+import {binaryPinWarnings,type PinOwnerObservation} from '../gate/binary-pins.ts';
 import {listedCgroupPopulated} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // The count step (docs/workflow.md, The machine: "the full check counts
@@ -100,6 +101,8 @@ export type CountInput = {
   now: number;
   /** Supplied filesystem observation for deterministic directory-walk controls. */
   folderStat?: FolderStat;
+  /** Complete supplied pin owner observation for deterministic upkeep controls. */
+  pinOwnerObservation?:PinOwnerObservation;
 };
 
 /** A leftover of a kind the full check removes itself, and why it is one. */
@@ -391,6 +394,7 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
     else red.push(...judgeFolder(entry, rule, context, removable,notes));
   }
   red.push(...nodeTestRoots(input, context));
+  red.push(...binaryPinWarnings(join(input.cache,"nts-gate","bin"),input.pinOwnerObservation));
 }
 
 /** The count's own interval: a slice younger than this may be a live run's, not a leftover. */

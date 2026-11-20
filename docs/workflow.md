@@ -1235,6 +1235,19 @@ the tooling strict checker owns the source's type checking.
   tree, the gate's tree and target, a records tree for each part, the bench
   tree, its state, the count's file and the runs. A tree's cargo target is its own: two trees
   sharing one run each other's compiled crates.
+- **Gate binaries stay while their runs hold them.** `tooling/gate/binary-pins.ts`
+  publishes immutable executables in `~/.cache/nts-gate/bin/<sha256>` and records
+  each run's holder under that folder's `holders/`. The holder binds its run,
+  token and boot/PID/start identity. Copies and hashing happen outside the
+  cache-wide owner lock; publication, holder acquisition, recency, reclamation
+  and pruning share that lock. Retention keeps every held folder and the ten
+  newest unheld folders. The runner releases after its workers, scopes and
+  reservation drain on success, failure and signal. Terminal reporting never
+  acquires a holder. A killed owner leaves a lease that can be reclaimed only
+  after a fresh identity proves the original process gone; an unreadable
+  identity or malformed or newer holder state protects the folder. The hourly
+  count names unreclaimable leases. Lock wait and hold durations are observations
+  in the run's compiler identity, never verdict inputs.
 - **No evidence folders.** The landing check's and the full check's logs are
   the evidence; each keeps three days of them. A control or a bisect is a
   pinned compiler, not a tree: `node tooling/conformance/pin.ts <rev>` builds
@@ -1596,6 +1609,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Gate pin retention follows live ownership.** The pin owner serializes
+  publication and per-run leases with pruning, stages executable bytes outside
+  the lock, and retains all held folders plus ten recent unheld ones. Unknown
+  ownership protects the folder and appears in the hourly count
+  ([log](records/notebooks/decisions-log.md#gate-binary-pins-follow-run-leases-11-20)).
 
 - **Cost observations retain session identity independently of files.** Pool
   snapshots are written only on a structural change, excluding clock and rusage

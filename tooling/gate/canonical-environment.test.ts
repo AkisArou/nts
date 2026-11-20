@@ -575,8 +575,9 @@ child.release();
   assert.equal(writeCostHistory(historyFile(memory),{steps:oracle?[{name:'program-oracles',memory:{unit:'token',peak:Math.floor(2*2**30/1.25)}}]:[],jobs:[
     {key:'oracle-dependency-capture',basis:'job',width:1,peak:Math.floor(2*2**30/1.25)},
   ]}),undefined);
+  const compiler=join(run,'compiler');writeFileSync(compiler,'startup fixture compiler');
   const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{
-    NTS_GATE_STEPS:oracle?'program-oracles':'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target'),
+    NTS_BIN:compiler,NTS_GATE_STEPS:oracle?'program-oracles':'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target'),
     ...(oracle==='priority'?{NTS_MEMORY_PRIORITY:'full-check'}:{}),
   }});
   const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
@@ -587,7 +588,10 @@ child.release();
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
   child.on('close',(code,signal)=>{terminal={code,signal};});
-  return {root,directory,memory,looked,unit,child,output:()=>output,terminal:()=>terminal};
+  return {root,directory,memory,looked,unit,child,pins:join(base.HOME,'.cache/nts-gate/bin'),output:()=>output,terminal:()=>terminal};
+}
+function pinLeases(root:string):string[]{
+  return readdirSync(root).filter(name=>/^[0-9a-f]{64}$/.test(name)).flatMap(name=>readdirSync(join(root,name,'holders')));
 }
 test("a priority recheck during oracle capture leaves the run live for its first token",async t=>{
   const f=startupRunner(t,4*2**20,"priority");
@@ -609,6 +613,7 @@ test("a priority recheck during oracle capture leaves the run live for its first
   assert.equal(before.admitted.filter(row=>row.what.startsWith("gate run ")).length,1);
   await waitFor("the oracle run to finish",()=>!!f.terminal());
   assert.equal(f.terminal()!.code,0,f.output()+readFileSync(log,"utf8"));
+  assert.deepEqual(pinLeases(f.pins),[],"successful gate drained its pin lease");
   assert.match(readFileSync(log,"utf8"),/oracle case entered/);
   assert.doesNotMatch(readFileSync(log,"utf8"),/reservation .* has ended/);
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]});
@@ -618,6 +623,7 @@ test("a running oracle step reports the loss of its gate reservation and drains"
   const f=startupRunner(t,32*2**20,"lost");
   await waitFor("the oracle run to finish",()=>!!f.terminal());
   assert.equal(f.terminal()!.code,1,f.output());
+  assert.deepEqual(pinLeases(f.pins),[],"failed gate drained its pin lease");
   const summary=JSON.parse(readFileSync(join(f.directory,"summary.json"),"utf8")),row=summary.steps[0];
   assert.match(summary.interrupted,/gate run reservation .* ended while the run was active/);
   assert.deepEqual([row.name,row.verdict,row.scope.populated],["program-oracles","NOT RUN",0]);
@@ -634,9 +640,10 @@ const cpuSeconds=(unit:string)=>Number(spawnTest('systemctl',['--user','show',un
 // 2 GiB beside it holds the capture.
 for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'waiting',/memory: gate run .* waits for 1\.0 GiB \(agent\)/],
   ['for its startup capture\'s memory',4*2**20,'admitted',/memory: oracle dependency capture waits for 2\.0 GiB \(agent\)/]] as const) test(`SIGTERM releases a runner waiting ${where}`,async t=>{
-  const {root,directory,memory,unit,output,terminal}=startupRunner(t,availableKiB);
+  const {root,directory,memory,unit,pins,output,terminal}=startupRunner(t,availableKiB);
   await waitFor(`the run to wait ${where}`,()=>waiting.test(output()),{stopped:()=>terminal()?output():undefined});
   assert.equal(existsSync(join(directory,'summary.json')),false,'the runner is still preparing, not dispatching');
+  assert.equal(pinLeases(pins).length,1,'the waiting gate holds its compiler');
   assert.equal(readLedger(memory.NTS_MEMORY_LEDGER)[state].length,1,`the run's reservation is ${state} in the test's own ledger`);
   const signaled=spawnTest('systemctl',['--user','kill','--signal=SIGTERM',unit],{encoding:'utf8'});
   assert.equal(signaled.status,0,signaled.stderr);
@@ -645,6 +652,7 @@ for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'wai
   assert.equal(terminal()!.signal,null,output());
   const summary=JSON.parse(readFileSync(join(directory,'summary.json'),'utf8'));
   assert.equal(summary.interrupted,'signal SIGTERM');
+  assert.deepEqual(pinLeases(pins),[],'SIGTERM releases the pin after gate resources drain');
   assert.equal(summary.steps[0].verdict,'NOT RUN');
   assert.equal(existsSync(join(root,'step-launched')),false);
   const remaining=readLedger(memory.NTS_MEMORY_LEDGER);

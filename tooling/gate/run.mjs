@@ -94,6 +94,7 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 //   NTS_GATE_COSTS_DIR    the run's history and cost files (<target>/gate-costs,
 //                         unless the launcher's code owns another, as a test does)
 
+import {pinBinaries as leaseBinaries} from "./binary-pins.ts";
 import {RunDiagnostics} from "./run-diagnostics.ts";
 import {clippyTarget} from "./build-targets.ts";
 import {HostObservationError,reportMemoryFailure,sampleCgroup} from "./host-observations.ts";
@@ -106,8 +107,8 @@ import {ProgressBound, stepBound, stepBoundReason, stepBoundWait} from "./step-b
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
-  appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
-  readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync,
+  appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync,
+  readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import {homedir} from "node:os";
 import {dirname, join, resolve, relative, isAbsolute, sep} from "node:path";
@@ -1508,43 +1509,29 @@ function stop(why) {
 // same immutable executable identity, even when a worktree rebuilds its output.
 const pinned = {};
 const PIN_ROOT = join(env.XDG_CACHE_HOME ?? join(env.HOME ?? "/tmp", ".cache"), "nts-gate", "bin");
+/** @type {import('./binary-pins.ts').BinaryPin | undefined} */
+let binaryPin;
 function pinBinaries() {
   const hash = identities.nts?.sha256;
-  if (!hash) return;
-  const dir = join(PIN_ROOT, hash);
-  try {
-    mkdirSync(dir, { recursive: true });
-    const put = (from, name) => {
-      if (!existsSync(from)) return undefined;
-      const to = join(dir, name);
-      if (!existsSync(to) || sha256(to) !== sha256(from)) {
-        const tmp = `${to}.${process.pid}`;
-        copyFileSync(from, tmp);
-        chmodSync(tmp, 0o555);
-        renameSync(tmp, to);
-      }
-      return to;
-    };
-    pinned.nts = put(ntsBin, "nts");
-    pinned.suite = put(suiteBin, "nts-suite");
-    pinned.protocol = put(join(dirname(ntsBin), "nts-test262-protocol"), "nts-test262-protocol");
-    pinned.planner = put(join(dirname(ntsBin), "oracle-plan"), "oracle-plan");
-    identities.nts.pinned = pinned.nts;
-    // Keep the ten most recent pins; each is ~40 MB.
-    const all = readdirSync(PIN_ROOT).map((n) => ({ n, t: statSync(join(PIN_ROOT, n)).mtimeMs })).sort((a, b) => b.t - a.t);
-    utimesSync(dir, new Date(), new Date());
-    for (const old of all.slice(10)) if (old.n !== hash) rmSync(join(PIN_ROOT, old.n), { recursive: true, force: true });
-  } catch (e) {if(isCommandExit(e))throw e;
-    // Unpinned is how every run before this one worked; say so and go on.
-    process.stderr.write(`run.mjs: could not pin the binaries (${e.message}); steps run ${ntsBin} in place\n`);
-    for (const k of Object.keys(pinned)) delete pinned[k];
-  }
+  if (!hash || binaryPin) return;
+  // The lease is acquired before any step can receive these paths.
+  binaryPin = leaseBinaries({root:PIN_ROOT,hash,run:RUN_DIR,binaries:{
+    nts:ntsBin,'nts-suite':suiteBin,
+    'nts-test262-protocol':join(dirname(ntsBin),'nts-test262-protocol'),
+    'oracle-plan':join(dirname(ntsBin),'oracle-plan'),
+  }});
+  pinned.nts=binaryPin.paths.nts;
+  pinned.suite=binaryPin.paths['nts-suite'];
+  pinned.protocol=binaryPin.paths['nts-test262-protocol'];
+  pinned.planner=binaryPin.paths['oracle-plan'];
+  identities.nts.pinned=pinned.nts;
+  identities.nts.pin_lock=binaryPin.timing;
 }
 
-function identify() {
+function identify(acquirePin = true) {
   identities.nts = { path: ntsBin, sha256: sha256(ntsBin) };
   identities.nts_suite = { path: suiteBin, sha256: sha256(suiteBin) };
-  pinBinaries();
+  if (acquirePin) pinBinaries();
 }
 
 // ---------------------------------------------------------------------------
@@ -1573,7 +1560,7 @@ function done(){
 
 function writeSummary() {
   if (outrankedNow) memoryRecord.outranked_s += (Date.now() - outrankedSince) / 1000;
-  if (!identities.nts) identify();
+  if (!identities.nts) identify(false);
   identities.node = process.version;
   for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled");
 
@@ -1791,6 +1778,7 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     try{scopes?.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{reservation?.release();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await reservation?.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{binaryPin?.release();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     if(failures.length===1)throw failures[0];
     if(failures.length)throw new AggregateError(failures,'gate run resources failed to close');
   },
