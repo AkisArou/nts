@@ -1,7 +1,7 @@
 import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
-import {existsSync,mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,readdirSync,symlinkSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {dirname,join,resolve} from 'node:path';
@@ -13,7 +13,6 @@ import * as producer from './program-oracles.ts';
 import {PROGRAM_EMIT_PROJECTS,programOracleDirectory,programOracleSources,hasOracleWork,type ProgramOracleTask} from './program-oracles.ts';
 import {openProgramOracleResults,programOracleHandoff} from './oracle-results.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
-import {readRecords,fixtureOf} from './oracle-records.ts';
 import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
 import {hostEnvironment,oracleToolchainLocation} from '../gate/host-environment.ts';
 import type {GateEnvironment} from '../gate/environment-types.ts';
@@ -65,7 +64,7 @@ test('a plan budget is work to retry: its entry is planned again, once per fixtu
   assert.throws(()=>programOracleSources({rows:[row(measured,'measured',4)],unplanned:[plan('tests/programs/measured/src/other.ts')]}),/multiple source entries: tests\/programs\/measured/);
 });
 
-test('the measured example corpus names every type-directed emit project, and names only those',()=>{
+test('the example corpus names every type-directed emit project, and names only those',()=>{
   const location=oracleToolchainLocation(),{compiler}=verifyToolchain(location),require=createRequire(join(location,'package.json'));
   const {API}:typeof import('typescript/sync')=require('typescript/sync'),ast:typeof import('typescript/ast')=require('typescript/ast');
   const api=new API({cwd:REPOSITORY,tsserverPath:compiler});
@@ -88,16 +87,11 @@ test('the measured example corpus names every type-directed emit project, and na
     });
   };
   try{
-    // Which projects have oracle work depends on what the records hold, so the
-    // named list covers the measured ones rather than equalling them.
-    const projects=new Set(programOracleSources(readRecords(REPOSITORY)).filter(source=>source.startsWith('tests/programs/')).map(fixtureOf));
-    const unnamed=[...projects].filter(project=>!PROGRAM_EMIT_PROJECTS.includes(project.split('/').at(-1)!)&&typeDirected(project));
-    assert.deepEqual(unnamed,[],'a new type-directed project must be named before the standalone path can run it');
-    for(const name of PROGRAM_EMIT_PROJECTS){
-      const project='tests/programs/'+name;
-      assert.ok(existsSync(join(REPOSITORY,project,'tsconfig.json')),'a named type-directed project exists: '+name);
-      assert.ok(typeDirected(project),'a named project is type-directed: '+name);
-    }
+    // The whole corpus, not the projects the records measure today: a pending
+    // fixture is measured once its record lands, so it is named when it lands.
+    const corpus=join(REPOSITORY,'tests/programs');
+    const directed=readdirSync(corpus).filter(name=>existsSync(join(corpus,name,'tsconfig.json'))&&typeDirected('tests/programs/'+name));
+    assert.deepEqual(directed.sort(),[...PROGRAM_EMIT_PROJECTS].sort(),'a type-directed project must be named before the standalone path can run it');
   }finally{api.close();}
 });
 
