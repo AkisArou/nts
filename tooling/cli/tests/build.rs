@@ -712,35 +712,51 @@ export default defineConfig({ products: {
 /// The first math reference is in a dependency archive, after nts's objects.
 /// GCC selects the non-LTO link, so GNU ld cannot hide a misplaced -lm.
 #[test]
-#[expect(clippy::too_many_lines, reason = "archive, non-LTO driver and load controls")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "archive, non-LTO driver and load controls"
+)]
 fn elf_dependency_archives_resolve_math_at_the_end_of_the_link() {
     if !cfg!(target_os = "linux") || !available() {
         skip("Linux, node, clang, GCC, ar and pkg-config");
         return;
     }
-    let project = fixture("build-archive-math", r#"
+    let project = fixture(
+        "build-archive-math",
+        r#"
 import {defineConfig, library, sources, target} from "@nts/config";
 export default defineConfig({products: {
   c: library.native({entry:"./src/main.ts", targets:[target.linux({backend:"c"})]}),
   llvm: library.native({entry:"./src/main.ts", targets:[target.linux({backend:"llvm"})]})
 }, native:[sources({dir:"native"})],
 dependencies:{"linux-gnu":{from:"pkg-config", packages:["archive-math"]}}});
-"#);
-    std::fs::write(project.join("src/main.ts"), "export function answer(): number { return 42; }").unwrap();
+"#,
+    );
+    std::fs::write(
+        project.join("src/main.ts"),
+        "export function answer(): number { return 42; }",
+    )
+    .unwrap();
     std::fs::create_dir_all(project.join("native")).unwrap();
     std::fs::create_dir_all(project.join("pc")).unwrap();
-    std::fs::write(project.join("native/activate.c"), r"
+    std::fs::write(
+        project.join("native/activate.c"),
+        r"
 #include <stdlib.h>
 extern double from_archive(double);
 __attribute__((constructor)) static void check_archive(void) {
   double value = from_archive(0.5);
   if (!(value > 1.27 && value < 1.28)) abort();
 }
-").unwrap();
+",
+    )
+    .unwrap();
     let archive = project.join("libarchive-math.a");
     std::fs::write(project.join("pc/archive-math.pc"), format!(
         "Name: archive-math\nDescription: archive with the first math reference\nVersion: 1\nLibs: {}\n", archive.display())).unwrap();
-    std::fs::write(project.join("load.c"), r#"
+    std::fs::write(
+        project.join("load.c"),
+        r#"
 #include <dlfcn.h>
 #include <stdio.h>
 int main(int argc, char **argv) {
@@ -749,9 +765,16 @@ int main(int argc, char **argv) {
   if (!library) { fprintf(stderr, "%s\n", dlerror()); return 1; }
   return dlclose(library) != 0;
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let loader = project.join("load");
-    let compiled = Command::new("gcc").arg(project.join("load.c")).args(["-ldl", "-o"]).arg(&loader).output().unwrap();
+    let compiled = Command::new("gcc")
+        .arg(project.join("load.c"))
+        .args(["-ldl", "-o"])
+        .arg(&loader)
+        .output()
+        .unwrap();
     assert!(compiled.status.success(), "{compiled:?}");
     for needs_math in [false, true] {
         let body = if needs_math {
@@ -761,20 +784,51 @@ int main(int argc, char **argv) {
         };
         std::fs::write(project.join("archive.c"), body).unwrap();
         let object = project.join("archive.o");
-        let compiled = Command::new("gcc").args(["-O2", "-fPIC", "-c"]).arg(project.join("archive.c")).arg("-o").arg(&object).output().unwrap();
+        let compiled = Command::new("gcc")
+            .args(["-O2", "-fPIC", "-c"])
+            .arg(project.join("archive.c"))
+            .arg("-o")
+            .arg(&object)
+            .output()
+            .unwrap();
         assert!(compiled.status.success(), "{compiled:?}");
-        let archived = Command::new("ar").arg("rcs").arg(&archive).arg(&object).output().unwrap();
+        let archived = Command::new("ar")
+            .arg("rcs")
+            .arg(&archive)
+            .arg(&object)
+            .output()
+            .unwrap();
         assert!(archived.status.success(), "{archived:?}");
-        let built = output_of(Command::new(env!("CARGO_BIN_EXE_nts"))
-            .arg("build").arg(project.join("tsconfig.json"))
-            .env("CC", "gcc").env("PKG_CONFIG_PATH", project.join("pc"))).unwrap();
-        assert!(built.status.success(), "math={needs_math}: {}{}", String::from_utf8_lossy(&built.stdout), String::from_utf8_lossy(&built.stderr));
+        let built = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("CC", "gcc")
+                .env("PKG_CONFIG_PATH", project.join("pc")),
+        )
+        .unwrap();
+        assert!(
+            built.status.success(),
+            "math={needs_math}: {}{}",
+            String::from_utf8_lossy(&built.stdout),
+            String::from_utf8_lossy(&built.stderr)
+        );
         for backend in ["c", "llvm"] {
-            let library = project.join(format!(".nts/build/{backend}/linux-gnu-x86_64/lib{backend}.so"));
-            let dynamic = Command::new("readelf").arg("-d").arg(&library).output().unwrap();
+            let library = project.join(format!(
+                ".nts/build/{backend}/linux-gnu-x86_64/lib{backend}.so"
+            ));
+            let dynamic = Command::new("readelf")
+                .arg("-d")
+                .arg(&library)
+                .output()
+                .unwrap();
             assert!(dynamic.status.success(), "{dynamic:?}");
             let dynamic = String::from_utf8(dynamic.stdout).unwrap();
-            assert_eq!(dynamic.contains("[libm.so.6]"), needs_math, "{backend}: {dynamic}");
+            assert_eq!(
+                dynamic.contains("[libm.so.6]"),
+                needs_math,
+                "{backend}: {dynamic}"
+            );
             let loaded = Command::new(&loader).arg(&library).output().unwrap();
             assert!(loaded.status.success(), "{backend}: {loaded:?}");
         }
