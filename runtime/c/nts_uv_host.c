@@ -50,9 +50,19 @@ static uv_thread_t nts_uv_owner;
 static bool nts_uv_installed;
 static bool nts_uv_running;
 static uint32_t nts_uv_dropped;
-/* Written only by the owner. A foreign reader holds nts_uv_foreign_lock:
- * publishing this after uv_async_init is the wakeup handoff. */
+/* Owner-only: the callbacks that foreign code can reach never read it. */
 static bool nts_uv_active;
+
+static int nts_uv_no_wakeup(uv_async_t *handle) {
+  (void)handle;
+  return 0;
+}
+
+/* Read and published under the foreign queue's lock. The fixed foreign entry
+ * pays one indirect call, just as a libuv PLT call does, without a readiness
+ * branch on every completion. A preactivation post needs no wakeup: the owner
+ * drains that batch before it can block. */
+static int (*nts_uv_wakeup)(uv_async_t *handle) = nts_uv_no_wakeup;
 
 /* Posted by the owner thread. */
 static NtsUvQueue nts_uv_tasks;
@@ -357,12 +367,7 @@ static void nts_uv_post_from_any_thread(void *state, NtsTask task) {
    * thread. */
   uv_mutex_lock(&nts_uv_foreign_lock);
   nts_uv_queue_push(&nts_uv_foreign, task);
-  /* Activation publishes a fully initialized handle under this same lock.
-   * Before it, the owner drains the queued batch itself; after it, this wakeup
-   * also reaches an owner already blocked in the loop. */
-  if (nts_uv_active) {
-    uv_async_send(&nts_uv_async);
-  }
+  nts_uv_wakeup(&nts_uv_async);
   uv_mutex_unlock(&nts_uv_foreign_lock);
 }
 
@@ -456,6 +461,7 @@ static void nts_uv_activate(void) {
    * operations reference it before starting a worker that will complete. */
   uv_unref((uv_handle_t *)&nts_uv_async);
   nts_uv_active = true;
+  nts_uv_wakeup = uv_async_send;
   uv_mutex_unlock(&nts_uv_foreign_lock);
   nts_host_activate(&nts_uv_host);
 }
@@ -469,6 +475,7 @@ void nts_uv_host_install(uv_loop_t *loop) {
   nts_uv_dropped = 0;
   nts_uv_pending = 0;
   nts_uv_active = false;
+  nts_uv_wakeup = nts_uv_no_wakeup;
 
   if (uv_mutex_init(&nts_uv_foreign_lock) != 0) {
     nts_uv_fail("could not create the foreign-post lock");
