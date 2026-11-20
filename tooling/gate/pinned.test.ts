@@ -67,7 +67,7 @@ for (const status of [0, 23]) for(const docs of [false,true])test(`pinned Cargo 
   const directory = testScratch(t, "pinned-admission"), root = join(directory, "repo"), tree = join(directory, "tree");
   const target = join(directory, "target"), bin = join(directory, "bin");
   mkdirSync(join(root, "tooling/gate"), {recursive:true});mkdirSync(bin);
-  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts", "tooling/gate/build.ts","tooling/gate/affinity/main.ts"], root);
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts", "tooling/gate/build.ts","tooling/gate/doctest-preparation.ts","tooling/gate/affinity/main.ts"], root);
   writeFileSync(join(root,'Cargo.toml'),'[workspace]\n'+readFileSync(TEST_PROFILE_MANIFEST,'utf8').split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]')));
   writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
   writeFileSync(join(root,'tooling/gate/affinity/main.ts'),'');

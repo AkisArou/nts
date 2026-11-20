@@ -38,5 +38,9 @@ export async function build(args:readonly string[],env:NodeJS.ProcessEnv=process
 
 runAsCommand(import.meta.url,async()=>{
   try{return await build(process.argv.slice(2));}
-  catch(error){if(isCommandExit(error))throw error;if(error instanceof ToolingInstrumentError)publishToolingFailure(error);throw error;}
+  catch(error){
+    if(isCommandExit(error))throw error;
+    if(error instanceof ToolingInstrumentError){publishToolingFailure(error);console.error('NOT MEASURED: '+String(error));return 2;}
+    throw error;
+  }
 });
