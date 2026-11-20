@@ -81,7 +81,7 @@ fs.mkdirSync(path.join(target,doc?'nts-dev':'release'),{recursive:true});
 if(doc){console.log(JSON.stringify({reason:'compiler-artifact',filenames:[path.join(target,'nts-dev/deps/private')],profile:{test:false,debuginfo:0},fresh:false}));console.log(JSON.stringify({reason:'build-finished',success:true}));}
 else for(const name of ['nts','nts-suite'])fs.writeFileSync(path.join(target,'release',name),'#!/bin/sh\\nexit 0\\n',{mode:0o755});
 `,{mode:0o755});
-  const base=withoutHanded(f.options([]).env!);
+  const base=launcherEnvironment(withoutHanded(f.options([]).env!));
   assignTestValues(base,{NTS_GATE_STEP:undefined,NTS_GATE_STEP_ATTEMPT:undefined,NTS_GATE_STEP_RESULT:undefined,
     NTS_GATE_STEP_MEMORY_BYTES:undefined,NTS_GATE_CASE_COSTS_DIR:undefined,NTS_MEMORY_HANDOVER:undefined});
   const planned=gateEnvironment(base,{run:f.run,owned:{...f.memory,NTS_GATE_STEPS:'build doctests',
