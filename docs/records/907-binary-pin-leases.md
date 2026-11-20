@@ -124,6 +124,7 @@ Measured lock intervals exclude copying, hashing and member verification.
 | Holder fsync inside lock | `366cf321a828b52240de48d8a090ef1a46e739f9` | 1191.483 | 619.084 |
 | Complete staging outside lock | `df4ec629b7f557eb6fbcacc6c49bff725c92dd9e` | 404.654 | 2.165 |
 | Owned staging reclamation and confirmed recency | `5da0a8fa09e7ec5eb28de83a0279e8b5ca6a94c4` | 109.374 | 18.075 |
+| Final owner with read-only diagnostic retention | `f99c9fd898f8733b2b90b9f28a42222f436db0cb` | 203.915 | 4.545 |
 
 The first arm exceeded the requested one-second wait bound. Moving complete
 holder preparation and flushing outside the lock removed that serialized IO;
@@ -175,3 +176,23 @@ Additional retained review evidence:
 | `review-sabotage.mjs` | `1c4c0bf06cd08ca43a6174feb089263c92f4a6f4f3dc441f5d9da0751da889e8` |
 | `review-focused.log` | `3c763a66cfe31090fd6bc0bb78012d8624d2c1b1d7546c504f5e58534d6a0d16` |
 | `review-tooling.log` | `f0ccef814d5282e9ae0f41ce798bee1457b048e224f6e7c86846f703e239f105` |
+
+The final owner was checked with 48 focused pin/count controls and the same
+24-publisher payload cohort. A fourth sabotage arm removed future/malformed
+diagnostic retention protection: the control failed, then passed after exact
+source restoration. All four sabotage arms have failing and restored controls.
+
+Final retained review evidence:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `final-review-measurement-commit.log` | `729a38443c50408e5dd79482c74b3277c90b7bd7c855c2b21fa9a6481e2fe618` |
+| `final-review-concurrent-starts.json` | `a3988600348912edeec40b86527df7e39394f52303bbce5be6b6240d4b1e1b3b` |
+| `final-review-concurrent.log` | `d1c7c335fcfbed850f5f5b90f3dd6ad20604eeef4e23e7103ac7225e5c13207f` |
+| `final-review-concurrent-starts.mjs` | `bb649d121779fa2cbd24bc7438646ea75f02417f99b4f2e5a3673ad0ee51c996` |
+| `final-review-pin-child.mjs` | `f5e03365ba76b72bcff7c277be6075e1ee5a8cdb8f92b3418004e44ade905203` |
+| `final-review-sabotage.json` | `e06b7c1fdd5bc0d3f0092eeb39a7b64d68c77f25dc3234535aa67efbc96035b9` |
+| `final-review-sabotage.log` | `3672a7be41b82c880488bf50abd44ebcb315630bdd57c92bb314612b0b28220b` |
+| `final-review-sabotage.mjs` | `0258050ddea0de87c970b0058a46b066e01e5a89f09ea099f4b67fcbb13f3ccf` |
+| `review-final-focused.log` | `a31440115e7c17f498585fc5814422599b5a9f3e6ba40f3a7d547f8d748803bd` |
+| `review-final-tooling.log` | `051d5672c21a8b9811cacdd9c893182c6799a13098dd3432f81c72833bef2217` |
