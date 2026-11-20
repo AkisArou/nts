@@ -495,12 +495,15 @@ static void activation_keeps_the_foreign_contract_immutable(void) {
    * accidental full-vtable replacement fails this control. */
   NtsHost active = {.post_task = transition_post};
   nts_host_activate(&active);
+  check("activation asserts the installed owner identity", owner_checks == 1);
   trace[0] = '\0';
   nts_post_task(reaction("active"));
   nts_post_from_any_thread(reaction("unused"));
   nts_enqueue_microtask(reaction("unused"));
   expect("activation replaces the owner task entry", "active");
-  check("activation asserts and preserves owner identity", owner_checks >= 2);
+  check("activation preserves the owner callback state",
+        transitioned_tasks == 1);
+  check("activation preserves owner identity", nts_is_owner_thread());
   check("activation preserves state and foreign entry", preserved_foreign == 1);
   check("activation preserves checkpoint policy", preserved_microtasks == 1);
 }
