@@ -522,17 +522,26 @@ static void count_completion(void *state) {
   count_callback(state);
   nts_pending_end();
 }
+static void count_iteration(void) {
+  nts_post_task((NtsTask){count_callback, 0, 0});
+  nts_post_delayed((NtsTask){count_callback, 0, 0}, 0, false);
+  nts_pending_begin();
+  nts_post_from_any_thread((NtsTask){count_completion, 0, 0});
+  nts_uv_host_run();
+}
 static int count_work(unsigned count, bool lazy) {
   if (!lazy) {
     uv_loop_init(&loop);
   }
   nts_uv_host_install(lazy ? NULL : &loop);
+  if (!lazy) {
+    /* Warm the queue/table storage and lazy DSO bindings in both the empty
+     * and work arms. --activate measures first work separately. */
+    count_iteration();
+    counted_callbacks = 0;
+  }
   for (unsigned i = 0; i < count; i++) {
-    nts_post_task((NtsTask){count_callback, 0, 0});
-    nts_post_delayed((NtsTask){count_callback, 0, 0}, 0, false);
-    nts_pending_begin();
-    nts_post_from_any_thread((NtsTask){count_completion, 0, 0});
-    nts_uv_host_run();
+    count_iteration();
   }
   nts_uv_host_shutdown();
   int closed = lazy ? (count ? uv_loop_close(uv_default_loop()) : 0)
