@@ -1,9 +1,15 @@
 # Native executable launch to exit
 
+The review follow-up and corrected implementation are recorded in
+[Native launch review controls](0870-native-launch-review.md). This record
+retains the original measurements; its implementation had two defects in
+foreign-post activation and library ordering, fixed in that follow-up.
+
 Issue #870 removes unused loop acquisition and unused libm loading from the
 ordinary standalone host. Empty and hello win against ScriptC in the standard
 final sitting and tie in the paired base/variant/replay sitting; all native
-cells win against node. Builtins remains unavailable, refused before timing
+cells win against node. The paired floor inverted above the native and
+ScriptC cells, so its formal ties cannot be separated from noise. Builtins remains unavailable, refused before timing
 with `NTS1100 JSON.parse` (the outstanding builtins work is #886).
 
 The baseline is `723a9ce9f90144ee5047790c35a88912394f7e49`; the final measured
@@ -140,7 +146,10 @@ Only ratios inside a sitting decide its verdict.
 
 The baseline is replayed in the same rotating sitting as the variant. All
 baseline and replay native cells still lose to ScriptC; all four variant
-cells tie. Builtins has no baseline product and the variant is refused, so
+cells are formally classified TIE. However, /bin/true is slower than every
+variant native and ScriptC cell (252.823 µs empty, 228.117 µs hello). This
+sitting cannot separate TIE from noise; the instruction, fault and syscall
+counts carry the cause claim. Builtins has no baseline product and the variant is refused, so
 its native ratio is unavailable rather than a win.
 
 | Row | Column | µs | spread | / ScriptC | / node | ScriptC verdict |
@@ -243,8 +252,10 @@ JVM scalar helper declaration, so no erasure, read-only or JVM mapping row is
 owed. The callback's no-raise protocol permits loop acquisition and host
 assertions, never inline language execution.
 
-Each supported dynamic ELF driver scopes `--as-needed` around each existing
-`-lm`, preserving its position and the other flags. Emitted-argument controls
+The measured implementation scoped `--as-needed` around each existing `-lm`.
+Review found that their original positions could precede a static archive
+which first references math. The corrected link emits one scoped libm after
+all library inputs; the follow-up records the GNU ld regression control. Emitted-argument controls
 cover ELF, Mach-O and COFF. Fully static links keep their original flags.
 Zig's driver rejected `--push-state`; Zig dynamic still links libm, a known
 residue. The original static-musl/cross-link control remains and passes.
@@ -277,7 +288,8 @@ teardown. Seven interleaved repeats give:
 | replay | 2297764.0 | 2297761.5–2297766.5 | 1.000002176 |
 
 The variant's 1.000000435x base ratio is flat within the repeat spread.
-First work including activation, one task/checkpoint and teardown adds a
+First work including activation, one mixed iteration (a task, timer and
+pending foreign completion) and teardown adds a
 median 25093 instructions (25091–25163), once. Probe load was
 23.66/25.44/28.92 → 25.37/25.76/29.00. Earlier exploratory probes are retained;
 the accepted steady-state probe matches static UV and uses one outer run.
