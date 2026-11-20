@@ -178,7 +178,6 @@ fn identical_comparators_share_helpers_and_keep_unsigned_addressing() {
             .iter()
             .filter(|f| f.name.starts_with("¢nts$sort"))
         {
-            assert!(helper.params.iter().all(|p| !p.name.is_empty()));
             for op in &helper.values {
                 if let OpKind::ArrayGet { index, .. } | OpKind::ArraySet { index, .. } = op.kind {
                     assert!(

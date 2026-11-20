@@ -22,6 +22,7 @@ struct Contract {
     argument_type: Option<TypeId>,
     carry: bool,
     substitution: Substitution,
+    sources: crate::hir::generics::Sources,
 }
 
 /// A registry belongs to one lowering, including its specialized builders.
@@ -53,6 +54,7 @@ impl Registry {
             argument_type: comparator.argument_source.and_then(|(_, ty)| ty),
             carry: builder.tested_for_a_raise(site),
             substitution: builder.substitution.clone(),
+            sources: builder.sources.clone(),
         };
         let mut families = self.0.borrow_mut();
         if let Some(family) = families.iter().find(|family| family.contract == contract) {
@@ -178,6 +180,7 @@ pub(in crate::hir::lower) fn lower_helpers(
                 super::super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default),
                 Copy {
                     substitution: family.contract.substitution.clone(),
+                    sources: family.contract.sources.clone(),
                     suffix: family.suffix.clone(),
                     raises: family.contract.carry,
                     ..Copy::default()
