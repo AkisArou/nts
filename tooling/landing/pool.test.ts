@@ -203,6 +203,31 @@ test('a landed hold still needs admission when taken again',t=>{
   assert.equal(p.take('884').state,'held');assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
 });
 
+test('a reclaimed landed hold still needs admission when attached again',t=>{
+  let busy=false;
+  const {p,s,observe}=pool(t,2,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]});
+  const tree=p.take('884'),target=join(tree.path,'target');
+  mkdirSync(target);writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
+  for(const name of ['nts-dev','clippy'] as const){const output=join(target,name);mkdirSync(output);completeBuild(tree.path,name,output);}
+  p.detach('884');busy=true;assert.equal(p.release('884',tree.head).state,'kept');busy=false;
+  assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'landed');
+  observe({freeBytes:44*GB,freeInodes:1000});
+  assert.ok(p.capacity.reclaim(p.dir)!.removed.some(row=>row.kind==='detached-build-output'&&row.root===target));
+  assert.equal(existsSync(target),false);
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});p.take('885');
+  const file=workerPresenceFile(tree.path),record=readFileSync(file,'utf8'),inode=lstatSync(file).ino;
+  assert.throws(()=>p.attach('884'),PoolFull);
+  assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'landed');
+  assert.equal(readFileSync(file,'utf8'),record);assert.equal(lstatSync(file).ino,inode);
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,0,'the other task keeps its admitted promise');
+  observe({freeBytes:DISK_MARGIN_BYTES+2*COLD_TARGET_BYTES,freeInodes:1000});
+  assert.equal(p.attach('884').presence!.state,'attached');
+  writeFileSync(join(tree.path,'resumed.txt'),'resumed task work\n');
+  s.git(['add','resumed.txt'],tree.path);s.git(['commit','-qm','resume task'],tree.path);
+  assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'held');
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,0,'the resumed hold fits beside the other promise');
+});
+
 test('reattachment admits only the partial promise and leaves complete output alone under pressure',t=>{
   const {p,observe}=pool(t,1),tree=p.take('884'),target=join(tree.path,'target');
   mkdirSync(target);writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
