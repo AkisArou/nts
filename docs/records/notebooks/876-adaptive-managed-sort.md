@@ -1613,3 +1613,32 @@ Raw evidence manifest: `/home/akisarou/.cache/nts-scratch/876/helper-static-evid
 SHA-256 `42587adb0c87fa1bd4ccde4272eb6b05bd81e8f335cdbb2269e884934369eaee`.
 The focused command and launcher are in that manifest; the failed launcher
 syntax attempts are retained too.
+
+### Native helper ownership inspection
+
+The fresh nts-dev compiler emitted RC C and LLVM for sort-objects and
+map-entries-top-k. All seven generated helper bodies in each of the four
+outputs contain zero explicit retain or release sites. Caller-owned buffers
+keep their releases in the callers. This is a static placement control; it
+does not replace the exact dynamic counting floor or optimized-code inlining
+proof, which remain owed after the machine hold. Emission diagnostics are
+empty in all four outputs.
+
+| Row | Backend | Helpers inspected | Explicit retain/release sites inside helpers | Verdict |
+|---|---|---:|---:|---|
+| sort-objects | c | 7 | 0 | no helper argument counting |
+| sort-objects | llvm | 7 | 0 | no helper argument counting |
+| map-entries-top-k | c | 7 | 0 | no helper argument counting |
+| map-entries-top-k | llvm | 7 | 0 | no helper argument counting |
+
+The next matched sitting's script has main, monolithic adaptive and split
+adaptive arms, six alternating repetitions on the five sorting rows, C, LLVM
+and default-policy JVM, checksum checks, CPU-5 observations and retained
+compilation logs. Its separate output prefix preserves the failed full-memory
+sitting and the huge-method flag control. The replacement full-memory scripts
+retain the automatic results JSON in scratch and drop only their results-only
+commit, as before; they no longer assert ELF identity with the pre-split arm.
+These scripts are prepared, syntax checked, and have not been run.
+
+Raw evidence and prepared scripts: `/home/akisarou/.cache/nts-scratch/876/helper-native-evidence.json`, SHA-256
+`56ea710a5480db2c40ee961ccf9240ecb2fe8ffd2cd77c04a9868b39a93346ce`.
