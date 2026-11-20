@@ -20,7 +20,7 @@ import {dependencySourceCandidates} from './dependency-source-candidates.ts';
 import {DEPENDENCY_ROOT_INPUTS,installationBinPaths} from './dependency-input-names.ts';
 export {DEPENDENCY_ROOT_INPUTS} from './dependency-input-names.ts';
 import {executableModuleSource} from '../gate/reader-inputs/main.ts';
-import {installationCatalog,installationCatalogBytes,dependencyHash,readDependencyCatalog,type DependencyCatalogTrust} from './dependency-catalog.ts';
+import {installationCatalog,installationCatalogBytes,dependencyHash,readDependencyCatalog,type DependencyCatalog,type DependencyCatalogTrust} from './dependency-catalog.ts';
 import {dependencyPackageContent} from './dependency-inventory.ts';
 
 const digest=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");
@@ -43,11 +43,24 @@ export function installationCatalogTrust(root:string,tree:string):DependencyCata
 export function installationCatalogPublication(root:string,tree:string):string{
   return `node tooling/inputs/linker.ts work ${JSON.stringify(root)} ${JSON.stringify(tree)}`;
 }
+/**
+ * Whether `tree`'s installed packages are the ones its catalog authenticates,
+ * read through the same owner every consumer reads them with. A tree with no
+ * package graph installs nothing and owes no catalog; a missing or stale one
+ * names the command that publishes it. A malformed catalog throws.
+ */
+export function installationCatalogState(shared:string,tree:string,trust?:DependencyCatalogTrust|null):
+  {state:'current';catalog:DependencyCatalog}|{state:'none'}|{state:'stale';message:string}{
+  if(!hasDependencies(tree))return {state:'none'};
+  const result=readDependencyCatalog(trust===undefined?installationCatalogTrust(shared,tree):trust,tree);
+  return result.state==='current'?result:{state:'stale',message:`${result.reason}; publish with ${installationCatalogPublication(shared,tree)}`};
+}
 /** Acquisition pins authenticate the catalog; only runtime bytes identify behavior. */
 export function installationRuntimeContent(tree:string):string{
   const shared=dirname(git(tree,'rev-parse','--path-format=absolute','--git-common-dir'));
-  const result=readDependencyCatalog(installationCatalogTrust(shared,tree),tree);
-  if(result.state!=='current')throw failure(`${result.reason}; publish with ${installationCatalogPublication(shared,tree)}`);
+  const result=installationCatalogState(shared,tree);
+  if(result.state==='none')throw failure(`${tree} has no package graph to identify`);
+  if(result.state==='stale')throw failure(result.message);
   return dependencyPackageContent(result.catalog.entries);
 }
 const failure=(message:string)=>new ToolingInstrumentError("tooling-setup",`dependency inputs: ${message}`);

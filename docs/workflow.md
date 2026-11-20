@@ -399,6 +399,16 @@ cost keeps them under ten minutes, moving the costliest deferrable ones to
 the full check. `node tooling/landing/check.ts <commit> --dry-run` prints the
 landing steps, the deferred ones and the estimate.
 
+**Installed packages are current before a step runs.** The landing service's
+tree preparation links each tip with its own linker, which republishes the
+tree's installation catalog. `check.ts <commit> --here` runs in an agent's
+tree as it stands, so it reads that tree's catalog through its owner
+(`installationCatalogState` in `tooling/inputs/dependency-inputs.ts`) before it
+selects anything. A missing catalog, or one whose pins no longer match the tree
+(after a rebase, say), is a refusal naming the
+`node tooling/inputs/linker.ts work` command that republishes it. A tree with
+no package graph owes no catalog.
+
 **One queue.** One service, `nts-landing-check`, checks changes
 one at a time, each rebased onto the newest `main`. Green: `main`
 fast-forwards and is pushed, the task's branch is deleted here and on

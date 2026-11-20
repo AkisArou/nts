@@ -206,3 +206,35 @@ try{
  const output=(result.stdout??'')+(result.stderr??'');assert.equal(result.status,0,output);
  assert.match(output,/PASS\s+build/);assert.match(output,/PASS\s+rustfmt/);assert.match(output,/landing: green in .*green/);
 });
+
+test('--here refuses a tree whose installation catalog is not current before it selects or runs a step; a tree that installs nothing runs',t=>{
+  const c=cli(t);
+  const stale=c.s.commit({'package.json':'{"name":"catalog-refusal","private":true}\n','pnpm-lock.yaml':"lockfileVersion: '9.0'\n"},'a package graph with no published catalog');
+  const imports=process.execArgv.flatMap((argument,index,args)=>argument==='--import'&&args[index+1]?[argument,args[index+1]!]:[]);
+  // A child with this module's real check command, its selection and runner
+  // replaced by recorders, and its rank scope declined, so the order is what is seen.
+  const here=(commit:string)=>{
+    const code=`import {mock} from 'node:test';
+const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)},scope=${JSON.stringify(new URL('../gate/scopes/bound-slice.ts',import.meta.url).href)};
+const realRules=await import(rules),realRun=await import(run),realScope=await import(scope);
+const {landingSelection}=await import(${JSON.stringify(new URL('./selection.ts',import.meta.url).href)});
+const calls=[];
+const selection=landingSelection({owed:{steps:['build']},paths:[],catalogue:['build'],table:{build:{form:'as-is'}},inCorpus:()=>false,rows:new Map(),cost:()=>({cpu:1,measured:true,source:'control'}),budget:{slots:24,frontends:24,seconds:600}});
+mock.module(rules,{exports:{...realRules,ruleSelect:()=>()=>{calls.push('select');return {selection,kind:'other',interop:null,doctests:null};}}});
+mock.module(run,{exports:{...realRun,runLanding:async()=>{calls.push('run');return {state:'green',message:'recorded',steps:[],pending:[],refresh:[],wall_s:0};}}});
+mock.module(scope,{exports:{...realScope,rankedScopeArgs:()=>null}});
+process.argv=[process.execPath,${JSON.stringify(CHECK)},${JSON.stringify(commit)},'--here'];
+await import(${JSON.stringify(CHECK)});
+console.log('calls='+JSON.stringify(calls)+' exit='+process.exitCode);`;
+    const r=spawnSync(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{cwd:c.s.root,encoding:'utf8',
+      env:{PATH:process.env.PATH!,HOME:c.home,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1'}});
+    return `${r.stdout}${r.stderr}`;
+  };
+  const refused=here(stale);
+  assert.match(refused,/landing: --here runs on this tree's installed packages, and installation catalog is missing; publish with node tooling\/inputs\/linker\.ts work ".*" ".*"/,refused);
+  assert.match(refused,/calls=\[\] exit=2/,'no step was selected or run');
+  const none=c.s.commit({'package.json':null,'pnpm-lock.yaml':null},'no package graph');
+  const ran=here(none);
+  assert.match(ran,/calls=\["select","run"\] exit=0/,ran);
+  assert.doesNotMatch(ran,/installation catalog/);
+});

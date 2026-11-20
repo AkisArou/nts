@@ -5,7 +5,8 @@ import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {test} from "node:test";
 import {spawnTest} from "../gate/test-wait.ts";
-import {dependencyCache,identity,installDependencies,installationIdentityPath,installationCatalogPath,installationCatalogTrust} from "./dependency-inputs.ts";
+import {dependencyCache,identity,installDependencies,installationCatalogState,installationIdentityPath,installationCatalogPath,installationCatalogTrust} from "./dependency-inputs.ts";
+import {installedCatalogFixture} from '../gate/installed-catalog-fixture.ts';
 import {readDependencyCatalog} from './dependency-catalog.ts';
 import {withPackageManager} from "./package-manager.ts";
 import {registerHooks} from 'node:module';
@@ -128,4 +129,16 @@ for(const sameSource of [false,true])for(const mutation of ['clean','dirty','unr
       assert.equal(existsSync(installationCatalogPath(shared,tree)),false,'no new recipe bytes can certify the older producer work');
     }
   }finally{hooks.deregister();}
+});
+
+test('a tree\'s catalog state: current, stale by a changed pin with the command that republishes it, and none without a package graph',t=>{
+  const fixture=installedCatalogFixture(t),shared='/shared-checkout';
+  const current=installationCatalogState(shared,fixture.root,fixture.trust);
+  assert.equal(current.state,'current');
+  fixture.put('recipe.ts','// a rebased producer input\n');
+  const stale=installationCatalogState(shared,fixture.root,fixture.trust);
+  assert.deepEqual(stale,{state:'stale',message:`installation catalog pin changed: recipe.ts; publish with node tooling/inputs/linker.ts work "${shared}" "${fixture.root}"`});
+  assert.deepEqual(installationCatalogState(shared,fixture.root,null),{state:'stale',message:`installation catalog is missing; publish with node tooling/inputs/linker.ts work "${shared}" "${fixture.root}"`});
+  const scratch=testScratch(t,'catalog-no-graph');
+  assert.deepEqual(installationCatalogState(shared,scratch,null),{state:'none'},'a tree that installs nothing owes no catalog');
 });

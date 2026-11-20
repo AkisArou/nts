@@ -35,6 +35,7 @@ import { describeSelection, landingSteps } from "./selection.ts";
 import { BUDGET, drain, KEEP_DAYS, machineConfig, prune } from "./service.ts";
 import {COST_HISTORY_NAME,historyFile,snapshotCostHistory} from '../gate/step-scheduling.ts';
 import {reportRustRecordDecisions} from '../gate/rust-selector-decision.ts';
+import {installationCatalogState} from '../inputs/dependency-inputs.ts';
 
 const say = (line: string) => console.log(`landing: ${line}`);
 const short = (sha: string) => sha.slice(0, 12);
@@ -86,6 +87,14 @@ function rankHere(): number | undefined {
   return 2;
 }
 
+/** Why `--here` cannot start on `tree`'s installation catalog, or null when it is current or the tree installs nothing. */
+export function catalogRefusal(root: string, tree: string): string | null {
+  let state: ReturnType<typeof installationCatalogState>;
+  try { state = installationCatalogState(root, tree); }
+  catch (error) { return `--here cannot read this tree's installation catalog: ${(error as Error).message}`; }
+  return state.state === "stale" ? `--here runs on this tree's installed packages, and ${state.message}` : null;
+}
+
 async function here(root: string, sha: string,traceRustInputs=false): Promise<number> {
   const ranked = rankHere();
   if (ranked !== undefined) return ranked;
@@ -93,6 +102,10 @@ async function here(root: string, sha: string,traceRustInputs=false): Promise<nu
   if (spawnSync("git",gitArguments( ["rev-parse", "HEAD"]), { cwd: tree, encoding: "utf8" }).stdout.trim() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
   const dirty = spawnSync("git",gitArguments( ["status", "--porcelain", "--untracked-files=no"]), { cwd: tree, encoding: "utf8" }).stdout.trim();
   if (dirty) { say(`--here checks the commit, and this tree has uncommitted changes:\n${dirty}`); return 2; }
+  // Its tests read the installed packages this tree's catalog authenticates:
+  // a stale catalog is said now, never as a failure per case at the end.
+  const refusal = catalogRefusal(root, tree);
+  if (refusal) { say(refusal); return 2; }
   const { base, note } = rangeOf(root, sha);
   const selected = ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET)(base, sha, changedPaths({ root }, base, sha));
   const steps = landingSteps(selected.selection);
