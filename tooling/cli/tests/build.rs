@@ -866,10 +866,19 @@ exec /usr/bin/gcc "$@"
     );
     // Same library flags, with only the native caller object: no dead runtime
     // references can accidentally retain libm before the archive is visited.
+    let reduced_source = project.join("reduced.c");
+    std::fs::write(
+        &reduced_source,
+        format!(
+            "{}\ndouble answer(void) {{ return 42; }}\n",
+            std::fs::read_to_string(&caller).expect("native caller")
+        ),
+    )
+    .expect("reduced caller with the same exported constant function");
     let caller_object = project.join("caller.o");
     let compiled = Command::new("gcc")
         .args(["-fPIC", "-c"])
-        .arg(&caller)
+        .arg(&reduced_source)
         .arg("-o")
         .arg(&caller_object)
         .output()
