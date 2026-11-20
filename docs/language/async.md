@@ -137,6 +137,21 @@ microtask queue.
 `nts check` links a deterministic test host instead, with virtual time and no
 I/O, so promise ordering is reproducible.
 
+A standalone libuv runner installs its host with a null loop. The first
+task, timer, pending operation or request for the backend creates the default
+loop and its handles. An unused host runs and shuts down without creating
+them. A foreign completion posted before activation stays queued and can run
+on the owner without creating a loop. Explicit loops, including the GTK,
+CoreFoundation and Win32 adapters, are installed eagerly.
+
+Activation replaces only callbacks read by the owner thread. The foreign-post
+entry, owner query, checkpoint policy and state stay fixed after installation.
+The foreign queue's mutex publishes its wakeup target after the async handle
+is initialized; an earlier post needs no wakeup because the owner drains it
+before blocking. Task, timer and pending-operation callbacks then execute
+without an activation check. Promise and microtask processing stays in the
+runtime's existing queues and checkpoint.
+
 On the JVM, the default environment (the one a runnable jar uses) advances a
 virtual clock: a timer fires when nothing else is runnable, in deadline order,
 without waiting out its delay as node would. A promise does not cross a Node addon's boundary
@@ -188,6 +203,11 @@ decided to check every entry from a thread it does not own
 ([Decisions](#decisions)).
 
 ## Decisions
+
+- **A standalone libuv host acquires its loop on demand.** Explicit-loop
+  embedders stay eager; activation changes owner-only callbacks and publishes
+  the foreign wakeup under its queue mutex
+  ([log](../records/notebooks/decisions-log.md#native-loop-initialization-follows-scheduled-work-11-20)).
 
 - An unhandled promise rejection follows the same per-target split as an
   exception escaping a host callback ([errors.md](errors.md#callbacks-a-host-invokes);

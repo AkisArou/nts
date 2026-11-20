@@ -4096,3 +4096,14 @@ cache lock. Neither failed verification nor diagnostic publication refreshes
 recency, and count names the diagnostic without hashing executable bytes under
 the lock. Malformed and future diagnostic versions are never overwritten or
 removed by retention.
+## Native loop initialization follows scheduled work (11-20)
+
+The standalone libuv host installs without creating a default loop or handles.
+Tasks, timers, pending operations and backend access activate it once. Explicit
+loops and GUI adapters remain eager. The runtime transitions only owner-thread
+callbacks, leaving the foreign entry, owner query, checkpoint policy and state
+immutable. The foreign queue's mutex publishes a wakeup function after async
+handle initialization, preserving posts before and during activation without
+an activation branch on each completion. ELF links retain libm only when live
+code needs it, with `--as-needed` scoped to that library. The measured launch
+cost and controls are recorded in [0870](../0870-native-launch.md).
