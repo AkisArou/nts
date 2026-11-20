@@ -4193,6 +4193,15 @@ void nts_environment_destroy(NtsEnvironment *environment);
 
 void nts_host_install(const NtsHost *host);
 
+/* Replace only the owner-thread operations of an installed host. This is a
+ * host API, never a call emitted for a language operation. It asserts the
+ * installed host's owner identity. post_task, post_delayed, cancel_delayed,
+ * pump_one and pending are read only by that owner; activation may replace
+ * them once work requires a real loop. The foreign-post entry, owner query,
+ * checkpoint policy and state remain immutable after installation, so a
+ * foreign post may race this transition without reading a changing field. */
+void nts_host_activate(const NtsHost *host);
+
 /* Run a task with the checkpoint around it. Hosts call *this*, never
  * `task.run`, so a host cannot omit a checkpoint by forgetting. */
 void nts_task_run(NtsTask task);

@@ -998,6 +998,7 @@ static SIGNATURES: &[Declared] = &[
         Some(HirType::Bool),
         Raising::NoRaise,
     ),
+    ("nts_host_activate", None, None, Raising::NoRaise),
     ("nts_host_checkpoint_end", None, None, Raising::NoRaise),
     ("nts_host_install", None, None, Raising::NoRaise),
     (

@@ -657,6 +657,58 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
     );
 }
 
+#[test]
+fn elf_products_load_libm_only_when_live_math_needs_it() {
+    if !cfg!(target_os = "linux") || !available() {
+        skip("Linux, node, clang, nm and readelf");
+        return;
+    }
+    let project = fixture(
+        "build-libm-needed",
+        r#"
+import { defineConfig, app, target } from "@nts/config";
+export default defineConfig({ products: {
+    c: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({backend: "c"})] }),
+    llvm: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({backend: "llvm"})] })
+} });
+"#,
+    );
+    let entry = project.join("src/main.ts");
+    for (source, needs_math) in [
+        ("console.log('hello');", false),
+        (
+            "let total = 0; for (let n = 0; n < 1000; n++) total += Math.sin(n); console.log(total > 0);",
+            true,
+        ),
+    ] {
+        std::fs::write(&entry, source).expect("writing the live-math control");
+        let built = build(&project, &[]);
+        assert!(built.ok, "{}{}", built.stdout, built.stderr);
+        let oracle = Command::new("node")
+            .arg(&entry)
+            .output()
+            .expect("node oracle");
+        assert!(oracle.status.success(), "{oracle:?}");
+        for backend in ["c", "llvm"] {
+            let binary = project.join(format!(".nts/build/{backend}/linux-gnu-x86_64/{backend}"));
+            let dynamic = Command::new("readelf")
+                .arg("-d")
+                .arg(&binary)
+                .output()
+                .expect("reading the ELF product's dependencies");
+            assert!(dynamic.status.success(), "{dynamic:?}");
+            let dynamic = String::from_utf8(dynamic.stdout).expect("readelf text");
+            let has_math = dynamic
+                .lines()
+                .any(|line| line.contains("(NEEDED)") && line.contains("[libm.so.6]"));
+            assert_eq!(has_math, needs_math, "{backend}: {dynamic}");
+            let ran = Command::new(&binary).output().expect("running the product");
+            assert!(ran.status.success(), "{ran:?}");
+            assert_eq!(ran.stdout, oracle.stdout, "{backend} must agree with node");
+        }
+    }
+}
+
 /// A bigint through an erased slot at the top level builds.
 ///
 /// This was the witness that a standalone build whose module initialiser the

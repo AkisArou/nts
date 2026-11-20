@@ -50,14 +50,16 @@ static uv_thread_t nts_uv_owner;
 static bool nts_uv_installed;
 static bool nts_uv_running;
 static uint32_t nts_uv_dropped;
+/* Written only by the owner. A foreign reader holds nts_uv_foreign_lock:
+ * publishing this after uv_async_init is the wakeup handoff. */
+static bool nts_uv_active;
 
 /* Posted by the owner thread. */
 static NtsUvQueue nts_uv_tasks;
 
 /* Posted by any other thread, and drained on the owner's. `nts_uv_foreign` is
- * the only state in this file a second thread touches, and the mutex is the
- * only lock: everything else is owner-only by contract, asserted rather than
- * guarded. */
+ * queue and the activation handoff are the only state a second thread
+ * touches, under this mutex. Everything else is owner-only. */
 static NtsUvQueue nts_uv_foreign;
 static uv_mutex_t nts_uv_foreign_lock;
 
@@ -70,6 +72,8 @@ static void nts_uv_fail(const char *what) {
   fprintf(stderr, "nts uv host: %s\n", what);
   abort();
 }
+
+static void nts_uv_activate(void);
 
 /* --- A queue of tasks ------------------------------------------------------
  */
@@ -353,8 +357,13 @@ static void nts_uv_post_from_any_thread(void *state, NtsTask task) {
    * thread. */
   uv_mutex_lock(&nts_uv_foreign_lock);
   nts_uv_queue_push(&nts_uv_foreign, task);
+  /* Activation publishes a fully initialized handle under this same lock.
+   * Before it, the owner drains the queued batch itself; after it, this wakeup
+   * also reaches an owner already blocked in the loop. */
+  if (nts_uv_active) {
+    uv_async_send(&nts_uv_async);
+  }
   uv_mutex_unlock(&nts_uv_foreign_lock);
-  uv_async_send(&nts_uv_async);
 }
 
 /* --- Installation and teardown ---------------------------------------------
@@ -382,6 +391,75 @@ static NtsHostPumpResult nts_uv_pump_one(void *state) {
   return NTS_HOST_PUMP_TURN;
 }
 
+/* These cold callbacks are replaced once, rather than adding an activation
+ * check to every task, timer and pending-operation hot path. */
+static void nts_uv_start_task(void *state, NtsTask task) {
+  nts_uv_require_owner("post_task");
+  nts_uv_activate();
+  nts_uv_post_task(state, task);
+}
+
+static NtsTimerId nts_uv_start_delayed(void *state, NtsTask task,
+                                       double delay_ms, bool repeating) {
+  nts_uv_require_owner("post_delayed");
+  nts_uv_activate();
+  return nts_uv_post_delayed(state, task, delay_ms, repeating);
+}
+
+static void nts_uv_start_pending(void *state, int delta) {
+  nts_uv_require_owner("pending");
+  nts_uv_activate();
+  nts_uv_pending_change(state, delta);
+}
+
+static NtsHostPumpResult nts_uv_start_pump(void *state) {
+  nts_uv_require_owner("pump_one");
+  if (nts_uv_running) {
+    return NTS_HOST_PUMP_BUSY;
+  }
+  nts_uv_running = true;
+  bool ran = nts_uv_run_foreign();
+  nts_uv_running = false;
+  if (ran) {
+    return NTS_HOST_PUMP_TURN;
+  }
+  return nts_uv_active ? nts_uv_pump_one(state) : NTS_HOST_PUMP_IDLE;
+}
+
+static const NtsHost nts_uv_host = {
+    .post_task = nts_uv_post_task,
+    .post_delayed = nts_uv_post_delayed,
+    .cancel_delayed = nts_uv_cancel_delayed,
+    .post_from_any_thread = nts_uv_post_from_any_thread,
+    .is_owner_thread = nts_uv_is_owner,
+    .enqueue_microtask = 0,
+    .pump_one = nts_uv_pump_one,
+    .pending = nts_uv_pending_change,
+    .state = 0,
+};
+
+static void nts_uv_activate(void) {
+  uv_mutex_lock(&nts_uv_foreign_lock);
+  if (!nts_uv_loop) {
+    nts_uv_loop = uv_default_loop();
+    if (!nts_uv_loop) {
+      nts_uv_fail("could not create the default loop");
+    }
+  }
+  if (uv_idle_init(nts_uv_loop, &nts_uv_idle) != 0) {
+    nts_uv_fail("could not create the task handle");
+  }
+  if (uv_async_init(nts_uv_loop, &nts_uv_async, nts_uv_drain_foreign) != 0) {
+    nts_uv_fail("could not create the cross-thread handle");
+  }
+  /* The unreferenced wakeup does not keep a program alive by itself. Pending
+   * operations reference it before starting a worker that will complete. */
+  uv_unref((uv_handle_t *)&nts_uv_async);
+  nts_uv_active = true;
+  uv_mutex_unlock(&nts_uv_foreign_lock);
+  nts_host_activate(&nts_uv_host);
+}
+
 void nts_uv_host_install(uv_loop_t *loop) {
   if (nts_uv_installed) {
     nts_uv_fail("installed twice");
@@ -390,37 +468,21 @@ void nts_uv_host_install(uv_loop_t *loop) {
   nts_uv_owner = uv_thread_self();
   nts_uv_dropped = 0;
   nts_uv_pending = 0;
+  nts_uv_active = false;
 
   if (uv_mutex_init(&nts_uv_foreign_lock) != 0) {
     nts_uv_fail("could not create the foreign-post lock");
   }
-  if (uv_idle_init(loop, &nts_uv_idle) != 0) {
-    nts_uv_fail("could not create the task handle");
-  }
-  if (uv_async_init(loop, &nts_uv_async, nts_uv_drain_foreign) != 0) {
-    nts_uv_fail("could not create the cross-thread handle");
-  }
-  /* Unreferenced: an async handle is always active, so a referenced one
-   * would keep `uv_run` alive forever and a program with nothing left to do
-   * would never exit. It still wakes the loop when something is sent. */
-  uv_unref((uv_handle_t *)&nts_uv_async);
-
-  static const NtsHost host = {
-      .post_task = nts_uv_post_task,
-      .post_delayed = nts_uv_post_delayed,
-      .cancel_delayed = nts_uv_cancel_delayed,
-      .post_from_any_thread = nts_uv_post_from_any_thread,
-      .is_owner_thread = nts_uv_is_owner,
-      /* Null: this host does not own checkpointing, so the runtime's two
-       * queues and its drain are the ones that run. Only a Blink renderer
-       * supplies one. */
-      .enqueue_microtask = 0,
-      .pump_one = nts_uv_pump_one,
-      .pending = nts_uv_pending_change,
-      .state = 0,
-  };
+  NtsHost host = nts_uv_host;
+  host.post_task = nts_uv_start_task;
+  host.post_delayed = nts_uv_start_delayed;
+  host.pump_one = nts_uv_start_pump;
+  host.pending = nts_uv_start_pending;
   nts_host_install(&host);
   nts_uv_installed = true;
+  if (loop) {
+    nts_uv_activate();
+  }
 }
 
 int nts_uv_host_run(void) {
@@ -430,7 +492,7 @@ int nts_uv_host_run(void) {
   }
   nts_uv_running = true;
   (void)nts_uv_run_foreign();
-  int alive = uv_run(nts_uv_loop, UV_RUN_DEFAULT);
+  int alive = nts_uv_active ? uv_run(nts_uv_loop, UV_RUN_DEFAULT) : 0;
   nts_uv_running = false;
   return alive;
 }
@@ -459,6 +521,9 @@ static void nts_uv_turn(void) {
 
 int nts_uv_host_backend_fd(void) {
   nts_uv_require_owner("backend_fd");
+  if (!nts_uv_active) {
+    nts_uv_activate();
+  }
   /* Asked by a foreign loop about to watch it: registered now, so a post
    * made before that loop's first pump is one it sees. */
   if (!nts_uv_running) {
@@ -471,6 +536,9 @@ int nts_uv_host_backend_fd(void) {
 
 int nts_uv_host_backend_timeout(void) {
   nts_uv_require_owner("backend_timeout");
+  if (!nts_uv_active) {
+    nts_uv_activate();
+  }
   /* The loop's cached "now" is from its last iteration, and the timeout is
    * measured from it; without the update a foreign loop that ran for a while
    * would be told to sleep for time that has already passed. */
@@ -489,6 +557,9 @@ int nts_uv_host_backend_timeout(void) {
 
 uv_loop_t *nts_uv_host_loop(void) {
   nts_uv_require_owner("loop");
+  if (!nts_uv_active) {
+    nts_uv_activate();
+  }
   return nts_uv_loop;
 }
 
@@ -504,7 +575,9 @@ void nts_uv_host_pump(void) {
   }
   nts_uv_running = true;
   (void)nts_uv_run_foreign();
-  nts_uv_turn();
+  if (nts_uv_active) {
+    nts_uv_turn();
+  }
   nts_uv_running = false;
 }
 
@@ -542,10 +615,12 @@ void nts_uv_host_shutdown(void) {
   }
   nts_uv_require_owner("shutdown");
 
-  uv_idle_stop(&nts_uv_idle);
-  uv_close((uv_handle_t *)&nts_uv_idle, 0);
-  uv_close((uv_handle_t *)&nts_uv_async, 0);
-  nts_uv_close_timers();
+  if (nts_uv_active) {
+    uv_idle_stop(&nts_uv_idle);
+    uv_close((uv_handle_t *)&nts_uv_idle, 0);
+    uv_close((uv_handle_t *)&nts_uv_async, 0);
+    nts_uv_close_timers();
+  }
 
   nts_uv_queue_drop(&nts_uv_tasks);
   uv_mutex_lock(&nts_uv_foreign_lock);
@@ -553,8 +628,10 @@ void nts_uv_host_shutdown(void) {
   uv_mutex_unlock(&nts_uv_foreign_lock);
 
   /* Let the close callbacks run, which is what frees the timers. */
-  uv_run(nts_uv_loop, UV_RUN_NOWAIT);
-  uv_run(nts_uv_loop, UV_RUN_NOWAIT);
+  if (nts_uv_active) {
+    uv_run(nts_uv_loop, UV_RUN_NOWAIT);
+    uv_run(nts_uv_loop, UV_RUN_NOWAIT);
+  }
 
   uv_mutex_destroy(&nts_uv_foreign_lock);
   free(nts_uv_slots);

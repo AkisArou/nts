@@ -2208,3 +2208,25 @@ fn a_standalone_program_runs_its_loop_and_exits() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+fn only_the_standalone_libuv_host_defers_its_default_loop() {
+    for host in [
+        nts_codegen_c::LoopHost::Libuv,
+        nts_codegen_c::LoopHost::Glib,
+        nts_codegen_c::LoopHost::CoreFoundation,
+        nts_codegen_c::LoopHost::Win32,
+    ] {
+        let main = nts_codegen_c::main_for(nts_codegen_c::MainShape {
+            initializes: true,
+            host,
+            autorelease_pool: false,
+        });
+        let install = if host == nts_codegen_c::LoopHost::Libuv {
+            "nts_uv_host_install(NULL);"
+        } else {
+            "nts_uv_host_install(uv_default_loop());"
+        };
+        assert!(main.contains(install), "{host:?}: {main}");
+    }
+}

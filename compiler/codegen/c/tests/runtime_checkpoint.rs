@@ -526,13 +526,17 @@ fn the_libuv_host_keeps_the_same_contract_as_the_deterministic_one() {
     }
     let report = run_suite_with(
         "uv_host",
-        &["-DNTS_PROVIDER_RC"],
+        &[
+            "-DNTS_PROVIDER_RC",
+            "-Duv_default_loop=nts_probe_default_loop",
+            "-Duv_mutex_lock=nts_probe_mutex_lock",
+        ],
         &["nts_uv_host.c"],
         &["-luv"],
     );
     assert!(
-        checks(&report) >= 13,
-        "expected at least 13 host checks, saw {}:\n{report}",
+        checks(&report) >= 30,
+        "expected at least 30 host checks, saw {}:\n{report}",
         checks(&report)
     );
 }

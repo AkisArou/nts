@@ -11,9 +11,42 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "nts_uv_host.h"
+
+/* The harness substitutes only these two libuv entries. The production host
+ * remains a separate translation unit. Count the avoided default-loop call,
+ * and force a foreign post to attempt the lock while activation holds it. */
+#if defined(uv_default_loop) && defined(uv_mutex_lock)
+#undef uv_default_loop
+#undef uv_mutex_lock
+uv_loop_t *uv_default_loop(void);
+void uv_mutex_lock(uv_mutex_t *mutex);
+static unsigned default_loop_requests;
+static bool force_activation_race;
+static uv_thread_t activation_owner;
+static uv_sem_t activation_entered;
+static uv_sem_t foreign_attempted;
+
+uv_loop_t *nts_probe_default_loop(void) {
+  default_loop_requests++;
+  if (force_activation_race) {
+    uv_sem_post(&activation_entered);
+    uv_sem_wait(&foreign_attempted);
+  }
+  return uv_default_loop();
+}
+
+void nts_probe_mutex_lock(uv_mutex_t *mutex) {
+  uv_thread_t self = uv_thread_self();
+  if (force_activation_race && !uv_thread_equal(&activation_owner, &self)) {
+    uv_sem_post(&foreign_attempted);
+  }
+  uv_mutex_lock(mutex);
+}
+#endif
 
 static char trace[512];
 static int failures;
@@ -298,7 +331,228 @@ static void a_fractional_delay_truncates(void) {
   finish();
 }
 
-int main(void) {
+#if !defined(NTS_HOST_COUNT_ONLY)
+static void check(const char *what, bool agrees) {
+  if (!agrees) {
+    printf("FAIL %s\n", what);
+    failures++;
+  } else {
+    printf("ok   %s\n", what);
+  }
+}
+
+#if defined(__linux__)
+/* The same descriptor census before and after also detects creating the
+ * backend and leaving it open. It does not itself ask libuv for a loop. */
+#include <dirent.h>
+static unsigned descriptors(void) {
+  DIR *directory = opendir("/proc/self/fd");
+  if (!directory) {
+    abort();
+  }
+  unsigned count = 0;
+  while (readdir(directory)) {
+    count++;
+  }
+  closedir(directory);
+  return count;
+}
+#endif
+
+static void an_unused_default_host_never_creates_a_loop(void) {
+#if defined(__linux__)
+  unsigned before = descriptors();
+#endif
+  nts_uv_host_install(NULL);
+  check("an unused default host returns without work", nts_uv_host_run() == 0);
+  nts_uv_host_pump();
+  nts_cancel_delayed(0);
+  nts_uv_host_shutdown();
+#if defined(__linux__)
+  check("an unused default host creates no descriptors",
+        descriptors() == before);
+#endif
+  check("an unused default host never asks for the loop",
+        default_loop_requests == 0);
+}
+
+static void a_lazy_task_activates_once_and_keeps_checkpoints(void) {
+  trace[0] = '\0';
+  unsigned before = default_loop_requests;
+  nts_uv_host_install(NULL);
+  nts_post_task((NtsTask){task_then_microtask, 0, (void *)"first"});
+  nts_post_task(reaction("second"));
+  nts_uv_host_run();
+  expect("lazy tasks keep the checkpoint order", "first -> micro -> second");
+  check("lazy tasks activate the default loop once",
+        default_loop_requests == before + 1);
+  nts_uv_host_shutdown();
+  check("lazy task handles all close", uv_loop_close(uv_default_loop()) == 0);
+}
+
+static void a_lazy_timer_activates_once(void) {
+  trace[0] = '\0';
+  unsigned before = default_loop_requests;
+  nts_uv_host_install(NULL);
+  nts_post_delayed(reaction("timer"), 0, false);
+  nts_uv_host_run();
+  expect("a lazy timer fires", "timer");
+  check("a timer activates once", default_loop_requests == before + 1);
+  nts_uv_host_shutdown();
+  check("lazy timer handles all close", uv_loop_close(uv_default_loop()) == 0);
+}
+
+static void a_foreign_post_before_activation_runs_without_a_loop(void) {
+  trace[0] = '\0';
+  unsigned before = default_loop_requests;
+  nts_uv_host_install(NULL);
+  owner_thread = uv_thread_self();
+  foreign_ran_on_owner = false;
+  uv_thread_t worker;
+  uv_thread_create(&worker, foreign_thread, 0);
+  uv_thread_join(&worker);
+  nts_uv_host_run();
+  expect("a preactivation foreign post runs exactly once", "foreign");
+  check("a preactivation foreign post runs on the owner", foreign_ran_on_owner);
+  check("a foreign post alone needs no backend",
+        default_loop_requests == before);
+  nts_uv_host_shutdown();
+}
+
+static void racing_foreign_thread(void *state) {
+  (void)state;
+  uv_sem_wait(&activation_entered);
+  foreign_thread(NULL);
+}
+
+static void foreign_posts_race_activation_without_loss_or_duplication(void) {
+  unsigned before = default_loop_requests;
+  bool agrees = true;
+  for (unsigned round = 0; round < 200; round++) {
+    trace[0] = '\0';
+    owner_thread = activation_owner = uv_thread_self();
+    foreign_ran_on_owner = false;
+    uv_sem_init(&activation_entered, 0);
+    uv_sem_init(&foreign_attempted, 0);
+    force_activation_race = true;
+    nts_uv_host_install(NULL);
+    uv_thread_t worker;
+    uv_thread_create(&worker, racing_foreign_thread, NULL);
+    /* The default-loop wrapper waits for the foreign thread to enter its
+     * post while the owner holds the activation lock. */
+    nts_post_task(reaction("task"));
+    uv_thread_join(&worker);
+    force_activation_race = false;
+    nts_uv_host_run();
+    agrees =
+        agrees && strcmp(trace, "foreign -> task") == 0 && foreign_ran_on_owner;
+    nts_uv_host_shutdown();
+    agrees = agrees && uv_loop_close(uv_default_loop()) == 0;
+    uv_sem_destroy(&activation_entered);
+    uv_sem_destroy(&foreign_attempted);
+  }
+  check("200 forced activation/post interleavings run each task once", agrees);
+  check("each racing host activates exactly once",
+        default_loop_requests == before + 200);
+}
+
+static unsigned transitioned_tasks;
+static unsigned preserved_foreign;
+static unsigned preserved_microtasks;
+static unsigned owner_checks;
+static int transition_state;
+
+static bool transition_owner(void *state) {
+  owner_checks++;
+  return state == &transition_state;
+}
+static void transition_post(void *state, NtsTask task) {
+  if (state == &transition_state) {
+    transitioned_tasks++;
+  }
+  nts_task_run(task);
+}
+static void transition_foreign(void *state, NtsTask task) {
+  (void)task;
+  if (state == &transition_state) {
+    preserved_foreign++;
+  }
+}
+static void transition_microtask(void *state, NtsTask task) {
+  (void)task;
+  if (state == &transition_state) {
+    preserved_microtasks++;
+  }
+}
+
+static void activation_keeps_the_foreign_contract_immutable(void) {
+  NtsHost host = {.post_from_any_thread = transition_foreign,
+                  .is_owner_thread = transition_owner,
+                  .enqueue_microtask = transition_microtask,
+                  .state = &transition_state};
+  nts_host_install(&host);
+  /* All immutable fields intentionally differ from the installed host. An
+   * accidental full-vtable replacement fails this control. */
+  NtsHost active = {.post_task = transition_post};
+  nts_host_activate(&active);
+  trace[0] = '\0';
+  nts_post_task(reaction("active"));
+  nts_post_from_any_thread(reaction("unused"));
+  nts_enqueue_microtask(reaction("unused"));
+  expect("activation replaces the owner task entry", "active");
+  check("activation asserts and preserves owner identity", owner_checks >= 2);
+  check("activation preserves state and foreign entry", preserved_foreign == 1);
+  check("activation preserves checkpoint policy", preserved_microtasks == 1);
+}
+#endif
+
+/* A fixed-work count entry in the same harness. Count N minus count 0 to
+ * exclude install/shutdown. Each iteration posts a task, schedules and fires
+ * a timer, begins pending work and delivers its completion through the
+ * foreign-post seam. Actual foreign-thread ordering is forced above. */
+static unsigned counted_callbacks;
+static void count_callback(void *state) {
+  (void)state;
+  counted_callbacks++;
+}
+static void count_completion(void *state) {
+  count_callback(state);
+  nts_pending_end();
+}
+static int count_work(unsigned count, bool lazy) {
+  if (!lazy) {
+    uv_loop_init(&loop);
+  }
+  nts_uv_host_install(lazy ? NULL : &loop);
+  for (unsigned i = 0; i < count; i++) {
+    nts_post_task((NtsTask){count_callback, 0, 0});
+    nts_post_delayed((NtsTask){count_callback, 0, 0}, 0, false);
+    nts_pending_begin();
+    nts_post_from_any_thread((NtsTask){count_completion, 0, 0});
+    nts_uv_host_run();
+  }
+  nts_uv_host_shutdown();
+  int closed = lazy ? (count ? uv_loop_close(uv_default_loop()) : 0)
+                    : uv_loop_close(&loop);
+  printf("counted %u callbacks\n", counted_callbacks);
+  return closed != 0 || counted_callbacks != count * 3;
+}
+
+int main(int argc, char **argv) {
+  if (argc == 3 && strcmp(argv[1], "--count") == 0) {
+    return count_work((unsigned)strtoul(argv[2], NULL, 10), false);
+  }
+  if (argc == 3 && strcmp(argv[1], "--activate") == 0) {
+    return count_work((unsigned)strtoul(argv[2], NULL, 10), true);
+  }
+#if !defined(NTS_HOST_COUNT_ONLY)
+  an_unused_default_host_never_creates_a_loop();
+  a_lazy_task_activates_once_and_keeps_checkpoints();
+  a_lazy_timer_activates_once();
+  a_foreign_post_before_activation_runs_without_a_loop();
+  foreign_posts_race_activation_without_loss_or_duplication();
+  activation_keeps_the_foreign_contract_immutable();
+#endif
   a_microtask_runs_before_the_next_task();
   a_fractional_delay_truncates();
   an_id_this_host_never_issued_is_a_no_op();

@@ -11538,6 +11538,21 @@ static void nts_require_host(const char *what) {
   }
 }
 
+void nts_host_activate(const NtsHost *host) {
+  nts_require_host("host activation");
+  if (!nts_env->host.is_owner_thread ||
+      !nts_env->host.is_owner_thread(nts_env->host.state)) {
+    fprintf(stderr,
+            "nts: host activation from a thread that does not own it\n");
+    abort();
+  }
+  nts_env->host.post_task = host->post_task;
+  nts_env->host.post_delayed = host->post_delayed;
+  nts_env->host.cancel_delayed = host->cancel_delayed;
+  nts_env->host.pump_one = host->pump_one;
+  nts_env->host.pending = host->pending;
+}
+
 /* A growable ring of tasks.
  *
  * A ring rather than a list because the drain is FIFO and the whole point is

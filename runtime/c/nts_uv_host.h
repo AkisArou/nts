@@ -42,7 +42,10 @@
 /* Install the host on `loop`, and take the calling thread as the owner.
  *
  * `loop` outlives the host and is not owned by it: an embedder with its own
- * loop passes that one, and the standalone runner passes `uv_default_loop`.
+ * loop passes that one. With NULL, the standalone libuv runner defers the
+ * default loop and its handles until work needs them. Explicit loops remain
+ * eager, including the platform adapters. A foreign post before activation
+ * stays queued and runs on the owner when it next pumps or runs the host.
  */
 void nts_uv_host_install(uv_loop_t *loop);
 
