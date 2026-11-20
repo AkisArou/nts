@@ -21,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 
 import {CgroupObservations,CgroupDeparted,HostObservationError,type CgroupFiles} from '../gate/host-observations.ts';
+import {workerPresenceFile,writeWorkerPresence} from '../landing/pool-presence.ts';
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const DAY = 86_400_000;
@@ -101,6 +102,7 @@ function cacheFixture(t: TestContext): string {
   folder("nts/outcomes/12345", 9);
   folder(`nts-pins/${OTHER.slice(0, 12)}`);
   folder("nts-pool/scratch");
+  writeWorkerPresence(join(cache,'nts-pool/1'),'compiler/a-task','attached',NOW);
   folder("nts-gate/tree");
   folder("nts/snapshots");
   folder("nts-tsrs2-review-r1");
@@ -246,6 +248,25 @@ test("a machine within the rules is green; one the count could not read is not",
     "not counted: GitHub's open pull requests (gh: not logged in), so no branch is named by one",
     "not counted: GitHub's open issues (gh: not logged in), so no branch is named by one",
   ]);
+});
+
+test('the count names corrupt and future worker records, and leaves the normal missing default quiet',t=>{
+  const cache=cacheFixture(t),tree=join(cache,'nts-pool/1'),file=workerPresenceFile(tree);
+  for(const body of [null,'{broken',JSON.stringify({version:99})]){
+    if(body===null)rmSync(file);else writeFileSync(file,body);
+    const result=count(input(t,{cache}),KEEP);
+    assert.equal(result.red.some(line=>line.includes(file)&&line.includes('kept as attached')),body!==null,result.red.join('\n'));
+    if(body===null)assert.equal(existsSync(file),false);else assert.equal(readFileSync(file,'utf8'),body);
+  }
+});
+
+test('presence diagnostics follow canonical pool membership through a cache alias',t=>{
+  const cache=cacheFixture(t),tree=join(cache,'nts-pool/1'),file=workerPresenceFile(tree),alias=cache+'-alias';
+  symlinkSync(cache,alias);t.after(()=>rmSync(alias));writeFileSync(file,'{broken');
+  for(const path of [tree,join(alias,'nts-pool/1')]){
+    const result=count(input(t,{cache:alias,worktrees:[{path,branch:'refs/heads/compiler/a-task'}]}),KEEP);
+    assert.ok(result.red.some(line=>line.includes(file)&&line.includes('kept as attached')),result.red.join('\n'));
+  }
 });
 
 test("a listed cache child that disappears before stat leaves the other count lines intact", t => {

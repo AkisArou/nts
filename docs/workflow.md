@@ -1089,10 +1089,35 @@ the tooling strict checker owns the source's type checking.
   an unbuilt idle checkout is removed through Git.
   Agents do not make worktrees of their own. The shared checkout
   `~/Projects/nts` stays on `main`.
+  A held task's worker presence is explicit: `pool.ts detach <branch>` marks
+  it without giving back its checkout; `pool.ts attach <branch>` and taking
+  an already-held branch attach it again. Agent hosts call detach after their
+  worker ends or parks, and attach before recovery/resume; a host that only
+  reads status must attach separately. Hosts without these hooks leave trees
+  attached. Detach refuses live process, unit, resource-lock or disk-claim
+  owners by name. The pool writes a versioned, atomic, branch- and worktree-bound
+  `<slot>.worker.json` beside the tree's lease. Missing state is the normal
+  attached default, with no diagnostic. Corrupt, mismatched or unknown-version
+  state protects it as attached with a named diagnostic; the hourly count
+  reports that diagnostic. `status --json` version 2 reports
+  attached, detached or unknown presence without changing it. The task's Git
+  branch and checkout remain held in either worker state. Ending the hold by
+  reset or checkout removal also removes its presence record; a future-version
+  record refuses either mutation.
 - **One disk capacity owner.** `tooling/gate/disk-capacity.ts` keeps the
   temporary hard floor free beside active build promises. A free checkout
-  promises nothing. Taking a cold tree checks and creates its Git lease under
-  the capacity lock; landing or giving it back ends that promise. The forecast
+  promises nothing. An attached held tree promises its remaining cold build;
+  a detached worker promises none. Taking a cold tree checks and creates its
+  Git lease under the capacity lock; worker detachment, landing or giving it
+  back ends that promise. Resuming a detached or landed tree admits any cold
+  or partial remainder under the same lock and capacity equation as a new take,
+  protecting that target during pressure reclamation. A refusal exits 75 and
+  leaves its presence and hold unchanged for retry. Taking or attaching an
+  already-counted lease is idempotent, with no new admission or publication,
+  even under disk pressure or while its tree resource is in use. Complete
+  output adds no promise. A resumed
+  task or explicit build rebuilds missing output through normal build admission.
+  The forecast
   comes from `results/builds/cold-inner.json`, recorded by
   `tooling/gate/build-footprint.ts`: the independently sampled peaks of
   `target/nts-dev` and `target/clippy`, summed and rounded once. Allocated bytes
@@ -1134,9 +1159,14 @@ the tooling strict checker owns the source's type checking.
   delete. Below the floor plus live promises and one measured cold build, it
   removes in cost order until another cold build of headroom is free: obsolete
   whole profile generations, clean unbuilt pool checkouts, then free pool build
-  output while keeping two warm targets. The landing and full-check trees offer
+  output while keeping two warm targets, then held trees' Cargo `target/`
+  whose workers are explicitly detached, oldest detachment first. This last
+  kind runs only under pressure, never from elapsed idleness. It preserves
+  branches, commits and uncommitted work outside `target/`, and requires Cargo
+  cache identity, recognized build contents and no tracked target files.
+  The landing and full-check trees offer
   only obsolete generations, never their current build output. Unknown or corrupt
-  generation markers keep the candidate. A checkout must be detached, clean,
+  generation markers keep the candidate. A removed checkout must be Git-detached, clean,
   registered and have no unpublished commits; ignored local data also keeps it.
   Git removes checkouts, preserving its worktree registry.
   Each removal rechecks physical root identity, the resource lock, leases, build
@@ -1146,8 +1176,13 @@ the tooling strict checker owns the source's type checking.
   always count. A non-dumpable process with a readable cgroup outside every nts
   or agent unit is excluded with its PID, birth and cgroup in the audit facts;
   unreadable nts processes and unreadable cgroups keep the root by name.
+  Held-output removal rereads its branch registration, worker presence and
+  live claims beside the final ownership and identity checks under both pool
+  and tree locks. A detached record cannot override a live owner, including
+  ledger jobs' processes, units, working directories, executables or open files.
   Old-boot claims and locks confer no ownership. One JSON line in the pool's
-  `.disk-reclaim.log` names each removal, its allocated footprint, observed free
+  `.disk-reclaim.log` names each removal, its tree and task for held output,
+  allocated footprint, observed free
   space change and checked ownership facts. These byte measures have separate
   meanings when other jobs or filesystem sharing affect free space. Scratch,
   evidence, shared corpora and unknown cache roots have no deletion grant.

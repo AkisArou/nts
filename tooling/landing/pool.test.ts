@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, pruneLines, reportPoolStatus, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
 import {treeUsers} from "./tree-users.ts";
@@ -21,7 +21,11 @@ import {generatedJavaScript} from '../gate/generated-javascript.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {lockChild,replaceOnce,LOCK_BARRIER} from './lock-fixture.ts';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {workerPresence,workerPresenceFile} from './pool-presence.ts';
+import {GateResource} from '../gate/gate-resource.ts';
+import {cargoSync} from '../gate/cargo.ts';
+import {spawnTest} from '../gate/test-wait.ts';
 
 const GB = 2 ** 30, DAY = 86_400_000;
 /** The tests' "now": git's clock and every idle time are read against it, never the machine's. */
@@ -97,6 +101,217 @@ test("a free tree with a warm target is taken before a cold one", t => {
   for(const name of ['nts-dev','clippy'] as const){const output=join(p.dir,'3','target',name);mkdirSync(output,{recursive:true});completeBuild(join(p.dir,'3'),name,output);}
   assert.equal(p.take("fix/a").name, "3");
   assert.equal(p.take("fix/b").name, "1");
+});
+
+test('attach, detach and take own worker presence while status stays read-only',t=>{
+  const {p}=pool(t,1),tree=p.take('884'),file=workerPresenceFile(tree.path);
+  assert.equal(workerPresence(tree.path,'884').state,'attached');assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
+  p.detach('884');const bytes=readFileSync(file,'utf8');
+  assert.equal(p.room().reservedBytes,0);assert.equal(p.capacity.activeLeases().length,0);
+  const trees=p.measured(p.statusTrees()),status=statusJson(p.dir,trees,p.room(trees),NOW);
+  assert.equal(status.version,2);assert.equal(status.trees[0]!.worker_presence,'detached');
+  assert.equal(readFileSync(file,'utf8'),bytes,'status never attaches a worker');
+  p.attach('884');assert.equal(workerPresence(tree.path,'884').state,'attached');
+  p.detach('884');assert.equal(p.take('884').path,tree.path);assert.equal(workerPresence(tree.path,'884').state,'attached');
+  assert.equal(p.capacity.activeLeases().length,1);
+  assert.throws(()=>p.detach('absent'),/no pool tree holds/);
+  for(const body of [null,'{broken',JSON.stringify({version:99})]){
+    if(body===null)rmSync(file);else writeFileSync(file,body);
+    assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
+    const status=statusJson(p.dir,p.measured(p.statusTrees()),p.room(),NOW);
+    assert.equal(status.trees[0]!.worker_presence,body===null?'attached':'unknown');
+    if(body===null){assert.equal(status.trees[0]!.presence_diagnostic,null);assert.equal(existsSync(file),false);}
+    else{assert.match(status.trees[0]!.presence_diagnostic!,/worker.json/);assert.equal(readFileSync(file,'utf8'),body);}
+  }
+  assert.throws(()=>p.attach('884'),/unsupported future state version/);
+});
+
+test('the CLI attach/detach verbs and take --issue preserve the branch and status v2 bytes',t=>{
+  const {p,s,observe}=pool(t,1),tree=p.take('884');
+  const env={...s.env,...observe({freeBytes:1000*GB,freeInodes:1000})};
+  const cli=(...args:string[])=>{
+    const result=spawnTest(process.execPath,[fileURLToPath(new URL('./pool.ts',import.meta.url)),...args,'--pool',p.dir],{cwd:s.root,env,encoding:'utf8'});
+    assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;
+  };
+  assert.match(cli('detach','884'),/task 884: detached/);
+  const before=readFileSync(workerPresenceFile(tree.path),'utf8');
+  const status=JSON.parse(cli('status','--json'));assert.equal(status.version,2);assert.equal(status.trees[0].worker_presence,'detached');
+  assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),before);
+  assert.match(cli('attach','884'),/task 884: attached/);
+  cli('detach','884');cli('take','--issue','884');
+  assert.equal(workerPresence(tree.path,'884').state,'attached');assert.equal(s.git(['branch','--show-current'],tree.path),'884');
+});
+
+for(const action of ['take','attach'] as const)test('reattachment cannot spend another cold task promise: '+action,t=>{
+  const {p,observe}=pool(t,2),tree=p.take('884'),target=join(tree.path,'target');
+  mkdirSync(target);writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
+  for(const name of ['nts-dev','clippy'] as const){const output=join(target,name);mkdirSync(output);completeBuild(tree.path,name,output);}
+  p.detach('884');observe({freeBytes:44*GB,freeInodes:1000});
+  assert.ok(p.capacity.reclaim(p.dir)!.removed.some(row=>row.kind==='detached-build-output'));
+  assert.equal(existsSync(target),false);
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});
+  const other=p.take('885'),record=readFileSync(workerPresenceFile(tree.path),'utf8');
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,0,'the one available cold promise belongs to B');
+  assert.throws(()=>p[action]('884'),error=>error instanceof PoolFull);
+  assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),record,'refusal leaves A detached');
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,0,'A cannot overcommit B\'s admitted promise');
+  const release=p.capacity.beginBuild({root:other.path,target:join(other.path,'target')});release();
+  observe({freeBytes:DISK_MARGIN_BYTES+2*COLD_TARGET_BYTES,freeInodes:1000});
+  assert.equal(p[action]('884').presence!.state,'attached','capacity returning permits a retry');
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
+});
+
+for(const action of ['take','attach'] as const)for(const output of ['cold','partial'] as const)test('an already-counted lease stays accessible under pressure: '+action+' '+output,t=>{
+  const {p,s,observe}=pool(t,1),tree=p.take('884');
+  if(output==='partial'){
+    const profile=join(tree.path,'target/nts-dev');mkdirSync(profile,{recursive:true});completeBuild(tree.path,'nts-dev',profile);
+  }
+  writeFileSync(join(tree.path,'notes.txt'),'uncommitted task work');
+  const promised=p.capacity.snapshot(p.dir).reservedBytes;assert.ok(promised>0);
+  observe({freeBytes:DISK_MARGIN_BYTES+promised-1,freeInodes:1000});
+  const record=readFileSync(workerPresenceFile(tree.path),'utf8'),inode=lstatSync(workerPresenceFile(tree.path)).ino,changes=s.git(['status','--porcelain'],tree.path);
+  const resumed=p[action]('884');
+  assert.equal(resumed.path,tree.path);assert.equal(resumed.head,tree.head);assert.equal(resumed.presence!.state,'attached');
+  assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),record);
+  assert.equal(lstatSync(workerPresenceFile(tree.path)).ino,inode,'idempotent access publishes no replacement record');
+  assert.equal(s.git(['status','--porcelain'],tree.path),changes);
+  assert.equal(p.capacity.snapshot(p.dir).reservedBytes,promised,'the existing promise stays counted exactly once');
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,-1,'the idempotent operation neither spends nor frees capacity');
+});
+
+test('an already-counted lease stays accessible while its resource is in use',t=>{
+  const {p}=pool(t,1),tree=p.take('884'),file=workerPresenceFile(tree.path),record=readFileSync(file,'utf8');
+  const lock=GateResource.tryAcquire(tree.path+'.lock');assert.ok(lock);
+  try{
+    assert.equal(p.take('884').path,tree.path);assert.equal(p.attach('884').path,tree.path);
+    assert.equal(readFileSync(file,'utf8'),record);
+  }finally{lock.close();}
+});
+
+test('a landed hold still needs admission when taken again',t=>{
+  let busy=false;
+  const {p,observe}=pool(t,2,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]});
+  const tree=p.take('884');busy=true;assert.equal(p.release('884',tree.head).state,'kept');busy=false;
+  assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'landed');
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});p.take('885');
+  const record=readFileSync(workerPresenceFile(tree.path),'utf8');
+  assert.throws(()=>p.take('884'),PoolFull);
+  assert.equal(p.trees().find(row=>row.path===tree.path)!.state,'landed');
+  assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),record);
+  assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
+  observe({freeBytes:DISK_MARGIN_BYTES+2*COLD_TARGET_BYTES,freeInodes:1000});
+  assert.equal(p.take('884').state,'held');assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
+});
+
+test('reattachment admits only the partial promise and leaves complete output alone under pressure',t=>{
+  const {p,observe}=pool(t,1),tree=p.take('884'),target=join(tree.path,'target');
+  mkdirSync(target);writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
+  for(const name of ['nts-dev','clippy'] as const){const output=join(target,name);mkdirSync(output);completeBuild(tree.path,name,output);}
+  p.detach('884');observe({freeBytes:DISK_MARGIN_BYTES-1,freeInodes:1000});
+  assert.equal(p.attach('884').presence!.state,'attached','completed output adds no promise even under pressure');
+  assert.ok(existsSync(join(target,'nts-dev/.nts-complete.json')));
+  p.detach('884');rmSync(join(target,'clippy'),{recursive:true});
+  const needed=p.capacity.snapshot(p.dir,[{root:tree.path,target}]).reservedBytes;
+  assert.ok(needed>0&&needed<COLD_TARGET_BYTES);
+  observe({freeBytes:DISK_MARGIN_BYTES+needed-1,freeInodes:1000});
+  const record=readFileSync(workerPresenceFile(tree.path),'utf8');
+  assert.throws(()=>p.attach('884'),PoolFull);
+  assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),record);
+  assert.ok(existsSync(join(target,'nts-dev/.nts-complete.json')),'the requested partial target is protected during reclaim');
+  observe({freeBytes:DISK_MARGIN_BYTES+needed,freeInodes:1000});
+  p.attach('884');assert.equal(p.capacity.snapshot(p.dir).reservedBytes,needed);
+});
+
+test('another builder consuming its admitted bytes cannot fund a reattachment',t=>{
+  const {p,observe}=pool(t,2),a=p.take('884'),b=p.take('885');p.detach('884');
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});
+  const original=p.capacity.poolSnapshot.bind(p.capacity);let completed=false;
+  p.capacity.poolSnapshot=(path,leases)=>{
+    const snapshot=original(path,leases);
+    if(!completed){
+      completed=true;
+      for(const name of ['nts-dev','clippy'] as const){const output=join(b.path,'target',name);mkdirSync(output,{recursive:true});completeBuild(b.path,name,output);}
+      observe({freeBytes:DISK_MARGIN_BYTES,freeInodes:1000});
+    }
+    return snapshot;
+  };
+  const record=readFileSync(workerPresenceFile(a.path),'utf8');
+  assert.throws(()=>p.attach('884'),PoolFull);assert.ok(completed);
+  assert.equal(readFileSync(workerPresenceFile(a.path),'utf8'),record);assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
+});
+
+test('reattachment reclaims other approved output before refusing the requested lease',t=>{
+  const f=pool(t,2),tree=f.p.take('884'),free=join(f.p.dir,'2'),debug=join(free,'target/debug');
+  f.p.detach('884');mkdirSync(debug,{recursive:true});
+  writeFileSync(join(free,'target/CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
+  const host={...f.p.capacity.host,disk:(path:string)=>({...f.p.capacity.host.disk(path),freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES-1+(existsSync(debug)?0:2*GB)})};
+  const p=new Pool(f.p.dir,f.p.git,()=>{},{host,users:()=>[],reclamation:{services:[],ownership:()=>{}}});
+  p.attach('884');assert.equal(workerPresence(tree.path,'884').state,'attached');assert.equal(existsSync(debug),false);
+  assert.ok(p.capacity.snapshot(p.dir).availableBytes>=0);
+});
+
+test('a held take recovers inputs after presence publication failed on a fresh take',t=>{
+  const {p,linked}=pool(t,1),tree=join(p.dir,'1'),file=workerPresenceFile(tree);
+  writeFileSync(file,JSON.stringify({version:99}));const before=linked.length;
+  assert.throws(()=>p.take('884'),/unsupported future state version/);
+  assert.equal(p.trees()[0]!.branch,'884');assert.equal(linked.length,before);
+  rmSync(file);p.take('884');assert.equal(linked.length,before+1);assert.equal(linked.at(-1),tree);
+});
+
+test('ending a hold removes presence on give, landing reset and landed upkeep',t=>{
+  let busy=false;
+  const {p}=pool(t,2,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]});
+  const first=p.take('884');p.detach('884');p.give('884');assert.equal(existsSync(workerPresenceFile(first.path)),false);
+  const second=p.take('885');p.release('885',second.head);assert.equal(existsSync(workerPresenceFile(second.path)),false);
+  const third=p.take('886');busy=true;assert.equal(p.release('886',third.head).state,'kept');
+  assert.ok(existsSync(workerPresenceFile(third.path)));busy=false;p.prune({now:NOW});
+  assert.equal(existsSync(workerPresenceFile(third.path)),false);
+});
+
+test('ending a hold refuses a future presence version before changing Git',t=>{
+  const {p,s}=pool(t,1),tree=p.take('884'),file=workerPresenceFile(tree.path),future=JSON.stringify({version:99});
+  writeFileSync(file,future);
+  assert.throws(()=>p.give('884'),/unsupported future state version/);
+  assert.throws(()=>p.release('884',tree.head),/unsupported future state version/);
+  assert.equal(s.git(['branch','--show-current'],tree.path),'884');assert.equal(readFileSync(file,'utf8'),future);
+});
+
+test('detach refuses live process, unit, claim and resource owners by name',async t=>{
+  const f=pool(t,1),tree=f.p.take('884');
+  const child=spawn('cat',[],{cwd:tree.path,env:f.s.env,stdio:['pipe','ignore','pipe']}),exited=once(child,'exit');
+  try{
+    await once(child,'spawn');
+    const owned=new Pool(f.p.dir,f.p.git,()=>{},{host:f.p.capacity.host,users:path=>treeUsers(path,{pids:[child.pid!]}),reclamation:{services:[],ownership:()=>{}}});
+    assert.throws(()=>owned.detach('884'),new RegExp('pid '+child.pid));
+    assert.equal(workerPresence(tree.path,'884').state,'attached');
+  }finally{child.stdin.end();await exited;}
+  const unit=new Pool(f.p.dir,f.p.git,()=>{},{host:f.p.capacity.host,users:()=>[],reclamation:{services:[],ownership:()=>{throw Error('unit branch-build.service owns WorkingDirectory');}}});
+  assert.throws(()=>unit.detach('884'),/branch-build.service/);
+  const release=f.p.capacity.beginBuild({root:tree.path,target:join(tree.path,'target')});
+  try{assert.throws(()=>f.p.detach('884'),/live build claim.*pid/);}finally{release();}
+  const lock=GateResource.tryAcquire(tree.path+'.lock');assert.ok(lock);
+  try{assert.throws(()=>f.p.detach('884'),/resource lock is held/);}finally{lock.close();}
+  f.p.detach('884');assert.equal(workerPresence(tree.path,'884').state,'detached');
+});
+
+test('a reclaimed task reattaches, rebuilds Cargo output and runs its committed branch test',t=>{
+  const {p,s,observe}=pool(t,1),tree=p.take('884');
+  const branchTest=generatedJavaScript(`import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {test} from 'node:test';import {fileURLToPath} from 'node:url';test('retained branch artifact',()=>assert.equal(execFileSync(fileURLToPath(new URL('./target/nts-dev/branch-fixture',import.meta.url)),{encoding:'utf8'}).trim(),'task 884'));`);
+  s.commit({'Cargo.toml':'[package]\nname="branch-fixture"\nversion="0.0.0"\nedition="2021"\n[profile.nts-dev]\ninherits="dev"\ndebug=0\n',
+    'src/main.rs':'fn main() { println!("task 884"); }\n','branch.test.mjs':branchTest},'branch build and test',tree.path);
+  const build=()=>{
+    const release=p.capacity.beginBuild({root:tree.path,target:join(tree.path,'target'),outputs:['nts-dev']});
+    try{const result=cargoSync(['build','--offline','--profile','nts-dev'],{cwd:tree.path,env:s.env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+    finally{release();}
+  };
+  build();assert.ok(existsSync(join(tree.path,'target/nts-dev/branch-fixture')));
+  p.detach('884');observe({freeBytes:44*GB,freeInodes:1000});
+  const report=p.capacity.reclaim(p.dir)!;assert.deepEqual(report.removed.map(row=>row.kind),['detached-build-output'],JSON.stringify(report));
+  assert.equal(existsSync(join(tree.path,'target')),false);
+  observe({freeBytes:100*GB,freeInodes:1000});
+  p.take('884');assert.equal(workerPresence(tree.path,'884').state,'attached');build();
+  const tested=spawnTest(process.execPath,['--test',join(tree.path,'branch.test.mjs')],{cwd:tree.path,env:s.env,encoding:'utf8'});
+  assert.equal(tested.status,0,tested.stdout+tested.stderr);assert.match(tested.stdout,/retained branch artifact/);
 });
 
 test("a branch checked out outside the pool is not taken", t => {
@@ -358,7 +573,7 @@ test("status shows each tree's state, task, idle time and target size, for a sch
   assert.match(text, / 1 {2}\S+ {2}task fix\/a, idle 0m, target 24\.0 GB/);
   assert.match(text, / 2 {2}\S+ {2}free, idle 0m, no target/);
   const json = statusJson(p.dir, trees, room, NOW);
-  assert.equal(json.version, 1);
+  assert.equal(json.version, 2);
   assert.equal(json.room.ok, true);
   assert.equal(json.room.tree_bytes, COLD_TARGET_BYTES, "whole-target size never sets the build forecast");
   assert.equal(json.room.unbuilt, 1);

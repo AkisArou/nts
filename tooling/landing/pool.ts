@@ -9,6 +9,7 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //   node tooling/landing/pool.ts status [--json]        each tree's state, task, idle time and target size
 //   node tooling/landing/pool.ts take <branch>          a tree on the task's branch at the newest main
 //   node tooling/landing/pool.ts take --issue <N> [--slug <words>]   the same, on issue N's branch (tooling/tasks/branch.ts)
+//   node tooling/landing/pool.ts attach <branch> | detach <branch>   worker presence; keep the task's checkout
 //   node tooling/landing/pool.ts give <branch|tree> [--discard]
 //                                                       give a tree back, detached at main and warm;
 //                                                       --discard drops the task: its uncommitted work
@@ -16,7 +17,7 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //   node tooling/landing/pool.ts init <n>               prewarm trees 1..n that are missing; never a cap
 //   node tooling/landing/pool.ts prune                  the hourly upkeep, by hand
 //
-// `take` and `init` exit 75 (EX_TEMPFAIL) when the machine cannot host another
+// `take`, `attach` and `init` exit 75 (EX_TEMPFAIL) when the machine cannot host another
 // tree, naming why: a scheduler waits for a tree to be given back, or for disk,
 // and asks again.
 //
@@ -44,6 +45,8 @@ import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from 
 import {completedBuild} from '../gate/build-completion.ts';
 import type {HostObservations} from '../gate/host-observations.ts';
 import type {ReclaimReport} from '../gate/disk-reclamation.ts';
+import {workerPresence,writeWorkerPresence,assertWorkerPresenceWritable,removeWorkerPresence,type WorkerPresence} from './pool-presence.ts';
+import {GateResource} from '../gate/gate-resource.ts';
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Where a held tree's branch is marked landed, at the commit that landed: refs/nts/landed/<branch>. */
@@ -67,6 +70,7 @@ export type PoolTree = {
   users: TreeUser[];
   /** Read-only status could not establish ownership. Never an idle verdict. */
   ownershipError?: string;
+  presence?:WorkerPresence;
 };
 /** A tree with its cargo target measured; null when it has none yet. */
 export type MeasuredTree = PoolTree & { targetBytes: number | null };
@@ -181,7 +185,7 @@ export class Pool {
         ownershipError=error instanceof Error?error.message:String(error);
       }
       return { name, path, state, branch: tree.branch, head: tree.head, changes, ahead: ahead ?? 0, behind: behind ?? 0, movedAt: this.movedAt(path),
-        users,...(ownershipError?{ownershipError}:{}) };
+        users,...(ownershipError?{ownershipError}:{}),...(tree.branch?{presence:workerPresence(path,tree.branch)}:{}) };
     });
   }
   /** Every tree, with its target measured. */
@@ -192,7 +196,25 @@ export class Pool {
     const snapshot=this.capacity.poolSnapshot(this.dir,this.leases(trees));
     return this.roomFor(snapshot.freeBytes,snapshot.reservedBytes,snapshot.leases.filter(lease=>lease.remainingBytes>0).length,this.capacity.forecast.bytes);
   }
-  private leases(trees:readonly PoolTree[]):BuildLease[]{return trees.filter(tree=>tree.state==='held').map(tree=>({root:tree.path,target:join(tree.path,'target')}));}
+  private leases(trees:readonly PoolTree[]):BuildLease[]{return trees.filter(tree=>tree.state==='held'&&workerPresence(tree.path,tree.branch!).state==='attached').map(tree=>({root:tree.path,target:join(tree.path,'target')}));}
+  /** Admission for a fresh hold or a newly restored cold/partial promise.
+   * Existing counted leases are handled idempotently by setPresence. */
+  private admitLease(path:string,resuming=false):void{
+    const pending={root:path,target:join(path,'target')};
+    const measure=()=>{
+      // Decide from one complete hypothetical snapshot. Another builder may
+      // consume its promise while snapshots are read; a difference of whole
+      // totals would mistake that progress for capacity belonging to this take.
+      const snapshot=this.capacity.poolSnapshot(this.dir,[...this.leases(this.trees()),pending]);
+      const bytes=snapshot.leases.find(lease=>lease.root===path)!.remainingBytes;
+      return this.roomFor(snapshot.freeBytes,snapshot.reservedBytes-bytes,
+        snapshot.leases.filter(lease=>lease.root!==path&&lease.remainingBytes>0).length,bytes);
+    };
+    if(resuming&&measure().treeBytes===0)return;
+    this.capacity.poolReclaim(this.dir,undefined,[pending]);
+    const room=measure();
+    if(!room.ok)throw new PoolFull(room);
+  }
   private roomFor(freeBytes:number,reservedBytes:number,unbuilt:number,treeBytes:number):Room {
     const floorBytes = treeBytes + DISK_MARGIN_BYTES;
     const ok = freeBytes - reservedBytes >= floorBytes;
@@ -240,25 +262,29 @@ export class Pool {
   take(branch: string): PoolTree {
     if (!taskBranch(branch)) throw new Error(`not a task branch: ${branch}`);
     return this.locked(() => {
-      this.capacity.poolReclaim(this.dir);
       const trees = this.trees();
       const mine = trees.find(t => t.branch === branch);
       // Asked for again, a landed task's tree is held: its task goes on there.
-      if (mine?.state === "landed") { this.forget(branch); return this.trees().find(t => t.name === mine.name)!; }
-      if (mine) return mine;
+      if (mine) {
+        this.setPresence(mine,'attached','resume');
+        if(mine.state==='landed')this.forget(branch);
+        this.inputs(mine.path);
+        return this.trees().find(t=>t.name===mine.name)!;
+      }
+      this.capacity.poolReclaim(this.dir);
+      // Reclamation may remove free unbuilt trees. Refresh before selection.
+      const available=this.trees();
       const elsewhere = worktrees(this.git).find(t => t.branch === branch);
       if (elsewhere) throw new Error(`${branch} is checked out in ${elsewhere.path}, outside the pool`);
       // A warm target saves the task a cold build.
-      let tree = trees.filter(t => t.state === "free").sort((a, b) => compatible(b) - compatible(a) || Number(a.name) - Number(b.name))[0]?.name;
+      let tree = available.filter(t => t.state === "free").sort((a, b) => compatible(b) - compatible(a) || Number(a.name) - Number(b.name))[0]?.name;
       if (!tree)tree=this.nextName();
       const path = join(this.dir, tree);
-      const leases=this.leases(trees),before=this.capacity.poolSnapshot(this.dir,leases);
-      const after=this.capacity.poolSnapshot(this.dir,[...leases,{root:path,target:join(path,'target')}]);
-      const room=this.roomFor(before.freeBytes,before.reservedBytes,before.leases.filter(lease=>lease.remainingBytes>0).length,after.reservedBytes-before.reservedBytes);
-      if(!room.ok)throw new PoolFull(room);
+      this.admitLease(path);
       if(!existsSync(path))this.grow(tree);
       const exists = run(this.git, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], this.git.root).status === 0;
       checked(this.git, exists ? ["switch", "-q", branch] : ["switch", "-q", "-c", branch, "refs/heads/main"], path);
+      this.setPresence(this.trees().find(t=>t.name===tree)!,'attached','fresh');
       this.inputs(path);
       return this.trees().find(t => t.name === tree)!;
     });
@@ -269,6 +295,36 @@ export class Pool {
     const tree = trees.find(t => t.name === asked || t.path === resolve(asked) || t.branch === asked);
     if (!tree) throw new Error(`no pool tree is ${asked}: ${trees.map(t => `${t.name} ${t.branch ?? t.state}`).join(", ")}`);
     return tree;
+  }
+
+  private setPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh'|'resume'='existing'):void{
+    if(!tree.branch||tree.state!=='held'&&tree.state!=='landed')throw Error('worker presence requires a held task branch: '+tree.path);
+    assertWorkerPresenceWritable(tree.path);
+    // Use the lease owner's predicate, including its fail-closed default.
+    // No new promise or publication is needed, even while a builder owns the
+    // tree resource. A fresh Git hold still publishes its initial presence.
+    if(state==='attached'&&transition!=='fresh'&&this.leases([tree]).length>0)return;
+    const lock=GateResource.tryAcquire(tree.path+'.lock');
+    if(!lock)throw Error('tree resource lock is held: '+tree.path);
+    try{
+      if(state==='attached'&&transition!=='fresh'&&(tree.state==='held'||transition==='resume'))this.admitLease(tree.path,true);
+      if(state==='detached'){
+        const users=this.users(tree.path);
+        if(users.length)throw Error('cannot detach '+tree.branch+': '+using(users));
+        this.capacity.assertWorkerAbsent(tree.path);
+      }
+      writeWorkerPresence(tree.path,tree.branch,state,this.capacity.host.wallNow());
+    }finally{lock.close();}
+  }
+  attach(branch:string):PoolTree{return this.presence(branch,'attached');}
+  detach(branch:string):PoolTree{return this.presence(branch,'detached');}
+  private presence(branch:string,state:WorkerPresence['state']):PoolTree{
+    return this.locked(()=>{
+      const tree=this.trees().find(tree=>tree.branch===branch);
+      if(!tree)throw Error('no pool tree holds branch '+branch);
+      this.setPresence(tree,state);
+      return this.trees().find(row=>row.name===tree.name)!;
+    });
   }
 
   /**
@@ -284,7 +340,7 @@ export class Pool {
       const tree = this.find(asked);
       if (tree.state === "missing") throw new Error(`pool tree ${tree.name} is missing: ${tree.path}`);
       if (tree.changes.length && !discard) throw new Error(`pool tree ${tree.name} has uncommitted changes, kept: ${tree.changes.slice(0, 5).join("; ")}${tree.changes.length > 5 ? "; ..." : ""} (give it back with --discard to drop them)`);
-      this.detach(tree.path, discard);
+      this.resetTree(tree.path, discard);
       const branch = discard && tree.branch ? deleteBranch(this.git, tree.branch, tree.head, this.remote) : [];
       // A person's give decides for a landed tree too.
       this.forget(tree.branch);
@@ -312,7 +368,7 @@ export class Pool {
           ? `pool tree ${tree.name} has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}; it stays on its branch, and the next upkeep resets it once they are gone and nothing uses it`
           : `pool tree ${tree.name} stays on its branch while ${using(users)} (a shell or editor with its working directory there counts too); the next upkeep resets it once nothing does` };
       }
-      this.detach(tree.path, false);
+      this.resetTree(tree.path, false);
       this.forget(branch);
       return { tree: this.trees().find(t => t.name === tree.name)!, state: "reset" };
     });
@@ -329,17 +385,22 @@ export class Pool {
     if (tree.changes.length) return { why: `it has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}` };
     const users = this.users(tree.path);
     if (users.length) return { why: `${using(users)} (a shell or editor with its working directory there counts too)` };
-    this.detach(tree.path, false);
+    this.resetTree(tree.path, false);
     const outcome = deleteBranch(this.git, tree.branch!, landed, null);
     this.forget(tree.branch);
     return { outcome };
   }
 
-  private detach(path: string, discard: boolean): void {
+  private resetTree(path: string, discard: boolean): void {
+    assertWorkerPresenceWritable(path);
     if (discard) {
       checked(this.git, ["checkout", "-q", "--detach", "--force", "refs/heads/main"], path);
+      removeWorkerPresence(path);
       checked(this.git, ["clean", "-fdq", "-e", "third_party", "-e", "node_modules", "-e", "**/node_modules"], path);
-    } else checked(this.git, ["switch", "-q", "--detach", "refs/heads/main"], path);
+    } else {
+      checked(this.git, ["switch", "-q", "--detach", "refs/heads/main"], path);
+      removeWorkerPresence(path);
+    }
   }
 
   /**
@@ -421,13 +482,15 @@ export function describeRoom(room: Room): string {
 /** What the pool's status says, for a scheduler (`status --json`). */
 export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Room, now = Date.now()) {
   return {
-    version: 1, pool: dir, idle_limit_ms: IDLE_LIMIT_MS, warm_minimum: WARM_MINIMUM,
+    version: 2, pool: dir, idle_limit_ms: IDLE_LIMIT_MS, warm_minimum: WARM_MINIMUM,
     room: { ok: room.ok, free_bytes: room.freeBytes, tree_bytes: room.treeBytes, unbuilt: room.unbuilt, reserved_bytes: room.reservedBytes, floor_bytes: room.floorBytes, why: room.why },
     trees: trees.map(t => ({
       name: t.name, path: t.path, state: t.state, task: t.branch, head: t.head, ahead: t.ahead, behind: t.behind, uncommitted: t.changes.length,
       moved_at: t.movedAt === null ? null : new Date(t.movedAt).toISOString(), idle_ms: t.movedAt === null ? null : Math.max(0, now - t.movedAt), target_bytes: t.targetBytes,
       users: t.users.map(user => ({ pid: user.pid, command: user.command, where: user.where })),
       ...(t.ownershipError?{ownership_error:t.ownershipError}:{}),
+      ...(t.presence?{worker_presence:t.presence.diagnostic?'unknown':t.presence.state,detached_at:t.presence.detachedAt,
+        presence_diagnostic:t.presence.diagnostic??null}:{}),
     })),
   };
 }
@@ -466,13 +529,14 @@ function main(argv: string[]): number {
     if (command === "status" || command === undefined) {
       return reportPoolStatus(pool,args.includes("--json"));
     } else if (command === "take" && target) { const t = pool.take(target); console.log(`${t.path}\n  task ${t.branch}, at ${t.head.slice(0, 12)}`); }
+    else if((command==='attach'||command==='detach')&&target){const t=pool[command](target);console.log(`pool tree ${t.name}, task ${t.branch}: ${t.presence!.state}`);}
     else if (command === "give" && target) {
       const given = pool.give(target, { discard: args.includes("--discard") });
       console.log(`pool tree ${given.tree.name} is free, at main ${given.tree.head.slice(0, 12)}`);
       for (const b of given.branch) console.log(`  branch ${b.where === "local" ? "here" : `on ${pool.remote}`}: ${b.state}${b.reason ? ` (${b.reason})` : ""}`);
     } else if (command === "init" && target) console.log(describePool(pool.init(Number(target))));
     else if (command === "prune") { const lines = pruneLines(pool.prune()); console.log(lines.length ? lines.join("\n") : "pool: nothing to remove"); }
-    else { console.error("usage: pool.ts status [--json] | take <branch> | take --issue <N> [--slug <words>] | give <branch|tree> [--discard] | init <n> | prune  [--pool <dir>]"); return 2; }
+    else { console.error("usage: pool.ts status [--json] | take <branch> | take --issue <N> [--slug <words>] | attach <branch> | detach <branch> | give <branch|tree> [--discard] | init <n> | prune  [--pool <dir>]"); return 2; }
     return 0;
   } catch (error) {
     console.error(`pool: ${(error as Error).message}`);

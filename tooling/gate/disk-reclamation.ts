@@ -10,11 +10,12 @@ import {gitArguments} from './git-arguments/main.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {buildGenerationFromInputs,type BuildOutputName} from './build-completion.ts';
 import {assertStateVersion} from './state-version.ts';
+import {workerPresence,assertWorkerPresenceWritable,removeWorkerPresence} from '../landing/pool-presence.ts';
 import type {HostObservations} from './host-observations.ts';
 
 export type ReclaimTarget={tree:string;target:string;service:boolean};
-export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output';
-export type ReclaimRemoval={root:string;kind:ReclaimKind;allocatedBytes:number;freeBytesChange:number;facts:string[]};
+export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output'|'detached-build-output';
+export type ReclaimRemoval={root:string;kind:ReclaimKind;allocatedBytes:number;freeBytesChange:number;facts:string[];tree?:string;task?:string};
 export type ReclaimReport={triggered:boolean;before:number;after:number;triggerBytes:number;goalBytes:number;
   removed:ReclaimRemoval[];kept:{root:string;reason:string;routine:boolean}[]};
 export type ReclaimOwnership=(tree:string,target:string)=>readonly string[]|void;
@@ -27,7 +28,7 @@ export type ReclaimOptions={
   maintenance?:{before:number;keep:number};
 };
 type Identity={path:string;dev:number;ino:number;uid:number};
-type Candidate={tree:string;root:string;kind:ReclaimKind;identity:Identity[];service:boolean;movedAt:number};
+type Candidate={tree:string;root:string;kind:ReclaimKind;identity:Identity[];service:boolean;movedAt:number;branch?:string};
 class TaskBranch extends Error{}
 const under=(root:string,path:string)=>path===root||path.startsWith(root+sep);
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
@@ -177,6 +178,14 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     if(gitRead(pool.git,['status','--porcelain','--untracked-files=all'],tree))throw Error('uncommitted changes');
     if(Number(gitRead(pool.git,['rev-list','--count',revision+'..HEAD'],tree))!==0)throw Error('unpublished detached commits');
   };
+  const detached=(tree:string,branch:string):number=>{
+    const current=registered().find(row=>resolve(row.path)===tree);
+    if(!current||current.branch!==branch)throw Error('task branch or worktree registration changed: '+tree);
+    const presence=workerPresence(tree,branch);
+    if(presence.diagnostic)throw Error(presence.diagnostic);
+    if(presence.state!=='detached')throw new TaskBranch('branch remains owned by an attached worker: '+branch);
+    return presence.detachedAt!;
+  };
   const marker=(path:string,name:BuildOutputName):'current'|'obsolete'|'unknown'=>{
     const file=join(path,'.nts-complete.json');
     if(!existsSync(file))return 'unknown';
@@ -187,13 +196,21 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   };
   const candidates:Candidate[]=[];
   const poolTargets:ReclaimTarget[]=registered().map(tree=>({tree:resolve(tree.path),target:join(tree.path,'target'),service:false}));
-  const add=(target:ReclaimTarget,root:string,kind:ReclaimKind,movedAt:number):void=>{
-    candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,movedAt});
+  const add=(target:ReclaimTarget,root:string,kind:ReclaimKind,movedAt:number,branch?:string):void=>{
+    candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,movedAt,...(branch?{branch}:{})});
   };
   for(const target of [...poolTargets,...options.services]){
     const start=candidates.length;
     try{
       physical(target.tree);
+      const branch=target.service?null:registered().find(row=>resolve(row.path)===target.tree)?.branch;
+      if(branch){
+        // An explicit detached worker lease offers only Cargo output, never
+        // the checkout, its branch, or any work left in it. No upkeep eviction.
+        if(report.triggered&&isDirectory(target.target))add(target,target.target,'detached-build-output',detached(target.tree,branch),branch);
+        else keep(target.tree,new TaskBranch('branch remains owned: '+branch));
+        continue;
+      }
       if(!target.service)free(target.tree);
       const movedText=target.service?'':gitRead(pool.git,['reflog','-1','--date=unix','--format=%gd','HEAD'],target.tree);
       const moved=/@\{(\d+)\}/.exec(movedText)?.[1];
@@ -214,7 +231,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const warmth=(target:ReclaimTarget)=>['nts-dev','clippy'].filter(name=>isDirectory(join(target.target,name))&&marker(join(target.target,name),name as BuildOutputName)==='current').length;
   warmTargets.sort((a,b)=>warmth(b)-warmth(a)||(candidates.find(row=>row.root===b.target)?.movedAt??0)-(candidates.find(row=>row.root===a.target)?.movedAt??0)||a.tree.localeCompare(b.tree));
   const retained=new Set(warmTargets.slice(0,Math.max(2,options.maintenance?.keep??2)).map(row=>row.target));
-  const rank:Record<ReclaimKind,number>={'obsolete-profile':0,'unbuilt-checkout':1,'free-build-output':2};
+  const rank:Record<ReclaimKind,number>={'obsolete-profile':0,'unbuilt-checkout':1,'free-build-output':2,'detached-build-output':3};
   candidates.sort((a,b)=>rank[a.kind]-rank[b.kind]||a.movedAt-b.movedAt||a.root.localeCompare(b.root));
   for(const candidate of candidates){
     const {root,tree,kind}=candidate;
@@ -231,8 +248,10 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       lock=GateResource.tryAcquire(tree+'.lock');if(!lock)throw Error('tree resource lock is held');
       if(gitRead(pool.git,['rev-parse','refs/heads/main'])!==revision)throw Error('current build policy changed during reclamation');
       if(options.protectedRoots().some(owner=>[owner.root,owner.target].some(path=>under(resolve(path),root)||under(root,resolve(path)))))throw Error('live lease or build claim');
-      if(!candidate.service)free(tree);
+      if(candidate.branch)detached(tree,candidate.branch);
+      else if(!candidate.service)free(tree);
       if(kind==='unbuilt-checkout'){
+        assertWorkerPresenceWritable(tree);
         // Ignored user files also belong to their author. Only the linker's
         // exact shared input links may disappear with an unbuilt checkout.
         const ignored=gitRead(pool.git,['ls-files','--others','--ignored','--exclude-standard','-z'],tree).split('\0').filter(Boolean);
@@ -240,8 +259,9 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
           if(!lstatSync(join(tree,path)).isSymbolicLink()||realpathSync(join(tree,path))!==realpathSync(join(pool.git.root,path)))throw Error('ignored local data: '+path);
         }
         if(existsSync(join(tree,'target')))throw Error('checkout acquired build output');
-      }else if(kind==='free-build-output'){
+      }else if(kind==='free-build-output'||kind==='detached-build-output'){
         if(gitRead(pool.git,['ls-files','--','target'],tree))throw Error('tracked target content');
+        for(const name of ['nts-dev','clippy'] as const)if(isDirectory(join(root,name)))marker(join(root,name),name);
         const allowed=/^(?:nts-dev|clippy|debug|release|CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json)$/;
         for(const name of readdirSync(root))if(!allowed.test(name))throw Error('unrecognized target content: '+name);
         if(!readFileSync(join(root,'CACHEDIR.TAG'),'utf8').startsWith('Signature: 8a477f597d28d172789f06886806bc55'))throw Error('target lacks Cargo cache identity');
@@ -251,13 +271,21 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       // Measure first; the fresh process/unit observation is immediately beside
       // the identity fence and removal, rather than before a possibly large du.
       const ownerFacts=options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root)??[];
+      // Measurement may be slow. Re-read every mutable lease/presence fact
+      // beside the final physical fence, while both locks are still held.
+      if(candidate.branch)detached(tree,candidate.branch);
+      if(options.protectedRoots().some(owner=>[owner.root,owner.target].some(path=>under(resolve(path),root)||under(root,resolve(path)))))throw Error('live lease or build claim');
       sameRoot(candidate.identity);
-      if(kind==='unbuilt-checkout')gitRead(pool.git,['worktree','remove','--',root]);
+      if(kind==='unbuilt-checkout'){
+        assertWorkerPresenceWritable(tree);
+        gitRead(pool.git,['worktree','remove','--',root]);deleted=true;
+        removeWorkerPresence(tree);
+      }
       else{writable(root);rmSync(root,{recursive:true});}
       deleted=true;
       report.after=options.snapshot().freeBytes;
-      const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.service?'service: obsolete generation only':'detached clean published worktree',...ownerFacts];
-      const removal:ReclaimRemoval={root,kind,allocatedBytes,freeBytesChange:report.after-before,facts};report.removed.push(removal);
+      const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.branch?'explicit detached worker; task checkout retained':candidate.service?'service: obsolete generation only':'detached clean published worktree',...ownerFacts];
+      const removal:ReclaimRemoval={root,kind,allocatedBytes,freeBytesChange:report.after-before,facts,...(candidate.branch?{tree,task:candidate.branch}:{})};report.removed.push(removal);
       appendFileSync(join(pool.dir,'.disk-reclaim.log'),JSON.stringify({at:host.wallNow(),...removal})+'\n');
     }catch(error){if(deleted)throw Error('disk reclamation removed '+root+' but could not observe or audit completion',{cause:error});keep(root,error);}finally{lock?.close();}
   }

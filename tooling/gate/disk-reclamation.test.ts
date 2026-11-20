@@ -16,6 +16,7 @@ import {processIdentity} from '../landing/lock.ts';
 import {assertNoProcessUsers,observeTreeProcesses,processCgroup} from '../landing/tree-users.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
+import {workerPresenceFile,writeWorkerPresence} from '../landing/pool-presence.ts';
 const GiB=2**30;
 const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
 
@@ -27,7 +28,7 @@ function fixture(t:TestContext){
   const original=hostObservations(env),outputs=new Map<string,number>();
   let initialFree=44*GiB;
   const free=()=>initialFree+[...outputs].filter(([path])=>!existsSync(path)).reduce((sum,[,bytes])=>sum+bytes,0);
-  const host={...original,disk:(path:string)=>({...original.disk(path),freeBytes:free()}),allocatedBytes:(path:string)=>outputs.get(path)??0};
+  const host={...original,disk:(path:string)=>({...original.disk(path),freeBytes:free()}),allocatedBytes:(path:string)=>[...outputs].filter(([root])=>root===path||root.startsWith(path+'/')).reduce((sum,[,bytes])=>sum+bytes,0)};
   const tree=(name:string)=>{const path=join(dir,name);s.git(['worktree','add','-q','--detach',path,'main']);return path;};
   const output=(tree:string,name='nts-dev',bytes=4*GiB)=>{
     const target=join(tree,'target'),path=join(target,name);mkdirSync(path,{recursive:true});
@@ -55,6 +56,104 @@ test('pressure reclaims in cost order to a measured hysteresis goal, then stops'
   assert.deepEqual(repeated.removed,[],'headroom prevents repeated eviction; kept='+JSON.stringify(repeated.kept));
 });
 
+test('pressure reclaims an explicitly detached task target and preserves every form of task work',t=>{
+  const f=fixture(t),tree=f.tree('1');
+  f.s.git(['switch','-q','-c','884'],tree);
+  const head=f.s.commit({'private.txt':'committed task work'},'task commit',tree);
+  writeFileSync(join(tree,'private.txt'),'uncommitted edit');writeFileSync(join(tree,'untracked.txt'),'untracked work');
+  f.output(tree,'nts-dev',16*GiB);
+  writeWorkerPresence(tree,'884','detached',10);
+  const before=f.s.git(['status','--porcelain','--untracked-files=all'],tree);
+  const capacity=new DiskCapacity({env:f.s.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:f.options.ownership}});
+  assert.deepEqual(capacity.activeLeases(),[],'detached tasks promise no cold build');
+  const report=capacity.reclaim(f.dir)!;
+  assert.deepEqual(report.removed.map(row=>[row.kind,row.tree,row.task,row.allocatedBytes]),[['detached-build-output',tree,'884',16*GiB]],JSON.stringify(report));
+  assert.equal(existsSync(join(tree,'target')),false);
+  assert.equal(f.s.git(['branch','--show-current'],tree),'884');assert.equal(f.s.git(['rev-parse','HEAD'],tree),head);
+  assert.equal(f.s.git(['status','--porcelain','--untracked-files=all'],tree),before);
+  assert.equal(readFileSync(join(tree,'private.txt'),'utf8'),'uncommitted edit');
+  assert.equal(readFileSync(join(tree,'untracked.txt'),'utf8'),'untracked work');
+  const logged=JSON.parse(readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8'));
+  assert.equal(logged.tree,tree);assert.equal(logged.task,'884');assert.equal(logged.allocatedBytes,16*GiB);
+});
+
+test('free targets precede detached targets, keeping two warm, then oldest detached first',t=>{
+  const f=fixture(t),free=['1','2','3'].map(f.tree),newer=f.tree('4'),older=f.tree('5');
+  free.forEach(tree=>f.output(tree));
+  for(const [tree,branch,at] of [[newer,'884',20],[older,'885',10]] as const){
+    f.s.git(['switch','-q','-c',branch],tree);f.output(tree);writeWorkerPresence(tree,branch,'detached',at);
+  }
+  const report=reclaimDisk(f.options),kinds=report.removed.map(row=>row.kind);
+  assert.deepEqual(kinds,['free-build-output','detached-build-output','detached-build-output'],JSON.stringify(report));
+  assert.deepEqual(report.removed.slice(1).map(row=>row.tree),[older,newer]);
+  assert.equal(free.filter(tree=>existsSync(join(tree,'target'))).length,2);
+});
+
+test('attached, absent, corrupt, future and mismatched presence records retain task targets by name',t=>{
+  for(const state of ['attached','missing','corrupt','future','wrong-branch','wrong-tree']){
+    const f=fixture(t),tree=f.tree('1');f.s.git(['switch','-q','-c','884'],tree);f.output(tree,'debug',16*GiB);
+    if(state!=='missing')writeWorkerPresence(tree,'884',state==='attached'?'attached':'detached',10);
+    const file=workerPresenceFile(tree);
+    if(state==='corrupt')writeFileSync(file,'{broken');
+    if(state==='future')writeFileSync(file,JSON.stringify({version:99}));
+    if(state==='wrong-branch')writeWorkerPresence(tree,'885','detached',10);
+    if(state==='wrong-tree'){const row=JSON.parse(readFileSync(file,'utf8'));writeFileSync(file,JSON.stringify({...row,ino:row.ino+1}));}
+    const report=reclaimDisk(f.options);
+    assert.deepEqual(report.removed,[],JSON.stringify(report));assert.ok(existsSync(join(tree,'target/debug')));
+    assert.ok(report.kept.some(row=>row.reason.includes(state==='attached'||state==='missing'?'attached worker':file)),JSON.stringify(report));
+    const capacity=new DiskCapacity({env:f.s.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:f.options.ownership}});
+    assert.equal(capacity.activeLeases().length,1,state+' protects its build promise');
+  }
+});
+
+test('ordinary upkeep never evicts detached targets without pressure',t=>{
+  const f=fixture(t),tree=f.tree('1');f.s.git(['switch','-q','-c','884'],tree);f.output(tree,'debug');
+  writeWorkerPresence(tree,'884','detached',1);f.setFree(80*GiB);
+  const report=reclaimDisk({...f.options,maintenance:{before:100,keep:2}});
+  assert.deepEqual(report.removed,[]);assert.ok(existsSync(join(tree,'target/debug')));
+});
+
+test('a detached tree with a real cwd or target fd owner is retained',async t=>{
+  for(const where of ['cwd','fd']){
+    const f=fixture(t),tree=f.tree('1');f.s.git(['switch','-q','-c','884'],tree);const output=f.output(tree,'nts-dev',16*GiB);
+    writeWorkerPresence(tree,'884','detached',10);
+    if(where==='cwd'){
+      const child=spawn('cat',[],{cwd:tree,env:f.s.env,stdio:['pipe','ignore','pipe']});
+      const exited=once(child,'exit');
+      try{
+        await once(child,'spawn');
+        const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target],{pids:[child.pid!]})});
+        assert.deepEqual(report.removed,[]);assert.match(report.kept.map(row=>row.reason).join('\n'),/owns cwd/);
+      }finally{child.stdin.end();await exited;}
+    }
+    if(where==='fd'){
+      const source=generatedJavaScript(`import{openSync,closeSync}from'node:fs';const fd=openSync(process.argv[1],'r');process.stdout.write('ready');process.stdin.resume();process.stdin.on('end',()=>closeSync(fd));`);
+      const reader=spawn(process.execPath,['--input-type=module','-e',source,join(output,'built')],{cwd:f.s.dir,env:f.s.env,stdio:['pipe','pipe','pipe']});
+      const closed=once(reader,'exit');let out='';reader.stdout.on('data',part=>{out+=String(part);});
+      try{
+        await waitFor('held target descriptor',()=>out.includes('ready'),{stopped:()=>reader.exitCode===null?undefined:'reader exited '+reader.exitCode});
+        const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target],{pids:[reader.pid!]})});
+        assert.deepEqual(report.removed,[]);assert.match(report.kept.map(row=>row.reason).join('\n'),/owns fd\//);
+      }finally{reader.stdin.end();await closed;}
+    }
+    assert.ok(existsSync(join(tree,'target')));
+  }
+});
+
+test('detached targets recheck attachment and build claims after measuring',t=>{
+  for(const guard of ['presence','claim','unit']){
+    const f=fixture(t),tree=f.tree('1');f.s.git(['switch','-q','-c','884'],tree);f.output(tree,'nts-dev',16*GiB);
+    writeWorkerPresence(tree,'884','detached',10);let claimed=false;
+    const report=reclaimDisk({...f.options,protectedRoots:()=>claimed?[{root:tree,target:join(tree,'target')}]:[],ownership:()=>{
+      if(guard==='presence')writeWorkerPresence(tree,'884','attached',20);
+      if(guard==='claim')claimed=true;
+      if(guard==='unit')assertUnitTreeUnused([tree],{unit:'queued-build.service',workingDirectory:tree,rootDirectory:'',commands:[]});
+    }});
+    assert.deepEqual(report.removed,[],JSON.stringify(report));assert.ok(existsSync(join(tree,'target')));
+    assert.match(report.kept.map(row=>row.reason).join('\n'),guard==='presence'?/attached worker/:guard==='claim'?/live lease or build claim/:/queued-build.service owns WorkingDirectory/);
+  }
+});
+
 test('free build output keeps the checkout and two warm targets; unbuilt removal uses Git',t=>{
   const f=fixture(t),trees=['1','2','3'].map(f.tree),unbuilt=f.tree('4');
   for(const tree of trees)f.output(tree);
@@ -65,6 +164,25 @@ test('free build output keeps the checkout and two warm targets; unbuilt removal
   assert.equal(report.removed.filter(row=>row.kind==='free-build-output').length,1,JSON.stringify(report?.kept));
   assert.ok(trees.every(path=>existsSync(path)),( 'built checkouts remain registered')+'; kept='+JSON.stringify(report?.kept));
   assert.equal(trees.filter(path=>existsSync(join(path,'target'))).length,2,JSON.stringify(report?.kept));
+});
+
+test('unbuilt checkout removal ends stale presence but keeps a future record and its tree',t=>{
+  const f=fixture(t),old=f.tree('1'),future=f.tree('2');
+  writeWorkerPresence(old,'ended-task','attached',10);
+  const body=JSON.stringify({version:99});writeFileSync(workerPresenceFile(future),body);
+  const report=reclaimDisk(f.options);
+  assert.ok(report.removed.some(row=>row.kind==='unbuilt-checkout'&&row.root===old),JSON.stringify(report));
+  assert.equal(existsSync(workerPresenceFile(old)),false);
+  assert.ok(existsSync(future));assert.equal(readFileSync(workerPresenceFile(future),'utf8'),body);
+  assert.ok(report.kept.some(row=>row.reason.includes(workerPresenceFile(future))&&row.reason.includes('future state version')),JSON.stringify(report));
+});
+
+test('a future presence appearing at the final ownership observation keeps the checkout',t=>{
+  const f=fixture(t),tree=f.tree('1'),body=JSON.stringify({version:99});
+  const report=reclaimDisk({...f.options,ownership:()=>writeFileSync(workerPresenceFile(tree),body)});
+  assert.deepEqual(report.removed,[]);assert.ok(existsSync(tree));
+  assert.equal(readFileSync(workerPresenceFile(tree),'utf8'),body);
+  assert.ok(report.kept.some(row=>row.reason.includes('future state version')),JSON.stringify(report));
 });
 
 test('service targets offer obsolete whole profiles, never their current output',t=>{

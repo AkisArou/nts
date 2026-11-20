@@ -10,6 +10,7 @@ import {homedir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {worktrees,type Git} from '../landing/git.ts';
+import {workerPresence} from '../landing/pool-presence.ts';
 import {withLock,processIdentity} from '../landing/lock.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {completedBuild,type BuildOutputName} from './build-completion.ts';
@@ -125,7 +126,17 @@ export class DiskCapacity {
     const refs=infrastructureProbe({purpose:'read landed disk lease owners',command:'git',args:gitArguments(['for-each-ref','--format=%(objectname) %(refname)','refs/nts/landed/']),cwd:git.root,...(git.env?{env:git.env}:{})}).stdout;
     const landed=new Map(refs.trim().split('\n').filter(Boolean).map(line=>{const [sha,ref]=line.split(' ');return [ref!.slice('refs/nts/landed/'.length),sha!];}));
     return worktrees(git).filter(tree=>dirname(resolve(tree.path))===resolve(dir)&&/^[1-9][0-9]*$/.test(tree.path.split('/').at(-1)!)
-      &&tree.branch!==null&&landed.get(tree.branch)!==tree.head).map(tree=>({root:tree.path,target:join(tree.path,'target')}));
+      &&tree.branch!==null&&landed.get(tree.branch)!==tree.head&&workerPresence(tree.path,tree.branch).state==='attached').map(tree=>({root:tree.path,target:join(tree.path,'target')}));
+  }
+  /** Caller holds the pool lock. Explicit detach never overrides a live build,
+   * temporary claim, unit, or process (including ledger owners and waiters). */
+  assertWorkerAbsent(tree:string):void{
+    const under=(a:string,b:string)=>b===a||b.startsWith(a+'/');
+    for(const claim of this.claims())if([claim.root,claim.target].some(path=>under(resolve(tree),resolve(path))||under(resolve(path),resolve(tree))))
+      throw Error('live build claim '+claim.id+' by pid '+claim.pid+' owns '+tree);
+    for(const claim of this.temporaryClaims())if(under(resolve(tree),resolve(claim.path))||under(resolve(claim.path),resolve(tree)))
+      throw Error('live temporary claim '+claim.id+' by pid '+claim.pid+' owns '+tree);
+    this.reclamation.ownership(tree,join(tree,'target'));
   }
   snapshot(path:string,leases?:readonly BuildLease[]):CapacitySnapshot {
     if(leases===undefined)return this.locked(()=>this.snapshot(path,[...this.activeLeases(),...this.claims()]));
@@ -202,12 +213,13 @@ export class DiskCapacity {
     if(!this.pool)return null;
     const report=reclaimDisk({pool:this.pool,host:this.host,coldBytes:this.forecast.bytes,...this.reclamation,maintenance,
       snapshot:()=>{const snapshot=this.snapshot(path,leases);return {...snapshot,reservedBytes:snapshot.reservedBytes+extraReservedBytes};},
-      protectedRoots:()=>[...this.activeLeases(),...this.claims(),...leases]});
+      protectedRoots:()=>[...this.activeLeases(),...this.claims(),...leases,...this.temporaryClaims().map(claim=>({root:claim.path,target:claim.path}))]});
     if(report.removed.length)this.signalChange();
     return report;
   }
-  /** Already inside the pool lock. The next take rereads Git after reclaim. */
-  poolReclaim(path:string,maintenance?:{before:number;keep:number}):ReclaimReport|null {
-    try{return this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],maintenance);}finally{this.signalChange();}
+  /** Already inside the pool lock. Prospective takes/reattachments protect
+   * their target and include its promise while making room, before publication. */
+  poolReclaim(path:string,maintenance?:{before:number;keep:number},pending:readonly BuildLease[]=[]):ReclaimReport|null {
+    try{return this.reclaimLocked(path,[...this.activeLeases(),...this.claims(),...pending],maintenance);}finally{this.signalChange();}
   }
 }
