@@ -535,8 +535,8 @@ fn the_libuv_host_keeps_the_same_contract_as_the_deterministic_one() {
         &["-luv"],
     );
     assert!(
-        checks(&report) >= 30,
-        "expected at least 30 host checks, saw {}:\n{report}",
+        checks(&report) >= 39,
+        "expected at least 39 host checks, saw {}:\n{report}",
         checks(&report)
     );
 }

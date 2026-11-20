@@ -419,6 +419,55 @@ static void a_foreign_post_before_activation_runs_without_a_loop(void) {
   nts_uv_host_shutdown();
 }
 
+static void post_supplied_task(void *state) {
+  nts_post_from_any_thread(*(NtsTask *)state);
+}
+
+static void complete_pending(void *state) {
+  (void)state;
+  note("completion");
+  nts_pending_end();
+}
+
+static void pending_work_can_be_the_first_activation(void) {
+  trace[0] = '\0';
+  unsigned before = default_loop_requests;
+  nts_uv_host_install(NULL);
+  nts_pending_begin();
+  NtsTask task = {complete_pending, 0, 0};
+  uv_thread_t worker;
+  uv_thread_create(&worker, post_supplied_task, &task);
+  uv_thread_join(&worker);
+  nts_uv_host_run();
+  expect("pending work receives its foreign completion", "completion");
+  check("pending work activates the loop once",
+        default_loop_requests == before + 1);
+  nts_uv_host_shutdown();
+  check("pending work closes its handles",
+        uv_loop_close(uv_default_loop()) == 0);
+}
+
+static void fulfill_queued_promise(void *state) {
+  nts_promise_fulfill_number((NtsPromise *)state, 42);
+}
+
+static void a_queued_promise_joins_without_a_backend(void) {
+  unsigned before = default_loop_requests;
+  nts_uv_host_install(NULL);
+  NtsPromise *promise = nts_promise_new();
+  NtsTask task = {fulfill_queued_promise, 0, promise};
+  uv_thread_t worker;
+  uv_thread_create(&worker, post_supplied_task, &task);
+  uv_thread_join(&worker);
+  check("a queued foreign settlement can be joined",
+        nts_promise_join(promise) == NTS_JOIN_FULFILLED);
+  check("the queued promise retains its value",
+        nts_promise_number(promise) == 42);
+  nts_release((NtsHeader *)promise);
+  nts_uv_host_shutdown();
+  check("a queued promise join needs no loop", default_loop_requests == before);
+}
+
 static void racing_foreign_thread(void *state) {
   (void)state;
   uv_sem_wait(&activation_entered);
@@ -562,6 +611,8 @@ int main(int argc, char **argv) {
   a_lazy_task_activates_once_and_keeps_checkpoints();
   a_lazy_timer_activates_once();
   a_foreign_post_before_activation_runs_without_a_loop();
+  pending_work_can_be_the_first_activation();
+  a_queued_promise_joins_without_a_backend();
   foreign_posts_race_activation_without_loss_or_duplication();
   activation_keeps_the_foreign_contract_immutable();
 #endif
