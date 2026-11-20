@@ -709,14 +709,15 @@ export default defineConfig({ products: {
     }
 }
 
-/// The first math reference is in a dependency archive, after nts's objects.
-/// GCC selects the non-LTO link, so GNU ld cannot hide a misplaced -lm.
+/// Capture the non-LTO GCC link and replay its library flags without dead
+/// runtime math references, which would otherwise mask an early -lm.
 #[test]
 #[expect(
     clippy::too_many_lines,
-    reason = "archive, non-LTO driver and load controls"
+    reason = "captured CLI link and reduced GNU ld control"
 )]
 fn elf_dependency_archives_resolve_math_at_the_end_of_the_link() {
+    use std::os::unix::fs::PermissionsExt as _;
     if !cfg!(target_os = "linux") || !available() {
         skip("Linux, node, clang, GCC, ar and pkg-config");
         return;
@@ -726,8 +727,7 @@ fn elf_dependency_archives_resolve_math_at_the_end_of_the_link() {
         r#"
 import {defineConfig, library, sources, target} from "@nts/config";
 export default defineConfig({products: {
-  c: library.native({entry:"./src/main.ts", targets:[target.linux({backend:"c"})]}),
-  llvm: library.native({entry:"./src/main.ts", targets:[target.linux({backend:"llvm"})]})
+  c: library.native({entry:"./src/main.ts", targets:[target.linux({backend:"c"})]})
 }, native:[sources({dir:"native"})],
 dependencies:{"linux-gnu":{from:"pkg-config", packages:["archive-math"]}}});
 "#,
@@ -739,8 +739,9 @@ dependencies:{"linux-gnu":{from:"pkg-config", packages:["archive-math"]}}});
     .unwrap();
     std::fs::create_dir_all(project.join("native")).unwrap();
     std::fs::create_dir_all(project.join("pc")).unwrap();
+    let caller = project.join("native/activate.c");
     std::fs::write(
-        project.join("native/activate.c"),
+        &caller,
         r"
 #include <stdlib.h>
 extern double from_archive(double);
@@ -755,19 +756,91 @@ __attribute__((constructor)) static void check_archive(void) {
     std::fs::write(project.join("pc/archive-math.pc"), format!(
         "Name: archive-math\nDescription: archive with the first math reference\nVersion: 1\nLibs: {}\n", archive.display())).unwrap();
     std::fs::write(
-        project.join("load.c"),
-        r#"
-#include <dlfcn.h>
-#include <stdio.h>
-int main(int argc, char **argv) {
-  if (argc != 2) return 2;
-  void *library = dlopen(argv[1], RTLD_NOW);
-  if (!library) { fprintf(stderr, "%s\n", dlerror()); return 1; }
-  return dlclose(library) != 0;
-}
+        project.join("archive.c"),
+        "#include <math.h>\ndouble from_archive(double x) { return sin(x) + cbrt(x); }\n",
+    )
+    .unwrap();
+    let object = project.join("archive.o");
+    let compiled = Command::new("gcc")
+        .args(["-O2", "-fPIC", "-c"])
+        .arg(project.join("archive.c"))
+        .arg("-o")
+        .arg(&object)
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{compiled:?}");
+    let archived = Command::new("ar")
+        .arg("rcs")
+        .arg(&archive)
+        .arg(&object)
+        .output()
+        .unwrap();
+    assert!(archived.status.success(), "{archived:?}");
+    let driver = project.join("gcc");
+    std::fs::write(
+        &driver,
+        r#"#!/bin/sh
+for arg; do
+  if [ "$arg" = "-shared" ]; then printf '%s\n' "$@" > "$NTS_LINK_ARGS"; break; fi
+done
+exec /usr/bin/gcc "$@"
 "#,
     )
     .unwrap();
+    std::fs::set_permissions(&driver, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let captured = project.join("link-args");
+    let built = output_of(
+        Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(project.join("tsconfig.json"))
+            .env(
+                "CC",
+                format!("{} -fno-semantic-interposition", driver.display()),
+            )
+            .env("NTS_LINK_ARGS", &captured)
+            .env("PKG_CONFIG_PATH", project.join("pc")),
+    )
+    .unwrap();
+    assert!(
+        built.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&built.stdout),
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let args: Vec<_> = std::fs::read_to_string(captured)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert!(!args.iter().any(|arg| arg.starts_with("-flto")), "{args:?}");
+    assert_eq!(
+        args.iter().filter(|arg| *arg == "-lm").count(),
+        1,
+        "{args:?}"
+    );
+    let math = args.iter().position(|arg| arg == "-lm").unwrap();
+    assert_eq!(
+        &args[math - 1..=math + 1],
+        ["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]
+    );
+    for (index, arg) in args.iter().enumerate() {
+        if arg.ends_with(".a") || (arg.starts_with("-l") && arg != "-lm") {
+            assert!(index < math, "library follows scoped libm: {args:?}");
+        }
+    }
+    let out = project.join(".nts/build/c/linux-gnu-x86_64");
+    let library = out.join("libc.so");
+    let dynamic = Command::new("readelf")
+        .arg("-d")
+        .arg(&library)
+        .output()
+        .unwrap();
+    assert!(
+        dynamic.status.success()
+            && String::from_utf8_lossy(&dynamic.stdout).contains("[libm.so.6]"),
+        "{dynamic:?}"
+    );
+    std::fs::write(project.join("load.c"), "#include <dlfcn.h>\nint main(int n,char **v){if(n!=2)return 2;void *p=dlopen(v[1],RTLD_NOW);return !p || dlclose(p)!=0;}\n").unwrap();
     let loader = project.join("load");
     let compiled = Command::new("gcc")
         .arg(project.join("load.c"))
@@ -776,63 +849,70 @@ int main(int argc, char **argv) {
         .output()
         .unwrap();
     assert!(compiled.status.success(), "{compiled:?}");
-    for needs_math in [false, true] {
-        let body = if needs_math {
-            "#include <math.h>\ndouble from_archive(double x) { return sin(x) + cbrt(x); }\n"
-        } else {
-            "double from_archive(double x) { (void)x; return 1.273126064588303; }\n"
-        };
-        std::fs::write(project.join("archive.c"), body).unwrap();
-        let object = project.join("archive.o");
-        let compiled = Command::new("gcc")
-            .args(["-O2", "-fPIC", "-c"])
-            .arg(project.join("archive.c"))
-            .arg("-o")
-            .arg(&object)
-            .output()
-            .unwrap();
-        assert!(compiled.status.success(), "{compiled:?}");
-        let archived = Command::new("ar")
-            .arg("rcs")
-            .arg(&archive)
-            .arg(&object)
-            .output()
-            .unwrap();
-        assert!(archived.status.success(), "{archived:?}");
-        let built = output_of(
-            Command::new(env!("CARGO_BIN_EXE_nts"))
-                .arg("build")
-                .arg(project.join("tsconfig.json"))
-                .env("CC", "gcc -fno-semantic-interposition")
-                .env("PKG_CONFIG_PATH", project.join("pc")),
-        )
+    assert!(
+        Command::new(&loader)
+            .arg(&library)
+            .status()
+            .unwrap()
+            .success()
+    );
+    // Same library flags, with only the native caller object: no dead runtime
+    // references can accidentally retain libm before the archive is visited.
+    let caller_object = project.join("caller.o");
+    let compiled = Command::new("gcc")
+        .args(["-fPIC", "-c"])
+        .arg(&caller)
+        .arg("-o")
+        .arg(&caller_object)
+        .output()
         .unwrap();
-        assert!(
-            built.status.success(),
-            "math={needs_math}: {}{}",
-            String::from_utf8_lossy(&built.stdout),
-            String::from_utf8_lossy(&built.stderr)
-        );
-        for backend in ["c", "llvm"] {
-            let library = project.join(format!(
-                ".nts/build/{backend}/linux-gnu-x86_64/lib{backend}.so"
-            ));
-            let dynamic = Command::new("readelf")
-                .arg("-d")
-                .arg(&library)
-                .output()
-                .unwrap();
-            assert!(dynamic.status.success(), "{dynamic:?}");
-            let dynamic = String::from_utf8(dynamic.stdout).unwrap();
-            assert_eq!(
-                dynamic.contains("[libm.so.6]"),
-                needs_math,
-                "{backend}: {dynamic}"
-            );
-            let loaded = Command::new(&loader).arg(&library).output().unwrap();
-            assert!(loaded.status.success(), "{backend}: {loaded:?}");
+    assert!(compiled.status.success(), "{compiled:?}");
+    let mut flags = Vec::new();
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "-o" {
+            iter.next();
+        } else if !arg.ends_with(".o") {
+            flags.push(arg.clone());
         }
     }
+    let reduced = project.join("reduced.so");
+    let link = |flags: &[String]| {
+        Command::new("gcc")
+            .current_dir(&out)
+            .arg(&caller_object)
+            .args(flags)
+            .arg("-o")
+            .arg(&reduced)
+            .output()
+            .unwrap()
+    };
+    let good = link(&flags);
+    assert!(good.status.success(), "{good:?}");
+    assert!(
+        Command::new(&loader)
+            .arg(&reduced)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let math = flags.iter().position(|arg| arg == "-lm").unwrap();
+    let scope: Vec<_> = flags.drain(math - 1..=math + 1).collect();
+    let archive_at = flags
+        .iter()
+        .position(|arg| arg.ends_with("libarchive-math.a"))
+        .unwrap();
+    flags.splice(archive_at..archive_at, scope);
+    let bad = link(&flags);
+    assert!(
+        !bad.status.success(),
+        "early scoped libm must fail: {bad:?}"
+    );
+    let error = String::from_utf8_lossy(&bad.stderr);
+    assert!(
+        error.contains("undefined reference") && (error.contains("sin") || error.contains("cbrt")),
+        "{error}"
+    );
 }
 
 /// A bigint through an erased slot at the top level builds.

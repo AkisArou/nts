@@ -149,8 +149,9 @@ Activation replaces only callbacks read by the owner thread. The foreign-post
 entry, owner query, checkpoint policy, native-loop accessor and state stay fixed
 after installation.
 The foreign queue's mutex publishes its wakeup target after the async handle
-is initialized; an earlier post needs no wakeup because the owner drains it
-before blocking. Task, timer and pending-operation callbacks then execute
+is initialized and signals any posts already queued. Such posts may arrive
+while the owner runs a previously detached foreign batch; activation must wake
+them before the loop can block. Task, timer and pending-operation callbacks then execute
 without an activation check. Promise and microtask processing stays in the
 runtime's existing queues and checkpoint.
 

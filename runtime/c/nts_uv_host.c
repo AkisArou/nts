@@ -60,8 +60,8 @@ static int nts_uv_no_wakeup(uv_async_t *handle) {
 
 /* Read and published under the foreign queue's lock. The fixed foreign entry
  * pays one indirect call, just as a libuv PLT call does, without a readiness
- * branch on every completion. A preactivation post needs no wakeup: the owner
- * drains that batch before it can block. */
+ * branch on every completion. Activation signals any inherited queued posts:
+ * they may have arrived while the owner ran a previously detached batch. */
 static int (*nts_uv_wakeup)(uv_async_t *handle) = nts_uv_no_wakeup;
 
 /* Posted by the owner thread. */
@@ -468,6 +468,9 @@ static void nts_uv_activate(void) {
   uv_unref((uv_handle_t *)&nts_uv_async);
   nts_uv_active = true;
   nts_uv_wakeup = uv_async_send;
+  if (nts_uv_foreign.len != 0) {
+    uv_async_send(&nts_uv_async);
+  }
   uv_mutex_unlock(&nts_uv_foreign_lock);
   nts_host_activate(&nts_uv_host);
 }

@@ -176,6 +176,13 @@ pub(super) fn scopes_math(command: &Command) -> bool {
         && !command.get_args().any(|arg| arg == "-static")
 }
 
+/// Called by the ELF application link owner after every library input.
+pub(super) fn finish_elf_math(command: &mut Command) {
+    if scopes_math(command) {
+        command.args(["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]);
+    }
+}
+
 fn link_arguments(
     flags: &[String],
     format: node_deps::ObjectFormat,
@@ -188,9 +195,9 @@ fn link_arguments(
             continue;
         }
         if scoped && format == node_deps::ObjectFormat::Elf && flag == "-lm" {
-            // Keep its archive-order position: a preceding --as-needed -lm
-            // cannot resolve math first referenced by a later static archive.
-            arguments.extend(["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]);
+            // The application's link owner emits math once after all inputs.
+            // Even this archive closure may be followed by another library.
+            continue;
         } else {
             arguments.push(flag.as_str());
         }
@@ -296,12 +303,12 @@ mod cache_tests {
 
 #[cfg(test)]
 mod link_tests {
-    use super::{link_arguments, scopes_math};
+    use super::{finish_elf_math, link_arguments, scopes_math};
     use nts_build::node_deps::ObjectFormat;
     use std::process::Command;
 
     #[test]
-    fn only_elf_libm_arguments_gain_scoped_as_needed() {
+    fn elf_math_is_emitted_once_after_all_library_inputs() {
         let flags: Vec<String> = [
             "-lconstructor",
             "uv.a",
@@ -316,6 +323,10 @@ mod link_tests {
             let mut command = Command::new("compiler");
             let scoped = scopes_math(&command);
             command.args(link_arguments(&flags, format, false, scoped));
+            if format == ObjectFormat::Elf {
+                command.arg("late.a");
+                finish_elf_math(&mut command);
+            }
             let actual: Vec<_> = command
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
@@ -324,14 +335,12 @@ mod link_tests {
                 [
                     "-lconstructor",
                     "uv.a",
-                    "-Wl,--push-state,--as-needed",
-                    "-lm",
-                    "-Wl,--pop-state",
                     "-ldl",
+                    "-Wl,--exclude-libs,ALL",
+                    "late.a",
                     "-Wl,--push-state,--as-needed",
                     "-lm",
                     "-Wl,--pop-state",
-                    "-Wl,--exclude-libs,ALL",
                 ]
                 .map(str::to_owned)
                 .to_vec()
@@ -356,6 +365,7 @@ mod link_tests {
             let scoped = scopes_math(&command);
             assert!(!scoped, "{driver} {prefix}");
             command.args(link_arguments(&flags, ObjectFormat::Elf, false, scoped));
+            finish_elf_math(&mut command);
             let actual: Vec<_> = command
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
