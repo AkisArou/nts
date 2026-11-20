@@ -2042,3 +2042,54 @@ in `git range-diff`; main's intervening commits changed no compiler or
 `/home/akisarou/.cache/nts-scratch/876/pre-final-rebase.bundle`.
 
 Raw conformance evidence manifest: `/home/akisarou/.cache/nts-scratch/876/final-conformance-evidence.json`, SHA-256 `fe7d1cd40ad3b6390fb6fc13d611f24fb3dfd675936a20a9f23935c7a1207959`.
+
+## Final inner proof
+
+Checked source: `edbf216ff` (the final changes before this proof record are lint-only).
+
+The full `node tooling/gate/inner.ts` run included agreement on C, LLVM and JVM,
+then C and LLVM with reference counting enabled, against main
+`3df1845fafc26b20498a0d607b5c8e50dc7432e1`. It ran as
+`nts-876-final-inner-3`, with the ordinary inner admission and worker settings.
+
+| Phase | Verdict | Wall seconds (including admission) |
+|---|---|---:|
+| fmt | PASS | 6 |
+| clang-format | PASS | 1 |
+| clippy | PASS | 5 |
+| build | PASS | 98 |
+| tests | PASS | 727 |
+| agree c | PASS | 1083 |
+| agree llvm | PASS | 818 |
+| agree jvm | PASS | 1569 |
+| agree c rc | PASS | 1151 |
+| agree llvm rc | PASS | 621 |
+
+The crate and backend tests reported 1,897 passes, zero failures and one
+existing ignored full-GIR test (`NTS_IMPLEMENTATION_PROJECTS` is not supplied).
+The adaptive-sort Node controls, unsigned cursor boundaries, helper-family
+sharing and default HotSpot method-size guard passed.
+
+The first launch lacked Node on systemd's PATH and ran no check. The next
+two attempts stopped at Clippy: four infallible helper wrappers and an Rc
+parameter, then Markdown quoting of `HotSpot` in a test comment. The final
+source simplifies those Rust wrappers and borrows that Rc; it emits the same
+HIR as the measured source. No sorting policy or runtime code changed.
+
+- `agree c`: 1091 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, 29 pending, in 920 s
+  150053 of 151213 case(s) compared; not compared: 1160 declined, 0 timed out, 0 unreached.
+  Unchanged limitation: `wrong, both   typed-array-aliasing                             disagrees, 637 of 643 compared, 6 declined`.
+- `agree llvm`: 1091 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, 29 pending, in 807 s
+  150053 of 151213 case(s) compared; not compared: 1160 declined, 0 timed out, 0 unreached.
+  Unchanged limitation: `wrong, both   typed-array-aliasing                             disagrees, 637 of 643 compared, 6 declined`.
+- `agree jvm`: 1091 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, 29 pending, in 639 s
+  150053 of 151213 case(s) compared; not compared: 1160 declined, 0 timed out, 0 unreached.
+  Unchanged limitation: `wrong, both   typed-array-aliasing                             disagrees, 637 of 643 compared, 6 declined`.
+- `agree c rc`: 1091 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, 29 pending, in 706 s
+  150053 of 151213 case(s) compared; not compared: 1160 declined, 0 timed out, 0 unreached.
+  Unchanged limitation: `wrong, both   typed-array-aliasing                             disagrees, 637 of 643 compared, 6 declined`.
+- `agree llvm rc`: 1091 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, 29 pending, in 619 s
+  150053 of 151213 case(s) compared; not compared: 1160 declined, 0 timed out, 0 unreached.
+  Unchanged limitation: `wrong, both   typed-array-aliasing                             disagrees, 637 of 643 compared, 6 declined`.
+
+Raw final-inner evidence manifest: `/home/akisarou/.cache/nts-scratch/876/final-inner-evidence.json`, SHA-256 `1649fbfa0a3920c71e9cbec069d7afa2b3ed511f12d7970a97e67859ab9ab72b`.
