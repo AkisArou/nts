@@ -4125,3 +4125,11 @@ ThinLTO clang can discard unused libm, while non-LTO GCC can retain it through
 dead runtime math references. Initially static drivers and Zig preserve their
 original math flags. The regression control varies a pkg-config `Libs` field
 by one late `-static` flag.
+
+### Free build profiles have independent reclamation grants (11-21)
+
+Issue #919: a mixed target's unknown sibling cannot veto independently proven
+Cargo profiles. Reclaim those profiles under the pool and tree locks, retaining
+two compatible warm targets and preserving unknown siblings. Refusals include
+reclamation decisions; count reports retained sibling paths and known writers.
+Attached cold holds keep their promises until explicit worker detachment.

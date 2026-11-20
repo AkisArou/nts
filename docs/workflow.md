@@ -1161,9 +1161,18 @@ the tooling strict checker owns the source's type checking.
   delete. Below the floor plus live promises and one measured cold build, it
   removes in cost order until another cold build of headroom is free: obsolete
   whole profile generations, clean unbuilt pool checkouts, then free pool build
-  output while keeping two warm targets, then held trees' Cargo `target/`
+  output while keeping two compatible warm targets, then held trees' Cargo `target/`
   whose workers are explicitly detached, oldest detachment first. This last
-  kind runs only under pressure, never from elapsed idleness. It preserves
+  kind runs only under pressure, never from elapsed idleness. Free targets
+  containing unknown siblings offer their recognized Cargo profiles separately:
+  a Cargo cache tag or a validated owner completion marker proves the profile.
+  Unknown siblings remain by path, with their writer where known; they cannot
+  veto removal of an independently proven profile. Each profile removal holds
+  both pool and tree locks and repeats the physical, claim and owner checks.
+  Taking the tree afterwards rebuilds missing output normally. Admission
+  refusals include their removal and retention decisions, including the warm
+  minimum. The hourly count reports retained target siblings by path and
+  known writer without granting deletion. Held target removal preserves
   branches, commits and uncommitted work outside `target/`, and requires Cargo
   cache identity, recognized build contents and no tracked target files.
   The landing and full-check trees offer
@@ -1913,6 +1922,12 @@ death; an absent timestamp remains explicit after forced termination.
   One declaration list owns selection and staging, so an undeclared external
   reference fails the private build. The copy remains alive through diagnostic
   capture and is removed after the compiler drains.
+
+- **Free build profiles have independent reclamation grants.** Unknown target
+  siblings remain named by path and known writer. They do not veto proven
+  Cargo profiles in a free tree. The warm compatible pair and each profile's
+  live ownership remain protected under both locks. Admission refusals retain
+  the decisions that prevented reclaiming enough space.
 
 - **Pressure reclamation uses ownership provenance**: only approved rebuildable
   outputs and clean unbuilt pool checkouts may be removed under the capacity

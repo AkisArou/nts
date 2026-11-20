@@ -28,7 +28,7 @@ export type ReclaimOptions={
   maintenance?:{before:number;keep:number};
 };
 type Identity={path:string;dev:number;ino:number;uid:number};
-type Candidate={tree:string;root:string;kind:ReclaimKind;identity:Identity[];service:boolean;movedAt:number;branch?:string};
+type Candidate={tree:string;root:string;kind:ReclaimKind;identity:Identity[];service:boolean;target:string;movedAt:number;branch?:string};
 class TaskBranch extends Error{}
 const under=(root:string,path:string)=>path===root||path.startsWith(root+sep);
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
@@ -153,6 +153,34 @@ export const liveReclaimOwnership:ReclaimOwnership=(tree,target)=>{
   assertNoUnitUsers([tree,target]);return assertNoProcessUsers([tree,target]);
 };
 
+const cargoProfiles=['nts-dev','clippy','debug','release'] as const;
+const cargoMetadata=/^(?:CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json|\.rustdoc_fingerprint\.json)$/;
+/** Inventory only: these siblings have no deletion grant. Writer attribution
+ * names the current owner where known, never a grant to remove its output. */
+export function targetLeftovers(tree:string):{root:string;writer:string}[]{
+  const target=join(tree,'target');
+  if(!isDirectory(target))return [];
+  return readdirSync(target).filter(name=>!cargoProfiles.some(profile=>profile===name)&&!cargoMetadata.test(name)).sort().map(name=>({
+    root:join(target,name),writer:name==='tmp'?'compiler/test-support/scratch.rs (test scratch)':
+      name.endsWith('-tests')?'compiler integration tests via compiler/test-support/scratch.rs':
+      name==='gate-costs'?'tooling/gate/step-scheduling.ts':
+      /^\d+-/.test(name)?'historical issue #'+name.split('-')[0]+' probe/log; writer unknown':'unknown',
+  }));
+}
+function cargoCache(target:string):boolean{
+  const file=join(target,'CACHEDIR.TAG');
+  try{return lstatSync(file).isFile()&&!lstatSync(file).isSymbolicLink()&&readFileSync(file,'utf8').startsWith('Signature: 8a477f597d28d172789f06886806bc55');}
+  catch(error){if(missing(error))return false;throw error;}
+}
+/** Include routine warmth/branch decisions too when admission actually refuses. */
+export function describeReclamation(...reports:(ReclaimReport|null|undefined)[]):string{
+  const lines=reports.flatMap(report=>report?[
+    ...report.removed.map(row=>'removed '+row.root+': '+row.kind+'; '+row.allocatedBytes+' allocated bytes'),
+    ...report.kept.map(row=>'kept '+row.root+': '+row.reason),
+  ]:[]);
+  return lines.length?'\nDisk reclamation:\n'+[...new Set(lines)].join('\n'):'';
+}
+
 export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const {pool,host,coldBytes}=options;
   const first=options.snapshot(),trigger=first.floorBytes+first.reservedBytes+coldBytes;
@@ -194,10 +222,14 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     if(record.version!==1||typeof record.generation!=='string'||!/^[a-f0-9]{64}$/.test(record.generation))throw Error('invalid profile generation '+file);
     return record.generation===generations[name]?'current':'obsolete';
   };
+  const assertUnclaimed=(root:string):void=>{
+    const owner=options.protectedRoots().flatMap(owner=>[owner.root,owner.target]).find(path=>under(resolve(path),root)||under(root,resolve(path)));
+    if(owner)throw Error('live lease or build claim: '+owner);
+  };
   const candidates:Candidate[]=[];
   const poolTargets:ReclaimTarget[]=registered().map(tree=>({tree:resolve(tree.path),target:join(tree.path,'target'),service:false}));
   const add=(target:ReclaimTarget,root:string,kind:ReclaimKind,movedAt:number,branch?:string):void=>{
-    candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,movedAt,...(branch?{branch}:{})});
+    candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,target:target.target,movedAt,...(branch?{branch}:{})});
   };
   for(const target of [...poolTargets,...options.services]){
     const start=candidates.length;
@@ -222,15 +254,28 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       // debug is the retired top-level test profile, never clippy/debug.
       if(isDirectory(join(target.target,'debug')))add(target,join(target.target,'debug'),'obsolete-profile',movedAt);
       for(const name of ['nts-dev','clippy'] as const)if(isDirectory(join(target.target,name))&&marker(join(target.target,name),name)==='obsolete')add(target,join(target.target,name),'obsolete-profile',movedAt);
-      if(!target.service)add(target,target.target,'free-build-output',movedAt);
+      if(!target.service){
+        const leftovers=targetLeftovers(target.tree),cache=cargoCache(target.target);
+        for(const row of leftovers)keep(row.root,'unrecognized target content; writer: '+row.writer);
+        if(!leftovers.length&&cache)add(target,target.target,'free-build-output',movedAt);
+        else for(const name of cargoProfiles){
+          const output=join(target.target,name);
+          if(!isDirectory(output))continue;
+          // A successful owner marker proves the profile even where older
+          // writers omitted the top-level Cargo tag. Unknown siblings survive.
+          const proven=cache||((name==='nts-dev'||name==='clippy')&&marker(output,name)!=='unknown');
+          if(proven)add(target,output,'free-build-output',movedAt);
+          else keep(output,'profile has neither Cargo cache identity nor a completion marker');
+        }
+      }
     }catch(error){candidates.length=start;if(!missing(error))keep(target.tree,error);}
   }
   // Keep two useful free targets. Stale markers and mere empty folders cannot
   // displace a current completed generation; recent use breaks equal warmth.
-  const warmTargets=poolTargets.filter(target=>candidates.some(row=>row.root===target.target&&row.kind==='free-build-output'));
+  const warmTargets=poolTargets.filter(target=>candidates.some(row=>row.target===target.target&&row.kind==='free-build-output'));
   const warmth=(target:ReclaimTarget)=>['nts-dev','clippy'].filter(name=>isDirectory(join(target.target,name))&&marker(join(target.target,name),name as BuildOutputName)==='current').length;
-  warmTargets.sort((a,b)=>warmth(b)-warmth(a)||(candidates.find(row=>row.root===b.target)?.movedAt??0)-(candidates.find(row=>row.root===a.target)?.movedAt??0)||a.tree.localeCompare(b.tree));
-  const retained=new Set(warmTargets.slice(0,Math.max(2,options.maintenance?.keep??2)).map(row=>row.target));
+  warmTargets.sort((a,b)=>warmth(b)-warmth(a)||(candidates.find(row=>row.target===b.target)?.movedAt??0)-(candidates.find(row=>row.target===a.target)?.movedAt??0)||a.tree.localeCompare(b.tree));
+  const retained=new Set(warmTargets.filter(target=>warmth(target)>0).slice(0,Math.max(2,options.maintenance?.keep??2)).map(row=>row.target));
   const rank:Record<ReclaimKind,number>={'obsolete-profile':0,'unbuilt-checkout':1,'free-build-output':2,'detached-build-output':3};
   candidates.sort((a,b)=>rank[a.kind]-rank[b.kind]||a.movedAt-b.movedAt||a.root.localeCompare(b.root));
   for(const candidate of candidates){
@@ -239,7 +284,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     const goal=snapshot.floorBytes+snapshot.reservedBytes+2*coldBytes;
     if(report.triggered&&snapshot.freeBytes>=goal)break;
     if(!report.triggered&&options.maintenance&&candidate.movedAt>=options.maintenance.before)continue;
-    if(kind==='free-build-output'&&retained.has(root)){keep(root,'two warm free targets retained',true);continue;}
+    if(kind==='free-build-output'&&retained.has(candidate.target)){if(!report.kept.some(row=>row.root===candidate.target&&row.reason==='two warm free targets retained'))keep(candidate.target,'two warm free targets retained',true);continue;}
     // A previous obsolete-profile removal may have consumed this candidate.
     if(!existsSync(root))continue;
     let lock:GateResource|null=null,deleted=false;
@@ -247,7 +292,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       sameRoot(candidate.identity);
       lock=GateResource.tryAcquire(tree+'.lock');if(!lock)throw Error('tree resource lock is held');
       if(gitRead(pool.git,['rev-parse','refs/heads/main'])!==revision)throw Error('current build policy changed during reclamation');
-      if(options.protectedRoots().some(owner=>[owner.root,owner.target].some(path=>under(resolve(path),root)||under(root,resolve(path)))))throw Error('live lease or build claim');
+      assertUnclaimed(root);
       if(candidate.branch)detached(tree,candidate.branch);
       else if(!candidate.service)free(tree);
       if(kind==='unbuilt-checkout'){
@@ -259,12 +304,18 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
           if(!lstatSync(join(tree,path)).isSymbolicLink()||realpathSync(join(tree,path))!==realpathSync(join(pool.git.root,path)))throw Error('ignored local data: '+path);
         }
         if(existsSync(join(tree,'target')))throw Error('checkout acquired build output');
+      }else if(kind==='free-build-output'&&root!==candidate.target){
+        const name=basename(root);
+        if(dirname(root)!==candidate.target||!cargoProfiles.some(profile=>profile===name))throw Error('unrecognized Cargo profile');
+        if(gitRead(pool.git,['ls-files','--','target/'+name],tree))throw Error('tracked target content');
+        const completed=(name==='nts-dev'||name==='clippy')&&marker(root,name)!=='unknown';
+        if(!cargoCache(candidate.target)&&!completed)throw Error('profile has neither Cargo cache identity nor a completion marker');
       }else if(kind==='free-build-output'||kind==='detached-build-output'){
         if(gitRead(pool.git,['ls-files','--','target'],tree))throw Error('tracked target content');
         for(const name of ['nts-dev','clippy'] as const)if(isDirectory(join(root,name)))marker(join(root,name),name);
-        const allowed=/^(?:nts-dev|clippy|debug|release|CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json)$/;
-        for(const name of readdirSync(root))if(!allowed.test(name))throw Error('unrecognized target content: '+name);
-        if(!readFileSync(join(root,'CACHEDIR.TAG'),'utf8').startsWith('Signature: 8a477f597d28d172789f06886806bc55'))throw Error('target lacks Cargo cache identity');
+        const allowed=(name:string)=>cargoProfiles.some(profile=>profile===name)||cargoMetadata.test(name);
+        for(const name of readdirSync(root))if(!allowed(name))throw Error('unrecognized target content: '+name);
+        if(!cargoCache(root))throw Error('target lacks Cargo cache identity');
       }else if(basename(root)!=='debug'&&marker(root,basename(root) as BuildOutputName)!=='obsolete')throw Error('profile is no longer obsolete');
       const allocatedBytes=host.allocatedBytes(root);
       const before=options.snapshot().freeBytes;
@@ -274,8 +325,14 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       // Measurement may be slow. Re-read every mutable lease/presence fact
       // beside the final physical fence, while both locks are still held.
       if(candidate.branch)detached(tree,candidate.branch);
-      if(options.protectedRoots().some(owner=>[owner.root,owner.target].some(path=>under(resolve(path),root)||under(root,resolve(path)))))throw Error('live lease or build claim');
+      assertUnclaimed(root);
       sameRoot(candidate.identity);
+      if(kind==='free-build-output'&&root!==candidate.target){
+        const name=basename(root);
+        if(gitRead(pool.git,['ls-files','--','target/'+name],tree))throw Error('tracked target content');
+        const completed=(name==='nts-dev'||name==='clippy')&&marker(root,name)!=='unknown';
+        if(!cargoCache(candidate.target)&&!completed)throw Error('profile has neither Cargo cache identity nor a completion marker');
+      }
       if(kind==='unbuilt-checkout'){
         assertWorkerPresenceWritable(tree);
         gitRead(pool.git,['worktree','remove','--',root]);deleted=true;

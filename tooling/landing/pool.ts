@@ -44,7 +44,7 @@ import { describeUsers, treeUsers, type TreeUser } from "./tree-users.ts";
 import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from '../gate/disk-capacity.ts';
 import {completedBuild} from '../gate/build-completion.ts';
 import type {HostObservations} from '../gate/host-observations.ts';
-import type {ReclaimReport} from '../gate/disk-reclamation.ts';
+import {describeReclamation,type ReclaimReport} from '../gate/disk-reclamation.ts';
 import {workerPresence,writeWorkerPresence,assertWorkerPresenceWritable,removeWorkerPresence,type WorkerPresence} from './pool-presence.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 
@@ -199,7 +199,7 @@ export class Pool {
   private leases(trees:readonly PoolTree[]):BuildLease[]{return trees.filter(tree=>tree.state==='held'&&workerPresence(tree.path,tree.branch!).state==='attached').map(tree=>({root:tree.path,target:join(tree.path,'target')}));}
   /** Admission for a fresh hold or a newly restored cold/partial promise.
    * Existing counted leases are handled idempotently by setPresence. */
-  private admitLease(path:string,resuming=false):void{
+  private admitLease(path:string,resuming=false,previous?:ReclaimReport|null):void{
     const pending={root:path,target:join(path,'target')};
     const measure=()=>{
       // Decide from one complete hypothetical snapshot. Another builder may
@@ -211,9 +211,9 @@ export class Pool {
         snapshot.leases.filter(lease=>lease.root!==path&&lease.remainingBytes>0).length,bytes);
     };
     if(resuming&&measure().treeBytes===0)return;
-    this.capacity.poolReclaim(this.dir,undefined,[pending]);
+    const reclamation=this.capacity.poolReclaim(this.dir,undefined,[pending]);
     const room=measure();
-    if(!room.ok)throw new PoolFull(room);
+    if(!room.ok)throw new PoolFull({...room,why:room.why+describeReclamation(previous,reclamation)});
   }
   private roomFor(freeBytes:number,reservedBytes:number,unbuilt:number,treeBytes:number):Room {
     const floorBytes = treeBytes + DISK_MARGIN_BYTES;
@@ -270,7 +270,7 @@ export class Pool {
         this.inputs(mine.path);
         return this.trees().find(t=>t.name===mine.name)!;
       }
-      this.capacity.poolReclaim(this.dir);
+      const reclamation=this.capacity.poolReclaim(this.dir);
       // Reclamation may remove free unbuilt trees. Refresh before selection.
       const available=this.trees();
       const elsewhere = worktrees(this.git).find(t => t.branch === branch);
@@ -279,7 +279,7 @@ export class Pool {
       let tree = available.filter(t => t.state === "free").sort((a, b) => compatible(b) - compatible(a) || Number(a.name) - Number(b.name))[0]?.name;
       if (!tree)tree=this.nextName();
       const path = join(this.dir, tree);
-      this.admitLease(path);
+      this.admitLease(path,false,reclamation);
       if(!existsSync(path))this.grow(tree);
       const exists = run(this.git, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], this.git.root).status === 0;
       checked(this.git, exists ? ["switch", "-q", branch] : ["switch", "-q", "-c", branch, "refs/heads/main"], path);

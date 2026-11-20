@@ -22,9 +22,9 @@ export class ToolingInstrumentError extends Error{
 }
 export class DiskBuildAdmissionError extends ToolingInstrumentError{
   readonly disk:DiskBuildRefusal;
-  constructor(value:DiskBuildRefusal){
+  constructor(value:DiskBuildRefusal,reclamation=''){
     const disk=readDiskBuildRefusal(value);
-    super('disk-capacity',`disk build admission: ${disk.target} needs ${disk.shortBytes} more bytes above the ${disk.floorBytes/2**30} GiB floor and active build promises (${disk.buildReservedBytes} build bytes, ${disk.temporaryReservedBytes} temporary bytes; ${disk.freeBytes} free bytes)`);
+    super('disk-capacity',`disk build admission: ${disk.target} needs ${disk.shortBytes} more bytes above the ${disk.floorBytes/2**30} GiB floor and active build promises (${disk.buildReservedBytes} build bytes, ${disk.temporaryReservedBytes} temporary bytes; ${disk.freeBytes} free bytes)${reclamation}`);
     this.name='DiskBuildAdmissionError';this.disk=disk;
   }
 }

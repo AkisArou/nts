@@ -1,3 +1,4 @@
+import {targetLeftovers} from '../gate/disk-reclamation.ts';
 import {binaryPinDiagnostics,type PinOwnerObservation} from '../gate/binary-pins.ts';
 import {listedCgroupPopulated} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
@@ -282,7 +283,7 @@ function fullCheckPin(path: string): boolean {
   catch { return false; }
 }
 
-function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Removable[],notes:string[]): string[] {
+function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Removable[],notes:string[],notices:string[]): string[] {
   const at = relative(context.cache, entry.path);
   const lines: string[] = [];
   if ("writer" in keep && keep.writer && !writerNames(context.root, keep.writer, at)) {
@@ -292,7 +293,12 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
   switch (keep.kind) {
     case "kept": break;
     case "pool":
-      for (const child of children) if (!/^\d+$/.test(child.name)) lines.push(`${display(child.path, context)}: not a pool slot (~/.cache/nts-pool/<n>)`);
+      for (const child of children) {
+        if (!/^\d+$/.test(child.name)) lines.push(`${display(child.path, context)}: not a pool slot (~/.cache/nts-pool/<n>)`);
+        else try{
+          for(const row of targetLeftovers(child.path))notices.push(`${display(row.root,context)}: retained target sibling; writer: ${row.writer}`);
+        }catch(error){notes.push(`${display(child.path,context)}: target sibling inventory unavailable: ${error instanceof Error?error.message:String(error)}`);}
+      }
       break;
     case "runs":
     case "logs": {
@@ -339,7 +345,7 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
         }
         const inner = keep.folders[child.name];
         if (!inner) lines.push(`${display(child.path, context)}: kept by no entry of keep.json under ${entry.name}/`);
-        else lines.push(...judgeFolder(child, inner, context, removable,notes));
+        else lines.push(...judgeFolder(child, inner, context, removable,notes,notices));
       }
       break;
   }
@@ -391,7 +397,7 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
     if(legacy){issueScratch(entry,Number(legacy[1]),context,red,notes);continue;}
     const rule = keep[entry.name];
     if (!rule) red.push(`${display(entry.path, context)}: an nts folder no rule keeps`);
-    else red.push(...judgeFolder(entry, rule, context, removable,notes));
+    else red.push(...judgeFolder(entry, rule, context, removable,notes,notices));
   }
   red.push(...nodeTestRoots(input, context));
   // Legacy writers have no leases. No age or absence of a new holder proves

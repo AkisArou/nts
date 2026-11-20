@@ -587,3 +587,13 @@ test('an unknown unlisted slice is still a named observation failure',()=>{
   const observation=new CgroupObservations(files);
   assert.throws(()=>observation.populated('/unknown'),error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes('/unknown'));
 });
+
+test('the count names retained pool target siblings and known writers without deleting them',t=>{
+  const cache=cacheFixture(t),tree=join(cache,'nts-pool/1');
+  for(const name of ['nts-dev','clippy','test-scratch','tmp','919-probe.log','gate-costs'])mkdirSync(join(tree,'target',name),{recursive:true});
+  const result=count(input(t,{cache}),KEEP),lines=(result.notices??[]).join('\n');
+  for(const name of ['test-scratch','tmp','919-probe.log','gate-costs'])assert.ok(lines.includes('nts-pool/1/target/'+name),lines);
+  assert.match(lines,/compiler\/test-support\/scratch.rs/);assert.match(lines,/historical issue #919/);assert.match(lines,/tooling\/gate\/step-scheduling.ts/);
+  assert.ok(result.removable.every(row=>!row.path.startsWith(join(tree,'target'))));
+  assert.ok(existsSync(join(tree,'target/test-scratch')));
+});

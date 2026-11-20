@@ -625,3 +625,53 @@ test('ordinary upkeep retains task and warm-target facts without kept-line noise
   assert.equal(kept.filter(row=>row.reason==='two warm free targets retained').length,2);
   assert.ok(kept.every(row=>row.routine));assert.deepEqual(pruneLines(pruned),[]);
 });
+
+for(const blocked of [false,true])test('take reclaims the oldest surplus Cargo profiles beside preserved evidence; blocked '+blocked,t=>{
+  const f=pool(t,3),old=join(f.p.dir,'1');
+  for(const [index,tree] of f.p.trees().entries()){
+    for(const profile of ['nts-dev','clippy'] as const){const path=join(tree.path,'target',profile);mkdirSync(path,{recursive:true});completeBuild(tree.path,profile,path);}
+    f.freedAt(tree.name,(3-index)*DAY);
+  }
+  const evidence=join(old,'target/test-scratch/evidence');mkdirSync(join(old,'target/test-scratch'));writeFileSync(evidence,'keep');
+  const host={...f.p.capacity.host,disk:(path:string)=>({...f.p.capacity.host.disk(path),freeBytes:DISK_MARGIN_BYTES-1+(existsSync(join(old,'target/nts-dev'))?0:16*GB)}),
+    allocatedBytes:(path:string)=>path===join(old,'target/nts-dev')&&existsSync(path)?16*GB:0};
+  const p=new Pool(f.p.dir,f.p.git,()=>{},{host,users:()=>[],reclamation:{services:[],ownership:()=>{if(blocked)throw Error('unit build-owner.service owns profile');}}});
+  if(blocked){
+    assert.throws(()=>p.take('919'),error=>{
+      assert.ok(error instanceof PoolFull);
+      for(const tree of f.p.trees())assert.ok(error.message.includes(tree.path),error.message);
+      assert.match(error.message,/two warm free targets retained/);assert.match(error.message,/test-scratch/);assert.match(error.message,/build-owner.service/);
+      return true;
+    });
+    assert.equal(p.trees().some(tree=>tree.branch==='919'),false);
+  }else{
+    const taken=p.take('919');assert.equal(taken.name,'2','a retained compatible warm tree is preferred');
+    assert.equal(existsSync(join(old,'target/nts-dev')),false);
+    for(const name of ['2','3'])assert.ok(existsSync(join(p.dir,name,'target/nts-dev')));
+  }
+  assert.equal(readFileSync(evidence,'utf8'),'keep');
+});
+
+test('a reclaimed free tree is taken and Cargo rebuilds its removed profile',t=>{
+  const f=pool(t,0);
+  f.s.commit({'.gitignore':'target/\nCargo.lock\n','Cargo.toml':'[package]\nname="reclaimed-free"\nversion="0.0.0"\nedition="2021"\n[profile.nts-dev]\ninherits="dev"\ndebug=0\n',
+    'src/main.rs':'fn main() { println!("rebuilt free tree"); }\n'},'rebuild control');
+  f.p.init(3);
+  for(const [index,tree] of f.p.trees().entries()){
+    for(const name of ['nts-dev','clippy'] as const){const path=join(tree.path,'target',name);mkdirSync(path,{recursive:true});completeBuild(tree.path,name,path);}
+    f.freedAt(tree.name,(3-index)*DAY);
+  }
+  const old=join(f.p.dir,'1'),evidence=join(old,'target/test-scratch/evidence');
+  mkdirSync(join(old,'target/test-scratch'));writeFileSync(evidence,'preserve');
+  const release=f.p.capacity.beginBuild({root:old,target:join(old,'target'),outputs:['nts-dev']});
+  try{const result=cargoSync(['build','--offline','--profile','nts-dev'],{cwd:old,env:f.s.env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);completeBuild(old,'nts-dev',join(old,'target/nts-dev'));}finally{release();}
+  const host={...f.p.capacity.host,disk:(path:string)=>({...f.p.capacity.host.disk(path),freeBytes:44*GB+(existsSync(join(old,'target/nts-dev'))?0:16*GB)}),allocatedBytes:(path:string)=>path===join(old,'target/nts-dev')&&existsSync(path)?16*GB:0};
+  const p=new Pool(f.p.dir,f.p.git,()=>{},{host,users:()=>[],reclamation:{services:[],ownership:()=>{}}});
+  const report=p.capacity.reclaim(p.dir)!;assert.ok(report.removed.some(row=>row.root===join(old,'target/nts-dev')),JSON.stringify(report));
+  // Occupy the warm pair so the next task takes the reclaimed checkout.
+  p.take('920');p.take('921');const taken=p.take('919');assert.equal(taken.path,old);
+  const finish=p.capacity.beginBuild({root:old,target:join(old,'target'),outputs:['nts-dev']});
+  try{const result=cargoSync(['build','--offline','--profile','nts-dev'],{cwd:old,env:f.s.env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}finally{finish();}
+  assert.equal(execFileSync(join(old,'target/nts-dev/reclaimed-free'),{cwd:old,env:f.s.env,encoding:'utf8'}).trim(),'rebuilt free tree');
+  assert.equal(readFileSync(evidence,'utf8'),'preserve');
+});

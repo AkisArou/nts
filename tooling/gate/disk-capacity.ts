@@ -19,7 +19,7 @@ import {infrastructureProbe} from './infrastructure-probe.ts';
 import {TEMP_DISK_FLOOR_BYTES} from './run-temporary.ts';
 import {assertStateVersion,assertWritableState} from './state-version.ts';
 import {durableRecord} from './durable-record.ts';
-import {reclaimDisk,liveReclaimOwnership,type ReclaimReport,type ReclaimTarget,type ReclaimOwnership} from './disk-reclamation.ts';
+import {describeReclamation,reclaimDisk,liveReclaimOwnership,type ReclaimReport,type ReclaimTarget,type ReclaimOwnership} from './disk-reclamation.ts';
 import {landingLayout} from '../landing/layout.ts';
 import {layout as fullCheckLayout} from '../full-check/layout.ts';
 import {DiskBuildAdmissionError} from '../differential/command-entry/instrument.ts';
@@ -189,10 +189,10 @@ export class DiskCapacity {
     if(!identity)throw Error('disk build owner has no process birth identity');
     this.locked(()=>{
       const claims=this.claims(),next={...lease,id,pid,identity};
-      this.reclaimLocked(lease.target,[...this.activeLeases(),...claims,next]);
+      const reclamation=this.reclaimLocked(lease.target,[...this.activeLeases(),...claims,next]);
       const snapshot=this.snapshot(lease.target,[...this.activeLeases(),...claims,next]);
       if(snapshot.availableBytes<0)throw new DiskBuildAdmissionError({root:resolve(lease.root),target:resolve(lease.target),outputs:[...(lease.outputs??['nts-dev','clippy'])],
-        shortBytes:-snapshot.availableBytes,freeBytes:snapshot.freeBytes,floorBytes:snapshot.floorBytes,buildReservedBytes:snapshot.buildReservedBytes,temporaryReservedBytes:snapshot.temporaryReservedBytes});
+        shortBytes:-snapshot.availableBytes,freeBytes:snapshot.freeBytes,floorBytes:snapshot.floorBytes,buildReservedBytes:snapshot.buildReservedBytes,temporaryReservedBytes:snapshot.temporaryReservedBytes},describeReclamation(reclamation));
       this.record([...claims,next]);
     });
     let released=false;
