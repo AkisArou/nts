@@ -132,6 +132,9 @@ import {typeScriptOracleHandoff} from '../census/typescript-oracle-results.ts';
 import {programOracleHandoff} from '../differential/oracle-results.ts';
 import {programOracleDirectory} from '../differential/oracle-result-scope.ts';
 import {outsideSource} from './source-containment.ts';
+import {build as sharedBuild} from './build.ts';
+import {assertDoctestPreparation} from './doctest-preparation.ts';
+import {reserveJob} from './memory-ledger.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -292,7 +295,6 @@ function checkTable() {
   if (problem) usage(`run.mjs: ${problem}`);
 }
 
-let buildCompilerRequested = true;
 function requested() {
   const raw = argSteps.length ? argSteps.join(" ") : env.NTS_GATE_STEPS;
   if (raw === undefined || raw.trim() === "") return STEPS.map((s) => s.name);
@@ -308,10 +310,6 @@ function requested() {
     );
   }
   const set = new Set(want);
-  buildCompilerRequested = set.has('build');
-  // A doctests-only selection still prepares its exact Cargo graph. Landing
-  // supplies the receipt from its separate shared build instead.
-  if(set.has('doctests')&&!env.NTS_DOCTEST_PREPARATION)set.add('build');
   if(want.some(name=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(name)))set.add('program-oracles');
   if(want.some(name=>['typescript-c','typescript-llvm','typescript-jvm'].includes(name)))set.add('typescript-oracles');
   return STEPS.map((s) => s.name).filter((n) => set.has(n));
@@ -407,8 +405,8 @@ function stepEnv(step, slots, scope) {
   e.CARGO_TARGET_DIR = target;
   if(plan.includes('doctests'))e.NTS_DOCTEST_PREPARATION=env.NTS_DOCTEST_PREPARATION??join(RUN_DIR,'doctest-build.json');
   if(step.name==='build'){
-    e.NTS_BUILD_DOCTESTS=plan.includes('doctests')?'1':'0';
-    e.NTS_BUILD_COMPILER=buildCompilerRequested?'1':'0';
+    // Compilation belongs to admitted preparation, before step scopes.
+    e.NTS_BUILD_DOCTESTS='0';
   }
   // clippy checks the same tree in a profile nothing else builds, so its
   // artefacts live apart and it runs beside the release build and `cargo test`
@@ -1807,6 +1805,25 @@ caseCosts.preparePhases(plan,env);
 identities.commit = git("rev-parse", "HEAD");
 const dirty = git("status", "--porcelain", "--untracked-files=no");
 identities.dirty = dirty === null ? null : dirty.split("\n").filter(Boolean).length;
+let doctestSetupFailure;
+if(plan.includes('doctests')){
+  const supplied=env.NTS_DOCTEST_PREPARATION,receipt=supplied??join(RUN_DIR,'doctest-build.json');
+  try{
+    const preparationEnv={...env,CARGO_TARGET_DIR:target,NTS_BUILD_DOCTESTS:'1',NTS_DOCTEST_PREPARATION:receipt};
+    // pinned.sh and landing prepare through this same build owner. A direct
+    // selection (or an older launcher) admits that work before step scopes.
+    if(!supplied&&!existsSync(receipt)){
+      const hold=await reserveJob({key:'pinned-build',what:'gate doctest prerequisite preparation'},
+        {env:preparationEnv,signal:startupAbort.signal});
+      try{
+        const status=await sharedBuild(['--profile','nts-dev','--no-compiler'],preparationEnv,ROOT);
+        if(status!==0)throw new ToolingInstrumentError('tooling-setup','doctests shared build preparation exited '+status);
+      }finally{hold.release();await hold.closed;}
+    }
+    assertDoctestPreparation(preparationEnv,ROOT);
+    assignOwnedValues(env,{NTS_DOCTEST_PREPARATION:receipt});
+  }catch(error){if(isCommandExit(error))throw error;doctestSetupFailure=String(error);}
+}
 if (!plan.includes("build")) identify();
 // **Every setting that changes how hard a step runs, at the top of the log.**
 // On 2026-10-06 a wrapper exported NTS_JOBS=1-2 and RUST_TEST_THREADS=1-2 and
@@ -1833,8 +1850,8 @@ function settings() {
 // step's slice is under the run's own, the run's reservation in the memory
 // ledger is measured as that slice, and the capture below runs inside the
 // reservation. Without either, no step can run.
-let setupFailure, dependencySealFailure;
-try { scopes = new GateScopes(env, { rank: PRIORITY, ownerFile: join(ROOT, "target/gate-scope-owner.json") }); }
+let setupFailure=doctestSetupFailure, dependencySealFailure;
+try { if(!setupFailure)scopes = new GateScopes(env, { rank: PRIORITY, ownerFile: join(ROOT, "target/gate-scope-owner.json") }); }
 catch (error) {if(isCommandExit(error))throw error; setupFailure = `step scope setup failed: ${error.message}`; }
 if(diagnosticsFailure)setupFailure=`host observation setup failed: ${diagnosticsFailure}`;
 if(!setupFailure&&scopes){

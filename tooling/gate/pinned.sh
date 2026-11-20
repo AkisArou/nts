@@ -142,11 +142,20 @@ echo "gate: $sha in $tree"
 cd "$tree"
 # Only Cargo owns this job. Once it exits the shell has no reservation to
 # carry into run.mjs, whose admission discards the exited build owner.
-if [ -x /usr/bin/time ] && [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
-  CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned release preparation $sha" -- \
-    /usr/bin/time -f '%e %U %S' -o "$NTS_GATE_RUN_DIR/prepare.cpu" node "$pinned_launcher/tooling/gate/cargo.ts" build --release -q
+prepare_compiler() {
+  if [ -x /usr/bin/time ] && [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
+    CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned compiler preparation $sha" -- \
+      /usr/bin/time -f '%e %U %S' -o "$NTS_GATE_RUN_DIR/prepare.cpu" "$@"
+  else
+    CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned compiler preparation $sha" -- "$@"
+  fi
+}
+# The candidate owns the preparation recipe, including its selected doctest
+# graph. Older candidates retain their original release-only preparation.
+if [ -f "$tree/tooling/gate/build.ts" ]; then
+  prepare_compiler node "$tree/tooling/gate/build.ts" --profile release --gate "$@"
 else
-  CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned release preparation $sha" -- node "$pinned_launcher/tooling/gate/cargo.ts" build --release -q
+  prepare_compiler node "$pinned_launcher/tooling/gate/cargo.ts" build --release -q
 fi
 NTS_CHECKERS=1 \
 NTS_BIN="$target/release/nts" \

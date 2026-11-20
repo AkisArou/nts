@@ -81,6 +81,18 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   const build = join(own, "build.sh");
   writeFileSync(build, `#!/bin/sh\n[ "$(cat ${JSON.stringify(join(controls, "build"))} 2>/dev/null)" = fail ] && { echo "error[E0308]: mismatched types"; exit 101; }\nmkdir -p "$CARGO_TARGET_DIR/${PROFILE}" && echo "nts $CARGO_INCREMENTAL" > "$CARGO_TARGET_DIR/${PROFILE}/nts" && chmod +x "$CARGO_TARGET_DIR/${PROFILE}/nts"\necho "   Compiling nts-core"\n`);
   chmodSync(build, 0o755);
+  writeFileSync(build,readFileSync(build,'utf8')+`
+if [ "\${NTS_BUILD_DOCTESTS:-0}" = 1 ]; then
+node --input-type=module - <<'JS'
+import {realpathSync} from 'node:fs';
+import {testInvocation} from './tooling/gate/test-profile.ts';
+import {durableRecord} from './tooling/gate/durable-record.ts';
+const invocation=testInvocation('doctests-build');
+durableRecord(process.env.NTS_DOCTEST_PREPARATION,{version:2,status:0,buildFinished:true,artifacts:[{}],buildNamespace:realpathSync(invocation.targetDirectory),
+invocation:{cwd:invocation.cwd,profileDirectory:invocation.profileDirectory,args:invocation.args}});
+JS
+fi
+`);
   const control = (step: string, what: string) => writeFileSync(join(controls, step), what);
   const options = (steps: string[], extra: Partial<RunOptions> = {}): RunOptions => ({
     tree, target, run, commit, steps, build: [build], env: { ...fixtureEnvironment(t), HOME: home },

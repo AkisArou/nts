@@ -2238,11 +2238,7 @@ compile_time_rc() {
 }
 
 build() {
-  if [ "${NTS_BUILD_COMPILER:-1}" = 0 ]; then
-    node tooling/gate/build.ts --profile release --no-compiler
-  else
-    node tooling/gate/build.ts --profile release
-  fi
+  node tooling/gate/build.ts --profile release
 }
 step "build"   build
 step "clippy"  lint

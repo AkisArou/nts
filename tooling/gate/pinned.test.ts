@@ -13,6 +13,7 @@ import {ownMemory,withoutHanded} from "./test-memory.ts";
 import {admittedEntry,readLedger} from "./memory-ledger.ts";
 import {GateResource} from "./gate-resource.ts";
 import { testScratch } from "./test-scratch.ts";
+import {TEST_PROFILE_MANIFEST} from './test-profile.ts';
 
 const script = readFileSync(new URL("./pinned.sh", import.meta.url), "utf8");
 
@@ -62,11 +63,12 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
   });
 }
 
-for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit ${status}, before the gate`, async t => {
+for (const status of [0, 23]) for(const docs of [false,true])test(`pinned Cargo owns admission until its exit ${status}, before the gate${docs?' including doctest preparation':''}`, async t => {
   const directory = testScratch(t, "pinned-admission"), root = join(directory, "repo"), tree = join(directory, "tree");
   const target = join(directory, "target"), bin = join(directory, "bin");
   mkdirSync(join(root, "tooling/gate"), {recursive:true});mkdirSync(bin);
-  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts", "tooling/gate/cargo.ts","tooling/gate/affinity/main.ts"], root);
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts", "tooling/gate/build.ts","tooling/gate/affinity/main.ts"], root);
+  writeFileSync(join(root,'Cargo.toml'),'[workspace]\n'+readFileSync(TEST_PROFILE_MANIFEST,'utf8').split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]')));
   writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
   writeFileSync(join(root,'tooling/gate/affinity/main.ts'),'');
   writeFileSync(join(root, "tooling/inputs/link.sh"), "exit 0\n");
@@ -88,6 +90,14 @@ for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit $
   assert.ok(id,'Cargo preparation has no memory reservation');
   const entry=admittedEntry(ledger,id);assert.ok(entry,'Cargo preparation reservation is not live');
   assert.equal(process.env.CARGO_TARGET_DIR,${JSON.stringify(target)});
+  if(process.argv.includes('--doc')){
+    assert.equal(${docs},true,'unselected doctests were prepared');
+    assert.deepEqual(process.argv.slice(-2),['--','--list']);
+    fs.mkdirSync(${JSON.stringify(join(target,'nts-dev'))},{recursive:true});
+    console.log(JSON.stringify({reason:'compiler-artifact',filenames:[${JSON.stringify(join(target,'nts-dev/deps/private'))}],profile:{test:false,debuginfo:0},fresh:false}));
+    console.log(JSON.stringify({reason:'build-finished',success:true}));
+    console.log('DOCTEST prerequisites prepared under '+id);return;
+  }
   fs.writeSync(1,'BUILD '+JSON.stringify({id,owner:entry.owner.pid,cargo:process.pid})+'\\n');
   const release=Buffer.alloc(1);assert.equal(fs.readSync(0,release,0,1,null),1);
   process.exitCode=${status};
@@ -102,11 +112,12 @@ for(const entry of readLedger(process.env.NTS_MEMORY_LEDGER).admitted){
   assert.equal(admittedEntry(process.env.NTS_MEMORY_LEDGER,entry.id),null,'a live build owner survives gate entry');
 }
 console.log('GATE after build owner exited');
+${docs?`const {assertDoctestPreparation}=await import('./tooling/gate/doctest-preparation.ts');assertDoctestPreparation({...process.env,NTS_DOCTEST_PREPARATION:${JSON.stringify(join(directory,'run/doctest-build.json'))}});`:''}
 JS
 `);
   git("init","-q");git("add",".");git("commit","-qm","candidate");const candidate=git("rev-parse","HEAD");
   const planned = gateEnvironment(env, {run:join(directory,"run"),owned:{...owned,NTS_GATE_TREE:tree,NTS_GATE_TARGET:target,PATH:bin+":"+env.PATH}});
-  const child=spawn("sh",[join(root,"tooling/gate/pinned.sh"),candidate,"compile-time"],{cwd:root,env:planned.env,stdio:["pipe","pipe","pipe"]});
+  const child=spawn("sh",[join(root,"tooling/gate/pinned.sh"),candidate,docs?'doctests':"compile-time"],{cwd:root,env:planned.env,stdio:["pipe","pipe","pipe"]});
   let stdout="",stderr="",closed=false;child.stdout.on("data",part=>stdout+=part);child.stderr.on("data",part=>stderr+=part);
   const done=new Promise<{status:number|null;signal:NodeJS.Signals|null}>((resolve,reject)=>{
     child.once("error",reject);child.once("close",(status,signal)=>{closed=true;resolve({status,signal});});
@@ -120,5 +131,6 @@ JS
     assert.equal(stdout.includes("GATE after build owner exited"),status===0);
     assert.equal(admittedEntry(owned.NTS_MEMORY_LEDGER,row.id),null,'the preparation owner is gone before the route returns');
     if(status===0)assert.match(stdout,/GATE after build owner exited/);
+    assert.equal(stdout.includes('DOCTEST prerequisites prepared under'),docs&&status===0,stdout+stderr);
   }finally{child.stdin.end();if(!closed)await done;}
 });

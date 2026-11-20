@@ -58,6 +58,15 @@ test("a step the rules narrowed runs narrowed: the touched crates' doc tests", a
   assert.equal(readFileSync(join(f.controls, "doctest-crates"), "utf8"), "nts-core nts-cli\n");
 });
 
+test('a doctests-only landing prepares before its execution, and retains preparation on retry',async t=>{
+  const f=fixture(t);f.control('doctests','pressure');
+  const ran=await runLanding(f.options(['doctests'],{doctests:'nts-core'}));
+  assert.equal(ran.state,'green',ran.message);
+  assert.equal(ran.steps.find(row=>row.name==='doctests')?.attempt,2);
+  assert.ok(existsSync(join(f.run,'doctest-build.json')));
+  assert.equal(readFileSync(join(f.controls,'doctest-crates'),'utf8'),'nts-core\n');
+});
+
 test("a failing build refuses the change, and nothing after it runs", async t => {
   const f = fixture(t);
   f.control("build", "fail");
