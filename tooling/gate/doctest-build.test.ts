@@ -21,10 +21,10 @@ test('listing doctests prepares the identical graph, including dev dependency fe
   const subject=join(root,'subject/src/lib.rs');
   writeFileSync(subject,'/// ```\n/// assert_eq!(subject::answer(), 42);\n/// ```\npub fn answer() -> u32 { dependency::answer() }\n');
   const env={...fixtureEnvironment(t),CARGO_TARGET_DIR:target,CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
-    NTS_DOCTEST_CRATES:'subject',NTS_DOCTEST_PREPARATION:join(root,'prepared.json'),NTS_BUILD_DOCTESTS:'1'};
+    NTS_DOCTEST_CRATES:'subject',NTS_DOCTEST_PREPARATION:join(root,'doctest-build.json'),NTS_BUILD_DOCTESTS:'1',NTS_GATE_RUN_DIR:root};
   const run=(list:boolean)=>{
-    const artifacts=join(root,list?'prepared.json':'executed.json');
-    const command=list?[new URL('./build.ts',import.meta.url).pathname,'--profile','nts-dev','--no-compiler']
+    const artifacts=join(root,list?'doctest-build.json':'executed.json');
+    const command=list?[new URL('./build.ts',import.meta.url).pathname,'--profile','nts-dev','--no-compiler','--gate','doctests']
       :[new URL('./test-profile.ts',import.meta.url).pathname,'--artifacts',artifacts,'doctests'];
     const ran=spawnSync(process.execPath,command,{cwd:root,env,encoding:'utf8'});
     assert.equal(ran.status,0,ran.stdout+ran.stderr);
@@ -38,6 +38,10 @@ test('listing doctests prepares the identical graph, including dev dependency fe
     assert.throws(()=>assertDoctestPreparation({...env,...changed},root),/doctests needs successful shared build preparation/);
   const reused=run(false);assert.ok(reused.rows.every(row=>row.fresh),'execution compiles no library');assert.match(reused.output,/1 passed/);
   assert.ok(run(false).rows.every(row=>row.fresh),'warm execution stays warm');
+  const savedReceipt=readFileSync(env.NTS_DOCTEST_PREPARATION,'utf8');
+  const unselected=spawnSync(process.execPath,[new URL('./build.ts',import.meta.url).pathname,'--profile','nts-dev','--no-compiler','--gate','rustfmt'],{cwd:root,env,encoding:'utf8'});
+  assert.equal(unselected.status,0,unselected.stdout+unselected.stderr);
+  assert.equal(readFileSync(env.NTS_DOCTEST_PREPARATION,'utf8'),savedReceipt,'unselected doctests do not prepare or replace a receipt');
   // Counterfactual: omit preparation after a source edit. Correct answers
   // alone cannot prove that doctests avoided compiling the workspace.
   writeFileSync(dependency,readFileSync(dependency,'utf8')+'\npub fn unprepared_change() {}\n');
