@@ -15,7 +15,7 @@ import {durableRecord} from './durable-record.ts';
 export const TEST_PROFILE='nts-dev';
 export const TEST_INCREMENTAL='1';
 export const TEST_PROFILE_MANIFEST=fileURLToPath(new URL('../../Cargo.toml',import.meta.url));
-export const TEST_ROUTES=['workspace','inner','frontend','doctests'] as const;
+export const TEST_ROUTES=['workspace','inner','frontend','doctests','doctests-build'] as const;
 export type TestRoute=typeof TEST_ROUTES[number];
 export type TestInvocation={route:TestRoute;args:string[];env:NodeJS.ProcessEnv;cwd:string;profileDirectory:string;targetDirectory:string};
 function fail(why:string):never {throw new ToolingInstrumentError('tooling-setup','Rust test profile: '+why);}
@@ -56,11 +56,12 @@ export function testInvocation(route:TestRoute,selection:readonly string[]=[],en
   else if(route==='frontend'){
     if(selection.length)fail('frontend route takes no arguments');
     chosen=['-p','nts-frontend-ts','--test','integration','--jobs','4','--','native_invariants::','--ignored','--test-threads=1'];
-  }else if(route==='doctests'){
+  }else if(route==='doctests'||route==='doctests-build'){
     if(selection.length)fail('doctests selects crates through NTS_DOCTEST_CRATES');
     const crates=(env.NTS_DOCTEST_CRATES??'').trim().split(/\s+/).filter(Boolean);
     if(crates.some(name=>!/^[A-Za-z0-9_-]+$/.test(name)))fail('invalid NTS_DOCTEST_CRATES');
     chosen=['--doc',...(crates.length?[...new Set(crates)].flatMap(name=>['-p',name]):['--workspace'])];
+    if(route==='doctests-build')chosen.push('--','--list');
   }else chosen=[...selection];
   const args=['test','--profile',TEST_PROFILE,'--no-fail-fast','--message-format=json',...chosen];
   const targetAt=args.indexOf('--target'),target=targetAt<0?env.CARGO_BUILD_TARGET:args[targetAt+1];
@@ -85,8 +86,8 @@ export function assertTestArtifact(invocation:TestInvocation,value:unknown):bool
   return true;
 }
 
-export async function runTestProfile(route:TestRoute,selection:readonly string[]=[],env:NodeJS.ProcessEnv=process.env,cwd=process.cwd(),evidence?:{artifacts:string}):Promise<number> {
-  if(evidence&&!isAbsolute(evidence.artifacts))fail('artifact evidence needs an absolute path');
+export async function runTestProfile(route:TestRoute,selection:readonly string[]=[],env:NodeJS.ProcessEnv=process.env,cwd=process.cwd(),evidence?:{artifacts?:string;requireFresh?:boolean}):Promise<number> {
+  if(evidence?.artifacts&&!isAbsolute(evidence.artifacts))fail('artifact evidence needs an absolute path');
   const invocation=testInvocation(route,selection,env,cwd);
   assertPreparedInnerTests(invocation);
   assertTestProfileManifest(readFileSync(resolve(cwd,'Cargo.toml'),'utf8'));
@@ -102,12 +103,15 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
     try{value=JSON.parse(text);}catch{process.stdout.write(text+'\n');return;}
     const event=value as {reason?:unknown;message?:{rendered?:unknown}};
     if(!buildFinished&&event&&typeof event==='object'&&['compiler-artifact','compiler-message','build-script-executed','build-finished'].includes(String(event.reason))){
-      try{if(assertTestArtifact(invocation,event)){artifacts++;if(evidence)artifactRows.push(event);}}catch(error){problem??=error;}
+      try{if(assertTestArtifact(invocation,event)){
+        artifacts++;if(evidence?.requireFresh&&(event as {fresh?:unknown}).fresh!==true)fail('doctests compiled an artifact instead of reusing its build preparation');
+        if(evidence?.artifacts)artifactRows.push(event);
+      }}catch(error){problem??=error;}
       if(event.reason==='build-script-executed'){
         const script=event as {package_id?:unknown;out_dir?:unknown};
         if(typeof script.package_id!=='string'||!script.package_id||typeof script.out_dir!=='string'||!isAbsolute(script.out_dir)
           ||relative(invocation.profileDirectory,script.out_dir).split(sep).includes('..'))problem??=new ToolingInstrumentError('tooling-setup','Rust test profile: invalid build-script OUT_DIR');
-        else if(evidence)buildScripts.push(event);
+        else if(evidence?.artifacts)buildScripts.push(event);
       }
       if(event.reason==='compiler-message'&&typeof event.message?.rendered==='string')process.stdout.write(event.message.rendered);
       if(event.reason==='build-finished'){
@@ -124,11 +128,13 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
     child.once('close',(code,signal)=>{if(signal)reject(new ToolingInstrumentError('tooling-setup','Rust test profile: cargo killed by '+signal));else done(code??2);});
   });
   if(pending)line(pending);
-  if(evidence)durableRecord(evidence.artifacts,{version:2,status,buildFinished,artifacts:artifactRows,buildScripts,
+  if(evidence?.artifacts)durableRecord(evidence.artifacts,{version:2,status,buildFinished,artifacts:artifactRows,buildScripts,
+    invocation:{cwd:invocation.cwd,profileDirectory:invocation.profileDirectory,args:invocation.args},
     buildNamespace:status===0&&artifacts&&buildFinished?realpathSync(invocation.targetDirectory):invocation.targetDirectory});
   if(problem)throw problem;
   if(status===0&&!artifacts)fail(route+' produced no compiler-artifact evidence');
   if(status===0&&!buildFinished)fail(route+' produced no build-finished evidence');
+  if(evidence?.requireFresh)console.log('doctests: reused '+artifacts+' fresh Cargo artifacts; compiled 0');
   return status;
   }finally{release();}
 }

@@ -2237,7 +2237,14 @@ compile_time_rc() {
   return $status
 }
 
-step "build"   node tooling/gate/cargo.ts build --release
+build() {
+  if [ "${NTS_BUILD_COMPILER:-1}" = 0 ]; then
+    node tooling/gate/build.ts --profile release --no-compiler
+  else
+    node tooling/gate/build.ts --profile release
+  fi
+}
+step "build"   build
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
 #

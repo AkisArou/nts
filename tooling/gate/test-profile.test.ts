@@ -18,13 +18,13 @@ import {ownMemory} from './test-memory.ts';
 import {readStepInstrument} from './step-result.ts';
 
 const manifest=readFileSync(TEST_PROFILE_MANIFEST,'utf8');
-for(const route of [...TEST_ROUTES,'doctests-entry'] as const)test(route+' reports owned disk shortage before Cargo, through its actual command',t=>{
+for(const route of TEST_ROUTES)test(route+' reports owned disk shortage before Cargo, through its actual command',t=>{
   const root=newTestScratch('test-profile-disk');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const capture=join(root,'cargo-started'),bin=join(root,'bin'),receipt=join(root,'result.json');mkdirSync(bin);
   writeFileSync(join(root,'Cargo.toml'),'[workspace]\n'+manifest.split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]')));
   writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)},'started');process.exit(7);\n`,{mode:0o755});
   const memory=ownMemory(join(root,'owned'),{disk:{freeBytes:45*2**30,freeInodes:100}});
-  const command=route==='doctests-entry'?['doctests.ts']:['test-profile.ts',route,...(route==='inner'?['--no-run']:[])];
+  const command=['test-profile.ts',route,...(route==='inner'?['--no-run']:[])];
   const result=spawnSync(process.execPath,[new URL(command[0]!,import.meta.url).pathname,...command.slice(1)],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...memory,PATH:bin,CARGO_TARGET_DIR:join(root,'target'),CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,NTS_GATE_STEP:'control',NTS_GATE_STEP_ATTEMPT:'disk',NTS_GATE_STEP_RESULT:receipt}});
   assert.equal(result.status,2,result.stdout+result.stderr);assert.match(result.stderr,/DiskBuildAdmissionError: disk build admission/);
   assert.equal(existsSync(capture),false,'the actual Cargo owner was never invoked');

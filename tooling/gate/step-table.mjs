@@ -36,7 +36,7 @@ import { statedBoundProblem } from "./step-bound.ts";
 export const STEPS = [
   // Its history is the last build's, which a warm cache makes seconds; a cold
   // release build of the workspace took about forty minutes beside a gate.
-  { name: "build", slots: 8, min: 4, lock: "cargo", bound: 7200, doc: "release binaries build" },
+  { name: "build", slots: 8, min: 4, lock: "cargo", bound: 7200, doc: "compiler and selected doctest prerequisites build" },
   // Its own target directory (see stepEnv), so it neither waits for nor blocks
   // `build` and `tests` on cargo's build-directory lock.
   { name: "clippy", slots: 6, min: 4, lock: "clippy", doc: "lint clean" },
@@ -48,7 +48,7 @@ export const STEPS = [
   { name: "audit", slots: 1, treeOnly: true, doc: "classification reasons, authorities and suite entries" },
   { name: "unicode-freshness", slots: 1, treeOnly: true, doc: "URL-host cases match the offline pinned Unicode source and Node oracle" },
   { name: "jvm-members", slots: 1, treeOnly: true, doc: "JVM catalogue outputs are fresh and reserved names have one owner" },
-  { name: "doctests", slots: 4, min: 1, lock: "cargo", after: ["build"], bound: 3600, doc: "touched crates' doc examples compile and pass" },
+  { name: "doctests", slots: 4, min: 1, lock: "cargo", needs: ["build"], bound: 3600, doc: "touched crates' doc examples compile and pass" },
   { name: "test262", slots: 1, after: ["build"], doc: "test262 pin, inventory, features audit" },
   // The conformance steps are elastic: the resident pool starts all its
   // workers, and each case holds one token from dispatch to answer

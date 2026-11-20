@@ -292,6 +292,7 @@ function checkTable() {
   if (problem) usage(`run.mjs: ${problem}`);
 }
 
+let buildCompilerRequested = true;
 function requested() {
   const raw = argSteps.length ? argSteps.join(" ") : env.NTS_GATE_STEPS;
   if (raw === undefined || raw.trim() === "") return STEPS.map((s) => s.name);
@@ -307,6 +308,10 @@ function requested() {
     );
   }
   const set = new Set(want);
+  buildCompilerRequested = set.has('build');
+  // A doctests-only selection still prepares its exact Cargo graph. Landing
+  // supplies the receipt from its separate shared build instead.
+  if(set.has('doctests')&&!env.NTS_DOCTEST_PREPARATION)set.add('build');
   if(want.some(name=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(name)))set.add('program-oracles');
   if(want.some(name=>['typescript-c','typescript-llvm','typescript-jvm'].includes(name)))set.add('typescript-oracles');
   return STEPS.map((s) => s.name).filter((n) => set.has(n));
@@ -400,6 +405,11 @@ function stepEnv(step, slots, scope) {
   e.NTS_SUITE_BIN = pinned.suite ?? suiteBin;
   e.NTS_CHECKERS = "1";
   e.CARGO_TARGET_DIR = target;
+  if(plan.includes('doctests'))e.NTS_DOCTEST_PREPARATION=env.NTS_DOCTEST_PREPARATION??join(RUN_DIR,'doctest-build.json');
+  if(step.name==='build'){
+    e.NTS_BUILD_DOCTESTS=plan.includes('doctests')?'1':'0';
+    e.NTS_BUILD_COMPILER=buildCompilerRequested?'1':'0';
+  }
   // clippy checks the same tree in a profile nothing else builds, so its
   // artefacts live apart and it runs beside the release build and `cargo test`
   // instead of queueing on their lock. What it lints is unchanged.

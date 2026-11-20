@@ -786,6 +786,15 @@ shell frontend step, the workspace replay and the doctest step call the same
 invocation owner. An executing inner invocation without those prepared
 capabilities refuses before Cargo starts and names the contributor command.
 Compile-only `--no-run` invocations need no runtime preparation.
+The shared build prepares selected doctests in that same target and `nts-dev`
+profile with the doctest route's `-- --list` mode. It compiles Cargo libraries
+and dev dependencies while rustdoc only lists examples. The executing doctest
+step requires the successful build receipt for its source, selected crates,
+profile and target, and requires every Cargo artifact to be fresh. A doctests-only
+selection prepares those prerequisites without building compiler binaries.
+Landing prepares them inside its separate build lifetime; retries retain that
+receipt. A selection without doctests performs no doctest preparation. The
+build's disk claim includes `nts-dev`, shared with existing claims for that target.
 The complete seal verifier is a node-only leaf, `differential/oracle-seal/main.ts`,
 so checking preparation adds no launcher dependencies to the Rust test steps.
 Rust and TypeScript oracle consumers require that inherited sealed image;

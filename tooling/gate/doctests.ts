@@ -1,7 +1,8 @@
 // The shared owner also validates rustdoc's input artifacts and profile.
 import {runTestProfile} from './test-profile.ts';
+import {assertDoctestPreparation} from './doctest-preparation.ts';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url)
-  runTestProfile('doctests').then(status=>{if(status!==0)console.error('doctests: cargo exited '+status);process.exitCode=status===0?0:1;},error=>{if(error instanceof ToolingInstrumentError)publishToolingFailure(error);console.error('NOT MEASURED: '+String(error));process.exitCode=2;});
+  Promise.resolve().then(()=>{assertDoctestPreparation();return runTestProfile('doctests',[],process.env,process.cwd(),{requireFresh:true});}).then(status=>{if(status!==0)console.error('doctests: cargo exited '+status);process.exitCode=status===0?0:1;},error=>{if(error instanceof ToolingInstrumentError)publishToolingFailure(error);console.error('NOT MEASURED: '+String(error));process.exitCode=2;});

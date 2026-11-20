@@ -34,7 +34,7 @@ import type {StepDiagnostics} from '../gate/step-result.ts';
 import { removable } from "../gate/run-temporary.ts";
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join,relative } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
 import {ENVIRONMENT_EXPERIMENT} from '../gate/canonical-environment.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
@@ -57,6 +57,9 @@ import {readRustRecordDecisions,type RustRecordDecisionAtRevision} from '../gate
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {fileURLToPath} from 'node:url';
 import {WithdrawalRequested} from './withdrawal-watch.ts';
+
+const BUILD_OWNER=new URL('../gate/build.ts',import.meta.url);
+const SOURCE_ROOT=new URL('../../',import.meta.url);
 
 export const PROFILE = TEST_PROFILE;
 type BinaryIdentities = Record<string, string | null>;
@@ -225,6 +228,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
     const owned = {
       NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
       NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
+      ...(options.steps.includes('doctests')?{NTS_BUILD_DOCTESTS:'1',NTS_DOCTEST_PREPARATION:join(run,'doctest-build.json')}:{}),
       ...STANDING_GATE_POLICY,
       NTS_MEMORY_PRIORITY: runRank(options),
       // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
@@ -276,7 +280,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
       if(errors.length)throw new AggregateError(errors,'landing build reservation failed to drain');
     })();
     try {
-      if (options.steps.includes("build")) {
+      if (options.steps.includes("build")||options.steps.includes('doctests')) {
         const log = join(run, "build.log");
         try {
           hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}` },
@@ -384,10 +388,11 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const slots = machineBudget(cpus().length).slots;
-  const command = options.build ?? [node, join(options.tree,"tooling/gate/cargo.ts"), "build", "--profile", PROFILE, "--jobs", String(slots)];
+  const command = options.build ?? [node, join(options.tree,relative(fileURLToPath(SOURCE_ROOT),fileURLToPath(BUILD_OWNER))), "--profile", PROFILE,
+    ...(options.steps.includes('build')?[]:['--no-compiler'])];
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   const launch = gateCommand(timed[0]!, timed.slice(1), { rank: runRank(options), env: launcher });
-  const r = await runCandidate(options,node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher,false,log);
+  const r = await runCandidate(options,node, { tree: options.tree, run: options.run, owned:{...owned,CARGO_BUILD_JOBS:String(slots)}, command: [launch.command, ...launch.args] }, launcher,false,log);
   appendFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
   try {
