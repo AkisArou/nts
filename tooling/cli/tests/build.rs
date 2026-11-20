@@ -803,7 +803,7 @@ int main(int argc, char **argv) {
             Command::new(env!("CARGO_BIN_EXE_nts"))
                 .arg("build")
                 .arg(project.join("tsconfig.json"))
-                .env("CC", "gcc")
+                .env("CC", "gcc -fno-semantic-interposition")
                 .env("PKG_CONFIG_PATH", project.join("pc")),
         )
         .unwrap();
