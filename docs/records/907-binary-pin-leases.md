@@ -27,8 +27,10 @@ its compiler bytes and live holder intact.
 `keep.json` classifies both roots as `kept`. That kind has no age-based sweep;
 none of the existing sweep kinds proves an old lease-less runner has ended.
 The hourly count therefore names each legacy content folder as a report-only
-leftover. These folders are never added to its removable list. Their removal
-awaits the user's decision after historical writers have ended.
+leftover. These folders are never added to its removable list. The owner
+authorized the guarded legacy sweep in follow-up #920: it may remove these
+folders once `verified` includes #907 and no pre-#907 `run.mjs` is alive.
+Until #920 lands, they remain report-only under their `kept` rule.
 
 ## Consumer audit
 
