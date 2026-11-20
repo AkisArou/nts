@@ -791,7 +791,7 @@ __attribute__((constructor)) static void check_archive(void) {
 for arg; do
   if [ "$arg" = "-shared" ]; then printf '%s\n' "$@" > "$NTS_LINK_ARGS"; break; fi
 done
-exec /usr/bin/gcc "$@"
+exec gcc "$@"
 "#,
     )
     .expect("archive link fixture operation");
@@ -951,14 +951,14 @@ exec /usr/bin/gcc "$@"
 fn late_static_dependency_flags_keep_live_math() {
     if !cfg!(target_os = "linux")
         || !available()
-        || !["gcc", "pkg-config", "readelf"].iter().all(|tool| {
+        || !["pkg-config", "readelf"].iter().all(|tool| {
             Command::new(tool)
                 .arg("--version")
                 .output()
                 .is_ok_and(|output| output.status.success())
         })
     {
-        skip("Linux, node, clang, nm, gcc, pkg-config and readelf");
+        skip("Linux, node, clang, nm, pkg-config and readelf");
         return;
     }
     let project = fixture(
@@ -990,7 +990,7 @@ export default defineConfig({products: {
         "#include <dlfcn.h>\nint main(int n, char **v) { return n != 2 || !dlopen(v[1], RTLD_NOW); }\n")
         .expect("library evaluation host");
     let loader = project.join("load");
-    let compiled = Command::new("gcc")
+    let compiled = Command::new("clang")
         .arg(project.join("load.c"))
         .args(["-ldl", "-o"])
         .arg(&loader)
@@ -1009,7 +1009,7 @@ export default defineConfig({products: {
             Command::new(env!("CARGO_BIN_EXE_nts"))
                 .arg("build")
                 .arg(project.join("tsconfig.json"))
-                .env("CC", "gcc -fno-semantic-interposition")
+                .env("CC", "clang")
                 .env("PKG_CONFIG_PATH", &pc),
         )
         .expect("building with dependency flags");
