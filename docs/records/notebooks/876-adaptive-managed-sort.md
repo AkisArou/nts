@@ -1559,3 +1559,57 @@ and command lines are retained. The after-correction sizes are still owed.
 | string-sort-control | adaptive | `public static int ¢nts$body$work$23$whole(int);` | 8970 | OVER LIMIT |
 
 Raw evidence manifest: `/home/akisarou/.cache/nts-scratch/876/jvm-control-evidence.json`, SHA-256 `9b47dc03c526fb6bdc8a665e4592e3a4d615008b76d1a5c871f90af883f35be5`.
+
+## Typed helper correction: focused proof and emitted size
+
+Source: `06196c2e3114d6d4aa228f10768c8229d06f7b0a`. The coordinator approved
+typed helper boundaries with shared identical families. The registry is shared
+across specialized builders and keys resolved element/callback types, the typed
+callback entry, source/substitution facts and carrying mode. Caller-owned
+permutation buffers and comparator call order are unchanged. Each family emits
+run detection, binary insertion, merge and four direction/strictness-specific
+gallop methods. Every carrying helper call tests the raised flag before using
+its result. No JVM flag changes.
+
+The focused run passed nine tests: two u32 cursor/power boundary guards; two
+raw/prepared-HIR ownership and family-sharing guards; the C runtime write-back
+and mutation control; JVM size and Node agreement; and the two native sort
+suites, including forced collection, reentrancy, phase-specific throws, RC
+poisoning and ASan/UBSan. The adaptive fixture has 17 exports and 18 seeds
+(306 Node cases). Insertion, merge and gallop throws have a matching quiet
+control. A test-only Shared initializer and a duplicate helper drain were
+corrected before this green run. `cargo fmt --check` passed. An initial
+`fmt --all --check` traversed unformatted third-party dependencies; it changed
+no files and is not the gate formatting command.
+
+These are static sizes from the fresh nts-dev compiler, not timed benchmark
+rows. javap instruction endpoints match the exact Code attribute lengths for
+every method. Each benchmark emits one seven-method family shared by the public
+and whole-number entry points. The two-site fixture independently checks that
+one identical comparator requests one family. All seven helper lengths are
+455 / 253 / 2363 / 470 / 432 / 444 / 482 bytes. The largest emitted method is
+2,363 bytes in every row, below default HotSpot's 8,000-byte limit.
+
+| Row | Families | Helper methods | Helper bytecodes | Program total bytecodes | Program.class bytes | All emitted class bytes | Size verdict |
+|---|---:|---:|---:|---:|---:|---:|---|
+| sort-objects | 1 | 7 | 4899 | 7868 | 13401 | 14605 | all methods within limit |
+| sort-objects-shuffled | 1 | 7 | 4899 | 8380 | 14589 | 15793 | all methods within limit |
+| sort-objects-runs | 1 | 7 | 4899 | 8088 | 13687 | 14891 | all methods within limit |
+| map-entries-top-k | 1 | 7 | 4899 | 8545 | 15471 | 16813 | all methods within limit |
+| string-sort-control | 1 | 7 | 4899 | 7321 | 12213 | 13041 | all methods within limit |
+
+All emitted class bytes includes the program, closure and data classes; it
+excludes the unchanged runtime jar. The complete per-method names and sizes,
+javap output, emitted classes, compiler arguments and SHA-256 identities live
+in kept scratch. The preceding table retains the oversized before methods.
+
+The machine hold remains active: no final instruction-count, native inlining
+profile, matched JVM timing or whole-memory sitting has run for this correction.
+The before flag-enabled map/shuffled/string losses remain unresolved timing
+evidence until the default-flag matched run measures the split. Inner, the five
+test262 records and --here are also still owed.
+
+Raw evidence manifest: `/home/akisarou/.cache/nts-scratch/876/helper-static-evidence.json`,
+SHA-256 `42587adb0c87fa1bd4ccde4272eb6b05bd81e8f335cdbb2269e884934369eaee`.
+The focused command and launcher are in that manifest; the failed launcher
+syntax attempts are retained too.
