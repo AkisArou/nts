@@ -186,7 +186,7 @@ pub(in crate::hir::lower) fn lower_helpers(
                     ..Copy::default()
                 },
             );
-            match lower_phase(&mut builder, Rc::clone(&family), phase) {
+            match lower_phase(&mut builder, &family, phase) {
                 Ok(function) => lowered.program.funcs.push(function),
                 Err(diagnostic) => {
                     lowered
@@ -226,7 +226,7 @@ fn parameter(
 
 fn lower_phase(
     builder: &mut FuncBuilder<'_>,
-    family: Rc<Family>,
+    family: &Rc<Family>,
     phase: Phase,
 ) -> Result<Func, Diagnostic> {
     let origin = builder.origin(family.site);
@@ -281,7 +281,7 @@ fn lower_phase(
         comparator: &comparator,
         length,
         order,
-        family: Rc::clone(&family),
+        family: Rc::clone(family),
     };
     let result = match phase {
         Phase::Run => Some(sort.build_next_run(args[0], args[1])?),

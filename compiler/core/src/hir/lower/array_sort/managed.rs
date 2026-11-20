@@ -129,13 +129,12 @@ impl Sort<'_, '_> {
         self.family.call(self.b, phase, args, &self.origin)
     }
 
-    fn next_run(&mut self, start: ValueId, minrun: ValueId) -> Built<ValueId> {
-        Ok(self.helper(Phase::Run, &[start, minrun]))
+    fn next_run(&mut self, start: ValueId, minrun: ValueId) -> ValueId {
+        self.helper(Phase::Run, &[start, minrun])
     }
 
-    fn binary_insert(&mut self, start: ValueId, sorted: ValueId, end: ValueId) -> Built {
+    fn binary_insert(&mut self, start: ValueId, sorted: ValueId, end: ValueId) {
         self.helper(Phase::Insert, &[start, sorted, end]);
-        Ok(())
     }
 
     fn merge(
@@ -145,9 +144,8 @@ impl Sort<'_, '_> {
         base: ValueId,
         middle: ValueId,
         end: ValueId,
-    ) -> Built {
+    ) {
         self.helper(Phase::Merge, &[scratch, stack, base, middle, end]);
-        Ok(())
     }
 
     fn gallop(
@@ -158,14 +156,14 @@ impl Sort<'_, '_> {
         pivot: ValueId,
         low: bool,
         first: bool,
-    ) -> Built<ValueId> {
-        Ok(self.helper(
+    ) -> ValueId {
+        self.helper(
             Phase::Gallop {
                 forward: low,
                 first,
             },
             &[source, start, n, pivot],
-        ))
+        )
     }
 
     fn push(&mut self, kind: OpKind, ty: HirType) -> ValueId {
@@ -352,7 +350,7 @@ impl Sort<'_, '_> {
             },
         )?;
         let minrun = self.minrun()?;
-        let first_end = self.next_run(zero, minrun)?;
+        let first_end = self.next_run(zero, minrun);
         let multiple = self.binary(BinOp::Lt, first_end, self.length);
         // A whole natural run allocates neither a merge buffer nor a stack.
         self.branch(
@@ -444,7 +442,7 @@ impl Sort<'_, '_> {
         let minimum_end =
             bounded_advance(start, minrun, self.length, |op, a, b| self.binary(op, a, b));
         let finish = self.binary(BinOp::Max, minimum_end, self.var(end));
-        self.binary_insert(start, self.var(end), finish)?;
+        self.binary_insert(start, self.var(end), finish);
         Ok(finish)
     }
 
@@ -619,7 +617,7 @@ impl Sort<'_, '_> {
                     more,
                     &[next, power],
                     |s| {
-                        let finish = s.next_run(s.var(end), minrun)?;
+                        let finish = s.next_run(s.var(end), minrun);
                         let boundary = s.power(s.var(base), s.var(end), finish)?;
                         s.bind(next, finish);
                         s.bind(power, boundary);
@@ -641,7 +639,7 @@ impl Sort<'_, '_> {
                         s.advance(top, -1);
                         let slot = s.binary(BinOp::Mul, s.var(top), two);
                         let previous = s.get_index(stack, slot);
-                        s.merge(scratch, stack, previous, s.var(base), s.var(end))?;
+                        s.merge(scratch, stack, previous, s.var(base), s.var(end));
                         s.bind(base, previous);
                         Ok(())
                     },
@@ -880,7 +878,7 @@ impl Sort<'_, '_> {
         } else {
             self.binary(BinOp::Sub, self.var(cursor), boundary)
         };
-        let n = self.gallop(source, self.var(cursor), available, pivot, low, first)?;
+        let n = self.gallop(source, self.var(cursor), available, pivot, low, first);
         let at = self.variable(zero);
         self.loop_while(
             &[at],

@@ -2007,3 +2007,38 @@ Times in µs; ratios are backend / engine. Verdicts are the tool’s recorded ve
 | tree-teardown | 48.0262 | 49.5107 | 27.3950 | 27.1136 | 18.33 → 12.99 | 9.77 → 12.31 | False |
 
 Raw evidence manifest: `/home/akisarou/.cache/nts-scratch/876/helper-final-evidence.json`, SHA-256 `c888d8534d70cf174421238e2c7aacf238b4829a2e705510437194ace6cc42e7`.
+
+## Final conformance and memory proof
+
+The final release compiler passed `tooling/memory/run.sh`: all 78 cases
+met both the operation and allocation floors, in naive and elided modes,
+with no leaks or changed answers. This includes the sort ownership controls.
+
+The five recorded test262 slices ran sequentially through `admit.ts`'s
+`test262-records` owner, with eight census workers and the clean pin
+`/home/akisarou/.cache/nts-pins/3313015deaa8/nts`. The pin's compiler SHA-256
+was checked against its provenance before running. These are reconciliations
+against the existing records, not claims that every attempted case passes.
+
+| Slice | Attempted | Pass-count | Regressed | Changed | Missing | Unstable |
+|---|---:|---:|---:|---:|---:|---:|
+| language | 8401 | 7014 | 0 | 0 | 0 | 0 |
+| builtins | 1085 | 888 | 0 | 0 | 0 | 0 |
+| annexb | 12 | 9 | 0 | 0 | 0 | 0 |
+| staging | 59 | 54 | 0 | 0 | 0 | 0 |
+| harness | 17 | 17 | 0 | 0 | 0 | 0 |
+
+An initial launcher failed before attempting a case because its explicit
+`NTS_CENSUS_DIR` was outside the oracle owner's registered temporary. The
+retry let `ownCensusScratch` choose that directory and retained the public
+`--rows` and `--json` outputs in issue scratch. The failed setup log and
+original launcher remain alongside the successful evidence. No passed slice
+was discarded or repeated.
+
+After those runs finished, the branch was rebased from `1dccb9d1090c` onto
+`3df1845fafc26b20498a0d607b5c8e50dc7432e1`. All 35 task patches are equal
+in `git range-diff`; main's intervening commits changed no compiler or
+`runtime/c` source. The pre-rebase branch is preserved in
+`/home/akisarou/.cache/nts-scratch/876/pre-final-rebase.bundle`.
+
+Raw conformance evidence manifest: `/home/akisarou/.cache/nts-scratch/876/final-conformance-evidence.json`, SHA-256 `fe7d1cd40ad3b6390fb6fc13d611f24fb3dfd675936a20a9f23935c7a1207959`.
