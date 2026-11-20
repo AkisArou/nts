@@ -1,7 +1,7 @@
 # Native executable launch to exit
 
 The review follow-up and corrected implementation are recorded in
-[Native launch review controls](0870-native-launch-review.md). This record
+[Native launch review controls](0871-native-launch-review-controls.md). This record
 retains the original measurements; its implementation had two defects in
 foreign-post activation and library ordering, fixed in that follow-up.
 
