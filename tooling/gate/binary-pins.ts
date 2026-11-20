@@ -1,7 +1,7 @@
 // Content-named executables outlive every run holding them. All cache mutations
 // share one owner lock; expensive copies and hashing happen before taking it.
 import {createHash,randomUUID} from 'node:crypto';
-import {chmodSync,copyFileSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,utimesSync} from 'node:fs';
+import {chmodSync,closeSync,copyFileSync,existsSync,fsyncSync,lstatSync,mkdirSync,mkdtempSync,openSync,readFileSync,readdirSync,renameSync,rmSync,utimesSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {processIdentity,withLock} from '../landing/lock.ts';
 import {durableRecord} from './durable-record.ts';
@@ -98,6 +98,7 @@ export function pinBinaries(options:Options):BinaryPin{
       if(!existsSync(source))continue;
       const to=join(staging,name);copyFileSync(source,to);chmodSync(to,0o555);
       members[name]=createHash('sha256').update(readFileSync(to)).digest('hex');
+      const fd=openSync(to,'r');try{fsyncSync(fd);}finally{closeSync(fd);}
     }
     if(members.nts!==options.hash)
       throw Error('compiler changed while staging binary pin');
