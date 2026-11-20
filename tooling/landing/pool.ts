@@ -163,7 +163,7 @@ export class Pool {
     return new Map(listed.split("\n").filter(Boolean).map(line => { const [sha, ref] = line.split(" "); return [ref!.slice(LANDED_REFS.length), sha!]; }));
   }
   private mark(branch: string, sha: string): void { checked(this.git, ["update-ref", `${LANDED_REFS}${branch}`, sha], this.git.root); }
-  private forget(branch: string | null): void { if (branch) run(this.git, ["update-ref", "-d", `${LANDED_REFS}${branch}`], this.git.root); }
+  private forget(branch: string | null): void { if (branch) checked(this.git, ["update-ref", "-d", `${LANDED_REFS}${branch}`], this.git.root); }
   /** Every tree of the pool, by number, with what holds it. */
   trees(): PoolTree[] { return this.readTrees(false); }
   /** An observation failure is display data only; decision callers use trees. */
@@ -267,7 +267,6 @@ export class Pool {
       // Asked for again, a landed task's tree is held: its task goes on there.
       if (mine) {
         this.setPresence(mine,'attached');
-        if(mine.state==='landed')this.forget(branch);
         this.inputs(mine.path);
         return this.trees().find(t=>t.name===mine.name)!;
       }
@@ -314,6 +313,9 @@ export class Pool {
         this.capacity.assertWorkerAbsent(tree.path);
       }
       writeWorkerPresence(tree.path,tree.branch,state,this.capacity.host.wallNow());
+      // Both resume verbs publish the admitted lease before releasing either
+      // lock: a landed mark would keep the attached promise uncounted.
+      if(state==='attached'&&tree.state==='landed')this.forget(tree.branch);
     }finally{lock.close();}
   }
   attach(branch:string):PoolTree{return this.presence(branch,'attached');}

@@ -1111,7 +1111,9 @@ the tooling strict checker owns the source's type checking.
   Git lease under the capacity lock; worker detachment, landing or giving it
   back ends that promise. Resuming a detached or landed tree admits any cold
   or partial remainder under the same lock and capacity equation as a new take,
-  protecting that target during pressure reclamation. A refusal exits 75 and
+  protecting that target during pressure reclamation. Both take and attach
+  make a landed tree held before releasing the lock, so its admitted promise
+  is counted before another take can spend that capacity. A refusal exits 75 and
   leaves its presence and hold unchanged for retry. Taking or attaching an
   already-counted lease is idempotent, with no new admission or publication,
   even under disk pressure or while its tree resource is in use. Complete
