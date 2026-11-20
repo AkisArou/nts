@@ -71,6 +71,32 @@ SIGTERM, including a run waiting for admission before its first step.
 The hourly count uses the same ownership inspection and reports unreclaimable
 leases by folder and holder path. It grants no deletion of uncertain state.
 
+## Staging and detected corruption
+
+Private staging directory names carry version 1, the complete boot/PID/start
+identity and a unique token. Atomic directory creation publishes that identity
+before any payload bytes, so a kill before the first copy has no unowned window.
+The same locked prune that retains bundles reclaims a staging directory only
+after proving its original process gone and rechecking its name and filesystem
+device/inode. Live stages remain notices. Unknown, malformed and unsupported
+stage names, including earlier `.staging-XXXXXX` names, remain protected warnings.
+One typed `binaryPinDiagnostics` view supplies both categories to the count.
+
+Controls cover dead and reused-PID stages, live notices that leave the count
+green, unknown/malformed stages that the count names as warnings, and replacement
+of a staging inode during observation. Real private publishers are paused after
+directory creation and after copying, then killed through their named units with
+`systemctl --user stop` and `KillSignal=SIGKILL`. Both leave their stage behind;
+the next acquisition reclaims it only after the process has ended.
+
+A member digest mismatch publishes `.corrupt-v1.json` from owned private staging.
+The diagnostic is prepared and flushed outside the cache lock. Count reads its
+versioned metadata without hashing executable bytes. Failed verification never
+refreshes the bundle's recency, including when publishing the diagnostic changes
+directory metadata. Corruption controls verify repeated refusal, unchanged
+executable inode/content and recency, named count warnings, and preservation of
+future diagnostic versions.
+
 ## Publication durability
 
 Payload files and the complete holder record are flushed in private staging.

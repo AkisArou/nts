@@ -1,7 +1,7 @@
 // Content-named executables outlive every run holding them. All cache mutations
 // share one owner lock; expensive copies and hashing happen before taking it.
 import {createHash,randomUUID} from 'node:crypto';
-import {chmodSync,closeSync,copyFileSync,existsSync,fsyncSync,lstatSync,mkdirSync,mkdtempSync,openSync,readFileSync,readdirSync,renameSync,rmSync,utimesSync} from 'node:fs';
+import {chmodSync,closeSync,copyFileSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,renameSync,rmSync,utimesSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {processIdentity,withLock} from '../landing/lock.ts';
 import {durableRecord} from './durable-record.ts';
@@ -16,6 +16,11 @@ type Options={root:string;hash:string;run:string;binaries:Readonly<Record<string
   observe?:PinOwnerObservation;now?:()=>number;wallNow?:()=>number};
 const HASH=/^[0-9a-f]{64}$/;
 const IDENTITY=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} ([1-9][0-9]*) [0-9]+$/;
+const UUID='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const STAGING=new RegExp('^\\.staging-v1-('+UUID+')-([1-9][0-9]*)-([0-9]+)-'+UUID+'$');
+const CORRUPT='.corrupt-v1.json';
+type Corruption={version:1;member:string;expected:string;actual:string};
+export type BinaryPinDiagnostics={warnings:string[];notices:string[]};
 const missing=(error:unknown)=>(error as NodeJS.ErrnoException).code==='ENOENT';
 
 /** null from the shared identity reader alone is not evidence of death: it
@@ -43,6 +48,60 @@ function pins(root:string):string[]{
   catch(error){if(missing(error))return [];throw error;}
 }
 
+/** The complete birth identity is published by mkdir itself, before copying
+ * any bytes. No crash can leave a newly created stage without an owner. */
+function createStaging(root:string,row:Holder):string{
+  const path=join(root,'.staging-v1-'+row.identity.replaceAll(' ','-')+'-'+randomUUID());
+  mkdirSync(path,{mode:0o700});return path;
+}
+
+function stagingDiagnostics(root:string,observe:PinOwnerObservation,reclaim:boolean):BinaryPinDiagnostics{
+  const result:BinaryPinDiagnostics={warnings:[],notices:[]};
+  for(const entry of readdirSync(root,{withFileTypes:true}).filter(entry=>entry.name.startsWith('.staging-'))){
+    const path=join(root,entry.name);
+    try{
+      const match=STAGING.exec(entry.name),pid=Number(match?.[2]);
+      if(!match||!Number.isSafeInteger(pid))throw Error('malformed or unsupported staging owner name');
+      const identity=match[1]+' '+pid+' '+match[3],before=lstatSync(path);
+      if(!before.isDirectory()||before.isSymbolicLink())throw Error('staging is not a real directory');
+      const state=observe(pid,identity);
+      if(state==='gone'&&reclaim){
+        const current=lstatSync(path);
+        if(current.dev!==before.dev||current.ino!==before.ino||!current.isDirectory()||current.isSymbolicLink()
+          ||!STAGING.test(entry.name)||observe(pid,identity)!=='gone')throw Error('staging ownership changed during reclamation');
+        rmSync(path,{recursive:true,force:true});
+      }else if(state==='unknown')result.warnings.push(`${path}: unreclaimable staging directory: owner identity unknown (${identity})`);
+      else result.notices.push(`${path}: ${state==='live'?'live':'abandoned'} staging directory (${identity})`);
+    }catch(error){if(!missing(error))result.warnings.push(`${path}: unreclaimable staging directory: ${String(error)}`);}
+  }
+  return result;
+}
+
+function readCorruption(path:string):Corruption|undefined{
+  let value:unknown;
+  try{value=JSON.parse(readFileSync(path,'utf8'));}catch(error){if(missing(error))return;throw error;}
+  if(!value||typeof value!=='object')throw Error('malformed corruption diagnostic');
+  const row=value as Partial<Corruption>;
+  if(typeof row.version==='number'&&row.version>1)throw Error('future corruption diagnostic version '+row.version);
+  if(row.version!==1||typeof row.member!=='string'||typeof row.expected!=='string'||!HASH.test(row.expected)
+    ||typeof row.actual!=='string'||!HASH.test(row.actual))throw Error('malformed corruption diagnostic');
+  return row as Corruption;
+}
+
+function reportCorruption(root:string,dir:string,row:Holder,diagnostic:Corruption):void{
+  const stage=createStaging(root,row),prepared=join(stage,CORRUPT),path=join(dir,CORRUPT);
+  try{
+    durableRecord(prepared,diagnostic);
+    withLock(join(root,'.lock'),()=>{
+      readCorruption(path); // Never overwrite malformed or future state.
+      const before=lstatSync(dir);
+      renameSync(prepared,path);
+      // Publishing a diagnostic is not a successful use of the bundle.
+      utimesSync(dir,before.atime,before.mtime);
+    });
+  }finally{rmSync(stage,{recursive:true,force:true});}
+}
+
 function inspect(dir:string,observe:PinOwnerObservation,reclaim:boolean):{held:boolean;warnings:string[]}{
   const directory=join(dir,'holders'),warnings:string[]=[];
   let entries:string[];
@@ -68,13 +127,25 @@ function inspect(dir:string,observe:PinOwnerObservation,reclaim:boolean):{held:b
   return {held,warnings};
 }
 
-/** Read-only upkeep diagnostics: uncertainty protects a pin and is named. */
-export function binaryPinWarnings(root:string,observe:PinOwnerObservation=observePinOwner):string[]{
-  if(!existsSync(root))return [];
-  return withLock(join(root,'.lock'),()=>pins(root).flatMap(dir=>inspect(dir,observe,false).warnings));
+/** One locked upkeep view. Normal live preparation is a notice; uncertainty
+ * and detected corruption are warnings. No payload hashing belongs here. */
+export function binaryPinDiagnostics(root:string,observe:PinOwnerObservation=observePinOwner):BinaryPinDiagnostics{
+  if(!existsSync(root))return {warnings:[],notices:[]};
+  return withLock(join(root,'.lock'),()=>{
+    const result=stagingDiagnostics(root,observe,false);
+    for(const dir of pins(root)){
+      result.warnings.push(...inspect(dir,observe,false).warnings);
+      try{
+        const row=readCorruption(join(dir,CORRUPT));
+        if(row)result.warnings.push(`${dir}: corrupt binary bundle member ${row.member}: expected ${row.expected}, got ${row.actual}`);
+      }catch(error){result.warnings.push(`${dir}: unreadable corruption diagnostic: ${String(error)}`);}
+    }
+    return result;
+  });
 }
 
 function prune(root:string,observe:PinOwnerObservation):void{
+  stagingDiagnostics(root,observe,true);
   const unheld=pins(root).filter(dir=>!inspect(dir,observe,true).held)
     .map(dir=>({dir,time:lstatSync(dir).mtimeMs})).sort((a,b)=>b.time-a.time||a.dir.localeCompare(b.dir));
   // Held folders do not consume the ten recently used, unheld cache slots.
@@ -89,9 +160,14 @@ export function pinBinaries(options:Options):BinaryPin{
   const row:Holder={version:1,run:resolve(options.run),token:randomUUID(),identity,pid:process.pid};
   const host=hostObservations(),now=options.now??(()=>host.now()),wallNow=options.wallNow??(()=>host.wallNow());
   mkdirSync(root,{recursive:true});
-  const staging=mkdtempSync(join(root,'.staging-')),paths:Record<string,string>={},members:Record<string,string>={};
+  const staging=createStaging(root,row),paths:Record<string,string>={},members:Record<string,string>={};
   const lock=join(root,'.lock');let lease:string|undefined;
   let published=false,stageOwned=true;
+  const timing:PinTiming={waitMs:0,heldMs:0};
+  const locked=(body:()=>void)=>{
+    const started=now();
+    withLock(lock,()=>{const entered=now();timing.waitMs+=entered-started;try{body();}finally{timing.heldMs+=now()-entered;}});
+  };
   try{
     for(const [name,source]of Object.entries(options.binaries)){
       if(!/^[a-zA-Z0-9_-]+$/.test(name))throw Error('invalid pinned binary name '+name);
@@ -109,28 +185,26 @@ export function pinBinaries(options:Options):BinaryPin{
     // Complete and flush the holder privately, too. No fsync (which can wait
     // for unrelated copying) belongs inside the cache's publication lock.
     const stagedLease=join(staging,'holders',row.token+'.json');durableRecord(stagedLease,row);
-    const started=now();let entered=started,ended=started;
-    withLock(lock,()=>{
-      entered=now();
-      try{
-        // A new bundle is published complete. Existing immutable members are
-        // verified after leasing, outside the lock, and are never rewritten.
-        if(!existsSync(dir)){renameSync(staging,dir);stageOwned=false;}
-        else{
-          mkdirSync(join(dir,'holders'),{recursive:true});
-          renameSync(stagedLease,leasePath);
-        }
-        published=true;
-        const touched=new Date(wallNow());utimesSync(dir,touched,touched);
-        prune(root,observe);
-      }finally{ended=now();}
+    locked(()=>{
+      // A new bundle is published complete. Existing immutable members are
+      // verified after leasing, outside the lock, and are never rewritten.
+      if(!existsSync(dir)){renameSync(staging,dir);stageOwned=false;}
+      else{
+        mkdirSync(join(dir,'holders'),{recursive:true});
+        renameSync(stagedLease,leasePath);
+      }
+      published=true;
     });
     for(const [name,digest]of pairs){
-      if(createHash('sha256').update(readFileSync(paths[name]!)).digest('hex')!==digest)
+      const actual=createHash('sha256').update(readFileSync(paths[name]!)).digest('hex');
+      if(actual!==digest){
+        reportCorruption(root,dir,row,{version:1,member:name,expected:digest,actual});
         throw Error('pinned bundle member digest mismatch: '+paths[name]);
+      }
     }
+    locked(()=>{const touched=new Date(wallNow());utimesSync(dir,touched,touched);prune(root,observe);});
     let released=false;
-    return {paths,bundleSha256,members,timing:{waitMs:entered-started,heldMs:ended-entered},release:()=>{
+    return {paths,bundleSha256,members,timing,release:()=>{
       if(released)return;
       withLock(lock,()=>{
         const current=holder(leasePath);

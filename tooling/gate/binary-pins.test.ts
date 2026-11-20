@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
-import {chmodSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync,statSync,utimesSync,writeFileSync} from 'node:fs';
+import {createHash,randomUUID} from 'node:crypto';
+import {chmodSync,existsSync,mkdirSync,readFileSync,readdirSync,renameSync,rmSync,statSync,utimesSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
-import {binaryPinWarnings,pinBinaries,observePinOwner,type PinOwnerObservation} from './binary-pins.ts';
+import {binaryPinDiagnostics,pinBinaries,observePinOwner,type PinOwnerObservation} from './binary-pins.ts';
 import {processIdentity} from '../landing/lock.ts';
 import {testScratch} from './test-scratch.ts';
 import {count,type CountInput} from '../full-check/count.ts';
@@ -11,6 +11,10 @@ import {pathToFileURL} from 'node:url';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
 import {lockChild} from '../landing/lock-fixture.ts';
+import {spawn} from 'node:child_process';
+import {fixtureEnvironment} from './test-environment.ts';
+import {spawnTest,waitFor} from './test-wait.ts';
+import {toolingSliceArgs} from './tooling-slice.ts';
 
 function fixture(t:TestContext){
   const cache=testScratch(t,'binary-pins'),root=join(cache,'nts-gate','bin-v2');mkdirSync(root,{recursive:true});
@@ -24,6 +28,53 @@ function fixture(t:TestContext){
   });
   return {cache,root,source,hash,bundle,acquire,age,seed};
 }
+
+function counted(f:ReturnType<typeof fixture>,observe?:PinOwnerObservation){
+  return count({plan:'',local:[],remote:[],pulls:[],issues:[],recordCitations:[],worktrees:[],shared:f.cache,cache:f.cache,
+    root:f.cache,main:null,verified:null,slices:[],activeUnits:[],now:0,pinOwnerObservation:observe},
+  {'nts-gate':{kind:'kept',why:'fixture'}});
+}
+
+function stage(f:ReturnType<typeof fixture>,identity:string):string{
+  const path=join(f.root,'.staging-v1-'+identity.replaceAll(' ','-')+'-'+randomUUID());
+  mkdirSync(path);writeFileSync(join(path,'nts'),'partially copied compiler');return path;
+}
+
+test('dead and reused-birth stages are reclaimed while live stages remain named notices',t=>{
+  const f=fixture(t),identity=processIdentity(process.pid)!;
+  const dead=stage(f,'00000000-0000-0000-0000-000000000000 2147483647 1');
+  const reused=stage(f,identity.replace(/ [0-9]+$/,' 0')),live=stage(f,identity);
+  const held=f.acquire();
+  assert.equal(existsSync(dead),false);assert.equal(existsSync(reused),false);assert.equal(existsSync(live),true);
+  const report=binaryPinDiagnostics(f.root);assert.deepEqual(report.warnings,[]);
+  assert.ok(report.notices.some(line=>line.includes(live)&&line.includes('live staging')));
+  const result=counted(f);assert.equal(result.verdict,'PASS');assert.ok(result.notices?.some(line=>line.includes(live)));
+  held.release();assert.equal(existsSync(live),true);
+});
+
+test('unknown, malformed and unsupported staging owners are kept and count names each',t=>{
+  const f=fixture(t),identity=processIdentity(process.pid)!.replace(/ [0-9]+$/,' 0'),unknown=stage(f,identity);
+  const malformed=join(f.root,'.staging-legacy'),future=join(f.root,'.staging-v2-unknown');
+  mkdirSync(malformed);mkdirSync(future);
+  const observe:PinOwnerObservation=(pid,birth)=>birth===identity?'unknown':observePinOwner(pid,birth);
+  const held=f.acquire(observe),report=binaryPinDiagnostics(f.root,observe);
+  for(const path of [unknown,malformed,future]){
+    assert.equal(existsSync(path),true);assert.ok(report.warnings.some(line=>line.includes(path)));
+    assert.ok(counted(f,observe).red.some(line=>line.includes(path)));
+  }
+  held.release();
+});
+
+test('staging reclamation rechecks the directory inode before removing it',t=>{
+  const f=fixture(t),identity='00000000-0000-0000-0000-000000000000 2147483647 1',path=stage(f,identity);
+  let replaced=false;
+  const observe:PinOwnerObservation=(pid,birth)=>{
+    if(birth===identity&&!replaced){renameSync(path,join(f.cache,'original-stage'));mkdirSync(path);writeFileSync(join(path,'replacement'),'keep');replaced=true;}
+    return observePinOwner(pid,birth);
+  };
+  const held=f.acquire(observe);assert.equal(replaced,true);assert.equal(readFileSync(join(path,'replacement'),'utf8'),'keep');
+  held.release();
+});
 
 test('oldest live pin survives eleven newer pins; next oldest unheld pin is pruned',t=>{
   const f=fixture(t),held=f.acquire(),oldest=join(f.root,f.bundle);f.age(oldest,0);
@@ -96,7 +147,7 @@ test('unknown, corrupt and future holder state protects its pin and count names 
   }
   const observe:PinOwnerObservation=(pid,identity)=>identity===rows[0]!.identity?'unknown':observePinOwner(pid,identity),held=f.acquire(observe);
   for(const dir of old.slice(0,3))assert.equal(existsSync(dir),true);
-  const warnings=binaryPinWarnings(f.root,observe);assert.equal(warnings.length,3);
+  const warnings=binaryPinDiagnostics(f.root,observe).warnings;assert.equal(warnings.length,3);
   for(const dir of old.slice(0,3))assert.ok(warnings.some(line=>line.includes(dir)));
   // Production count uses the same diagnostics, including readable corrupt or
   // future leases. No count result grants deletion of these folders.
@@ -141,11 +192,59 @@ test('complete bundle identity separates suite-only changes and reuses identical
 test('reuse checks every member digest and never repairs or overwrites a mismatching executable',t=>{
   const f=fixture(t),first=f.acquire(),path=first.paths.nts!;
   chmodSync(path,0o755);writeFileSync(path,'corrupted pin');chmodSync(path,0o555);
-  const before=statSync(path);
+  const dir=join(f.root,first.bundleSha256);f.age(dir,1000);const before=statSync(path);
   assert.throws(()=>f.acquire(),/pinned bundle member digest mismatch/);
+  assert.throws(()=>f.acquire(),/pinned bundle member digest mismatch/);
+  assert.equal(statSync(dir).mtimeMs,1000,'failed reuse never refreshes recency');
+  assert.equal(JSON.parse(readFileSync(join(dir,'.corrupt-v1.json'),'utf8')).version,1);
+  assert.ok(binaryPinDiagnostics(f.root).warnings.some(line=>line.includes(dir)&&line.includes('corrupt binary bundle')));
+  assert.ok(counted(f).red.some(line=>line.includes(dir)&&line.includes('corrupt binary bundle')));
   assert.equal(readFileSync(path,'utf8'),'corrupted pin');assert.equal(statSync(path).ino,before.ino);
   assert.equal(readdirSync(join(f.root,first.bundleSha256,'holders')).length,1,'failed reuse releases only its own holder');
   first.release();
+});
+
+test('future corruption diagnostics are never overwritten by a failed reuse',t=>{
+  const f=fixture(t),first=f.acquire(),path=first.paths.nts!,marker=join(f.root,first.bundleSha256,'.corrupt-v1.json');
+  chmodSync(path,0o755);writeFileSync(path,'corrupted');chmodSync(path,0o555);
+  writeFileSync(marker,'{"version":2}');
+  assert.throws(()=>f.acquire(),/future corruption diagnostic version/);
+  assert.equal(readFileSync(marker,'utf8'),'{"version":2}');
+  assert.ok(binaryPinDiagnostics(f.root).warnings.some(line=>line.includes('future corruption diagnostic version')));
+  first.release();
+});
+
+const PAUSED_PIN_CHILD=generatedJavaScript(`const {pinBinaries}=await import(process.argv[1]);
+pinBinaries({root:process.argv[2],hash:process.argv[3],run:process.argv[4],binaries:{nts:process.argv[5]},now:()=>0,wallNow:()=>100000});`);
+
+for(const point of ['created','copied'] as const)test('a publisher killed after staging is '+point+' leaves a safely reclaimable owner',async t=>{
+  const f=fixture(t),copy=join(f.cache,'stage');copyModuleClosure(['tooling/gate/binary-pins.ts'],copy);
+  const file=join(copy,'tooling/gate/binary-pins.ts'),source=readFileSync(file,'utf8');
+  const anchor=point==='created'?'let published=false,stageOwned=true;':'const stagedLease=join(staging,\'holders\',row.token+\'.json\');durableRecord(stagedLease,row);';
+  assert.equal(source.split(anchor).length,2);
+  const barrier=generatedJavaScript("process.stdout.write('staged:'+staging+'\\n');__pauseRead(0,Buffer.alloc(1),0,1,null);");
+  writeFileSync(file,"import {readSync as __pauseRead} from 'node:fs';\n"+source.replace(anchor,anchor+'\n'+barrier));
+  const env=fixtureEnvironment(t),unit='nts-907-pin-killed-'+randomUUID();
+  const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--unit='+unit,...toolingSliceArgs(env,'agent'),
+    '-p','Nice=19','-p','CPUWeight=20','-p','LimitCORE=0','-p','RuntimeMaxSec=300','-p','KillSignal=SIGKILL',
+    ...Object.entries(env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([name,value])=>'--setenv='+name+'='+value),
+    '--','taskset','-c','0-3,6-31',process.execPath,'--input-type=module','-e',PAUSED_PIN_CHILD,
+    pathToFileURL(file).href,f.root,f.hash,join(f.cache,'run'),f.source],{env,stdio:['pipe','pipe','pipe']});
+  let output='',errors='',ended=false;
+  child.stdout.on('data',part=>output+=String(part));child.stderr.on('data',part=>errors+=String(part));
+  const closed=new Promise<number|null>((resolve,reject)=>{
+    child.once('error',error=>{ended=true;reject(error);});child.once('close',code=>{ended=true;resolve(code);});
+  });
+  try{
+    await waitFor('publisher staged its owned directory',()=>output.includes('staged:'),{stopped:()=>ended?errors:undefined});
+    const path=output.split('\n').find(line=>line.startsWith('staged:'))!.slice('staged:'.length);
+    assert.equal(existsSync(path),true);
+    const held=f.acquire();assert.ok(binaryPinDiagnostics(f.root).notices.some(line=>line.includes(path)&&line.includes('live staging')));
+    const stopped=spawnTest('systemctl',['--user','stop',unit],{env,encoding:'utf8'});assert.equal(stopped.status,0,stopped.stderr);
+    assert.notEqual(await closed,0,errors);assert.equal(existsSync(path),true,'SIGKILL bypassed finally');
+    const later=f.acquire();assert.equal(existsSync(path),false,'the next locked prune reclaimed the exact dead owner');
+    later.release();held.release();
+  }finally{child.stdin.end();spawnTest('systemctl',['--user','stop',unit],{env,encoding:'utf8'});await closed;}
 });
 
 const PIN_CHILD=generatedJavaScript(`import {readSync,readFileSync} from 'node:fs';
@@ -172,5 +271,5 @@ test('24 simultaneous starts publish complete leases and serialize release and r
   for(const child of children)child.child.stdin.end();
   assert.deepEqual(await Promise.all(children.map(child=>child.closed)),Array(24).fill(0));
   assert.equal(readdirSync(f.root).filter(name=>/^[0-9a-f]{64}$/.test(name)).length,10);
-  assert.deepEqual(binaryPinWarnings(f.root),[]);
+  assert.deepEqual(binaryPinDiagnostics(f.root),{warnings:[],notices:[]});
 });

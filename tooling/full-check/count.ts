@@ -1,4 +1,4 @@
-import {binaryPinWarnings,type PinOwnerObservation} from '../gate/binary-pins.ts';
+import {binaryPinDiagnostics,type PinOwnerObservation} from '../gate/binary-pins.ts';
 import {listedCgroupPopulated} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // The count step (docs/workflow.md, The machine: "the full check counts
@@ -399,7 +399,8 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
   for(const pin of folders(join(input.cache,"nts-gate","bin"),input.folderStat)){
     if(/^[0-9a-f]{64}$/.test(pin.name))notices.push(`${display(pin.path,context)}: legacy gate pin without lease ownership; report only, deletion awaits the user's decision`);
   }
-  red.push(...binaryPinWarnings(join(input.cache,"nts-gate","bin-v2"),input.pinOwnerObservation));
+  const pins=binaryPinDiagnostics(join(input.cache,"nts-gate","bin-v2"),input.pinOwnerObservation);
+  red.push(...pins.warnings);notices.push(...pins.notices);
 }
 
 /** The count's own interval: a slice younger than this may be a live run's, not a leftover. */

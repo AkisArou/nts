@@ -1253,6 +1253,13 @@ the tooling strict checker owns the source's type checking.
   identity or malformed or newer holder state protects the folder. The hourly
   count names unreclaimable leases. Lock wait and hold durations are observations
   in the run's compiler identity, never verdict inputs.
+  Private staging directories publish a versioned boot/PID/start identity and
+  unique token in their names at creation, before any payload bytes. Pruning
+  reclaims only proven-dead stages under the same lock after rechecking their
+  directory identities and names. Live stages remain named notices; unknown,
+  malformed and older unnamed stages remain protected warnings. A detected
+  member mismatch records a versioned corruption diagnostic and does not refresh
+  recency. The count reports corruption without hashing payloads under the lock.
   The sibling legacy `nts-gate/bin` root remains isolated from these leases:
   historical gates can prune only their own root. Both roots have `kept` rules;
   no existing age-based sweep proves a legacy run gone. The count reports legacy

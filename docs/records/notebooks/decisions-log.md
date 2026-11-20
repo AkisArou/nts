@@ -4080,3 +4080,18 @@ including an nts-only set. Companion-only changes get a new immutable folder.
 Compiler provenance retains its own digest; the summary also records bundle
 and member digests. Reuse verifies every member after leasing, outside the
 lock, and never overwrites a published executable.
+
+## Gate staging names publish ownership atomically (11-20)
+
+Private gate binary staging directories encode a version, complete boot/PID/start
+identity and unique token in the name created before any payload bytes. The pin
+owner reclaims them under its cache lock only after proving that owner gone and
+rechecking the directory name and device/inode. Live preparation is a named
+notice; unknown, malformed and earlier anonymous stages remain protected warnings.
+One typed diagnostic view supplies both to the count. This completes the killed
+publisher lifecycle of [gate binary leases](#gate-binary-pins-follow-run-leases-11-20).
+
+Detected member corruption publishes a versioned diagnostic prepared outside the
+cache lock. Neither failed verification nor diagnostic publication refreshes
+recency, and count names the diagnostic without hashing executable bytes under
+the lock. Malformed and future diagnostic versions are never overwritten.
