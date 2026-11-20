@@ -96,7 +96,7 @@ void nts_test_host_install(void) {
   nts_test_next_id = 0;
   nts_test_dropped = 0;
 
-  NtsHost host;
+  NtsHost host = {0};
   host.post_task = nts_test_post;
   host.post_delayed = nts_test_post_delayed;
   host.cancel_delayed = nts_test_cancel;

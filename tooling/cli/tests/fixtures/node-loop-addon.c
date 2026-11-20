@@ -4,6 +4,10 @@
 
 #include "nts_node.h"
 
+/* An explicit Node-API loop must bypass the core host accessor. This addon
+ * fixture deliberately links no core runtime; consulting it is a failure. */
+uv_loop_t *nts_host_loop(void) { abort(); }
+
 typedef struct {
     uv_work_t request;
     napi_env env;

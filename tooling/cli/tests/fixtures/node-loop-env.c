@@ -12,6 +12,14 @@ static napi_cleanup_hook hooks[2];
 static void *origins[2];
 static unsigned hook_count;
 static int worker_result;
+static _Thread_local unsigned host_queries;
+
+/* This isolated Node-API fixture installs no core host. The query count also
+ * proves that an explicit hosted loop bypasses the core accessor. */
+uv_loop_t *nts_host_loop(void) {
+    host_queries++;
+    return NULL;
+}
 
 napi_status napi_get_uv_event_loop(napi_env env, uv_loop_t **loop) {
     *loop = env == env_a ? &loop_a : &loop_b;
@@ -30,7 +38,7 @@ napi_status napi_add_env_cleanup_hook(napi_env env, napi_cleanup_hook hook,
 static void worker(void *unused) {
     (void)unused;
     nts_node_set_loop(&loop_worker);
-    worker_result = nts_node_loop() != &loop_worker;
+    worker_result = nts_node_loop() != &loop_worker || host_queries != 0;
 }
 
 int main(void) {
@@ -44,7 +52,9 @@ int main(void) {
     if (uv_thread_create(&thread, worker, NULL) != 0) return 4;
     if (uv_thread_join(&thread) != 0 || worker_result != 0) return 5;
     if (nts_node_loop() != &loop_b) return 6;
+    if (host_queries != 0) return 8;
     hooks[1](origins[1]);
     if (nts_node_loop() != uv_default_loop()) return 7;
+    if (host_queries != 1) return 9;
     return 0;
 }
