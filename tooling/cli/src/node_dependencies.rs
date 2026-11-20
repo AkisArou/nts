@@ -4,7 +4,7 @@ use camino::Utf8Path;
 use nts_build::node_deps::{self, Artifacts, Request};
 use std::{
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -129,7 +129,13 @@ pub(super) fn link(
     let format = node_deps::recipe_for(&artifacts.target)?.object_format;
     let exports =
         Utf8Path::new(driver).file_name() == Some("zig") && format == node_deps::ObjectFormat::Elf;
-    command.args(link_arguments(&artifacts.link_flags, format, exports));
+    let scoped = scopes_math(command);
+    command.args(link_arguments(
+        &artifacts.link_flags,
+        format,
+        exports,
+        scoped,
+    ));
     if !exports {
         return Ok(());
     }
@@ -160,13 +166,28 @@ pub(super) fn link(
     Ok(())
 }
 
-fn link_arguments(flags: &[String], format: node_deps::ObjectFormat, exports: bool) -> Vec<&str> {
+// A static link has no DSO to omit. Zig's cc driver rejects state push/pop,
+// even though its underlying lld supports them, so its dynamic policy stays
+// unchanged as well. Other native ELF drivers can scope libm alone.
+pub(super) fn scopes_math(command: &Command) -> bool {
+    !Path::new(command.get_program())
+        .file_name()
+        .is_some_and(|name| name == "zig")
+        && !command.get_args().any(|arg| arg == "-static")
+}
+
+fn link_arguments(
+    flags: &[String],
+    format: node_deps::ObjectFormat,
+    exports: bool,
+    scoped: bool,
+) -> Vec<&str> {
     let mut arguments = Vec::new();
     for flag in flags {
         if exports && flag == "-Wl,--exclude-libs,ALL" {
             continue;
         }
-        if format == node_deps::ObjectFormat::Elf && flag == "-lm" {
+        if scoped && format == node_deps::ObjectFormat::Elf && flag == "-lm" {
             // Keep its archive-order position: a preceding --as-needed -lm
             // cannot resolve math first referenced by a later static archive.
             arguments.extend(["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]);
@@ -275,7 +296,7 @@ mod cache_tests {
 
 #[cfg(test)]
 mod link_tests {
-    use super::link_arguments;
+    use super::{link_arguments, scopes_math};
     use nts_build::node_deps::ObjectFormat;
     use std::process::Command;
 
@@ -293,7 +314,8 @@ mod link_tests {
         .to_vec();
         for format in [ObjectFormat::Elf, ObjectFormat::Macho, ObjectFormat::Coff] {
             let mut command = Command::new("compiler");
-            command.args(link_arguments(&flags, format, false));
+            let scoped = scopes_math(&command);
+            command.args(link_arguments(&flags, format, false, scoped));
             let actual: Vec<_> = command
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
@@ -318,8 +340,30 @@ mod link_tests {
             };
             assert_eq!(actual, expected, "{format:?}");
         }
-        let exported = link_arguments(&flags, ObjectFormat::Elf, true);
+        let exported = link_arguments(&flags, ObjectFormat::Elf, true, true);
         assert!(!exported.contains(&"-Wl,--exclude-libs,ALL"));
         assert!(exported.contains(&"-lconstructor"));
+    }
+
+    #[test]
+    fn static_and_zig_link_arguments_stay_unchanged() {
+        let flags = ["-lconstructor", "uv.a", "-lm", "-ldl"]
+            .map(str::to_owned)
+            .to_vec();
+        for (driver, prefix) in [("clang", "-static"), ("zig", "cc")] {
+            let mut command = Command::new(driver);
+            command.arg(prefix);
+            let scoped = scopes_math(&command);
+            assert!(!scoped, "{driver} {prefix}");
+            command.args(link_arguments(&flags, ObjectFormat::Elf, false, scoped));
+            let actual: Vec<_> = command
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            let expected: Vec<_> = std::iter::once(prefix.to_owned())
+                .chain(flags.clone())
+                .collect();
+            assert_eq!(actual, expected, "{driver} {prefix}");
+        }
     }
 }

@@ -11540,8 +11540,7 @@ static void nts_require_host(const char *what) {
 
 void nts_host_activate(const NtsHost *host) {
   nts_require_host("host activation");
-  if (!nts_env->host.is_owner_thread ||
-      !nts_env->host.is_owner_thread(nts_env->host.state)) {
+  if (!nts_env->host.is_owner_thread || !nts_is_owner_thread()) {
     fprintf(stderr,
             "nts: host activation from a thread that does not own it\n");
     abort();

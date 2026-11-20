@@ -7543,12 +7543,15 @@ fn link_c(
                 // libm has no constructor contract: keep it only when live
                 // code needs a symbol from it. Scope this to libm, since other
                 // native libraries may be linked for their constructors.
-                ObjectFormat::Elf => command.args([
-                    "-Wl,--gc-sections",
-                    "-Wl,--push-state,--as-needed",
-                    "-lm",
-                    "-Wl,--pop-state",
-                ]),
+                ObjectFormat::Elf => {
+                    let scoped = node_dependencies::scopes_math(&command);
+                    command.arg("-Wl,--gc-sections");
+                    if scoped {
+                        command.args(["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"])
+                    } else {
+                        command.arg("-lm")
+                    }
+                }
                 ObjectFormat::Coff => command.args(["-Wl,--gc-sections", "-lm"]),
             };
             // **After our own objects and before `-o`.** A static archive is
