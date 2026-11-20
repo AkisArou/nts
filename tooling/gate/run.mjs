@@ -1816,7 +1816,8 @@ if(plan.includes('doctests')){
       const hold=await reserveJob({key:'pinned-build',what:'gate doctest prerequisite preparation'},
         {env:preparationEnv,signal:startupAbort.signal});
       try{
-        const status=await sharedBuild(['--profile','nts-dev','--no-compiler'],preparationEnv,ROOT);
+        const args=plan.includes('build')?['--profile','release']:['--profile','nts-dev','--no-compiler'];
+        const status=await sharedBuild(args,preparationEnv,ROOT);
         if(status!==0)throw new ToolingInstrumentError('tooling-setup','doctests shared build preparation exited '+status);
       }finally{hold.release();await hold.closed;}
     }

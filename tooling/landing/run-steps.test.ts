@@ -4,7 +4,7 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // and memory pressure run again alone. Shared helpers are in run-fixture.ts.
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {existsSync,readFileSync,writeFileSync} from "node:fs";
+import {existsSync,mkdirSync,readFileSync,writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {join} from "node:path";
 import {ENVIRONMENT_EXPERIMENT,gateEnvironment} from '../gate/canonical-environment.ts';
@@ -12,6 +12,7 @@ import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {launcherEnvironment,PROFILE,runLanding} from "./run.ts";
 import {fixture} from './run-fixture.ts';
 import {spawnTest} from "../gate/test-wait.ts";
+import {TEST_PROFILE_MANIFEST} from '../gate/test-profile.ts';
 
 test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", async t => {
   const f = fixture(t);
@@ -65,6 +66,27 @@ test('a doctests-only landing prepares before its execution, and retains prepara
   assert.equal(ran.steps.find(row=>row.name==='doctests')?.attempt,2);
   assert.ok(existsSync(join(f.run,'doctest-build.json')));
   assert.equal(readFileSync(join(f.controls,'doctest-crates'),'utf8'),'nts-core\n');
+});
+
+test('a direct build and doctests selection compiles both profiles before step scopes',t=>{
+  const f=fixture(t),bin=join(f.own,'bin'),calls=join(f.own,'cargo-calls');mkdirSync(bin);
+  writeFileSync(join(f.tree,'Cargo.toml'),'[workspace]\n'+readFileSync(TEST_PROFILE_MANIFEST,'utf8').split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]')));
+  writeFileSync(join(bin,'cargo'),`#!${process.execPath}
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+assert.equal(process.env.NTS_GATE_STEP,undefined,'compilation entered a step scope');assert.ok(process.env.NTS_MEMORY_RESERVATION);
+const target=process.env.CARGO_TARGET_DIR,doc=process.argv.includes('--doc');
+fs.appendFileSync(${JSON.stringify(calls)},doc?'doctest prerequisites\\n':'release compiler\\n');
+fs.mkdirSync(path.join(target,doc?'nts-dev':'release'),{recursive:true});
+if(doc){console.log(JSON.stringify({reason:'compiler-artifact',filenames:[path.join(target,'nts-dev/deps/private')],profile:{test:false,debuginfo:0},fresh:false}));console.log(JSON.stringify({reason:'build-finished',success:true}));}
+else for(const name of ['nts','nts-suite'])fs.writeFileSync(path.join(target,'release',name),'#!/bin/sh\\nexit 0\\n',{mode:0o755});
+`,{mode:0o755});
+  const base=f.options([]).env!,planned=gateEnvironment(base,{run:f.run,owned:{...f.memory,NTS_GATE_STEPS:'build doctests',
+    NTS_GATE_SLOTS:'4',CARGO_TARGET_DIR:f.target,PATH:bin+':'+base.PATH,NTS_MEMORY_PRIORITY:'agent'}});
+  const ran=spawnTest(process.execPath,[join(f.tree,'tooling/gate/run.mjs')],{cwd:f.tree,env:planned.env,encoding:'utf8'});
+  assert.equal(ran.status,0,ran.stdout+ran.stderr);
+  assert.deepEqual(readFileSync(calls,'utf8').trim().split('\n'),['release compiler','doctest prerequisites']);
+  const summary=JSON.parse(readFileSync(join(f.run,'summary.json'),'utf8'));
+  assert.deepEqual(summary.steps.map((row:{name:string;verdict:string})=>row.name+' '+row.verdict),['build PASS','doctests PASS']);
 });
 
 test("a failing build refuses the change, and nothing after it runs", async t => {

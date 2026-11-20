@@ -11,9 +11,11 @@ import {ownMemory} from './test-memory.ts';
 
 test('listing doctests prepares the identical graph, including dev dependency features',t=>{
   const root=testScratch(t,'doctest-build'),target=join(root,'external-target');
-  for(const name of ['subject','dependency'])mkdirSync(join(root,name,'src'),{recursive:true});
+  for(const name of ['subject','dependency','unrelated'])mkdirSync(join(root,name,'src'),{recursive:true});
   const profile=readFileSync(TEST_PROFILE_MANIFEST,'utf8').split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]'));
-  writeFileSync(join(root,'Cargo.toml'),'[workspace]\nmembers=["subject","dependency"]\nresolver="2"\n'+profile);
+  writeFileSync(join(root,'Cargo.toml'),'[workspace]\nmembers=["subject","dependency","unrelated"]\nresolver="2"\n'+profile);
+  writeFileSync(join(root,'unrelated/Cargo.toml'),'[package]\nname="unrelated"\nversion="0.0.0"\nedition="2024"\n');
+  writeFileSync(join(root,'unrelated/src/lib.rs'),'compile_error!("unselected crate must never compile");\n');
   writeFileSync(join(root,'dependency/Cargo.toml'),'[package]\nname="dependency"\nversion="0.0.0"\nedition="2024"\n[features]\ndoc_feature=[]\n');
   const dependency=join(root,'dependency/src/lib.rs');
   writeFileSync(dependency,'#[cfg(feature="doc_feature")] pub fn answer() -> u32 { 42 }\n');
