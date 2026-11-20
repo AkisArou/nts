@@ -1584,8 +1584,6 @@ tests/typescript/call-routes/shape-optional-map.ts	{"kind":"wrong","errorClass":
 tests/typescript/call-routes/shape-optional-omitted-variable.ts	{"kind":"invalid-hir","validator":"CallArgumentCount { func: \"module#init\", callee: \"target@raises\", expected: 2, found: 1 }"}
 tests/typescript/call-routes/shape-optional-variable.ts	{"kind":"pass"}
 tests/typescript/call-routes/shape-rest-array.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGBUS","output":""}}
-tests/typescript/call-routes/shape-rest-field.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGSEGV","output":""}}
-tests/typescript/call-routes/shape-rest-map.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGSEGV","output":""}}
 tests/typescript/call-routes/shape-rest-variable.ts	{"kind":"invalid-hir","validator":"CallArgumentCount { func: \"module#init\", callee: \"target@raises\", expected: 2, found: 3 }"}
 tests/typescript/call-routes/shape-this-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/call-routes/shape-this-field.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}

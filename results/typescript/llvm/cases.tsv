@@ -5350,7 +5350,6 @@ tests/typescript/library-addition-routes-controls/promises-try-field-returned-pr
 tests/typescript/library-addition-routes-controls/promises-try-generic-object-identity-control.ts	{"kind":"pass"}
 tests/typescript/library-addition-routes-controls/promises-try-interface-synchronous-value-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/library-addition-routes-controls/promises-try-map-returned-rejection-control.ts	{"kind":"pass"}
-tests/typescript/library-addition-routes-controls/promises-try-private-throwing-callback-control.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused at run time: calling `Closure0#call` through an erased signature with an argument not admitted by parameter `value`"}}
 tests/typescript/library-addition-routes-controls/promises-try-readonly-callback-array-control.ts	{"kind":"pass"}
 tests/typescript/library-addition-routes-controls/promises-try-static-throwing-callback-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/library-addition-routes-controls/promises-try-this-parameter-unbound-callback-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
