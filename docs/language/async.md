@@ -145,6 +145,12 @@ shuts down without creating them. A foreign completion posted before activation 
 on the owner without creating a loop. Explicit loops, including the GTK,
 CoreFoundation and Win32 adapters, are installed eagerly.
 
+On supported dynamic ELF links, a scoped `--as-needed -lm` follows all library
+inputs. ThinLTO clang links retain libm only when live code needs it; non-LTO
+GCC links can still retain it through dead runtime math references. Scoping is
+decided once from the driver command before adding library flags. Initially
+static drivers and Zig preserve their existing math flags.
+
 Activation replaces only callbacks read by the owner thread. The foreign-post
 entry, owner query, checkpoint policy, native-loop accessor and state stay fixed
 after installation.

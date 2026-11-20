@@ -7536,13 +7536,16 @@ fn link_c(
             for object in &objects {
                 command.arg(native_paths::relative(object, out)?);
             }
+            // Library inputs may add driver flags such as -static. Decide once
+            // before those inputs so filtering and final emission agree.
+            let scoped = format == ObjectFormat::Elf && node_dependencies::scopes_math(&command);
             match format {
                 // libm is part of libSystem there, and the zig-derived sysroot
                 // carries no separate `libm.tbd` for `-lm` to find.
                 ObjectFormat::MachO => command.arg("-Wl,-dead_strip"),
                 ObjectFormat::Elf => {
                     command.arg("-Wl,--gc-sections");
-                    if !node_dependencies::scopes_math(&command) {
+                    if !scoped {
                         command.arg("-lm");
                     }
                     &mut command
@@ -7566,7 +7569,14 @@ fn link_c(
                     .filter(|flag| !nts_build::node_deps::owned_library(flag)),
             );
             if let Some(artifacts) = &bundled_node {
-                node_dependencies::link(&mut command, artifacts, &tools, &product.kind, out)?;
+                node_dependencies::link(
+                    &mut command,
+                    artifacts,
+                    &tools,
+                    &product.kind,
+                    out,
+                    scoped,
+                )?;
             }
             // Swift's runtime, which the Swift objects name through their
             // autolink entries: its stubs in the SDK, and the OS's copy at
@@ -7584,9 +7594,7 @@ fn link_c(
             // --as-needed sees only references already encountered. Resolve
             // math once, after every native and bundled archive, so a later
             // dependency can be the first input that needs it.
-            if format == ObjectFormat::Elf {
-                node_dependencies::finish_elf_math(&mut command);
-            }
+            node_dependencies::finish_elf_math(&mut command, scoped);
             // **`--no-undefined` where it can be used**, which is the earliest
             // an unresolved symbol can be caught and the cheapest place to say
             // so. Not for an addon: a `.node` resolves `napi_*` out of the host

@@ -120,6 +120,7 @@ pub(super) fn link(
     tools: &super::Toolchain,
     kind: &str,
     out: &Utf8Path,
+    scoped: bool,
 ) -> Result<()> {
     let driver = tools
         .linker
@@ -129,7 +130,6 @@ pub(super) fn link(
     let format = node_deps::recipe_for(&artifacts.target)?.object_format;
     let exports =
         Utf8Path::new(driver).file_name() == Some("zig") && format == node_deps::ObjectFormat::Elf;
-    let scoped = scopes_math(command);
     command.args(link_arguments(
         &artifacts.link_flags,
         format,
@@ -177,8 +177,8 @@ pub(super) fn scopes_math(command: &Command) -> bool {
 }
 
 /// Called by the ELF application link owner after every library input.
-pub(super) fn finish_elf_math(command: &mut Command) {
-    if scopes_math(command) {
+pub(super) fn finish_elf_math(command: &mut Command, scoped: bool) {
+    if scoped {
         command.args(["-Wl,--push-state,--as-needed", "-lm", "-Wl,--pop-state"]);
     }
 }
@@ -323,8 +323,8 @@ mod link_tests {
             let scoped = scopes_math(&command);
             command.args(link_arguments(&flags, format, false, scoped));
             if format == ObjectFormat::Elf {
-                command.arg("late.a");
-                finish_elf_math(&mut command);
+                command.args(["late.a", "-static"]);
+                finish_elf_math(&mut command, scoped);
             }
             let actual: Vec<_> = command
                 .get_args()
@@ -337,6 +337,7 @@ mod link_tests {
                     "-ldl",
                     "-Wl,--exclude-libs,ALL",
                     "late.a",
+                    "-static",
                     "-Wl,--push-state,--as-needed",
                     "-lm",
                     "-Wl,--pop-state",
@@ -364,7 +365,7 @@ mod link_tests {
             let scoped = scopes_math(&command);
             assert!(!scoped, "{driver} {prefix}");
             command.args(link_arguments(&flags, ObjectFormat::Elf, false, scoped));
-            finish_elf_math(&mut command);
+            finish_elf_math(&mut command, scoped);
             let actual: Vec<_> = command
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())

@@ -4107,8 +4107,21 @@ Node-API addons retain their explicit hosted-loop fast path. The foreign
 queue's mutex publishes a wakeup function after async handle initialization and
 signals any inherited queued posts, including those posted while an earlier
 detached foreign batch runs. This preserves posts before and during activation
-without an activation branch on each completion. Supported dynamic ELF drivers retain
-libm only when live code needs it, with one scoped `--as-needed -lm` after
-every library input.
+without an activation branch on each completion. Supported dynamic ELF links
+place one scoped `--as-needed -lm` after every library input. On the ThinLTO
+clang route this retains libm only when live code needs it; non-LTO GCC links
+can retain it through dead runtime math references.
 Static and Zig links retain their original flags. The measured launch
 cost and controls are recorded in [0870](../0870-native-launch.md).
+
+## Math link scoping precedes library inputs (11-21)
+
+The application linker decides scoping once from its initial driver command,
+before any library input. The bundled dependency filter and final libm emission
+use that same value. A dependency's later `-static` cannot remove both the
+plain and scoped math flags. This refines
+[the native loop decision](#native-loop-initialization-follows-scheduled-work-11-20):
+ThinLTO clang can discard unused libm, while non-LTO GCC can retain it through
+dead runtime math references. Initially static drivers and Zig preserve their
+original math flags. The regression control varies a pkg-config `Libs` field
+by one late `-static` flag.
