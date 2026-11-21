@@ -145,6 +145,140 @@
       }
     },
     {
+      "module": "runtime/node/async_hooks",
+      "valid": true,
+      "runs": [
+        {
+          "module": "runtime/node/async_hooks",
+          "repeat": 1,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 3289259489,
+          "user_s": 0.51349,
+          "sys_s": 0.014505,
+          "cpu_s": 0.527995,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-sQjsNx/runtime_node_async_hooks-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 0.679208728,
+          "listing_functions": 461,
+          "listing_definitions": 461,
+          "listing_sha256": "f7e5f46e032f998257c12bcc7f71636bd8eb8174729a1d92af0fbe572bbfe1a9"
+        },
+        {
+          "module": "runtime/node/async_hooks",
+          "repeat": 2,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 3289283623,
+          "user_s": 0.560187,
+          "sys_s": 0.013565,
+          "cpu_s": 0.573752,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-sQjsNx/runtime_node_async_hooks-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 0.677140408,
+          "listing_functions": 461,
+          "listing_definitions": 461,
+          "listing_sha256": "f7e5f46e032f998257c12bcc7f71636bd8eb8174729a1d92af0fbe572bbfe1a9"
+        },
+        {
+          "module": "runtime/node/async_hooks",
+          "repeat": 3,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 3289301063,
+          "user_s": 0.504913,
+          "sys_s": 0.010706,
+          "cpu_s": 0.5156189999999999,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-sQjsNx/runtime_node_async_hooks-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 0.613325647,
+          "listing_functions": 461,
+          "listing_definitions": 461,
+          "listing_sha256": "f7e5f46e032f998257c12bcc7f71636bd8eb8174729a1d92af0fbe572bbfe1a9"
+        },
+        {
+          "module": "runtime/node/async_hooks",
+          "repeat": 4,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 3289273668,
+          "user_s": 0.548267,
+          "sys_s": 0.016643,
+          "cpu_s": 0.5649099999999999,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-sQjsNx/runtime_node_async_hooks-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 0.6894563020000001,
+          "listing_functions": 461,
+          "listing_definitions": 461,
+          "listing_sha256": "f7e5f46e032f998257c12bcc7f71636bd8eb8174729a1d92af0fbe572bbfe1a9"
+        },
+        {
+          "module": "runtime/node/async_hooks",
+          "repeat": 5,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 3289270366,
+          "user_s": 0.54768,
+          "sys_s": 0.011849,
+          "cpu_s": 0.5595289999999999,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-sQjsNx/runtime_node_async_hooks-5.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 0.589267943,
+          "listing_functions": 461,
+          "listing_definitions": 461,
+          "listing_sha256": "f7e5f46e032f998257c12bcc7f71636bd8eb8174729a1d92af0fbe572bbfe1a9"
+        }
+      ],
+      "median_instructions": 3289273668,
+      "median_cpu_s": 0.5595289999999999,
+      "spread": 0.000012639319013629802,
+      "source": {
+        "commit": "ca63c805525a0c96cb5934e486408a5d61a82df9",
+        "nts_sha256": "57f078e0fd94f5353e6c0d290e32567947f3ecd4841b963809d4a9be1cc5790d",
+        "raw_directory": "/home/akisarou/.cache/nts-compile-calibration/run-sQjsNx"
+      }
+    },
+    {
       "module": "runtime/node/buffer",
       "valid": true,
       "runs": [
@@ -544,6 +678,140 @@
         "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
         "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
         "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
+    },
+    {
+      "module": "runtime/node/console",
+      "valid": true,
+      "runs": [
+        {
+          "module": "runtime/node/console",
+          "repeat": 1,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 196474789185,
+          "user_s": 35.617814,
+          "sys_s": 0.240361,
+          "cpu_s": 35.858175,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-zNFbBi/runtime_node_console-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 36.778651072,
+          "listing_functions": 3327,
+          "listing_definitions": 3327,
+          "listing_sha256": "7e39af85bdfc416b92abd10aeef6c7d70ffbcc2a9bfb99eed66f1c9cf558fc5b"
+        },
+        {
+          "module": "runtime/node/console",
+          "repeat": 2,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 196445889469,
+          "user_s": 35.121221,
+          "sys_s": 0.22953,
+          "cpu_s": 35.350750999999995,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-zNFbBi/runtime_node_console-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 36.27399070800001,
+          "listing_functions": 3327,
+          "listing_definitions": 3327,
+          "listing_sha256": "7e39af85bdfc416b92abd10aeef6c7d70ffbcc2a9bfb99eed66f1c9cf558fc5b"
+        },
+        {
+          "module": "runtime/node/console",
+          "repeat": 3,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 196418982448,
+          "user_s": 36.341023,
+          "sys_s": 0.233778,
+          "cpu_s": 36.574801,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-zNFbBi/runtime_node_console-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 37.65654263099999,
+          "listing_functions": 3327,
+          "listing_definitions": 3327,
+          "listing_sha256": "7e39af85bdfc416b92abd10aeef6c7d70ffbcc2a9bfb99eed66f1c9cf558fc5b"
+        },
+        {
+          "module": "runtime/node/console",
+          "repeat": 4,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 196413888185,
+          "user_s": 34.179597,
+          "sys_s": 0.235975,
+          "cpu_s": 34.415572000000004,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-zNFbBi/runtime_node_console-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 35.321574238000004,
+          "listing_functions": 3327,
+          "listing_definitions": 3327,
+          "listing_sha256": "7e39af85bdfc416b92abd10aeef6c7d70ffbcc2a9bfb99eed66f1c9cf558fc5b"
+        },
+        {
+          "module": "runtime/node/console",
+          "repeat": 5,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 196430834167,
+          "user_s": 34.91368,
+          "sys_s": 0.216661,
+          "cpu_s": 35.130341,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-zNFbBi/runtime_node_console-5.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 35.38056778,
+          "listing_functions": 3327,
+          "listing_definitions": 3327,
+          "listing_sha256": "7e39af85bdfc416b92abd10aeef6c7d70ffbcc2a9bfb99eed66f1c9cf558fc5b"
+        }
+      ],
+      "median_instructions": 196430834167,
+      "median_cpu_s": 35.350750999999995,
+      "spread": 0.0003100646322047318,
+      "source": {
+        "commit": "ca63c805525a0c96cb5934e486408a5d61a82df9",
+        "nts_sha256": "57f078e0fd94f5353e6c0d290e32567947f3ecd4841b963809d4a9be1cc5790d",
+        "raw_directory": "/home/akisarou/.cache/nts-compile-calibration/run-zNFbBi"
       }
     },
     {
@@ -949,6 +1217,140 @@
       }
     },
     {
+      "module": "runtime/node/dns",
+      "valid": true,
+      "runs": [
+        {
+          "module": "runtime/node/dns",
+          "repeat": 1,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 10449236657,
+          "user_s": 1.747953,
+          "sys_s": 0.022865,
+          "cpu_s": 1.770818,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IculV6/runtime_node_dns-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 1.8012505549999998,
+          "listing_functions": 650,
+          "listing_definitions": 650,
+          "listing_sha256": "7272d55ca32188f80ff346bfcf6df083eeabf5378d2deda00b1cfebddf697625"
+        },
+        {
+          "module": "runtime/node/dns",
+          "repeat": 2,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 10450208224,
+          "user_s": 1.821503,
+          "sys_s": 0.022754,
+          "cpu_s": 1.844257,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IculV6/runtime_node_dns-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 1.8805979390000003,
+          "listing_functions": 650,
+          "listing_definitions": 650,
+          "listing_sha256": "7272d55ca32188f80ff346bfcf6df083eeabf5378d2deda00b1cfebddf697625"
+        },
+        {
+          "module": "runtime/node/dns",
+          "repeat": 3,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 10449583653,
+          "user_s": 1.838642,
+          "sys_s": 0.023784,
+          "cpu_s": 1.8624260000000001,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IculV6/runtime_node_dns-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 1.891865997,
+          "listing_functions": 650,
+          "listing_definitions": 650,
+          "listing_sha256": "7272d55ca32188f80ff346bfcf6df083eeabf5378d2deda00b1cfebddf697625"
+        },
+        {
+          "module": "runtime/node/dns",
+          "repeat": 4,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 10448850420,
+          "user_s": 1.584876,
+          "sys_s": 0.021814,
+          "cpu_s": 1.60669,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IculV6/runtime_node_dns-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 1.6556755,
+          "listing_functions": 650,
+          "listing_definitions": 650,
+          "listing_sha256": "7272d55ca32188f80ff346bfcf6df083eeabf5378d2deda00b1cfebddf697625"
+        },
+        {
+          "module": "runtime/node/dns",
+          "repeat": 5,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 10449389407,
+          "user_s": 1.469458,
+          "sys_s": 0.018845,
+          "cpu_s": 1.488303,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IculV6/runtime_node_dns-5.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 1.536483035,
+          "listing_functions": 650,
+          "listing_definitions": 650,
+          "listing_sha256": "7272d55ca32188f80ff346bfcf6df083eeabf5378d2deda00b1cfebddf697625"
+        }
+      ],
+      "median_instructions": 10449389407,
+      "median_cpu_s": 1.770818,
+      "spread": 0.00012994769237018033,
+      "source": {
+        "commit": "ca63c805525a0c96cb5934e486408a5d61a82df9",
+        "nts_sha256": "57f078e0fd94f5353e6c0d290e32567947f3ecd4841b963809d4a9be1cc5790d",
+        "raw_directory": "/home/akisarou/.cache/nts-compile-calibration/run-IculV6"
+      }
+    },
+    {
       "module": "runtime/node/events",
       "valid": true,
       "runs": [
@@ -1214,6 +1616,140 @@
         "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
         "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
         "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
+    },
+    {
+      "module": "runtime/node/http",
+      "valid": true,
+      "runs": [
+        {
+          "module": "runtime/node/http",
+          "repeat": 1,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 317824227552,
+          "user_s": 57.534501,
+          "sys_s": 0.313816,
+          "cpu_s": 57.848317,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-kVxl4Y/runtime_node_http-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 58.307738574,
+          "listing_functions": 4332,
+          "listing_definitions": 4332,
+          "listing_sha256": "8d1ae121be740b215e9c47cb1262d4c27ce3280cb9b0963c067ecd2f6a65e11e"
+        },
+        {
+          "module": "runtime/node/http",
+          "repeat": 2,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 317828775712,
+          "user_s": 58.01387,
+          "sys_s": 0.337325,
+          "cpu_s": 58.351195,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-kVxl4Y/runtime_node_http-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 58.824619515,
+          "listing_functions": 4332,
+          "listing_definitions": 4332,
+          "listing_sha256": "8d1ae121be740b215e9c47cb1262d4c27ce3280cb9b0963c067ecd2f6a65e11e"
+        },
+        {
+          "module": "runtime/node/http",
+          "repeat": 3,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 317799953205,
+          "user_s": 55.790524,
+          "sys_s": 0.257363,
+          "cpu_s": 56.047886999999996,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-kVxl4Y/runtime_node_http-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 56.479943848999994,
+          "listing_functions": 4332,
+          "listing_definitions": 4332,
+          "listing_sha256": "8d1ae121be740b215e9c47cb1262d4c27ce3280cb9b0963c067ecd2f6a65e11e"
+        },
+        {
+          "module": "runtime/node/http",
+          "repeat": 4,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 317824693544,
+          "user_s": 56.028491,
+          "sys_s": 0.333932,
+          "cpu_s": 56.362423,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-kVxl4Y/runtime_node_http-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 56.828753419,
+          "listing_functions": 4332,
+          "listing_definitions": 4332,
+          "listing_sha256": "8d1ae121be740b215e9c47cb1262d4c27ce3280cb9b0963c067ecd2f6a65e11e"
+        },
+        {
+          "module": "runtime/node/http",
+          "repeat": 5,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 317800972320,
+          "user_s": 47.312742,
+          "sys_s": 0.306442,
+          "cpu_s": 47.619184,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-kVxl4Y/runtime_node_http-5.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 47.84667942300001,
+          "listing_functions": 4332,
+          "listing_definitions": 4332,
+          "listing_sha256": "8d1ae121be740b215e9c47cb1262d4c27ce3280cb9b0963c067ecd2f6a65e11e"
+        }
+      ],
+      "median_instructions": 317824227552,
+      "median_cpu_s": 56.362423,
+      "spread": 0.00009069386797988521,
+      "source": {
+        "commit": "ca63c805525a0c96cb5934e486408a5d61a82df9",
+        "nts_sha256": "57f078e0fd94f5353e6c0d290e32567947f3ecd4841b963809d4a9be1cc5790d",
+        "raw_directory": "/home/akisarou/.cache/nts-compile-calibration/run-kVxl4Y"
       }
     },
     {
@@ -1616,6 +2152,274 @@
         "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
         "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
         "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
+    },
+    {
+      "module": "runtime/node/perf_hooks",
+      "valid": true,
+      "runs": [
+        {
+          "module": "runtime/node/perf_hooks",
+          "repeat": 1,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 192625915432,
+          "user_s": 26.072339,
+          "sys_s": 0.14439,
+          "cpu_s": 26.216729,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-n9Tf3t/runtime_node_perf_hooks-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 26.335761388999998,
+          "listing_functions": 3414,
+          "listing_definitions": 3414,
+          "listing_sha256": "87e6a2e2ba4a2b7ad81ff93e0a197f052a85ee56c986e1ff2eb43e2efeddf6d7"
+        },
+        {
+          "module": "runtime/node/perf_hooks",
+          "repeat": 2,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 192633845292,
+          "user_s": 21.470172,
+          "sys_s": 0.146451,
+          "cpu_s": 21.616623,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-n9Tf3t/runtime_node_perf_hooks-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 21.707770688,
+          "listing_functions": 3414,
+          "listing_definitions": 3414,
+          "listing_sha256": "87e6a2e2ba4a2b7ad81ff93e0a197f052a85ee56c986e1ff2eb43e2efeddf6d7"
+        },
+        {
+          "module": "runtime/node/perf_hooks",
+          "repeat": 3,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 192615918464,
+          "user_s": 21.296817,
+          "sys_s": 0.151383,
+          "cpu_s": 21.4482,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-n9Tf3t/runtime_node_perf_hooks-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 21.538940124,
+          "listing_functions": 3414,
+          "listing_definitions": 3414,
+          "listing_sha256": "87e6a2e2ba4a2b7ad81ff93e0a197f052a85ee56c986e1ff2eb43e2efeddf6d7"
+        },
+        {
+          "module": "runtime/node/perf_hooks",
+          "repeat": 4,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 192624532835,
+          "user_s": 23.955014,
+          "sys_s": 0.145116,
+          "cpu_s": 24.10013,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-n9Tf3t/runtime_node_perf_hooks-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 24.200981167000002,
+          "listing_functions": 3414,
+          "listing_definitions": 3414,
+          "listing_sha256": "87e6a2e2ba4a2b7ad81ff93e0a197f052a85ee56c986e1ff2eb43e2efeddf6d7"
+        },
+        {
+          "module": "runtime/node/perf_hooks",
+          "repeat": 5,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 192615684376,
+          "user_s": 21.154303,
+          "sys_s": 0.127407,
+          "cpu_s": 21.28171,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-n9Tf3t/runtime_node_perf_hooks-5.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 21.372232499000003,
+          "listing_functions": 3414,
+          "listing_definitions": 3414,
+          "listing_sha256": "87e6a2e2ba4a2b7ad81ff93e0a197f052a85ee56c986e1ff2eb43e2efeddf6d7"
+        }
+      ],
+      "median_instructions": 192624532835,
+      "median_cpu_s": 21.616623,
+      "spread": 0.00009428575901715419,
+      "source": {
+        "commit": "ca63c805525a0c96cb5934e486408a5d61a82df9",
+        "nts_sha256": "57f078e0fd94f5353e6c0d290e32567947f3ecd4841b963809d4a9be1cc5790d",
+        "raw_directory": "/home/akisarou/.cache/nts-compile-calibration/run-n9Tf3t"
+      }
+    },
+    {
+      "module": "runtime/node/process",
+      "valid": true,
+      "runs": [
+        {
+          "module": "runtime/node/process",
+          "repeat": 1,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 318911586593,
+          "user_s": 37.603518,
+          "sys_s": 0.237065,
+          "cpu_s": 37.840583,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IcKtgZ/runtime_node_process-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 38.000962595,
+          "listing_functions": 4511,
+          "listing_definitions": 4511,
+          "listing_sha256": "3408ffab3d7fd781c985daf03596bde7e93e0f8cba114116c445101e95160975"
+        },
+        {
+          "module": "runtime/node/process",
+          "repeat": 2,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 318897853958,
+          "user_s": 39.753171,
+          "sys_s": 0.254993,
+          "cpu_s": 40.008164,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IcKtgZ/runtime_node_process-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 40.183679503,
+          "listing_functions": 4511,
+          "listing_definitions": 4511,
+          "listing_sha256": "3408ffab3d7fd781c985daf03596bde7e93e0f8cba114116c445101e95160975"
+        },
+        {
+          "module": "runtime/node/process",
+          "repeat": 3,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 318891728843,
+          "user_s": 38.088033,
+          "sys_s": 0.249982,
+          "cpu_s": 38.338015000000006,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IcKtgZ/runtime_node_process-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 38.49290619599999,
+          "listing_functions": 4511,
+          "listing_definitions": 4511,
+          "listing_sha256": "3408ffab3d7fd781c985daf03596bde7e93e0f8cba114116c445101e95160975"
+        },
+        {
+          "module": "runtime/node/process",
+          "repeat": 4,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 318865959757,
+          "user_s": 37.608613,
+          "sys_s": 0.291701,
+          "cpu_s": 37.900314,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IcKtgZ/runtime_node_process-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 38.057496147,
+          "listing_functions": 4511,
+          "listing_definitions": 4511,
+          "listing_sha256": "3408ffab3d7fd781c985daf03596bde7e93e0f8cba114116c445101e95160975"
+        },
+        {
+          "module": "runtime/node/process",
+          "repeat": 5,
+          "arm": "nogc",
+          "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
+          "work_settings": {
+            "checkers": 1,
+            "single_threaded": true,
+            "rayon_num_threads": "1"
+          },
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 318892291986,
+          "user_s": 49.144198,
+          "sys_s": 0.227214,
+          "cpu_s": 49.371412,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IcKtgZ/runtime_node_process-5.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null,
+          "wall_s": 49.62682284699999,
+          "listing_functions": 4511,
+          "listing_definitions": 4511,
+          "listing_sha256": "3408ffab3d7fd781c985daf03596bde7e93e0f8cba114116c445101e95160975"
+        }
+      ],
+      "median_instructions": 318892291986,
+      "median_cpu_s": 38.338015000000006,
+      "spread": 0.00014309095908138225,
+      "source": {
+        "commit": "ca63c805525a0c96cb5934e486408a5d61a82df9",
+        "nts_sha256": "57f078e0fd94f5353e6c0d290e32567947f3ecd4841b963809d4a9be1cc5790d",
+        "raw_directory": "/home/akisarou/.cache/nts-compile-calibration/run-IcKtgZ"
       }
     },
     {
