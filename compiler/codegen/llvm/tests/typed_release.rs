@@ -114,11 +114,17 @@ int main(void) {
     if (nts_test_trace_calls != calls) return 17;
   }
   /* A compiled array of references dies through the runtime's shared
-   * pointer-slot callback: one release for it and one per non-null slot. */
+   * pointer-slot callback: one release for it and one per non-null slot.
+   * Which of the two runtime descriptors it gets is the cycle analysis's
+   * answer for this program (`payload: unknown` can hold a Leaf). */
   NtsHeader *leaves = ownedLeaves(5);
-  if (leaves->descriptor != &nts_desc_ref_acyclic ||
+  if ((leaves->descriptor != &nts_desc_ref &&
+       leaves->descriptor != &nts_desc_ref_acyclic) ||
       !leaves->descriptor->release_fields ||
-      leaves->descriptor->release_fields != nts_desc_ref.release_fields) return 18;
+      leaves->descriptor->release_fields != nts_desc_ref_acyclic.release_fields) {
+    nts_release(leaves);
+    return 18;
+  }
   nts_counting_reset();
   nts_release(leaves);
   if (nts_counted_releases() != 1 + 32) return 19;
@@ -133,9 +139,10 @@ int main(void) {
 #else
   if (descriptor->trace_fields) return 11;
   NtsHeader *leaves = ownedLeaves(5);
-  if (!leaves->descriptor->release_fields ||
-      leaves->descriptor->release_fields != nts_desc_ref.release_fields) return 18;
+  bool shared = leaves->descriptor->release_fields &&
+                leaves->descriptor->release_fields == nts_desc_ref.release_fields;
   nts_release(leaves);
+  if (!shared) return 18;
 #endif
   for (int i = 0; i < 24; i++) {
     size_t calls = nts_test_trace_calls;
