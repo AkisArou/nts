@@ -335,9 +335,9 @@ An oracle test's supplied canonical environment is already sealed with
   and check `journalctl -k` for OOM kills before blaming a crash.
 - **Heavy work reserves its memory in the machine's one ledger**
   (`tooling/gate/memory-ledger.ts`), a queue for every job on the machine:
-  the landing check first, then the full check's culprit-search probes while
-  it looks for the commit that made main red, then agents' work, then the
-  full check's other runs, and a job yields while one of higher priority
+  the landing check first, then the full check's culprit-search probes and
+  core runs advancing stale `verified`, then agents' work, then the full
+  check's other runs, and a job yields while one of higher priority
   waits. A ledger entry your tree's code cannot read stops `admit.ts` and
   the gate with "this tree's ledger reader predates the protocol that wrote
   it; rebase onto main": do that. What a step or job reserves is
@@ -352,7 +352,8 @@ An oracle test's supplied canonical environment is already sealed with
   was sized unmeasured or held more than it reserved. Nothing holds a job to
   its reservation: a gate step's separate supervisor and worker boundaries bound only runaways, and if the
   machine itself runs out, the kernel kills the full check's ordinary work
-  first, then agents' (admit.ts ranks yours), then a culprit search's, and a
+  first, then agents' (admit.ts ranks yours), then a culprit search's or
+  stale-verified core's, and a
   landing's last. Still `nice -n
   19` and one heavy job of yours at a time.
   A scoped `reserveJob` owner calls `release()` and awaits `closed` before
@@ -376,7 +377,14 @@ An oracle test's supplied canonical environment is already sealed with
   Pooled cases use the common case lease, keyed by step, backend and source
   path. On 2026-11-12 step-average sizing killed A* and flight-planner below
   their own caps. [The workflow](docs/workflow.md#the-machine) defines
-  per-case admission, hard boundaries and completion ownership.
+  per-case admission, hard boundaries and completion ownership. The controller
+  gives a core run the existing `culprit-search` rank only when it would
+  advance `verified` and the oldest first-parent change it has not verified
+  has been unverified on main for more than two hours (since its landing).
+  Landing results supply that time; a missing landing record is named and
+  keeps full-check rank. It chooses anew per run;
+  records, wide runs and benchmarks keep the full-check rank. The bound's
+  measured basis is in the workflow page.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
   measurement.** Every process an agent starts excludes both, monitors and
   samplers as much as gates and heavy jobs: `taskset -c 0-3,6-31` inside the

@@ -96,8 +96,8 @@ export type Gate = {
   /**
    * Run `steps` at `commit`; `label` names the run's folder. `rank` is the
    * run's place among the machine's work (ranks.ts), the full check's own
-   * unless the controller names another: a culprit search's probes outrank
-   * agents' work. It holds for this run only.
+   * unless the controller names another: culprit probes and core runs
+   * advancing stale verified outrank agents' work. It holds for this run only.
    */
   run(commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord, options?: RunOptions): Measurement;
 };

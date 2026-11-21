@@ -40,6 +40,7 @@ import {durableRecord} from '../gate/durable-record.ts';
 import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
 import { recordLandingFixture } from "../landing/verdict-fixture.ts";
 import { measureWithLanding } from "./landing-verdict.ts";
+import {admissible,queueOrder,type Queued} from '../gate/memory-ledger.ts';
 
 type Harness = Effects & {
   lines: string[]; queue: StubQueue; submitted: StubQueue["submitted"]; withdrawn: string[]; told: { n: number; comment: string }[]; units: StubUnits;
@@ -49,7 +50,7 @@ type Harness = Effects & {
   bench: Bench;
 };
 
-function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; applier?: Applier; queue?: StubQueue; units?: StubUnits; schedule?: Effects["schedule"]; idle?: boolean; memoryWaiter?: () => string | null; bench?: Bench; publisher?: Publisher; issue?: Effects["issue"] } = {}): Harness {
+function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; applier?: Applier; queue?: StubQueue; units?: StubUnits; schedule?: Effects["schedule"]; idle?: boolean; memoryWaiter?: () => string | null; bench?: Bench; publisher?: Publisher; issue?: Effects["issue"]; landedTimes?: Effects["landedTimes"] } = {}): Harness {
   const lines: string[] = [], told: { n: number; comment: string }[] = [];
   const queue = options.queue ?? stubQueue();
   return {
@@ -57,6 +58,7 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     git: repo.git,
     gate,
     queue,
+    landedTimes: options.landedTimes ?? (() => new Map()),
     // Core controls own a waiting agent; wide/benchmark controls select idle explicitly.
     memoryWaiter: options.memoryWaiter ?? (() => options.idle ? null : "fixture agent memory request waits"),
     restartTarget: () => null,
@@ -83,6 +85,107 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     told,
   };
 }
+
+/** Only this private repository's commits use the supplied clock. */
+function commitAt(repo: Repository, at: string, subject: string): string {
+  repo.git.env.GIT_COMMITTER_DATE = at;
+  repo.git.env.GIT_AUTHOR_DATE = at;
+  return repo.commit({"a.txt": subject}, subject);
+}
+
+test("core promotes an outstanding change only beyond two hours; the ledger orders landing, stale core, agent", async t => {
+  for (const offset of [-1, 0, 1]) {
+    const repo = repository(t), gate = fakeGate(repo);
+    const first = commitAt(repo, "2026-01-01T00:00:00Z", "old verified");
+    repo.git.run(["update-ref", "refs/heads/verified", first]);
+    const oldest = commitAt(repo, "2026-11-06T10:00:00Z", "oldest unverified");
+    const candidate = commitAt(repo, "2026-11-06T11:00:00Z", "newer candidate");
+    const fx = harness(repo, gate, {now: new Date(Date.parse("2026-11-06T12:00:00Z") + offset),
+      landedTimes: () => new Map([[oldest, "2026-11-06T10:00:00Z"], [candidate, "2026-11-06T11:00:00Z"]])});
+    assert.equal(await cycle(fx), "core");
+    const core = gate.measured.at(-1)!;
+    assert.equal(core.commit, candidate);
+    assert.equal(core.rank, offset > 0 ? "culprit-search" : "full-check", `boundary offset ${offset} ms`);
+    const promoted = fx.lines.filter(line => line.includes("takes culprit-search rank"));
+    assert.equal(promoted.length, offset > 0 ? 1 : 0);
+    if (offset > 0) {
+      assert.match(promoted[0]!, /7200 s since landing 2026-11-06T10:00:00Z, beyond 7200 s/);
+      assert.ok(promoted[0]!.includes(first.slice(0, 12)) && promoted[0]!.includes(oldest.slice(0, 12)));
+    }
+    // The actual rank supplied at launch feeds the real ledger decision. The
+    // agent arrived first, and the landing last; neither arrival changes rank.
+    const queue: Queued[] = [
+      {id: "agent", bytes: 2, seq: 1, priority: "agent"},
+      {id: "core", bytes: 3, seq: 2, priority: core.rank},
+      {id: "landing", bytes: 4, seq: 3, priority: "landing"},
+    ];
+    assert.deepEqual([...queue].sort(queueOrder).map(row => row.id), offset > 0 ? ["landing", "core", "agent"] : ["landing", "agent", "core"]);
+    assert.deepEqual([...admissible(7, queue)], offset > 0 ? ["landing", "core"] : ["landing", "agent"]);
+  }
+});
+
+test("a green stale-verified catch-up returns the next fresh core and wide to full-check rank", async t => {
+  const repo = repository(t), gate = fakeGate(repo);
+  const first = commitAt(repo, "2026-01-01T00:00:00Z", "old verified");
+  repo.git.run(["update-ref", "refs/heads/verified", first]);
+  const catchup = commitAt(repo, "2026-11-06T09:00:00Z", "catch up");
+  const landed = new Map([[catchup, "2026-11-06T09:00:00Z"]]);
+  const fx = harness(repo, gate, {now: new Date("2026-11-06T12:00:00Z"), landedTimes: () => landed});
+  assert.equal(await cycle(fx), "core");
+  assert.equal(repo.git.commit("refs/heads/verified"), catchup);
+  const fresh = commitAt(repo, "2026-11-06T11:59:00Z", "fresh main");
+  landed.set(fresh, "2026-11-06T11:59:00Z");
+  assert.equal(await cycle(fx), "core");
+  assert.equal(repo.git.commit("refs/heads/verified"), fresh);
+  fx.memoryWaiter = () => null;
+  assert.equal(await cycle(fx), "wide");
+  assert.deepEqual(gate.measured.map(row => [row.label, row.rank]), [["core", "culprit-search"], ["core", "full-check"], ["wide", "full-check"]]);
+});
+
+test("fresh work after a quiet spell, current, absent and non-ancestor verified keep full-check rank", async t => {
+  for (const mode of ["fresh", "current", "absent", "unrelated"] as const) {
+    const repo = repository(t), gate = fakeGate(repo);
+    const first = commitAt(repo, "2026-01-01T00:00:00Z", "old history");
+    const candidate = commitAt(repo, mode === "fresh" ? "2026-11-06T11:59:00Z" : "2026-11-06T09:00:00Z", "candidate");
+    if (mode !== "absent") {
+      const verified = mode === "current" ? candidate : mode === "unrelated"
+        ? repo.git.run(["commit-tree", `${first}^{tree}`, "-m", "unrelated verified"]) : first;
+      repo.git.run(["update-ref", "refs/heads/verified", verified]);
+    }
+    const fx = harness(repo, gate, {now: new Date("2026-11-06T12:00:00Z"),
+      landedTimes: () => new Map([[candidate, "2026-11-06T11:59:00Z"]])});
+    assert.equal(await cycle(fx), "core");
+    assert.equal(gate.measured.at(-1)?.rank, "full-check", mode);
+    assert.ok(!fx.lines.some(line => line.includes("takes culprit-search rank")), mode);
+  }
+});
+
+test("a branch committed three hours ago but landing now keeps full-check rank", async t => {
+  const repo = repository(t), gate = fakeGate(repo);
+  const first = commitAt(repo, "2026-01-01T00:00:00Z", "old verified");
+  repo.git.run(["update-ref", "refs/heads/verified", first]);
+  const candidate = commitAt(repo, "2026-11-06T09:00:00Z", "old branch landing now");
+  const fx = harness(repo, gate, {now: new Date("2026-11-06T12:00:00Z"),
+    landedTimes: () => new Map([[candidate, "2026-11-06T12:00:00Z"]])});
+  assert.equal(await cycle(fx), "core");
+  assert.equal(gate.measured.at(-1)?.rank, "full-check");
+  assert.ok(!fx.lines.some(line => line.includes("takes culprit-search rank")));
+});
+
+test("missing or invalid landing evidence is named and retains full-check rank", async t => {
+  for (const landedAt of [undefined, "not a landing time"]) {
+    const repo = repository(t), gate = fakeGate(repo);
+    const first = commitAt(repo, "2026-01-01T00:00:00Z", "old verified");
+    repo.git.run(["update-ref", "refs/heads/verified", first]);
+    const candidate = commitAt(repo, "2026-11-06T09:00:00Z", "old branch without landing evidence");
+    const fx = harness(repo, gate, {now: new Date("2026-11-06T12:00:00Z"),
+      landedTimes: () => landedAt === undefined ? new Map() : new Map([[candidate, landedAt]])});
+    assert.equal(await cycle(fx), "core");
+    assert.equal(gate.measured.at(-1)?.rank, "full-check");
+    const why = landedAt === undefined ? "no landing record" : "invalid landing time";
+    assert.ok(fx.lines.some(line => line.includes(why) && line.includes(candidate)));
+  }
+});
 
 test('disk-short core results hold without a culprit and retry normally after owned room returns',async t=>{
   const repo=repository(t),commit=repo.commit({'a.txt':'unchanged product'},'records only'),gate=fakeGate(repo),now=new Date('2026-11-06T12:00:00Z');
@@ -337,7 +440,7 @@ test("a red core is searched, and the first red commit's revert is made on main 
   // for four candidates, and the culprit measured again.
   const searched = gate.measured.filter(m => m.label === "core-probe").length;
   assert.equal(searched, 5, `probes: ${searched}`);
-  // Each probe outranks agents' work, below a landing; the core runs keep the full check's rank (ranks.ts).
+  // Each probe outranks agents' work, below a landing; these within-bound core runs keep full-check rank.
   assert.deepEqual([...new Set(gate.measured.filter(m => m.label === "core-probe").map(m => m.rank))], ["culprit-search"], "every probe at the culprit search's rank");
   assert.deepEqual([...new Set(gate.measured.filter(m => m.label === "core").map(m => m.rank))], ["full-check"], "the core's own runs at the full check's");
   assert.ok(gate.measured.some(m => m.label === "core-probe" && m.commit === good), "the last green commit is the control");

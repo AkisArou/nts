@@ -4211,3 +4211,33 @@ clear on every exit, and the graph still closes its API owners. No extra
 snapshot copies or deferred wrapper closures are retained. Separate endpoint
 and catalog views never join by a relative config name. Standalone graph
 consumers keep their existing fresh-read transactions.
+
+### Core work advancing stale verified shares the culprit-search rank (11-21)
+
+Issue #929 extends [#924's probe rank](#a-culprit-search-outranks-agents-work-11-21)
+to the ordinary core run that can restore stale `verified`. Immediately before
+`Gate.run`, `tooling/full-check/service.ts`'s `runPart` resolves `verified`,
+requires it to be a strict ancestor of the candidate, and promotes only if the
+oldest first-parent commit in that range is more than two hours old by Git
+committer time and the controller's supplied clock. A recent change after a
+quiet spell remains ordinary work. The choice ends with the run and is made
+again next time, so a green catch-up returns fresh core work to full-check rank.
+Wide runs, records and benchmarks keep full-check rank. No rank or ledger
+protocol changes. The [cycle cohort and launch replay](../full-check-stale-verified.md)
+state the bound's measured basis and firing frequency. Like #924, this takes
+effect only once `verified` contains it: the controller runs `verified`'s code.
+
+### Landing time owns stale-verified age (11-21)
+
+Issue #929 corrects the age source in
+[the earlier rank decision](#core-work-advancing-stale-verified-shares-the-culprit-search-rank-11-21).
+A commit can be old when it first lands: committer time incorrectly promoted
+`78265f88bace` just 55 seconds after its landing. The controller instead takes
+the oldest outstanding first-parent commit's landing result `at` from
+`queue.ts`'s `landedTimes()`, supplied through `Effects`. A missing record or
+invalid time is named and keeps full-check rank; no committer-time fallback
+is allowed. The two-hour boundary, strict-ancestor/current/missing verified
+guards, per-run rank lifetime and other full-check work's rank remain as stated.
+The [corrected replay](../full-check-stale-verified.md) uses landing results
+and preserves the earlier raw cohort as evidence. A control commits a branch
+three hours ago, lands it now, and requires full-check rank.

@@ -1,7 +1,7 @@
 // The machine's four ranks of work, highest first: the landing check, the
-// full check's culprit-search probes, an agent's own work, the full check's
-// other runs. One table says what each rank gets from
-// the kernel: the memory ledger admits by this order (memory-ledger.ts), the
+// full check's culprit probes and core runs advancing stale verified, an
+// agent's own work, the full check's other runs. One table says what each rank
+// gets from the kernel: the memory ledger admits by this order (memory-ledger.ts), the
 // OOM killer takes the lowest rank's work first, and the CPU scheduler shares
 // contended time by the rank's weight.
 //
@@ -15,9 +15,11 @@
 // A culprit search exists to restore `verified`, which every record,
 // benchmark and later bisection waits on, so its probes outrank agents' work
 // and stay below a landing. The full check's controller gives that rank to
-// each probe run it starts, and to nothing else: the rank ends with the run
-// (full-check/measure.ts). Its core and wide runs, records and benchmarks
-// keep the full check's own rank.
+// each probe run and to core runs that can advance verified when the oldest
+// outstanding first-parent change has been unverified on main for over two
+// hours since its landing: the rank ends with
+// the run (full-check/service.ts). Within that bound, core runs keep the full
+// check's rank, as do wide runs, records and benchmarks.
 
 /** The rank a launcher's code gives the job it starts (`priorityOf`). */
 export const PRIORITY_ENV = "NTS_MEMORY_PRIORITY";
@@ -36,11 +38,11 @@ export function priorityOf(env: NodeJS.ProcessEnv = process.env): Priority {
 /**
  * The kernel's OOM score adjustment of each rank's work, lowest first to
  * keep: if the machine itself runs out of memory, its OOM killer takes the
- * full check's ordinary work first, then agents', then a culprit search's,
- * and a landing's last. A user unit cannot go below the user manager's own
- * 100 (it asks 0 and is given 100), so the landing check's unit asks 100; an
+ * full check's ordinary work first, then agents', then a culprit search's
+ * or stale-verified core's, and a landing's last. A user unit cannot go below
+ * the user manager's own 100 (it asks 0 and is given 100), so the landing check's unit asks 100; an
  * agent's shell, started outside the manager, sits at 0, so agents' work
- * raises itself (memory-ledger.ts's `rankForOom`). A culprit-search probe
+ * raises itself (memory-ledger.ts's `rankForOom`). A culprit-search run
  * starts inside the full check's unit at 500 and is placed at its own 200 by
  * the controller's measurement (`placeForOom`), which may lower a score as far
  * as the manager's 100.

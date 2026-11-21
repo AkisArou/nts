@@ -88,7 +88,7 @@ import { search, type Measure, type Probe } from "./culprit.ts";
 import {selectRange,type RangeSelection} from '../gate/owed-range.ts';
 import {owedReach} from '../landing/selection.ts';
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
-import { pinnedGate, type Gate } from "./measure.ts";
+import { FULL_CHECK_RANK, pinnedGate, type Gate } from "./measure.ts";
 import { measuring, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
 import { landedTimes, landingQueue, submitTo, type LandingAnswer, type LandingQueue } from "./queue.ts";
 import { applyAt, applyRecords, recordAt, recordsMessage, runPin, type Applier, type Recorder } from "./records.ts";
@@ -106,6 +106,8 @@ const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
 export const KEEP_RUNS_MS = 3 * DAY;
 const HELD_RETRY_MS = HOUR / 2;
+/** Oldest outstanding main change; measured core-cycle basis in docs/workflow.md. */
+export const STALE_VERIFIED_MS = 2 * HOUR;
 
 export type Effects = {
   layout: Layout;
@@ -114,6 +116,8 @@ export type Effects = {
   gate: Gate;
   /** The landing check's queue (queue.ts). */
   queue: LandingQueue;
+  /** When each commit reached main, from the landing results; no Git-time proxy. */
+  landedTimes: () => ReadonlyMap<string, string>;
   /** A live higher-priority memory request, or null when none waits. */
   memoryWaiter: () => string | null;
   /** A newer verified the controller must adopt before starting more work. */
@@ -286,7 +290,28 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
     fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
     beforeRun(fx);
     if(part==="wide")beforeWideMeasurement(fx,state);
-    return fx.gate.run(commit, steps, part, state[part].last_green, { reuseLanding: part === "core" });
+    let rank: Priority = FULL_CHECK_RANK;
+    if (part === "core") {
+      const verified = fx.git.commit("refs/heads/verified");
+      if (verified && verified !== commit && fx.git.isAncestor(verified, commit)) {
+        const oldest = firstParents(fx.git, verified, commit)[0];
+        if (oldest) {
+          const landedAt = fx.landedTimes().get(oldest);
+          const landed = landedAt === undefined ? NaN : Date.parse(landedAt);
+          if (!Number.isFinite(landed)) {
+            const why = landedAt === undefined ? "no landing record" : `invalid landing time ${JSON.stringify(landedAt)}`;
+            fx.log(`core at ${short(commit)} keeps ${rank} rank: ${why} for oldest unverified main commit ${oldest}`);
+          } else {
+            const age = fx.now().getTime() - landed;
+            if (age > STALE_VERIFIED_MS) {
+              rank = CULPRIT_SEARCH_RANK;
+              fx.log(`core at ${short(commit)} takes ${rank} rank: verified ${short(verified)} leaves ${short(oldest)} unverified on main for ${Math.floor(age / 1000)} s since landing ${landedAt}, beyond ${STALE_VERIFIED_MS / 1000} s`);
+            }
+          }
+        }
+      }
+    }
+    return fx.gate.run(commit, steps, part, state[part].last_green, { reuseLanding: part === "core", rank });
   }, at);
   const end=part==='wide'?fx.now().toISOString():undefined;
   const failed = steps.filter(step => m.steps[step] === "FAIL");
@@ -461,7 +486,7 @@ function reopen(fx: Effects, state: State, finding: Finding, revert: string | nu
   if (!told.length || told.some(outcome => !outcome.ok)) task(fx, state, taskLine(finding, revert, why));
 }
 
-/** The rank a culprit search's probes run at; every other run of the full check keeps its own (measure.ts's FULL_CHECK_RANK). */
+/** Probes and core runs advancing stale verified share this rank; chosen per run. */
 export const CULPRIT_SEARCH_RANK: Priority = "culprit-search";
 
 /** The probe the search measures with: a composition, its steps, cached per step. */
@@ -1345,6 +1370,7 @@ function production(options: { schedule: Schedule }): Effects {
     layout, git,
     gate: pinnedGate(layout, ROOT, stamp),
     queue: landingQueue(),
+    landedTimes,
     memoryWaiter: () => wideMemoryWaiter(readLedger().waiting),
     restartTarget: () => controllerTarget(git, layout),
     reaches: (base, tip, steps) => rangeReaches(git, base, tip, steps),

@@ -442,9 +442,11 @@ are written by the full check.
 
 ## After landing: the full check
 
-The full check is every step the gate has today, in two parts. Both run at
-low priority, and reserve their memory at the full check's priority, below
-landing checks' and agents', so those come first.
+The full check is every step the gate has today, in two parts. Runs normally
+reserve their memory at the full check's rank, below landing checks and
+agents. Culprit probes and core runs advancing stale `verified` use the
+existing `culprit-search` rank, below landings and above agents, as specified
+in [The machine](#the-machine).
 
 The JVM verification step compiles its Java driver once into the run's
 temporary storage, shared by its sequential runtime and outcomes commands.
@@ -1617,27 +1619,46 @@ the tooling strict checker owns the source's type checking.
   fixture's private HOME. A fixture testing cache behavior declares its own
   cache capability. A generated shim declares any additional protocol fields
   or descriptors it forwards.
-- **A culprit search outranks agents' work.** The machine has four ranks,
-  highest first: the landing check, the full check's culprit-search probes,
-  agents' work, and the full check's other runs. A search exists to restore
+- **Restoring verified outranks agents' work.** The machine has four ranks,
+  highest first: the landing check, the full check's culprit-search probes
+  and core runs advancing stale `verified`, agents' work, and the full check's
+  other runs. A search exists to restore
   `verified`, which records, benchmarks and every later search wait on, so
-  the controller runs each probe at the `culprit-search` rank and nothing
-  else at it: the rank is that run's and ends with it. Probes stay one at a
-  time and keep their measured reservations; the full check's core and wide
-  runs, records and benchmarks keep the full check's rank. A probe of a
+  the controller runs each probe at the `culprit-search` rank. The same rank
+  applies to a core run when `verified` is a strict ancestor of its candidate
+  and the oldest first-parent commit in `verified..candidate` has been
+  unverified on main for more than **two hours** (since its landing), measured
+  from the landing result's `at` to the supplied controller clock immediately
+  before launch. `queue.ts`'s `landedTimes()` supplies each commit's arrival
+  on main through `Effects`; tests supply their own observations. Equality retains full-check
+  rank. A fresh change after a quiet spell, missing `verified`, a current
+  `verified` or a non-descendant candidate retains full-check rank. A branch
+  committed hours ago but landing now is fresh work. A missing landing record
+  or invalid landing time is named in the log and keeps full-check rank;
+  committer time never substitutes for landing evidence.
+  `tooling/full-check/service.ts` chooses at `runPart`'s launch and passes
+  the rank to `Gate.run`; it logs a promotion with the outstanding commit,
+  age and bound. The choice is fresh each run and ends with it, so a green
+  catch-up returns subsequent fresh core work to full-check rank. Wide runs,
+  records and benchmarks keep full-check rank. Probes stay one at a time and
+  all runs keep their measured reservations. The bound allows a complete
+  slow measured green core cycle before promoting; its
+  [measured cycle basis and historical promotion frequency](records/full-check-stale-verified.md)
+  distinguish ordinary completion from stale-backlog recovery. A probe of a
   commit whose own `ranks.ts` predates the rank runs at the full check's, and
   its log says so. The controller runs `verified`'s code, so the rank orders
-  probes only once `verified` contains it. A ledger entry at the
+  these runs only once `verified` contains the controller rule. A ledger entry at the
   `culprit-search` rank is written at version 4, so a reader that predates
   the rank refuses it by its future version rather than ordering it wrongly;
   the reader's operator rebases onto `main`. The current reader's refusal
   of a newer version names that remedy.
 - **A contended CPU serves the ranks in the memory ledger's order.** The
-  landing check's work comes first, a culprit search's second, agents'
+  landing check's work comes first, a culprit search's or stale-verified
+  core's second, agents'
   third, the full check's other runs last: `tooling/gate/ranks.ts` holds one
   table of what each rank gets from the kernel, its memory admission order,
   its OOM score and its CPU weight. The full check's measurement places a
-  probe, started inside the full check's unit, at the probe's OOM score. The rank travels in
+  promoted run, started inside the full check's unit, at its rank's OOM score. The rank travels in
   `NTS_MEMORY_PRIORITY`. Every rank's work runs under `nts.slice`, where
   siblings share a saturated machine by weight: each run's root slice
   carries its rank's `CPUWeight` (`startBoundSlice`, which refuses a root
@@ -1649,8 +1670,8 @@ the tooling strict checker owns the source's type checking.
   `with-lock.sh`'s and `inner.ts`'s (`--memory-max` caps that scope), and
   `check.ts --here`. The landing service's unit and an agent's unit
   (`tooling/agents`) run under `nts.slice` at their rank's weight; the full
-  check's units carry the full check's, and a probe's run slice the culprit
-  search's. A unit another launcher starts
+  check's units carry the full check's, and a probe's or stale-verified core's
+  run slice the culprit search's. A unit another launcher starts
   outside `nts.slice` (a Signalbox worker's) is ranked only through those
   entries; its other processes stay where it put them. Nice values still
   order the processes inside one run. A weight shares contended time only: it never
@@ -2363,7 +2384,8 @@ death; an absent timestamp remains explicit after forced termination.
   ([log](records/notebooks/decisions-log.md#the-nightly-benchmarks-run-in-a-unit-and-land-on-the-newest-main-11-09)).
 - **One memory ledger for the machine** (11-09): every heavy job reserves its
   peak in one queue, in priority order (the landing check, the full check's
-  culprit-search probes, agents' work, the full check's other runs); a gate run holds one reservation that grows and shrinks with
+  culprit-search probes and core runs advancing stale `verified`, agents'
+  work, the full check's other runs); a gate run holds one reservation that grows and shrinks with
   its steps; a job yields while one of higher priority waits; and no tool
   waits for the host's free memory itself. Resource reads go through the
   run's `HostObservations` capability, including dependencies and samplers
@@ -2772,6 +2794,16 @@ death; an absent timestamp remains explicit after forced termination.
   controller per probe run; ledger entries at that rank are version 4,
   which older readers refuse by name
   ([log](records/notebooks/decisions-log.md#a-culprit-search-outranks-agents-work-11-21)).
+
+- **Core work advancing stale verified shares the culprit-search rank.** At
+  launch the controller requires a strict ancestor `verified` and an oldest
+  outstanding first-parent commit unverified on main for more than two hours
+  since its recorded landing. Missing or invalid landing evidence is named
+  and retains full-check rank; committer time is no substitute.
+  The rank ends with the run; fresh core work, wide runs, records and
+  benchmarks keep full-check rank. The bound follows the
+  [measured core cycles](records/full-check-stale-verified.md)
+  ([log](records/notebooks/decisions-log.md#landing-time-owns-stale-verified-age-11-21)).
 
 - **Stopped exec vectors share the kernel budget.** The native reader owns
   growing argv and environment storage through serialization, bounded by the
