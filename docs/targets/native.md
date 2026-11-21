@@ -23,8 +23,8 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
 
 ## Two backends, one runtime
 
-- **C** (`nts emit-c`) writes C11 for clang. It is the readable one, and the
-  oracle the LLVM backend's output is compared against.
+- **C** (`nts emit-c`) writes C11 for GCC or clang. It is the readable one,
+  and the oracle the LLVM backend's output is compared against.
 - **LLVM** (`nts emit-llvm`) writes textual IR that `clang -x ir` compiles. The
   `nts` binary links no LLVM library, so no LLVM version is pinned into it
   (register [T-2](../open-questions.md#6-bindings-products-toolchains-dependencies)).
