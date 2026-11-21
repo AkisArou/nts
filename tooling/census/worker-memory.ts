@@ -21,7 +21,8 @@ import {readLimits} from '../gate/scopes/memory-limits.ts';
 import {ancestorMemoryIncident,memoryAncestors,type AncestorMemory} from '../gate/memory-ancestry.ts';
 import {hostInfrastructure} from '../gate/host-infrastructure.ts';
 
-import {userManager,userManagerFailure,UserBusUnreachableError} from '../gate/user-manager.ts';
+import {userManager,userManagerFailure,UserManagerError} from '../gate/user-manager.ts';
+import {HostStateError} from '../gate/host-state.ts';
 import {workerRoleValues,residentWorkerComponent} from './worker-identity.ts';
 
 const CGROUP = "/sys/fs/cgroup";
@@ -89,8 +90,7 @@ const groupOf = (unit: string, parent: string | undefined, since: string) => {
   catch (error) { if (isCommandExit(error)) throw error;
     // The manager never answered: its unit state and journal are behind the
     // same bus, and reading them would only wait out its timeout again.
-    if (error instanceof UserBusUnreachableError)
-      throw new UserBusUnreachableError(error.kind, `resident cap: ${unit} start job not answered: ${error.message}; diagnostics skipped`);
+    if (error instanceof UserManagerError) throw error.within(`resident cap: ${unit} start job not answered (diagnostics skipped)`);
     throw new Error(`resident cap: ${unit} start job failed: ${String(error)}; ${sliceDiagnostics(unit, since)}`, { cause: error });
   }
   const group = systemctl("show", unit, "--property=ControlGroup", "--value");
@@ -99,7 +99,7 @@ const groupOf = (unit: string, parent: string | undefined, since: string) => {
     // report a successful job after mkdir failed (for example, ENOMEM).
     // The unit diagnostics inform an operator; they do not establish which
     // resource failed or authorize an automatic retry.
-    throw new ToolingInstrumentError("tooling-setup", `resident cap: ${unit} cgroup realization failed after start job completed successfully (systemctl exit 0): ControlGroup is empty; ${sliceDiagnostics(unit, since)}`);
+    throw new HostStateError("tooling-setup", `resident cap: ${unit} cgroup realization failed after start job completed successfully (systemctl exit 0): ControlGroup is empty; ${sliceDiagnostics(unit, since)}`);
   }
   return validGroup(unit, group, parent);
 };

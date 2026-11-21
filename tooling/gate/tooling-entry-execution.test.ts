@@ -62,26 +62,32 @@ test('a file hitting its finite scope cap fails by name without losing its neigh
   const neighbour=f.write('neighbour',`import{test}from'node:test';test('unaffected neighbour',()=>{});`);
   assert.equal((await runScopedTooling([neighbour],{fixture:true,memoryMax:512*2**20,output:f.output})).status,0,f.text());
 });
-test('a test ended by an instrument fault holds its file; a definite failure beside it stays FAIL',async t=>{
-  const instrument=JSON.stringify(new URL('./step-result.ts',import.meta.url).href);
+test('only a host-state fault holds its file; every other failure beside or instead of it stays FAIL',async t=>{
+  const imports=`import{test}from'node:test';import assert from'node:assert/strict';import{HostStateError}from${JSON.stringify(new URL('./host-state.ts',import.meta.url).href)};import{ToolingInstrumentError}from${JSON.stringify(new URL('./step-result.ts',import.meta.url).href)};`;
   // #880's realization fault, as worker-memory.ts raises it inside a test.
-  const realization=`new ToolingInstrumentError('tooling-setup','resident cap: nts-fixture-w0.slice cgroup realization failed after start job completed successfully (systemctl exit 0): ControlGroup is empty')`;
-  const f=fixture(t),held=f.write('held',`import{test}from'node:test';import{ToolingInstrumentError}from${instrument};
-test('passes',()=>{});test('realization',()=>{throw ${realization};});`);
-  await assert.rejects(runScopedTooling([held],{fixture:true,memoryMax:512*2**20,output:f.output}),
-    (error:unknown)=>error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'&&/realization: resident cap: .*cgroup realization failed/.test(error.message));
-  const beside=f.write('beside',`import{test}from'node:test';import{ToolingInstrumentError}from${instrument};
-test('realization',()=>{throw ${realization};});test('assertion',()=>{throw Error('definite failure');});`);
-  const red=await runScopedTooling([beside],{fixture:true,memoryMax:512*2**20,output:f.output});
-  assert.equal(red.status,1,f.text());assert.equal(red.completedFailures,1,f.text());
-  assert.match(red.observationFailure?.reason??'',/cgroup realization failed/);
-  // Only the instance is the protocol: a same-named plain error is a failure.
-  const named=f.write('named',`import{test}from'node:test';
-test('lookalike',()=>{const error=Error('resident cap: lookalike');error.name='ToolingInstrumentError';error.kind='tooling-setup';throw error;});`);
-  const lookalike=await runScopedTooling([named],{fixture:true,memoryMax:512*2**20,output:f.output});
-  assert.equal(lookalike.status,1,f.text());assert.equal(lookalike.completedFailures,1,f.text());
-  // A test that catches and asserts an instrument error is an ordinary pass.
-  const caught=f.write('caught',`import{test}from'node:test';import assert from'node:assert/strict';import{ToolingInstrumentError}from${instrument};
-test('asserts the fault',()=>{assert.throws(()=>{throw ${realization};},ToolingInstrumentError);});`);
-  assert.equal((await runScopedTooling([caught],{fixture:true,memoryMax:512*2**20,output:f.output})).status,0,f.text());
+  const realization=`new HostStateError('tooling-setup','resident cap: nts-fixture-w0.slice cgroup realization failed after start job completed successfully (systemctl exit 0): ControlGroup is empty')`;
+  const f=fixture(t),run=(name:string,body:string)=>runScopedTooling([f.write(name,imports+body)],{fixture:true,memoryMax:512*2**20,output:f.output});
+  const held=(error:unknown)=>error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'&&/cgroup realization failed/.test(error.message);
+  await assert.rejects(run('held',`test('passes',()=>{});test('realization',()=>{throw ${realization};});`),held);
+  // oracle-dependencies.test.ts's shape: the fault arrives as the actual of a
+  // pattern assertion, never a cause.
+  await assert.rejects(run('pattern',`test('pattern',async()=>{await assert.rejects(Promise.reject(${realization}),/committed install inputs changed/);});`),held);
+  const red=async(name:string,body:string,why:string)=>{
+    const result=await run(name,body);
+    assert.equal(result.status,1,why+'\n'+f.text());assert.ok(result.completedFailures>=1,why+'\n'+f.text());
+    return result;
+  };
+  for(const [name,body,why] of [
+    ['protocol',`test('protocol',()=>{throw new ToolingInstrumentError('tooling-setup','invalid tooling request fields');});`,'a protocol or validation result is evidence against the code'],
+    ['lookalike',`test('lookalike',()=>{const error=Error('resident cap: lookalike');error.name='HostStateError';error.kind='tooling-setup';throw error;});`,'only the instance is the marker'],
+    ['deeper',`test('refusal',()=>{throw new Error('start job failed: invalid unit configuration',{cause:${realization}});});`,'a refusal whose cleanup met the host is still a refusal'],
+    ['beside-failure',`test('realization',()=>{throw ${realization};});test('assertion',()=>{throw Error('definite failure');});`,'a definite failure beside the fault'],
+    ['beside-timeout',`test('realization',()=>{throw ${realization};});test('timeout',{timeout:100},()=>new Promise(()=>{}));`,'a timeout beside the fault'],
+    ['beside-exit',`test('realization',()=>{throw ${realization};});test('exit code',()=>{process.exitCode=7;});`,'a nonzero exit beside the fault'],
+  ] as const){
+    const result=await red(name,body,why);
+    if(name.startsWith('beside'))assert.match(result.observationFailure?.reason??'',/cgroup realization failed/,why);
+  }
+  // A test that catches and asserts a host-state fault is an ordinary pass.
+  assert.equal((await run('caught',`test('asserts the fault',()=>{assert.throws(()=>{throw ${realization};},HostStateError);});`)).status,0,f.text());
 });

@@ -794,12 +794,15 @@ async function fakeManager(mode, module) {
   const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20, id: "fake-manager" });
   const instrumentPath = run.directory + "/slice-start.json";
   let error = null, closeError = null, group = null, instrument = null;
-  let errorName: string | null = null, causeMessages: string[] = [];
+  let errorName: string | null = null, causeName: string | null = null, hostState = false, causeMessages: string[] = [];
+  const { HostStateError } = await import(new URL("../gate/host-state.ts", module).href);
   if (mode === "queued-start") Date.now = () => { clockReads++; return wall; };
   try { group = run.worker(0, 64 * 2 ** 20).group; }
   catch (caught) {
     error = String(caught);
     errorName = caught instanceof Error ? caught.name : typeof caught;
+    hostState = caught instanceof HostStateError;
+    if (caught instanceof Error && caught.cause instanceof Error) causeName = caught.cause.name;
     if (caught instanceof Error && caught.cause instanceof AggregateError) causeMessages = caught.cause.errors.map(String);
     const receipt = { NTS_GATE_STEP_RESULT: instrumentPath, NTS_GATE_STEP: "tooling", NTS_GATE_STEP_ATTEMPT: "slice-start" };
     if (caught instanceof ToolingInstrumentError) publishToolingFailure(caught, receipt);
@@ -813,7 +816,7 @@ async function fakeManager(mode, module) {
     if (["queued-stop", "retained-stop"].includes(mode)) { let tick = 0; Date.now = () => tick += 4000; }
     try { run.close(); } catch (caught) { closeError = String(caught); }
   }
-  process.stdout.write(JSON.stringify({ error, errorName, causeMessages, closeError, group, calls, rootLookups, clockReads, wall, instrument,
+  process.stdout.write(JSON.stringify({ error, errorName, causeName, hostState, causeMessages, closeError, group, calls, rootLookups, clockReads, wall, instrument,
     policy: instrument ? instrumentPolicy(instrument.kind) : null, remaining: units.size }));
 }
 
@@ -833,9 +836,18 @@ for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-e
     const count = (prefix: string) => actual.calls.filter((call: string) => call.startsWith(prefix) && call.endsWith("-w0.slice")).length;
     if (["bus-start", "bus-busctl-timeout", "bus-signal"].includes(mode)) {
       // Unreachable twice: one retry, then a named instrument hold.
-      assert.equal(actual.errorName, "UserBusUnreachableError");
-      assert.match(actual.error, /systemd user bus unreachable: (systemctl|busctl) --user .*-w0\.slice.* \(2 attempts\)/);
+      if (mode === "bus-signal") {
+        // A signal is all the evidence shows: it names the signal, not the bus.
+        assert.equal(actual.errorName, "UserManagerSignalError");
+        assert.match(actual.error, /user manager call ended by signal SIGKILL \(2 attempts\): busctl --user .*-w0\.slice/);
+        assert.doesNotMatch(actual.error, /bus unreachable/);
+      } else {
+        assert.equal(actual.errorName, "UserBusUnreachableError");
+        assert.match(actual.error, /systemd user bus unreachable: (systemctl|busctl) --user .*-w0\.slice.* \(2 attempts\)/);
+      }
+      assert.ok(actual.hostState, "a machine-state fault carries the host-state marker");
       if (mode === "bus-start") {
+        assert.equal(actual.causeName, "UserBusUnreachableError", "the caller's context keeps the original fault as its cause");
         assert.equal(count("start:"), 2);
         assert.match(actual.error, /Failed to start \S+-w0\.slice: Transport endpoint is not connected; then Failed to start/);
         assert.match(actual.error, /diagnostics skipped/);
@@ -843,7 +855,7 @@ for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-e
       } else {
         assert.equal(count("create-attempt:"), 2);
         assert.equal(count("start:"), 0);
-        assert.match(actual.error, mode === "bus-signal" ? /ended by signal SIGKILL; then ended by signal SIGKILL/ : /Call failed: Connection timed out; then Call failed: Connection timed out/);
+        assert.match(actual.error, mode === "bus-signal" ? /first attempt: ended by signal SIGKILL/ : /Call failed: Connection timed out; then Call failed: Connection timed out/);
       }
       assert.doesNotMatch(actual.error, /undefined/);
       assert.equal(actual.instrument.kind, "tooling-setup");
@@ -865,6 +877,7 @@ for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-e
       assert.match(actual.error, /start job failed:.*invalid unit configuration/);
       assert.match(actual.error, /cleanup also failed: .*systemd user bus unreachable: busctl --user call .*StopUnit/);
       assert.equal(actual.errorName, "Error", "a refusal keeps its class beside an unreachable cleanup");
+      assert.equal(actual.hostState, false);
       assert.equal(actual.instrument, null);
       assert.equal(count("start:"), 1);
       assert.equal(count("stop:"), 2, "the cleanup's one retry");
@@ -908,7 +921,8 @@ for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-e
       assert.match(actual.error, /ControlGroup is empty/);
       assert.doesNotMatch(actual.error, /cgroup was not removed/);
       assert.equal(actual.instrument.kind, "tooling-setup");
-      assert.equal(actual.errorName, "ToolingInstrumentError");
+      assert.equal(actual.errorName, "HostStateError");
+      assert.ok(actual.hostState, "#880's realization fault is machine state");
       assert.equal(actual.instrument.verdict, "INSTRUMENT", "a failed realization holds the landing instead of failing the code");
       assert.deepEqual(actual.policy, { verdict: "INSTRUMENT", disposition: "operator-hold" });
       assert.match(actual.error, /diagnostic only: LoadState=loaded/);

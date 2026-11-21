@@ -7,6 +7,8 @@ import {fileURLToPath} from 'node:url';
 import {hostObservations} from './host-observations.ts';
 import {publishHung,publishToolingFailure,PressureError,ToolingInstrumentError,type InstrumentResult} from './step-result.ts';
 import {CommandLiveness} from './command-liveness.ts';
+import {HostStateError} from './host-state.ts';
+import {AssertionError} from 'node:assert';
 import {ToolingEntryActivity,type ToolingActivitySample} from './tooling-entry-activity.ts';
 
 export const TOOLING_IDLE_GUARD_MS=5*60_000;
@@ -17,15 +19,24 @@ export function completedTestFailure(data:{details:{passed?:boolean;error?:unkno
   const failureType=typeof error==="object"&&error!==null&&"failureType" in error&&typeof error.failureType==="string"?error.failureType:"";
   return data.details.passed===false&&!data.todo&&!data.skip&&!["testAborted","cancelledByParent","subtestsFailed","testTimeoutFailure"].includes(failureType);
 }
-/** The instrument fault a completed failed test ended with: only a
- * ToolingInstrumentError instance its own code threw (the entry runs
- * in-process, so the instance survives). Anything else is a failure. */
-export function completedInstrument(data:{details:{error?:unknown}}):ToolingInstrumentError|undefined {
+/** The host-state fault a completed failed test ended with: the test's own
+ * thrown value, or the `actual` of the assertion that rejected it (an
+ * assert.rejects or assert.throws pattern), when that is a HostStateError
+ * instance (the entry runs in-process, so the instance survives). No deeper:
+ * a refusal whose cleanup met the host is still a refusal. Any other error,
+ * including every other ToolingInstrumentError, is a completed failure. */
+export function completedHostFault(data:{details:{error?:unknown}}):HostStateError|undefined {
   const error=data.details.error;
   if(typeof error!=="object"||error===null||!("failureType" in error)||error.failureType!=="testCodeFailure")return;
-  const cause=(error as {cause?:unknown}).cause;
-  return cause instanceof ToolingInstrumentError?cause:undefined;
+  const primary=(error as {cause?:unknown}).cause;
+  if(primary instanceof HostStateError)return primary;
+  if(primary instanceof AssertionError&&primary.actual instanceof HostStateError)return primary.actual;
+  return;
 }
+const timedOut=(data:{details:{error?:unknown}})=>{
+  const error=data.details.error;
+  return typeof error==="object"&&error!==null&&"failureType" in error&&error.failureType==="testTimeoutFailure";
+};
 /** One test file of a run: when it started after the run began and how long it ran, null where it never did, and whether it passed. */
 export type ToolingFileTime={file:string;startedMs:number|null;wallMs:number|null;passed:boolean|null};
 /** A run's own times: its wall, how many files it runs at once, and each file's. */
@@ -104,14 +115,15 @@ export function readToolingRequest(value:unknown):ToolingRequest {
  * Node's completed-test evidence and serializes it before another body runs. */
 export async function runToolingEntry(file:string,progress:(event:'start'|'complete',id:number,name:string,failed?:boolean)=>void):Promise<ToolingResult>{
   const owners=new ToolingTestOwners([file]);
-  let completedFailures=0,success=true,summarized=false,instrument:ToolingInstrumentError|undefined;
+  let completedFailures=0,success=true,summarized=false,instrument:HostStateError|undefined,unfinished=false;
   const stream=run({files:[file],isolation:'none',setup:events=>{
     events.on('test:enqueue',data=>{owners.file(data);});
     events.on('test:dequeue',data=>{owners.file(data);progress('start',data.testId,data.name);});
     events.on('test:complete',data=>{
       owners.file(data);
-      const definite=completedTestFailure(data),held=definite?completedInstrument(data):undefined;
-      if(held)instrument??=new ToolingInstrumentError(held.kind,`${data.name}: ${held.message}`,{cause:held});
+      const definite=completedTestFailure(data),held=definite?completedHostFault(data):undefined;
+      if(held)instrument??=new HostStateError(held.kind,`${data.name}: ${held.message}`,{cause:held});
+      if(timedOut(data))unfinished=true;
       const failed=definite&&!held;if(failed)completedFailures++;
       progress('complete',data.testId,data.name,failed);
     });
@@ -121,17 +133,19 @@ export async function runToolingEntry(file:string,progress:(event:'start'|'compl
   if(!summarized)throw new ToolingInstrumentError('tooling-setup','tooling entry ended without a test summary');
   // Fixture teardown may revoke its environment before Node ends this stream.
   // The outside controller owns final timing as well as activity sampling.
-  if(process.exitCode!==undefined&&Number(process.exitCode)!==0)success=false;
-  if(instrument){
-    // A definite assertion result survives the instrument fault beside it.
-    if(!completedFailures)throw instrument;
-    process.stderr.write(`${instrument.name}: ${instrument.message}\n`);
-    return {status:1,completedFailures,observationFailure:{kind:instrument.kind==='tooling-cleanup'?'tooling-cleanup':'tooling-setup',reason:instrument.message}};
-  }
+  const exited=process.exitCode!==undefined&&Number(process.exitCode)!==0;
+  if(exited)success=false;
+  // The host fault alone holds the file. Anything else that failed it -- a
+  // completed failure, a timeout, a nonzero exit -- keeps the file FAIL.
+  if(instrument&&!completedFailures&&!unfinished&&!exited)throw instrument;
   if(!success&&!completedFailures){
     // The isolated API's file wrapper used to report a nonzero process exit
     // even when all assertions passed. Keep that definite file failure.
     progress('complete',Number.MAX_SAFE_INTEGER,file,true);completedFailures++;
+  }
+  if(instrument){
+    process.stderr.write(`${instrument.name}: ${instrument.message}\n`);
+    return {status:1,completedFailures,observationFailure:{kind:instrument.kind,reason:instrument.message}};
   }
   return {status:success?0:1,completedFailures};
 }
