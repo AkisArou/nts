@@ -219,6 +219,27 @@ fn typed_contents_cleanup_preserves_the_runtime_death_protocol() {
 }
 
 #[test]
+fn reference_arrays_release_their_slots_through_the_shared_callback() {
+    // ASan keeps its default main-thread stack: a recursive teardown of the
+    // suite's million-deep chain would crash there rather than slow down.
+    for flags in [
+        vec!["-DNTS_PROVIDER_RC", "-DNTS_COUNT_OPERATIONS"],
+        vec![
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_COUNT_OPERATIONS",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    ] {
+        let report = run_suite("reference_arrays", &flags);
+        println!("provider={flags:?}\n{report}");
+        assert_eq!(checks(&report), 25, "{report}");
+        assert!(report.lines().any(|line| line.starts_with("peak rss ")));
+    }
+}
+
+#[test]
 fn collector_progress_and_candidate_indices() {
     for flags in [
         vec!["-DNTS_PROVIDER_RC"],

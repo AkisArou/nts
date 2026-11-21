@@ -549,6 +549,27 @@ static const NtsDescriptor nts_desc_undefined = {.kind = NTS_KIND_OBJECT,
 const NtsHeader nts_undefined_reference = {&nts_desc_undefined, NTS_IMMORTAL,
                                            NTS_BLACK, 0u};
 
+/* The contents of either array of references: each slot a pointer, owned.
+ * Releases them directly rather than through the generic walk, whose
+ * per-element function-pointer call was most of a dying array's cost
+ * (docs/records/memory-stage1-counts-877.md). A null slot is skipped before
+ * the release, as that walk skipped it, so counted builds count the same.
+ *
+ * Called only from the dying-list drain (`nts_destroy`), so a child whose
+ * count reaches zero is linked onto the list rather than destroyed here:
+ * a wide array is this one loop, and a deep one is list links, never C stack.
+ * Tracing keeps the generic walk; this never runs during collection. */
+static void nts_release_reference_slots(NtsHeader *object) {
+  NtsHeader **slots = NTS_ITEMS((NtsArray *)object, NtsHeader *);
+  const uint32_t length = object->length;
+  for (uint32_t index = 0; index < length; index++) {
+    NtsHeader *child = slots[index];
+    if (child) {
+      nts_release(child);
+    }
+  }
+}
+
 const NtsDescriptor nts_desc_ref = {
     .kind = NTS_KIND_ARRAY,
     .size = sizeof(void *),
@@ -557,6 +578,7 @@ const NtsDescriptor nts_desc_ref = {
     .name = "reference",
     .element = NTS_ARRAY_REFERENCE,
     .to_string = nts_array_to_string,
+    .release_fields = nts_release_reference_slots,
 };
 /* The same array of references, for one whose elements the compiler proved
    can never lead back to it (`Cycles::array`): never buffered as a cycle
@@ -569,6 +591,7 @@ const NtsDescriptor nts_desc_ref_acyclic = {
     .name = "reference",
     .element = NTS_ARRAY_REFERENCE,
     .to_string = nts_array_to_string,
+    .release_fields = nts_release_reference_slots,
 };
 const NtsDescriptor nts_desc_string1 = {
     .kind = NTS_KIND_STRING,

@@ -1,0 +1,24 @@
+ideal 15
+allocated 15
+because Zero retains: every push is a move and every read a borrow, as in
+because `array-of-objects`.
+because
+because Fifteen releases, all from the two arrays' teardown: the nine cells in
+because the even slots, the cells array, the four string literals, and the
+because words array. The eight null slots cost nothing. The runtime's
+because pointer-slot callback tests a slot for null before it releases, as the
+because generic walk did; a callback that handed nulls to `nts_release` would
+because count eight more here, since a null release is an executed operation.
+because
+because The four literals are immortal, and each release of one returns at its
+because first test. That test is still a release the array owes: a `string[]`
+because slot may hold any string, and the array owns one reference per non-null
+because slot. Removing them needs a proof that every slot holds a literal, which
+because the compiler does not make.
+because
+because Allocations: nine cells, the cells array and the four blocks it grows
+because through (capacities 4, 8, 16 and 32 for seventeen pushes, as in
+because `array-of-objects`), and the words array. The four growth blocks are
+because the same avoidable cost `array-of-objects` records, and the same
+because known-trip-count sizing would remove them; 15 is the floor because it
+because is what runs.

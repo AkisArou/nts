@@ -338,7 +338,9 @@ typedef struct NtsDescriptor {
    * key is computed at run time, or a type that is not a function at all. */
   const struct NtsHeader *function_name;
   /* Give up only the managed edges of this fixed layout, once its count has
-   * reached zero. Emitted by C and LLVM from the same field plan. Erased
+   * reached zero. Emitted by C and LLVM from the same field plan; the
+   * runtime's own arrays of references (`nts_desc_ref`,
+   * `nts_desc_ref_acyclic`) share one pointer-slot callback. Erased
    * fields release managed tags only; foreign slots stay on the runtime's
    * clear-before-release protocol. NULL selects the generic contents walk.
    *

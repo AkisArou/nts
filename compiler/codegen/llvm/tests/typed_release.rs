@@ -23,6 +23,13 @@ export function ownedTuple(x: number): [Leaf, Leaf, unknown] {
   const leaf = new Leaf(x);
   return [leaf, leaf, BigInt(x)];
 }
+// An array of references uses the runtime's own descriptor on both emitters;
+// its null slots must not reach a counted release.
+export function ownedLeaves(x: number): (Leaf | null)[] {
+  const leaves: (Leaf | null)[] = [];
+  for (let i = 0; i < 64; i++) leaves.push((i & 1) === 0 ? new Leaf(x + i) : null);
+  return leaves;
+}
 "#
 );
 const DRIVER: &str = r#"
@@ -34,6 +41,7 @@ extern double deepGraph(double);
 extern NtsHeader *ownedGraph(double);
 extern NtsHeader *ownedClosure(double);
 extern NtsHeader *ownedTuple(double);
+extern NtsHeader *ownedLeaves(double);
 extern size_t descriptorSize(void);
 extern size_t releaseFieldsOffset(void);
 extern size_t traceFieldsOffset(void);
@@ -105,6 +113,15 @@ int main(void) {
     nts_release(owned);
     if (nts_test_trace_calls != calls) return 17;
   }
+  /* A compiled array of references dies through the runtime's shared
+   * pointer-slot callback: one release for it and one per non-null slot. */
+  NtsHeader *leaves = ownedLeaves(5);
+  if (leaves->descriptor != &nts_desc_ref_acyclic ||
+      !leaves->descriptor->release_fields ||
+      leaves->descriptor->release_fields != nts_desc_ref.release_fields) return 18;
+  nts_counting_reset();
+  nts_release(leaves);
+  if (nts_counted_releases() != 1 + 32) return 19;
   /* The generic walk skips null slots before calling nts_release. The typed
    * callback must do so too: calls count even when the payload is null. */
   NtsHeader *empty = nts_object_new(descriptor);
@@ -115,6 +132,10 @@ int main(void) {
   if (nts_counted_releases() != 1) return 5;
 #else
   if (descriptor->trace_fields) return 11;
+  NtsHeader *leaves = ownedLeaves(5);
+  if (!leaves->descriptor->release_fields ||
+      leaves->descriptor->release_fields != nts_desc_ref.release_fields) return 18;
+  nts_release(leaves);
 #endif
   for (int i = 0; i < 24; i++) {
     size_t calls = nts_test_trace_calls;
