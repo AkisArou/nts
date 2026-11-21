@@ -71,12 +71,23 @@ and return. The counterfactual retains the helper's PLT call and stack adjustmen
 This call path supplies no performance reason to add hidden-visibility
 annotations; it does not measure other paths.
 
+## Validation
+
+The prepared `inner.ts --no-agree` run passed formatting, Clippy, compiler
+preparation and all selected tests, including the CLI controls, C runtime
+contracts and the C, LLVM and JVM backend suites. All five C test262 records
+(language, built-ins, Annex B, staging and harness) reconciled with no regressions
+against the fixed pin.
+
 ## Raw evidence
 
 All raw files remain under `~/.cache/nts-scratch/917/`. The manifest binds the
 recipes, compiler provenance, traces, source, disassemblies and individual perf
 outputs:
 
+- `evidence-v2.sha256` (also binds compiled count inputs and validation logs): `7928f717997c269ceda5da549eb57d83afeb6bfbe5b9b5cb602984d3752cffd7`
+- `inner2.log`: `6f625cc027f8247e4b98ec52ea22282075138f9413d6ffe0afecf7d3a986b0b7`
+- `test262.json`: `6f891cd70aa858b4bda6e41e527b8a4fb01ff89919dab0eff0026dbf1b3fc655`
 - `evidence.sha256`: `da567970f6e2e3ce5eb4e32b83284354701d53ea0163243dea1e34148faf52c5`
 - `controls.json`: `9419773bc0c28fd1f13c01294fa0ede34d759ebdb8bff20c18ea0d88181a0a4f`
 - `count/builds.json`: `ee8de005f85b691f89e3c2602f63b4c318d8f9653d243bfc4b5be8a20c47447d`
