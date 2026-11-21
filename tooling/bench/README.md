@@ -214,6 +214,20 @@ UTF-8 source text after native decoding and overlays, not a digest of disk encod
 or a later reread. Declarations remain in that graph; their inventory, build recipes and toolchains
 have separately retained provenance. The compiler artifact is hashed and its build commit is recorded.
 
+For an agent's review evidence, use
+`nts-bench --sitting ~/.cache/nts-scratch/<N>/sittings/<id>/ [case ...]`
+(or combine `--sitting` with `--group`). The named directory must be fresh and
+outside the repository, including after resolving symlinks. The same measurement,
+sealing, validation, verdicts and `renderFull` produce `<run-id>-sitting.json`
+and `full.md` there. A partial sitting's page shows its selected rows against
+published history. Both outputs identify themselves as a sitting; its JSON has
+`purpose: "sitting"` and an id ending in `-sitting`. Publication and the published
+store reader refuse it. Cite the scratch path and SHA-256 in the task's record.
+The command leaves `results/`, Git HEAD and the index untouched; it creates no
+results commit to drop. Count, render and journal modes cannot combine with
+`--sitting`.
+
+The nightly command omits `--sitting` and keeps the published path:
 Each completed run is published atomically and followed by a results-only commit.
 The index must be clean; only the new record and generated page are staged.
 `--render` regenerates the page without restamping an old observation. Historical

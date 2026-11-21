@@ -407,7 +407,12 @@ An oracle test's supplied canonical environment is already sealed with
   cannot see, or a benchmark row's standing against the bar.
 - Benchmark on CPU 4 with sibling 5 idle, from a worktree pinned to a
   commit, under
-  `tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench`;
+  `tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench
+  --sitting ~/.cache/nts-scratch/<N>/sittings/<id>/`. An agent's evidence
+  sitting writes sealed JSON and `full.md` to fresh scratch, commits nothing,
+  and cannot be published; cite its path and SHA-256 in the record. Never
+  publish an agent sitting and drop its results commit. The nightly command
+  omits `--sitting` and publishes official records;
   an instruction count of any other command (a compile, a probe), which
   states no noise band of its own, uses its stable key:
   `tooling/gate/with-lock.sh --wait --key perf-count taskset -c 4 <command>`.

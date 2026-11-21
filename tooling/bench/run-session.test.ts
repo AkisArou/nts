@@ -1,12 +1,13 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
+import { COMPARATORS, COLUMNS, POLICY, parseRun, publishRun, readRuns, renderFull, sealRun, sittingDirectory } from "./run-record.ts";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
 import { newTestScratch, testScratch } from "../gate/test-scratch.ts";
 import { readJournal } from "./run-journal.ts";
@@ -153,4 +154,97 @@ test("session conditions have no dependency on the old landing lock probe", t =>
   assert.ok(observed.memoryAvailableBytes > 0);
   assert.equal(Object.hasOwn(observed, "landingLockHeld"), false);
   assert.equal(existsSync(invoked), false);
+});
+
+function git(root: string, args: string[]): string {
+  const result = spawnSync("git", gitArguments(args), { cwd: root, env: testEnvironment(), encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+test("session sitting seals and renders its partial row without changing Git or published results", t => {
+  const scratch = testScratch(t, "bench-sitting"), root = join(scratch, "tree"), destination = join(scratch, "sitting");
+  mkdirSync(root);
+  git(root, ["init", "-q"]);
+  git(root, ["config", "user.name", "Sitting control"]);
+  git(root, ["config", "user.email", "control@example.invalid"]);
+  writeFileSync(join(root, ".gitignore"), "target/\n");
+  writeFileSync(join(root, "source.ts"), "export const value=1;\n");
+  git(root, ["add", "source.ts", ".gitignore"]);
+  git(root, ["commit", "-qm", "initial"]);
+  const prior = sealRun({ ...fromNts(fixture().metadata, fixture()), complete: true });
+  publishRun(root, prior);
+  const head = git(root, ["rev-parse", "HEAD"]), index = git(root, ["ls-files", "--stage"]);
+  const priorJSON = readFileSync(join(root, "results/benchmarks/runs", prior.id + ".json"), "utf8");
+  const priorPage = readFileSync(join(root, "results/benchmarks/full.md"), "utf8");
+  const raw = { ...fixture(), requested: ["control"] };
+  raw.metadata.machine.conditions = {};
+  const input = join(scratch, "raw.json"); writeFileSync(input, JSON.stringify(raw));
+  const result = spawnSync(process.execPath, [script, "finish", root, input, destination], { env: testEnvironment(), encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Benchmark sitting retained at/);
+  const files = readdirSync(destination).sort();
+  assert.deepEqual(files, [prior.id + "-sitting.json", "full.md"]);
+  const record = parseRun(JSON.parse(readFileSync(join(destination, files[0]!), "utf8")));
+  assert.equal(record.purpose, "sitting"); assert.equal(record.complete, false);
+  assert.deepEqual(parseRun(JSON.parse(JSON.stringify(record))), record);
+  assert.deepEqual(record.rows, fromNts(raw.metadata, raw).rows);
+  const page = readFileSync(join(destination, "full.md"), "utf8");
+  assert.equal(page, renderFull(readRuns(root), [], record));
+  assert.match(page, /^# Benchmark sitting/); assert.match(page, /\|control\|/);
+  assert.ok(page.includes(`](${record.id}.json)`));
+  // Both the public API and locked command refuse before any publication side effect.
+  for (const commit of [true, false]) assert.throws(() => publishRun(root, record, commit), /cannot publish a benchmark sitting/);
+  const recordScript = fileURLToPath(new URL("./run-record.ts", import.meta.url));
+  for (const command of ["publish", "_publish-locked"]) {
+    const refused = spawnSync(process.execPath, [recordScript, command, root, join(destination, files[0]!), "no-commit"], { env: testEnvironment(), encoding: "utf8" });
+    assert.equal(refused.status, 1); assert.match(refused.stderr, /cannot publish a benchmark sitting/);
+  }
+  assert.equal(git(root, ["rev-parse", "HEAD"]), head);
+  assert.equal(git(root, ["ls-files", "--stage"]), index);
+  assert.equal(git(root, ["status", "--porcelain"]), "");
+  assert.deepEqual(readdirSync(join(root, "results/benchmarks/runs")), [prior.id + ".json"]);
+  assert.equal(readFileSync(join(root, "results/benchmarks/runs", prior.id + ".json"), "utf8"), priorJSON);
+  assert.equal(readFileSync(join(root, "results/benchmarks/full.md"), "utf8"), priorPage);
+  assert.throws(() => sittingDirectory(root, destination), /must be fresh/);
+  assert.throws(() => sittingDirectory(root, join(root, "results", "sitting")), /outside the repository/);
+  symlinkSync(root, join(scratch, "alias"));
+  assert.throws(() => sittingDirectory(root, join(scratch, "alias", "missing", "sitting")), /outside the repository/);
+  // Copying the scratch record directly into the store cannot import it either.
+  writeFileSync(join(root, "results/benchmarks/runs", record.id + ".json"), JSON.stringify(record));
+  assert.throws(() => readRuns(root), /cannot publish a benchmark sitting/);
+});
+
+test("sitting identity cannot lose its purpose or be assigned an unknown purpose", () => {
+  const record = fromNts(fixture().metadata, fixture());
+  assert.throws(() => sealRun({ ...record, purpose: "sitting" }), /identity and purpose disagree/);
+  assert.throws(() => sealRun({ ...record, id: record.id + "-sitting" }), /identity and purpose disagree/);
+  assert.throws(() => sealRun({ ...record, purpose: "other" }), /unknown run purpose/);
+});
+
+test("failed sitting observations remain sealed in scratch and keep the ordinary failure status", t => {
+  const scratch = testScratch(t, "bench-failed-sitting"), root = join(scratch, "tree"), destination = join(scratch, "sitting");
+  mkdirSync(root);
+  git(root, ["init", "-q"]); git(root, ["config", "user.name", "Sitting control"]);
+  git(root, ["config", "user.email", "control@example.invalid"]);
+  git(root, ["commit", "--allow-empty", "-qm", "initial"]);
+  const raw = { ...fixture(), requested: ["control"], measured: [], row_failures: { control: { kind: "build_failed", reason: "control build failed" } } };
+  raw.metadata.machine.conditions = {};
+  const input = join(scratch, "raw.json"); writeFileSync(input, JSON.stringify(raw));
+  const result = spawnSync(process.execPath, [script, "finish", root, input, destination], { env: testEnvironment(), encoding: "utf8" });
+  assert.equal(result.status, 1); assert.match(result.stderr, /observations retained.*control build failed/);
+  const json = readdirSync(destination).find(file => file.endsWith(".json"))!;
+  const record = parseRun(JSON.parse(readFileSync(join(destination, json), "utf8")));
+  assert.equal(record.rows[0]!.cells["nts C"]!.status, "BUILD_FAILED");
+  assert.equal(existsSync(join(root, "results")), false);
+  assert.equal(git(root, ["status", "--porcelain"]), "");
+});
+
+test("sitting directory command refuses missing, empty and extra paths by name", t => {
+  const root = testScratch(t, "bench-sitting-directory-cli");
+  for (const args of [[], [""], ["first", "second"]]) {
+    const result = spawnSync(process.execPath, [script, "sitting-directory", root, ...args], { env: testEnvironment(), encoding: "utf8" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /sitting-directory requires exactly one non-empty path/);
+  }
 });

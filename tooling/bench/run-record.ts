@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
+  realpathSync,
   readFileSync,
   readdirSync,
   mkdirSync,
@@ -14,7 +15,7 @@ import {
   fsyncSync,
   closeSync,
 } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
@@ -97,6 +98,7 @@ export type Build = {
 };
 export type RunRecord = {
   schemaVersion: 1;
+  purpose?: "sitting";
   id: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -310,6 +312,7 @@ function decode(value: unknown, derive: boolean): RunRecord {
     value,
     [
       "schemaVersion",
+      ...(value !== null && typeof value === "object" && Object.hasOwn(value, "purpose") ? ["purpose"] : []),
       "id",
       "startedAt",
       "finishedAt",
@@ -330,6 +333,9 @@ function decode(value: unknown, derive: boolean): RunRecord {
   check(o.schemaVersion === 1, "unsupported benchmark schema");
   const id = text(o.id, "id");
   check(/^\d{4}-\d\d-\d\d-[a-f0-9]{7,40}-[a-z0-9-]+$/.test(id), "invalid run filename identity");
+  const sitting = Object.hasOwn(o, "purpose");
+  if (sitting) check(o.purpose === "sitting", "unknown run purpose");
+  check(id.endsWith("-sitting") === sitting, "sitting identity and purpose disagree");
   const startedAt = o.startedAt === null ? null : date(o.startedAt, "startedAt"),
     finishedAt = o.finishedAt === null ? null : date(o.finishedAt, "finishedAt");
   if (startedAt && finishedAt)
@@ -466,6 +472,7 @@ function decode(value: unknown, derive: boolean): RunRecord {
   if (complete) check(rows.length === inventory.length, "complete run omitted a declared row");
   return {
     schemaVersion: 1,
+    ...(sitting ? { purpose: "sitting" as const } : {}),
     id,
     startedAt,
     finishedAt,
@@ -503,6 +510,7 @@ export function readRuns(root: string, inputs = benchmarkRecordInputs(root)): Ru
     .sort()
     .map((file) => {
       const run = parseRun(JSON.parse(readFileSync(join(directory, file), "utf8")));
+      requirePublished(run);
       check(file === run.id + ".json", "run filename disagrees with identity");
       return run;
     });
@@ -672,8 +680,8 @@ const ratio = (row: Row, mine: string, other: string): number | null => {
   const a = measure(row, row.cells[mine]!), b = measure(row, row.cells[other]!);
   return a && b ? a.value / b.value : null;
 };
-export function results(runs: RunRecord[]): Results | null {
-  const run = newestComplete(runs);
+export function results(runs: RunRecord[], current?: RunRecord): Results | null {
+  const run = current ?? newestComplete(runs);
   if (!run) return null;
   const counts = Object.fromEntries(
     BACKENDS.map((backend) => [
@@ -789,14 +797,18 @@ function globalCounts(model: Results): string[] {
     return "- **" + backend + "**: " + columns.join("; ") + ".";
   });
 }
-export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] = []): string {
-  const model = results(runs);
+export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] = [], current?: RunRecord): string {
+  const model = results(runs, current);
   if (!model) return "# Benchmark results\n\nNo complete run has been retained.\n";
   const { run } = model;
-  const strippedModel = results(runs.map(run => ({ ...run, rows: run.rows.filter(row => row.kind === EXECUTABLE_SIZE_KIND)
-    .map(row => ({ ...row, sizeView: "stripped" as const })) })));
+  const stripped = (run: RunRecord): RunRecord => ({ ...run, rows: run.rows.filter(row => row.kind === EXECUTABLE_SIZE_KIND)
+    .map(row => ({ ...row, sizeView: "stripped" as const })) });
+  const strippedModel = results(runs.map(stripped), current ? stripped(current) : undefined);
   const counts = globalCounts(model);
-  const header = `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json). Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best comparisons use each backend/comparator's best prior within-run ratio on the same machine, workload/input and harness contract. Only verified OK pairs are comparable. The change is current ratio / prior ratio; its allowance is max(1.05, the product of the four cell spreads). Noise factors below are current backend, current comparator, prior backend, prior comparator, in that order. Absolute times are information only. Missing comparisons are not established. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
+  const heading = run.purpose === "sitting"
+    ? `# Benchmark sitting\n\nScratch evidence; cannot be published. Sitting: [${run.id}](${run.id}.json)`
+    : `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json)`;
+  const header = `${heading}. Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best comparisons use each backend/comparator's best prior within-run ratio on the same machine, workload/input and harness contract. Only verified OK pairs are comparable. The change is current ratio / prior ratio; its allowance is max(1.05, the product of the four cell spreads). Noise factors below are current backend, current comparator, prior backend, prior comparator, in that order. Absolute times are information only. Missing comparisons are not established. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
   const tableFor = (rows: RowResult[]): string => {
   const native = ["nts C", "nts LLVM"] as const;
   const columns = [
@@ -987,9 +999,44 @@ export function renderRuns(root: string): string {
   check(r.status === 0, "benchmark renderer: " + r.stderr);
   return r.stdout.trim();
 }
+function requirePublished(run: RunRecord): void {
+  check(run.purpose !== "sitting" && !run.id.endsWith("-sitting"), "cannot publish a benchmark sitting");
+}
+/** Resolve missing descendants through their physical existing ancestor. */
+function physical(path: string): string {
+  try { return realpathSync(path); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const parent = dirname(path);
+    if (parent === path) throw error;
+    return join(physical(parent), path.slice(parent.length));
+  }
+}
+/** Refuse a destination before measurement, and again before writing evidence. */
+export function sittingDirectory(root: string, directory: string): string {
+  const destination = physical(resolve(directory)), repository = realpathSync(root);
+  const within = relative(repository, destination);
+  check(within !== "" && (isAbsolute(within) || within === ".." || within.startsWith(".." + sep)),
+    "benchmark sitting directory must be outside the repository");
+  check(!existsSync(destination), "benchmark sitting directory must be fresh: " + destination);
+  return destination;
+}
+export function writeSitting(root: string, run: RunRecord, directory: string): string {
+  parseRun(run);
+  check(run.purpose === "sitting", "scratch output requires a sitting record");
+  const destination = sittingDirectory(root, directory);
+  const page = renderFull(readRuns(root), readBenchmarkGroups(root), run);
+  mkdirSync(dirname(destination), { recursive: true });
+  mkdirSync(destination);
+  const path = join(destination, run.id + ".json");
+  atomic(path, JSON.stringify(run, null, 2) + "\n", true);
+  atomic(join(destination, "full.md"), page, true);
+  return path;
+}
 function publishLocked(root: string, value: unknown, commitResults: boolean): string {
   const run = parseRun(value),
     directory = join(root, "results/benchmarks/runs");
+  requirePublished(run);
   if (commitResults)
     check(
       git(root, ["diff", "--cached", "--name-only"]) === "",
@@ -1019,7 +1066,7 @@ function publishLocked(root: string, value: unknown, commitResults: boolean): st
   return path;
 }
 export function publishRun(root: string, run: RunRecord, commitResults = true): string {
-  parseRun(run);
+  requirePublished(parseRun(run));
   const work = join(root, "target/benchmark-records");
   mkdirSync(work, { recursive: true });
   const input = join(work, randomUUID() + ".json");

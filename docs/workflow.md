@@ -731,6 +731,14 @@ wire version and changes when its fields or meaning change.
 
 ## Benchmarks
 
+An agent's evidence sitting uses `nts-bench --sitting <dir>`, with a fresh
+`~/.cache/nts-scratch/<N>/sittings/<id>/` directory outside the repository.
+It retains sealed JSON and `full.md` through the ordinary measurement,
+validation and renderer, and commits nothing. Cite its path and SHA-256 in the
+record. A sitting identifies itself in both outputs and cannot be published.
+This replaces running a published run and dropping its results commit. The
+nightly command omits the flag and continues publishing official records.
+
 Benchmarks run nightly on `verified`, on the CPUs reserved for measurement
 (4 and 5), and produce the report with every row and its ratios. A
 regression becomes a task.

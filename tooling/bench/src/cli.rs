@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 
-pub(super) const USAGE: &str = "Usage: nts-bench [--root <tree>] [case ...]
+pub(super) const USAGE: &str = "Usage: nts-bench [--root <tree>] [--sitting <dir>] [case ...]
        nts-bench [--root <tree>] --group <name>
        nts-bench [--root <tree>] --count [case ...]
        nts-bench [--root <tree>] --render [run.json]
@@ -11,7 +11,9 @@ only those rows. `--group <name>` measures exactly the rows the foundation
 page naming that group declares, and combines with `--count`. --count prints
 each selected row's instruction counts per column instead of timing it: fixed
 work counted on any CPU outside 4-5, with no measurement lock. --render
-renders a saved run without measuring workloads.";
+renders a saved run without measuring workloads. --sitting writes a sealed
+review sitting and full.md to a fresh scratch directory outside the tree,
+without publishing or committing results. It combines with --group.";
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Command {
@@ -25,6 +27,7 @@ pub(super) enum Command {
 pub(super) struct Arguments {
     pub(super) root: Option<String>,
     pub(super) journal: Option<String>,
+    pub(super) sitting: Option<String>,
     pub(super) group: Option<String>,
     pub(super) command: Command,
 }
@@ -33,6 +36,7 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
     let mut args = args.into_iter().peekable();
     let mut root = None;
     let mut journal = None;
+    let mut sitting = None;
     let mut group = None;
     let mut command = None;
     let mut cases = Vec::new();
@@ -48,6 +52,14 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
                 }
             }
             "--help" | "-h" => set_command(&mut command, Command::Help)?,
+            "--sitting" => {
+                let Some(path) = args.next().filter(|next| !next.starts_with('-')) else {
+                    bail!("`--sitting` needs a path after it");
+                };
+                if sitting.replace(path).is_some() {
+                    bail!("`--sitting` was supplied more than once");
+                }
+            }
             "--journal" => {
                 let Some(path) = args.next().filter(|next| !next.starts_with('-')) else {
                     bail!("`--journal` needs a path after it");
@@ -87,9 +99,15 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
     if matches!(command, Some(Command::Count(_))) && journal.is_some() {
         bail!("`--count` records no run to journal");
     }
+    if sitting.is_some() && (command.is_some() || journal.is_some()) {
+        bail!(
+            "`--sitting` combines only with measurement; not --count, --render, --help or --journal"
+        );
+    }
     Ok(Arguments {
         root,
         journal,
+        sitting,
         group,
         command: match command {
             Some(Command::Count(_)) => Command::Count(cases),
@@ -177,6 +195,25 @@ mod tests {
             &["fib", "--group", "maps"],
             &["--group", "maps", "--render"],
             &["--group", "maps", "--help"],
+        ] {
+            assert!(parse(argv(case)).is_err(), "{case:?}");
+        }
+    }
+
+    #[test]
+    fn sitting_selects_only_the_measurement_destination() {
+        let args = parse(argv(&["--sitting", "/scratch", "fib"])).expect("valid sitting");
+        assert_eq!(args.sitting.as_deref(), Some("/scratch"));
+        assert_eq!(args.command, Command::Measure(vec!["fib".into()]));
+        assert!(parse(argv(&["--sitting", "/scratch", "--group", "maps"])).is_ok());
+        for case in [
+            &["--sitting"][..],
+            &["--sitting", "--count"],
+            &["--sitting", "a", "--sitting", "b"],
+            &["--sitting", "a", "--count"],
+            &["--sitting", "a", "--render"],
+            &["--sitting", "a", "--help"],
+            &["--sitting", "a", "--journal", "b"],
         ] {
             assert!(parse(argv(case)).is_err(), "{case:?}");
         }

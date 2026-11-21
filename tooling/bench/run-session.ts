@@ -17,6 +17,9 @@ import {
   parseRun,
   publishRun,
   renderRuns,
+  sealRun,
+  sittingDirectory,
+  writeSitting,
   type Json,
   type RunRecord,
 } from "./run-record.ts";
@@ -127,9 +130,10 @@ export function begin(root: string, binary: string, sourceDigest: string): Metad
     },
   };
 }
-export function finish(root: string, input: string): string {
-  const record = seal(root, JSON.parse(readFileSync(input, "utf8")));
-  const published = publishRun(root, record);
+export function finish(root: string, input: string, directory?: string): string {
+  const sealed = seal(root, JSON.parse(readFileSync(input, "utf8")));
+  const record = directory === undefined ? sealed : sealRun({ ...sealed, purpose: "sitting", id: sealed.id + "-sitting" });
+  const published = directory === undefined ? publishRun(root, record) : writeSitting(root, record, directory);
   const failures = record.rows.flatMap((row) =>
     Object.entries(row.cells)
       .filter(([_, c]) => c.status === "INVALID" || c.status === "BUILD_FAILED")
@@ -139,7 +143,7 @@ export function finish(root: string, input: string): string {
     throw new Error(
       "Benchmark observations retained at " + published + "; failed: " + failures.join("; "),
     );
-  return published;
+  return directory === undefined ? published : "Benchmark sitting retained at " + published;
 }
 
 /** Seal the durable prefix after the session's unit has stopped. */
@@ -204,7 +208,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const run = fromNts({ ...raw.metadata, complete: false }, raw, {}, hosts);
     console.log(consoleRow(run.rows[0]));
   } else if (mode === "begin") console.log(JSON.stringify(begin(root, args[0], args[1])));
-  else if (mode === "finish") console.log(finish(root, args[0]));
+  else if (mode === "finish") {
+    assert.ok(args.length === 1 || args.length === 2, "finish needs raw JSON and optional sitting directory");
+    console.log(finish(root, args[0], args[1]));
+  }
+  else if (mode === "sitting-directory") {
+    const [directory, ...extra] = args;
+    if (typeof directory !== "string" || !directory.length || extra.length)
+      throw new Error("sitting-directory requires exactly one non-empty path");
+    console.log(sittingDirectory(root, directory));
+  }
   else if (mode === "conditions") console.log(JSON.stringify(conditions()));
   else if (mode === "render") {
     if (args[0]) {

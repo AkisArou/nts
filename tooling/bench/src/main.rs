@@ -346,6 +346,14 @@ fn run() -> Result<()> {
     }
     validate_lanes()?;
     let root = repository_root(args.root.as_deref())?;
+    let sitting = args
+        .sitting
+        .as_deref()
+        .map(|directory| results::command(&root, "sitting-directory", &[directory]))
+        .transpose()?;
+    if let Some(directory) = &sitting {
+        println!("Benchmark sitting: {directory} (scratch evidence)");
+    }
     let counting_run = matches!(args.command, cli::Command::Count(_));
     let requested = match args.command {
         cli::Command::Render(path) => {
@@ -406,7 +414,7 @@ fn run() -> Result<()> {
         })
         .transpose()?;
     let (run, rows) = measure_cases(&root, &out, &cases, metadata, requested, lanes, journal)?;
-    finish(&root, &run, &rows, &cases)
+    finish(&root, &run, &rows, &cases, sitting.as_deref())
 }
 
 /// Instructions per counted op, rounded to the nearest whole instruction.
@@ -680,14 +688,24 @@ fn selected_cases(root: &Utf8Path, requested: &[String]) -> Result<Vec<Utf8PathB
 }
 
 /// Save every attempted row, then let the shared authority publish one immutable run.
-fn finish(root: &Utf8Path, run: &Run, rows: &[Row], _cases: &[Utf8PathBuf]) -> Result<()> {
+fn finish(
+    root: &Utf8Path,
+    run: &Run,
+    rows: &[Row],
+    _cases: &[Utf8PathBuf],
+    sitting: Option<&str>,
+) -> Result<()> {
     let saved = run_file(root);
     std::fs::write(&saved, serde_json::to_string(run)?)
         .with_context(|| format!("writing {saved}"))?;
     if let Some(drift) = refusal_drift(rows, REFUSES_TODAY) {
         eprintln!("note: {drift}");
     }
-    println!("{}", results::command(root, "finish", &[saved.as_str()])?);
+    let mut args = vec![saved.as_str()];
+    if let Some(directory) = sitting {
+        args.push(directory);
+    }
+    println!("{}", results::command(root, "finish", &args)?);
     require_valid_rows(&run.failed)
 }
 
