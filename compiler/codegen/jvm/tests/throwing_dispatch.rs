@@ -52,16 +52,11 @@ fn layout<'p>(program: &'p nts_core::hir::Program, name: &str) -> &'p nts_core::
 /// The raising and ordinary slots of `step`, read off `holder`'s entries, and
 /// the owned facts both receivers publish them by: the member identity, the
 /// ordinary relation and each slot's declared JVM member.
-///
-/// `ordinary_body` is what `holder`'s ordinary slot holds: its own body, or
-/// `None` where no call reaches `step` at the ordinary entry and pruning left
-/// the slot empty. The pair relation is owned either way.
 fn assert_slot_names(
     program: &nts_core::hir::Program,
     base: &str,
     holder: &str,
     raising_body: &str,
-    ordinary_body: Option<&str>,
 ) -> (usize, usize) {
     let facts = nts_codegen_jvm::JvmProgram::new(program);
     let base = layout(program, base);
@@ -88,9 +83,12 @@ fn assert_slot_names(
     )
     .unwrap();
     assert_ne!(raising, ordinary);
-    assert_eq!(child.methods[ordinary].as_deref(), ordinary_body);
-    // A receiver publishes a slot only where it holds an entry for it, and a
-    // slot whose body pruning removed is published by no receiver.
+    assert_eq!(
+        child.methods[ordinary].as_deref(),
+        Some(format!("{holder}#step").as_str())
+    );
+    // A receiver publishes a slot only where it holds an entry for it: the
+    // holder holds both, and a base whose body pruning removed holds none.
     let expected = [
         (ordinary, "step".to_owned()),
         (raising, facts.dispatch_name(raising).unwrap()),
@@ -109,12 +107,11 @@ fn assert_slot_names(
         nts_codegen_jvm::hierarchy::slot_member(&facts, raising, raising_body).unwrap(),
         facts.dispatch_name(raising).unwrap()
     );
-    if let Some(body) = ordinary_body {
-        assert_eq!(
-            nts_codegen_jvm::hierarchy::slot_member(&facts, ordinary, body).unwrap(),
-            "step"
-        );
-    }
+    assert_eq!(
+        nts_codegen_jvm::hierarchy::slot_member(&facts, ordinary, &format!("{holder}#step"))
+            .unwrap(),
+        "step"
+    );
     (raising, ordinary)
 }
 
@@ -226,21 +223,13 @@ fn the_throwing_override_and_its_throwing_base_control_both_emit() {
     );
     // Since #843 a call through `Base` asks `Child`'s override too, so
     // `Base#step` can raise and its raising slot is never its quiet ordinary
-    // body. Every call of `step` here sits inside a `try`, including the
-    // method read as a value (`const callback = source.step`), whose `try`
-    // is honest since #478 and dispatches at the raising slot. No call reaches
-    // the ordinary entry, so pruning empties the ordinary slot on both
-    // receivers while the owned pair relation still names it.
-    let (raising, ordinary) = assert_slot_names(
-        &prepared.program,
-        "Base",
-        "Child",
-        "Child#step@raises",
-        None,
-    );
+    // body. Here every call is specialised to `Child`, so the copy that slot
+    // would hold is pruned and the slot is empty.
+    let (raising, ordinary) =
+        assert_slot_names(&prepared.program, "Base", "Child", "Child#step@raises");
     let base = layout(&prepared.program, "Base");
-    assert_eq!(base.methods[ordinary].as_deref(), None);
-    assert_eq!(base.methods[raising].as_deref(), Some("Base#step@raises"));
+    assert_eq!(base.methods[ordinary].as_deref(), Some("Base#step"));
+    assert_ne!(base.methods[raising].as_deref(), Some("Base#step"));
     assert!(
         written("Child"),
         "the actual subject class must not disappear: {:?}",
@@ -250,7 +239,8 @@ fn the_throwing_override_and_its_throwing_base_control_both_emit() {
     let raising_name = nts_codegen_jvm::JvmProgram::new(&prepared.program)
         .dispatch_name(raising)
         .unwrap();
-    assert_emitted_slots(&emitted, &["Child", "Base"], &[&raising_name]);
+    assert_emitted_slots(&emitted, &["Child"], &["step", &raising_name]);
+    assert_emitted_slots(&emitted, &["Base"], &["step"]);
     assert_missing_slot_fact_conflicts(&prepared.program);
 }
 
@@ -268,13 +258,7 @@ fn a_quiet_override_fills_both_of_its_slots_with_one_body() {
         .expect("one ordinary snapshot of the quiet override");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = common::prepare(&snapshot).expect("valid JVM host-GC prepared HIR");
-    let (raising, ordinary) = assert_slot_names(
-        &prepared.program,
-        "Loud",
-        "Quiet",
-        "Quiet#step",
-        Some("Quiet#step"),
-    );
+    let (raising, ordinary) = assert_slot_names(&prepared.program, "Loud", "Quiet", "Quiet#step");
     let quiet = layout(&prepared.program, "Quiet");
     assert_eq!(quiet.methods[raising], quiet.methods[ordinary]);
     let emitted = nts_codegen_jvm::emit(&prepared.program);

@@ -1,8 +1,7 @@
 // run: check
 // backend: llvm
 
-// L15: an optional callback held in a field reaches the enclosing handler,
-// as a field callee is asked whether it can raise (#478).
+// L15: an optional callback held in a field loses the enclosing handler.
 // The control calls the same callback through an optional parameter instead.
 interface OptionalCallback {
   run?: ((n: number) => number) | undefined;

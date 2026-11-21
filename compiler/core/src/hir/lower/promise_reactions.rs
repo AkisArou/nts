@@ -34,7 +34,22 @@ const A_REACTION_IN_A_GENERIC: &str = "a `.then`, `.catch` or `.finally` inside 
 pub(super) fn reactions(probe: &FuncBuilder, closures: &mut Vec<ClosureInfo>) {
     for at in 0..probe.snapshot.nodes.len() {
         let site = NodeId(u32::try_from(at).unwrap_or(u32::MAX));
-        if !a_reaction_site(probe, site) {
+        if probe.kind_of(site) != Some(syntax::CALL_EXPRESSION) {
+            continue;
+        }
+        let Some((receiver, method)) = probe
+            .children(site)
+            .first()
+            .and_then(|callee| probe.member_access(*callee))
+        else {
+            continue;
+        };
+        if !matches!(method.as_str(), "then" | "catch" | "finally")
+            || !matches!(
+                probe.type_of(receiver),
+                Some(HirType::Managed(ManagedType::Promise(_)))
+            )
+        {
             continue;
         }
         let generic = std::iter::successors(probe.node(site).parent, |at| probe.node(*at).parent)
@@ -50,32 +65,6 @@ pub(super) fn reactions(probe: &FuncBuilder, closures: &mut Vec<ClosureInfo>) {
             ..ClosureInfo::as_written(site)
         });
     }
-}
-
-/// Whether `site` is a `.then`, `.catch` or `.finally` called on a promise: a site
-/// that subscribes a reaction.
-///
-/// **One answer for both readers.** [`reactions`] builds a closure for each such
-/// site, and `calls_guarded_by_a_try` counts each
-/// as a guarded call, because the reaction dispatches its handlers at the raising
-/// entry and a handler's `throw` rejects the result. Two spellings of this test
-/// could name a site one reader subscribes and the other does not guard, and
-/// that is a `throw` that ends the program where node rejects.
-pub(super) fn a_reaction_site(probe: &FuncBuilder, site: NodeId) -> bool {
-    if probe.kind_of(site) != Some(syntax::CALL_EXPRESSION) {
-        return false;
-    }
-    probe
-        .children(site)
-        .first()
-        .and_then(|callee| probe.member_access(*callee))
-        .is_some_and(|(receiver, method)| {
-            matches!(method.as_str(), "then" | "catch" | "finally")
-                && matches!(
-                    probe.type_of(receiver),
-                    Some(HirType::Managed(ManagedType::Promise(_)))
-                )
-        })
 }
 
 /// What one reaction holds and does, read off its site.
