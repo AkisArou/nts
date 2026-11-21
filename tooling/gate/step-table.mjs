@@ -44,6 +44,7 @@ export const STEPS = [
   { name: "rustfmt", slots: 1, treeOnly: true, doc: "the Rust tree is cargo-fmt formatted" },
   { name: "reformat", slots: 1, treeOnly: true, doc: "no whitespace-only diffs" },
   { name: "records", slots: 1, treeOnly: true, doc: "record numbers unique" },
+  { name: "benchmark-identities", slots: 1, treeOnly: true, doc: "benchmark compile rows name current sources and driver without compiling" },
   { name: "old-paths", slots: 1, treeOnly: true, doc: "nothing sits or points where the corpora used to be" },
   { name: "audit", slots: 1, treeOnly: true, doc: "classification reasons, authorities and suite entries" },
   { name: "unicode-freshness", slots: 1, treeOnly: true, doc: "URL-host cases match the offline pinned Unicode source and Node oracle" },

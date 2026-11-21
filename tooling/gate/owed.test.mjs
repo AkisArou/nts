@@ -22,9 +22,24 @@ import {programOracleConsumers} from "./program-oracle-consumers.ts";
 import {auditTestHost} from "./test-host-audit.ts";
 import {spawnTest} from './test-wait.ts';
 import {testScratch} from './test-scratch.ts';
+import {rustSelectorTrust} from './rust-selector-selection.ts';
+import {readDependencyCatalog} from '../inputs/dependency-catalog.ts';
 
 test('the real selector self-test preserves ordinary order with an explicit missing-catalog fallback',()=>{
   assert.equal(selfTest({acceptedRustRecordBlob:null,dependencyCatalog:null}),null);
+});
+
+test('the current-catalog selector self-test rejects lost LLVM benches reach',()=>{
+  const root=fileURLToPath(new URL('../..',import.meta.url)),trust=rustSelectorTrust(root);
+  const catalog=readDependencyCatalog(trust.dependencyCatalog??null,root);
+  assert.equal(catalog.state,'current',catalog.state==='pending'?catalog.reason:'');
+  const backend=RULES.find(row=>row.name==='the LLVM backend');assert.ok(backend);
+  const steps=backend.steps;
+  try{
+    backend.steps=steps.filter(step=>step!=='benches');
+    const failure=selfTest(trust);assert.ok(failure);
+    assert.match(failure,/LLVM backend does not owe benches.*current catalog/);
+  }finally{backend.steps=steps;}
 });
 
 test('the full selector population has its actual wide integrity owner',()=>{
@@ -848,7 +863,7 @@ test("the tooling load experiment has exact placement and a manual full round", 
 });
 
 test("tool-written result outputs owe tree checks while recorded baselines retain their readers", () => {
-  const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit","test-host","tooling-types","gate-inputs"]);
+  const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit","test-host","tooling-types","gate-inputs","benchmark-identities"]);
   for (const path of ["results/benchmarks/cells.tsv","results/typed-release/cells.tsv","results/suite/corpus.md","results/a-new-tool/measurements.json"]) {
     const got=stepsFor(path);
     assert.ok(got.length>0);
@@ -1508,4 +1523,14 @@ test('memory census modules and controls owe their tooling tests and records che
   }
   const records=owed([{path:'results/memory-census/tree-teardown.json',added:true}]);
   assert.ok(gateSteps(records).includes('records'));assert.ok(!records.some(row=>row.full));
+});
+test('benchmark compile identities are a no-compile tree check over cases, imports, driver and records',()=>{
+  assert.equal(policy.LANDING['benchmark-identities'].form,'tree');
+  assert.ok(policy.TREE_CHECKS.includes('benchmark-identities'));
+  const inputs=stepInputs();
+  for(const path of ['benchmarks/cases/fib/case.ts','tooling/bench/compile-producer.ts','tooling/conformance/compile-diagnostics.ts','results/benchmarks/c/outcomes.tsv','runtime/ecmascript/src/json/text.ts','runtime/node/internal/utf8.ts'])
+    assert.ok([...covering(inputs,path)].includes('benchmark-identities'),path);
+  assert.ok([...covering(policy.corpusInputs(),'tsconfig.fixtures.json')].includes('the bench cases'),'the corpus config owner retains inherited options');
+  const body=readFileSync(new URL('./all.sh',import.meta.url),'utf8');
+  assert.match(body,/step "benchmark-identities" node tooling\/bench\/build-records\.ts --check-identities/);
 });

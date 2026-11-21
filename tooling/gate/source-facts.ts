@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration,BindingName} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
-import {fixtureNamespaces,moduleMemberName,projectCatalogue,projectRole,relativeProjectInput,projectMemberPrefix,directoryCandidates,type DirectoryCandidate,type ModuleDeclarations,type ReaderInput,type DataNamespaces,type InputKind} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,projectCatalogue,projectRole,relativeProjectInput,projectMemberPrefix,projectMemberOptions,directoryCandidates,type DirectoryCandidate,type ModuleDeclarations,type ReaderInput,type DataNamespaces,type InputKind} from './reader-inputs/main.ts';
 
 const INPUT_OWNER='tooling/gate/reader-inputs/main.ts';
 const READER_FACTORIES:Readonly<Record<string,{owner:string;kind:InputKind}>>={
@@ -310,14 +310,20 @@ export class SourceFacts {
             throw Error(factory!.name+' needs one URL and a literal selection: '+this.file);
           const selection=parent.arguments[1].text;
           if(factory!.name==='projectMembers'){
-            let optional:true|undefined;
+            let options:Record<string,unknown>|undefined;
             if(parent.arguments.length===4){
-              const options=parent.arguments[3],property=options&&ast.isObjectLiteralExpression(options)&&options.properties.length===1?options.properties[0]:undefined;
-              if(!property||!ast.isPropertyAssignment(property)||!(ast.isIdentifier(property.name)||ast.isStringLiteral(property.name))||property.name.text!=='optional'||property.initializer.kind!==ast.SyntaxKind.TrueKeyword)
-                throw Error('projectMembers optional mode must be literal {optional:true}: '+this.file);
-              optional=true;
+              const supplied=parent.arguments[3];
+              if(!supplied||!ast.isObjectLiteralExpression(supplied))throw Error('projectMembers options must be literal: '+this.file);
+              options={};
+              for(const property of supplied.properties){
+                if(!ast.isPropertyAssignment(property)||!(ast.isIdentifier(property.name)||ast.isStringLiteral(property.name))
+                  ||Object.hasOwn(options,property.name.text))throw Error('projectMembers options must be unique literal properties: '+this.file);
+                const value=property.initializer;
+                if(!ast.isStringLiteral(value)&&value.kind!==ast.SyntaxKind.TrueKeyword)throw Error('projectMembers options must be literal: '+this.file);
+                options[property.name.text]=ast.isStringLiteral(value)?value.text:true;
+              }
             }
-            assets.push({path:literal.text,kind:'project-members',role:role(2),prefix:projectMemberPrefix(selection),...(optional?{optional}:{})});
+            assets.push({path:literal.text,kind:'project-members',role:role(2),prefix:projectMemberPrefix(selection),...projectMemberOptions(options)});
           }else{
             if(parent.arguments.length!==3)throw Error('projectCatalogue needs a URL, selection and literal role: '+this.file);
             projectCatalogue(new URL('file:///catalogue.tsv'),selection,role(2));

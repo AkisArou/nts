@@ -2,14 +2,14 @@ import {caseCohort} from '../gate/case-cohort.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 /** Compile-only benchmark observations. This command never executes a workload. */
-import assert from "node:assert/strict";
+import assert,{AssertionError} from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {fileURLToPath} from "node:url";
-import {dataDirectory} from "../gate/reader-inputs/main.ts";
+import {dataDirectory,fileInput,projectMembers} from "../gate/reader-inputs/main.ts";
 import { closeMemoryRun, memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
@@ -25,7 +25,13 @@ import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchma
   serializeBenchmarkRecord, type BenchmarkOutcome, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+export const CASE_INPUTS=projectMembers(new URL("../../benchmarks/cases/",import.meta.url),"","compiled-program",{member:"case.ts",defaultConfig:"../../tsconfig.fixtures.json",include:"directory"});
 const CASES=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
+const COMPILE_RECORDS={
+  c:fileInput(new URL("../../results/benchmarks/c/outcomes.tsv",import.meta.url)),
+  llvm:fileInput(new URL("../../results/benchmarks/llvm/outcomes.tsv",import.meta.url)),
+  jvm:fileInput(new URL("../../results/benchmarks/jvm/outcomes.tsv",import.meta.url)),
+};
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 /**
  * Each compile's own kernel cap: the one its rows were recorded under, a
@@ -59,7 +65,7 @@ export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow
 
 /** Every benchmark case: a directory under benchmarks/cases with a case.ts. */
 export function benchmarkCases(root: string): string[] {
-  const paths = readdirSync(join(root, CASES), { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(join(root, CASES, entry.name, "case.ts")))
+  const paths = readdirSync(join(root, CASES), { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(join(root, CASES, entry.name, CASE_INPUTS.member)))
     .map(entry => `${CASES}/${entry.name}`).sort();
   assert.ok(paths.length > 0, "no benchmark cases found; an empty run is not passing"); return paths;
 }
@@ -79,7 +85,7 @@ function compilerIdentityValue(root: string, value: unknown): unknown {
 
 /** Source identity comes from the SDK's resolved options, roots and sources,
  * plus case-local data. Config syntax only selects those inputs. This is identity validation,
- * not a cache: the compiler still executes every selected cell on every run.
+ * not a cache: measured modes still execute every selected cell on every run.
  */
 export async function benchmarkIdentities(root: string, paths: string[], scratch: string): Promise<Map<string, string>> {
   const { API } = await import("typescript/sync");
@@ -121,6 +127,46 @@ export async function benchmarkIdentities(root: string, paths: string[], scratch
     }
   } finally { api.close(); }
   return identities;
+}
+
+const compileRecordFile=(output:string,backend:Backend)=>join(output,backend,basename(fileURLToPath(COMPILE_RECORDS[backend])));
+
+/** The same compile inventory governs cheap identity checks and measured runs. */
+function compileInventories(backends:readonly Backend[],output:string,paths:readonly string[],identities:ReadonlyMap<string,string>,driver:string){
+  const records=new Map<Backend,BenchmarkRecord>(),pending=new Map<Backend,Set<string>>();
+  const cells=paths.map(path=>({path,scope:"compile" as const,source:identities.get(path)!,driver}));
+  for(const backend of backends){
+    const file=compileRecordFile(output,backend);
+    assert.ok(existsSync(file),`no benchmark compile record: ${file}; run build-records.ts --record on main's official pin`);
+    const record=parseBenchmarkRecord(readFileSync(file,"utf8"));
+    assert.equal(record.metadata.backend,backend,"foreign benchmark backend");
+    requireBenchmarkScopes(record,["compile"]);
+    pending.set(backend,new Set(benchmarkInventory({...record,rows:record.rows.filter(row=>row.scope==="compile")},cells).map(row=>row.path)));
+    records.set(backend,record);
+  }
+  return {records,pending};
+}
+
+/** Read identities only: no compiler binary, canonical compile environment,
+ * admission, emit/link command or outcome observation participates. */
+async function checkCompileIdentities(backends:readonly Backend[],output:string):Promise<number>{
+  const base=process.env.TMPDIR??join(homedir(),".cache/nts/benchmark-records");mkdirSync(base,{recursive:true});
+  const scratch=mkdtempSync(join(base,"identities-"));
+  try{
+    const paths=benchmarkCases(ROOT),identities=await benchmarkIdentities(ROOT,paths,scratch),driver=compileKey(ROOT);
+    const {records,pending}=compileInventories(backends,output,paths,identities,driver);
+    let waiting=0;
+    for(const backend of backends){
+      for(const path of pending.get(backend)!){
+        console.log(`${backend} ${pendingLine(path,relative(ROOT,compileRecordFile(output,backend)))}`);waiting++;
+      }
+    }
+    console.log(`${paths.length} benchmark cases, ${backends.length} backends; ${[...records.values()].reduce((n,record)=>n+record.rows.filter(row=>row.scope==="compile").length,0)} current compile identities, ${waiting} pending; compiled nothing`);
+    return 0;
+  }catch(error){
+    if(!(error instanceof AssertionError))throw error;
+    console.error(`benchmark identities: ${error instanceof Error?error.message:String(error)}`);return 1;
+  }finally{rmSync(scratch,{recursive:true,force:true});}
 }
 
 function publish(file: string, contents: string): void {
@@ -195,15 +241,16 @@ export async function compileCells(cells: readonly CompileCell[], lanes: number,
  * the same at any width.
  */
 export async function runBuildRecords(args = process.argv.slice(2)): Promise<number> {
-  const mode = args.shift(); assert.ok(mode === "--record" || mode === "--check" || mode === "--record-pending", "usage: build-records.ts --record|--check|--record-pending [--backend c|llvm|jvm] [--jobs N] [--output directory] [case]");
+  const mode = args.shift(); assert.ok(mode === "--record" || mode === "--check" || mode === "--record-pending" || mode === "--check-identities", "usage: build-records.ts --record|--check|--record-pending|--check-identities [--backend c|llvm|jvm] [--jobs N] [--output directory] [case]");
   let backends: readonly Backend[] = BACKENDS, output = join(ROOT, "results/benchmarks"), only: string | undefined, jobs: number | undefined;
   while (args.length) {
     const flag = args.shift();
     if (flag === "--backend") { const value = args.shift(); assert.ok(BACKENDS.includes(value as Backend), "unknown benchmark backend"); backends = [value as Backend]; }
     else if (flag === "--output") { const value = args.shift(); assert.ok(value, "--output needs a directory"); output = resolve(value); }
-    else if (flag === "--jobs") { const value = Number(args.shift()); assert.ok(Number.isSafeInteger(value) && value >= 1, "--jobs takes a whole number of at least 1"); jobs = value; }
+    else if (flag === "--jobs") { assert.notEqual(mode,"--check-identities","identity checks do not run compile jobs"); const value = Number(args.shift()); assert.ok(Number.isSafeInteger(value) && value >= 1, "--jobs takes a whole number of at least 1"); jobs = value; }
     else { assert.ok(flag && !flag.startsWith("-") && !only && mode === "--check", `unknown benchmark argument: ${flag}`); only = flag; }
   }
+  if(mode === "--check-identities")return checkCompileIdentities(backends,output);
   // How many compile at once: --jobs; else inside a gate, the step's workers,
   // each of which holds one of its tokens while it compiles; else the census's
   // width. Outside a gate no token is asked: the full check's records run is
@@ -219,7 +266,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     assert.equal(pin.binary_sha256, compiler, `${mode} pin binary differs from its recorded bytes`);
     execFileSync("git", gitArguments(["merge-base", "--is-ancestor", pin.sha, "main"]), { cwd: ROOT, stdio: "pipe" }); commit = pin.sha;
   }
-  const recordFile = (backend: Backend) => join(output, backend, "outcomes.tsv");
+  const recordFile = (backend: Backend) => compileRecordFile(output,backend);
   const shown = (file: string) => { const local = relative(ROOT, file); return local.startsWith("..") || isAbsolute(local) ? file : local; };
   const base = process.env.TMPDIR ?? join(homedir(), ".cache/nts/benchmark-records"); mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "compile-"));
@@ -236,19 +283,9 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     // Each case's project, written once before any compile reads it: its
     // backends compile at once.
     const projects = new Map(paths.map(path => [path, projectFor(ROOT, path, scratch)]));
-    const records = new Map<Backend, BenchmarkRecord>(), pending = new Map<Backend, Set<string>>(), actual = new Map<Backend, BenchmarkRow[]>();
-    for (const backend of backends) {
-      if (mode !== "--record") {
-        const file = recordFile(backend);
-        assert.ok(existsSync(file), `no benchmark compile record: ${file}; run build-records.ts --record on main's official pin`);
-        const record = parseBenchmarkRecord(readFileSync(file, "utf8")); assert.equal(record.metadata.backend, backend, "foreign benchmark backend");
-        requireBenchmarkScopes(record, ["compile"]);
-        const cells = all.map(path => ({ path, scope: "compile" as const, source: identities.get(path)!, driver }));
-        pending.set(backend, new Set(benchmarkInventory({ ...record, rows: record.rows.filter(row => row.scope === "compile") }, cells).map(row => row.path)));
-        records.set(backend, record);
-      }
-      actual.set(backend, []);
-    }
+    const {records,pending}=mode==="--record"?{records:new Map<Backend,BenchmarkRecord>(),pending:new Map<Backend,Set<string>>()}
+      :compileInventories(backends,output,all,identities,driver);
+    const actual=new Map<Backend,BenchmarkRow[]>(backends.map(backend=>[backend,[]]));
     const cell = (path: string, backend: Backend) => `${backend}\0${path}`;
     const cells: CompileCell[] = [], kept = new Map<string, BenchmarkRow>();
     for (const path of paths) for (const backend of backends) {

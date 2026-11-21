@@ -4162,3 +4162,52 @@ service's selection hands its reservation to the landing build through the
 ledger's existing `replaces` takeover, or to the gate run when nothing is
 built, as the build already hands to the run. #826 may shrink the peak; this
 makes the selection accountable whatever its size.
+## 2026-11-15: Check benchmark compile identities at landing (#546)
+## 2026-11-16: Check benchmark compile identities at landing (#546)
+
+The compile recorder exposes an identity-only mode before compiler binary,
+environment, admission and observation work. One landing tree step compares
+resolved benchmark source identities and the unchanged compile-driver key
+against compile-scope rows for C, LLVM and JVM. New cells stay pending; stale
+source/driver identities and missing recorded cases fail. Compiler source and
+binary identities remain provenance and cannot invalidate current rows. The
+mode writes no records or counts and invokes no compiler, linker or workload.
+
+The shared project-members owner accepts the literal case member, default config
+and include recipe. Discovery delegates to the existing generated-project owner
+so an own config takes precedence, .js imports resolve through the real Program,
+unimported whole-directory roots remain inputs and compiled runtime assets stay
+obligations. The compile producer and diagnostic key sources remain unchanged.
+
+An exact fixtureInput population grant records private data ownership without
+acquiring production member Programs for that namespace. It does not apply to
+other populations or ungranted contexts. The identity CLI fixture stages first,
+then supplies and validates private cases through the exported production recipe.
+
+## Project reads belong to one selection run (11-18)
+
+#546's benchmark member declaration exposed repeated Program acquisition in
+selection. Canonical step entries, inferred modules and shell-launched modules
+asked the same project questions in separate graph walks. The attribution and
+controlled comparisons are retained in
+[the selection-cost record](benchmark-identities-selection-cost.md).
+
+The coordinator's final scope decision selected the existing synchronous batch for
+the ordinary JS step graph's three description sites. The Rust selector retains
+its independent batch. The graph fixes source root, SDK and catalog view;
+each query includes the complete request, entry and namespace. Its first use
+acquires a fresh real Program, and repeats reuse that scope's detached answer.
+No separate frozen-answer wrapper or cross-view cache is retained.
+Independent cases are not combined into a population Program: an ambient
+declaration from another case can change module resolution. No native module
+resolution cache is introduced.
+
+The existing graph batch lifetime also supports adaptive synchronous walks.
+The original batch state retains every fence, including negative lookups,
+optional presence, directory membership, ownership and parsed-source hashes.
+The callback closes when its body returns, before return-value inspection and
+validation; escaped readers cannot answer there or after the scope. Query maps
+clear on every exit, and the graph still closes its API owners. No extra
+snapshot copies or deferred wrapper closures are retained. Separate endpoint
+and catalog views never join by a relative config name. Standalone graph
+consumers keep their existing fresh-read transactions.

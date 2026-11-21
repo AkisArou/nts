@@ -2,6 +2,7 @@ import {ToolingInstrumentError} from './step-result.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {cargoRustRuntimeTargets} from "./rust-runtime-declarations.ts";
 import {cargoMetadata,cargoRuntimeLinkageFromMetadata} from './cargo-inputs.ts';
+import {readDependencyCatalog} from '../inputs/dependency-catalog.ts';
 // Which checks does this change owe? Takes the change, not the author's
 // reading of it, and prints the checklist.
 //
@@ -172,7 +173,7 @@ const FULL_SELECTOR_POLICY_DATA = [
 export const SELECTOR_POLICY_DATA = [...FULL_SELECTOR_POLICY_DATA,
   "tooling/gate/rust-runtime-inputs.json", "results/gate-inputs/rust-runtime.json"];
 
-export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host", "tooling-types", "gate-inputs"];
+export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host", "tooling-types", "gate-inputs", "benchmark-identities"];
 const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full\.md)$/.test(path);
 
 /**
@@ -279,6 +280,7 @@ export const LANDING = {
   "test-host": { form: "tree" },
   "tooling-types": { form: "tree" },
   "gate-inputs": { form: "tree" },
+  "benchmark-identities": { form: "tree" },
   // The pin, the inventory and the features audit: seconds, and what a change
   // to a feature's classification owes for what it classified.
   test262: { form: "as-is" },
@@ -401,6 +403,7 @@ export const ASKS = {
   "typescript-c": ["answers", "does every recorded TypeScript conformance case still do what it did, on C"],
   "typescript-llvm": ["answers", "does every recorded TypeScript conformance case still do what it did, on LLVM"],
   "typescript-jvm": ["answers", "does every recorded TypeScript conformance case still do what it did, on the JVM"],
+  "benchmark-identities": ["valid", "do recorded benchmark compile rows name the current sources and compile driver"],
   // A corpus of its own, and the only step that compiles it: `any` as Erased
   // (093733f2d) left awfy-towers emitting C that clang rejects, and nothing a
   // lowering change owed pointed at it until another lane found it red.
@@ -1523,7 +1526,7 @@ const CORPORA = [
   { name: "the blockers", member: /^tests\/refusals\/[^/]+\//, dirs: () => kids("tests/refusals"), steps: ["blockers", "integrity"] },
   { name: "the outcomes", member: /^tests\/outcomes\/[^/]+\//, dirs: () => kids("tests/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
   { name: "the runtime modules", wide: true, member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "types", "jvm-verifies", "divergence"] },
-  { name: "the bench cases", wide: true, member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "launch-agree", "dex", "expect-ir"] },
+  { name: "the bench cases", wide: true, member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benchmark-identities", "benches", "bench-agree", "launch-agree", "dex", "expect-ir"] },
   { name: "the memory cases", wide: true, member: /^tests\/memory\/[^/]+\//, dirs: () => kids("tests/memory"), steps: ["memory"] },
 ];
 function kids(dir) {
@@ -1779,7 +1782,7 @@ function stepInputGraph(options) {
     /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'|'projectMatches'>}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
-    try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
+    try {return modules.withDescriptions(describe=>{for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1], rawCommand = m[2];
       if(!step||rawCommand===undefined)throw new Error("canonical gate step has no name or command");
       const command = rawCommand.trim();
@@ -1821,7 +1824,7 @@ function stepInputGraph(options) {
       while (entries.length) {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
-        const snapshot=modules.describe(batch, row => directory(row,step),row=>byteReaders.add(row.path,step));
+        const snapshot=describe(batch, row => directory(row,step),row=>byteReaders.add(row.path,step));
         metadata(snapshot,step);
         for(const input of snapshot.placingFiles)declared.add(input);
         for (const input of snapshot.files) {
@@ -1858,7 +1861,7 @@ function stepInputGraph(options) {
         if (/\.[cm]?[jt]sx?$/.test(input)) {
           /** @type {import('./module-closure.ts').ByteInputDeclaration[]} */
           const bytes=[];
-          const snapshot=modules.describe([input],undefined,row=>bytes.push(row));
+          const snapshot=describe([input],undefined,row=>bytes.push(row));
           references={named:[],other:snapshot.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)),data:snapshot.files,directories:snapshot.directories,bytes,metadata:snapshot};
         } else {
           const body = readFileSync(abs, "utf8");
@@ -1871,7 +1874,7 @@ function stepInputGraph(options) {
           const launched=[...references.named,...references.other].filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&existsSync(join(TREE,path))&&statSync(join(TREE,path)).isFile());
           /** @type {import('./module-closure.ts').ByteInputDeclaration[]} */
           const bytes=[];
-          const launchedInputs=modules.describe(launched,undefined,row=>bytes.push(row));
+          const launchedInputs=describe(launched,undefined,row=>bytes.push(row));
           references.bytes=bytes;
           references.other.push(...launchedInputs.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)));
           references.data=launchedInputs.files;
@@ -1927,7 +1930,7 @@ function stepInputGraph(options) {
       observationIndex:observations.size?readerObservationIndex(TREE,observations.values(),trackedFiles(),modules.membershipIndex()):undefined,
       projectedIndex:projectedDependencies.size?readerDependencyIndex(projectedDependencies.values(),row=>row.dependency,trackedFiles(),modules.membershipIndex()):undefined,
       membershipIndex:memberships.size?modules.membershipIndex():undefined,tracked:new Set(trackedFiles()) };
-    } finally {modules.close();}
+    });} finally {modules.close();}
   });
 }
 
@@ -2379,7 +2382,19 @@ export function selfTest(options) {
   const graph=stepInputGraph(trust),forced=new Set(graph.allRustSteps);
   for(const row of graph.unavailableInputs.values())for(const step of row.steps)forced.add(step);
   const ordinaryOrder=order.filter(step=>!forced.has(step)||ALWAYS.steps.includes(step));
-  if (ordinaryOrder.slice(0, 13).join(" ") !== "build clippy tests rustfmt old-paths test-host tooling-types gate-inputs program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  const expectedOrdinaryPrefix="build clippy tests rustfmt old-paths test-host tooling-types gate-inputs program-oracles llvm llvm-rc assembles";
+  const ordinaryPrefixLength=expectedOrdinaryPrefix.split(" ").length;
+  if (ordinaryOrder.slice(0, ordinaryPrefixLength).join(" ") !== expectedOrdinaryPrefix || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if(readDependencyCatalog(trust.dependencyCatalog??null,trust.committedSource?.tree??TREE).state==='current'&&ordinaryOrder[ordinaryPrefixLength]!=='benches')
+    return `the LLVM backend does not owe benches immediately after its ordinary prefix with a current catalog: ${order.join(" ")}`;
+  // #546 adds production reach for benches and benchmark-identities.
+  // tooling is reached through the tests' imports of the shared recorder.
+  if(trust.dependencyCatalog===null)for(const project of ['benchmarks/cases/node-buffer-alloc-small/tsconfig.json','benchmarks/cases/node-buffer-string-small/tsconfig.json']){
+    const inputs=[...graph.unavailableInputs.values()].filter(row=>row.kind==='installed-package-reach'&&row.reader==='tooling/bench/build-records.ts'
+      &&row.context.entry==='<entry>'&&row.project===project&&row.reason==='installation catalog is missing');
+    const steps=[...new Set(inputs.flatMap(row=>[...row.steps]))].sort();
+    if(steps.join(' ')!=='benches benchmark-identities tooling')return `missing-catalog unavailable input ${project} read by tooling/bench/build-records.ts forces ${steps.join(' ')||'(nothing)'}; expected exactly #546's added production steps benches and benchmark-identities, and tooling reached through the tests' imports of the shared recorder`;
+  }
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;

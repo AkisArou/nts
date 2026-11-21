@@ -1,8 +1,9 @@
 import {gitArguments} from "../gate/git-arguments/main.ts";
+import {fixtureInput} from '../gate/reader-inputs/main.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,7 +92,7 @@ test("the compile CLI records one compile at a time and four at once alike, chec
     writeFileSync(join(root, "benchmarks/cases", name, "case.ts"), "export function run() { return 1; }");
   }
   writeFileSync(join(root, "benchmarks/cases/root-coverage/unimported.ts"), "export const sibling = 1;\n");
-  copyModuleClosure(['tooling/bench/build-records.ts'],root,{reuseSourceLinks:true,dataNamespaces:{"benchmarks/cases":"benchmark compile CLI control"}});
+  copyModuleClosure([fixtureInput(new URL('./build-records.ts',import.meta.url),{dataNamespaces:{"benchmarks/cases":"benchmark compile CLI control"}})],root,{reuseSourceLinks:true});
   assert.deepEqual(readdirSync(join(root,"benchmarks/cases")).sort(),["control","root-coverage","subject"]);
   const git = (args: string[]) => {
     const result = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
@@ -407,4 +408,117 @@ test("a launch case is a benchmark case: its compile cells are enumerated and la
       .map(row => row.path);
     for (const path of launches) assert.ok(recorded.has(path) || pending.includes(path), `${backend} ${path} is recorded or pending`);
   }
+});
+
+test("identity-only CLI holds compile rows without compiler work and leaves new cases pending",async t=>{
+  const root=testScratch(t,"benchmark-identity-cli"),records=join(root,"records"),scratch=join(root,"temporary");
+  mkdirSync(scratch);
+  const write=(path:string,body:string)=>{const file=join(root,path);mkdirSync(join(file,".."),{recursive:true});writeFileSync(file,body);};
+  mkdirSync(join(root,'benchmarks/cases'),{recursive:true});
+  const placed=copyModuleClosure([fixtureInput(new URL('./build-records.ts',import.meta.url),{dataNamespaces:{'benchmarks/cases':'identity-only compile record control'}})],root);
+  write("tsconfig.fixtures.json",JSON.stringify({compilerOptions:{types:[],target:"ESNext",module:"ESNext",moduleResolution:"bundler",noEmit:true}}));
+  write("benchmarks/cases/control/case.ts","export function run(){return 1;}\n");
+  write("benchmarks/cases/subject/case.ts","import {input} from '../../../runtime/control.ts';export function run(){return input;}\n");
+  write("runtime/control.ts","export const input=1;\n");
+  assert.deepEqual(readdirSync(join(root,'benchmarks/cases')).sort(),['control','subject'],'the fixture has no production case population');
+  assert.ok(placed.includes('tooling/bench/build-records.ts'));
+  symlinkSync(fileURLToPath(new URL('../../node_modules',import.meta.url)),join(root,"node_modules"));
+  const {benchmarkIdentities,CASE_INPUTS}=await import('./build-records.ts'),{compileKey}=await import('./compile-producer.ts');
+  const {moduleGraph}=await import('../gate/module-closure.ts');
+  const {pathToFileURL}=await import('node:url');
+  const validateCases=()=>{const graph=moduleGraph({sourceRoot:root,generatedTemporaryParent:join(root,'declarations')});
+    try{return graph.describe([{...CASE_INPUTS,url:pathToFileURL(join(root,'benchmarks/cases/'))}]);}finally{graph.close();}};
+  assert.ok(validateCases().moduleFiles.includes('benchmarks/cases/subject/case.ts'));
+  write('benchmarks/cases/control/tsconfig.json','{broken');assert.throws(validateCases,/cannot be parsed/);rmSync(join(root,'benchmarks/cases/control/tsconfig.json'));
+  const {serializeBenchmarkRecord}=await import('./outcomes.ts');
+  const setup=join(root,'initial-configs');mkdirSync(setup);
+  const paths=['benchmarks/cases/control','benchmarks/cases/subject'],identities=await benchmarkIdentities(root,paths,setup),driver=compileKey(root);
+  for(const backend of ['c','llvm','jvm'] as const)write(`records/${backend}/outcomes.tsv`,serializeBenchmarkRecord({metadata:{version:1,backend,commit:'a'.repeat(40),compiler:'b'.repeat(16),harness:driver.slice(0,16),under:'benchmarks/cases',scopes:['compile']},rows:paths.map(path=>({path,scope:'compile',source:identities.get(path)!,driver,outcome:{kind:'pass'}}))}));
+  const before=new Map(['c','llvm','jvm'].map(backend=>[backend,readFileSync(join(records,backend,'outcomes.tsv'))]));
+  const marker=join(root,'compiler-started'),bin=join(root,'bin');mkdirSync(bin);
+  const trap=join(bin,'trap.cjs');writeFileSync(trap,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'started');process.exit(97);\n`,{mode:0o755});
+  for(const name of ['nts','clang','cc','clang++'])symlinkSync(trap,join(bin,name));
+  const env=fixtureEnvironment(t,{NTS_BIN:undefined,PATH:bin,TMPDIR:scratch});
+  const run=()=>spawnSync(process.execPath,['tooling/bench/build-records.ts','--check-identities','--output',records],{cwd:root,env,encoding:'utf8'});
+  const green=(pending:number)=>{const result=run();assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,new RegExp(`6 current compile identities, ${pending} pending; compiled nothing`));assert.equal(existsSync(marker),false);};
+  const red=(reason:RegExp)=>{const result=run();assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stderr,reason);assert.equal(existsSync(marker),false);};
+  green(0);
+  write('compiler/core/src/identity-only-control.rs','// Different compiler implementation is provenance, not compile validity.\n');green(0);
+  write('benchmarks/cases/new/case.ts','export function run(){return 3;}\n');assert.ok(validateCases().moduleFiles.includes('benchmarks/cases/new/case.ts'));green(3);
+  write('benchmarks/cases/subject/case.domains.json','{"version":1}');green(3);
+  for(const [path,body] of [
+    ['benchmarks/cases/control/case.ts','export function run(){return 2;}\n'],
+    ['runtime/control.ts','export const input=2;\n'],
+    ['benchmarks/cases/subject/data.txt','changed local data'],
+    ['tsconfig.fixtures.json',JSON.stringify({compilerOptions:{target:'ES2022',module:'ESNext',moduleResolution:'bundler',noEmit:true}})],
+  ] as const){
+    const file=join(root,path),old=existsSync(file)?readFileSync(file):undefined;write(path,body);red(/benchmark source changed/);
+    if(old)writeFileSync(file,old);else rmSync(file);
+  }
+  for(const path of ['tooling/bench/compile-producer.ts','tooling/conformance/compile-diagnostics.ts']){
+    const file=join(root,path),old=readFileSync(file);writeFileSync(file,Buffer.concat([old,Buffer.from('\n// changed driver input\n')]));red(/benchmark driver changed/);writeFileSync(file,old);
+  }
+  const source=join(root,'benchmarks/cases/control/case.ts'),bytes=readFileSync(source);rmSync(source);red(/recorded benchmark scope gone missing/);writeFileSync(source,bytes);
+  const file=join(records,'llvm/outcomes.tsv'),old=readFileSync(file);writeFileSync(file,'malformed');red(/benchmark|record/);writeFileSync(file,old);
+  writeFileSync(file,old.toString().replace('"backend":"llvm"','"backend":"c"'));red(/foreign benchmark backend/);writeFileSync(file,old);
+  for(const [backend,body] of before)assert.deepEqual(readFileSync(join(records,backend,'outcomes.tsv')),body,'the check never publishes records');
+  assert.deepEqual(readdirSync(scratch),[],'temporary configs are removed after positive and negative runs');
+  const entry=join(root,'tooling/bench/build-records.ts'),original=readFileSync(entry,'utf8'),packet=join(root,'private-instrument.json');
+  const anchor='const paths=benchmarkCases(ROOT),identities=await benchmarkIdentities(ROOT,paths,scratch),driver=compileKey(ROOT);';
+  assert.ok(original.includes(anchor));
+  writeFileSync(entry,original.replace(anchor,'throw new TypeError("injected identity programming defect");'+anchor));
+  const broken=spawnSync(process.execPath,['tooling/bench/build-records.ts','--check-identities','--output',records],{cwd:root,env:fixtureEnvironment(t,{...env,NTS_GATE_STEP:'benchmark-identities',NTS_GATE_STEP_ATTEMPT:'programming-error',NTS_GATE_STEP_RESULT:packet}),encoding:'utf8'});
+  assert.equal(broken.status,124,broken.stdout+broken.stderr);assert.match(broken.stderr,/injected identity programming defect/);
+  const failure=JSON.parse(readFileSync(packet,'utf8'));assert.equal(failure.verdict,'INSTRUMENT');assert.equal(failure.kind,'tooling-setup');
+  assert.equal(failure.step,'benchmark-identities');assert.equal(failure.attempt,'programming-error');
+  assert.equal(existsSync(marker),false);writeFileSync(entry,original);
+});
+
+
+test('benchmark member declaration matches the build projects and retains compiled assets',async t=>{
+  const {moduleGraph}=await import('../gate/module-closure.ts');
+  const {projectMembers,executableModuleSource}=await import('../gate/reader-inputs/main.ts');
+  const {projectInputOwner}=await import('../gate/project-inputs.ts');
+  const {prepareGeneratedProject}=await import('../gate/generated-project.ts');
+  const {projectFor}=await import('./compile-producer.ts');
+  const {API}=await import('typescript/sync');
+  const {pathToFileURL}=await import('node:url');
+  const {relative}=await import('node:path');
+  const root=testScratch(t,'benchmark-member-projects'),scratch=join(root,'scratch');mkdirSync(scratch);
+  const put=(path:string,text:string)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
+  put('package.json','{"type":"module"}');
+  put('tsconfig.fixtures.json','{"compilerOptions":{"types":[],"noLib":true,"module":"esnext","moduleResolution":"bundler","target":"es2022"}}');
+  for(const name of ['default','own']){
+    put(`benchmarks/cases/${name}/case.ts`,"import {value} from './dependency.js';export const answer=value;export const data=new URL('./data.txt',import.meta.url);");
+    put(`benchmarks/cases/${name}/dependency.ts`,'export const value=1;');
+    put(`benchmarks/cases/${name}/unimported.ts`,'export const other=2;');
+    put(`benchmarks/cases/${name}/data.txt`,'runtime bytes');
+  }
+  put('benchmarks/cases/own/tsconfig.json','{"compilerOptions":{"types":[],"noLib":true,"module":"esnext","moduleResolution":"bundler","target":"es2020"},"files":["case.ts"]}');
+  put('benchmarks/cases/not-a-case/ignored.ts','export {};');
+  const entry=projectMembers(pathToFileURL(join(root,'benchmarks/cases/')),'','compiled-program',{member:'case.ts',defaultConfig:'../../tsconfig.fixtures.json',include:'directory'});
+  const graph=moduleGraph({sourceRoot:root,generatedTemporaryParent:join(scratch,'graph')}),owner=projectInputOwner(root),api=new API({cwd:root});
+  try{
+    const actual=graph.describe([entry]),expectedModules=new Set<string>();
+    for(const name of ['default','own']){
+      const directory=`benchmarks/cases/${name}`,config=projectFor(root,directory,scratch);
+      const real=owner.read([{kind:'config',path:relative(root,config)}]);
+      for(const file of real.modules)expectedModules.add(file.path);
+      const prepared=name==='default'?prepareGeneratedProject({source:root,extends:'tsconfig.fixtures.json',directory,include:'directory',parent:join(scratch,'comparison')}):undefined;
+      try{
+        const original=api.parseConfigFile(config),declared=api.parseConfigFile(prepared?.config??config);
+        const options=(value:typeof original)=>{const result={...value.options};delete result.configFilePath;return result;};
+        assert.deepEqual(declared.fileNames,original.fileNames,'actual compile-producer roots');
+        assert.deepEqual(options(declared),options(original),'actual compile-producer options');
+      }finally{prepared?.close();}
+      assert.ok(actual.moduleFiles.includes(directory+'/dependency.ts'),'.js resolves through the Program to .ts');
+      assert.ok(actual.files.includes(directory+'/data.txt'),'compiled-program assets stay obligations');
+    }
+    assert.deepEqual(actual.moduleFiles.filter(executableModuleSource),[...expectedModules].sort(),'the declared executable source set equals actual Program sources');
+    assert.ok(actual.moduleFiles.includes('benchmarks/cases/default/unimported.ts'));
+    assert.ok(!actual.moduleFiles.includes('benchmarks/cases/own/unimported.ts'),'own config wins over directory default');
+    assert.ok(!actual.files.includes('benchmarks/cases/not-a-case/ignored.ts'));
+    assert.ok(actual.optionalFiles.some(row=>row.path==='benchmarks/cases/default/tsconfig.json'&&!row.present));
+    assert.ok(actual.optionalFiles.some(row=>row.path==='benchmarks/cases/not-a-case/case.ts'&&!row.present));
+  }finally{graph.close();owner.close();api.close();}
 });

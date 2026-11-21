@@ -2,7 +2,7 @@
 // the graph, SDK, selector or trace validator through this module.
 import {readFileSync} from 'node:fs';
 import {dirname,isAbsolute,posix,relative,sep} from 'node:path';
-import {projectRole} from './reader-inputs/main.ts';
+import {projectRole,projectMemberOptions} from './reader-inputs/main.ts';
 import type {InputKind,ModuleDeclarations,ReaderInput,DirectoryCandidate} from './reader-inputs/main.ts';
 
 export type RustInputTarget={source:string;name:string;kind:string[]};
@@ -46,7 +46,7 @@ function target(value:unknown):RustInputTarget{
 function input(value:unknown,source:string):ReaderInput{
   const row=object(value,'input in '+source),path=specifier(row.path,'input path in '+source),kind=text(row.kind,'input kind') as InputKind;
   if(!kinds.has(kind))fail('unknown input kind '+kind+' in '+source);
-  const extra=kind==='fixture'?['dataNamespaces']:kind==='members'?['member','data']:kind==='project-choice'?['alternatives']:kind==='project-catalogue'?['directory']:kind==='project-members'?['prefix','optional']:kind==='generated-project'?['directory','include']:kind==='directory-candidates'?['candidates']:[];
+  const extra=kind==='fixture'?['dataNamespaces']:kind==='members'?['member','data']:kind==='project-choice'?['alternatives']:kind==='project-catalogue'?['directory']:kind==='project-members'?['prefix','optional','member','defaultConfig','include']:kind==='generated-project'?['directory','include']:kind==='directory-candidates'?['candidates']:[];
   const project=['project-config','project-choice','project-catalogue','project-members','generated-project'].includes(kind);
   const role=project?projectRole(row.role):undefined;
   keys(row,['kind','path',...(project?['role']:[]),...extra],'input in '+source);
@@ -71,8 +71,9 @@ function input(value:unknown,source:string):ReaderInput{
   if(kind==='project-members'){
     const prefix=row.prefix===''?'':sourcePath(row.prefix,'project member prefix');
     if(prefix.includes('/')||/[*?\[\]]/.test(prefix))fail('project member prefix is not literal in '+source);
-    if(row.optional!==undefined&&row.optional!==true)fail('project member optional mode is not true in '+source);
-    return {kind,path,role,prefix,...(row.optional?{optional:true}:{})};
+    const names=['optional','member','defaultConfig','include'].filter(key=>Object.hasOwn(row,key));
+    const options=names.length?Object.fromEntries(names.map(key=>[key,row[key]])):undefined;
+    return {kind,path,role,prefix,...projectMemberOptions(options)};
   }
   if(kind==='fixture'){
     const namespaces=object(row.dataNamespaces,'fixture namespaces in '+source),dataNamespaces:Record<string,string>={};

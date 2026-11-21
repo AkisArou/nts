@@ -648,6 +648,16 @@ Budget revision separately schedules refreshes.
 Missing fixture records appear in the shared pending format, so the controller
 starts the core recorder even when no other suite requests those fixtures.
 
+The landing tree check `benchmark-identities` uses the compile recorder's
+`--check-identities` mode. It computes each benchmark's resolved options,
+roots, sources and local data, plus the existing compile-driver key, and holds
+all three backends' compile rows to those identities. It invokes no compiler,
+linker or workload, requires no compiler binary and publishes no records.
+Missing new cells are pending; changed source or driver identities and missing
+recorded cases fail. Compiler source and binary identity are provenance, not
+row validity: a compiler-only edit keeps current rows current. Measured compile
+outcomes remain the responsibility of `benches` and the full-check recorder.
+
 Benchmark run updates are independent by case. The recorder publishes each
 completed pending row and accepted update before reporting another case's
 failure or incomplete observation. A recorded regression keeps its old row,
@@ -1843,6 +1853,30 @@ death; an absent timestamp remains explicit after forced termination.
   if binding fails after a grant, it releases and drains that lease while
   retaining the binding and cleanup errors
   ([log](records/notebooks/decisions-log.md#resolver-launch-and-token-binding-ownership-11-15)).
+- **Benchmark compile identities are checked before compilation.** The landing
+  tree check shares the recorder's source and driver inventory comparison,
+  keeps new cells pending and compiles nothing. Compiler provenance does not
+  invalidate rows; case and compile-driver inputs do.
+  The benchmark population is one compiled-program project-members declaration:
+  its case member selects shallow directories, each own config wins, and absent
+  configs use the build's declared default and generated whole-directory recipe.
+  Program resolution supplies sources; compiled runtime assets remain inputs.
+  A fixtureInput grant exactly naming a member population substitutes only that
+  namespace: staging records its private data owner without building source
+  members. The fixture validates its private cases through the same production
+  member/default-config recipe; other populations retain normal discovery
+  ([log](records/notebooks/decisions-log.md#2026-11-16-check-benchmark-compile-identities-at-landing-546)).
+
+- **Project reads belong to one selection run.** The ordinary JS step graph
+  uses one synchronous discovery batch across its three description sites.
+  Each complete request, entry and namespace key is resolved once within the
+  graph's fixed source, installation and catalog view. Independent cases keep
+  independent Programs; the Rust selector retains its independent batch.
+  Validation preserves observations, source ownership and populations before
+  returning. The scoped callback closes when its body returns, and its query
+  answers clear on success or failure. Endpoint views cannot share answers
+  through relative config names. Standalone descriptions retain fresh reads
+  ([log](records/notebooks/decisions-log.md#project-reads-belong-to-one-selection-run-11-18)).
 
 - **Rust publication belongs to one owner.** `nts-publication` stages files,
   links and immutable directories in an exclusively acquired sibling claim

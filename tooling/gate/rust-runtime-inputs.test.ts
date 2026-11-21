@@ -6,7 +6,8 @@ import {moduleGraph} from './module-closure.ts';
 import {rustRuntimeInputGraph} from './rust-runtime-inputs.ts';
 import {bindRustRuntimeDeclarations,type RustRuntimeManifest,type RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {pathToFileURL} from 'node:url';
-import {projectCatalogue,projectMembers,projectChoice} from './reader-inputs/main.ts';
+import {projectCatalogue,projectMembers,projectChoice,projectConfig,fixtureInput} from './reader-inputs/main.ts';
+import {installedCatalogFixture} from './installed-catalog-fixture.ts';
 import {readerObservationIndex} from './reader-observations.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {rustBuildModules} from './rust-modules.ts';
@@ -140,4 +141,61 @@ test('optional project members preserve shallow enumeration and actual ENOTDIR c
     add('empty');assert.ok(graph.describe([entry]).moduleFiles.includes('projects/empty/main.ts'));
     assert.throws(()=>graph.describe([projectMembers(entry.url,'','compiled-program')]),/not a file|missing|ENOENT|ENOTDIR/,'required-member mode still refuses the ordinary child');
   }finally{graph.close();}
+});
+
+
+test('a fixture member grant substitutes only its exact population and hidden cases follow actual Program roots',async t=>{
+  const root=testScratch(t,'fixture-project-member-population');
+  const put=(path:string,body:string)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),body);};
+  put('reader.rs','');put('package.json','{"type":"module"}');put('base.json','{"compilerOptions":{"types":[],"noLib":true}}');
+  const cases=['cases/a/case.ts','cases/.hidden/case.ts','other/c/case.ts'];for(const path of cases)put(path,'export {};');
+  const declarations=new Map([['reader.rs',{imports:[],assets:['./cases/','./other/'].map(path=>({kind:'project-members' as const,path,role:'compiled-program' as const,prefix:'',member:'case.ts',defaultConfig:'../base.json',include:'directory' as const}))}]]);
+  const graph=moduleGraph({sourceRoot:root,declarations});
+  try{
+    const staged=graph.describe([fixtureInput(pathToFileURL(join(root,'reader.rs')),{dataNamespaces:{cases:'private case population'}})]);
+    assert.ok(staged.directories.some(row=>row.directory==='cases'&&row.kind==='data'&&row.fixture?.owner==='private case population'));
+    assert.ok(!staged.files.some(file=>file.startsWith('cases/')),'source members under the exact grant are not acquired');
+    assert.ok(staged.moduleFiles.includes('other/c/case.ts'),'the other members declaration is still discovered');
+    const {prepareGeneratedProject}=await import('./generated-project.ts'),{API}=await import('typescript/sync');
+    const prepared=prepareGeneratedProject({source:root,extends:'base.json',directory:'cases/.hidden',include:'directory',parent:join(root,'configs')}),api=new API({cwd:root});
+    try{
+      const parsed=api.parseConfigFile(prepared.config);
+      assert.deepEqual(parsed.fileNames,[],'the default directory include selects no hidden case roots');
+      assert.ok(parsed.errors.some(error=>error.code===18003),'the empty default include has its actual config diagnostic');
+      const program=api.createProgram(parsed.fileNames,parsed.options);
+      try{assert.ok(!program.getSourceFileNames().some(file=>file===join(root,'cases/.hidden/case.ts')),'the hidden case is not a default Program member');}
+      finally{program.dispose();}
+    }finally{api.close();prepared.close();}
+    assert.throws(()=>graph.describe(['reader.rs']),/No inputs were found/,'production refuses the empty hidden default Program');
+    put('cases/.hidden/tsconfig.json','{"extends":"../../base.json","files":["case.ts"]}');
+    const production=graph.describe(['reader.rs']);
+    for(const path of cases)assert.ok(production.moduleFiles.includes(path),'ungranted production case: '+path);
+    assert.ok(production.moduleFiles.includes('cases/.hidden/case.ts'),'an explicit files config includes the same hidden case');
+  }finally{graph.close();}
+});
+
+test('case project members preserve installed-package unavailable inputs for own and default configs',t=>{
+  const f=installedCatalogFixture(t);
+  f.put('base.json','{"compilerOptions":{"module":"preserve","moduleResolution":"bundler","types":[]}}');
+  for(const name of ['own','default'])f.put(`cases/${name}/case.ts`,"import type {Value} from 'fixture-package';export const value:Value=1;");
+  f.put('cases/own/tsconfig.json','{"extends":"../../base.json","files":["case.ts"]}');
+  const entry=projectMembers(pathToFileURL(join(f.root,'cases/')),'','compiled-program',{member:'case.ts',defaultConfig:'../base.json',include:'directory'});
+  const direct=projectConfig(pathToFileURL(join(f.root,'tsconfig.json')),'compiled-program');
+  const graph=moduleGraph({sourceRoot:f.root,dependencyCatalog:null,unavailableInputs:'conservative'});
+  try{
+    const baseline=graph.describe([direct]).unavailableInputs!;
+    assert.equal(baseline.length,1);
+    const actual=graph.describe([entry]).unavailableInputs!;
+    assert.deepEqual(actual.map(row=>row.kind==='installed-package-reach'?row.project:undefined),['base.json','cases/own/tsconfig.json']);
+    for(const row of actual)assert.deepEqual({...row,project:'tsconfig.json'},baseline[0],'member recipes retain the existing unavailable-input contract');
+  }finally{graph.close();}
+  const refusing=moduleGraph({sourceRoot:f.root,dependencyCatalog:null,unavailableInputs:'refuse'});
+  try{assert.throws(()=>refusing.describe([entry]),{name:'InstalledPackageReachUnavailable',message:/declared Program base\.json \(<entry>\) reaches installed package fixture-package@1\.0\.0; installation catalog is missing$/});}finally{refusing.close();}
+  const unasked=moduleGraph({sourceRoot:f.root,dependencyCatalog:null}),current=moduleGraph({sourceRoot:f.root,dependencyCatalog:f.trust,unavailableInputs:'conservative'});
+  try{
+    assert.equal(unasked.describe([entry]).unavailableInputs,undefined);
+    assert.equal(current.describe([entry]).unavailableInputs,undefined);
+  }finally{unasked.close();current.close();}
+  const destination=join(f.root,'..','member-destination');
+  assert.throws(()=>copyModuleClosure([entry],destination,{sourceRoot:f.root,dependencyCatalog:null}),/fixture closure needs the installation catalog: declared Program base\.json/);
 });

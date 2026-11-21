@@ -100,3 +100,14 @@ test('optional project member selection is literal and retains an empty all-memb
     assert.throws(()=>parseRustRuntimeManifest(invalid),/project member/);
   }
 });
+
+
+test('project member fallback recipes share the reader owner vocabulary',()=>{
+  const assets=[{kind:'project-members',role:'compiled-program',path:'./cases/',prefix:'',member:'case.ts',defaultConfig:'../../tsconfig.fixtures.json',include:'directory'}];
+  const supplied={...value(),readers:[{source:'compiler/control/case.rs',declarations:{imports:[],assets}}]};
+  assert.deepEqual(parseRustRuntimeManifest(supplied).readers![0]!.declarations.assets,assets);
+  for(const options of [{member:'../case.ts'},{defaultConfig:'/external.json'},{include:'other'},{optional:true},{extra:true}]){
+    const invalid=structuredClone(supplied);Object.assign(invalid.readers[0]!.declarations.assets[0]!,options);
+    assert.throws(()=>parseRustRuntimeManifest(invalid),/literal|relative|unknown field/);
+  }
+});

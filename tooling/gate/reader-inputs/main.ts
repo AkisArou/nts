@@ -11,7 +11,7 @@ export type ProjectRole='type-check'|'compiled-program';
 export function projectRole(value:unknown):ProjectRole{if(value!=='type-check'&&value!=='compiled-program')throw Error('project input needs an explicit type-check or compiled-program role');return value;}
 export type GeneratedInclude='directory'|'typescript-tree';
 export type DataNamespaces=Readonly<Record<string,string>>;
-export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string;data?:true;directory?:string;prefix?:string;alternatives?:readonly string[];optional?:true;include?:GeneratedInclude;role?:ProjectRole;candidates?:readonly DirectoryCandidate[]};
+export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string;data?:true;directory?:string;prefix?:string;alternatives?:readonly string[];optional?:true;defaultConfig?:string;include?:GeneratedInclude;role?:ProjectRole;candidates?:readonly DirectoryCandidate[]};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};
 export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:'module'|'data'|'inspection'|'conservative';context?:ReaderContext;
   member?:string;
@@ -66,7 +66,8 @@ export function directoryMembership(url:URL):DirectoryMembership{return url as D
 export type ProjectConfig={readonly kind:'project-config';readonly role:ProjectRole;readonly url:URL};
 export type ProjectChoice={readonly kind:'project-choice';readonly role:ProjectRole;readonly url:URL;readonly alternatives:readonly string[]};
 export type ProjectCatalogue={readonly kind:'project-catalogue';readonly role:ProjectRole;readonly url:URL;readonly directory:string};
-export type ProjectMembers={readonly kind:'project-members';readonly role:ProjectRole;readonly url:URL;readonly prefix:string;readonly optional?:true};
+export type ProjectMemberOptions={readonly optional?:true;readonly member?:string;readonly defaultConfig?:string;readonly include?:GeneratedInclude};
+export type ProjectMembers={readonly kind:'project-members';readonly role:ProjectRole;readonly url:URL;readonly prefix:string}&ProjectMemberOptions;
 export type GeneratedProject={readonly kind:'generated-project';readonly role:ProjectRole;readonly url:URL;readonly directory:string;readonly include:GeneratedInclude};
 export type DirectoryCandidates={readonly kind:'directory-candidates';readonly url:URL;readonly candidates:readonly DirectoryCandidate[]};
 export type OptionalModule={readonly kind:'optional-module';readonly url:URL};
@@ -134,9 +135,21 @@ export function projectChoice(url:URL,alternatives:readonly string[],role:Projec
 export function projectMemberPrefix(value:unknown):string{
   return value===''?'':moduleMemberName(value);
 }
-export function projectMembers(url:URL,prefix:string,role:ProjectRole,options?:{optional:true}):ProjectMembers{
-  if(options&&options.optional!==true)throw Error('project member optional mode must be explicit');
-  return {kind:'project-members',url,role:projectRole(role),prefix:projectMemberPrefix(prefix),...(options?{optional:true}:{})};
+/** A member recipe selects shallow case directories. Its own config wins;
+ * otherwise the declared default supplies the existing generated-project recipe. */
+export function projectMemberOptions(value:unknown):ProjectMemberOptions{
+  if(value===undefined)return {};
+  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('project member options must be literal');
+  const row=value as Record<string,unknown>,keys=Object.keys(row);
+  if(keys.length===1&&row.optional===true)return {optional:true};
+  if(keys.length!==3||keys.some(key=>!['member','defaultConfig','include'].includes(key))
+    ||(row.include!=='directory'&&row.include!=='typescript-tree'))throw Error('project member options need literal member, defaultConfig and include');
+  return {member:moduleMemberName(row.member),defaultConfig:relativeProjectInput(row.defaultConfig),include:row.include};
+}
+export function projectMembers(url:URL,prefix:string,role:ProjectRole,options:{member:string;defaultConfig:string;include:GeneratedInclude}):ProjectMembers&{member:string;defaultConfig:string;include:GeneratedInclude};
+export function projectMembers(url:URL,prefix:string,role:ProjectRole,options?:ProjectMemberOptions):ProjectMembers;
+export function projectMembers(url:URL,prefix:string,role:ProjectRole,options?:ProjectMemberOptions):ProjectMembers{
+  return {kind:'project-members',url,role:projectRole(role),prefix:projectMemberPrefix(prefix),...projectMemberOptions(options)};
 }
 
 export const canonicalNamespace=(name:string)=>name.length>0&&!name.startsWith('/')&&!/[\\\x00-\x1f]/.test(name)

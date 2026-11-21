@@ -2589,6 +2589,8 @@ step "jvm-verifies" jvm_verifies
 step "primitives" tooling/primitives/check.py
 step "tests"   tests
 step "corpus"  corpus
+# Check source/driver freshness before landing without a compiler or workload.
+step "benchmark-identities" node tooling/bench/build-records.ts --check-identities
 # Every benchmark case, compiled by both backends and not run. `corpus` proves
 # arbitrary input compiles and `examples` proves the examples agree with node;
 # nothing covered `benchmarks/cases`, so a code generation bug that only showed up
