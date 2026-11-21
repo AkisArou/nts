@@ -302,3 +302,78 @@ The tree was clean after the run. #798 had not landed: the coordinator retained
 the hold on measurements, inner and `--here` until its project-reader changes
 could be reconciled. No paired performance or final landing verdict was claimed
 from this focused run.
+
+## Post-#798 paired cost, owed-set equality and retained heap
+
+2026-11-21. Main was `8f810b3da39c301a354ea384c11d521670096d30`; the
+revision was `02037db2aa860b0b34700f0454c5a9c12c4da16a`, the squashed branch
+whose code is identical to `d5f0ecf2624c96999eb8fe2fc22f42ad09945244`.
+`withSelectorSources` prepared both committed trees outside the samples. Each
+tree used its own installation catalog and committed source, so both endpoints
+built the live Rust projection; the earlier comparison's catalog confound
+(one endpoint owing all Rust targets) is absent. One unit ran
+`with-lock.sh --wait --key perf-count`, every sample on CPU 4, in
+main/revision/main order. The selector probe called production `owed` and
+`gateSteps` for `compiler/core/src/lib.rs` with no hooks. The census repeated
+the landing CLI's conditional `--full-census` collect body; its only hook
+exported the existing private `stepInputGraph` binding. Running the
+unmodified CLI inside a prepared tree failed in its own nested source
+preparation (an offline package store miss), so it was not measured.
+
+| Scope | Arm | User instructions | Task-clock seconds |
+| --- | --- | ---: | ---: |
+| selector | main, first | 1,507,289,348,563 | 144.357 |
+| selector | revision | 1,735,746,419,285 | 144.898 |
+| selector | main, repeat | 1,492,900,181,190 | 124.822 |
+| conditional census | main, first | 1,611,674,231,114 | 138.731 |
+| conditional census | revision | 1,849,477,152,302 | 153.275 |
+| conditional census | main, repeat | 1,603,563,389,484 | 142.321 |
+
+The main controls differ by 0.96% (selector) and 0.50% (census). Against the
+mean of its main controls, the revision uses 1.157 times the selector
+instructions and 1.150 times the census instructions, down from 2.042 and
+2.574 before the repair. The two deltas, 235.7 and 241.9 billion instructions,
+agree, and match one pass of the benchmark project reads measured earlier
+(2.368 trillion over eleven passes). Every census reported no problem, 88
+full-gate paths and no unavailable input; directory declarations were 610 on
+main and 615 on the revision.
+
+Off the measurement CPUs (16–31, ordinary heap limit), read-only hooks forced
+GC at every tenth description and every 25th project read, and at the end; the
+same hook points exist on both trees. The revision then ran the fixed probes
+and the conditional census twice: as committed, and with a counterfactual hook
+making its three description sites call `modules.describe` outside
+`withDescriptions`.
+
+| Proof | Main | Revision | Verdict |
+| --- | ---: | ---: | --- |
+| Selector instructions, revision over main mean | 1 | 1.157 | over the 1.10 bound |
+| Conditional census instructions, revision over main mean | 1 | 1.150 | over the 1.10 bound |
+| Project reads in one selection | 481 | 627 | 146 added benchmark reads, no repeated pass |
+| Peak post-GC heap, mutated LLVM self-test | 618,683,224 | 755,094,176 | 1.220 times main |
+| Peak post-GC heap, full selector probe | 618,335,416 | 754,581,672 | 1.220 times main |
+| Twelve fixed probes' rules and steps, scoped against unscoped | — | identical, SHA-256 `de9980e1…` | equal |
+| Complete conditional census, scoped against unscoped | — | identical, SHA-256 `fb04c4d4…` | equal |
+
+The mutated self-test returned the named missing-benches failure on the
+revision and main's own prefix failure on main. Its heap and read counts equal
+the full selection's, since both build the same step graph. The scope changes
+no owed set, the census or its directory declarations; the unscoped arms took
+2.3–2.5 times the wall time of the scoped arms.
+
+Conclusion: the redundant passes are gone. What remains is one Program per
+benchmark project request, which the union-Program control above showed is
+required for correct roots and ambient context. That residual costs about 15%
+of selection instructions and 22% of retained heap (136 MB). It exceeds the
+1.10 instruction bound set at review. Meeting that bound needs cheaper Program
+construction in the shared project-read owner, not a change to this step's
+declarations.
+
+The 40 raw outputs, perf files, JSONL samples and scripts are listed in
+`~/.cache/nts-scratch/546/post798/manifest.sha256.json`, SHA-256
+`83cd3c4d459a002390c89db35e3e754b5a3816286a3895ba66024d79634d0c16`. The unit
+logs are `cost.log` (selector rows; its failed CLI census arm),
+`cost-census.log` and `diag.log` in that directory, SHA-256
+`f0b51d3574e51cff716bc25a432d4f5d1c4da0db3484f3b306cdb1c369192620`,
+`325c28215973419174dd08189d98beedb5d22042223b7db74beeb8d9755cda5d` and
+`cf2f0cecb341066ac49cb0bf9f24b76a4a093ee5b1b51da57f33f63d9055f282`.
