@@ -83,7 +83,11 @@ See [memory](../foundations/memory.md).
 **Roots.** Without `--entry` or `--main`, a project whose config declares one
 product is rooted at what that product's entry exports; a project with no
 config is rooted at every `export`. For an application product, pass `--main`
-to inspect what its build keeps.
+to inspect what its build keeps. Names given with `--entry` are closed roots
+only for an executable (`--main`, or an application product), where nothing
+outside calls into the program. For an addon (`--napi`) or a library they are
+the surface its host calls, so what they return stays callable: a returned or
+exported closure keeps its call entry, and a generator keeps its resume.
 
 ## Building
 

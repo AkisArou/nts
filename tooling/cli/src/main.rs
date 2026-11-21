@@ -2871,11 +2871,10 @@ fn prepare_as(
         // state nothing consumes is the failure this command exists to
         // avoid, and `named_entry`'s own comment is about what a missing
         // `module#init` costs -- five module-level `const`s left null and a
-        // benchmark answering 32768 against node's 10240.
-        roots: entry.as_deref().map_or_else(
-            || emission::default_roots(configured),
-            hir::reachable::Roots::Entry,
-        ),
+        // benchmark answering 32768 against node's 10240. And through
+        // `product_roots`, the emitters' own, so an addon's `--entry` is open
+        // here as it is there.
+        roots: emission::product_roots(emission.shape, entry.as_deref(), configured),
         table_entries: backend.table_entries(),
         provided: emission::provided(backend),
         ..hir::Options::default()
@@ -9209,6 +9208,11 @@ fn requested_product() -> Result<Option<String>> {
 ///
 /// `None` is `Roots::EveryExport`, which is what a library with no narrowing is:
 /// every export is a root and every root's signature is its published ABI.
+///
+/// These are names, not a product: whether they close the program is the
+/// shape's answer (`emission::product_roots`). An executable's are
+/// `Roots::Entry`; an addon's or a library's are `Roots::Declared`, because its
+/// host calls them and whatever they hand back.
 ///
 /// A flag beats the file because a flag is what you type to answer a question
 /// about this run. The file is not a default the flag overrides so much as the

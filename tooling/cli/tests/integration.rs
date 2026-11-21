@@ -67,6 +67,9 @@ mod node_dependencies;
 #[path = "platform_build_skips.rs"]
 mod platform_build_skips;
 
+#[path = "product_roots.rs"]
+mod product_roots;
+
 #[path = "refused_virtual_slots.rs"]
 mod refused_virtual_slots;
 

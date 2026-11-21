@@ -10,7 +10,8 @@ use nts_diagnostics::{Severity, SourceFile, SourceLocations};
 use nts_differential::case_costs;
 
 use super::{
-    Emission, configured_surface_to, foreign_tables, frontend_for, provider_for, selected_roots,
+    Emission, Shape, configured_surface_to, foreign_tables, frontend_for, provider_for,
+    selected_roots,
 };
 
 /// Live commands write directly; a combined command keeps each backend's exact
@@ -109,10 +110,7 @@ impl Metadata {
         let provider = provider_for(backend)?;
         Ok(hir::PreparationOptions {
             provider,
-            roots: self.entry.as_deref().map_or_else(
-                || default_roots(self.configured),
-                hir::reachable::Roots::Entry,
-            ),
+            roots: product_roots(emission.shape, self.entry.as_deref(), self.configured),
             callbacks_checkpoint: matches!(backend, Backend::C | Backend::Llvm)
                 && emission.host.checkpoints_after_callbacks(),
             targets: emission.scalar_targets(),
@@ -134,15 +132,30 @@ pub(super) fn provided(backend: Backend) -> hir::features::Provided {
     })
 }
 
-/// The roots of a build that names no `--entry`.
+/// The roots a product is prepared from: who can call into it.
 ///
-/// A configured project's product is its entry's surface. An unconfigured
-/// library may have any of its exports called from outside.
-pub(super) fn default_roots(configured: bool) -> hir::reachable::Roots<'static> {
-    if configured {
-        hir::reachable::Roots::EntrySurface
-    } else {
-        hir::reachable::Roots::EveryExport
+/// **The product's shape answers, not the flag that named the roots.** An
+/// executable has no outside, so its named entries are closed roots
+/// (`Roots::Entry`): nothing but the program calls them, and nothing the
+/// program hands back is called by anyone else. A Node-API addon or a library
+/// is entered by its host, so the same names are a declared surface
+/// (`Roots::Declared`): the host calls them with arguments the program does
+/// not show, and calls what they return -- a closure's entries, a generator's
+/// resume. `--entry` narrows which functions those are; it does not close the
+/// product.
+///
+/// With no names, a configured product's surface is its entry's exports, and
+/// an unconfigured library may have any export called from outside.
+pub(super) fn product_roots(
+    shape: Shape,
+    entry: Option<&[String]>,
+    configured: bool,
+) -> hir::reachable::Roots<'_> {
+    match (entry, shape) {
+        (Some(names), Shape::Executable) => hir::reachable::Roots::Entry(names),
+        (Some(names), Shape::Addon | Shape::Library) => hir::reachable::Roots::Declared(names),
+        (None, _) if configured => hir::reachable::Roots::EntrySurface,
+        (None, _) => hir::reachable::Roots::EveryExport,
     }
 }
 
@@ -229,5 +242,48 @@ impl Input {
             unprovided_stops_the_build(&prepared, &self.metadata.sources)?;
         }
         Ok((prepared, self.metadata))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Shape, product_roots};
+    use nts_core::hir::reachable::Roots;
+
+    /// Each shape's named roots: closed for an executable alone. A named entry
+    /// never decides the variant; the product does.
+    #[test]
+    fn the_shape_decides_whether_named_roots_are_closed() {
+        let names = vec!["work".to_owned(), "module#init".to_owned()];
+        for configured in [false, true] {
+            assert!(matches!(
+                product_roots(Shape::Executable, Some(&names), configured),
+                Roots::Entry(roots) if roots == names.as_slice()
+            ));
+            for host_entered in [Shape::Addon, Shape::Library] {
+                assert!(
+                    matches!(
+                        product_roots(host_entered, Some(&names), configured),
+                        Roots::Declared(roots) if roots == names.as_slice()
+                    ),
+                    "{host_entered:?}"
+                );
+            }
+        }
+    }
+
+    /// With no names, the product's surface is its config's entry, or every export.
+    #[test]
+    fn without_names_the_surface_is_the_configured_entry_or_every_export() {
+        for shape in [Shape::Executable, Shape::Addon, Shape::Library] {
+            assert!(matches!(
+                product_roots(shape, None, true),
+                Roots::EntrySurface
+            ));
+            assert!(matches!(
+                product_roots(shape, None, false),
+                Roots::EveryExport
+            ));
+        }
     }
 }
