@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "case": "event-loop-timers",
+  "sourceSha256": "75e3c28b91372931031fd594cd43a63ce9671067d02d5faa05720f2246d60213",
+  "compiler": {
+    "commit": "930ee112da548da767d13be33c53c7b0eb600c1f",
+    "sha256": "60e1ad7820d82b169ffac366cfd27f3b0033b336e7eed2dfe8b05215af395e8f"
+  },
+  "backend": "c",
+  "emitStatus": 0,
+  "refusal": "benchmarks/cases/event-loop-timers/case.ts:25:9: NTS1001 an empty array of unrepresentable type (an array of `Timeout`) is not supported by this lowering yet",
+  "workMeasured": false,
+  "dependency": "#940: a timer under @types/node is refused (its id is node's Timeout, not a number); then #939: setImmediate is not provided on C and LLVM (NTS1100), which the same work meets next",
+  "performanceEvidence": "Owed when the dependency makes this row compile: its nts C and LLVM cells against node, Bun JIT, Bun AOT and ScriptC; the engine columns are measured meanwhile.",
+  "oracleRecord": "Pending: written after landing by tooling/records/record-pending.ts into results/oracle-counts/benchmarks/cases/event-loop-timers.json. This records the seeded Node population, not compiled performance."
+}

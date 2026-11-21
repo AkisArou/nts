@@ -40,6 +40,14 @@ function perfCommand(control, acknowledgement, value) {
   }
 }
 
+// perf's control and acknowledgement FIFOs, which count mode brackets with.
+function perfControl() {
+  return {
+    control: openSync(process.env.NTS_BENCH_COUNT_CONTROL, "w"),
+    acknowledgement: openSync(process.env.NTS_BENCH_COUNT_ACK, "r"),
+  };
+}
+
 // The one loop counting mode warms up and counts, spelled once so warmup
 // tiers up the very loop the counter then brackets — a warmup in a different
 // shape would leave the counted loop to be compiled mid-count on a TurboFan
@@ -83,8 +91,7 @@ function count(run, checksum) {
   }
   // Warm up the loop being counted, outside the bracket.
   runLoop(run, warmed);
-  const control = openSync(process.env.NTS_BENCH_COUNT_CONTROL, "w");
-  const acknowledgement = openSync(process.env.NTS_BENCH_COUNT_ACK, "r");
+  const { control, acknowledgement } = perfControl();
   perfCommand(control, acknowledgement, "enable");
   const start = process.hrtime.bigint();
   const sink = runLoop(run, n);
@@ -155,6 +162,109 @@ export function measure(run) {
   view.setFloat64(0, checksum);
   const bits = view.getBigUint64(0).toString(16).padStart(16, "0");
   process.stdout.write(`${best.toFixed(4)} ${bits}\n`);
+}
+
+// A workload that answers `Promise<number>` (tooling/bench's `Answer`): its
+// timers, promise jobs and I/O run on the event loop after the call returns,
+// so a call is done when its promise settles. These are the loops above,
+// spelled again with each call awaited -- the same warmup bounds, calibration,
+// best of five and counting bracket -- rather than one loop that asks every
+// call whether it was a promise, which would change the synchronous rows'
+// timed code. A native column joins the same promise on the libuv host
+// (benchmarks/common/settle.c).
+async function runLoopAsync(run, reps) {
+  let sink = 0;
+  for (let i = 0; i < reps; i++) {
+    sink += await run();
+  }
+  return sink;
+}
+
+async function calibrateAsync(run, checksum) {
+  const until = process.hrtime.bigint() + 300_000_000n;
+  let warmed = 0;
+  while (warmed < 20000 && process.hrtime.bigint() < until) {
+    await run();
+    warmed++;
+  }
+  let reps = 1;
+  let elapsed = 0;
+  let sink = 0;
+  for (;;) {
+    const start = process.hrtime.bigint();
+    sink += await runLoopAsync(run, reps);
+    elapsed = Number(process.hrtime.bigint() - start);
+    if (elapsed >= 20_000_000 || reps >= 50_000_000) break;
+    reps = Math.min(reps * 2, 50_000_000);
+  }
+  if (Number.isNaN(sink)) throw new Error("unreachable");
+  process.stderr.write("NTS_BENCH_SINK " + checksumBits(sink) + "\n");
+  console.log(JSON.stringify({ checksum: checksumBits(checksum), warmup: warmed, nsPerOp: elapsed / reps, reps }));
+}
+
+async function countAsync(run, checksum) {
+  const n = Number(process.env.NTS_BENCH_COUNT_N);
+  const warmed = Number(process.env.NTS_BENCH_COUNT_WARMUP);
+  if (!Number.isSafeInteger(n) || n < 0 || !Number.isSafeInteger(warmed) || warmed < 0) {
+    throw new Error("fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP");
+  }
+  await runLoopAsync(run, warmed);
+  const { control, acknowledgement } = perfControl();
+  perfCommand(control, acknowledgement, "enable");
+  const start = process.hrtime.bigint();
+  const sink = await runLoopAsync(run, n);
+  const elapsed = Number(process.hrtime.bigint() - start);
+  perfCommand(control, acknowledgement, "disable");
+  closeSync(control);
+  closeSync(acknowledgement);
+  if (Number.isNaN(sink)) throw new Error("unreachable");
+  console.log(JSON.stringify({
+    checksum: checksumBits(checksum),
+    warmup: warmed,
+    n,
+    elapsedNs: elapsed,
+    nsPerOp: n === 0 ? 0 : elapsed / n,
+    sink,
+  }));
+}
+
+export async function measureAsync(run) {
+  const checksum = await run();
+
+  const mode = process.env.NTS_BENCH_COUNT_MODE;
+  if (mode === "calibrate") return calibrateAsync(run, checksum);
+  if (mode === "count") return countAsync(run, checksum);
+  if (mode !== undefined) throw new Error("unknown NTS_BENCH_COUNT_MODE: " + mode);
+
+  const until = process.hrtime.bigint() + 300_000_000n;
+  for (let i = 0; i < 20000 && process.hrtime.bigint() < until; i++) {
+    await run();
+  }
+
+  const probe = process.hrtime.bigint();
+  await run();
+  const one = Number(process.hrtime.bigint() - probe);
+  let reps = Math.floor(1e8 / Math.max(one, 1));
+  reps = Math.min(Math.max(reps, 1), 50_000_000);
+
+  let best = Infinity;
+  let sink = 0;
+  for (let trial = 0; trial < 5; trial++) {
+    const began = process.hrtime.bigint();
+    for (let i = 0; i < reps; i++) {
+      sink += await run();
+    }
+    const per = Number(process.hrtime.bigint() - began) / reps;
+    if (per < best) {
+      best = per;
+    }
+  }
+
+  if (Number.isNaN(sink)) {
+    throw new Error("unreachable");
+  }
+  process.stderr.write("NTS_BENCH_SINK " + checksumBits(sink) + "\n");
+  process.stdout.write(`${best.toFixed(4)} ${checksumBits(checksum)}\n`);
 }
 
 // Reload a bit-preserving input through shared atomic storage on every call.

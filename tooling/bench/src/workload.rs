@@ -21,6 +21,26 @@ pub(super) struct Workload {
 pub(super) struct Numeric {
     pub(super) callee: String,
     seed: f64,
+    /// How the call answers: with its number, or with a promise of one.
+    #[serde(default)]
+    pub(super) answer: Answer,
+}
+
+/// How a workload's call delivers its number.
+///
+/// An event-loop workload cannot answer synchronously: its timers, promise
+/// jobs and I/O completions run only after the call returns to the loop. So
+/// it answers with `Promise<number>`, and every driver waits for that promise
+/// before the call counts as done -- node and Bun by `await`, a native driver
+/// by joining it on the libuv host -- so one call is one fixed amount of
+/// event-loop work in every column.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum Answer {
+    /// `(number) => number`.
+    #[default]
+    Returned,
+    /// `(number) => Promise<number>`.
+    Promised,
 }
 
 impl Numeric {
@@ -76,8 +96,8 @@ impl Workload {
             let named = functions.iter().find(|(name, _)| name.as_str() == "work");
             let (name, signature) = if let Some(function) = named {
                 ensure!(
-                    compatible(snapshot, function.1),
-                    "{entry}: exported work must have the contract (number) => number"
+                    compatible(snapshot, function.1).is_some(),
+                    "{entry}: exported work must have the contract (number) => number or (number) => Promise<number>"
                 );
                 function
             } else {
@@ -87,16 +107,17 @@ impl Workload {
                 );
                 let mut candidates = functions
                     .iter()
-                    .filter(|(_, signature)| compatible(snapshot, *signature));
+                    .filter(|(_, signature)| compatible(snapshot, *signature).is_some());
                 let function = candidates.next().with_context(|| format!(
-                    "{entry}: no exported function has the contract (number) => number; provide explicit drivers"))?;
+                    "{entry}: no exported function has the contract (number) => number or (number) => Promise<number>; provide explicit drivers"))?;
                 ensure!(
                     candidates.next().is_none(),
                     "{entry}: ambiguous numeric benchmark exports; export work or provide explicit drivers"
                 );
                 function
             };
-            let _ = signature;
+            let answer =
+                compatible(snapshot, *signature).context("selected benchmark signature changed")?;
             let symbol = module
                 .exports
                 .iter()
@@ -117,6 +138,7 @@ impl Workload {
                 Some(Numeric {
                     callee: (*name).clone(),
                     seed,
+                    answer,
                 }),
             )
         };
@@ -175,15 +197,35 @@ fn signature(snapshot: &SemanticSnapshot, id: SymbolId) -> Option<SignatureId> {
         })
 }
 
-fn compatible(snapshot: &SemanticSnapshot, signature: SignatureId) -> bool {
+/// How a signature answers, when it is a benchmark's: one required number in,
+/// and a number or a promise of one out.
+fn compatible(snapshot: &SemanticSnapshot, signature: SignatureId) -> Option<Answer> {
     let signature = &snapshot.signatures[signature.0 as usize];
-    signature.type_parameters.is_empty()
+    let takes = signature.type_parameters.is_empty()
         && signature.this_type.is_none()
         && signature.parameters.len() == 1
         && !signature.parameters[0].optional
         && !signature.parameters[0].rest
-        && numeric(snapshot, signature.parameters[0].ty)
-        && numeric(snapshot, signature.return_type)
+        && numeric(snapshot, signature.parameters[0].ty);
+    if !takes {
+        None
+    } else if numeric(snapshot, signature.return_type) {
+        Some(Answer::Returned)
+    } else if promised_number(snapshot, signature.return_type) {
+        Some(Answer::Promised)
+    } else {
+        None
+    }
+}
+
+/// The library's `Promise<number>`, by the checker's identity and type
+/// argument: a class of the program's named `Promise` is not one, and the
+/// payload is read from the type, so an inferred `async` return counts.
+fn promised_number(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    snapshot.provided_name(ty) == Some("Promise")
+        && snapshot.type_arguments.get(&ty).is_some_and(
+            |arguments| matches!(arguments.as_slice(), [payload] if numeric(snapshot, *payload)),
+        )
 }
 
 fn numeric(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
@@ -345,6 +387,22 @@ mod tests {
             "alias",
             "function different(n: number): number { return n; } export { different as work }; export const seed = 1;",
         ),
+        (
+            "promised",
+            "export async function work(n: number): Promise<number> { return n + 1; } export const seed = 13;",
+        ),
+        (
+            "promised-inferred",
+            "export async function work(n: number) { return n * 2; } export const seed = 2;",
+        ),
+        (
+            "promised-text",
+            "export async function work(n: number): Promise<string> { return `${n}`; } export const seed = 1;",
+        ),
+        (
+            "promised-own",
+            "class Promise<T> { constructor(readonly value: T) {} } export function work(n: number): Promise<number> { return new Promise(n); } export const seed = 1;",
+        ),
     ];
 
     #[test]
@@ -381,7 +439,15 @@ mod tests {
         assert_eq!(recorded.numeric()?.callee, "work");
         assert_eq!(recorded.numeric()?.seed, 13.0);
         assert_eq!(selected.roots, ["work", hir::lower::MODULE_INIT]);
+        assert_eq!(selected.numeric()?.answer, Answer::Returned);
+        assert_eq!(recorded.numeric()?.answer, Answer::Returned);
         assert_eq!(plan("legacy", false)?.numeric()?.callee, "scan");
+        for name in ["promised", "promised-inferred"] {
+            let promised = plan(name, false)?;
+            assert_eq!(promised.numeric()?.answer, Answer::Promised, "{name}");
+            let recorded: Workload = serde_json::from_str(&serde_json::to_string(&promised)?)?;
+            assert_eq!(recorded.numeric()?.answer, Answer::Promised, "{name}");
+        }
         assert_eq!(
             plan("negative-zero", false)?.numeric()?.seed.to_bits(),
             (-0.0_f64).to_bits()
@@ -395,6 +461,8 @@ mod tests {
             ("closure", "one direct function declaration"),
             ("overload", "one direct function declaration"),
             ("alias", "name its local implementation"),
+            ("promised-text", "(number) => Promise<number>"),
+            ("promised-own", "(number) => Promise<number>"),
         ] {
             let error = plan(name, false)
                 .err()
@@ -406,6 +474,7 @@ mod tests {
         assert_eq!(custom.roots, ["scale", hir::lower::MODULE_INIT]);
 
         exercise_drivers(&root, &cases.join("render-first"), &output, &selected)?;
+        exercise_promised_drivers(&cases.join("promised"), &output, &plan("promised", false)?)?;
         std::fs::remove_dir_all(root)?;
         Ok(())
     }
@@ -455,6 +524,52 @@ mod tests {
         assert!(driver.contains("double work(double);"));
         assert!(driver.contains("volatile double in0 = 1.3e1;"));
         assert!(!driver.contains("render("));
+        assert!(!driver.contains("nts_bench_settle"));
+        Ok(())
+    }
+
+    /// A promised workload's drivers wait for its promise: node's awaits it
+    /// through `measureAsync`, the native one joins it on the libuv host.
+    fn exercise_promised_drivers(
+        case: &Utf8Path,
+        output: &Utf8Path,
+        promised: &Workload,
+    ) -> Result<()> {
+        // The shared observer `exercise_drivers` wrote, given an async form.
+        let common = case
+            .parent()
+            .and_then(Utf8Path::parent)
+            .context("case under benchmarks/cases")?
+            .join("common/bench.mjs");
+        std::fs::write(
+            &common,
+            "export function opaqueInput(value) { return value; }\n\
+             export function measure() { throw new Error('a promised workload took the synchronous timer'); }\n\
+             export async function measureAsync(run) {\n\
+               const pending = run();\n\
+               if (!(pending instanceof Promise)) throw new Error('the workload did not answer with a promise');\n\
+               console.log(await pending);\n\
+             }\n",
+        )?;
+        let harness = crate::node_harness(case, output, "promised", promised)?;
+        let result = std::process::Command::new("node")
+            .arg(&harness)
+            .arg(promised.numeric()?.input())
+            .output()?;
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "14");
+        let native = crate::native_driver(case, output, "promised", false, promised)?;
+        let driver = std::fs::read_to_string(native)?;
+        assert!(driver.contains("NtsPromise *work(double);"), "{driver}");
+        assert!(driver.contains("nts_bench_host_start();"), "{driver}");
+        assert!(
+            driver.contains("return nts_bench_settle(work(in0));"),
+            "{driver}"
+        );
         Ok(())
     }
 }

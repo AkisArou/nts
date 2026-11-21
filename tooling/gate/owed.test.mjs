@@ -1330,11 +1330,13 @@ test("a crate owes its own rule and its production consumers' rules", () => {
   for (const crate of ["compiler/codegen/common", "compiler/jvm-emitter"]) {
     superset(reach(`${crate}/src/lib.rs`), ["corpus", "benches", "bench-agree"], crate);
   }
-  // nts-build reaches the CLI normally, but the JVM only uses it in tests.
-  // That dev edge must keep workspace tests without selecting suite/bench runs.
+  // nts-build reaches the CLI and nts-bench (the libuv a promised workload
+  // runs on) in production, but the JVM only uses it in tests. That dev edge
+  // must keep workspace tests without selecting suite runs; nts-bench's
+  // production edge owes its benches.
   const build = stepsFor("build/src/lib.rs");
-  superset(build, ["tests", "config"], "build's production and test consumers");
-  for (const step of ["corpus", "benches"]) assert.ok(!build.includes(step), `build's dev-only JVM edge should not select ${step}`);
+  superset(build, ["tests", "config", "benches"], "build's production and test consumers");
+  assert.ok(!build.includes("corpus"), "build's dev-only JVM edge should not select corpus");
 });
 
 test("a deleted example still owes every step that compiles the examples", () => {

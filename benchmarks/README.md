@@ -205,6 +205,24 @@ quickly. A case whose variants disagree fails instead of reporting.
 each JS variant takes it from `argv`. A workload whose input is a compile-time
 constant can be folded to a constant, and then reports an impressive zero.
 
+**An event-loop workload answers with a promise.** A case's `work` has the
+contract `(number) => number`, or `(number) => Promise<number>` for work that
+runs on the event loop: timers, promise jobs and I/O completions run only after
+the call returns, so the call is done when its promise settles. The contract is
+read from the checker's type, so an inferred `async` return counts and a
+program's own class named `Promise` does not. Every column waits for each
+call's promise: node and Bun through `measureAsync` in `common/bench.mjs`, the
+same warm-up, calibration, best of five and counting bracket with each call
+awaited; the native columns through `common/settle.c`, which installs the
+libuv host a standalone program's `main` installs and joins the promise on it,
+ending the run by name when it does not fulfil with a number. libuv is built
+from Node's bundled sources into the shared native dependency cache, with the
+harness's own flags, never taken from the system. The JVM column of such a row
+is `NOT_RUN`: `Bench.java` has no promise join. A promised row does a fixed
+amount of work per call and never waits on the clock, because a call's
+wall time is its cell: the `event-loop` group's rows
+([async](../docs/language/async.md#rows)) say how each avoids the wait.
+
 **Everything is built with `-flto`.** Not for speed — for fairness. A reference
 variant defines its workload and `bench_run` in one translation unit, so clang
 would inline one into the other; nts output is necessarily in a separate unit

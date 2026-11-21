@@ -41,6 +41,7 @@ mod cli;
 mod count_noise;
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
 mod execution;
+mod loop_host;
 mod reference_link;
 mod references;
 mod reserved;
@@ -756,7 +757,8 @@ enum JvmAbsence {
     RuntimeAbort,
     /// The backend declined a construct, by name, at emit time.
     Refused,
-    /// The backend emitted it and the harness has no way to drive it.
+    /// The backend emitted it and the harness has no way to drive it: a
+    /// promised workload, which `Bench.java` cannot join (#941).
     NoDriver,
     /// `NTS_BENCH_LANES` left the lane out, so nothing was asked.
     ///
@@ -1071,6 +1073,9 @@ fn variants(
     let mut results: Vec<Option<Measured>> = Vec::new();
     let mut absences = Absences::default();
     let driver = native_driver(case, out, name, emission.initializes, workload)?;
+    let promised = workload
+        .numeric()
+        .is_ok_and(|numeric| numeric.answer == workload::Answer::Promised);
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
     // no LLVM, which is most of a run's wall clock: every other lane goes
     // through `clang -flto` per case and the JVM lane goes through `javac`.
@@ -1134,23 +1139,20 @@ fn variants(
             // this loop rather than joining the command line below. A refused
             // program has no classes, which empties the column and leaves the
             // row -- the same bargain the LLVM column keeps.
+            // `Bench.java` has no promise join: it cannot wait for a call's
+            // promise on the JVM's queue, so the row's JVM cell says so
+            // rather than timing a call that returned before its work ran.
             Generated::Jvm => {
-                let run = jvm_case(
-                    root, case, out, name, tsconfig, provider, workload, counting, builds,
-                );
-                match observe(run, Generated::Jvm, &mut absences.outcomes) {
-                    Ok(measured) => {
-                        if measured.is_none() {
-                            absences.jvm = Some(JvmAbsence::RuntimeAbort);
-                        }
-                        results.push(measured);
-                    }
-                    Err(error) if error.to_string().starts_with(DECLINED) => {
-                        absences.jvm = Some(JvmAbsence::Refused);
-                        results.push(None);
-                    }
-                    Err(error) => return Err(error),
-                }
+                let (measured, absence) = if promised {
+                    (None, Some(JvmAbsence::NoDriver))
+                } else {
+                    let run = jvm_case(
+                        root, case, out, name, tsconfig, provider, workload, counting, builds,
+                    );
+                    jvm_observed(run, &mut absences.outcomes)?
+                };
+                absences.jvm = absence;
+                results.push(measured);
                 continue;
             }
             Generated::JavaReference => {
@@ -1166,12 +1168,19 @@ fn variants(
             }
             Generated::None => {}
         }
+        // This compiler's columns of a promised workload run on the libuv
+        // host; a reference is hand-written C++ with no loop of ours.
+        let host = (promised && variant.generated != Generated::None)
+            .then(|| loop_host::loop_host(root, out))
+            .transpose()?;
+        c.extend(host.iter().flat_map(|host| host.sources.iter().cloned()));
         let request = NativeBuild {
             cpp: &cpp,
             c: &c,
             binary: &binary,
             defines,
             libraries: &libraries,
+            host,
             column: variant.column(),
         };
         let built = compile(root, request, builds).and_then(|()| {
@@ -1185,6 +1194,21 @@ fn variants(
         results.push(observe(built, variant.generated, &mut absences.outcomes)?);
     }
     Ok((results, absences))
+}
+
+/// The JVM column's measurement, and why it has none when it has none.
+fn jvm_observed(
+    run: Result<Measured>,
+    outcomes: &mut std::collections::BTreeMap<execution::Column, execution::Outcome>,
+) -> Result<(Option<Measured>, Option<JvmAbsence>)> {
+    match observe(run, Generated::Jvm, outcomes) {
+        Ok(None) => Ok((None, Some(JvmAbsence::RuntimeAbort))),
+        Ok(measured) => Ok((measured, None)),
+        Err(error) if error.to_string().starts_with(DECLINED) => {
+            Ok((None, Some(JvmAbsence::Refused)))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn reference_libraries(
@@ -1813,7 +1837,13 @@ fn node_harness(
     if supplied.exists() {
         return Ok(supplied);
     }
-    let callee = &workload.numeric()?.callee;
+    let numeric = workload.numeric()?;
+    let callee = &numeric.callee;
+    // A promised workload is timed by the same loop with each call awaited.
+    let (timer, wait) = match numeric.answer {
+        workload::Answer::Returned => ("measure", ""),
+        workload::Answer::Promised => ("measureAsync", "await "),
+    };
     let common = case
         .parent()
         .and_then(Utf8Path::parent)
@@ -1825,14 +1855,14 @@ fn node_harness(
     // alone lets an AOT optimizer hoist a pure workload out of the timed loop.
     let text = format!(
         "// Generated from `case.ts`. Edit that, or add a `driver.mjs` beside it.\n\
-         import {{ measure, opaqueInput }} from \"{common}\";\n\
+         import {{ {timer}, opaqueInput }} from \"{common}\";\n\
          import {{ {callee} }} from \"{case}/case.ts\";\n\n\
          if (process.argv.length !== 3 || process.argv[2].trim() === \"\") {{\n\
              throw new Error(\"benchmark input missing: expected one numeric seed argument\");\n\
          }}\n\
          const seed = Number(process.argv[2]);\n\
          if (!Number.isFinite(seed)) throw new Error(\"benchmark input is not a finite number\");\n\
-         measure(() => {callee}(opaqueInput(seed)));\n"
+         {wait}{timer}(() => {callee}(opaqueInput(seed)));\n"
     );
     std::fs::write(&path, &text).with_context(|| format!("writing {path}"))?;
     Ok(path)
@@ -1906,17 +1936,25 @@ fn native_driver(
     let numeric = workload.numeric()?;
     let callee = &numeric.callee;
     let arguments = [numeric.input()];
+    let promised = numeric.answer == workload::Answer::Promised;
     let mut text = String::from(
         "// Generated from `case.ts`. Edit that, or add a `driver.cpp` here.\n\
          #include \"harness.h\"\n\n\
          // The generated program is C, so its symbols are C.\n\
          extern \"C\" {\n",
     );
-    let _ = writeln!(
-        text,
-        "    double {callee}({});",
-        vec!["double"; arguments.len()].join(", ")
-    );
+    let parameters = vec!["double"; arguments.len()].join(", ");
+    if promised {
+        // `benchmarks/common/settle.c`: the libuv host a standalone program
+        // installs, and the join that waits for one call's promise.
+        let _ = writeln!(text, "    struct NtsPromise;");
+        let _ = writeln!(text, "    NtsPromise *{callee}({parameters});");
+        let _ = writeln!(text, "    void nts_bench_host_start(void);");
+        let _ = writeln!(text, "    void nts_bench_drain(void);");
+        let _ = writeln!(text, "    double nts_bench_settle(NtsPromise *promise);");
+    } else {
+        let _ = writeln!(text, "    double {callee}({parameters});");
+    }
     let _ = writeln!(text, "    void nts_process_start(void);");
     if initializes {
         let _ = writeln!(text, "    void module__init(void);");
@@ -1935,18 +1973,36 @@ fn native_driver(
     // Once, not per call: this is module evaluation, and it is not the workload.
     // So is the process's allocator policy, which a standalone program's `main`
     // sets before anything else and a row has to measure the same way.
+    //
+    // A promised workload starts the way a standalone program's `main` does:
+    // the libuv host before module evaluation, and what evaluation queued
+    // drained after it.
     let _ = writeln!(text, "    static int ready = 0;");
-    let init = if initializes { " module__init();" } else { "" };
+    let host = if promised {
+        " nts_bench_host_start();"
+    } else {
+        ""
+    };
+    let init = match (initializes, promised) {
+        (true, true) => " module__init(); nts_bench_drain();",
+        (true, false) => " module__init();",
+        (false, _) => "",
+    };
     let _ = writeln!(
         text,
-        "    if (!ready) {{ ready = 1; nts_process_start();{init} }}"
+        "    if (!ready) {{ ready = 1; nts_process_start();{host}{init} }}"
     );
     let mut passed = Vec::new();
     for (at, value) in arguments.iter().enumerate() {
         let _ = writeln!(text, "    volatile double in{at} = {value};");
         passed.push(format!("in{at}"));
     }
-    let _ = writeln!(text, "    return {callee}({});\n}}", passed.join(", "));
+    let call = format!("{callee}({})", passed.join(", "));
+    if promised {
+        let _ = writeln!(text, "    return nts_bench_settle({call});\n}}");
+    } else {
+        let _ = writeln!(text, "    return {call};\n}}");
+    }
     let path = out.join(format!("{name}.driver.cpp"));
     std::fs::write(&path, text).with_context(|| format!("writing {path}"))?;
     Ok(path)
@@ -2588,6 +2644,8 @@ struct NativeBuild<'a> {
     binary: &'a Utf8Path,
     defines: &'a [&'a str],
     libraries: &'a reference_link::Libraries,
+    /// The libuv host and its library, for a promised workload's columns.
+    host: Option<&'a loop_host::LoopHost>,
     column: &'a str,
 }
 
@@ -2602,6 +2660,7 @@ fn compile(
         binary,
         defines,
         libraries,
+        host,
         column,
     } = request;
     // What a shipped program is built with (`compile_flags::OPTIMIZE` and
@@ -2643,6 +2702,9 @@ fn compile(
             includes.push("-isystem".to_owned());
             includes.push(awfy.to_string());
         }
+    }
+    if let Some(host) = host {
+        includes.extend(host.include_flags.iter().cloned());
     }
 
     let mut objects = Vec::new();
@@ -2700,7 +2762,8 @@ fn compile(
                 .arg("-o")
                 .arg(binary)
                 .arg("-lm")
-                .args(libraries.flags()),
+                .args(libraries.flags())
+                .args(host.into_iter().flat_map(|host| host.link_flags.iter())),
         )
         .context("linking")?;
     if !link.status.success() {
@@ -3063,7 +3126,22 @@ const SPREAD_WORTH_SAYING: f64 = 1.10;
 /// `tests/refusals/index-of-on-a-byte-array` record its gaps, with
 /// `tests/programs/clbg-reverse-complement-controls` as the control, and it
 /// comes off this list in the commit that compiles it.
+///
+/// `event-loop-timers` and `event-loop-files` arrived refused with the
+/// `event-loop` group; each case's `refusal.json` records the refusal and the
+/// issue that owns it, and each comes off this list in the commit that
+/// compiles it.
 const REFUSES_TODAY: &[(&str, &str)] = &[
+    (
+        "event-loop-timers",
+        "a timer under @types/node, whose id is node's `Timeout` (#940), then \
+         `setImmediate` (#939)",
+    ),
+    (
+        "event-loop-files",
+        "`node:path`, `node:os` and `node:fs/promises` for native programs: \
+         builtins stage 9",
+    ),
     (
         "utf8-encode",
         "`new TextEncoder()`: the global is not wired to runtime/web-platform's class",

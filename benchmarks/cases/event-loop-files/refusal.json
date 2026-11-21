@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "case": "event-loop-files",
+  "sourceSha256": "e22fd504af4537144f211cdcd5b1312f88e0786f230b325d8cd2bd93b978e86f",
+  "compiler": {
+    "commit": "930ee112da548da767d13be33c53c7b0eb600c1f",
+    "sha256": "60e1ad7820d82b169ffac366cfd27f3b0033b336e7eed2dfe8b05215af395e8f"
+  },
+  "backend": "c",
+  "emitStatus": 0,
+  "refusal": "benchmarks/cases/event-loop-files/case.ts:36:16: NTS1003 `work` cannot be compiled because it calls `roundTrip`, and `join`, an imported name whose implementation is not in this program is not supported by this lowering yet",
+  "workMeasured": false,
+  "dependency": "builtins stage 9 (docs/foundations/builtins.md): node:* for native programs; node:path, node:os and node:fs/promises",
+  "performanceEvidence": "Owed when the dependency makes this row compile: its nts C and LLVM cells against node, Bun JIT, Bun AOT and ScriptC; the engine columns are measured meanwhile.",
+  "oracleRecord": "Pending: written after landing by tooling/records/record-pending.ts into results/oracle-counts/benchmarks/cases/event-loop-files.json. This records the seeded Node population, not compiled performance."
+}

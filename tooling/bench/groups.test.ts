@@ -72,3 +72,10 @@ test("row lists read this tree's foundations in page order", () => {
   const lists = rowLists(ROOT);
   assert.ok(lists.some((list) => list.page === "docs/foundations/objects.md" && list.name === "maps"));
 });
+
+test("the async page owns the event-loop rows, after the foundations and primitives", () => {
+  const lists = rowLists(ROOT);
+  assert.deepEqual(groupRows(readBenchmarkGroups(ROOT), "event-loop"), ["event-loop-promises", "event-loop-timers", "event-loop-files"]);
+  assert.deepEqual(lists.filter((list) => list.page === "docs/language/async.md").map((list) => list.name), ["event-loop", "event-loop", "event-loop"]);
+  assert.equal(lists.at(-1)?.page, "docs/language/async.md");
+});

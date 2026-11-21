@@ -21,6 +21,22 @@ export function typedTimer(source: string): string {
     ],
     ["export function measure(run) {", "export function measure(run: () => number): void {"],
     [
+      "async function runLoopAsync(run, reps) {",
+      "async function runLoopAsync(run: () => Promise<number>, reps: number): Promise<number> {",
+    ],
+    [
+      "async function calibrateAsync(run, checksum) {",
+      "async function calibrateAsync(run: () => Promise<number>, checksum: number): Promise<void> {",
+    ],
+    [
+      "async function countAsync(run, checksum) {",
+      "async function countAsync(run: () => Promise<number>, checksum: number): Promise<void> {",
+    ],
+    [
+      "export async function measureAsync(run) {",
+      "export async function measureAsync(run: () => Promise<number>): Promise<void> {",
+    ],
+    [
       "openSync(process.env.NTS_BENCH_COUNT_CONTROL,",
       "openSync(process.env.NTS_BENCH_COUNT_CONTROL!,",
     ],

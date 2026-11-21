@@ -12565,6 +12565,18 @@
       }
     },
     {
+      "source": "tooling/bench/src/loop_host.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../benchmarks/common/settle.c"
+          }
+        ]
+      }
+    },
+    {
       "source": "tooling/bench/src/reference_link.rs",
       "declarations": {
         "imports": [],

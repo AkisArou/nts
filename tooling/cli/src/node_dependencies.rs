@@ -52,7 +52,7 @@ pub(super) fn for_build(
         return Ok(None);
     }
     let plan = plan_for_target(target)?;
-    let cache = cache_from_environment(|name| std::env::var_os(name))?;
+    let cache = node_deps::cache_from_environment(|name| std::env::var_os(name))?;
     let mut flags = tools.cpu.clone();
     if tools.lto {
         flags.extend(super::lto_flags());
@@ -69,25 +69,6 @@ pub(super) fn for_build(
         jobs: 4,
     };
     node_deps::ensure(&request).map(Some)
-}
-
-fn cache_from_environment(read: impl Fn(&str) -> Option<std::ffi::OsString>) -> Result<PathBuf> {
-    if let Some(cache) = read("NTS_NODE_DEPS_CACHE").filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(cache));
-    }
-    if read("NTS_TEST_ENVIRONMENT").is_some() {
-        bail!("fixture cache capability missing: NTS_NODE_DEPS_CACHE");
-    }
-    Ok(read("XDG_CACHE_HOME")
-        .map_or_else(
-            || {
-                read("HOME")
-                    .map(|home| PathBuf::from(home).join(".cache"))
-                    .context("native dependency cache needs HOME or XDG_CACHE_HOME")
-            },
-            |path| Ok(PathBuf::from(path)),
-        )?
-        .join("nts/node-deps"))
 }
 
 fn plan_for_target(target: &nts_build::config::Target) -> Result<&'static node_deps::Recipe> {
@@ -261,7 +242,7 @@ pub(super) fn merge(artifacts: &Artifacts, archive: &Utf8Path) -> Result<()> {
 
 #[cfg(test)]
 mod cache_tests {
-    use super::cache_from_environment;
+    use nts_build::node_deps::cache_from_environment;
     use std::{ffi::OsString, path::PathBuf};
 
     #[test]

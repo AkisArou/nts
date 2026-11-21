@@ -278,7 +278,7 @@ export function fromNts(
           cells[column] = absent(
             "NOT_RUN",
             absences.jvm === "NoDriver"
-              ? "Program emitted, but the harness cannot drive its entry"
+              ? "Program emitted, but the harness cannot drive its entry: Bench.java has no promise join for a promised workload (#941)"
               : "Lane was not requested",
           );
         else if (

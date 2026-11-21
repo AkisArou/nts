@@ -128,6 +128,32 @@ pub struct Timings {
     pub archives_s: f64,
 }
 
+/// Where built dependencies are kept: `NTS_NODE_DEPS_CACHE` when declared,
+/// else `nts/node-deps` under the XDG cache or `~/.cache`. One rule for every
+/// client (`nts build`, `nts-bench`), so they share one cache. A fixture
+/// (`NTS_TEST_ENVIRONMENT`) must declare its cache, and never falls back to
+/// the production paths.
+pub fn cache_from_environment(
+    read: impl Fn(&str) -> Option<std::ffi::OsString>,
+) -> Result<PathBuf> {
+    if let Some(cache) = read("NTS_NODE_DEPS_CACHE").filter(|value| !value.is_empty()) {
+        return Ok(PathBuf::from(cache));
+    }
+    if read("NTS_TEST_ENVIRONMENT").is_some() {
+        bail!("fixture cache capability missing: NTS_NODE_DEPS_CACHE");
+    }
+    Ok(read("XDG_CACHE_HOME")
+        .map_or_else(
+            || {
+                read("HOME")
+                    .map(|home| PathBuf::from(home).join(".cache"))
+                    .context("native dependency cache needs HOME or XDG_CACHE_HOME")
+            },
+            |path| Ok(PathBuf::from(path)),
+        )?
+        .join("nts/node-deps"))
+}
+
 /// Building requires only the selected compiler and archiver. Source is embedded.
 pub fn ensure(request: &Request) -> Result<Artifacts> {
     let plan = recipe_for(&request.target)?;

@@ -360,6 +360,7 @@ dependencies = [
  "camino",
  "hmac-sha256",
  "nix",
+ "nts-build",
  "nts-codegen-c",
  "nts-codegen-common",
  "nts-codegen-jvm",

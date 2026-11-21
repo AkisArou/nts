@@ -1,6 +1,9 @@
 // Benchmark groups are declared by the foundation page that owns the rows:
 // a `## Rows` section in docs/foundations/<page>.md, one `### <group>` per
-// group and one backticked case name per list item, never numbers. This one
+// group and one backticked case name per list item, never numbers. Two pages
+// outside that folder own rows too: docs/primitives.md, and
+// docs/language/async.md, the design page of the control-flow foundation
+// (docs/foundations/README.md), which owns the event loop's. This one
 // reader serves nts-bench's --group selection, full.md's grouping and the
 // task audit's ownership checks, so the three cannot disagree about which
 // rows a group names.
@@ -12,6 +15,7 @@ import {dataDirectory} from "../gate/reader-inputs/main.ts";
 const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
 const FOUNDATIONS=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../docs/foundations/",import.meta.url))));
 const PRIMITIVES=relative(SOURCE,fileURLToPath(new URL("../../docs/primitives.md",import.meta.url)));
+const ASYNC=relative(SOURCE,fileURLToPath(new URL("../../docs/language/async.md",import.meta.url)));
 
 /** One list line's rows, under its page and group name. */
 export type RowList = { page: string; name: string; rows: string[] };
@@ -50,7 +54,7 @@ export function rowLists(root: string): RowList[] {
   const dir = join(root, FOUNDATIONS);
   if (!existsSync(dir)) return [];
   const pages = readdirSync(dir).filter((p) => p.endsWith(".md")).sort().map((p) => `${FOUNDATIONS}/${p}`);
-  if (existsSync(join(root, PRIMITIVES))) pages.push(PRIMITIVES);
+  for (const page of [PRIMITIVES, ASYNC]) if (existsSync(join(root, page))) pages.push(page);
   return pages.flatMap((page) => parseRowLists(page, readFileSync(join(root, page), "utf8")));
 }
 

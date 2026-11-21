@@ -361,10 +361,14 @@ export async function hostColumns(
     timer = join(directory, "timer.ts");
   let projected = typedTimer(readFileSync(canonical, "utf8"));
   // The startup arm calls the same body once, before warmup/timing. No hook is inside a timed loop.
-  projected = projected.replace(
-    "export function measure(run: () => number): void {",
-    'export function measure(run: () => number): void {\n  if (process.env.NTS_BENCH_STARTUP === "1") { const began = process.hrtime.bigint(); const value = run(); process.stdout.write(String(Math.max(1, Number(process.hrtime.bigint() - began))) + " " + checksumBits(value) + "\\n"); return; }',
-  );
+  // One hook for both timers; a promised workload's call is awaited.
+  const startup = (wait: string) =>
+    `\n  if (process.env.NTS_BENCH_STARTUP === "1") { const began = process.hrtime.bigint(); const value = ${wait}run(); process.stdout.write(String(Math.max(1, Number(process.hrtime.bigint() - began))) + " " + checksumBits(value) + "\\n"); return; }`;
+  for (const [signature, wait] of [
+    ["export function measure(run: () => number): void {", ""],
+    ["export async function measureAsync(run: () => Promise<number>): Promise<void> {", "await "],
+  ] as const)
+    projected = projected.replace(signature, signature + startup(wait));
   writeFileSync(timer, projected);
   let source = readFileSync(sourceHarness, "utf8");
   const imports = [...source.matchAll(/from\s+["']([^"']+)["']/g)];

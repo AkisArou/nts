@@ -6,7 +6,7 @@
 # names any other, and source-identity.test.ts holds each list to its
 # crate's cargo-metadata path-dependency closure.
 nts: .tool-versions Cargo.toml Cargo.lock build compiler results/differential-call-costs/calibration.json runtime rust-toolchain.toml third_party/react-compiler third_party/tsrs tooling/cli tooling/config/src/profiles tooling/deps tooling/differential tooling/publication tooling/surfaces
-nts-bench: Cargo.toml Cargo.lock compiler runtime rust-toolchain.toml third_party/tsrs tooling/bench tooling/bootstrap/awfy.pin tooling/cli/source-roots.txt tooling/cli/source_identity.rs
+nts-bench: .tool-versions Cargo.toml Cargo.lock build compiler runtime rust-toolchain.toml third_party/tsrs tooling/bench tooling/bootstrap/awfy.pin tooling/cli/source-roots.txt tooling/cli/source_identity.rs tooling/config/src/profiles tooling/publication
 # Read, but pinned by content inside a root (build/node-deps/recipes.json
 # holds each file's hash), so it needs no digest of its own.
 pinned: third_party/node-source

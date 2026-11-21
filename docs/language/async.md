@@ -255,3 +255,17 @@ decided to check every entry from a thread it does not own
 - **Generators, the iteration protocol and `using`** get the full protocol,
   built in phase 3 (L16; 10-28,
   [log](../records/notebooks/decisions-log.md#language-10-28)).
+
+## Rows
+
+### event-loop
+
+Each row's call answers with a promise of its checksum, and every column
+waits for it: node and Bun by `await`, the native columns by joining it on
+the libuv host. A row does a fixed amount of work per call and never waits
+on the clock. Timers that fire after `setTimeout(f, 0)` are not a row,
+because the 1 ms floor would time the loop's idle wait.
+
+- `event-loop-promises`: await in a loop and a Promise.all fan-out, the microtask path
+- `event-loop-timers`: setImmediate turns, each arming and cancelling timeouts
+- `event-loop-files`: writes, reads and removals through node:fs/promises, sixteen at once
