@@ -11,7 +11,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, pruneLines, reportPoolStatus, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
+import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, PoolRetry, poolExit, pruneLines, TreeInUse, reportPoolStatus, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
 import {treeUsers} from "./tree-users.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {ownMemory} from '../gate/test-memory.ts';
@@ -201,6 +201,53 @@ test('a landed hold still needs admission when taken again',t=>{
   assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
   observe({freeBytes:DISK_MARGIN_BYTES+2*COLD_TARGET_BYTES,freeInodes:1000});
   assert.equal(p.take('884').state,'held');assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
+});
+
+/** pool.ts's own CLI on the fixture's pool: its exit status and output, through main's exit mapping. */
+const poolCli=(f:ReturnType<typeof pool>,...args:string[])=>spawnTest(process.execPath,[fileURLToPath(new URL('./pool.ts',import.meta.url)),...args,'--pool',f.p.dir],
+  {cwd:f.s.root,env:{...f.s.env,...f.observe({freeBytes:1000*GB,freeInodes:1000})},encoding:'utf8'});
+const inUse=(tree:string)=>(error:unknown)=>error instanceof TreeInUse&&error instanceof PoolRetry&&poolExit(error)===75&&error.tree===tree
+  &&error.message.includes('tree resource lock is held for '+tree);
+
+for(const action of ['take','attach'] as const)test('a landed tree whose resource lock is held refuses for retry, unchanged, and resumes once released: '+action,t=>{
+  let busy=false;
+  const f=pool(t,1,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]}),{p,s}=f;
+  const tree=p.take('884');busy=true;assert.equal(p.release('884',tree.head).state,'kept');busy=false;
+  const file=workerPresenceFile(tree.path),record=readFileSync(file,'utf8'),inode=lstatSync(file).ino,reserved=p.room().reservedBytes;
+  const unchanged=()=>{
+    const row=p.trees().find(row=>row.path===tree.path)!;
+    assert.deepEqual([row.state,row.branch,row.head,p.landed().get('884')],['landed','884',tree.head,tree.head]);
+    assert.equal(readFileSync(file,'utf8'),record);assert.equal(lstatSync(file).ino,inode,'no replacement record is published');
+    assert.equal(s.git(['status','--porcelain'],tree.path),'');assert.equal(p.room().reservedBytes,reserved,'no promise is admitted');
+  };
+  const lock=GateResource.tryAcquire(tree.path+'.lock');assert.ok(lock);
+  try{
+    assert.throws(()=>p[action]('884'),inUse(tree.path));unchanged();
+    const cli=poolCli(f,action,'884');
+    assert.equal(cli.status,75,cli.stdout+cli.stderr);assert.ok(cli.stderr.includes('tree resource lock is held for '+tree.path),cli.stderr);unchanged();
+  }finally{lock.close();}
+  const resumed=p[action]('884');
+  assert.deepEqual([resumed.state,resumed.presence!.state,p.landed().size],['held','attached',0]);
+  assert.equal(p.room().reservedBytes,reserved+COLD_TARGET_BYTES,'the resumed cold promise is counted');
+});
+
+test('a fresh take of a free tree whose resource lock is held refuses for retry with the tree untouched',t=>{
+  const f=pool(t,1),{p,s}=f,path=join(p.dir,'1');
+  const observed=()=>({head:s.git(['rev-parse','HEAD'],path),branch:s.git(['branch','--show-current'],path),
+    status:s.git(['status','--porcelain','--untracked-files=all','--ignored'],path),worktrees:s.git(['worktree','list','--porcelain'],s.root),
+    branches:s.git(['for-each-ref','--format=%(refname) %(objectname)','refs/heads/'],s.root),presence:existsSync(workerPresenceFile(path)),
+    reserved:p.room().reservedBytes});
+  const before=observed();assert.equal(before.branch,'');assert.equal(before.presence,false);
+  const lock=GateResource.tryAcquire(path+'.lock');assert.ok(lock);
+  try{
+    assert.throws(()=>p.take('914'),inUse(path));assert.deepEqual(observed(),before);
+    const cli=poolCli(f,'take','--issue','914');
+    assert.equal(cli.status,75,cli.stdout+cli.stderr);assert.ok(cli.stderr.includes('tree resource lock is held for '+path),cli.stderr);
+    assert.deepEqual(observed(),before);
+  }finally{lock.close();}
+  const taken=p.take('914');
+  assert.deepEqual([taken.name,taken.state,taken.branch,taken.presence!.state],['1','held','914','attached']);
+  assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
 });
 
 for(const action of ['take','attach'] as const)test('a reclaimed landed hold reserves its admitted promise before another take: '+action,t=>{

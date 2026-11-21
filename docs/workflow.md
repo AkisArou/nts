@@ -1114,7 +1114,10 @@ the tooling strict checker owns the source's type checking.
   protecting that target during pressure reclamation. Both take and attach
   make a landed tree held before releasing the lock, so its admitted promise
   is counted before another take can spend that capacity. A refusal exits 75 and
-  leaves its presence and hold unchanged for retry. Taking or attaching an
+  leaves its presence and hold unchanged for retry. A take or attach whose tree
+  resource lock a gate run or disk reclamation holds refuses the same way,
+  exit 75 naming the tree, before any change to its branch, checkout or
+  presence. Taking or attaching an
   already-counted lease is idempotent, with no new admission or publication,
   even under disk pressure or while its tree resource is in use. Complete
   output adds no promise. A resumed

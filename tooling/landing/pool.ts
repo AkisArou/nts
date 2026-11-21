@@ -19,7 +19,8 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //
 // `take`, `attach` and `init` exit 75 (EX_TEMPFAIL) when the machine cannot host another
 // tree, naming why: a scheduler waits for a tree to be given back, or for disk,
-// and asks again.
+// and asks again. `take` and `attach` exit 75 too while a gate run or disk
+// reclamation holds the tree's resource lock (`PoolRetry`); nothing changed.
 //
 // A tree's state is git's own: a tree with a task's branch checked out is held
 // by that task, a detached clean one is free, and how long a tree has been
@@ -108,10 +109,21 @@ export type Pruned = {
   reclamation:ReclaimReport|null;
 };
 
+/** A refusal that changed nothing and can succeed when asked again later: exit 75 (EX_TEMPFAIL). */
+export abstract class PoolRetry extends Error {}
+export const RETRY_EXIT = 75;
+/** The CLI's exit code for a refusal: retryable ones exit 75, every other error 1. */
+export const poolExit = (error: unknown): number => error instanceof PoolRetry ? RETRY_EXIT : 1;
+
 /** The machine cannot host another tree now: `room` says why. */
-export class PoolFull extends Error {
+export class PoolFull extends PoolRetry {
   readonly room: Room;
   constructor(room: Room) { super(`the machine cannot host another tree: ${room.why}`); this.room = room; }
+}
+/** A gate run or disk reclamation holds the tree's resource lock, so a task cannot take or attach it now. */
+export class TreeInUse extends PoolRetry {
+  readonly tree: string;
+  constructor(tree: string) { super(`tree resource lock is held for ${tree}: a gate run or disk reclamation is using it; ask again once it ends`); this.tree = tree; }
 }
 
 function run(git: Git, args: readonly string[], cwd: string) {
@@ -257,7 +269,8 @@ export class Pool {
    * A tree on `branch`: the task's own if it holds one; else a free tree,
    * warm first; else a new one, when the disk can host it (`PoolFull` when it
    * cannot). The task's branch is checked out if it exists, else made at the
-   * newest main.
+   * newest main. While a gate run or reclamation holds the chosen tree's
+   * resource lock, `TreeInUse` refuses before anything changes.
    */
   take(branch: string): PoolTree {
     if (!taskBranch(branch)) throw new Error(`not a task branch: ${branch}`);
@@ -279,11 +292,16 @@ export class Pool {
       let tree = available.filter(t => t.state === "free").sort((a, b) => compatible(b) - compatible(a) || Number(a.name) - Number(b.name))[0]?.name;
       if (!tree)tree=this.nextName();
       const path = join(this.dir, tree);
-      this.admitLease(path,false,reclamation);
-      if(!existsSync(path))this.grow(tree);
-      const exists = run(this.git, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], this.git.root).status === 0;
-      checked(this.git, exists ? ["switch", "-q", branch] : ["switch", "-q", "-c", branch, "refs/heads/main"], path);
-      this.setPresence(this.trees().find(t=>t.name===tree)!,'attached','fresh');
+      // The tree's resource lock is decided before the first change, and held
+      // through the switch until its presence is published.
+      const lock=this.treeLock(path);
+      try{
+        this.admitLease(path,false,reclamation);
+        if(!existsSync(path))this.grow(tree);
+        const exists = run(this.git, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], this.git.root).status === 0;
+        checked(this.git, exists ? ["switch", "-q", branch] : ["switch", "-q", "-c", branch, "refs/heads/main"], path);
+        this.publishPresence(this.trees().find(t=>t.name===tree)!,'attached','fresh');
+      }finally{lock.close();}
       this.inputs(path);
       return this.trees().find(t => t.name === tree)!;
     });
@@ -296,27 +314,44 @@ export class Pool {
     return tree;
   }
 
-  private setPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh'='existing'):void{
+  /** The tree's resource lock, held by this pool operation; `TreeInUse` while a gate run or reclamation holds it. */
+  private treeLock(path:string):GateResource{
+    const lock=GateResource.tryAcquire(path+'.lock');
+    if(!lock)throw new TreeInUse(path);
+    return lock;
+  }
+  /** The task branch a presence record names; refuses a tree no task holds, or a record this reader cannot replace. */
+  private presenceBranch(tree:PoolTree):string{
     if(!tree.branch||tree.state!=='held'&&tree.state!=='landed')throw Error('worker presence requires a held task branch: '+tree.path);
     assertWorkerPresenceWritable(tree.path);
+    return tree.branch;
+  }
+  private setPresence(tree:PoolTree,state:WorkerPresence['state']):void{
+    this.presenceBranch(tree);
     // Use the lease owner's predicate, including its fail-closed default.
     // No new promise or publication is needed, even while a builder owns the
-    // tree resource. A fresh Git hold still publishes its initial presence.
-    if(state==='attached'&&transition!=='fresh'&&this.leases([tree]).length>0)return;
-    const lock=GateResource.tryAcquire(tree.path+'.lock');
+    // tree resource.
+    if(state==='attached'&&this.leases([tree]).length>0)return;
+    // Resuming waits for the resource as for disk (`TreeInUse`); detach
+    // refuses it by name, as it refuses every other live owner.
+    const lock=state==='attached'?this.treeLock(tree.path):GateResource.tryAcquire(tree.path+'.lock');
     if(!lock)throw Error('tree resource lock is held: '+tree.path);
-    try{
-      if(state==='attached'&&transition!=='fresh')this.admitLease(tree.path,true);
-      if(state==='detached'){
-        const users=this.users(tree.path);
-        if(users.length)throw Error('cannot detach '+tree.branch+': '+using(users));
-        this.capacity.assertWorkerAbsent(tree.path);
-      }
-      writeWorkerPresence(tree.path,tree.branch,state,this.capacity.host.wallNow());
-      // Both resume verbs publish the admitted lease before releasing either
-      // lock: a landed mark would keep the attached promise uncounted.
-      if(state==='attached'&&tree.state==='landed')this.forget(tree.branch);
-    }finally{lock.close();}
+    try{this.publishPresence(tree,state,'existing');}finally{lock.close();}
+  }
+  /** Publish presence while this operation holds the tree's resource lock. A
+   * fresh Git hold publishes its initial presence with no resume admission. */
+  private publishPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh'):void{
+    const branch=this.presenceBranch(tree);
+    if(state==='attached'&&transition!=='fresh')this.admitLease(tree.path,true);
+    if(state==='detached'){
+      const users=this.users(tree.path);
+      if(users.length)throw Error('cannot detach '+branch+': '+using(users));
+      this.capacity.assertWorkerAbsent(tree.path);
+    }
+    writeWorkerPresence(tree.path,branch,state,this.capacity.host.wallNow());
+    // Both resume verbs publish the admitted lease before releasing either
+    // lock: a landed mark would keep the attached promise uncounted.
+    if(state==='attached'&&tree.state==='landed')this.forget(branch);
   }
   attach(branch:string):PoolTree{return this.presence(branch,'attached');}
   detach(branch:string):PoolTree{return this.presence(branch,'detached');}
@@ -542,7 +577,7 @@ function main(argv: string[]): number {
     return 0;
   } catch (error) {
     console.error(`pool: ${(error as Error).message}`);
-    return error instanceof PoolFull ? 75 : 1;
+    return poolExit(error);
   }
 }
 
