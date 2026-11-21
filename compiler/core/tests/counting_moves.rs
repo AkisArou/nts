@@ -16,12 +16,18 @@ use nts_core::hir::{self, OpKind};
 use nts_frontend_ts::Frontend;
 
 fn counted(case: &str) -> hir::Prepared {
+    counted_at("memory", case)
+}
+
+/// [`counted`] for a case in another corpus under `tests/`.
+fn counted_at(corpus: &str, case: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/memory")
+        .join("../../tests")
+        .join(corpus)
         .join(case)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("tests/memory/{case} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/{corpus}/{case} is checked in"));
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
@@ -125,4 +131,51 @@ fn a_field_behind_an_assertion_is_borrowed() {
 fn a_handed_back_receiver_is_a_move() {
     let prepared = counted("pile-shuffle");
     assert_eq!(counting_in(&prepared, "Piles#constructor"), 0);
+}
+
+/// A borrow lasts until its last read, not until the end of everything its
+/// block can reach. Each function reads a chain out of a slot and only then
+/// overwrites the slot, and the overwrite, reachable round a loop or after
+/// the reads, made every read in the chain copy and release. What is left is
+/// the overwrite's own retain and release, and, on each throwing path, the
+/// release of the parameter the throw abandons. Counts on main before the
+/// change: 16, 2, 5 and 6.
+#[test]
+fn a_borrow_ends_at_its_last_read() {
+    let prepared = counted("a-borrow-ends-at-its-last-read");
+    // `old.next!.value + old.next!.back!.value`, then `ring[slot] = fresh`.
+    // The 7 left: the overwrite giving back what the slot held (1), and on
+    // each of the three throwing paths the error it built (3) and the
+    // `fresh` it was handed (3). The 9 removed were the copies and releases
+    // of the four reads, and the copy of `old` given back on the first
+    // throwing path.
+    assert_eq!(counting_in(&prepared, "replaceAfterBranches"), 7);
+    // The store pairs with the load of `old.next`, which takes the slot's
+    // reference rather than borrowing it: a take is a load fewer than a
+    // borrow followed by a store that has to read the slot again.
+    assert_eq!(counting_in(&prepared, "relinkAfterEarlyExit"), 2);
+    assert_eq!(counting_in(&prepared, "replaceInLoop"), 3);
+    // `at`, carried by the loop's parameter, is read before the store.
+    assert_eq!(counting_in(&prepared, "carriedPastNoStore"), 2);
+}
+
+/// Each `after` function beside its control, the same function with the
+/// overwrite moved in front of the last read. The control keeps its counts:
+/// what is read after its slot lets go of it holds a reference of its own,
+/// or takes the slot's. Run against node under reference counting, the same
+/// fixture shows each `before` function's reads still find their objects.
+#[test]
+fn a_store_before_the_last_read_still_ends_the_borrow() {
+    let prepared = counted_at("programs", "a-borrow-read-around-the-store-that-ends-it");
+    for (after, before, kept, copied) in [
+        ("afterBranches", "beforeBranches", 8, 17),
+        ("afterCall", "beforeCall", 3, 6),
+        ("afterEarlyExit#whole", "beforeEarlyExit#whole", 5, 11),
+        ("afterLoop#whole", "beforeLoop#whole", 6, 12),
+        ("afterCarried#whole", "beforeCarried#whole", 4, 10),
+        ("afterThrow", "beforeThrow", 5, 10),
+    ] {
+        assert_eq!(counting_in(&prepared, after), kept, "{after}");
+        assert_eq!(counting_in(&prepared, before), copied, "{before}");
+    }
 }

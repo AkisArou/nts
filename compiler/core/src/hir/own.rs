@@ -622,7 +622,7 @@ fn classify(
                 // this frame now holds on the stack.
                 if summaries.stack_returns.contains(name) {
                     Ownership::Borrowed
-                } else if !summaries.hands_back.contains(name) {
+                } else if arrives_owned(kind, summaries) {
                     Ownership::Produced
                 } else if safely() {
                     Ownership::Borrowed
@@ -630,7 +630,7 @@ fn classify(
                     Ownership::Copied
                 }
             } else if let OpKind::Call {
-                callee: super::Callee::Native(target),
+                callee: super::Callee::Native(_),
                 ..
             } = kind
                 && func.values[value.0 as usize].ty.counting().is_some()
@@ -655,7 +655,7 @@ fn classify(
                 // borrowed for as long as it is read, and counted only
                 // where it leaves the frame -- a store, a capture, a return
                 // -- as any borrowed value is.
-                if target.returns_owned {
+                if arrives_owned(kind, summaries) {
                     Ownership::Produced
                 } else if read.contains(value) && !stack_rooted(func, *value) {
                     Ownership::Copied
@@ -720,14 +720,16 @@ pub fn analyze(
         &summaries.harmless,
         &summaries.starts_zero,
     );
-    let crossing = crossing_borrows(func, layouts, summaries, &held, &initializing, &owns);
-    for anchor in anchors(func, &crossing, &held) {
-        live.hold_to_every_exit(func, anchor);
-    }
-    // And a foreign counted handle a name still holds, which is an anchor for a
-    // reason *no* analysis here can see. See `held_to_the_end`.
+    // A foreign counted handle a name still holds, which is an anchor for a
+    // reason *no* analysis here can see. See `held_to_the_end`. Stretched
+    // first, because a borrow's window is read from liveness and has to see
+    // every value at its full length.
     for (handle, through) in held_to_the_end(func) {
         live.hold_through(func, handle, |block| through.contains(&block));
+    }
+    let crossing = crossing_borrows(func, layouts, summaries, &held, &initializing, &owns, live);
+    for anchor in anchors(func, &crossing, &held) {
+        live.hold_to_every_exit(func, anchor);
     }
 
     let live = &*live;
@@ -885,8 +887,9 @@ fn field_name<'a>(
 /// range this pass stretches to every exit so that borrowing from them is safe.
 ///
 /// `reaches` is the other half. A borrow can only be invalidated by something
-/// that runs *after* it, so the scan below is over the blocks reachable from
-/// the load's own block and not over the whole function.
+/// that runs *after* it, so nothing outside the blocks reachable from where it
+/// starts can end it. `exposure` narrows that to the points a borrow is still
+/// read at; see [`Exposure`].
 struct Standing<'a> {
     settled: &'a rustc_hash::FxHashSet<ValueId>,
     owned: &'a rustc_hash::FxHashSet<ValueId>,
@@ -894,11 +897,8 @@ struct Standing<'a> {
     defined_in: &'a [Option<usize>],
     /// Which blocks each block can reach, itself included when it is in a loop.
     reaches: &'a [rustc_hash::FxHashSet<usize>],
-    /// Stores that write over a zero, and so disconnect nothing. See
-    /// [`initializing_stores`].
-    initializing: &'a rustc_hash::FxHashSet<ValueId>,
-    /// Callees that only initialize, and so disturb no slot anyone is watching.
-    harmless: &'a rustc_hash::FxHashSet<String>,
+    /// Where each value is live, and what there can end a borrow.
+    exposure: &'a Exposure<'a>,
 }
 
 /// Which block each value is defined in, and which blocks each block reaches.
@@ -1164,109 +1164,159 @@ fn anchored(func: &Func, standing: &Standing<'_>, container: ValueId) -> bool {
 /// from whatever anchors `c`, and is alive for exactly as long. An initializing
 /// store adds an edge and removes none, so the only thing that could take `v`
 /// away again is a store over a slot that was *not* zero -- which is what
-/// [`slot_survives`] goes on to rule out.
+/// [`slot_survives`] goes on to rule out, for as long as `v` or anything
+/// resting on it is read.
 ///
 /// This is what lets the link a list has just been extended with travel on as a
 /// borrow. `made` is stored into `tail.next` before it is carried round the
 /// loop, so by the time the edge takes it the list already holds it, and the
 /// retain that edge was doing was for a reference the list had.
-fn housed_safely(
-    func: &Func,
-    layouts: &[Layout],
-    mutates: &rustc_hash::FxHashSet<String>,
-    standing: &Standing<'_>,
-    unobserved: &rustc_hash::FxHashSet<ValueId>,
-    value: ValueId,
-) -> bool {
-    func.values.iter().enumerate().any(|(index, op)| {
-        let store = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-        if !standing.initializing.contains(&store) {
-            return false;
-        }
-        let (container, field) = match &op.kind {
-            OpKind::FieldSet {
-                object,
-                field,
-                value: stored,
-                ..
-            } if *stored == value => (*object, Some(*field)),
-            OpKind::ArraySet {
-                array,
-                value: stored,
-                ..
-            } if *stored == value => (*array, None),
-            _ => return false,
-        };
+fn housed_safely(func: &Func, layouts: &[Layout], standing: &Standing<'_>, value: ValueId) -> bool {
+    let Some(stores) = standing.exposure.housed.get(&value) else {
+        return false;
+    };
+    let resting = standing.exposure.resting_on(standing.settled, value);
+    stores.iter().any(|&(store, container, field)| {
         anchored(func, standing, container)
-            && slot_survives(
-                func, layouts, mutates, standing, unobserved, container, field, store,
-            )
+            && slot_survives(func, layouts, standing, container, field, store, &resting)
     })
 }
 
-/// Whether a slot goes on holding what it holds, everywhere this can reach.
-#[allow(clippy::too_many_arguments)]
+/// Whether a slot goes on holding what it holds for as long as `resting` --
+/// the borrow and everything resting on it ([`Exposure::resting_on`]) -- is
+/// still read.
+///
+/// **The window is liveness's.** Record 0024 puts the invariant as "the anchor
+/// slot is written between the borrow and a use", and the points between a
+/// borrow and a use are exactly the points liveness calls it live. A store
+/// where nothing resting on the slot is live again cannot be observed. This
+/// asked for every operation in every block reachable from the borrow
+/// instead, and in a loop that is the whole loop: `cyclic-churn` reads
+/// `ring[slot].child.parent` across its null checks and only then overwrites
+/// `ring[slot]`, and the overwrite, reachable round the back edge, cost each
+/// of the four reads a retain and a release, 15,872 counting operations a call.
+///
+/// A loop needs nothing of its own. A value defined in it names a new object
+/// each time round and is dead before it is defined again, unless a block
+/// parameter carries it, and then that parameter rests on it and its liveness
+/// is part of the window.
+///
+/// The window is also kept to the blocks reachable from `from` (its own block
+/// included), which is what it was before. For a load that changes nothing --
+/// whatever rests on it is defined after it -- but for a value an initializing
+/// store houses ([`housed_safely`]) it keeps the window to after the store.
 fn slot_survives(
     func: &Func,
     layouts: &[Layout],
-    mutates: &rustc_hash::FxHashSet<String>,
     standing: &Standing<'_>,
-    unobserved: &rustc_hash::FxHashSet<ValueId>,
     container: ValueId,
     from_field: Option<u32>,
     from: ValueId,
+    resting: &[ValueId],
 ) -> bool {
-    let ours = from_field.and_then(|field| field_name(func, layouts, container, field));
-    // A borrow out of a `readonly` slot cannot be ended by a call. No callee can
-    // write the slot -- that is what the word means -- so the reference the load
-    // found is still held by a container this borrow already required to be
-    // alive, and one call cannot take it away. Without this, any call that
-    // stores *anything* ends the borrow, which is how a field the checker
-    // proved constant came to be counted once per read.
-    let settled = from_field.is_some_and(|field| field_is_settled(func, layouts, container, field));
-    // Only what can run after the load. A borrow is invalidated by a store or a
-    // call that happens *later*, and scanning the whole function charged it for
-    // everything that happened earlier too -- which is most of a function that
-    // builds a structure and then walks it. `local-anchor` builds a list with a
-    // call that stores and then walks it with no call at all, and paid for the
-    // build on every step of the walk.
-    let after = standing
-        .defined_in
-        .get(from.0 as usize)
-        .copied()
-        .flatten()
-        .map(|at| &standing.reaches[at]);
-    !func.values.iter().enumerate().any(|(index, op)| {
-        let each = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-        if unobserved.contains(&each) {
-            return false;
-        }
-        // An operation no block holds any more never runs: the arena keeps
-        // what earlier passes replaced or cut. Read as a call, one of them
-        // ended every borrow in the function.
-        let Some(theirs) = standing.defined_in.get(index).copied().flatten() else {
-            return false;
-        };
-        // Its own block counts: a loop reaches itself, and on the next time
-        // round what came before the load comes after the one before it.
-        if let Some(reachable) = after {
-            let mine = standing.defined_in[from.0 as usize].unwrap_or(theirs);
-            if theirs != mine && !reachable.contains(&theirs) {
-                return false;
-            }
-        }
-        // A store that writes over a zero adds an edge and removes none, so
-        // nothing it does can end a borrow. Without this a list cannot be built
-        // without counting: the store that extends the chain looks exactly like
-        // one that could cut it, because both write a field called `next`.
-        if standing.initializing.contains(&each) {
-            return false;
-        }
-        match &op.kind {
+    let watched = Watched {
+        field: from_field,
+        ours: from_field.and_then(|field| field_name(func, layouts, container, field)),
+        // A borrow out of a `readonly` slot cannot be ended by a call. No
+        // callee can write the slot -- that is what the word means -- so the
+        // reference the load found is still held by a container this borrow
+        // already required to be alive, and one call cannot take it away.
+        // Without this, any call that stores *anything* ends the borrow, which
+        // is how a field the checker proved constant came to be counted once
+        // per read.
+        settled: from_field.is_some_and(|field| field_is_settled(func, layouts, container, field)),
+    };
+    let home = standing.defined_in.get(from.0 as usize).copied().flatten();
+    let after = |block: usize| {
+        home.is_none_or(|home| block == home || standing.reaches[home].contains(&block))
+    };
+    resting
+        .iter()
+        .all(|&value| standing.exposure.quiet_while_live(value, &after, &watched))
+}
+
+/// The slot a borrow was read from, as [`Effects::ends`] asks about it.
+struct Watched<'a> {
+    /// The field, or `None` for an element.
+    field: Option<u32>,
+    /// The field's name, which is how two slots are told apart
+    /// ([`field_name`]); `None` where no layout names it.
+    ours: Option<&'a str>,
+    /// A `readonly` field, which no call can write.
+    settled: bool,
+}
+
+/// Where each value is live, and what can end a borrow at each operation.
+///
+/// Built once per function and read by every borrow [`crossing_borrows`]
+/// weighs, on every pass of its fixpoint: one walk over the ops and over
+/// liveness's sets, rather than one walk over the function per borrow. What a
+/// borrow costs after that is a lookup per block its window covers.
+struct Exposure<'a> {
+    live: &'a liveness::Liveness,
+    /// Each placed value's block, and its position there; `None` for a block
+    /// parameter, which is defined before every op.
+    placed: Vec<Option<(usize, Option<usize>)>>,
+    /// Per block, the last op that reads each value.
+    last_read: Vec<rustc_hash::FxHashMap<ValueId, usize>>,
+    /// Per block, what its terminator reads.
+    terminator_reads: Vec<rustc_hash::FxHashSet<ValueId>>,
+    /// The blocks each value that may rest on a borrow is live into. With the
+    /// block that defines it, these are the blocks it is available in.
+    live_into: rustc_hash::FxHashMap<ValueId, Vec<usize>>,
+    /// Per block, what its ops can end.
+    effects: Vec<Effects<'a>>,
+    /// The ops that read each value.
+    users: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    /// The block parameters each value is handed to.
+    handed_to: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    /// The initializing stores of each value: the store, its container and the
+    /// field, `None` for an element.
+    housed: rustc_hash::FxHashMap<ValueId, Vec<(ValueId, ValueId, Option<u32>)>>,
+}
+
+/// How many kinds of op [`Effects`] tells apart.
+const EFFECT_KINDS: usize = 6;
+
+/// What one block's ops can end, as running counts: `counts[i]` covers the
+/// ops before position `i`, so any stretch of them is a subtraction.
+struct Effects<'a> {
+    counts: Vec<[u32; EFFECT_KINDS]>,
+    /// The positions of stores into a named field, by name.
+    named: rustc_hash::FxHashMap<&'a str, Vec<usize>>,
+}
+
+impl Effects<'_> {
+    /// A call that can store, or one whose callee is not known: ends every
+    /// borrow but one out of a `readonly` field.
+    const CALL: usize = 0;
+    /// A runtime helper that may store or release: ends an element borrow.
+    const ELEMENT_HELPER: usize = 1;
+    /// ... and one that may also write a field (not `keeps_field_borrows`).
+    const FIELD_HELPER: usize = 2;
+    const ELEMENT_STORE: usize = 3;
+    const FIELD_STORE: usize = 4;
+    /// A store into a field no layout names, which may be any field.
+    const UNNAMED_FIELD_STORE: usize = 5;
+
+    /// What one op can end: the kinds it counts as, and the name of the field
+    /// it stores into, when a layout names it.
+    fn of<'n>(
+        func: &Func,
+        layouts: &'n [Layout],
+        summaries: &Summaries,
+        kind: &OpKind,
+    ) -> ([bool; EFFECT_KINDS], Option<&'n str>) {
+        let mut ends = [false; EFFECT_KINDS];
+        let mut name = None;
+        match kind {
             OpKind::Call {
-                callee: super::Callee::Direct(name),
+                callee: super::Callee::Direct(callee),
                 ..
-            } => !settled && mutates.contains(name) && !standing.harmless.contains(name),
+            } => {
+                ends[Self::CALL] =
+                    summaries.mutates.contains(callee) && !summaries.harmless.contains(callee);
+            }
             // A runtime helper that runs no program code and writes no field
             // (`keeps_field_borrows`) cannot end a field borrow, the rule
             // `borrows_safely` applies block by block; the container's life is
@@ -1277,27 +1327,272 @@ fn slot_survives(
             // took a retain and a release of the key per lookup, a fifth of
             // `record-word-counts`.
             OpKind::Call {
-                callee: super::Callee::External(name),
+                callee: super::Callee::External(callee),
                 ..
             } => {
-                !settled
-                    && !super::runtime::stores_nothing(name)
-                    && (from_field.is_none() || !super::keeps_field_borrows(name))
+                let stores = !super::runtime::stores_nothing(callee);
+                ends[Self::ELEMENT_HELPER] = stores;
+                ends[Self::FIELD_HELPER] = stores && !super::keeps_field_borrows(callee);
             }
-            OpKind::Call { .. } => !settled,
-            OpKind::FieldSet { object, field, .. } => match (ours, from_field) {
-                // An element borrow is never a field, and a field slot is named.
-                (_, None) => false,
-                // A layout this cannot find is a slot it cannot rule out.
-                (None, Some(_)) => true,
-                (Some(ours), Some(_)) => {
-                    field_name(func, layouts, *object, *field).is_none_or(|theirs| ours == theirs)
-                }
-            },
-            OpKind::ArraySet { .. } => from_field.is_none(),
-            _ => false,
+            OpKind::Call { .. } => ends[Self::CALL] = true,
+            OpKind::FieldSet { object, field, .. } => {
+                ends[Self::FIELD_STORE] = true;
+                name = field_name(func, layouts, *object, *field);
+                ends[Self::UNNAMED_FIELD_STORE] = name.is_none();
+            }
+            OpKind::ArraySet { .. } => ends[Self::ELEMENT_STORE] = true,
+            _ => {}
         }
-    })
+        (ends, name)
+    }
+
+    /// Whether an op from position `lo` to `hi`, both included, can end a
+    /// borrow of `watched`.
+    fn ends(&self, lo: usize, hi: usize, watched: &Watched<'_>) -> bool {
+        let any = |kind: usize| self.counts[hi + 1][kind] > self.counts[lo][kind];
+        let calls = |helper: usize| !watched.settled && (any(Self::CALL) || any(helper));
+        match (watched.field, watched.ours) {
+            (None, _) => calls(Self::ELEMENT_HELPER) || any(Self::ELEMENT_STORE),
+            // A layout this cannot find is a slot it cannot rule out.
+            (Some(_), None) => calls(Self::FIELD_HELPER) || any(Self::FIELD_STORE),
+            (Some(_), Some(ours)) => {
+                calls(Self::FIELD_HELPER)
+                    || any(Self::UNNAMED_FIELD_STORE)
+                    || self.named.get(ours).is_some_and(|at| {
+                        let first = at.partition_point(|&position| position < lo);
+                        at.get(first).is_some_and(|&position| position <= hi)
+                    })
+            }
+        }
+    }
+}
+
+/// Whether a value may rest on a borrow ([`Exposure::resting_on`]): it is
+/// not a copy of a scalar, and does not arrive with a reference of its own.
+///
+/// Not "may hold a reference": a `StringView` is a native pointer into the
+/// string it lends, holding no count, and a borrow it was lent from has to
+/// outlive the call that reads it. Whose window ended at the view, a callback
+/// that call ran could overwrite the slot and free the string while C read it
+/// (`tests/interop/native-string-view-lend`). The line is the one
+/// `rc`'s `Leaning` draws: a scalar is a copy, and anything else leans on
+/// what it was made from.
+fn may_rest(func: &Func, summaries: &Summaries, value: ValueId) -> bool {
+    let op = &func.values[value.0 as usize];
+    !op.ty.is_scalar()
+        && !matches!(op.ty, HirType::Void | HirType::Never)
+        && !arrives_owned(&op.kind, summaries)
+}
+
+/// The block parameters each value is handed to, by the edges that pass it.
+fn handed_to(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
+    let mut handed: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    for block in &func.blocks {
+        let edges: Vec<(BlockId, &Vec<ValueId>)> = match &block.terminator {
+            super::Terminator::Jump { target, args } => vec![(*target, args)],
+            super::Terminator::Branch {
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+                ..
+            } => vec![(*then_target, then_args), (*else_target, else_args)],
+            _ => Vec::new(),
+        };
+        for (target, args) in edges {
+            let Some(receiving) = func.blocks.get(target.0 as usize) else {
+                continue;
+            };
+            for (arg, param) in args.iter().zip(&receiving.params) {
+                handed.entry(*arg).or_default().push(*param);
+            }
+        }
+    }
+    handed
+}
+
+impl<'a> Exposure<'a> {
+    fn of(
+        func: &Func,
+        layouts: &'a [Layout],
+        summaries: &Summaries,
+        live: &'a liveness::Liveness,
+        initializing: &rustc_hash::FxHashSet<ValueId>,
+    ) -> Self {
+        let mut placed = vec![None; func.values.len()];
+        let mut last_read = Vec::with_capacity(func.blocks.len());
+        let mut terminator_reads = Vec::with_capacity(func.blocks.len());
+        let mut effects = Vec::with_capacity(func.blocks.len());
+        let mut users: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> =
+            rustc_hash::FxHashMap::default();
+        let mut housed: rustc_hash::FxHashMap<ValueId, Vec<(ValueId, ValueId, Option<u32>)>> =
+            rustc_hash::FxHashMap::default();
+        let mut live_into: rustc_hash::FxHashMap<ValueId, Vec<usize>> =
+            rustc_hash::FxHashMap::default();
+        for (at, block) in func.blocks.iter().enumerate() {
+            for param in &block.params {
+                placed[param.0 as usize] = Some((at, None));
+            }
+            // Operations in a block that control never leaves. A `throw`
+            // lowers to a call and an `Unreachable`, and nothing after it runs
+            // -- so whatever it did, nothing observes. Guard clauses are
+            // everywhere in real code, and every one of them was ending a
+            // borrow for the whole function around it.
+            let unobserved = matches!(block.terminator, super::Terminator::Unreachable);
+            let mut reads = rustc_hash::FxHashMap::default();
+            let mut counts = Vec::with_capacity(block.ops.len() + 1);
+            counts.push([0; EFFECT_KINDS]);
+            let mut named: rustc_hash::FxHashMap<&'a str, Vec<usize>> =
+                rustc_hash::FxHashMap::default();
+            for (position, &op) in block.ops.iter().enumerate() {
+                placed[op.0 as usize] = Some((at, Some(position)));
+                let kind = &func.values[op.0 as usize].kind;
+                let rests = may_rest(func, summaries, op);
+                for operand in super::operands_of(kind) {
+                    if may_rest(func, summaries, operand) {
+                        reads.insert(operand, position);
+                        if rests {
+                            users.entry(operand).or_default().push(op);
+                        }
+                    }
+                }
+                match kind {
+                    OpKind::FieldSet {
+                        object,
+                        field,
+                        value,
+                        ..
+                    } if initializing.contains(&op) => {
+                        housed
+                            .entry(*value)
+                            .or_default()
+                            .push((op, *object, Some(*field)));
+                    }
+                    OpKind::ArraySet { array, value, .. } if initializing.contains(&op) => {
+                        housed.entry(*value).or_default().push((op, *array, None));
+                    }
+                    _ => {}
+                }
+                let mut row = *counts.last().unwrap_or(&[0; EFFECT_KINDS]);
+                // A store that writes over a zero adds an edge and removes
+                // none, so nothing it does can end a borrow. Without this a
+                // list cannot be built without counting: the store that
+                // extends the chain looks exactly like one that could cut it,
+                // because both write a field called `next`.
+                if !unobserved && !initializing.contains(&op) {
+                    let (ends, name) = Effects::of(func, layouts, summaries, kind);
+                    for (count, adds) in row.iter_mut().zip(ends) {
+                        *count += u32::from(adds);
+                    }
+                    if let Some(name) = name {
+                        named.entry(name).or_default().push(position);
+                    }
+                }
+                counts.push(row);
+            }
+            let ends: rustc_hash::FxHashSet<ValueId> =
+                super::operands_of_terminator(&block.terminator)
+                    .into_iter()
+                    .collect();
+            for value in live.live_in(BlockId(u32::try_from(at).unwrap_or(u32::MAX))) {
+                if may_rest(func, summaries, *value) {
+                    live_into.entry(*value).or_default().push(at);
+                }
+            }
+            last_read.push(reads);
+            terminator_reads.push(ends);
+            effects.push(Effects { counts, named });
+        }
+        Self {
+            live,
+            placed,
+            last_read,
+            terminator_reads,
+            live_into,
+            effects,
+            users,
+            handed_to: handed_to(func),
+            housed,
+        }
+    }
+
+    /// A value and everything that rests on it: what reads its object through
+    /// it without a reference of its own, and so is good only while the slot
+    /// it came from still holds it.
+    ///
+    /// That is what is read out of it, a view, a `StringView` or a
+    /// repackaging of it, a call that hands it back, and a block parameter it
+    /// is carried into that `crossing` still calls borrowed -- one that is not
+    /// is counted, and its edges retain for it. Transitively:
+    /// `ring[slot].child.parent` rests on `ring[slot]`. Anything made from it
+    /// that [`may_rest`] says can, rather than a list: a value that takes a
+    /// count of its own later only makes the window longer than it had to be.
+    fn resting_on(
+        &self,
+        crossing: &rustc_hash::FxHashSet<ValueId>,
+        value: ValueId,
+    ) -> Vec<ValueId> {
+        let mut seen = rustc_hash::FxHashSet::default();
+        seen.insert(value);
+        let mut resting = vec![value];
+        let mut next = 0;
+        while let Some(&at) = resting.get(next) {
+            next += 1;
+            for &user in self.users.get(&at).into_iter().flatten() {
+                if seen.insert(user) {
+                    resting.push(user);
+                }
+            }
+            for &param in self.handed_to.get(&at).into_iter().flatten() {
+                if crossing.contains(&param) && seen.insert(param) {
+                    resting.push(param);
+                }
+            }
+        }
+        resting
+    }
+
+    /// Whether nothing that could end a borrow of `watched` runs, in a block
+    /// `after` admits, while `value` is live.
+    fn quiet_while_live(
+        &self,
+        value: ValueId,
+        after: &impl Fn(usize) -> bool,
+        watched: &Watched<'_>,
+    ) -> bool {
+        let home = self.placed[value.0 as usize].map(|(block, _)| block);
+        home.into_iter()
+            .chain(self.live_into.get(&value).into_iter().flatten().copied())
+            .filter(|&block| after(block))
+            .all(|block| {
+                self.live_ops(value, block)
+                    .is_none_or(|(lo, hi)| !self.effects[block].ends(lo, hi, watched))
+            })
+    }
+
+    /// The ops of `block` that run while `value` is live, first and last
+    /// included: from the block's start or the op after its definition, to
+    /// the block's end where it is live out or the terminator reads it, else
+    /// to its last read. The op that reads it last is inside, as it is for
+    /// `borrows_safely`: a store that reads a borrow can still free it first.
+    fn live_ops(&self, value: ValueId, block: usize) -> Option<(usize, usize)> {
+        let length = self.effects[block].counts.len() - 1;
+        let id = BlockId(u32::try_from(block).unwrap_or(u32::MAX));
+        let start = match self.placed[value.0 as usize] {
+            _ if self.live.live_in(id).contains(&value) => 0,
+            Some((home, None)) if home == block => 0,
+            Some((home, Some(position))) if home == block => position + 1,
+            _ => return None,
+        };
+        let end = if self.live.live_out(id).contains(&value)
+            || self.terminator_reads[block].contains(&value)
+        {
+            length.checked_sub(1)?
+        } else {
+            *self.last_read[block].get(&value)?
+        };
+        (start <= end).then_some((start, end))
+    }
 }
 
 /// Values that are null on entry to each block.
@@ -1898,19 +2193,8 @@ fn crossing_borrows(
     owned: &rustc_hash::FxHashSet<ValueId>,
     initializing: &rustc_hash::FxHashSet<ValueId>,
     owns: &rustc_hash::FxHashSet<ValueId>,
+    live: &liveness::Liveness,
 ) -> rustc_hash::FxHashSet<ValueId> {
-    let (mutates, harmless) = (&summaries.mutates, &summaries.harmless);
-    // Operations in a block that control never leaves. A `throw` lowers to a
-    // call and an `Unreachable`, and nothing after it runs -- so whatever it
-    // did, nothing observes. Guard clauses are everywhere in real code, and
-    // every one of them was ending a borrow for the whole function around it.
-    let mut unobserved = rustc_hash::FxHashSet::default();
-    for block in &func.blocks {
-        if matches!(block.terminator, super::Terminator::Unreachable) {
-            unobserved.extend(block.ops.iter().copied());
-        }
-    }
-
     let mut crossing = rustc_hash::FxHashSet::default();
     if !eliding() {
         return crossing;
@@ -1921,6 +2205,14 @@ fn crossing_borrows(
     // and a block parameter are *candidates*: they may turn out to be borrows,
     // and the loop below decides. Nothing else is ever in the set, which is
     // what stops an allocation or a call result from being assumed away.
+    //
+    // Nor a load that can *take* the slot's reference ([`taking`]): the store
+    // that overwrites the slot pairs with it, so the reference moves out of
+    // the slot for nothing and the store gives nothing back. A borrow there
+    // would leave the store to read the slot again and release what it
+    // held: as many counting operations, and a load more. Once a borrow's
+    // window ended at its last read rather than the function's end, the
+    // borrow began to win that choice, which is backwards.
     for (index, op) in func.values.iter().enumerate() {
         let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
         if (matches!(op.kind, OpKind::Param(_)) || is_load(&op.kind))
@@ -1933,14 +2225,35 @@ fn crossing_borrows(
             crossing.insert(value);
         }
     }
+    if crossing
+        .iter()
+        .any(|value| is_load(&func.values[value.0 as usize].kind))
+    {
+        let (would_take, _) = taking(
+            func,
+            layouts,
+            &rustc_hash::FxHashSet::default(),
+            &summaries.harmless,
+        );
+        crossing.retain(|value| !would_take.contains(value));
+    }
+    let mut weighed = crossing
+        .iter()
+        .any(|value| is_load(&func.values[value.0 as usize].kind));
     for block in &func.blocks {
         for param in &block.params {
             if counted(func, layouts, *param) {
                 crossing.insert(*param);
+                weighed = true;
             }
         }
     }
     crossing.extend(stack_borrowed_results(func, summaries));
+    // Nothing the fixpoint below would weigh: every candidate is a parameter
+    // or a stack-rooted result, and stands as it is.
+    if !weighed {
+        return crossing;
+    }
     // Loads and block parameters in **one** fixpoint, not two, and running
     // down rather than up. In a loop they depend on each other circularly:
     // `at` is a block parameter carrying `head` and `at.next`, the load is good
@@ -1949,6 +2262,7 @@ fn crossing_borrows(
     // asked from above it survives unless something outside it objects.
     let incoming = super::loops::predecessors(func);
     let (defined_in, reaches) = control_flow(func);
+    let exposure = Exposure::of(func, layouts, summaries, live, initializing);
     loop {
         let mut shrank = false;
         let mut doomed: Vec<ValueId> = Vec::new();
@@ -1957,8 +2271,7 @@ fn crossing_borrows(
             owned,
             defined_in: &defined_in,
             reaches: &reaches,
-            initializing,
-            harmless,
+            exposure: &exposure,
         };
         for &value in &crossing {
             let kind = &func.values[value.0 as usize].kind;
@@ -1988,12 +2301,11 @@ fn crossing_borrows(
                 || !slot_survives(
                     func,
                     layouts,
-                    mutates,
                     &standing,
-                    &unobserved,
                     container,
                     field,
                     value,
+                    &exposure.resting_on(&crossing, value),
                 )
             {
                 doomed.push(value);
@@ -2027,9 +2339,7 @@ fn crossing_borrows(
                                 // `d === null ? null : query(d)`.
                                 || (stack_rooted(func, *param)
                                     && matches!(func.values[arg.0 as usize].kind, OpKind::ConstNull))
-                                || housed_safely(
-                                    func, layouts, mutates, &standing, &unobserved, *arg,
-                                )
+                                || housed_safely(func, layouts, &standing, *arg)
                         })
                     })
                 {
@@ -2307,6 +2617,33 @@ pub(super) fn produces_owned(kind: &OpKind) -> bool {
             // it. Retaining again here would count one reference twice.
             | OpKind::BlockParam(_)
     )
+}
+
+/// Whether a value arrives holding a reference of its own, whatever it was
+/// computed from: an allocation, a concatenation, or a call whose result is
+/// +1 -- every call but one that hands back an argument
+/// (`Summaries::hands_back`), one that returns a handle from the stack
+/// (`Summaries::stack_returns`), and a foreign function's +0 result.
+///
+/// [`classify`] makes these `Produced`, and [`Exposure::resting_on`] leaves
+/// them out of what a borrow has to outlive: a value holding its own
+/// reference no longer needs the slot it was computed from. One rule, read by
+/// both, so a value one of them calls owned the other cannot call borrowed.
+fn arrives_owned(kind: &OpKind, summaries: &Summaries) -> bool {
+    match kind {
+        OpKind::Call {
+            callee: super::Callee::Direct(name) | super::Callee::External(name),
+            ..
+        } => !summaries.stack_returns.contains(name) && !summaries.hands_back.contains(name),
+        OpKind::Call {
+            callee: super::Callee::Native(target),
+            ..
+        } => target.returns_owned,
+        // A block parameter's reference is its edges' question, and
+        // `crossing_borrows` answers it.
+        OpKind::BlockParam(_) => false,
+        other => produces_owned(other),
+    }
 }
 
 /// Whether to elide at all.

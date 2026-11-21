@@ -1,0 +1,26 @@
+ideal 49
+allocated 27
+because no read takes a reference: every one finishes before the store or
+because call that would end it. What is left is what the stores and the
+because ownership the program hands around cost, and nothing can remove it.
+because
+because Twelve pairs are made, each `head` with two holders (the caller and
+because `tail.back`): 12 retains. Every store of `fresh` or a new pair into a
+because slot that held something is a retain of the new reference and a release
+because of the old one: 1 in `replaceAfterBranches` (its `fresh` arrives
+because handed over), 10 in `replaceInLoop`, 8 in `carriedPastNoStore`, and the
+because five releases of the replacement loop in `work`. `relinkAfterEarlyExit`
+because takes the old `next` out of its slot and gives it back once read (1),
+because stores `fresh` (1), and the tail it gave up dies and gives up its
+because `back` (1), which later lets its head die and give up `fresh` (1).
+because `work` hands `fresh` over once (1) and gives up the pair it made for
+because `replaceInLoop` (1), `fresh` (1) and the ring (1), whose destruction
+because gives up its five elements (5).
+because
+because Main counted 77: 28 more, the copy and release of `ring[slot]`,
+because `ring[slot].next` (twice) and `.next.back` in `replaceAfterBranches`,
+because of each `ring[i]` in `replaceInLoop`, and of each `ring[i]` the
+because loop's parameter carries in `carriedPastNoStore`. Each was ended by an
+because overwrite that came after its last read.
+because
+because Allocations: 24 nodes, and 3 for the ring and its growing element storage.
