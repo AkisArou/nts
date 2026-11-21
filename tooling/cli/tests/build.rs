@@ -184,6 +184,192 @@ export default defineConfig({
 });
 "#;
 
+/// #917: GCC cannot inline the PIC runtime under semantic interposition.
+/// The scalar-only reproducer still compiles that runtime. Load and call the
+/// products, since successful linking alone does not prove their ABI works.
+fn compiler_product_shapes(compiler: &str) {
+    if !cfg!(target_os = "linux")
+        || !available()
+        || !Command::new(compiler)
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    {
+        skip("Linux, node, clang, gcc and nm");
+        return;
+    }
+    let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
+    assert!(headers.join("node_api.h").is_file(), "Node-API headers");
+    for (shape, product, artifact) in [
+        (
+            "shared",
+            "library.native({entry:'./src/main.ts',targets:[target.linux({backend:'c'})]})",
+            "linux-gnu-x86_64/libprobe.so",
+        ),
+        (
+            "app",
+            "app.cli({entry:'./src/main.ts',backend:'c'})",
+            "linux-gnu-x86_64/probe",
+        ),
+        (
+            "addon",
+            "library.node({entry:'./src/main.ts',apiVersion:8})",
+            "node-api-8-x86_64/probe.node",
+        ),
+    ] {
+        let project = fixture(
+            &format!("build-{compiler}-{shape}"),
+            &format!(
+                "import {{defineConfig,library,app,target}} from '@nts/config';\nexport default defineConfig({{products:{{probe:{product}}}}});\n"
+            ),
+        );
+        let program = if shape == "app" {
+            "export function answer(): number { return 42; }\nconsole.log(answer());\n"
+        } else {
+            "export function answer(): number { return 42; }\n"
+        };
+        std::fs::write(project.join("src/main.ts"), program).expect("entry");
+        let built = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("CC", compiler)
+                .env("NTS_NAPI_INCLUDE", &headers),
+        )
+        .expect("build");
+        assert!(
+            built.status.success(),
+            "{compiler} {shape}:\n{}{}",
+            String::from_utf8_lossy(&built.stdout),
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let artifact = project.join(".nts/build/probe").join(artifact);
+        let output = match shape {
+            "shared" => {
+                assert_eq!(exported(&artifact), BTreeSet::from(["answer".to_owned()]));
+                std::fs::write(project.join("load.c"), "#include <dlfcn.h>\n#include <stdio.h>\nint main(int n,char **v){if(n!=2)return 2;void *p=dlopen(v[1],RTLD_NOW);if(!p)return 3;double (*f)(void)=(double (*)(void))dlsym(p,\"answer\");if(!f)return 4;printf(\"%g\\n\",f());return dlclose(p)!=0;}\n").expect("consumer");
+                let consumer = project.join("load");
+                let built = Command::new(compiler).arg(project.join("load.c"))
+                    .args(["-ldl", "-o"]).arg(&consumer).output().expect("consumer build");
+                assert!(built.status.success(), "{built:?}");
+                Command::new(consumer).arg(&artifact).output()
+            }
+            "addon" => Command::new("node").args(["-e", &format!("console.log(require({:?}).answer())", artifact.to_string_lossy())]).output(),
+            _ => Command::new(&artifact).output(),
+        }.expect("running product");
+        assert!(output.status.success(), "{compiler} {shape}: {output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "42\n",
+            "{compiler} {shape}"
+        );
+    }
+}
+
+#[test]
+fn gcc_builds_every_native_product_shape() {
+    compiler_product_shapes("gcc");
+}
+
+#[test]
+fn clang_builds_every_native_product_shape() {
+    compiler_product_shapes("clang");
+}
+
+#[test]
+fn pic_interposition_policy_follows_the_wrapped_compiler() {
+    use std::os::unix::fs::PermissionsExt;
+    if !available()
+        || !Command::new("gcc")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    {
+        skip("node, clang, gcc and nm");
+        return;
+    }
+    let project = fixture(
+        "build-pic-policy",
+        &SHARED
+            .replace("library, target", "library, sources, target")
+            .replace(
+                "  products:",
+                "  native: [sources({dir:'native'})],\n  products:",
+            ),
+    );
+    std::fs::create_dir(project.join("native")).expect("native directory");
+    std::fs::write(
+        project.join("native/foreign.c"),
+        "int foreign(void) { return 1; }\n",
+    )
+    .expect("foreign source");
+    let wrapper = project.join("cc-wrapper");
+    std::fs::write(&wrapper, "#!/bin/sh\nprintf '%s\\t' \"$@\" >> \"$NTS_CC_TRACE\"\nprintf '\\n' >> \"$NTS_CC_TRACE\"\nexec \"$@\"\n").expect("wrapper");
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755))
+        .expect("executable wrapper");
+    for compiler in ["gcc", "clang"] {
+        let trace = project.join(format!("{compiler}.trace"));
+        let built = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("CC", format!("{} {compiler}", wrapper.display()))
+                .env("NTS_CC_TRACE", &trace),
+        )
+        .expect("build");
+        assert!(built.status.success(), "{built:?}");
+        let calls = std::fs::read_to_string(trace).expect("compiler trace");
+        assert_eq!(
+            calls
+                .lines()
+                .filter(|line| line.split('\t').any(|arg| arg == "-dM"))
+                .count(),
+            1,
+            "{calls}"
+        );
+        let compiles: Vec<_> = calls
+            .lines()
+            .filter(|line| line.split('\t').any(|arg| arg == "-c"))
+            .collect();
+        assert!(
+            compiles.iter().any(|line| line.contains("program.c\t")),
+            "{calls}"
+        );
+        assert!(
+            compiles.iter().any(|line| line.contains("nts_runtime.c\t")),
+            "{calls}"
+        );
+        assert!(
+            compiles.iter().any(|line| line.contains("foreign.c\t")),
+            "{calls}"
+        );
+        for line in calls.lines() {
+            let owns = line.split('\t').any(|arg| arg == "-c") && !line.contains("foreign.c\t");
+            assert_eq!(
+                line.contains("-fno-semantic-interposition\t"),
+                owns && compiler == "gcc",
+                "{line}"
+            );
+        }
+    }
+    // A failed probe is an explicit build failure, not a guessed compiler.
+    std::fs::write(&wrapper, "#!/bin/sh\nfor arg; do if [ \"$arg\" = -dM ]; then echo probe-refused >&2; exit 42; fi; done\nexec \"$@\"\n").expect("failing probe");
+    let built = output_of(
+        Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(project.join("tsconfig.json"))
+            .env("CC", format!("{} gcc", wrapper.display())),
+    )
+    .expect("build");
+    assert!(!built.status.success(), "{built:?}");
+    let error = String::from_utf8_lossy(&built.stderr);
+    assert!(
+        error.contains("detecting C compiler interposition policy")
+            && error.contains("probe-refused"),
+        "{error}"
+    );
+}
+
 /// The artifact exists, links, and publishes exactly the entry's surface.
 ///
 /// **The symbol count is the assertion.** Linked without a version script, this
@@ -802,10 +988,7 @@ exec gcc "$@"
         Command::new(env!("CARGO_BIN_EXE_nts"))
             .arg("build")
             .arg(project.join("tsconfig.json"))
-            .env(
-                "CC",
-                format!("{} -fno-semantic-interposition", driver.display()),
-            )
+            .env("CC", &driver)
             .env("NTS_LINK_ARGS", &captured)
             .env("PKG_CONFIG_PATH", project.join("pc")),
     )

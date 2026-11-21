@@ -4258,3 +4258,25 @@ The namespace and provider transport changes from 3e8c1cab3 stay out.
 The contract is in [errors](../../language/errors.md#decisions); reproduction,
 controls and descriptor evidence are in
 [the task record](../0478-stored-callbacks-and-catch-roles.md).
+
+## Native PIC interposition (11-21)
+
+#917 reproduces GCC refusing the runtime's `always_inline` helpers in a
+`library.native` build under `-fPIC`: the body can be overwritten at link time.
+The final version script cannot inform compile-time inlining.
+
+The CLI owns one policy for every nts-owned translation unit in a PIC product,
+including the generated program and bundled runtime. It reads predefined macros
+from the resolved command once before compiling those units, including wrapper
+arguments. GCC receives `-fno-semantic-interposition`; clang's arguments remain
+unchanged. A failed probe is a named build failure. Foreign C sources and the
+link do not receive the flag. The object cache includes the resulting arguments.
+
+Visibility stays with the linker's published surface. Compile-time hidden
+visibility was not chosen because it would require export annotations in
+`runtime/c` and generated public declarations; the runtime's current declarations
+and exported ABI remain unchanged. GCC's policy allows inlining under the
+assumption that an interposed definition preserves semantics, as documented in
+[GCC's optimization options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#index-fsemantic-interposition).
+
+The contract is in [native](../../targets/native.md#decisions).

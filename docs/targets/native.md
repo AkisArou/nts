@@ -84,6 +84,14 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
 A library has no loop. A C program that embeds one and wants its timers or I/O
 installs a host of its own (`nts_host_install`).
 
+For a position-independent product, `nts build` probes the resolved C compiler's
+predefined macros once before compiling its generated code and bundled runtime.
+GCC compiles those units with `-fno-semantic-interposition`: internal calls use
+their definitions even when a symbol is published. Clang keeps its existing
+flags. The linker still selects the published ABI. Foreign C sources retain
+their own interposition semantics, and the flag is not passed to the link.
+A failed compiler probe stops the build with its diagnostic.
+
 ## Bundled dependency archives
 
 `build/src/node_deps` builds the selected libraries from the embedded Node
@@ -229,6 +237,13 @@ int main(void) {
 
 ## Decisions
 
+- PIC products use one compile-time interposition policy for nts-owned code:
+  GCC receives `-fno-semantic-interposition`, including through compiler wrappers;
+  clang's arguments stay unchanged. Visibility remains the linker's published
+  surface, preserving the runtime declarations and ABI. Compile-time hidden
+  visibility would require explicit export annotations in the runtime headers
+  and generated public declarations
+  ([log](../records/notebooks/decisions-log.md#native-pic-interposition-11-21)).
 - Bundled native archives have content identity across extraction roots.
   One invocation owner supplies and verifies the source prefix maps, and
   records the virtual bundle location rather than an extraction directory.

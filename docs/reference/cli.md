@@ -415,7 +415,7 @@ allocator reservation are separate instruments.
 | `NTS_BACKEND` | `check` | the backend: `c`, `llvm` or `jvm`; an unknown name is an error |
 | `NTS_RC` | `check` | `1` counts references |
 | `NTS_NODE` | anything that reads `nts.config.ts` | the node that evaluates the config; default `node` |
-| `CC` | `build` | the C compiler command line, such as `zig cc`; default `clang`. ThinLTO only when it is clang |
+| `CC` | `build` | the C compiler command line, such as `zig cc`; default `clang`. ThinLTO only when it is clang. PIC builds detect GCC through predefined macros and compile nts-owned units with `-fno-semantic-interposition` ([native policy](../targets/native.md#the-c-runtime)) |
 | `NTS_BIND_CC` | `bind-c`, `build` | the compiler that parses headers; else `CC`, else `clang` |
 | `ANDROID_HOME`, `ANDROID_SDK_ROOT` | `build` | the Android SDK; default `~/Android/Sdk`. Set and not a directory is an error |
 | `GRADLE_USER_HOME` | `build` | the Gradle cache searched for pinned jars |

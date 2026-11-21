@@ -33,7 +33,7 @@ mod xcframework;
 
 use std::fmt::Write as _;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use emission::{Input as EmissionInput, Report as EmissionReport};
 use nts_core::hir::facts;
@@ -5163,6 +5163,7 @@ fn compile_program(
     with: &Compiling<'_>,
     objects: &mut Vec<Utf8PathBuf>,
 ) -> Result<()> {
+    let pic_flags = with.tools.owned_pic_flags(out, pic)?;
     for source in sources {
         let object = out.join(format!("{source}.o"));
         // An LLVM module has no headers to find and no C to read a define:
@@ -5181,6 +5182,7 @@ fn compile_program(
             if pic {
                 arguments.push("-fPIC".to_owned());
             }
+            arguments.extend(pic_flags.iter().cloned());
             if with.tools.lto {
                 arguments.extend(lto_flags());
             }
@@ -5220,6 +5222,7 @@ fn compile_program(
         if pic {
             arguments.push("-fPIC".to_owned());
         }
+        arguments.extend(pic_flags.iter().cloned());
         if with.tools.lto {
             arguments.extend(lto_flags());
         }
@@ -6820,6 +6823,51 @@ struct Toolchain {
 }
 
 impl Toolchain {
+    /// Interposition policy for nts-owned units, decided once before compiling
+    /// any of them. The link still owns visibility; foreign sources keep their
+    /// own semantics. GCC's PIC default prevents mandatory runtime inlining.
+    /// Clang already permits that inlining, and keeps its existing arguments.
+    fn owned_pic_flags(&self, directory: &Utf8Path, pic: bool) -> Result<Vec<String>> {
+        if !pic {
+            return Ok(Vec::new());
+        }
+        // Ask the actual command, including wrappers and target arguments.
+        // Its filename (cc, ccache, etc.) cannot identify the compiler.
+        let mut command = self.command_in(directory)?;
+        let output = command
+            .args(["-dM", "-E", "-x", "c", "-"])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .with_context(|| {
+                format!(
+                    "detecting C compiler interposition policy for {}",
+                    self.key()
+                )
+            })?;
+        ensure!(
+            output.status.success(),
+            "detecting C compiler interposition policy for {} failed:\n{}",
+            self.key(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let macros = std::str::from_utf8(&output.stdout)
+            .context("detecting C compiler interposition policy: non-UTF-8 predefined macros")?;
+        if macros
+            .lines()
+            .any(|line| line.starts_with("#define __clang__ "))
+        {
+            return Ok(Vec::new());
+        }
+        ensure!(
+            macros
+                .lines()
+                .any(|line| line.starts_with("#define __GNUC__ ")),
+            "detecting C compiler interposition policy for {}: expected GCC or clang predefined macros",
+            self.key()
+        );
+        Ok(vec!["-fno-semantic-interposition".to_owned()])
+    }
+
     /// The SDK and target triple of an Apple toolchain, from its leading
     /// `-target` and `-isysroot`: what Swift compiles for.
     fn apple_target(&self) -> Option<(String, String)> {
