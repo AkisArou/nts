@@ -35,6 +35,7 @@
   "nts": { "kind": "folders", "why": "the root of the tools' own caches", "folders": {
     "apple": { "kind": "kept", "writer": "tooling/apple/build-libuv.sh", "why": "the Apple libuv builds" },
     "arm64-sysroot": { "kind": "kept", "writer": "tooling/android/arm-barrier.sh", "why": "the arm64 sysroot" },
+    "benchmark-records": { "kind": "scratch", "writer": "tooling/bench/build-records.ts" },
     "case-roots": { "kind": "kept", "writer": "tooling/census/project.ts", "why": "the census's case roots, which it expires itself" },
     "c-objects": { "kind": "kept", "writer": "tooling/census/conformance262.ts", "why": "compiled runtime objects, by content" },
     "conformance262": { "kind": "scratch", "writer": "tooling/census/census-scratch.ts" },
@@ -44,7 +45,7 @@
     "gate-scope-entries": { "kind": "scratch", "writer": "tooling/gate/scopes/step-scope.ts" },
     "jvm-cds": { "kind": "kept", "writer": "tooling/jvm/launch.ts", "why": "one class-data archive per runtime jar" },
     "linux": { "kind": "kept", "writer": "tooling/linux/build-libuv.sh", "why": "the Linux musl libuv builds" },
-    "node-compile-cache": { "kind": "kept", "writer": "tooling/gate/canonical-environment.ts", "why": "the shared Node compile cache, bounded by hourly age and byte retention in tooling/full-check/node-cache-retention.ts" },
+    "node-compile-cache": { "kind": "kept", "writer": "tooling/gate/host-environment.ts", "why": "the shared Node compile cache, bounded by hourly age and byte retention in tooling/full-check/node-cache-retention.ts" },
     "node-deps": { "kind": "kept", "writer": "tooling/conformance/node-deps.mjs", "why": "the bundled Node native dependencies" },
     "project-inputs": { "kind": "scratch", "writer": "tooling/gate/generated-project.ts" },
     "proxy-app": { "kind": "kept", "writer": "tooling/android/proxy-app.sh", "why": "the Android proxy app's build" },

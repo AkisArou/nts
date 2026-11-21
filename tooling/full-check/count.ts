@@ -267,14 +267,25 @@ export function writerNames(root: string, writer: string, path: string): boolean
  * Nothing under `path` changed after `since` (its own folder's time aside): no
  * run still writes it. Walked by bytes, as removable() walks: a name that is
  * not UTF-8 would name nothing, and a fresh file under it would go unseen.
+ * A link is the folder's own entry, never a walk into what it points to: a
+ * run's link to a shared corpus or package store is not something it writes.
  */
 function settled(path: string, since: number): boolean {
-  const root = Buffer.from(path), slash = Buffer.from("/");
-  for (const name of readdirSync(root, { recursive: true, encoding: "buffer" })) {
-    try { if (lstatSync(Buffer.concat([root, slash, name])).mtimeMs > since) return false; }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  }
-  return true;
+  const slash = Buffer.from("/");
+  const walk = (dir: Buffer): boolean => {
+    let names: Buffer[];
+    try { names = readdirSync(dir, { encoding: "buffer" }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return true; throw error; }
+    for (const name of names) {
+      const child = Buffer.concat([dir, slash, name]);
+      let info;
+      try { info = lstatSync(child); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+      if (info.mtimeMs > since || info.isDirectory() && !walk(child)) return false;
+    }
+    return true;
+  };
+  return walk(Buffer.from(path));
 }
 
 /** A pin the full check built (records.ts's runPin), by its provenance. */

@@ -4,7 +4,7 @@ import {fixtureEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
@@ -515,4 +515,108 @@ test("the real unchanged selector reaches a newly added census test without a co
   assert.ok(selected.checks.steps.includes("tooling"));
   assert.equal(selected.views.some(view=>view.rules.some(rule=>rule.name==="owes the full gate")),false);
   assert.deepEqual([...selected.checks.steps].sort(),["build","clippy","gate-inputs","old-paths","rustfmt","test-host","tests","tooling","tooling-types"]);
+});
+
+const LIFETIME_BOUND_MS=120_000;
+/** A selector source lifetime in its own process, under a private HOME, so
+ * its range folder is observed in isolation from the account's cache. */
+function sourceLifetime(t:Parameters<typeof fixtureEnvironment>[0]){
+  const directory=mkdtempSync(join(tmpdir(),"owed-lifetime-")),repo=join(directory,"repo"),home=join(directory,"home");
+  const parent=join(home,".cache/nts-owed-range");
+  const env={...fixtureEnvironment(t),HOME:home,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const children:ReturnType<typeof spawn>[]=[];
+  t.after(async()=>{
+    for(const child of children)if(child.exitCode===null&&child.signalCode===null)try{process.kill(-child.pid!,"SIGKILL");}catch{/* already ended */}
+    await Promise.all(children.map(child=>child.exitCode!==null||child.signalCode!==null?Promise.resolve():new Promise<void>(done=>child.once("close",()=>done()))));
+    rmSync(directory,{recursive:true,force:true});
+  });
+  mkdirSync(repo,{recursive:true});mkdirSync(home,{recursive:true});
+  const git=(...args:string[])=>execFileSync("git",gitArguments(args),{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  git("init","-qb","main");writeFileSync(join(repo,"base"),"base\n");git("add","base");git("commit","-qm","base");
+  const script=`import {withSelectorSources} from ${JSON.stringify(new URL("./owed-range.ts",import.meta.url).href)};
+import {execFileSync,spawnSync} from 'node:child_process';import {readdirSync} from 'node:fs';
+const [repo,mode,parent]=process.argv.slice(1);
+const head=execFileSync('git',['--no-optional-locks','rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim();
+try{withSelectorSources(repo,[head],sources=>{
+  const tree=sources.prepare(0);
+  if(mode==='list'){process.stdout.write(JSON.stringify({tree,listed:readdirSync(parent).sort()})+'\\n');return;}
+  if(mode==='throw'){process.stdout.write(JSON.stringify({tree})+'\\n');throw Error('supplied operation failure');}
+  // The held child announces the tree itself, so the test signals only once a
+  // process of this group blocks the operation. It holds until the test ends
+  // this process's stdin pipe, or signals the group.
+  const held=spawnSync('sh',['-c','echo "$1"; exec cat','sh',JSON.stringify({tree})],{stdio:['inherit','inherit','ignore']});
+  if(held.status!==0)throw Error('held operation ended by '+(held.signal??held.status));
+});}catch(error){console.error(String(error));process.exitCode=1;}`;
+  /** Starts the lifetime as its own process group; holding() resolves once a process of that group blocks its operation. */
+  const start=(mode:string)=>{
+    const child=spawn(process.execPath,["--input-type=module","-e",script,repo,mode,parent],{env,detached:true,stdio:["pipe","pipe","pipe"]});children.push(child);
+    let out="",err="";child.stdout!.on("data",bytes=>out+=bytes);child.stderr!.on("data",bytes=>err+=bytes);
+    const closed=new Promise<{code:number|null;signal:NodeJS.Signals|null;out:string;err:string}>(done=>child.once("close",(code,signal)=>done({code,signal,out,err})));
+    const ended=()=>child.exitCode!==null||child.signalCode!==null;
+    // Named bounds inside the runner's silence guard: a fixture that never
+    // holds or never ends fails here, by its name.
+    const holding=()=>waitFor(`the ${mode} lifetime to hold its tree`,()=>out.includes("\n")||ended(),{timeoutMs:LIFETIME_BOUND_MS});
+    const end=async()=>{await waitFor(`the ${mode} lifetime to end`,ended,{timeoutMs:LIFETIME_BOUND_MS});return closed;};
+    return {child,closed:end,holding,tree:()=>JSON.parse(out.split("\n")[0]!).tree as string};
+  };
+  const listing=()=>existsSync(parent)?readdirSync(parent).sort():[];
+  return {repo,home,parent,env,git,start,listing};
+}
+
+test("a thrown operation error removes the run's range folder, tree and pins",async t=>{
+  const f=sourceLifetime(t),run=f.start("throw");
+  const result=await run.closed();
+  assert.equal(result.code,1,result.err);assert.match(result.err,/supplied operation failure/);
+  assert.equal(existsSync(run.tree()),false,"the endpoint tree is removed");
+  assert.deepEqual(f.listing(),[],"no range folder remains");
+  assert.equal(f.git("for-each-ref","--format=%(refname)","refs/nts-selector/"),"","no source pin remains");
+});
+
+test("a SIGTERM to a lifetime blocked in its operation removes its range folder and ends nonzero",async t=>{
+  const f=sourceLifetime(t),run=f.start("hold");
+  await run.holding();
+  assert.ok(existsSync(run.tree()),"the lifetime holds its tree while blocked");
+  process.kill(-run.child.pid!,"SIGTERM");
+  const result=await run.closed();
+  // The held signal survives cleanup as a nonzero status: 143, or the killed
+  // operation's own failure. #928 makes the command owner keep 143 itself.
+  assert.equal(result.signal,null,"the signal waits for cleanup instead of ending the process");
+  assert.notEqual(result.code,0,result.err);
+  assert.deepEqual(f.listing(),[],"no range folder remains after SIGTERM");
+  assert.equal(f.git("for-each-ref","--format=%(refname)","refs/nts-selector/"),"","no source pin remains");
+});
+
+test("the next selector collects a SIGKILLed owner's folder and receipts, and never a live or legacy folder",async t=>{
+  const f=sourceLifetime(t),run=f.start("hold");
+  await run.holding();
+  process.kill(-run.child.pid!,"SIGKILL");
+  const killed=await run.closed();assert.equal(killed.signal,"SIGKILL");
+  const [left,...others]=f.listing();
+  assert.equal(others.length,0);assert.match(left!,new RegExp(`^range-${run.child.pid}-[0-9]+-[a-f0-9]{32}-[A-Za-z0-9]{6}$`),"named by its owner from birth");
+  const record=JSON.parse(readFileSync(join(f.parent,left!,"owner.json"),"utf8"));
+  assert.equal(record.version,3);assert.equal(record.receipts.length,2,"the prepared tree's receipts are recorded before they exist");
+  // Identities come from the real owner names: this boot, the dead PID with
+  // a start no live process has, and a live lifetime held while collection runs.
+  const [,deadPid,,boot]=/^range-([0-9]+)-([0-9]+)-([a-f0-9]{32})-/.exec(left!)!;
+  const holder=f.start("hold");await holder.holding();
+  const live=basename(dirname(holder.tree())),legacy="range-abcDEF",claimed=`collect-${deadPid}-0-${boot}-dead01`;
+  assert.match(live,/^range-[0-9]+-[0-9]+-[a-f0-9]{32}-[A-Za-z0-9]{6}$/);
+  for(const name of [legacy,claimed])mkdirSync(join(f.parent,name));
+  // A collector that died after claiming: its claim is collected with the receipts it lists.
+  const receipt=join(f.home,".cache/nts-dependencies","a".repeat(64),"trees","b".repeat(64)+".json");
+  mkdirSync(dirname(receipt),{recursive:true});writeFileSync(receipt,"{}\n");
+  writeFileSync(join(f.parent,claimed,"owner.json"),JSON.stringify({version:3,receipts:[receipt]})+"\n");
+  // A dead owner whose record a power cut left torn: its death alone proves the folder abandoned.
+  const torn=`range-${deadPid}-0-${boot}-torn01`;mkdirSync(join(f.parent,torn));writeFileSync(join(f.parent,torn,"owner.json"),'{"version":3,"rec');
+  const next=f.start("list"),result=await next.closed();
+  assert.equal(result.code,0,result.err);
+  const listed:string[]=JSON.parse(result.out.split("\n")[0]!).listed;
+  assert.deepEqual(listed.filter(name=>name!==basename(dirname(next.tree()))),[legacy,live].sort(),"only dead owners' folders are collected");
+  assert.equal(existsSync(receipt),false,"a collected claim's receipts are removed");
+  assert.deepEqual(f.listing(),[legacy,live].sort(),"the collector's own folder is removed too");
+  assert.equal(f.git("for-each-ref","--format=%(refname)","refs/nts-selector/").split("\n").length,1,"the dead owner's pin is collected; the live holder's remains");
+  holder.child.stdin!.end();
+  const ended=await holder.closed();assert.equal(ended.code,0,ended.err);
+  assert.deepEqual(f.listing(),[legacy],"the live holder removes its own folder when it ends");
+  assert.equal(f.git("for-each-ref","--format=%(refname)","refs/nts-selector/"),"","no source pin remains");
 });

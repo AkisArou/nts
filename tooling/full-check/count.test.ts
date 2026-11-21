@@ -5,7 +5,7 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // fixture worktrees and a fixture ~/.cache, and its keep list against this
 // tree: every tool it names still writes the folder it keeps.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, lutimesSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {fileURLToPath} from 'node:url';
@@ -541,6 +541,44 @@ test("a name that is not UTF-8 is walked by its bytes: the sweep removes its fol
   utimesSync(join(cache, "nts-messages/still-written-bytes"), when, when);
   const result = count(input(t, { cache }), KEEP);
   assert.ok(!result.removable.some(one => one.path.endsWith("still-written-bytes")), "a fresh file under a raw name is seen");
+});
+
+test("a stopped run's link to a shared store is its own entry: a fresh file behind it leaves the folder settled", t => {
+  const cache = cacheFixture(t), shared = mkdtempSync(join(tmpdir(), "full-check-shared-"));
+  t.after(() => rmSync(shared, { recursive: true, force: true }));
+  // The shared corpus or package store a run linked to is written by others today.
+  mkdirSync(join(shared, ".git"));writeFileSync(join(shared, ".git/FETCH_HEAD"), "now\n");
+  const old = new Date(NOW - 2 * DAY);
+  mkdirSync(join(cache, "nts-messages/run-linked/checkout"), { recursive: true });
+  symlinkSync(shared, join(cache, "nts-messages/run-linked/checkout/corpus"));
+  lutimesSync(join(cache, "nts-messages/run-linked/checkout/corpus"), old, old);
+  utimesSync(join(cache, "nts-messages/run-linked/checkout"), old, old);
+  utimesSync(join(cache, "nts-messages/run-linked"), old, old);
+  // Control: the same folder with a fresh file of its own is still written.
+  mkdirSync(join(cache, "nts-messages/run-written/checkout"), { recursive: true });
+  symlinkSync(shared, join(cache, "nts-messages/run-written/checkout/corpus"));
+  lutimesSync(join(cache, "nts-messages/run-written/checkout/corpus"), old, old);
+  writeFileSync(join(cache, "nts-messages/run-written/checkout/log"), "now\n");
+  utimesSync(join(cache, "nts-messages/run-written/checkout"), old, old);
+  utimesSync(join(cache, "nts-messages/run-written"), old, old);
+  const removable = count(input(t, { cache }), KEEP).removable.map(one => one.path);
+  assert.ok(removable.includes(join(cache, "nts-messages/run-linked")), "a link's target is not walked");
+  assert.ok(!removable.includes(join(cache, "nts-messages/run-written")), "a fresh file of the folder's own keeps it");
+  assert.deepEqual(sweep([{ path: join(cache, "nts-messages/run-linked"), why: "old" }], cache), ["swept ~/.cache/nts-messages/run-linked: old"]);
+  assert.ok(existsSync(join(shared, ".git/FETCH_HEAD")), "the sweep removes the link, never what it points to");
+});
+
+test("every keep.json row that names a writer is still written by it", () => {
+  const root = fileURLToPath(new URL("../..", import.meta.url)), stale: string[] = [];
+  const walk = (prefix: string, rows: Record<string, Keep>) => {
+    for (const [name, row] of Object.entries(rows)) {
+      const path = prefix ? `${prefix}/${name}` : name;
+      if ("writer" in row && row.writer && !writerNames(root, row.writer, path)) stale.push(`${path}: ${row.writer}`);
+      if ("folders" in row) walk(path, row.folders);
+    }
+  };
+  walk("", readKeep());
+  assert.deepEqual(stale, [], "a row whose writer no longer names its folder names the folder's current writer, or goes");
 });
 
 test("the sweep removes real folders inside the cache, read-only ones too, and keeps a link or a path outside it", t => {

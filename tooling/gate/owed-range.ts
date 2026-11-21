@@ -1,11 +1,11 @@
 import {gitArguments} from "./git-arguments/main.ts";
-import {runAsCommand} from "../differential/command-entry/main.ts";
+import {registerCommandCloser,runAsCommand} from "../differential/command-entry/main.ts";
 // Evaluate each endpoint's own rules and derived inputs in immutable trees.
 // The caller's working files and the other endpoint cannot narrow that view.
 import { createHash } from "node:crypto";
 import { registerHooks } from "node:module";
 import {infrastructureProbe,type InfrastructureProbe,type ProbeRequest} from './infrastructure-probe.ts';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import {basename,dirname,isAbsolute,join,relative,resolve} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -63,6 +63,31 @@ function processIdentity(pid:number):{start:string;live:boolean}|null {
   }catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}
 }
 
+/** A selector owner's boot, PID and process start. A terminated selector may
+ * not reach finally; this identity, not age, proves its sources abandoned,
+ * and a reused PID cannot keep them alive. Refs and folders share it. */
+type OwnerIdentity={pid:number;start:string;boot:string};
+function bootIdentity():string{
+  const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
+  if(!/^[a-f0-9]{32}$/.test(boot))throw new Error("invalid boot identity");
+  return boot;
+}
+function ownIdentity(boot:string):OwnerIdentity{
+  const identity=processIdentity(process.pid);
+  if(!identity?.live)throw new Error("selector process identity is unavailable");
+  return {pid:process.pid,start:identity.start,boot};
+}
+function ownerDead(owner:OwnerIdentity,boot:string):boolean{
+  const identity=owner.boot===boot?processIdentity(owner.pid):null;
+  return !identity?.live||identity.start!==owner.start;
+}
+const ownerLabel=(owner:OwnerIdentity)=>`${owner.pid}-${owner.start}-${owner.boot}`;
+/** The identity a ref or folder name carries in its first three groups. */
+function namedOwner(match:RegExpExecArray|null):OwnerIdentity|null{
+  const [,pid,start,boot]=match??[];
+  return pid&&start&&boot?{pid:Number(pid),start,boot}:null;
+}
+
 function collectPin(repo:string,ref:string,expected:string):void {
   try{git(repo,"update-ref","-d",ref,expected);}
   catch(error){
@@ -78,23 +103,61 @@ function collectPin(repo:string,ref:string,expected:string):void {
   }
 }
 
-function selectorPins(repo:string,nonce:string):string {
+function selectorPins(repo:string,owner:OwnerIdentity,nonce:string):string {
   return infrastructure("selector object lifetime",()=>{
-    const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
-    if(!/^[a-f0-9]{32}$/.test(boot))throw new Error("invalid boot identity");
-    // A terminated selector may not reach finally. A boot and process-start
-    // identity prevents a reused PID from keeping its abandoned refs alive.
     for(const row of git(repo,"for-each-ref","--format=%(refname) %(objectname)","refs/nts-selector/").split("\n")){
       const [ref,expected]=row.split(" ");
-      const owner=/^refs\/nts-selector\/(\d+)-(\d+)-([a-f0-9]{32})-[A-Za-z0-9-]+\/(?:base|tip)$/.exec(ref);
-      if(!owner)continue;
-      const identity=owner[3]===boot?processIdentity(Number(owner[1])):null;
-      if(!identity?.live||identity.start!==owner[2])collectPin(repo,ref,expected);
+      if(!ref||!expected)continue;
+      const named=namedOwner(/^refs\/nts-selector\/(\d+)-(\d+)-([a-f0-9]{32})-[A-Za-z0-9-]+\/(?:base|tip)$/.exec(ref));
+      if(named&&ownerDead(named,owner.boot))collectPin(repo,ref,expected);
     }
-    const identity=processIdentity(process.pid);
-    if(!identity?.live)throw new Error("selector process identity is unavailable");
-    return `refs/nts-selector/${process.pid}-${identity.start}-${boot}-${nonce}`;
+    return `refs/nts-selector/${ownerLabel(owner)}-${nonce}`;
   });
+}
+
+/** A source folder is named by its owner from birth (mkdtemp's suffix is its
+ * nonce); a collector's claim carries the collector's own identity. Legacy
+ * folders without an identity never match and are left for a person. */
+const SOURCE_FOLDER=/^(?:range|collect)-(\d+)-(\d+)-([a-f0-9]{32})-[A-Za-z0-9]{6}$/;
+/** Receipts a source owner records: tooling/inputs/dependency-inputs.ts's tree identity and catalog. */
+const SOURCE_RECEIPT=/\/\.cache\/nts-dependencies\/[a-f0-9]{64}\/trees\/[a-f0-9]{64}(?:\.catalog)?\.json$/;
+type SourceRecord={version:3;pid:number;start:string;boot:string;created:number;repo:string;registry:string;pins:string[];receipts:string[]};
+function writeSourceRecord(directory:string,record:SourceRecord):void{
+  // Renamed into place: a collector reads either the previous or the complete record.
+  const file=join(directory,"owner.json"),partial=file+".partial";
+  writeFileSync(partial,JSON.stringify(record)+"\n");renameSync(partial,file);
+}
+/** The receipts a dead owner's record lists. A record is written before any
+ * receipt it lists exists, so one never written lists none. An unreadable
+ * record (a power cut before its bytes reached the disk) names no receipt
+ * to remove; its owner's death alone still proves the folder abandoned. */
+function recordedReceipts(directory:string):string[]{
+  let record:unknown;
+  try{record=JSON.parse(readFileSync(join(directory,"owner.json"),"utf8"));}
+  catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT"||error instanceof SyntaxError)return [];throw error;}
+  const receipts=record&&typeof record==="object"&&"receipts" in record?record.receipts:undefined;
+  if(!Array.isArray(receipts))return [];
+  return receipts.filter((path:unknown):path is string=>typeof path==="string"&&isAbsolute(path)&&resolve(path)===path&&SOURCE_RECEIPT.test(path));
+}
+
+/** Collect the source folders of owners that ended without their finally
+ * (SIGKILL, an OOM kill, a power cut). Each is claimed by one atomic rename
+ * into a folder named by this collector, so concurrent collectors never
+ * share a removal; a collector that dies leaves a claim that is collected
+ * the same way. */
+function collectDeadSources(parent:string,owner:OwnerIdentity):void{
+  for(const name of readdirSync(parent)){
+    const named=namedOwner(SOURCE_FOLDER.exec(name));
+    if(!named||!ownerDead(named,owner.boot))continue;
+    const claim=mkdtempSync(join(parent,`collect-${ownerLabel(owner)}-`));
+    try{renameSync(join(parent,name),claim);}
+    catch(error){
+      if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;
+      rmdirSync(claim);continue; // Another collector claimed it first.
+    }
+    for(const receipt of recordedReceipts(claim))rmSync(receipt,{force:true});
+    rmSync(claim,{recursive:true,force:true});
+  }
 }
 
 function endpoints(repo: string, range: string): [string, string] {
@@ -171,42 +234,62 @@ export function withSelectorSources<T>(repo:string,revisions:readonly string[],o
   if(!revisions.length||revisions.length>2||revisions.some(revision=>!/^[a-f0-9]{40,64}$/.test(revision)))throw Error('selector sources need one or two resolved commits');
   const parent = join(homedir(), ".cache/nts-owed-range");
   const shared=dirname(git(repo,"rev-parse","--path-format=absolute","--git-common-dir"));
+  const owner=infrastructure("selector owner identity",()=>ownIdentity(bootIdentity()));
   const dependencyReceipts:string[]=[];
-  infrastructure("selector directory",()=>mkdirSync(parent,{recursive:true}));
-  const directory=infrastructure("selector directory",()=>mkdtempSync(join(parent,"range-")));
-  const registry=join(directory,"registry.git");
   const pins:string[]=[];
+  let directory:string|undefined;
+  // All registrations are private to the directory. Removing it also
+  // collects a partially created endpoint, without consulting shared state.
+  // Idempotent: what is removed leaves its list, so a repeat removes the rest.
+  const release=():unknown[]=>{
+    const errors:unknown[]=[];
+    if(directory!==undefined)try{infrastructure("selector cleanup",()=>rmSync(directory!,{recursive:true,force:true}));directory=undefined;}catch(error){errors.push(error);}
+    for(const path of dependencyReceipts.splice(0))try{infrastructure('selector installation receipt cleanup',()=>rmSync(path,{force:true}));}catch(error){errors.push(error);dependencyReceipts.push(path);}
+    for(const ref of pins.splice(0))try{git(repo,"update-ref","-d",ref);}catch(error){errors.push(error);}
+    return errors;
+  };
+  // The command owner holds a terminating signal until this synchronous
+  // lifetime has unwound through finally; its drain releases anything left.
+  const unregister=registerCommandCloser("selector sources",{close:()=>{
+    const errors=release();
+    if(errors.length)throw new AggregateError(errors,`selector sources cleanup failed: ${errors.map(String).join('; ')}`);
+  }});
   let result:T|undefined;
   const errors:unknown[]=[];
   const prepared=new Set<number>();
   try {
-    const owner=selectorPins(repo,basename(directory));
+    infrastructure("selector directory",()=>{mkdirSync(parent,{recursive:true});collectDeadSources(parent,owner);});
+    const own=directory=infrastructure("selector directory",()=>mkdtempSync(join(parent,`range-${ownerLabel(owner)}-`)));
+    const prefix=selectorPins(repo,owner,basename(own).slice(-6));
     for(const [index,revision]of revisions.entries()){
-      const ref=`${owner}/${index===0?'base':'tip'}`;
+      const ref=`${prefix}/${index===0?'base':'tip'}`;
       git(repo,'update-ref',ref,revision,'0'.repeat(revision.length));pins.push(ref);
     }
+    const registry=join(own,"registry.git");
     const objects=git(repo,'rev-parse','--path-format=absolute','--git-path','objects');
-    git(directory,'init','--quiet','--bare','--template=',registry);
+    git(own,'init','--quiet','--bare','--template=',registry);
     // Git's alternates format uses C-quoted byte paths, including whitespace.
     infrastructure("selector object store",()=>writeFileSync(join(registry,"objects/info/alternates"),`"${Array.from(Buffer.from(objects),byte=>`\\${byte.toString(8).padStart(3,"0")}`).join("")}"\n`));
-    infrastructure("selector owner record",()=>writeFileSync(join(directory,"owner.json"),JSON.stringify({version:2,pid:process.pid,created:Date.now(),repo:shared,registry,pins})+"\n"));
+    const created=Date.now();
+    const record=():SourceRecord=>({version:3,pid:owner.pid,start:owner.start,boot:owner.boot,created,repo:shared,registry,pins:[...pins],receipts:[...dependencyReceipts]});
+    infrastructure("selector owner record",()=>writeSourceRecord(own,record()));
     result=operation({shared,prepare(index){
       if(!Number.isInteger(index)||index<0||index>=revisions.length||prepared.has(index))throw Error('selector source preparation must name one unused endpoint');
       prepared.add(index);const revision=revisions[index]!;
-      const tree=join(directory,`${basename(directory)}-${index}`);
+      const tree=join(own,`${basename(own)}-${index}`);
       git(registry,'worktree','add','--quiet','--detach',tree,revision);
       dependencyReceipts.push(installationIdentityPath(shared,tree),installationCatalogPath(shared,tree));
+      // Recorded before the linker can write them, for a collector after SIGKILL.
+      infrastructure("selector owner record",()=>writeSourceRecord(own,record()));
       if(existsSync(join(tree,'pnpm-lock.yaml')))infrastructure('selector inputs',()=>linkTree(tree,'work',shared));
       return tree;
     }});
     if(result&&typeof (result as {then?:unknown}).then==='function')throw Error('selector source callback must be synchronous');
   } catch(error){errors.push(error);}
   finally {
-    // All registrations are private to this directory. Removing it also
-    // collects a partially created endpoint, without consulting shared state.
-    try{infrastructure("selector cleanup",()=>rmSync(directory,{recursive:true,force:true}));}catch(error){errors.push(error);}
-    for(const path of dependencyReceipts)try{infrastructure('selector installation receipt cleanup',()=>rmSync(path,{force:true}));}catch(error){errors.push(error);}
-    for(const ref of pins)try{git(repo,"update-ref","-d",ref);}catch(error){errors.push(error);}
+    errors.push(...release());
+    // Anything a failed removal kept stays with the command owner's drain.
+    if(directory===undefined&&!dependencyReceipts.length)unregister();
   }
   if(errors.length)throw new AggregateError(errors,`selector sources failed; no source authority was granted: ${errors.map(String).join('; ')}`);
   return result!;
