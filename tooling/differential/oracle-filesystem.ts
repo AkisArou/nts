@@ -5,7 +5,7 @@ import {snapshotHash,snapshotSlot,SNAPSHOT_SLOT_BYTES,MAX_SNAPSHOT_SLOTS,MAX_SNA
 export {dependencySealIdentity,dependencySealReady,dependencySealError,ownsDependencyRun,DEPENDENCY_SEAL_FIELDS,checkerImportIdentity,readOracleSnapshotIndex} from './oracle-runtime.ts';
 export type {DependencySealIdentity,DependencyRunSeal,CheckerImportRelation,OracleSnapshotReference} from './oracle-runtime.ts';
 
-import {mkdirSync,writeFileSync,readFileSync,readdirSync,readlinkSync,realpathSync,statSync,lstatSync} from 'node:fs';
+import {mkdirSync,writeFileSync,readFileSync,readdirSync,readlinkSync,realpathSync,statSync,lstatSync,type Stats} from 'node:fs';
 import {dirname,isAbsolute,join,parse,relative,resolve,sep} from 'node:path';
 import {validateRuntimeObservations,sameOracleObservation,type ObservationKind,type DirectoryEntries,type HostObservation,type FileStat} from './oracle-runtime.ts';
 export {OraclePathPrefixes,capturedModuleIdentity,OracleResolutionDomain,ORACLE_NODE_RESOLUTION_RECIPE,oracleLegacyMainQueries} from './oracle-runtime.ts';
@@ -18,16 +18,25 @@ export function capturedPackageMetadata(directory:string):{valid:boolean;main:st
   const value=data&&typeof data==='object'?data as {main?:unknown;name?:unknown;exports?:unknown}:{};
   return {valid:true,main:typeof value.main==='string'?value.main:null,name:typeof value.name==='string'?value.name:null,exports:value.exports??null};
 }
-const absent=(error:unknown)=>['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??'');
+// A POSIX pathname ends at its first NUL byte, so no file is named by a path
+// containing one. Such a path is absent by its spelling alone, as Node's own
+// resolver answers (MODULE_NOT_FOUND); fs refuses it before any syscall.
+const unnameable=(path:string)=>path.includes('\0');
+/** The one host lookup rule: an unnameable path, ENOENT and ENOTDIR (and a
+ * reader's own extra code) are its absent answer; every other error fails. */
+function lookup<T>(path:string,missing:T,read:()=>T,alsoAbsent?:string):T{
+  if(unnameable(path))return missing;
+  try{return read();}
+  catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==='ENOENT'||code==='ENOTDIR'||code!==undefined&&code===alsoAbsent)return missing;throw error;}
+}
 const compare=(a:string,b:string)=>Buffer.compare(Buffer.from(a),Buffer.from(b));
-function metadata(path:string){try{return statSync(path);}catch(error){if(absent(error))return null;throw error;}}
+const metadata=(path:string):Stats|null=>lookup<Stats|null>(path,null,()=>statSync(path));
 const statFact=(value:ReturnType<typeof metadata>):FileStat|null=>value===null?null:{mode:value.mode,size:value.size,mtimeMs:value.mtime.getTime()};
-function bytes(path:string){try{return readFileSync(path);}catch(error){if(absent(error))return null;throw error;}}
+const bytes=(path:string):Buffer|null=>lookup<Buffer|null>(path,null,()=>readFileSync(path));
+const names=(path:string):Buffer[]=>lookup<Buffer[]>(path,[],()=>readdirSync(path,{encoding:'buffer'}));
 function directoryEntries(path:string):DirectoryEntries{
-  let names:Buffer[];
-  try{names=readdirSync(path,{encoding:'buffer'});}catch(error){if(absent(error))return {files:[],directories:[]};throw error;}
   const result:DirectoryEntries={files:[],directories:[]};
-  for(const raw of names){
+  for(const raw of names(path)){
     const name=raw.toString('utf8');
     if(!Buffer.from(name).equals(raw))throw Error('oracle filesystem directory has a non-UTF8 name: '+path);
     const info=metadata(path+sep+name); // Follow links, as the SDK host does.
@@ -36,19 +45,13 @@ function directoryEntries(path:string):DirectoryEntries{
   result.files.sort(compare);result.directories.sort(compare);return result;
 }
 function runtimeEntries(path:string):string[]{
-  let names:Buffer[];
-  try{names=readdirSync(path,{encoding:'buffer'});}catch(error){if(absent(error))return [];throw error;}
-  return names.map(raw=>{const name=raw.toString('utf8');if(!Buffer.from(name).equals(raw))throw Error('oracle runtime directory has a non-UTF8 name: '+path);return name;}).sort(compare);
+  return names(path).map(raw=>{const name=raw.toString('utf8');if(!Buffer.from(name).equals(raw))throw Error('oracle runtime directory has a non-UTF8 name: '+path);return name;}).sort(compare);
 }
-function runtimeKind(path:string):string|null{
-  try{const info=lstatSync(path);return info.isSymbolicLink()?'symlink':info.isFile()?'file':info.isDirectory()?'directory':'other';}
-  catch(error){if(absent(error))return null;throw error;}
-}
-function physicalPath(path:string){try{return realpathSync.native(path);}catch(error){if(absent(error))return path;throw error;}}
-function linkText(path:string):string|null{
-  try{if(!lstatSync(path).isSymbolicLink())return null;const bytes=readlinkSync(path,{encoding:'buffer'}),text=bytes.toString('utf8');if(!Buffer.from(text).equals(bytes))throw Error('oracle filesystem link has a non-UTF8 target: '+path);return text;}
-  catch(error){if(absent(error)||(error as NodeJS.ErrnoException).code==='EINVAL')return null;throw error;}
-}
+const runtimeKind=(path:string):string|null=>lookup<string|null>(path,null,()=>{const info=lstatSync(path);return info.isSymbolicLink()?'symlink':info.isFile()?'file':info.isDirectory()?'directory':'other';});
+const physicalPath=(path:string):string=>lookup(path,path,()=>realpathSync.native(path));
+const linkText=(path:string):string|null=>lookup<string|null>(path,null,()=>{
+  if(!lstatSync(path).isSymbolicLink())return null;const bytes=readlinkSync(path,{encoding:'buffer'}),text=bytes.toString('utf8');if(!Buffer.from(text).equals(bytes))throw Error('oracle filesystem link has a non-UTF8 target: '+path);return text;
+},'EINVAL');
 function answer(kind:ObservationKind,path:string):HostObservation['value']{
   switch(kind){
     case 'file':{const value=bytes(path);return value===null?null:digest(value);}
@@ -73,7 +76,11 @@ export class OracleFilesystem{
   constructor(onObservation?:(row:HostObservation)=>void){this.onObservation=onObservation;}
   clear(){this.observations.clear();}
   private record<T extends HostObservation['value']>(kind:ObservationKind,path:string,value:T):T{
-    path=resolve(path);const key=JSON.stringify([kind,path]),previous=this.observations.get(key);
+    path=resolve(path);
+    // An unnameable path's answer is fixed by its spelling, not observed of the
+    // host: it never enters a snapshot, so no replayer needs to read it.
+    if(unnameable(path))return value;
+    const key=JSON.stringify([kind,path]),previous=this.observations.get(key);
     if(previous&&!sameOracleObservation(previous.value,value))throw Error(`oracle filesystem ${kind} changed during preparation: ${path}`);
     const row={kind,path,value};this.observations.set(key,row);this.onObservation?.(row);return value;
   }

@@ -3,11 +3,11 @@ import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {OracleResolutionDomain,ORACLE_NODE_RESOLUTION_RECIPE,type ResolutionDomainRecord} from './oracle-filesystem.ts';
 import assert from 'node:assert/strict';
-import {mkdirSync,mkdtempSync,writeFileSync,rmSync,symlinkSync,realpathSync,lstatSync,readdirSync,readlinkSync,readFileSync,statSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,writeFileSync,rmSync,symlinkSync,realpathSync,lstatSync,readdirSync,readlinkSync,readFileSync,statSync,chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve,sep} from 'node:path';
 import {test,type TestContext} from 'node:test';
-import {OracleFilesystem,OraclePathPrefixes,validateHostObservations,writeOracleSnapshotIndex,readOracleSnapshotIndex} from './oracle-filesystem.ts';
+import {OracleFilesystem,OraclePathPrefixes,validateHostObservations,writeOracleSnapshotIndex,readOracleSnapshotIndex,readHostObservation} from './oracle-filesystem.ts';
 import {MAX_SNAPSHOT_BUCKET_BYTES,snapshotSlot,oracleNodePackageScopes} from './oracle-runtime.ts';
 test('input identities preserve component order and resolve an external alias into source first',t=>{
   const root=fixture(t),source=join(root,'source'),outside=join(root,'outside');
@@ -405,4 +405,31 @@ test('exact captured module files grant no directory or sibling lookup domain',(
     assert.equal(missingScope.prove(request).complete,false,'exact bytes cannot replace unknown package scope');
     const excluded=new OracleResolutionDomain({...record,excluded:[file]});assert.equal(excluded.prove(request).complete,false);
   }
+});
+test('a path containing a NUL byte is absent by its spelling, as Node resolves it, and is never a host observation',t=>{
+  const root=fixture(t),modules=join(root,'node_modules');mkdirSync(join(modules,'ab'),{recursive:true});writeFileSync(join(modules,'ab','index.js'),'');
+  assert.throws(()=>statSync(join(modules,'\0ab')),{code:'ERR_INVALID_ARG_VALUE'},'fs refuses the spelling before any syscall');
+  // test/parallel/test-require-nul.js asserts Node's own resolver answers these as missing.
+  for(const name of ['\0ab','a\0b','ab\0']){
+    const path=join(modules,name),host=new OracleFilesystem(),emitted:unknown[]=[],observer=new OracleFilesystem(row=>emitted.push(row));
+    assert.equal(host.fileExists(path),false);assert.equal(host.directoryExists(path),false);
+    assert.equal(host.readBytes(path),null);assert.equal(host.readFile(path),null);
+    assert.deepEqual(host.getAccessibleEntries(path),{files:[],directories:[]});assert.deepEqual(host.runtimeEntries(path),[]);
+    assert.equal(host.runtimeKind(path),null);assert.equal(host.readlink(path),null);
+    assert.equal(host.realpath(path),path);assert.equal(host.stat(path),undefined);
+    assert.deepEqual(host.captured().filter(row=>row.path.includes('\0')),[],'an unnameable path enters no snapshot');
+    assert.equal(observer.directoryExists(path),false);assert.deepEqual(emitted,[]);
+    for(const kind of ['file','fileExists','directoryExists','entries','realpath','readlink','runtimeEntries','runtimeKind','stat'] as const)
+      assert.doesNotThrow(()=>readHostObservation(kind,path),kind);
+  }
+});
+test('a real filesystem error is not an absent answer and fails by its code and path',t=>{
+  const root=fixture(t),locked=join(root,'locked'),child=join(locked,'child');mkdirSync(locked);writeFileSync(child,'');
+  chmodSync(locked,0o000);
+  try{
+    const host=new OracleFilesystem();
+    for(const ask of [()=>host.fileExists(child),()=>host.directoryExists(child),()=>host.runtimeKind(child),()=>host.readBytes(child),()=>host.readlink(child),()=>host.runtimeEntries(locked)])
+      assert.throws(ask,(error:NodeJS.ErrnoException)=>error.code==='EACCES'&&error.message.includes(locked));
+    assert.deepEqual(host.captured(),[],'a failed lookup records no answer');
+  }finally{chmodSync(locked,0o700);}
 });
