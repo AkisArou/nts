@@ -22,6 +22,7 @@ import { LANDING_HOME } from "../landing/queue.ts";
 import { treeOf } from "../landing/git.ts";
 import { measureWithLanding } from "./landing-verdict.ts";
 import {withCargoConfigurationSync} from '../gate/cargo.ts';
+import type { Priority } from "../gate/ranks.ts";
 
 /**
  * A step's result as the full check reads it: a skip the policy accepts is a
@@ -92,9 +93,18 @@ export function readSummary(run: string, commit: string, requested: readonly str
 export type Gate = {
   /** Every step the commit's all.sh defines, and the wide ones its owed.mjs names. */
   steps(commit: string): { all: string[]; wide: string[] };
-  /** Run `steps` at `commit`; `label` names the run's folder. */
-  run(commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord, options?: { reuseLanding?: boolean }): Measurement;
+  /**
+   * Run `steps` at `commit`; `label` names the run's folder. `rank` is the
+   * run's place among the machine's work (ranks.ts), the full check's own
+   * unless the controller names another: a culprit search's probes outrank
+   * agents' work. It holds for this run only.
+   */
+  run(commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord, options?: RunOptions): Measurement;
 };
+export type RunOptions = { reuseLanding?: boolean; rank?: Priority };
+
+/** The rank every full-check run has unless its controller names another, and every candidate knows. */
+export const FULL_CHECK_RANK: Priority = "full-check";
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
@@ -148,7 +158,7 @@ export function fullCheckBound(lastGreen: RunRecord | undefined, steps: readonly
 /** The production gate: pinned.sh from the controller's tree, measuring in the full check's. */
 export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string;env?:NodeJS.ProcessEnv;landingHome?:string}={}): Gate {
   const pinned = join(controller, "tooling/gate/pinned.sh");
-  const launch = (commit: string, run: string, steps: readonly string[], bounds?: RunBounds, probeContract = false) => {
+  const launch = (commit: string, run: string, steps: readonly string[], bounds?: RunBounds, probeContract = false, rank: Priority = FULL_CHECK_RANK) => {
     mkdirSync(run, { recursive: true });
     const selected = nodeToolchain(nodePin(controller, commit), options.env ?? process.env, options.nodeInstallations);
     // Hold pinned.sh's existing tree lock through setup, candidate import and
@@ -160,10 +170,11 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       ...fullOwned({ candidate: false, commit, label: 'MAIN', run, tree: layout.tree, target: layout.target }, steps),
       NTS_GATE_LOCK_FD: '8', CARGO_TARGET_DIR: layout.target,
       NTS_BIN: join(layout.target, 'release/nts'), NTS_SUITE_BIN: join(layout.target, 'release/nts-suite'),
-      // The run reserves its memory in the machine's ledger at the full
-      // check's priority: it waits its turn there, and yields to a landing
-      // check's or an agent's work, so nothing here waits for the host's.
-      NTS_MEMORY_PRIORITY: 'full-check',
+      // Setup reserves nothing, and runs at the rank every candidate knows;
+      // the measured run reserves its memory in the machine's ledger at its
+      // own rank (`ranked` below): it waits its turn there, and yields to
+      // higher ranks' work, so nothing here waits for the host's.
+      NTS_MEMORY_PRIORITY: FULL_CHECK_RANK,
     };
     let out: number | undefined;
     try {
@@ -208,18 +219,43 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       } else slice = newToolingSlice(false, launcher);
       // A runner older than its step lifecycle publishes none to bound.
       if (!existsSync(join(layout.tree, "tooling/gate/run-lifecycle.ts"))) bounds = { ...bounds, lifecycle_s: null };
+      // A candidate's own ledger reads the rank: one that predates the rank
+      // asked for would refuse it, so ask the candidate's own table first.
+      let placed = rank;
+      if (rank !== FULL_CHECK_RANK) {
+        const ranksModule = join(layout.tree, "tooling/gate/ranks.ts");
+        let known: readonly string[] = [];
+        if (existsSync(ranksModule)) {
+          const rankRun = join(run, "ranks"), receipt = join(rankRun, "priorities.json");
+          mkdirSync(rankRun, { recursive: true });
+          const asked = candidateCommand(selected.node, {
+            tree: layout.tree, run: rankRun, owned: { ...owned, NTS_GATE_RUN_DIR: rankRun },
+            standalone: true, discardTemporary: true,
+            command: [selected.node, "--input-type=module", "-e",
+              'import {writeFileSync} from "node:fs";const {PRIORITIES}=await import(process.argv[1]);writeFileSync(process.argv[2],JSON.stringify(PRIORITIES));',
+              pathToFileURL(ranksModule).href, receipt],
+          }, launcher, { output: out, treeLock: lock.fd });
+          if (asked.status !== 0 || asked.error || asked.signal) return asked;
+          known = JSON.parse(readFileSync(receipt, "utf8")) as string[];
+        }
+        if (!known.includes(rank)) {
+          log(`${commit.slice(0, 12)} predates the ${rank} rank; measuring it at ${FULL_CHECK_RANK}`);
+          placed = FULL_CHECK_RANK;
+        }
+      }
+      const ranked = { ...owned, NTS_MEMORY_PRIORITY: placed };
       const measure = fileURLToPath(new URL("./measure-command.ts", import.meta.url));
       log(`full check run bounds: stalled ${bounds.stall_s} s, ${bounds.lifecycle_s === null ? "no lifecycle bound (the runner publishes none)" : `no step progress ${bounds.lifecycle_s} s`}, `
-        + `${bounds.cpu_s === null ? "no CPU bound (no measured basis)" : `CPU ${bounds.cpu_s} cpu-s`}; logs ${run}`);
+        + `${bounds.cpu_s === null ? "no CPU bound (no measured basis)" : `CPU ${bounds.cpu_s} cpu-s`}; at the ${placed} rank; logs ${run}`);
       return candidateCommand(selected.node, {
-        tree: layout.tree, run, owned: { ...owned, NTS_TOOLING_SLICE: slice }, standalone: true,
+        tree: layout.tree, run, owned: { ...ranked, NTS_TOOLING_SLICE: slice }, standalone: true,
         command: ['sh', pinned, '--environment-ready', commit],
       }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(bounds.stall_s), bounds.lifecycle_s === null ? "none" : String(bounds.lifecycle_s),
-        bounds.cpu_s === null ? "none" : String(bounds.cpu_s), run, slice] });
+        bounds.cpu_s === null ? "none" : String(bounds.cpu_s), run, slice, placed] });
       });
     } finally { if (out !== undefined) closeSync(out); lock.close(); }
   };
-  const measure = (commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord): Measurement => {
+  const measure = (commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord, rank: Priority = FULL_CHECK_RANK): Measurement => {
     if (!steps.length) throw new Error("no steps to run: an empty NTS_GATE_STEPS is every step");
     const run = join(layout.runs, `${label}-${commit.slice(0, 12)}-${stamp()}`);
     log(`measuring ${steps.join(" ")} at ${commit.slice(0, 12)}; logs ${run}`);
@@ -227,7 +263,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
     try {
       const file = join(controller, "tooling/gate/times.tsv");
       const bounds = fullCheckBound(lastGreen, steps, existsSync(file) ? readFileSync(file, "utf8") : "", hostObservations(options.env ?? process.env).machineWidth());
-      result = launch(commit, run, steps, bounds);
+      result = launch(commit, run, steps, bounds, false, rank);
     }
     catch(error) {
       const reason=String(error);log(reason);
@@ -259,7 +295,8 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       return result;
     },
     run(commit, steps, label, lastGreen, reuse) {
-      if (!reuse?.reuseLanding) return measure(commit, steps, label, lastGreen);
+      const rank = reuse?.rank ?? FULL_CHECK_RANK;
+      if (!reuse?.reuseLanding) return measure(commit, steps, label, lastGreen, rank);
       const evidenceRun = join(layout.runs, `${label}-evidence-${commit.slice(0, 12)}-${stamp()}`);
       let contract: VerdictContract, tree: string;
       try {
@@ -271,12 +308,12 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
         tree = treeOf({ root: layout.tree, env: options.env }, commit);
       } catch (error) {
         log(`core landing reuse unavailable: ${String(error)}`);
-        return measure(commit, steps, label, lastGreen);
+        return measure(commit, steps, label, lastGreen, rank);
       }
       return measureWithLanding({
         home: options.landingHome ?? LANDING_HOME, commit, tree, contract,
         requested: steps, evidenceRun, lastGreen, log,
-        measure: (execute, previous) => measure(commit, execute, label, previous),
+        measure: (execute, previous) => measure(commit, execute, label, previous, rank),
       });
     },
   };

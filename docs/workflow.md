@@ -1584,11 +1584,27 @@ the tooling strict checker owns the source's type checking.
   fixture's private HOME. A fixture testing cache behavior declares its own
   cache capability. A generated shim declares any additional protocol fields
   or descriptors it forwards.
+- **A culprit search outranks agents' work.** The machine has four ranks,
+  highest first: the landing check, the full check's culprit-search probes,
+  agents' work, and the full check's other runs. A search exists to restore
+  `verified`, which records, benchmarks and every later search wait on, so
+  the controller runs each probe at the `culprit-search` rank and nothing
+  else at it: the rank is that run's and ends with it. Probes stay one at a
+  time and keep their measured reservations; the full check's core and wide
+  runs, records and benchmarks keep the full check's rank. A probe of a
+  commit whose own `ranks.ts` predates the rank runs at the full check's, and
+  its log says so. The controller runs `verified`'s code, so the rank orders
+  probes only once `verified` contains it. A ledger entry at the
+  `culprit-search` rank is written at version 4, so a reader that predates
+  the rank refuses it by its future version rather than ordering it wrongly;
+  the reader's operator rebases onto `main`. The current reader's refusal
+  of a newer version names that remedy.
 - **A contended CPU serves the ranks in the memory ledger's order.** The
-  landing check's work comes first, agents' second, the full check's last:
-  `tooling/gate/ranks.ts` holds one table of what each rank gets from the
-  kernel, its memory admission order, its OOM score and its CPU weight
-  (landing 1000, agent 100, full check 10). The rank travels in
+  landing check's work comes first, a culprit search's second, agents'
+  third, the full check's other runs last: `tooling/gate/ranks.ts` holds one
+  table of what each rank gets from the kernel, its memory admission order,
+  its OOM score and its CPU weight. The full check's measurement places a
+  probe, started inside the full check's unit, at the probe's OOM score. The rank travels in
   `NTS_MEMORY_PRIORITY`. Every rank's work runs under `nts.slice`, where
   siblings share a saturated machine by weight: each run's root slice
   carries its rank's `CPUWeight` (`startBoundSlice`, which refuses a root
@@ -1600,7 +1616,8 @@ the tooling strict checker owns the source's type checking.
   `with-lock.sh`'s and `inner.ts`'s (`--memory-max` caps that scope), and
   `check.ts --here`. The landing service's unit and an agent's unit
   (`tooling/agents`) run under `nts.slice` at their rank's weight; the full
-  check's units carry the full check's. A unit another launcher starts
+  check's units carry the full check's, and a probe's run slice the culprit
+  search's. A unit another launcher starts
   outside `nts.slice` (a Signalbox worker's) is ranked only through those
   entries; its other processes stay where it put them. Nice values still
   order the processes inside one run. A weight shares contended time only: it never
@@ -2288,8 +2305,8 @@ death; an absent timestamp remains explicit after forced termination.
   on the newest `main` by `main`'s own renderer and followed as records are
   ([log](records/notebooks/decisions-log.md#the-nightly-benchmarks-run-in-a-unit-and-land-on-the-newest-main-11-09)).
 - **One memory ledger for the machine** (11-09): every heavy job reserves its
-  peak in one queue, in priority order (the landing check, agents' work, the
-  full check); a gate run holds one reservation that grows and shrinks with
+  peak in one queue, in priority order (the landing check, the full check's
+  culprit-search probes, agents' work, the full check's other runs); a gate run holds one reservation that grows and shrinks with
   its steps; a job yields while one of higher priority waits; and no tool
   waits for the host's free memory itself. Resource reads go through the
   run's `HostObservations` capability, including dependencies and samplers
@@ -2481,7 +2498,8 @@ death; an absent timestamp remains explicit after forced termination.
   throttles a step to its grant. Grants are the ledger's accounting, grown
   from the sampled charge. A step killed at its bound records memory pressure.
   If the machine itself runs out, the kernel kills the full
-  check's work first, then agents', and a landing's last
+  check's ordinary work first, then agents', then a culprit search's, and a
+  landing's last
   ([log](records/notebooks/decisions-log.md#memory-limits-guard-against-runaways-only-11-10)).
 - **CPU ranks follow the memory ranks** (11-17): the CPU scheduler shares a
   contended machine by the ledger's ranks, as cgroup CPU weights from one
@@ -2685,6 +2703,12 @@ death; an absent timestamp remains explicit after forced termination.
   No wall bound remains; the live progress receipt makes an endless wait
   visible in the status
   ([log](records/notebooks/decisions-log.md#the-full-checks-run-bound-measures-progress-11-19)).
+
+- **A culprit search outranks agents' work.** Its probes run at a rank of
+  their own, below a landing and above agents' work, chosen by the
+  controller per probe run; ledger entries at that rank are version 4,
+  which older readers refuse by name
+  ([log](records/notebooks/decisions-log.md#a-culprit-search-outranks-agents-work-11-21)).
 
 - **Stopped exec vectors share the kernel budget.** The native reader owns
   growing argv and environment storage through serialization, bounded by the

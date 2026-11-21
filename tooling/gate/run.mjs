@@ -70,7 +70,7 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 //   NTS_GATE_STEP_CEILING_S the most any step may run (the landing check's
 //                         ceiling; see step-bound.ts)
 //   NTS_MEMORY_PRIORITY   the run's place in the machine's memory queue
-//                         (landing, agent, full-check; default agent), given
+//                         (ranks.ts; default agent), given
 //                         by the launcher's code: a shell's is discarded
 //   NTS_MEMORY_HANDOVER   a reservation the run takes over as its own is
 //                         admitted: the landing build's, given by the landing

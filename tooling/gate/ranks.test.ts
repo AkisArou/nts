@@ -40,7 +40,7 @@ const AGENT_SHELL = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/
 const IN_A_RUN = "0::/user.slice/user-1000.slice/user@1000.service/nts.slice/nts-r12345678.slice/nts-r12345678-s23456789.slice/nts-s34567890.scope\n";
 
 test("the ranks are ordered the same way for memory, the OOM killer and the CPU", () => {
-  assert.deepEqual([...PRIORITIES], ["landing", "agent", "full-check"]);
+  assert.deepEqual([...PRIORITIES], ["landing", "culprit-search", "agent", "full-check"]);
   const weights = PRIORITIES.map(rank => CPU_WEIGHT[rank]), scores = PRIORITIES.map(rank => OOM_SCORE[rank]);
   assert.deepEqual(weights, [...weights].sort((a, b) => b - a), "a higher rank never weighs less");
   assert.deepEqual(scores, [...scores].sort((a, b) => a - b), "a higher rank is never killed first");

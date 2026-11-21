@@ -4133,3 +4133,18 @@ Cargo profiles. Reclaim those profiles under the pool and tree locks, retaining
 two compatible warm targets and preserving unknown siblings. Refusals include
 reclamation decisions; count reports retained sibling paths and known writers.
 Attached cold holds keep their promises until explicit worker detachment.
+
+### A culprit search outranks agents' work (11-21)
+
+Issue #924: on 2026-11-20 and 21 the core culprit search for a red at
+e60a93b9b2 ran over six hours, 30 to 45 minutes a probe, because its probes
+ranked below four busy agents; `verified` stayed 68 commits behind, records
+waited and the nightly benchmark did not start. A new rank, `culprit-search`,
+sits between the landing check and agents' work in `tooling/gate/ranks.ts`
+(OOM score 200, CPU weight 300). The controller passes it to each probe run
+only. A candidate whose own table lacks it is probed at the full check's
+rank. Entries at the rank are ledger version 4, so pre-#924 readers fail
+closed with a future-version refusal until rebased. It composes with #827
+and #829 by rank order, without special cases. It takes effect once
+`verified` contains #924, because the controller runs `verified`'s code;
+the search that motivated it was not sped up.

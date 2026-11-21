@@ -75,7 +75,7 @@ import {launcherEnvironment} from '../landing/run.ts';
 import {nodePin} from '../bootstrap/node.ts';
 import { gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { GateResource } from "../gate/gate-resource.ts";
-import { readLedger } from "../gate/memory-ledger.ts";
+import { readLedger, type Priority } from "../gate/memory-ledger.ts";
 import {nodeToolchain} from '../gate/toolchain.ts';
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
@@ -461,6 +461,9 @@ function reopen(fx: Effects, state: State, finding: Finding, revert: string | nu
   if (!told.length || told.some(outcome => !outcome.ok)) task(fx, state, taskLine(finding, revert, why));
 }
 
+/** The rank a culprit search's probes run at; every other run of the full check keeps its own (measure.ts's FULL_CHECK_RANK). */
+export const CULPRIT_SEARCH_RANK: Priority = "culprit-search";
+
 /** The probe the search measures with: a composition, its steps, cached per step. */
 function probe(fx: Effects, state: State, part: Part): Measure {
   return (base, reverts, steps, fresh) => {
@@ -493,11 +496,14 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     // found at the commit that added it.
     const present = steps.filter(step => all.includes(step));
     if (!present.length) return result("green", "", []);
+    // A probe outranks agents' work, below a landing (ranks.ts): the search
+    // exists to restore verified, which records, benchmarks and every later
+    // search wait on. The rank is this run's alone and ends with it.
     const m = doing(fx, state, "probe", commit, () => {
       beforeRun(fx);
       if(part==="wide")beforeWideMeasurement(fx,state);
       return fx.gate.run(commit, present, `${part}-probe`, state[part].last_green,
-        { reuseLanding: part === "core" && !fresh });
+        { reuseLanding: part === "core" && !fresh, rank: CULPRIT_SEARCH_RANK });
     });
     const at = fx.now().toISOString();
     for (const step of present) {
@@ -1537,7 +1543,7 @@ const minutes = (seconds: number) => `${Math.round(seconds / 60)} min`;
 /** The live measurement in a line: its progress against its bounds, and what its own waiting request is queued behind. */
 export function measurementText(m: NonNullable<FullCheckStatus["measurement"]>): string {
   const waits = Object.entries(m.waited_s).filter(([, value]) => value > 0).map(([kind, value]) => `${kind} ${Math.round(value)} s`);
-  return `${m.run}: ran ${m.cpu_s.toFixed(0)}${m.bounds.cpu_s === null ? "" : ` of ${m.bounds.cpu_s}`} cpu-s in ${Math.round(m.wall_s)} s, `
+  return `${m.run}${m.rank === undefined ? "" : ` (${m.rank} rank)`}: ran ${m.cpu_s.toFixed(0)}${m.bounds.cpu_s === null ? "" : ` of ${m.bounds.cpu_s}`} cpu-s in ${Math.round(m.wall_s)} s, `
     + `stalled ${Math.round(m.stalled_s)} of ${m.bounds.stall_s} s${m.bounds.lifecycle_s === null ? "" : `, outside steps ${Math.round(m.outside_s)} of ${m.bounds.lifecycle_s} s`}`
     + `, lost ${Math.round(m.cpu_lost_s)} s to higher-ranked CPU work${waits.length ? `, waited ${waits.join(", ")}` : ""}`
     + `${!m.waiting ? "" : m.waiting.kind === "priority" ? `; it yields to ${m.waiting.what} (${m.waiting.priority}, ${m.waiting.id}), which waits on other work's memory`

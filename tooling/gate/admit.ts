@@ -1,8 +1,8 @@
 // Run a command once the machine's memory ledger admits it, or say what the
 // ledger holds:
 //
-//   node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority ...] [--what <label>] -- <command> [args...]
-//   node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]
+//   node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority <rank>] [--what <label>] -- <command> [args...]
+//   node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority <rank>] [--what <label>] -- <command> [args...]
 //   node tooling/gate/admit.ts --status [--json]
 //
 // With `--key`, the command reserves what its earlier runs under that key
@@ -61,8 +61,11 @@ import { measurementAdmission, MeasurementBusy } from "./measurement-admission.t
 import { rankedScopeArgs } from "./scopes/bound-slice.ts";
 import { describeHolderRows } from "./memory-holders.ts";
 
-const USAGE = "usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
-  + "       node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
+const RANKS = PRIORITIES.join("|");
+/** The status's rank column: as wide as the longest rank's name. */
+const RANK_WIDTH = Math.max(...PRIORITIES.map(rank => rank.length));
+const USAGE = `usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority ${RANKS}] [--what <label>] -- <command> [args...]\n`
+  + `       node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority ${RANKS}] [--what <label>] -- <command> [args...]\n`
   + "       node tooling/gate/admit.ts --status [--json]";
 
 class Refusal extends Error {
@@ -165,7 +168,7 @@ function admittedRows(admitted: LedgerStatus["admitted"], clock: (iso: string) =
     if (shown.has(entry.id)) return;
     shown.add(entry.id);
     const pad = "  ".repeat(depth);
-    rows.push(`    ${pad}${entry.priority.padEnd(10)} ${gib(entry.bytes).padStart(10)}, using ${gib(entry.used_bytes).padStart(10)}  `
+    rows.push(`    ${pad}${entry.priority.padEnd(RANK_WIDTH)} ${gib(entry.bytes).padStart(10)}, using ${gib(entry.used_bytes).padStart(10)}  `
       + `pid ${entry.owner_pid}  since ${clock(entry.since)}${entry.live ? "" : "  (its owner has exited)"}  ${entry.what}`
       + (entry.drawn_bytes ? `\n      ${pad}drew ${gib(entry.drawn_bytes)} of it on the reservation above` : "")
       + (entry.unmeasured.length ? `\n      ${pad}unmeasured (${entry.liveUse ? "live use and margin" : "sized by the largest of its kind, or its share of the machine"}): ${entry.unmeasured.join(" ")}` : "")
@@ -189,7 +192,7 @@ function describeStatus(status: LedgerStatus): string {
     `  admitted (${status.admitted.length})${status.admitted.length ? ":" : ": none"}`,
     ...admittedRows(status.admitted, clock),
     `  waiting (${status.waiting.length})${status.waiting.length ? ":" : ": none"}`,
-    ...status.waiting.map((entry, at) => `    ${String(at + 1).padStart(2)}. ${entry.priority.padEnd(10)} ${entry.grows === null ? "" : "grows by "}${gib(entry.bytes)}  `
+    ...status.waiting.map((entry, at) => `    ${String(at + 1).padStart(2)}. ${entry.priority.padEnd(RANK_WIDTH)} ${entry.grows === null ? "" : "grows by "}${gib(entry.bytes)}  `
       + `waited ${Math.round(entry.waited_s)} s  pid ${entry.waiter_pid}${entry.live ? "" : "  (gone)"}  ${entry.what}`),
     ...("unavailable" in status.holders ? [`  held now: unavailable: ${status.holders.unavailable}`] : describeHolderRows(status.holders)),
   ];

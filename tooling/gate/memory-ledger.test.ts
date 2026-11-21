@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, ledgerWait, lockLedger, releaseLedgerEntries, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
+  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, ledgerWait, lockLedger, releaseLedgerEntries, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, queueOrder, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { peakReservation, readCostHistory, historyFile, writeCostHistory, type JobBasis } from "./step-scheduling.ts";
@@ -84,6 +84,17 @@ test("the landing check outranks agents' work, which outranks the full check, wh
   assert.deepEqual(fits(5.9, [full, agent, landing]), ["landing"], "the agent's 2 do not fit in the 1.9 left, and the full check waits behind it");
   assert.deepEqual(fits(6, [full, agent, landing]), ["agent", "landing"]);
   assert.deepEqual(fits(7, [full, agent, landing]), ["agent", "full", "landing"]);
+});
+
+test("a culprit search's probes rank below a landing and above agents' work; the full check's other runs stay below agents'", () => {
+  const full = q("full", 1, 1, "full-check"), agent = q("agent", 2, 2), probe = q("probe", 3, 3, "culprit-search"), landing = q("landing", 4, 4, "landing");
+  const queue = [full, agent, probe, landing];
+  assert.deepEqual([...queue].sort(queueOrder).map(entry => entry.id), ["landing", "probe", "agent", "full"], "whenever each arrived");
+  assert.deepEqual(fits(6.9, queue), ["landing"], "the probe's 3 do not fit in the 2.9 left, and the agent's job waits behind it");
+  assert.deepEqual(fits(7, queue), ["landing", "probe"]);
+  assert.deepEqual(fits(8.9, queue), ["landing", "probe"], "the agent's 2 do not fit in the 1.9 left, and the full check waits behind it");
+  assert.deepEqual(fits(9.9, queue), ["agent", "landing", "probe"], "the full check's 1 does not fit in the 0.9 left");
+  assert.deepEqual(fits(10, queue), ["agent", "full", "landing", "probe"]);
 });
 
 // #804's supplied ledger state: the full check was already waiting to grow
@@ -763,6 +774,73 @@ test("a reservation is outranked while a live request of higher priority waits, 
   assert.equal(full.outranked(), false);
 });
 
+test("an agent's job yields to a waiting culprit-search probe, a probe to a waiting landing, and a probe never to an agent's request", async t => {
+  const f = fixture(t); // 20 available, 2 kept for the system
+  const agent = await f.ask({ bytes: 8 * GiB, what: "agent job" });
+  const probe = await f.ask({ bytes: 8 * GiB, what: "probe", priority: "culprit-search" });
+  // Each uses all it reserved: room for 2, which none of the 3 GiB requests below fits.
+  f.used.set("agent job", 8 * GiB); f.used.set("probe", 8 * GiB);
+  f.memory(4);
+  const waiting = (what: string) => waitFor(`${what} to wait`, () => readLedger(f.dir).waiting.some(row => row.what === what && row.fits === true), { stopped: f.stopped });
+  const later = f.ask({ bytes: 3 * GiB, what: "another agent job" });
+  await waiting("another agent job");
+  assert.deepEqual([agent.outranked(), probe.outranked()], [false, false], "an agent's request outranks neither its own rank nor a probe");
+  const second = f.ask({ bytes: 3 * GiB, what: "a second probe", priority: "culprit-search" });
+  await waiting("a second probe");
+  assert.deepEqual([agent.outranked(), probe.outranked()], [true, false], "the agent's job yields to the probe; the probe waits its own rank's turn");
+  const landing = f.ask({ bytes: 3 * GiB, what: "landing job", priority: "landing" });
+  await waiting("landing job");
+  assert.deepEqual([agent.outranked(), probe.outranked()], [true, true], "a landing outranks the probe");
+  assert.deepEqual(readLedger(f.dir).waiting.map(row => [row.what, row.priority]),
+    [["landing job", "landing"], ["a second probe", "culprit-search"], ["another agent job", "agent"]], "the queue's order");
+  agent.release(); probe.release();
+  f.used.clear(); f.memory(20);
+  for (const request of [await landing, await second, await later]) request.release();
+});
+
+test("a culprit-search entry is written at version 4, the version that carries its rank, and an older reader refuses it by name", async t => {
+  const f = fixture(t);
+  const probe = await f.ask({ bytes: GiB, what: "probe", priority: "culprit-search" }), agent = await f.ask({ bytes: GiB, what: "agent job" });
+  const file = (id: string) => join(f.dir, "admitted", `${id}.json`);
+  const wire = (id: string) => JSON.parse(readFileSync(file(id), "utf8"));
+  assert.deepEqual([wire(probe.id).version, wire(agent.id).version], [4, 2], "only the rank's own entries need the newer reader");
+  assert.deepEqual(readLedger(f.dir).admitted.map(row => [row.what, row.priority]).sort(), [["agent job", "agent"], ["probe", "culprit-search"]]);
+  // A version-3 reader (before #924) meets the probe's entry and fails closed by name, never deciding without its rank.
+  const older = spawnSync(process.execPath, ["--input-type=module", "-e",
+    `const { assertStateVersion } = await import(${JSON.stringify(pathToFileURL(fileURLToPath(new URL("./state-version.ts", import.meta.url))).href)});
+assertStateVersion(JSON.parse(process.argv[2]), 3, process.argv[1]);`, file(probe.id), readFileSync(file(probe.id), "utf8")], { env: testEnvironment(), encoding: "utf8" });
+  assert.notEqual(older.status, 0);
+  assert.match(older.stderr, /unsupported future state version 4; this reader supports through 3/);
+  // An entry whose version and rank disagree is no ledger entry.
+  const original = readFileSync(file(probe.id), "utf8");
+  writeFileSync(file(probe.id), JSON.stringify({ ...JSON.parse(original), version: 2 }) + "\n");
+  assert.throws(() => readLedger(f.dir), /is not a memory ledger entry/, "a culprit-search rank below version 4");
+  writeFileSync(file(probe.id), JSON.stringify({ ...JSON.parse(original), priority: "agent" }) + "\n");
+  assert.throws(() => readLedger(f.dir), /is not a memory ledger entry/, "version 4 without the rank it carries");
+  writeFileSync(file(probe.id), original);
+  probe.release(); agent.release();
+});
+
+test("a culprit-search run yields to a waiting landing, and never to an agent's request", t => {
+  const root = testScratch(t, "memory-ledger-probe-wait"), run = "/fixture.slice/nts-run.slice";
+  const env = ownMemory(root, { availableKiB: 2 * 2 ** 20 + 128 * 1024 }), dir = env.NTS_MEMORY_LEDGER;
+  for (const state of ["waiting", "admitted"]) mkdirSync(join(dir, state), { recursive: true });
+  const me = processIdentity(process.pid)!;
+  let seq = 0;
+  const put = (state: "waiting" | "admitted", fields: Partial<LedgerEntry>) => {
+    const entry = { version: 2, id: randomUUID(), seq: seq++, bytes: GiB, what: "job", priority: "agent", owner: me, waiter: me,
+      measure: { tree: true, cgroup: null }, since: new Date(Date.UTC(2026, 10, 21, 10, seq)).toISOString(), grows: null, fits: true, ...fields };
+    writeFileSync(join(dir, state, `${entry.id}.json`), JSON.stringify(entry));
+    return entry;
+  };
+  put("admitted", { version: 4, what: "gate run of a culprit-search probe", priority: "culprit-search", measure: { tree: false, cgroup: { path: `${run}/nts-run-w.slice`, inode: "1" } } });
+  put("waiting", { what: "an agent's build" });
+  assert.equal(ledgerWait(dir, run, "culprit-search", env), null, "an agent's request outranks no probe");
+  assert.equal(ledgerWait(dir, run, "full-check", env)?.kind, "priority", "the full check's own runs yield to it");
+  const landing = put("waiting", { what: "gate run of a landing", priority: "landing" });
+  assert.deepEqual(ledgerWait(dir, run, "culprit-search", env), { kind: "priority", id: landing.id, what: landing.what, priority: "landing", since: landing.since, behind: null });
+});
+
 test("an observer outside a run reads its own fitting request, and a yield only to requests that wait on other work's memory", t => {
   const root = testScratch(t, "memory-ledger-run-wait"), run = "/fixture.slice/nts-run.slice";
   const machine = (availableKiB: number) => ownMemory(root, { availableKiB });
@@ -971,6 +1049,8 @@ test("admit.ts --status: the reservations admitted, with what each uses, and the
   await waitFor("the agent's request to wait", () => f.of("agent job").length >= 1, { stopped: f.stopped });
   const landing = f.ask({ bytes: 7 * GiB, what: "landing job", priority: "landing" });
   await waitFor("the landing request to wait", () => f.of("landing job").length >= 1, { stopped: f.stopped });
+  const probe = f.ask({ bytes: 7 * GiB, what: "culprit-search probe", priority: "culprit-search" });
+  await waitFor("the probe to wait", () => f.of("culprit-search probe").length >= 1, { stopped: f.stopped });
   setCharge(f, 16 * 2 ** 20);
   const json = admit(f, ["--status", "--json"]);
   assert.equal(json.status, 0, json.stderr);
@@ -987,17 +1067,17 @@ test("admit.ts --status: the reservations admitted, with what each uses, and the
   assert.equal(status.pending_bytes, Math.min(12 * GiB, peakReservation([entry.used_bytes])) - entry.used_bytes);
   assert.equal(status.room_bytes, 9 * GiB - status.pending_bytes - 2 * GiB);
   assert.deepEqual(status.waiting.map((w: { what: string; priority: string; bytes: number; owner_pid: number; grows: null }) => [w.what, w.priority, w.bytes, w.owner_pid, w.grows]),
-    [["landing job", "landing", 7 * GiB, process.pid, null], ["agent job", "agent", 7 * GiB, owner.pid, null]], "in the queue's order");
+    [["landing job", "landing", 7 * GiB, process.pid, null], ["culprit-search probe", "culprit-search", 7 * GiB, process.pid, null], ["agent job", "agent", 7 * GiB, owner.pid, null]], "in the queue's order");
   assert.ok(status.waiting.every((w: { waited_s: number }) => typeof w.waited_s === "number" && w.waited_s >= 0));
   const text = admit(f, ["--status"]);
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /^memory ledger .* at \S+\n  machine: 64\.0 GiB, 9\.0 GiB available; /);
   assert.match(text.stdout, /\n  admitted \(1\):\n    full-check +12\.0 GiB, using .*  pid \d+  since \d\d:\d\d:\d\d  held job\n/);
-  assert.match(text.stdout, /\n  waiting \(2\):\n     1\. landing +7\.0 GiB  waited \d+ s  pid \d+  landing job\n     2\. agent +7\.0 GiB  waited \d+ s  pid \d+  agent job\n  held now: unavailable: memory holders: own cgroup \/fixture-runner is under no user's systemd manager\n$/);
-  // It ends, and what it used is available again: room for both.
+  assert.match(text.stdout, /\n  waiting \(3\):\n     1\. landing +7\.0 GiB  waited \d+ s  pid \d+  landing job\n     2\. culprit-search 7\.0 GiB  waited \d+ s  pid \d+  culprit-search probe\n     3\. agent +7\.0 GiB  waited \d+ s  pid \d+  agent job\n  held now: unavailable: memory holders: own cgroup \/fixture-runner is under no user's systemd manager\n$/);
+  // It ends, and what it used is available again: room for all three, one at a time.
   held.release();
   f.memory(20);
-  for (const request of [await agent, await landing]) request.release();
+  (await landing).release(); (await probe).release(); (await agent).release();
 });
 
 const MiB = 2 ** 20;
@@ -1410,19 +1490,21 @@ test("a waiter that could not fit were every admitted job to end makes nobody yi
   job.release();
 });
 
-test("work is ranked for the OOM killer by priority, a landing's last to go and the full check's first; a score is raised, never lowered", () => {
-  assert.ok(OOM_SCORE.landing < OOM_SCORE.agent && OOM_SCORE.agent < OOM_SCORE["full-check"]);
+test("work is ranked for the OOM killer by priority, a landing's last to go and the full check's first; a score is raised, never lowered, unless its launcher places it", () => {
+  assert.ok(OOM_SCORE.landing < OOM_SCORE["culprit-search"] && OOM_SCORE["culprit-search"] < OOM_SCORE.agent && OOM_SCORE.agent < OOM_SCORE["full-check"]);
   const inherited = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), ledger = pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href;
-  // A child ranks itself, from `start` when given (a process may raise its own).
-  const ranked = (priority: string, start?: number) => Number(spawnSync(process.execPath, ["--input-type=module", "-e",
+  // A child ranks itself (rankForOom) or is placed (placeForOom), from `start` when given (a process may raise its own).
+  const ranked = (priority: string, start?: number, how: "rankForOom" | "placeForOom" = "rankForOom") => Number(spawnSync(process.execPath, ["--input-type=module", "-e",
     `import { readFileSync, writeFileSync } from "node:fs";${start === undefined ? "" : ` writeFileSync("/proc/self/oom_score_adj", "${start}");`}
-const { rankForOom } = await import(${JSON.stringify(ledger)}); rankForOom(${JSON.stringify(priority)}); process.stdout.write(readFileSync("/proc/self/oom_score_adj", "utf8"));`],
+const { ${how} } = await import(${JSON.stringify(ledger)}); ${how}(${JSON.stringify(priority)}); process.stdout.write(readFileSync("/proc/self/oom_score_adj", "utf8"));`],
   {env:testEnvironment(), encoding: "utf8" }).stdout);
   for (const priority of PRIORITIES) assert.equal(ranked(priority), Math.max(inherited, OOM_SCORE[priority]), priority);
   // Above its priority's score already, it stays: an unprivileged process cannot lower its own.
   assert.equal(ranked("landing", 900), 900);
+  // Started at the full check's 500, as a probe is inside the full check's unit, it is placed at the culprit search's 200.
+  assert.equal(ranked("culprit-search", OOM_SCORE["full-check"], "placeForOom"), OOM_SCORE["culprit-search"]);
+  assert.equal(ranked("full-check", OOM_SCORE["full-check"], "placeForOom"), OOM_SCORE["full-check"], "its own rank's score is left as it is");
 });
-
 
 test("the 13.6 GiB ancestor replay gives its borrower the agent rank and releases forecasts to a landing",async t=>{
   const f=fixture(t),outer=await f.ask({bytes:Math.round(13.6*GiB),what:"outer agent"});
@@ -1470,12 +1552,13 @@ test("borrowers inherit rank and admission order across multiple ancestors",asyn
 test("future ledger entries refuse reads, updates and release without changing their bytes",async t=>{
   const f=fixture(t),held=await f.ask({bytes:GiB,what:"future owner"});
   const path=join(f.dir,"admitted",held.id+".json"),original=readFileSync(path,"utf8");
-  const future=JSON.stringify({...JSON.parse(original),version:4,extra:"unknown"})+"\n";
+  const future=JSON.stringify({...JSON.parse(original),version:5,extra:"unknown"})+"\n";
   writeFileSync(path,future);
-  assert.throws(()=>readLedger(f.dir),/unsupported future state version 4/);
-  await assert.rejects(held.noteOver("future-key"),/unsupported future state version 4/);
+  const remedy=/unsupported future state version 5; this reader supports through 4; left untouched; this tree's ledger reader predates the protocol that wrote it; rebase onto main$/;
+  assert.throws(()=>readLedger(f.dir),remedy,"it says what its operator does");
+  await assert.rejects(held.noteOver("future-key"),/unsupported future state version 5/);
   held.release();
-  assert.match(f.lines.join("\n"),/release cleanup failed.*future state version 4/);
+  assert.match(f.lines.join("\n"),/release cleanup failed.*future state version 5.*rebase onto main/);
   assert.equal(readFileSync(path,"utf8"),future);
 });
 

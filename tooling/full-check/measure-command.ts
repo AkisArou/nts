@@ -17,7 +17,13 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // its waits and lost CPU, which catches a spinner no step bounds; or when it has used its
 // CPU bound, the backstop a slowed run cannot reach. There is no wall bound:
 // every wait it excuses ends when the admitted work it waits on ends, and
-// that work has its own bound. What it measured is kept
+// that work has its own bound.
+//
+// **The run competes at the rank its controller names** (ranks.ts): the full
+// check's own, or a culprit search's for a probe. Its slice takes that rank's
+// CPU weight, its processes that rank's OOM score (`placeForOom`: a probe
+// starts inside the full check's unit, at its score), and its ledger waits
+// are read at that rank. What it measured is kept
 // in the run folder while it runs (MEASUREMENT_PROGRESS), for
 // `service.ts --status`.
 import { spawn } from "node:child_process";
@@ -29,7 +35,7 @@ import { requireOwnUnit, startBoundSlice } from "../gate/scopes/bound-slice.ts";
 import { populated, waitForEmptyCgroup } from "../gate/scopes/step-scope.ts";
 import { stopToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 import { hostObservations } from "../gate/host-observations.ts";
-import { LEDGER_DIR, LEDGER_ENV, ledgerWait, processIdentity, type LedgerWait, type ProcessIdentity } from "../gate/memory-ledger.ts";
+import { LEDGER_DIR, LEDGER_ENV, ledgerWait, placeForOom, PRIORITIES, processIdentity, type LedgerWait, type Priority, type ProcessIdentity } from "../gate/memory-ledger.ts";
 import { ProgressBound, progressSummary, type CpuSample, type ProgressState, type StepLifecycle } from "../gate/step-bound.ts";
 import { readRunLifecycle } from "../gate/run-lifecycle.ts";
 
@@ -47,6 +53,8 @@ export type RunBounds = { stall_s: number; lifecycle_s: number | null; cpu_s: nu
 /** What a measurement has measured, kept up to date while it runs. */
 export type MeasurementProgress = Omit<ProgressState, "expired"> & {
   version: 1; writer: ProcessIdentity; live: boolean; updated_at: string; bounds: RunBounds;
+  /** The rank the run competes at; absent from a receipt an older measurement wrote. */
+  rank?: Priority;
   /** The run slice's cgroup. */
   group: string;
   /** The run's ledger wait: its own request and what is queued ahead of it, or the request it yields to; and since when this observer has seen it. */
@@ -84,9 +92,9 @@ export function runBoundReason(state: ProgressState, bounds: RunBounds): string 
 const positive = (value: number) => Number.isFinite(value) && value > 0;
 const validBounds = (bounds: RunBounds) => positive(bounds.stall_s) && [bounds.lifecycle_s, bounds.cpu_s].every(bound => bound === null || positive(bound));
 
-async function measure(bounds: RunBounds, run: string, slice: string, command: string[]): Promise<number> {
-  if (!toolingSlice({ NTS_TOOLING_SLICE: slice }) || !isAbsolute(run) || !validBounds(bounds) || !command.length) {
-    throw new Error("a full-check measurement needs a run, its own slice and positive bounds");
+async function measure(bounds: RunBounds, run: string, slice: string, rank: Priority, command: string[]): Promise<number> {
+  if (!toolingSlice({ NTS_TOOLING_SLICE: slice }) || !isAbsolute(run) || !validBounds(bounds) || !PRIORITIES.includes(rank) || !command.length) {
+    throw new Error("a full-check measurement needs a run, its own slice, positive bounds and a rank");
   }
   const unit = `nts-full-check-measure-${randomUUID()}`;
   const host = hostObservations(process.env), ledger = process.env[LEDGER_ENV] ?? LEDGER_DIR;
@@ -110,7 +118,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
   const receipt = (live: boolean) => {
     if (!state) return;
     const { wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s } = state;
-    const progress: MeasurementProgress = { version: 1, writer, live, updated_at: new Date(host.wallNow()).toISOString(), bounds, group,
+    const progress: MeasurementProgress = { version: 1, writer, live, updated_at: new Date(host.wallNow()).toISOString(), bounds, rank, group,
       wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s, waiting, held };
     try {
       const file = join(run, MEASUREMENT_PROGRESS);
@@ -123,7 +131,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
   // The wait named now holds until the next sample. A ledger that cannot be
   // read excuses nothing.
   const wait = (): LedgerWait | null => {
-    try { const found = ledgerWait(ledger, group, "full-check", process.env); ledgerFailure = undefined; return found; }
+    try { const found = ledgerWait(ledger, group, rank, process.env); ledgerFailure = undefined; return found; }
     catch (error) {
       const failure = `full check run bound cannot read the memory ledger: ${String(error)}`;
       if (failure !== ledgerFailure) console.error(failure);
@@ -150,8 +158,10 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
   let cleanupFailed = false;
   try {
     const owner = requireOwnUnit();
-    // The full check's measurement competes for CPU at the full check's rank (ranks.ts).
-    group = startBoundSlice(slice,owner,{rank:"full-check"});acquired=true;
+    // The measurement competes for CPU at its rank, and the scope's processes,
+    // this one's children, are killed in that rank's turn (ranks.ts).
+    group = startBoundSlice(slice,owner,{rank});acquired=true;
+    placeForOom(rank, line => console.error(line));
     sample();
     const child = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", "--expand-environment=no",
       `--unit=${unit}`, `--slice=${slice}`, "--property=TimeoutStopSec=5s",
@@ -193,8 +203,8 @@ async function measure(bounds: RunBounds, run: string, slice: string, command: s
 }
 
 runAsCommand(import.meta.url,async()=>{
-  const [, , stall, lifecycle, cpu, run, slice, ...command] = process.argv;
+  const [, , stall, lifecycle, cpu, run, slice, rank, ...command] = process.argv;
   const optional = (value: string | undefined) => value === "none" ? null : Number(value);
-  try { process.exitCode = await measure({ stall_s: Number(stall), lifecycle_s: optional(lifecycle), cpu_s: optional(cpu) }, run!, slice!, command); }
+  try { process.exitCode = await measure({ stall_s: Number(stall), lifecycle_s: optional(lifecycle), cpu_s: optional(cpu) }, run!, slice!, rank as Priority, command); }
   catch (error) { console.error(error); process.exitCode = 1; }
 });

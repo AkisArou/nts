@@ -15,7 +15,8 @@ import { appliedLine, DELTA_FILE, parseDelta, serializeDelta } from "../records/
 import type { Units, UnitSpec } from "./background.ts";
 import { FULL_MD, RUNS, type Bench, type BenchAttempt, type Publisher } from "./bench.ts";
 import { Git } from "./git.ts";
-import { verdictOf, type Gate, type Measurement, type StepResult } from "./measure.ts";
+import { FULL_CHECK_RANK, verdictOf, type Gate, type Measurement, type StepResult } from "./measure.ts";
+import type { Priority } from "../gate/ranks.ts";
 import type { LandingAnswer } from "./queue.ts";
 import type { Applier, Recorder } from "./records.ts";
 import { layout, type Layout } from "./state.ts";
@@ -57,7 +58,7 @@ export function repository(t: TestContext): Repository {
   return { root, dir, origin, git, layout: layout(join(root, "cache")), commit };
 }
 
-export type FakeGate = Gate & { measured: { commit: string; steps: string[]; label: string }[] };
+export type FakeGate = Gate & { measured: { commit: string; steps: string[]; label: string; rank: Priority }[] };
 
 /**
  * The stand-in gate. Like pinned.sh it checks the measured commit out in the
@@ -75,8 +76,8 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
   return {
     measured,
     steps: () => ({ all, wide }),
-    run(commit, steps, label): Measurement {
-      measured.push({ commit, steps: [...steps], label });
+    run(commit, steps, label, _lastGreen, options): Measurement {
+      measured.push({ commit, steps: [...steps], label, rank: options?.rank ?? FULL_CHECK_RANK });
       const tree = repo.layout.tree;
       if (repo.git.ok(["-C", tree, "rev-parse", "--git-dir"])) new Git(tree, repo.git.env).run(["checkout", "--detach", "-q", "--force", commit]);
       else repo.git.run(["worktree", "add", "--detach", "-q", tree, commit]);

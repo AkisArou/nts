@@ -31,7 +31,8 @@ import {registerCommandCloser} from '../differential/command-entry/main.ts';
 //     count the anonymous and shared memory they map (RssAnon + RssShmem).
 //
 // **The queue.** Requests wait in arrival order within a priority: the
-// landing check first, then agents' work, then the full check. The longest
+// landing check first, then the full check's culprit-search probes, then
+// agents' work, then the full check's other runs (ranks.ts). The longest
 // prefix of the queue that fits together is admitted. A non-fitting head
 // blocks new admissions and ordinary growth. Fitting draining growth of an
 // admitted equal- or lower-priority owner may backfill: it completes already-started work whose
@@ -167,10 +168,32 @@ export {CPU_WEIGHT,OOM_SCORE,PRIORITIES,PRIORITY_ENV,priorityOf,type Priority};
  * says why it could not, and the work runs all the same.
  */
 export function rankForOom(priority: Priority, report: (line: string) => void = () => {}): void {
+  adjustOom(priority, "raise", report);
+}
+
+/**
+ * Sets this process's OOM score adjustment, which its children inherit, to
+ * `priority`'s, lowering it where needed, for a launcher whose code places
+ * the work it starts at a rank of its own: the full check's measurement
+ * places a culprit-search probe, started inside the full check's unit at its
+ * 500, at the probe's 200. The kernel lets an unprivileged process lower its
+ * score only as far as its manager's floor (the user manager's 100); below
+ * that it says why, and the work runs at the score it has, which the OOM
+ * killer reaches sooner, never later.
+ */
+export function placeForOom(priority: Priority, report: (line: string) => void = () => {}): void {
+  adjustOom(priority, "place", report);
+}
+
+/** The one owner of this process's OOM score: `raise` only ever raises it; `place` sets it exactly. */
+function adjustOom(priority: Priority, how: "raise" | "place", report: (line: string) => void): void {
   const path = "/proc/self/oom_score_adj", wanted = OOM_SCORE[priority];
   try {
-    if (Number(readFileSync(path, "utf8")) < wanted) writeFileSync(path, String(wanted));
-  } catch (error) { report(`memory: cannot raise this process's OOM score to its ${priority} priority's ${wanted}: ${(error as Error).message}`); }
+    const now = Number(readFileSync(path, "utf8"));
+    if (how === "raise" ? now < wanted : now !== wanted) writeFileSync(path, String(wanted));
+  } catch (error) {
+    report(`memory: cannot ${how === "raise" ? "raise this process's OOM score to" : "place this process's OOM score at"} its ${priority} priority's ${wanted}: ${(error as Error).message}`);
+  }
 }
 
 const POLL_MS = 1000;
@@ -420,7 +443,7 @@ export type CgroupRef = { path: string; inode: string };
 /** What counts as the job's memory: its owner's process tree, a cgroup, or both (the cgroup, and the tree's processes outside it). */
 export type Measure = { tree: boolean; cgroup: CgroupRef | null };
 export type LedgerEntry = {
-  version: 2 | 3; id: string; seq: number; bytes: number; what: string; priority: Priority;
+  version: 2 | 3 | 4; id: string; seq: number; bytes: number; what: string; priority: Priority;
   owner: ProcessIdentity; waiter: ProcessIdentity; measure: Measure; since: string;
   /** For a waiting request to grow an admitted reservation, that reservation's id; null for one of its own. */
   grows: string | null;
@@ -450,7 +473,18 @@ export type LedgerEntry = {
   fits?: boolean;
 };
 type State = "waiting" | "admitted";
-const LEDGER_READER_VERSION=3;
+const LEDGER_READER_VERSION=4;
+/** What an older reader's operator does on meeting a newer entry. */
+const LEDGER_REMEDY="this tree's ledger reader predates the protocol that wrote it; rebase onto main";
+/**
+ * The version an entry is written at: the oldest whose readers understand it.
+ * A version tells an older reader that an entry's meaning is beyond it, so it
+ * fails closed by name rather than deciding wrongly. Version 4 (#924) carries
+ * the culprit-search rank, which a version-3 reader cannot order; version 3
+ * carries protected drained bytes; version 2 everything else.
+ */
+const wireVersion = (entry: Pick<LedgerEntry, "priority" | "drained">): 2 | 3 | 4 =>
+  entry.priority === "culprit-search" ? 4 : (entry.drained ?? 0) > 0 ? 3 : 2;
 
 const entryPath = (dir: string, state: State, id: string) => join(dir, state, `${id}.json`);
 
@@ -462,16 +496,17 @@ function identity(value: unknown): value is ProcessIdentity {
 const keyList = (value: unknown) => value === undefined || (Array.isArray(value) && value.every(key => typeof key === "string" && KEY.test(key)));
 
 function parseEntry(text: string, file: string): LedgerEntry {
-  const parsed = JSON.parse(text) as Omit<LedgerEntry, "version" | "grows"> & { version: 1 | 2 | 3; grows?: string | null };
-  assertStateVersion(parsed,LEDGER_READER_VERSION,file);
+  const parsed = JSON.parse(text) as Omit<LedgerEntry, "version" | "grows"> & { version: 1 | 2 | 3 | 4; grows?: string | null };
+  assertStateVersion(parsed,LEDGER_READER_VERSION,file,LEDGER_REMEDY);
   // Version 1 has the same fields and no growth: an admit.ts from before
   // reservations could grow may still write one, so it reads as a request of
   // its own rather than one that stops every decision.
   const entry = (parsed?.version === 1 && !("grows" in parsed) ? { ...parsed, version: 2, grows: null } : parsed) as LedgerEntry;
   const measure = entry?.measure, cgroup = measure?.cgroup;
-  if ((entry?.version !== 2 && entry?.version !== 3) || (entry.version===3)!==((entry.drained??0)>0)
+  if ((entry?.version !== 2 && entry?.version !== 3 && entry?.version !== 4)
       || typeof entry.id !== "string" || !ID.test(entry.id) || !Number.isSafeInteger(entry.seq)
       || !Number.isSafeInteger(entry.bytes) || entry.bytes <= 0 || typeof entry.what !== "string" || !PRIORITIES.includes(entry.priority)
+      || entry.version !== wireVersion(entry)
       || !identity(entry.owner) || !identity(entry.waiter) || typeof entry.since !== "string" || typeof measure?.tree !== "boolean"
       || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))
       || (entry.grows !== null && (typeof entry.grows !== "string" || !ID.test(entry.grows)))
@@ -506,17 +541,18 @@ function readEntries(dir: string, state: State): LedgerEntry[] {
 
 function writeEntry(dir: string, state: State, entry: LedgerEntry): void {
   const temporary = join(dir, `.tmp-${entry.id}`);
-  assertWritableState(entryPath(dir,state,entry.id),LEDGER_READER_VERSION);
-  assertWritableState(temporary,LEDGER_READER_VERSION);
-  // The protected promise changes admission meaning. Old readers must fail
-  // closed while it exists, and may read the compatible state once returned.
-  const wire={...entry,version:(entry.drained??0)>0?3:2};
+  assertWritableState(entryPath(dir,state,entry.id),LEDGER_READER_VERSION,LEDGER_REMEDY);
+  assertWritableState(temporary,LEDGER_READER_VERSION,LEDGER_REMEDY);
+  // The protected promise, and the culprit-search rank, change admission
+  // meaning. Old readers must fail closed while either exists, and may read
+  // the compatible state once it is gone.
+  const wire={...entry,version:wireVersion(entry)};
   writeFileSync(temporary, `${JSON.stringify(wire)}\n`, { mode: 0o600 });
   renameSync(temporary, entryPath(dir, state, entry.id));
 }
 
 function removeQuietly(path: string): void {
-  assertWritableState(path,LEDGER_READER_VERSION);
+  assertWritableState(path,LEDGER_READER_VERSION,LEDGER_REMEDY);
   try { unlinkSync(path); }
   catch (error) { if (!gone(error)) throw error; }
 }
@@ -586,7 +622,7 @@ export function releaseLedgerEntries(dir:string,ids:readonly {id:string;state:St
     try{
       if(!lock){report(`memory: ${what} release could not lock ${dir} within its cleanup bound; entries left for dead-owner reclamation`);return;}
       const paths=ids.map(entry=>entryPath(dir,entry.state,entry.id));
-      for(const path of paths)assertWritableState(path,LEDGER_READER_VERSION);
+      for(const path of paths)assertWritableState(path,LEDGER_READER_VERSION,LEDGER_REMEDY);
       for(const path of paths)removeQuietly(path);
     }catch(error){failed(error);}finally{lock?.release();}
   };

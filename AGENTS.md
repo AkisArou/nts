@@ -335,8 +335,12 @@ An oracle test's supplied canonical environment is already sealed with
   and check `journalctl -k` for OOM kills before blaming a crash.
 - **Heavy work reserves its memory in the machine's one ledger**
   (`tooling/gate/memory-ledger.ts`), a queue for every job on the machine:
-  the landing check first, then agents' work, then the full check, and a job
-  yields while one of higher priority waits. What a step or job reserves is
+  the landing check first, then the full check's culprit-search probes while
+  it looks for the commit that made main red, then agents' work, then the
+  full check's other runs, and a job yields while one of higher priority
+  waits. A ledger entry your tree's code cannot read stops `admit.ts` and
+  the gate with "this tree's ledger reader predates the protocol that wrote
+  it; rebase onto main": do that. What a step or job reserves is
   what it was measured to hold in its tree's scheduling history
   (`tooling/gate/step-scheduling.ts`); nothing declares a number. The gate's
   runs and the tools they start reserve for themselves. Run a heavy command
@@ -347,8 +351,9 @@ An oracle test's supplied canonical environment is already sealed with
   tooling/gate/admit.ts --status` shows who holds what, who waits, and what
   was sized unmeasured or held more than it reserved. Nothing holds a job to
   its reservation: a gate step's separate supervisor and worker boundaries bound only runaways, and if the
-  machine itself runs out, the kernel kills the full check's work first,
-  then agents' (admit.ts ranks yours), and a landing's last. Still `nice -n
+  machine itself runs out, the kernel kills the full check's ordinary work
+  first, then agents' (admit.ts ranks yours), then a culprit search's, and a
+  landing's last. Still `nice -n
   19` and one heavy job of yours at a time.
   A scoped `reserveJob` owner calls `release()` and awaits `closed` before
   removing anything its sampler or reporter can use; process-lifetime jobs

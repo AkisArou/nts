@@ -17,7 +17,7 @@ import { fullCheckBound, pinnedGate, readSummary, RUN_BOUND_FLOOR_S, verdictOf }
 import { MEASUREMENT_PROGRESS, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
 import { fullCheckStatus, liveMeasurement, statusText } from "./service.ts";
 import { readState } from "./state.ts";
-import { processIdentity, readLedger, reserve } from "../gate/memory-ledger.ts";
+import { OOM_SCORE, processIdentity, readLedger, reserve, type Priority } from "../gate/memory-ledger.ts";
 import { inheritedCpus, gateCpus } from "../gate/affinity.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
 import { spawnTest,waitFor } from "../gate/test-wait.ts";
@@ -73,7 +73,7 @@ const GiB=2**30;
 // A measurement in its own unit, as the controller starts it: `command` in a
 // slice of the full check's rank, with an owned ledger and live CPU.
 // A machine of `availableKiB` measures its jobs' resident memory live.
-function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{stall:number;lifecycle?:number},command:(run:string)=>string[],options:{slice?:string;availableKiB?:number}={}){
+function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{stall:number;lifecycle?:number},command:(run:string)=>string[],options:{slice?:string;availableKiB?:number;rank?:Priority;oomScore?:number}={}){
   const dir=newTestScratch(name),runs=join(dir,"runs"),run=join(runs,`core-${COMMIT.slice(0,12)}-${randomUUID()}`);
   mkdirSync(run,{recursive:true});
   const memory=ownMemory(join(dir,"machine"),{cpu:{kind:"live"},pressure:{kind:"live"},wallClock:{kind:"live"},...(options.availableKiB===undefined?{}:{availableKiB:options.availableKiB,resident:{kind:"live"}})});
@@ -81,8 +81,9 @@ function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{
   const slice=options.slice??newToolingSlice(true),unit=`nts-test-full-check-${name}-${randomUUID()}`;
   const args=["--user",`--unit=${unit}`,...toolingSliceArgs(process.env,"agent"),"--collect","--quiet","--pipe","--wait",
     "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=120s",
+    ...(options.oomScore===undefined?[]:["-p",`OOMScoreAdjust=${options.oomScore}`]),
     ...Object.entries(memory).map(([key,value])=>`--setenv=${key}=${value}`),
-    process.execPath,fileURLToPath(new URL("./measure-command.ts",import.meta.url)),String(bounds.stall),String(bounds.lifecycle??"none"),"none",run,slice,...command(run)];
+    process.execPath,fileURLToPath(new URL("./measure-command.ts",import.meta.url)),String(bounds.stall),String(bounds.lifecycle??"none"),"none",run,slice,options.rank??"full-check",...command(run)];
   t.after(()=>{
     spawnTest("systemctl",["--user","stop",unit],{encoding:"utf8"});
     stopToolingSlice(slice);
@@ -156,7 +157,7 @@ test("a run whose own request waits behind a never-released higher-ranked one is
   assert.ok(live,"the live measurement is found by its commit");
   assert.deepEqual([live.progress.waiting?.id,live.progress.waiting?.behind?.id],[own.id,landing.id]);
   const status=fullCheckStatus(readState("/nonexistent"),{main:null,verified:null,unverified:null,landedAt:()=>"",controller:null,count:null,measurement:live,now:new Date(live.progress.updated_at)});
-  assert.match(statusText(status),new RegExp(`^measuring: ${m.run}: ran \\d+ cpu-s in \\d+ s, stalled \\d+ of 3 s, lost \\d+ s to higher-ranked CPU work, waited (priority \\d+ s, )?memory \\d+ s; `
+  assert.match(statusText(status),new RegExp(`^measuring: ${m.run} \\(full-check rank\\): ran \\d+ cpu-s in \\d+ s, stalled \\d+ of 3 s, lost \\d+ s to higher-ranked CPU work, waited (priority \\d+ s, )?memory \\d+ s; `
     +`its request gate run of the full check \\(${own.id}\\) waits behind a landing that never ends \\(landing, ${landing.id}\\) since \\S+, \\d+ min$`,"m"));
 });
 
@@ -223,6 +224,17 @@ for(const small of [false,true])test(`a run that yields to a higher-ranked reque
   assert.ok(readLedger(ledger).waiting.some(row=>row.priority==="agent"&&row.fits===true),"the agent's job could fit were every admitted job to end");
 });
 
+// A probe starts inside the full check's unit, at its OOM score: the
+// measurement places the probe's processes at the culprit search's, and the
+// full check's own runs stay at theirs (ranks.ts).
+for(const rank of ["culprit-search","full-check"] as const)test(`a ${rank} measurement's processes are killed in its rank's turn, and its receipt names the rank`,t=>{
+  const m=measured(t,`oom-${rank}`,{stall:30},run=>["sh","-c",'cat /proc/self/oom_score_adj > "$1"',"sh",join(run,"oom")],{rank,oomScore:OOM_SCORE["full-check"]});
+  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.equal(Number(readFileSync(join(m.run,"oom"),"utf8")),OOM_SCORE[rank]);
+  assert.equal(m.progress()?.rank,rank);
+});
+
 test("a run that spins after its last step is held at its lifecycle bound, with no step progress named",t=>{
   const lifecycle=pathToFileURL(fileURLToPath(new URL("../gate/run-lifecycle.ts",import.meta.url))).href;
   const m=measured(t,"lifecycle",{stall:60,lifecycle:2},run=>[process.execPath,"--input-type=module","-e",
@@ -246,7 +258,7 @@ if [ -n "$NTS_GATE_SETUP_ONLY" ];then
   exit 0
 fi
 [ "$1" = --environment-ready ] && shift
-node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";if(process.env.NTS_TOOLING_SLICE!==${JSON.stringify(legacySlice)})throw Error("historical slice grammar changed");const run=process.env.NTS_GATE_RUN_DIR;writeFileSync(join(run,"observed-node"),process.env.PATH);writeFileSync(join(run,"summary.json"),JSON.stringify({identities:{commit:process.argv[1]},environment:{canonical:true},steps:[{name:"tooling",verdict:"PASS"}]}));' "$1"
+node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";if(process.env.NTS_TOOLING_SLICE!==${JSON.stringify(legacySlice)})throw Error("historical slice grammar changed");const run=process.env.NTS_GATE_RUN_DIR;writeFileSync(join(run,"observed-node"),process.env.PATH);writeFileSync(join(run,"observed-rank"),process.env.NTS_MEMORY_PRIORITY);writeFileSync(join(run,"summary.json"),JSON.stringify({identities:{commit:process.argv[1]},environment:{canonical:true},steps:[{name:"tooling",verdict:"PASS"}]}));' "$1"
 `;
   candidateEnvironmentFixture(repo.root);
   const naming=join(repo.root,"tooling/gate/tooling-slice.ts");
@@ -270,6 +282,23 @@ export function toolingSlice(env=process.env){const value=env.NTS_TOOLING_SLICE;
   const historical = gate.run(old, ["tooling"], "historical-reuse-fallback", undefined, { reuseLanding: true });
   assert.equal(historical.verdict, "green", JSON.stringify(historical.reasons));
   assert.deepEqual(historical.steps, { tooling: "PASS" }, "a historical candidate without a portable contract executes the requested check");
+  assert.equal(readFileSync(join(historical.run,"observed-rank"),"utf8"),"full-check","a run the controller names no rank for is the full check's");
+  // A probe runs at the rank the controller names where the candidate's own
+  // table knows it, and at the full check's where the candidate predates it.
+  const lines:string[]=[],ranked=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  // The fixture's candidates carry this tree's own table.
+  const table=readFileSync(fileURLToPath(new URL("../gate/ranks.ts",import.meta.url)),"utf8");
+  assert.equal(repo.git(["show",`${next}:tooling/gate/ranks.ts`]),table.trimEnd());
+  const probe=ranked.run(next!,["tooling"],"core-probe",undefined,{rank:"culprit-search"});
+  assert.equal(probe.verdict,"green",JSON.stringify(probe.reasons));
+  assert.equal(readFileSync(join(probe.run,"observed-rank"),"utf8"),"culprit-search");
+  const older=table.replace('"landing", "culprit-search", "agent"','"landing", "agent"');
+  assert.notEqual(older,table,"the historical table drops the rank");
+  const predates=repo.commit({".tool-versions":"nodejs 99.2.0\n","tooling/gate/ranks.ts":older},"a table before the culprit-search rank");
+  const fallback=ranked.run(predates,["tooling"],"core-probe",undefined,{rank:"culprit-search"});
+  assert.equal(fallback.verdict,"green",JSON.stringify(fallback.reasons));
+  assert.equal(readFileSync(join(fallback.run,"observed-rank"),"utf8"),"full-check");
+  assert.ok(lines.includes(`${predates.slice(0,12)} predates the culprit-search rank; measuring it at full-check`),lines.join("\n"));
 });
 
 test('red full-check runs use the measured environment and release resolution sessions while the controller lives',async t=>{

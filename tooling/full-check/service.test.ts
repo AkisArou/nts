@@ -244,6 +244,7 @@ test('an existing wide culprit retry waits for benchmarks and resumes after they
   const before=gate.measured.length;assert.equal(await cycle(fx),'idle');assert.equal(gate.measured.length,before);
   fx.units.stop(BENCH_UNIT);assert.equal(await cycle(fx),'wide');
   assert.ok(gate.measured.slice(before).some(row=>row.label==='wide-probe'));
+  assert.ok(gate.measured.slice(before).every(row=>row.label!=='wide-probe'||row.rank==='culprit-search'),'a wide search probes at the culprit search\'s rank too');
 });
 
 test('an unreadable benchmark unit refuses measurement by name',async t=>{
@@ -336,6 +337,9 @@ test("a red core is searched, and the first red commit's revert is made on main 
   // for four candidates, and the culprit measured again.
   const searched = gate.measured.filter(m => m.label === "core-probe").length;
   assert.equal(searched, 5, `probes: ${searched}`);
+  // Each probe outranks agents' work, below a landing; the core runs keep the full check's rank (ranks.ts).
+  assert.deepEqual([...new Set(gate.measured.filter(m => m.label === "core-probe").map(m => m.rank))], ["culprit-search"], "every probe at the culprit search's rank");
+  assert.deepEqual([...new Set(gate.measured.filter(m => m.label === "core").map(m => m.rank))], ["full-check"], "the core's own runs at the full check's");
   assert.ok(gate.measured.some(m => m.label === "core-probe" && m.commit === good), "the last green commit is the control");
 
   // Main moves on while the revert waits in the queue: the red is explained
@@ -964,7 +968,7 @@ test("the wide steps follow verified when idle, without waiting for a clock slot
   repo.commit({ "a.txt": "2\n" }, "on main, not verified yet");
   const later = harness(repo, gate, { now: new Date(2026, 10, 6, 10, 30), idle: true, schedule: { nightly: "03:00" } });
   assert.equal(await cycle(later), "wide");
-  assert.deepEqual(gate.measured.at(-1), { commit: first, steps: ["integrity"], label: "wide" });
+  assert.deepEqual(gate.measured.at(-1), { commit: first, steps: ["integrity"], label: "wide", rank: "full-check" });
   assert.equal(readState(repo.layout.state).wide.last_green?.commit, first);
   assert.equal(await cycle(later), "core", "the slot is answered; the core takes main");
 });

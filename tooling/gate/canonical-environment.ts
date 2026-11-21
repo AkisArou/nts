@@ -29,7 +29,7 @@ const SYSTEM_TOOL_DIRECTORIES = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/loc
 // (memory-ledger.ts), which a tool in the step joins instead of asking again.
 const PARENT = new Set(["NTS_TOOLING_SLICE", "NTS_MEMORY_RESERVATION"]);
 // Owned values a launcher's code supplies, never copied from the launcher:
-// the run's place in the machine's memory queue (landing, agent, full-check),
+// the run's place in the machine's memory queue (a rank of ranks.ts's),
 // which a shell's own value would otherwise let it jump, and a reservation
 // the run takes over (the landing build's, memory-ledger.ts's `replaces`),
 // which a shell's would let it end. A shell's is discarded, and named as
