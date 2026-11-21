@@ -2405,6 +2405,7 @@ mod statement_branches;
 mod static_builtins;
 mod string_builtins;
 mod string_positions;
+mod string_split;
 mod structural_copies;
 mod suspended_bodies;
 mod symbol_builtins;

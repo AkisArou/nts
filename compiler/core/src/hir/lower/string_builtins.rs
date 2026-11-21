@@ -2,8 +2,8 @@
 
 use super::{
     Absent, Argument, BinOp, Branch, Callee, Diagnostic, FuncBuilder, HirType, ManagedType,
-    MethodsOf, NodeId, OpKind, Origin, Terminator, TypeId, TypeKind, UnOp, ValueId, access,
-    claimed_reads, printed, syntax,
+    MethodsOf, NodeId, NumericBuiltin, OpKind, Origin, Terminator, TypeId, TypeKind, UnOp, ValueId,
+    access, claimed_reads, printed, syntax,
 };
 
 impl FuncBuilder<'_> {
@@ -638,48 +638,6 @@ impl FuncBuilder<'_> {
         ty: &HirType,
         origin: &Origin,
     ) -> Option<ValueId> {
-        // **`s.split(sep, limit)` splits and then truncates.**
-        //
-        // Exact for a string separator: the specification stops early and a
-        // truncation of the whole result is the same list, because a separator
-        // that is not a regular expression cannot make the earlier elements
-        // depend on how many are wanted.
-        //
-        // The limit goes through `ToUint32` first, and that is not decoration.
-        // `split(",", -1)` means *no* limit -- `ToUint32(-1)` is 4294967295 --
-        // while slicing to `-1` counts from the end and would drop the last
-        // element.
-        //
-        // `UnOp::ToUint32` and not the `>>> 0` that spells it in source. The
-        // idiom is two operands and a coercion on each, which the binary path
-        // inserts and a hand-built op does not: writing the shift here gave
-        // LLVM a raw double where it wanted a converted one, and `-1` came back
-        // as a negative index that dropped the last element. The operation the
-        // specification names is the one op this needs.
-        if helper == "nts_str_split" && args.len() == 3 {
-            let whole = self.runtime_call(
-                "nts_str_split",
-                vec![args[0], args[1]],
-                ty.clone(),
-                origin.clone(),
-            );
-            let limit = self.push(
-                OpKind::Unary {
-                    op: UnOp::ToUint32,
-                    operand: args[2],
-                },
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            let from = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-            return Some(self.runtime_call(
-                "nts_array_slice_ref",
-                vec![whole, from, limit],
-                ty.clone(),
-                origin.clone(),
-            ));
-        }
-
         // **`s.concat()` is `s`.** With no arguments there is nothing to join,
         // and the arity check would otherwise pad the missing one -- with a
         // *number*, because the filler does not know this parameter is a
@@ -709,6 +667,64 @@ impl FuncBuilder<'_> {
             return Some(folded);
         }
         None
+    }
+
+    /// **Every argument that is not a number is a `const NtsString *`.** The
+    /// helpers `lower_string_method` calls take strings and numbers only; the
+    /// numeric positions are the catalog's (`numeric_arguments::contract`),
+    /// converted as they are lowered, and every other one is read by the
+    /// runtime as a string. Anything else arriving there -- an erased value, a
+    /// number, a `RegExp` -- spelled a call C rejects and LLVM compiles into
+    /// reading a stale register (#932), so it is refused by name instead.
+    fn require_string_arguments(
+        &self,
+        id: NodeId,
+        name: &str,
+        args: &[ValueId],
+    ) -> Result<(), Diagnostic> {
+        for (position, value) in args.iter().enumerate().skip(1) {
+            if !super::numeric_arguments::is_numeric_position(
+                NumericBuiltin::Method(MethodsOf::String, name),
+                position,
+            ) && self.values[value.0 as usize].ty != HirType::Managed(ManagedType::String)
+            {
+                return Err(self.unsupported(
+                    id,
+                    &format!("`{name}` with an argument that is not a string"),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// A constant `null` or `undefined` at a string position, as the string
+    /// the method's `ToString` makes of it: `"lego".concat(null)` is
+    /// `"legonull"`, `.concat(void 0)` `"legoundefined"`. Exact, because the
+    /// constant is the whole of the value. Before this it reached the helper
+    /// as a null pointer, which the string rule below now refuses.
+    ///
+    /// `padStart` and `padEnd` treat an `undefined` fill as absent (ECMA-262
+    /// `StringPad`, step 3), so theirs is the default single space.
+    fn stringify_absent_constants(&mut self, name: &str, args: &mut [ValueId], origin: &Origin) {
+        for (position, value) in args.iter_mut().enumerate().skip(1) {
+            if super::numeric_arguments::is_numeric_position(
+                NumericBuiltin::Method(MethodsOf::String, name),
+                position,
+            ) {
+                continue;
+            }
+            let text = match self.values[value.0 as usize].kind {
+                OpKind::ConstNull => "null",
+                OpKind::ConstUndefined if matches!(name, "padStart" | "padEnd") => " ",
+                OpKind::ConstUndefined => "undefined",
+                _ => continue,
+            };
+            *value = self.push(
+                OpKind::ConstString(text.into()),
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            );
+        }
     }
 
     pub(super) fn lower_string_method(
@@ -743,6 +759,10 @@ impl FuncBuilder<'_> {
 
         if let Some(value) = self.lower_positioned_string_method(id, receiver, &name, arguments)? {
             return Ok(value);
+        }
+
+        if name == "split" {
+            return self.lower_string_split(id, receiver, arguments);
         }
 
         // `s.concat()` concatenates nothing: `s` itself, which is immutable.
@@ -783,14 +803,6 @@ impl FuncBuilder<'_> {
 
             "trimStart" => ("nts_str_trim_start", 0, string.clone()),
             "trimEnd" => ("nts_str_trim_end", 0, string.clone()),
-            // `split`, with a *string* separator. A regular expression is a
-            // different feature and is refused below by falling through, which
-            // names it rather than splitting on its source text.
-            "split" => (
-                "nts_str_split",
-                1,
-                HirType::Managed(ManagedType::Array(Box::new(string))),
-            ),
             // `replace` takes the first match, `replaceAll` every one. The
             // difference is the whole of it, so they share a runtime function
             // and differ by which entry point calls it.
@@ -815,6 +827,10 @@ impl FuncBuilder<'_> {
         let mut args = vec![receiver];
         self.lower_method_arguments(id, (MethodsOf::String, name.as_str()), arguments, &mut args)?;
         let origin = self.origin(id);
+        self.stringify_absent_constants(&name, &mut args, &origin);
+        // Before the folds, which build their own calls from these arguments:
+        // `"a".concat(o, "b")` with `o: any` reached `nts_concat` unchecked.
+        self.require_string_arguments(id, &name, &args)?;
 
         if let Some(folded) = self.fold_string_call(helper, &args, &ty, &origin) {
             return Ok(folded);
@@ -827,17 +843,9 @@ impl FuncBuilder<'_> {
 
         self.fill_string_arguments((id, name.as_str()), helper, arity, &mut args, &origin)?;
 
-        // A regular expression is a pattern `String.prototype.replace` accepts
-        // and this does not. It has to be named and refused *here*: everything
-        // below spells a call handing a `NtsString *` to the runtime, so a
-        // `RegExp` arriving at it is a wrong answer rather than a type error.
-        if matches!(helper, "nts_str_replace" | "nts_str_replace_all")
-            && args[1..].iter().any(|value| {
-                self.values[value.0 as usize].ty != HirType::Managed(ManagedType::String)
-            })
-        {
-            return Err(self.unsupported(id, "`replace` with a pattern that is not a string"));
-        }
+        // The filler pads a missing argument with a number, which a string
+        // position refuses here (`replace("a")`).
+        self.require_string_arguments(id, &name, &args)?;
 
         // `codePointAt` answers **`undefined`** for an index that is not there
         // and the helper answers NaN, which is not the same value: `?? 0` takes

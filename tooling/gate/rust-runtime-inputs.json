@@ -7569,6 +7569,13 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/lower/string_split.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/core/src/hir/lower/structural_copies.rs",
       "declarations": {
         "imports": [],

@@ -421,7 +421,7 @@ impl FuncBuilder<'_> {
         ))
     }
 
-    fn array_from_values(
+    pub(super) fn array_from_values(
         &mut self,
         id: NodeId,
         values: Vec<(NodeId, ValueId)>,

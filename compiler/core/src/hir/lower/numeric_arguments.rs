@@ -30,6 +30,12 @@ enum Undefined {
     Constant(f64),
 }
 
+/// Whether `position` of `builtin` is one the catalog converts to a number.
+/// A string method's other positions are its string parameters.
+pub(super) fn is_numeric_position(builtin: Builtin<'_>, position: usize) -> bool {
+    contract(builtin, position).is_some()
+}
+
 /// Positions count source arguments from one, excluding the receiver.
 fn contract(builtin: Builtin<'_>, position: usize) -> Option<Undefined> {
     use Builtin as B;

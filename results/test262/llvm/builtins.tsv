@@ -602,7 +602,6 @@ test/built-ins/String/prototype/codePointAt/return-single-code-unit.js	pass
 test/built-ins/String/prototype/codePointAt/return-utf16-decode.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-than-zero.js	pass	
-test/built-ins/String/prototype/concat/S15.5.4.6_A1_T10.js	fail	nts: uncaught Test262Error: #1: var x; var __obj = {toString:function(){return "A";}, valueOf:function(){return "_A_";}}; var __str = "lego"; __str.concat(__obj) === "legoA". Actual: lego
 test/built-ins/String/prototype/concat/S15.5.4.6_A1_T4.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail_2.js	pass	
@@ -639,11 +638,9 @@ test/built-ins/String/prototype/indexOf/S15.5.4.7_A2_T4.js	pass
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T1.js	pass	
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T3.js	pass	
 test/built-ins/String/prototype/lastIndexOf/not-a-substring.js	pass	
-test/built-ins/String/prototype/padEnd/exception-fill-string-symbol.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/built-ins/String/prototype/padEnd/fill-string-empty.js	pass	
 test/built-ins/String/prototype/padEnd/max-length-not-greater-than-string.js	pass	
 test/built-ins/String/prototype/padEnd/normal-operation.js	pass	
-test/built-ins/String/prototype/padStart/exception-fill-string-symbol.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/built-ins/String/prototype/padStart/fill-string-empty.js	pass	
 test/built-ins/String/prototype/padStart/max-length-not-greater-than-string.js	pass	
 test/built-ins/String/prototype/padStart/normal-operation.js	pass	
