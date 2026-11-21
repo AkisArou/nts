@@ -952,9 +952,10 @@ fn template_data(
 ///
 /// And `to_string`, how an object of the type prints (`Program::printed`), and
 /// `function_name`, what a function of it is called (`Program::function_names`),
-/// and the owned managed-edge release/trace callbacks, last.
+/// the owned managed-edge release/trace callbacks, and the fixed string-message
+/// offset, last.
 const DESCRIPTOR_TYPE: &str = "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, \
-     ptr, i32, i32, ptr, ptr, ptr, ptr, ptr }";
+     ptr, i32, i32, ptr, ptr, ptr, ptr, ptr, i32 }";
 
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
@@ -1076,6 +1077,10 @@ fn native_column(
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes one descriptor from the layout and its publication plans"
+)]
 fn descriptors(
     program: &Emission<'_>,
     pool: &LiteralPool,
@@ -1181,10 +1186,13 @@ fn descriptors(
             Some(FunctionName::Bound) => "ptr @nts_bound_function_name".to_owned(),
             None => "ptr null".to_owned(),
         };
+        let message_offset = layout
+            .message_field()
+            .map_or(0, |field| placed.offsets[field as usize]);
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {}, \
-                 {function_name}, {release_fields}, {trace_fields}",
+                 {function_name}, {release_fields}, {trace_fields}, i32 {message_offset}",
                 erased.len(),
                 to_string_slot(program, layout, class)
             )
@@ -1248,7 +1256,7 @@ fn view_class_descriptors(out: &mut String, program: &Emission<'_>) {
             "@nts_view_desc_{} = internal constant {{ %NtsDescriptor, ptr }} \
              {{ %NtsDescriptor {{ i32 {KIND_VIEW}, i32 {VIEW_SIZE}, i32 1, i32 1, \
              ptr @nts_view_refs, ptr null, ptr @nts_name_{tag}, i32 0, ptr null, i32 0, \
-             i32 0, ptr null, ptr @nts_view_to_string, ptr null, ptr null, ptr null }}, \
+             i32 0, ptr null, ptr @nts_view_to_string, ptr null, ptr null, ptr null, i32 0 }}, \
              ptr null }}",
             view_tag(view)
         );
@@ -1380,7 +1388,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
              ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null, \
-             ptr null, ptr null, ptr null }}",
+             ptr null, ptr null, ptr null, i32 0 }}",
             u32::from(family.holds_closures()),
             nts_codegen_common::counting::ARRAY_FOREIGN
         );
@@ -1427,7 +1435,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 {erased}, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null, ptr null }}",
+                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null, ptr null, i32 0 }}",
                 shape.size,
                 nts_codegen_common::counting::array_element(element)
             );

@@ -4340,6 +4340,13 @@
       }
     },
     {
+      "source": "compiler/codegen/jvm/tests/thrown_message.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/codegen/jvm/tests/transport.rs",
       "declarations": {
         "imports": [],

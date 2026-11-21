@@ -7,10 +7,9 @@
 // privatename-*` cases await six erased results through one `Promise.all`,
 // which is how it was found once their C compiled.
 //
-// **C only, as this harness is.** As a tests/programs/ fixture the same
-// program agrees on C and LLVM, and not yet elsewhere: the JVM has no boolean
-// `NtsPromise.all` and stores strings into the wrong array type, and Wasm
-// misreads the results. It moves there once both agree.
+// The tests/programs control checks the four result kinds on C, LLVM and the
+// JVM. This module-scope chain also guards its final reaction's rejected
+// Observed value: the unhandled-rejection report must keep its string message.
 //
 // The control is `numbers`: doubles into a double array, which agreed.
 async function settle<T>(value: T): Promise<T> {

@@ -4241,3 +4241,20 @@ guards, per-run rank lifetime and other full-check work's rank remain as stated.
 The [corrected replay](../full-check-stale-verified.md) uses landing results
 and preserves the earlier raw cohort as evidence. A control commits a branch
 three hours ago, lands it now, and requires full-check rank.
+## Stored callbacks and rejected message objects (11-21)
+
+#478's reaction-site guard correctly rejects a reaction's result when its
+callback throws. Its original landing exposed an unhandled-rejection reporter
+that retained the thrown object but could not read its message. The guard and
+the stored-callback catch analysis remain.
+
+`Layout::message_field()` owns membership of the fixed string field. C and
+LLVM publish its byte offset in the allocation's descriptor; JVM allocation
+classes implement the reserved `NtsThrownMessage` protocol. The common uncaught
+reporters read this projection from the actual value when no explicit detail
+was supplied. There is no separate promise message, getter call or coercion.
+The namespace and provider transport changes from 3e8c1cab3 stay out.
+
+The contract is in [errors](../../language/errors.md#decisions); reproduction,
+controls and descriptor evidence are in
+[the task record](../0478-stored-callbacks-and-catch-roles.md).

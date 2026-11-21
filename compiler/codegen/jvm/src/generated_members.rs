@@ -76,6 +76,7 @@ pub fn erased_closure(key: &str) -> String {
     readable_name(ERASED_CLOSURE_PREFIX, key)
 }
 pub const RAISING_PAIRS: &str = "¢nts$raisingPairs";
+pub const THROWN_MESSAGE: &str = "¢nts$thrownMessage";
 
 /// The catalogue's injective, readable escape for a source identity.
 #[must_use]
@@ -128,6 +129,7 @@ pub const SPECIMENS: &[&str] = &[
     "¢nts$closure$sample",
     "¢nts$erasedClosure$sample",
     "¢nts$raisingPairs",
+    "¢nts$thrownMessage",
 ];
 
 pub const JAVA_TOKENS: &[(&str, &str)] = &[
@@ -145,6 +147,7 @@ pub const JAVA_TOKENS: &[(&str, &str)] = &[
     ("@@MODULE_INIT@@", MODULE_INIT),
     ("@@INTERFACE_HELD@@", INTERFACE_HELD),
     ("@@RAISING_PAIRS@@", RAISING_PAIRS),
+    ("@@THROWN_MESSAGE@@", THROWN_MESSAGE),
     ("@@PREFIX@@", PREFIX),
     ("@@LEGACY_RAISING_SUFFIX@@", LEGACY_RAISING_SUFFIX),
 ];

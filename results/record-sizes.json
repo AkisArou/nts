@@ -1,6 +1,8 @@
 {
   "version": 1,
   "files": {
+    "docs/records/0872-paired-nogc-compile-counts-for-stored-callbacks.tsv": 2982,
+    "docs/records/0873-paired-rc-compile-counts-for-stored-callbacks.tsv": 2982,
     "docs/records/case-retirement-752.json": 27860,
     "docs/records/command-lifetime-758.json": 34323,
     "docs/records/disk-promises-708-before.json": 4297,

@@ -357,6 +357,12 @@ typedef struct NtsDescriptor {
    * NULL keeps the generic walk. Ordinary destruction never calls this. */
   void (*trace_fields)(struct NtsHeader *object,
                        void (*visit)(struct NtsHeader *child));
+  /* The byte offset of the fixed `message: string` field, or zero when no
+   * such field exists. An object header precedes every field, so zero cannot
+   * name a field. Published from the same Layout authority on every native
+   * backend; uncaught throws and unhandled rejections read this one projection.
+   * It never invokes a getter or converts a non-string property. */
+  uint32_t message_offset;
 } NtsDescriptor;
 
 /* What an array's slots hold.
@@ -3377,10 +3383,9 @@ typedef struct NtsLanding {
   jmp_buf frame;
   struct NtsLanding *previous;
   NtsValue thrown;
-  /* The message, which the compiler supplies at the throw site because a
-     descriptor records where an object's references are and not what they are
-     called -- so the runtime cannot read a `message` field and the compiler
-     can. The same fact `nts_uncaught` is handed. */
+  /* The borrowed message supplied to `nts_uncaught`, or its fixed string
+     projection from the thrown value's descriptor when no detail was supplied.
+   */
   const NtsString *detail;
 } NtsLanding;
 

@@ -1,7 +1,7 @@
 // run: check
 
-// L15 (#862): reading an overridden method as a value through its base loses the
-// override's throw, whether or not the base method can throw itself. Calling
+// Guard for L15 (#862): reading an overridden method as a value through its base
+// keeps the override's throw, whether or not the base method can throw itself. Calling
 // the same method directly is the agreeing one-difference control, through
 // either base: a direct call through a base that cannot throw asks every
 // override since #843, and is guarded by

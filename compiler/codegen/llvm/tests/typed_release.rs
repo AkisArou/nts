@@ -30,6 +30,12 @@ export function ownedLeaves(x: number): (Leaf | null)[] {
   for (let i = 0; i < 64; i++) leaves.push((i & 1) === 0 ? new Leaf(x + i) : null);
   return leaves;
 }
+class Message {
+  constructor(readonly prefix: number, readonly message: string, readonly suffix: string) {}
+}
+export function messageObject(): Message { return new Message(7, 'kept', 'other'); }
+export function messageCapture(message: string): () => string { return () => message; }
+export function textCapture(text: string): () => string { return () => text; }
 "#
 );
 const DRIVER: &str = r#"
@@ -42,10 +48,15 @@ extern NtsHeader *ownedGraph(double);
 extern NtsHeader *ownedClosure(double);
 extern NtsHeader *ownedTuple(double);
 extern NtsHeader *ownedLeaves(double);
+extern NtsHeader *messageObject(void);
+extern NtsHeader *messageCapture(NtsString *);
+extern NtsHeader *textCapture(NtsString *);
 extern size_t descriptorSize(void);
 extern size_t releaseFieldsOffset(void);
 extern size_t traceFieldsOffset(void);
+extern size_t messageOffsetOffset(void);
 size_t nts_test_trace_calls;
+static NtsLanding message_landing;
 #ifdef NTS_PROVIDER_RC
 static NtsHeader *seen[4];
 static size_t seen_count;
@@ -57,7 +68,34 @@ static void visit(NtsHeader *child) {
 int main(void) {
   if (descriptorSize() != sizeof(NtsDescriptor) ||
       releaseFieldsOffset() != offsetof(NtsDescriptor, release_fields) ||
-      traceFieldsOffset() != offsetof(NtsDescriptor, trace_fields)) return 2;
+      traceFieldsOffset() != offsetof(NtsDescriptor, trace_fields) ||
+      messageOffsetOffset() != offsetof(NtsDescriptor, message_offset)) return 2;
+  /* Exercise the offset the emitter published, and the reporter reading it
+   * from an erased value. A differently typed field precedes the message. */
+  NtsHeader *message = messageObject();
+  if (!message->descriptor->message_offset) return 20;
+  NtsString *detail = *(NtsString **)((char *)message + message->descriptor->message_offset);
+  if (!detail || detail->length != 4 || nts_unit(detail, 0) != 'k') return 21;
+  if (setjmp(message_landing.frame) == 0) {
+    nts_landing_push(&message_landing);
+    nts_uncaught(nts_value_of_reference(message, NTS_TAG_OBJECT), NULL);
+  }
+  if (nts_landing_detail(&message_landing) != detail ||
+      nts_value_reference(nts_landing_thrown(&message_landing)) != message) return 22;
+  nts_release(message);
+  /* Capture names are lexical storage, never properties of the function.
+   * Both native emitters must publish no projection for either spelling. */
+  NtsHeader *captures[2] = {messageCapture(NULL), textCapture(NULL)};
+  for (int i = 0; i < 2; i++) {
+    if (captures[i]->descriptor->message_offset) return 23;
+    if (setjmp(message_landing.frame) == 0) {
+      nts_landing_push(&message_landing);
+      nts_uncaught(nts_value_of_reference(captures[i], NTS_TAG_FUNCTION), NULL);
+    }
+    if (nts_landing_detail(&message_landing) != NULL ||
+        nts_value_reference(nts_landing_thrown(&message_landing)) != captures[i]) return 24;
+    nts_release(captures[i]);
+  }
   NtsHeader *owned = ownedGraph(5);
   const NtsDescriptor *descriptor = owned->descriptor;
   if (!descriptor->release_fields) {
@@ -163,7 +201,8 @@ int main(void) {
 
 const C_ABI_QUERY: &str = "\nsize_t descriptorSize(void) { return sizeof(NtsDescriptor); }\n\
     size_t releaseFieldsOffset(void) { return offsetof(NtsDescriptor, release_fields); }\n\
-    size_t traceFieldsOffset(void) { return offsetof(NtsDescriptor, trace_fields); }\n";
+    size_t traceFieldsOffset(void) { return offsetof(NtsDescriptor, trace_fields); }\n\
+    size_t messageOffsetOffset(void) { return offsetof(NtsDescriptor, message_offset); }\n";
 const LLVM_ABI_QUERY: &str = "\ndefine i64 @descriptorSize() {\n\
     %p = getelementptr %NtsDescriptor, ptr null, i64 1\n\
     %size = ptrtoint ptr %p to i64\n\
@@ -175,6 +214,10 @@ const LLVM_ABI_QUERY: &str = "\ndefine i64 @descriptorSize() {\n\
     define i64 @traceFieldsOffset() {\n\
     %p = getelementptr %NtsDescriptor, ptr null, i32 0, i32 15\n\
     %offset = ptrtoint ptr %p to i64\n\
+    ret i64 %offset\n}\n\
+    define i64 @messageOffsetOffset() {\n\
+    %p = getelementptr %NtsDescriptor, ptr null, i32 0, i32 16\n\
+    %offset = ptrtoint ptr %p to i64\n\
     ret i64 %offset\n}\n";
 
 fn run_native(
@@ -183,6 +226,7 @@ fn run_native(
     input: &str,
     sources: &[std::path::PathBuf],
     expected_exit: i32,
+    expected_report: Option<&str>,
 ) -> Vec<u8> {
     let binary = dir.join(format!("run-{input}-{provider:?}"));
     let mut cc = Command::new("clang");
@@ -229,7 +273,9 @@ fn run_native(
         run.status,
         String::from_utf8_lossy(&run.stderr)
     );
-    if matches!(expected_exit, 3 | 6) {
+    if let Some(report) = expected_report {
+        assert_eq!(run.stderr, report.as_bytes(), "{input}");
+    } else if matches!(expected_exit, 3 | 6) {
         let message = if expected_exit == 3 {
             b"missing typed contents callback\n".as_slice()
         } else {
@@ -295,7 +341,14 @@ fn check_unwired(dir: &Utf8Path, c: &str, llvm: &str, sources: &[std::path::Path
                 ),
             )
             .unwrap();
-            run_native(dir, hir::Memory::ReferenceCounting, &input, sources, exit);
+            run_native(
+                dir,
+                hir::Memory::ReferenceCounting,
+                &input,
+                sources,
+                exit,
+                None,
+            );
         }
     }
 }
@@ -447,7 +500,7 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
             }
         }
         for input in ["program.c", "program.ll"] {
-            let output = run_native(&dir, provider, input, &sources, 0);
+            let output = run_native(&dir, provider, input, &sources, 0, None);
             if let Some(expected) = &baseline {
                 assert_eq!(&output, expected);
             } else {
@@ -457,6 +510,88 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
         if provider == hir::Memory::ReferenceCounting {
             cross_compile(&dir, &prepared.program);
             check_unwired(&dir, c.writer.text(), &llvm.text, &sources);
+        }
+    }
+}
+
+#[test]
+fn throwing_and_rejecting_a_function_does_not_report_its_captured_message() {
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    for capture in ["message", "text"] {
+        for action in [
+            "throw f",
+            "Promise.reject(f)",
+            "Promise.resolve(0).then(()=>{throw f})",
+        ] {
+            let dir = ScratchDir::new(&root.join("target/typed-release-tests"), "thrown-capture");
+            std::fs::write(
+                dir.join("main.ts"),
+                format!("function make({capture}:string):()=>string{{return ()=>{capture}}} export function run():void{{const f=make('captured-secret'); if(f()!=='captured-secret')throw 'bad capture'; {action};}}"),
+            ).unwrap();
+            std::fs::write(
+                dir.join("tsconfig.json"),
+                format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
+            )
+            .unwrap();
+            let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+                .with_checkers(std::num::NonZeroU16::MIN)
+                .snapshot(&dir.join("tsconfig.json"))
+                .unwrap();
+            assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+            std::fs::write(dir.join("drive.c"), "#include \"nts_runtime.h\"\nextern void run(void);\nint main(void) { nts_enter(); run(); nts_leave(); return 0; }\n").unwrap();
+            for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+                let prepared = hir::prepare_with(
+                    &snapshot,
+                    &hir::Options {
+                        provider,
+                        ..hir::Options::default()
+                    },
+                )
+                .unwrap();
+                assert!(
+                    prepared.diagnostics.is_empty(),
+                    "{:?}",
+                    prepared.diagnostics
+                );
+                assert!(
+                    prepared.program.uncompiled.is_empty(),
+                    "{:?}",
+                    prepared.program.uncompiled
+                );
+                let c = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+                let llvm = nts_codegen_llvm::emit(
+                    &prepared.program,
+                    nts_codegen_llvm::Platform::SYSV_X86_64,
+                );
+                assert!(c.is_complete(), "{:?}", c.diagnostics);
+                assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+                std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+                std::fs::write(dir.join("program.ll"), llvm.text).unwrap();
+                let sources: Vec<_> = c
+                    .support_files()
+                    .iter()
+                    .filter_map(|file| {
+                        let path = file.write(dir.as_std_path()).unwrap();
+                        file.compiled.then_some(path)
+                    })
+                    .collect();
+                for input in ["program.c", "program.ll"] {
+                    assert_eq!(
+                        run_native(
+                            &dir,
+                            provider,
+                            input,
+                            &sources,
+                            1,
+                            Some("nts: uncaught Closure0\n")
+                        ),
+                        [] as [u8; 0]
+                    );
+                }
+            }
         }
     }
 }

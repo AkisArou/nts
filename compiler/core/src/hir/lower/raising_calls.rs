@@ -3,11 +3,11 @@
 use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, BinOp, Diagnostic, Edge, Exit, FuncBuilder, HirType, MemberKey,
     NodeId, OpKind, Origin, RAISING_SUFFIX, THROUGH_A_FUNCTION_VALUE, Terminator, TypeId, TypeKind,
-    ValueId, a_copy_can_be_made_of, a_declaration_that_can_raise, a_method_under_a_computed_key,
-    a_value_held_call, access_families, an_inlined_construction, calls_in_the_body_of,
-    children_in_the_body_of, children_that_run, erased_calls, interface_member_of,
-    is_generic_function, literal_methods, members_filling, planned_callee, raising_callees_of,
-    syntax,
+    ValueId, a_callee_with_a_body, a_copy_can_be_made_of, a_declaration_that_can_raise,
+    a_method_under_a_computed_key, a_value_held_call, a_value_held_callee, access_families,
+    an_inlined_construction, calls_in_the_body_of, children_in_the_body_of, children_that_run,
+    erased_calls, interface_member_of, is_generic_function, literal_methods, members_filling,
+    planned_callee, raising_callees_of, syntax,
 };
 
 /// How one instantiated receiver supplies the member a generic body invokes.
@@ -1337,19 +1337,23 @@ impl FuncBuilder<'_> {
         // than no sentence: it is why this went unfound through the React lane's
         // report of the *same shape* one spelling over.
         //
-        // **A parameter only**, deliberately, and the narrowness is what makes it
-        // safe. An *imported* function's local symbol declares an import
-        // specifier rather than a function and is nevertheless in `throwing`, so
-        // a cross-module `try` keeps working -- verified, 29 of 29 against node.
-        // A plain non-throwing function keeps compiling, which is
-        // `tests/programs/array-buffer`'s shape and the reason the membership test is
-        // still asked below. What remains uncovered is a callee held in a
-        // *variable* (`const h = cb; try { h() }`), which has the same hole and
-        // no witness yet.
+        // **Any value, not only a parameter, and asked of the one predicate the other
+        // readers ask.** This arm once matched `PARAMETER` alone, and its comment
+        // admitted the rest: "a callee held in a *variable* (`const h = cb; try { h()
+        // }`) has the same hole and no witness yet". The witness is
+        // `tests/programs/a-stored-callback-reaches-its-supplied-handler`:
+        // `const callback = this.subscribers[i]; try { callback(n) } catch …` read as
+        // unable to raise, `call_within` neither handled nor refused it, the `try`
+        // lowered with no handler at all, and the stored callback's `throw` ended the
+        // program where node runs the `catch`. [`a_value_held_callee`] is what
+        // `a_call_that_can_raise`, `a_copy_can_contain` and the body verifier already
+        // read, in the same order: a symbol that names a body is asked its own answer
+        // below, and only one that holds a value arriving at run time is unresolved.
         //
-        // Found by the conformance lane: it is what `assert.throws` is, so 3,601
-        // of test262's 15,078 positive `test/language` cases were going to read
-        // as wrong answers with this one bug as the cause.
+        // A plain non-throwing function keeps compiling, which is
+        // `tests/programs/array-buffer`'s shape, and an imported function's local
+        // symbol declares an import specifier, which holds no value, so a
+        // cross-module `try` keeps its own answer below.
         //
         // **Unless it is a promise settler**, which is a parameter and is *not a
         // call*: `lower_settler_call` inlines `resolve(v)` into the executor, so
@@ -1358,11 +1362,9 @@ impl FuncBuilder<'_> {
         // generated `*_promise` wrapper, whose body is a `try` around the settler
         // it was handed. The gate's interop step is what said so; the corpus
         // census did not, because the GIR bindings are not in it.
-        if record
-            .declarations
-            .iter()
-            .any(|at| self.kind_of(*at) == Some(syntax::PARAMETER))
-            && !self.settlers.contains_key(&symbol.0)
+        if !self.settlers.contains_key(&symbol.0)
+            && !a_callee_with_a_body(self.snapshot, self, symbol.0)
+            && a_value_held_callee(self.snapshot, self, symbol.0)
         {
             return true;
         }

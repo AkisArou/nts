@@ -464,8 +464,8 @@ public final class NtsEnv {
      * <p>After the drain, because a handler attached during the turn handles
      * the rejection and one attached later does not. Only the outermost
      * checkpoint reports: a nested one has not finished the turn. The report
-     * is {@link NtsRuntime#uncaught} with no detail, exactly as C's is, so the
-     * line reads `nts: uncaught RangeError` on both lanes and the status is 1.
+     * is {@link NtsRuntime#uncaught}, whose value-owned message projection is
+     * shared with synchronous uncaught throws. The status is 1.
      */
     private static void checkpoint(NtsEnv env) {
         boolean previous = env.checkpointing;

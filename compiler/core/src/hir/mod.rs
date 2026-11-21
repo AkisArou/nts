@@ -2549,6 +2549,30 @@ pub struct FieldArm {
 }
 
 impl Layout {
+    /// The fixed string field used to describe an uncaught object, if present.
+    /// Every backend publishes this projection with the object's actual layout.
+    #[must_use]
+    pub fn message_field(&self) -> Option<u32> {
+        // Only source objects and provided error instances have properties.
+        // The other synthetic layouts store captures, cells, frames or boxes:
+        // their field names describe storage, not properties on the value.
+        if self.types.is_empty()
+            || !self
+                .types
+                .iter()
+                .all(|ty| ty.0 < SYNTHETIC_TYPE_FLOOR || is_provided_error_type(*ty))
+        {
+            return None;
+        }
+        self.fields
+            .iter()
+            .position(|field| {
+                field.name.is_name("message")
+                    && matches!(field.ty, HirType::Managed(ManagedType::String))
+            })
+            .and_then(|at| u32::try_from(at).ok())
+    }
+
     /// The function a closure's layout calls: its one method, in the closure
     /// slot. That slot is numbered after every slot an override claims, so it
     /// is the first only in a program with no overriding -- reading the first
@@ -9440,6 +9464,41 @@ mod tests {
             methods: Vec::new(),
             base: None,
         }
+    }
+
+    #[test]
+    fn message_membership_belongs_to_object_properties_not_compiler_storage() {
+        let message = || field("message", HirType::Managed(ManagedType::String));
+        for id in [
+            0,
+            SYNTHETIC_TYPE_FLOOR - 1,
+            PROVIDED_ERRORS,
+            CONSTRUCTOR_TOKENS - 1,
+        ] {
+            assert_eq!(
+                layout("Object", id, vec![message()]).message_field(),
+                Some(0)
+            );
+        }
+        for id in [
+            SYNTHETIC_CELLS,
+            SYNTHETIC_OBJC_STATES,
+            HANDLE_BOX_GOBJECT,
+            HANDLE_BOX_OBJC,
+            HANDLE_BOX_COM,
+            BOXED_RECORD,
+            SYNTHETIC_FRAMES,
+            SYNTHETIC_GENERATOR_FRAMES,
+            SYNTHETIC_CLOSURES,
+            SYNTHETIC_CLASS_TOKENS,
+            CONSTRUCTOR_TOKENS,
+            u32::MAX,
+        ] {
+            assert_eq!(layout("Storage", id, vec![message()]).message_field(), None);
+        }
+        let mut unknown = layout("Unknown", 0, vec![message()]);
+        unknown.types.clear();
+        assert_eq!(unknown.message_field(), None);
     }
 
     /// A frame object whose name reaches a block it does not dominate.

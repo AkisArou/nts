@@ -754,6 +754,9 @@ fn identity_class(
     // Named for its layout and itself, `Layout__Class`, where C's descriptor
     // says only `Class`.
     class_named(&mut builder, &mut pool, &name, &class.name, &origin)?;
+    if interface {
+        thrown_message_method(package, program, layout, &mut builder, &mut pool, &origin)?;
+    }
     // How an instance of this class prints, where that is not how its layout
     // prints. Two classes of one field shape share the layout's class and so
     // its inherited `nts$print`; the one whose own `toString` the layout's
@@ -1144,6 +1147,7 @@ fn interface_instance(
                 origin.location,
             )
         })?;
+    thrown_message_method(package, program, layout, &mut builder, &mut pool, &origin)?;
     builder.build(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4004",
@@ -1741,6 +1745,7 @@ fn object_class(
     if !interface {
         printing_method(package, program, layout, &mut builder, &mut pool, &origin)?;
         naming_method(package, program, layout, &mut builder, &mut pool, &origin)?;
+        thrown_message_method(package, program, layout, &mut builder, &mut pool, &origin)?;
         // A layout whose JVM name is not its own -- a generic instantiation's
         // `<` and `>` are spelled otherwise here -- says what C's descriptor
         // says, which is the layout's name.
@@ -1882,6 +1887,56 @@ fn printing_method(
         Some(rendered),
     );
     builder.interfaces.push(types::PRINTABLE.to_owned());
+    Ok(())
+}
+
+/// Publish the same fixed string-message slot that native descriptors carry.
+fn thrown_message_method(
+    package: &str,
+    program: &JvmProgram<'_>,
+    layout: &nts_core::hir::Layout,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    let Some(field) = layout.message_field() else {
+        return Ok(());
+    };
+    let class = builder.name.clone();
+    let owner = types::class_name(package, layout);
+    let field = hierarchy::field_name(program, layout, field as usize).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS4009",
+            format!(
+                "the message field of `{}` has no published JVM name",
+                layout.name
+            ),
+            origin.location,
+        )
+    })?;
+    let mut code = Code::new(vec![VType::Object(class)], 1);
+    code.load(origin, Kind::Ref, 0);
+    code.get_field(origin, pool, &owner, &field, "Ljava/lang/String;");
+    code.ret(origin, Some(Kind::Ref));
+    let rendered = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4009",
+            format!(
+                "the uncaught message projection for `{}` could not be written: {error}",
+                layout.name
+            ),
+            origin.location,
+        )
+    })?;
+    builder.method(
+        access::PUBLIC,
+        types::THROWN_MESSAGE,
+        "()Ljava/lang/String;",
+        Some(rendered),
+    );
+    builder
+        .interfaces
+        .push(types::THROWN_MESSAGE_INTERFACE.to_owned());
     Ok(())
 }
 

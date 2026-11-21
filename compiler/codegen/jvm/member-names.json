@@ -120,6 +120,11 @@
       "rust": "RAISING_PAIRS",
       "stem": "raisingPairs",
       "key": "none"
+    },
+    {
+      "rust": "THROWN_MESSAGE",
+      "stem": "thrownMessage",
+      "key": "none"
     }
   ],
   "java_templates": [
@@ -226,6 +231,10 @@
     {
       "template": "runtime/jvm/member-templates/tooling/conformance/JvmVerify.java.in",
       "output": "tooling/conformance/JvmVerify.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsThrownMessage.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsThrownMessage.java"
     }
   ],
   "observer": {

@@ -1,0 +1,6 @@
+package nts.rt;
+
+/** The fixed string-message field published by an actual generated layout. */
+public interface NtsThrownMessage {
+    String @@THROWN_MESSAGE@@();
+}

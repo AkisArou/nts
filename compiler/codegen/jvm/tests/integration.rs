@@ -186,3 +186,6 @@ mod whole_program;
 
 #[path = "wide_cursor.rs"]
 mod wide_cursor;
+
+#[path = "thrown_message.rs"]
+mod thrown_message;

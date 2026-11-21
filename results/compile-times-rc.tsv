@@ -6,35 +6,18 @@
 # Five-repeat medians; policy/evidence: results/compile-counter-rc-calibration.json
 # Rerecord with node tooling/gate/compile-time.mjs --record --arm rc; explain why.
 # module	G user instructions (all threads/descendants from exec)	CPU s
-runtime/node/assert	181.989	18.135
 runtime/node/async_hooks	3.780	0.536
 runtime/node/buffer	7.000	1.062
-runtime/node/child_process	270.099	24.778
-runtime/node/cluster	292.597	27.127
-runtime/node/console	213.916	36.339
-runtime/node/crypto	292.473	48.827
-runtime/node/dgram	266.707	24.348
 runtime/node/diagnostics_channel	2.983	0.236
-runtime/node/dns	11.685	1.743
-runtime/node/events	174.818	15.560
-runtime/node/fs	367.137	37.040
-runtime/node/http	343.149	58.831
-runtime/node/net	268.570	25.905
 runtime/node/os	7.335	0.960
 runtime/node/path	8.034	0.652
-runtime/node/perf_hooks	210.467	31.223
-runtime/node/process	343.760	54.492
 runtime/node/punycode	0.799	0.082
 runtime/node/querystring	8.135	1.098
-runtime/node/readline	217.598	21.221
-runtime/node/stream	247.011	23.412
 runtime/node/string_decoder	7.084	0.967
 runtime/node/timers	5.518	0.500
 runtime/node/tty	0.051	0.011
 runtime/node/url	26.825	4.122
-runtime/node/util	186.088	18.144
 runtime/node/zlib	379.935	64.240
-runtime/web-platform	219.435	22.327
 tests/compile-time/escape-analysis-scaling	2.833	0.220
 tests/compile-time/evolved-type-scaling	1.236	0.113
 tests/compile-time/length-fold-scaling	7.951	0.622

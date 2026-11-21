@@ -4032,10 +4032,14 @@ fn emit_object_descriptors(
             Some(FunctionName::Bound) => "&nts_bound_function_name".to_owned(),
             None => "NULL".to_owned(),
         };
+        let message_offset = layout.message_field().map_or_else(
+            || "0u".to_owned(),
+            |field| format!("offsetof({name}, {})", c_member_at(layout, field as usize)),
+        );
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {}, \
-                 {function_name}, {release_fields}, {trace_fields}",
+                 {function_name}, {release_fields}, {trace_fields}, {message_offset}",
                 erased.len(),
                 to_string(class)
             )
@@ -4106,7 +4110,7 @@ fn emit_view_class_descriptors(writer: &mut CodeWriter, origin: &Origin, program
             format!(
                 "static const NtsViewDescriptor {} = {{{{NTS_KIND_VIEW, (uint32_t)sizeof(NtsView), \
                  1u, 1u, (const uint32_t[]){{(uint32_t)offsetof(NtsView, buffer)}}, 0, {}, 0u, 0, \
-                 NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL, NULL, NULL}}, NULL}};",
+                 NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL, NULL, NULL, 0u}}, NULL}};",
                 view_descriptor_name(view),
                 c_string(&view.name)
             ),
@@ -4268,7 +4272,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL, NULL, NULL }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL, NULL, NULL, 0u }};",
                 descriptor_name(element),
                 array_element_kind(element),
             ),
@@ -7832,7 +7836,7 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Emi
             writer.line(
                 origin,
                 format!(
-                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL, NULL, NULL }};"
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL, NULL, NULL, 0u }};"
                 ),
             );
         }

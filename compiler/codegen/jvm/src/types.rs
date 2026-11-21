@@ -665,6 +665,12 @@ pub const CLASS_NAMED: &str = "nts/rt/NtsClassNamed";
 /// [`CLASS_NAMED`]'s one method, `()Ljava/lang/String;`.
 pub const CLASS_NAME: &str = crate::generated_members::CLASS_NAME;
 
+/// The fixed string-message projection of an actual generated object layout.
+pub const THROWN_MESSAGE_INTERFACE: &str = "nts/rt/NtsThrownMessage";
+
+/// [`THROWN_MESSAGE_INTERFACE`]'s borrowed string result, `()Ljava/lang/String;`.
+pub const THROWN_MESSAGE: &str = crate::generated_members::THROWN_MESSAGE;
+
 /// The field an object carries its optional-property presence bits in.
 ///
 /// `runtime/c` puts them in the header's spare flag bits -- 26 of them above

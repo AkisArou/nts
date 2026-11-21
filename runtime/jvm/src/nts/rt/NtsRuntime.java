@@ -264,6 +264,9 @@ public final class NtsRuntime {
     }
 
     public static void uncaught(NtsValue value, String detail) {
+        if (detail == null && value.ref instanceof NtsThrownMessage) {
+            detail = ((NtsThrownMessage) value.ref).¢nts$thrownMessage();
+        }
         StringBuilder line = new StringBuilder("nts: uncaught ");
         switch (value.tag) {
             case NtsValue.STRING: line.append((String) value.ref); break;

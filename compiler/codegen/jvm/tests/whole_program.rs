@@ -524,7 +524,10 @@ fn an_unhandled_rejection_is_reported_after_the_turn() {
         stdout, "after\n",
         "reported after the module, not at the throw"
     );
-    assert_eq!(stderr.trim(), "nts: uncaught RangeError");
+    assert_eq!(
+        stderr.trim(),
+        "nts: uncaught RangeError: nobody handles this"
+    );
 }
 
 /// The control: the same rejection awaited inside a `try` later in the turn is

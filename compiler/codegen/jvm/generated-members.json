@@ -14,6 +14,7 @@
     "RAISING_CALL": "¢nts$callRaises",
     "MODULE_INIT": "¢nts$moduleInit",
     "INTERFACE_HELD": "¢nts$interface",
-    "RAISING_PAIRS": "¢nts$raisingPairs"
+    "RAISING_PAIRS": "¢nts$raisingPairs",
+    "THROWN_MESSAGE": "¢nts$thrownMessage"
   }
 }

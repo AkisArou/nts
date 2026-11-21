@@ -8,7 +8,7 @@ use super::{
 /// The index of a `message: string` field, if a type has one.
 ///
 /// Used by `throw` to hand the runtime something to print. By shape, not by
-/// name: the four classes in [`super::builtin`](crate::hir::builtin) have such a field, and so does
+/// name: the error classes in [`super::builtin`](crate::hir::builtin) have such a field, and so does
 /// every user class that extends one, and nothing here needs to tell them
 /// apart.
 fn message_field(layouts: &[Layout], ty: &HirType) -> Option<u32> {
@@ -16,14 +16,7 @@ fn message_field(layouts: &[Layout], ty: &HirType) -> Option<u32> {
         return None;
     };
     let layout = layouts.iter().find(|layout| layout.types.contains(id))?;
-    layout
-        .fields
-        .iter()
-        .position(|field| {
-            field.name.is_name("message")
-                && matches!(field.ty, HirType::Managed(ManagedType::String))
-        })
-        .and_then(|at| u32::try_from(at).ok())
+    layout.message_field()
 }
 
 /// One reason a `try` has to be noticed while the statements inside it lower.
@@ -304,12 +297,9 @@ impl FuncBuilder<'_> {
         // Only on the path that ends the program, and after the check above so
         // that a caught `throw` does not load a field nothing reads.
         //
-        // A descriptor records where an object's references *are*, not what
-        // they are called, so the runtime cannot find `message` by name and
-        // this can. Matched by shape rather than against the four builtin error
-        // classes: any object with a string `message` renders, which covers
-        // every `class MyError extends Error` without needing to know that any
-        // of them is one.
+        // The layout owns the same fixed string projection that descriptors
+        // publish for a value arriving erased, such as a promise rejection.
+        // A statically known object can supply its field directly here.
         let detail = match message_field(&self.layouts, thrown_ty) {
             Some(field) => self.push(
                 OpKind::FieldGet {

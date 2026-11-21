@@ -3,10 +3,11 @@
 use super::raising_calls::ArgumentMembers;
 use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, FuncBuilder, HirType, NodeId, NodeKind, SemanticSnapshot,
-    a_parameter_pattern_can_throw, a_value_held_call, access_families, an_inlined_construction,
-    calls_in_the_body_of, children_in_the_body_of, children_that_run, const_function_aliases,
-    copyable_symbols, declared_base_class, declares_a_class, iterator_close, parameters_of,
-    parse_bigint, raising_callees_of, syntax, taken_as_a_closure, the_constructor_declared_by,
+    a_parameter_pattern_can_throw, a_reaction_site, a_value_held_call, access_families,
+    an_inlined_construction, calls_in_the_body_of, children_in_the_body_of, children_that_run,
+    const_function_aliases, copyable_symbols, declared_base_class, declares_a_class,
+    iterator_close, parameters_of, parse_bigint, raising_callees_of, syntax, taken_as_a_closure,
+    the_constructor_declared_by,
 };
 
 /// Every symbol whose function can raise a `throw`.
@@ -240,7 +241,11 @@ fn a_parameter_among(
 
 /// Whether this symbol resolves to a body, so a call naming it is a *resolved*
 /// callee. See [`names_a_body`].
-fn a_callee_with_a_body(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) -> bool {
+pub(super) fn a_callee_with_a_body(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    symbol: u32,
+) -> bool {
     snapshot.symbols.get(symbol as usize).is_some_and(|record| {
         record
             .declarations
@@ -1331,6 +1336,17 @@ pub(super) fn calls_guarded_by_a_try(
             guarded_calls.insert(id);
             guarded_a_call = true;
             iterator_close::guarded_regions(probe, id)
+        } else if a_reaction_site(probe, id) {
+            // **A reaction is a guard too**: it calls its handlers at the raising
+            // entry, and a handler's `throw` rejects the promise it hands back
+            // (`call_a_reaction_handler`). Its handler calls are
+            // synthesised, so there is no region to walk -- but without this a
+            // program whose only guard is `.then(callback)` offered `callback` no
+            // raising copy, the reaction's dispatch reached its ordinary entry, and
+            // the `throw` ended the program where node rejects:
+            // `tests/programs/a-runtime-promise-job-catches-a-named-callback`.
+            guarded_a_call = true;
+            continue;
         } else {
             continue;
         };

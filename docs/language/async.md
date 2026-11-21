@@ -193,10 +193,10 @@ C, LLVM and the JVM, and designed for Wasm.
 
 A promise rejected with no handler is a candidate; at the end of the outermost
 checkpoint, every candidate still unhandled ends the program as an uncaught
-error. On C, LLVM and the JVM the line is `nts: uncaught RangeError` for an
-error object (its class, without the message) or the thrown value itself, and
-the exit status is 1. On Wasm, by design, the reason is thrown to the
-JavaScript host.
+error. On C, LLVM and the JVM the line names the actual object's class and its
+fixed string `message` field (`nts: uncaught RangeError: boom`), or prints the
+thrown primitive value itself. The exit status is 1. On Wasm, by design, the
+reason is thrown to the JavaScript host.
 
 ## Threads
 

@@ -2719,6 +2719,14 @@ _Noreturn void nts_no_arm_of(NtsValue subject, const NtsString *member) {
 }
 
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
+  if (detail == NULL && (nts_value_tag(value) == NTS_TAG_OBJECT ||
+                         nts_value_tag(value) == NTS_TAG_FUNCTION)) {
+    const NtsHeader *object = nts_value_reference(value);
+    if (object && object->descriptor && object->descriptor->message_offset) {
+      memcpy(&detail, (const char *)object + object->descriptor->message_offset,
+             sizeof(detail));
+    }
+  }
   /* An embedder with somewhere to put it gets it, and the process survives.
      Popped here rather than by the caller, because the caller is reached by a
      jump and the frame it lands in is no longer the innermost one. */
@@ -2770,10 +2778,9 @@ _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
     fputs("null", stderr);
     break;
   default: {
-    /* An object or a function. A descriptor does name the class it describes --
-     * `Error`, `TypeError`, whatever a user subclass is called -- so this half
-     * needs nothing from the compiler; only `message` does, being a field. The
-     * two together read the way node's uncaught line does. */
+    /* The descriptor owns both the class name and the fixed message projection.
+     * A synchronous throw and an unhandled promise reason are described here.
+     */
     const NtsHeader *object = nts_value_reference(value);
     const char *class_name =
         object && object->descriptor ? object->descriptor->name : NULL;
@@ -11743,13 +11750,9 @@ static void nts_rejection_candidate(NtsPromise *promise) {
  * `nts_uncaught` is the reporter rather than a sentence of its own: node ends
  * an unhandled rejection exactly as it ends an uncaught throw, an embedder that
  * wants the value gets it through the same path, and the exit status is 1 for
- * the same reason. The detail is NULL, which is a real limitation and not an
- * oversight -- the runtime cannot find `message` by name, since a descriptor
- * records where an object's references are and not what they are called, so the
- * line reads `nts: uncaught Error` where node prints the message too. Closing
- * it means the compiler passing the field it already knows how to find
- * (`message_field`), which is a change to every rejection's emitted code and so
- * its own decision. */
+ * the same reason. The descriptor carries the reason's fixed string-message
+ * projection, so the shared reporter describes the original value without
+ * a separate promise-side representation of its message. */
 static void nts_report_unhandled_rejections(void) {
   uint32_t at = 0;
   while (at < nts_env->rejected_len) {
