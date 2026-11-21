@@ -19,15 +19,16 @@ export function completedTestFailure(data:{details:{passed?:boolean;error?:unkno
   const failureType=typeof error==="object"&&error!==null&&"failureType" in error&&typeof error.failureType==="string"?error.failureType:"";
   return data.details.passed===false&&!data.todo&&!data.skip&&!["testAborted","cancelledByParent","subtestsFailed","testTimeoutFailure"].includes(failureType);
 }
-/** The host-state fault a completed failed test ended with: the test's own
- * thrown value, or the `actual` of the assertion that rejected it (an
+/** The host-state fault a completed failed test ended with: the value its
+ * body or one of its hooks (a cleanup's t.after, say) threw, or the `actual`
+ * of the assertion that rejected it (an
  * assert.rejects or assert.throws pattern), when that is a HostStateError
  * instance (the entry runs in-process, so the instance survives). No deeper:
  * a refusal whose cleanup met the host is still a refusal. Any other error,
  * including every other ToolingInstrumentError, is a completed failure. */
 export function completedHostFault(data:{details:{error?:unknown}}):HostStateError|undefined {
   const error=data.details.error;
-  if(typeof error!=="object"||error===null||!("failureType" in error)||error.failureType!=="testCodeFailure")return;
+  if(typeof error!=="object"||error===null||!("failureType" in error)||!["testCodeFailure","hookFailed"].includes(error.failureType as string))return;
   const primary=(error as {cause?:unknown}).cause;
   if(primary instanceof HostStateError)return primary;
   if(primary instanceof AssertionError&&primary.actual instanceof HostStateError)return primary.actual;

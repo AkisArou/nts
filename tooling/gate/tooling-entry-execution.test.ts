@@ -71,6 +71,8 @@ test('only a host-state fault holds its file; every other failure beside or inst
   await assert.rejects(run('held',`test('passes',()=>{});test('realization',()=>{throw ${realization};});`),held);
   // oracle-dependencies.test.ts's shape: the fault arrives as the actual of a
   // pattern assertion, never a cause.
+  // Cleanup runs in hooks: a slice stop that meets the host fails the hook.
+  await assert.rejects(run('hook',`test('cleanup',t=>{t.after(()=>{throw ${realization};});});`),held);
   await assert.rejects(run('pattern',`test('pattern',async()=>{await assert.rejects(Promise.reject(${realization}),/committed install inputs changed/);});`),held);
   const red=async(name:string,body:string,why:string)=>{
     const result=await run(name,body);
@@ -82,11 +84,13 @@ test('only a host-state fault holds its file; every other failure beside or inst
     ['lookalike',`test('lookalike',()=>{const error=Error('resident cap: lookalike');error.name='HostStateError';error.kind='tooling-setup';throw error;});`,'only the instance is the marker'],
     ['deeper',`test('refusal',()=>{throw new Error('start job failed: invalid unit configuration',{cause:${realization}});});`,'a refusal whose cleanup met the host is still a refusal'],
     ['beside-failure',`test('realization',()=>{throw ${realization};});test('assertion',()=>{throw Error('definite failure');});`,'a definite failure beside the fault'],
+    ['beside-hook',`test('body',t=>{t.after(()=>{throw ${realization};});throw Error('definite failure');});`,'a failed body beside its failed cleanup hook'],
     ['beside-timeout',`test('realization',()=>{throw ${realization};});test('timeout',{timeout:100},()=>new Promise(()=>{}));`,'a timeout beside the fault'],
     ['beside-exit',`test('realization',()=>{throw ${realization};});test('exit code',()=>{process.exitCode=7;});`,'a nonzero exit beside the fault'],
   ] as const){
     const result=await red(name,body,why);
-    if(name.startsWith('beside'))assert.match(result.observationFailure?.reason??'',/cgroup realization failed/,why);
+    // node keeps the body's own failure as the test's error; its hook's fault is not seen.
+    if(name.startsWith('beside')&&name!=='beside-hook')assert.match(result.observationFailure?.reason??'',/cgroup realization failed/,why);
   }
   // A test that catches and asserts a host-state fault is an ordinary pass.
   assert.equal((await run('caught',`test('asserts the fault',()=>{assert.throws(()=>{throw ${realization};},HostStateError);});`)).status,0,f.text());

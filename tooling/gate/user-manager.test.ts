@@ -16,6 +16,11 @@ function scripted(...answers:Answer[]):{spawn:UserManagerSpawn;calls:string[][]}
   };
   return {spawn,calls};
 }
+/** A path expected to answer: a fault it raises is this test's failure, never
+ * a host-state hold of its file. */
+function answered<T>(call:()=>T):T{
+  try{return call();}catch(error){throw new Error(`expected the user manager's answer, got: ${String(error)}`);}
+}
 const NOT_CONNECTED={status:1,stderr:"Failed to start a.slice: Transport endpoint is not connected\nSee user logs and 'systemctl --user status a.slice' for details.\n"};
 const TIMED_OUT={status:1,stderr:'Call failed: Connection timed out\n'};
 
@@ -64,20 +69,20 @@ test('a call ended by a signal names the signal, not the bus',()=>{
 
 test('a transient fault is answered by its retry, and the answer says so',()=>{
   const {spawn,calls}=scripted(TIMED_OUT,{status:0,stdout:'o "/job"\n'});
-  const result=userManager('busctl',['call','x'],{phase:'tooling-setup'},spawn);
+  const result=answered(()=>userManager('busctl',['call','x'],{phase:'tooling-setup'},spawn));
   assert.equal(result.status,0);assert.equal(result.retried,true);assert.equal(result.stdout,'o "/job"\n');
   assert.equal(calls.length,2);
 });
 
 test('refusals and evidence-free exits return at once, named by status or signal',()=>{
   const refusal=scripted({status:1,stderr:'Job for a.slice failed: invalid unit configuration (job result: dependency).\n'});
-  const refused=userManager('systemctl',['start','a.slice'],{phase:'tooling-setup'},refusal.spawn);
+  const refused=answered(()=>userManager('systemctl',['start','a.slice'],{phase:'tooling-setup'},refusal.spawn));
   assert.equal(refusal.calls.length,1);assert.equal(refused.retried,false);
   assert.equal(userManagerFailure(refused),'Job for a.slice failed: invalid unit configuration (job result: dependency). (exit status 1)');
   const silent=scripted({status:1});
-  const empty=userManager('busctl',['call','x'],{phase:'tooling-setup'},silent.spawn);
+  const empty=answered(()=>userManager('busctl',['call','x'],{phase:'tooling-setup'},silent.spawn));
   assert.equal(silent.calls.length,1);assert.equal(userManagerFailure(empty),'no stderr (exit status 1)');
   const hung=scripted({status:null,signal:'SIGTERM',error:Object.assign(Error('spawnSync systemctl ETIMEDOUT'),{code:'ETIMEDOUT'})});
-  const guard=userManager('systemctl',['stop','a.slice'],{phase:'tooling-cleanup',timeoutMs:5},hung.spawn);
+  const guard=answered(()=>userManager('systemctl',['stop','a.slice'],{phase:'tooling-cleanup',timeoutMs:5},hung.spawn));
   assert.equal(hung.calls.length,1);assert.equal(userManagerFailure(guard),'no stderr (spawn error: spawnSync systemctl ETIMEDOUT)');
 });
