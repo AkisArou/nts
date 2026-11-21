@@ -21,6 +21,7 @@ import {readLimits} from '../gate/scopes/memory-limits.ts';
 import {ancestorMemoryIncident,memoryAncestors,type AncestorMemory} from '../gate/memory-ancestry.ts';
 import {hostInfrastructure} from '../gate/host-infrastructure.ts';
 
+import {userManager,userManagerFailure,UserBusUnreachableError} from '../gate/user-manager.ts';
 import {workerRoleValues,residentWorkerComponent} from './worker-identity.ts';
 
 const CGROUP = "/sys/fs/cgroup";
@@ -41,11 +42,12 @@ const integer = (value: number, what: string) => {
   return value;
 };
 const systemctl = (...args: string[]) => {
-  const result = spawnSync("systemctl", ["--user", ...args], { encoding: "utf8", ...(args[0] === "stop" ? {timeout: STOP_HANG_MS} : {}) });
-  if (args[0] === "stop" && (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT")
+  const stop = args[0] === "stop";
+  const result = userManager("systemctl", args, { phase: stop ? "tooling-cleanup" : "tooling-setup", ...(stop ? {timeoutMs: STOP_HANG_MS} : {}) });
+  if (stop && (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT")
     throw new Error(`resident cap: hung waiting for ${args[1]}'s stop job to finish (${STOP_HANG_MS} ms hang guard)`, {cause: result.error});
-  if (args[0] === "stop" && result.status !== 0 && result.stderr.includes(`Unit ${args[1]} not loaded.`)) return "";
-  if (result.status !== 0) throw new Error(`resident cap: systemctl ${args.join(" ")} failed: ${result.stderr || result.error?.message}`);
+  if (stop && result.status !== 0 && result.stderr.includes(`Unit ${args[1]} not loaded.`)) return "";
+  if (result.status !== 0) throw new Error(`resident cap: systemctl ${args.join(" ")} failed: ${userManagerFailure(result)}`);
   return result.stdout.trim();
 };
 /** systemctl joins StopUnit's job; a queued D-Bus reply is not a drain. */
@@ -85,6 +87,10 @@ const groupOf = (unit: string, parent: string | undefined, since: string) => {
   // completion even on a loaded manager; elapsed time is no readiness signal.
   try { systemctl("start", unit); }
   catch (error) { if (isCommandExit(error)) throw error;
+    // The manager never answered: its unit state and journal are behind the
+    // same bus, and reading them would only wait out its timeout again.
+    if (error instanceof UserBusUnreachableError)
+      throw new UserBusUnreachableError(error.kind, `resident cap: ${unit} start job not answered: ${error.message}; diagnostics skipped`);
     throw new Error(`resident cap: ${unit} start job failed: ${String(error)}; ${sliceDiagnostics(unit, since)}`, { cause: error });
   }
   const group = systemctl("show", unit, "--property=ControlGroup", "--value");
@@ -110,9 +116,16 @@ const failedSetup = (error: unknown, cleanup: () => void): never => {
   throw error;
 };
 const manager = (...args: string[]) => {
-  const result = spawnSync("busctl", ["--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager", ...args], { encoding: "utf8" });
-  if (result.status !== 0 && args[0] === "StopUnit" && result.stderr.includes(`Unit ${args[2]} not loaded.`)) return;
-  if (result.status !== 0) throw new Error(`resident cap: user manager failed: ${result.stderr || result.error?.message}; a working user bus and XDG_RUNTIME_DIR are required`);
+  const [method, , unit] = args, stop = method === "StopUnit";
+  const result = userManager("busctl", ["call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager", ...args],
+    { phase: stop ? "tooling-cleanup" : "tooling-setup" });
+  if (result.status === 0) return;
+  if (stop && result.stderr.includes(`Unit ${unit} not loaded.`)) return;
+  // A start whose first reply was lost may have created the unit. Its name
+  // carries a fresh random component, so the unit is this call's; groupOf
+  // and #verify still check its realized group and kernel caps.
+  if (method === "StartTransientUnit" && result.retried && result.stderr.includes(`Unit ${unit} already exists.`)) return;
+  throw new Error(`resident cap: user manager ${method} ${unit} failed: ${userManagerFailure(result)}; a working user bus and XDG_RUNTIME_DIR are required`);
 };
 const events = (group: string, local = false) => {
   const text = readFileSync(join(CGROUP, group, local ? "memory.events.local" : "memory.events"), "utf8");

@@ -610,7 +610,7 @@ test("an unavailable user bus refuses to compile instead of running uncapped", (
   const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", env: { ...testEnvironment(), DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent-nts-user-bus" },});
   assert.notEqual(result.status, 0);
   assert.ok(!result.stdout.includes("UNCAPPED"));
-  assert.match(result.stderr, /resident cap: user manager failed/);
+  assert.match(result.stderr, /resident cap: user manager StartTransientUnit \S+ failed: [^]*\(exit status \d+\)/);
 });
 
 test("a serial runner shares one scope across compiles and removes every cgroup", () => {
@@ -689,15 +689,26 @@ async function fakeManager(mode, module) {
     const held = units.get(unit);
     for (const [name, row] of units) if (name === unit || held && row.group.startsWith(held.group + "/")) units.delete(name);
   };
-  const response = (stdout = "", status = 0, stderr = "") => ({ stdout, stderr, status });
+  const response = (stdout = "", status: number | null = 0, stderr = "", signal: string | null = null) => ({ stdout, stderr, status, signal });
+  const attempts = new Map<string, number>();
+  const attempt = (key: string) => { const n = (attempts.get(key) ?? 0) + 1; attempts.set(key, n); return n; };
   cp.spawnSync = ((command: string, args: readonly string[] = [], options?: import("node:child_process").SpawnSyncOptions) => {
     if (command === "busctl") {
       let at = args.indexOf("StartTransientUnit");
       if (at >= 0) {
         const unit = args[at + 2]; root ??= unit;
+        if (unit !== root) {
+          calls.push(`create-attempt:${unit}`);
+          const n = attempt(`create:${unit}`);
+          if (mode === "bus-busctl-timeout") return response("", 1, "Call failed: Connection timed out");
+          if (mode === "bus-signal") return response("", null, "", "SIGKILL");
+          if (mode === "empty-stderr") return response("", 1, "");
+          if (mode === "bus-lost-reply" && n === 2) return response("", 1, `Call failed: Unit ${unit} already exists.`);
+        }
         const group = `/fake-user/${root}${unit === root ? "" : `/${unit}`}`;
         units.set(unit, { unit, group, bytes: Number(args[args.indexOf("MemoryMax") + 2]), ready: false, reads: 0 });
         calls.push(`create:${unit}`);
+        if (mode === "bus-lost-reply" && unit !== root) return response("", 1, "Call failed: Connection timed out");
         return response('o "/fake-job"');
       }
       at = args.indexOf("StopUnit");
@@ -705,6 +716,7 @@ async function fakeManager(mode, module) {
         const unit = args[at + 2];
         calls.push(`stop:${unit}`);
         if (["failed-cleanup", "realization-cleanup"].includes(mode) && unit !== root) return response("", 1, "injected cleanup failure");
+        if (mode === "refusal-bus-cleanup" && unit !== root) return response("", 1, "Call failed: Transport endpoint is not connected");
         if (!["queued-stop", "retained-stop"].includes(mode)) remove(unit);
         return response('o "/fake-stop-job"');
       }
@@ -719,7 +731,9 @@ async function fakeManager(mode, module) {
       }
       if (operation === "start") {
         if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected start failure: invalid unit configuration (job result: dependency)");
-        if (mode === "invalid-start" && unit !== root) return response("", 1, `Job for ${unit} failed: invalid unit configuration (job result: dependency).`);
+        if (["invalid-start", "refusal-bus-cleanup"].includes(mode) && unit !== root) return response("", 1, `Job for ${unit} failed: invalid unit configuration (job result: dependency).`);
+        if (unit !== root && (mode === "bus-start" || mode === "bus-transient" && attempt(`start:${unit}`) === 1))
+          return response("", 1, `Failed to start ${unit}: Transport endpoint is not connected\nSee user logs and 'systemctl --user status ${unit}' for details.`);
         if (mode === "queued-start" && unit !== root) {
           calls.push(`start-job-queued:${unit}`);
           // Supplied time passes the former 3 s deadline while the job is
@@ -803,7 +817,8 @@ async function fakeManager(mode, module) {
     policy: instrument ? instrumentPolicy(instrument.kind) : null, remaining: units.size }));
 }
 
-for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-empty", "journal-throws", "wrong-parent", "parent-traversal", "wrong-unit", "invalid-start", "failed-cleanup", "realization-cleanup", "queued-stop", "retained-stop"]) {
+for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-empty", "journal-throws", "wrong-parent", "parent-traversal", "wrong-unit", "invalid-start", "failed-cleanup", "realization-cleanup", "queued-stop", "retained-stop",
+  "bus-start", "bus-busctl-timeout", "bus-signal", "bus-transient", "bus-lost-reply", "empty-stderr", "refusal-bus-cleanup"]) {
   test(`slice setup with fake manager: ${mode}`, () => {
     const code = `(${fakeManager.toString()})(${JSON.stringify(mode)},${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});`;
     const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",});
@@ -815,7 +830,45 @@ for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-e
       assert.ok(actual.remaining > 0);
       assert.ok(actual.calls.includes("kernel-populated-after-stop-job"));
     } else assert.equal(actual.remaining, 0);
-    if (mode === "queued-start" || mode === "queued-stop") {
+    const count = (prefix: string) => actual.calls.filter((call: string) => call.startsWith(prefix) && call.endsWith("-w0.slice")).length;
+    if (["bus-start", "bus-busctl-timeout", "bus-signal"].includes(mode)) {
+      // Unreachable twice: one retry, then a named instrument hold.
+      assert.equal(actual.errorName, "UserBusUnreachableError");
+      assert.match(actual.error, /systemd user bus unreachable: (systemctl|busctl) --user .*-w0\.slice.* \(2 attempts\)/);
+      if (mode === "bus-start") {
+        assert.equal(count("start:"), 2);
+        assert.match(actual.error, /Failed to start \S+-w0\.slice: Transport endpoint is not connected; then Failed to start/);
+        assert.match(actual.error, /diagnostics skipped/);
+        assert.ok(!actual.calls.some((call: string) => call.startsWith("journal:")), "an unanswered start reads no diagnostics behind the same bus");
+      } else {
+        assert.equal(count("create-attempt:"), 2);
+        assert.equal(count("start:"), 0);
+        assert.match(actual.error, mode === "bus-signal" ? /ended by signal SIGKILL; then ended by signal SIGKILL/ : /Call failed: Connection timed out; then Call failed: Connection timed out/);
+      }
+      assert.doesNotMatch(actual.error, /undefined/);
+      assert.equal(actual.instrument.kind, "tooling-setup");
+      assert.equal(actual.instrument.verdict, "INSTRUMENT", "an unreachable user bus holds the landing instead of failing the code");
+      assert.deepEqual(actual.policy, { verdict: "INSTRUMENT", disposition: "operator-hold" });
+    } else if (mode === "bus-transient" || mode === "bus-lost-reply") {
+      assert.equal(actual.error, null);
+      assert.equal(actual.closeError, null);
+      assert.ok(actual.group.endsWith("-w0.slice"));
+      if (mode === "bus-transient") assert.equal(count("start:"), 2, "one retry after the transient fault");
+      else { assert.equal(count("create-attempt:"), 2); assert.equal(count("create:"), 1, "the lost reply's unit is the retry's own"); }
+    } else if (mode === "empty-stderr") {
+      assert.match(actual.error, /resident cap: user manager StartTransientUnit \S+-w0\.slice failed: no stderr \(exit status 1\)/);
+      assert.doesNotMatch(actual.error, /undefined/);
+      assert.equal(actual.errorName, "Error", "a nonzero exit with no evidence stays a failure");
+      assert.equal(actual.instrument, null);
+      assert.equal(count("create-attempt:"), 1, "no retry without bus evidence");
+    } else if (mode === "refusal-bus-cleanup") {
+      assert.match(actual.error, /start job failed:.*invalid unit configuration/);
+      assert.match(actual.error, /cleanup also failed: .*systemd user bus unreachable: busctl --user call .*StopUnit/);
+      assert.equal(actual.errorName, "Error", "a refusal keeps its class beside an unreachable cleanup");
+      assert.equal(actual.instrument, null);
+      assert.equal(count("start:"), 1);
+      assert.equal(count("stop:"), 2, "the cleanup's one retry");
+    } else if (mode === "queued-start" || mode === "queued-stop") {
       assert.equal(actual.error, null);
       assert.equal(actual.closeError, null);
       assert.ok(actual.group.endsWith("-w0.slice"));
@@ -839,6 +892,7 @@ for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-e
     } else if (mode === "invalid-start") {
       assert.match(actual.error, /resident cap: .*?-w0.slice start job failed:.*invalid unit configuration \(job result: dependency\)/);
       assert.equal(actual.instrument, null, "a refused start remains a failure, never a memory-pressure retry");
+      assert.equal(count("start:"), 1, "a refusal is never retried");
       assert.equal(actual.calls.filter((call: string) => call.startsWith("group-read:")).length, 1, "a failed worker start never reads its group");
     } else if (["wrong-parent", "parent-traversal", "wrong-unit"].includes(mode)) {
       assert.match(actual.error, /resident cap: .*?-w0.slice has no valid ControlGroup/);

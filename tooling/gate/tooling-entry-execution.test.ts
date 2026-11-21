@@ -7,6 +7,7 @@ import {PassThrough} from 'node:stream';
 import {runScopedTooling} from './tooling-runner.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {spawnTest} from './test-wait.ts';
+import {ToolingInstrumentError} from './step-result.ts';
 
 function fixture(t:import('node:test').TestContext){
   const root=mkdtempSync(join(tmpdir(),'tooling-entry-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -60,4 +61,27 @@ test('a file hitting its finite scope cap fails by name without losing its neigh
   assert.equal(result.status,1,f.text());assert.match(f.text(),/process terminated mid-file/);
   const neighbour=f.write('neighbour',`import{test}from'node:test';test('unaffected neighbour',()=>{});`);
   assert.equal((await runScopedTooling([neighbour],{fixture:true,memoryMax:512*2**20,output:f.output})).status,0,f.text());
+});
+test('a test ended by an instrument fault holds its file; a definite failure beside it stays FAIL',async t=>{
+  const instrument=JSON.stringify(new URL('./step-result.ts',import.meta.url).href);
+  // #880's realization fault, as worker-memory.ts raises it inside a test.
+  const realization=`new ToolingInstrumentError('tooling-setup','resident cap: nts-fixture-w0.slice cgroup realization failed after start job completed successfully (systemctl exit 0): ControlGroup is empty')`;
+  const f=fixture(t),held=f.write('held',`import{test}from'node:test';import{ToolingInstrumentError}from${instrument};
+test('passes',()=>{});test('realization',()=>{throw ${realization};});`);
+  await assert.rejects(runScopedTooling([held],{fixture:true,memoryMax:512*2**20,output:f.output}),
+    (error:unknown)=>error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'&&/realization: resident cap: .*cgroup realization failed/.test(error.message));
+  const beside=f.write('beside',`import{test}from'node:test';import{ToolingInstrumentError}from${instrument};
+test('realization',()=>{throw ${realization};});test('assertion',()=>{throw Error('definite failure');});`);
+  const red=await runScopedTooling([beside],{fixture:true,memoryMax:512*2**20,output:f.output});
+  assert.equal(red.status,1,f.text());assert.equal(red.completedFailures,1,f.text());
+  assert.match(red.observationFailure?.reason??'',/cgroup realization failed/);
+  // Only the instance is the protocol: a same-named plain error is a failure.
+  const named=f.write('named',`import{test}from'node:test';
+test('lookalike',()=>{const error=Error('resident cap: lookalike');error.name='ToolingInstrumentError';error.kind='tooling-setup';throw error;});`);
+  const lookalike=await runScopedTooling([named],{fixture:true,memoryMax:512*2**20,output:f.output});
+  assert.equal(lookalike.status,1,f.text());assert.equal(lookalike.completedFailures,1,f.text());
+  // A test that catches and asserts an instrument error is an ordinary pass.
+  const caught=f.write('caught',`import{test}from'node:test';import assert from'node:assert/strict';import{ToolingInstrumentError}from${instrument};
+test('asserts the fault',()=>{assert.throws(()=>{throw ${realization};},ToolingInstrumentError);});`);
+  assert.equal((await runScopedTooling([caught],{fixture:true,memoryMax:512*2**20,output:f.output})).status,0,f.text());
 });
