@@ -180,8 +180,8 @@ test('landing status reports an ownership failure on its tree line and returns s
 
 test('a real held-then-green --here run prints its final PASS report and exits zero',t=>{
  const code=`import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {readFileSync} from 'node:fs';import {join} from 'node:path';import {mock} from 'node:test';
-const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)};
-const realRules=await import(rules),realRun=await import(run);
+const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)},memory=${JSON.stringify(new URL('./selection-memory.ts',import.meta.url).href)};
+const realRules=await import(rules),realRun=await import(run),realMemory=await import(memory);
 const {landingSelection}=await import(${JSON.stringify(new URL('./selection.ts',import.meta.url).href)});
 import {gitArguments} from '../gate/git-arguments/main.ts';
 const {hostEnvironment}=await import(${JSON.stringify(new URL('../gate/host-environment.ts',import.meta.url).href)});
@@ -200,7 +200,10 @@ assert.equal(installationCatalogState(f.tree,f.tree).state,'current');
 const commit=git('rev-parse','HEAD');let actualRun;
 const selection=landingSelection({owed:{steps:['build','rustfmt']},paths:[],catalogue:['build','rustfmt'],table:{build:{form:'as-is'},rustfmt:{form:'as-is'}},inCorpus:()=>false,rows:new Map(),cost:()=>({cpu:1,measured:true,source:'control'}),budget:{slots:24,frontends:24,seconds:600}});
 mock.module(rules,{namedExports:{...realRules,ruleSelect:()=>()=>({selection,kind:'other',interop:null,doctests:null})}});
-mock.module(run,{namedExports:{...realRun,runLanding:options=>{actualRun=options.run;return realRun.runLanding({...options,build:f.options([]).build,owned:f.options([]).owned,env:{...options.env,HOME:f.options([]).env.HOME}});}}});
+// The selection reserves in the fixture's own ledger, which the run's build then takes it over in.
+let selectionHeld;
+mock.module(memory,{namedExports:{...realMemory,holdSelection:async(caller,commit,target,options)=>{selectionHeld=await realMemory.holdSelection(caller,commit,target,{...options,env:{...hostEnvironment(f.options([]).env),...f.memory}});return selectionHeld;}}});
+mock.module(run,{namedExports:{...realRun,runLanding:options=>{actualRun=options.run;assert.equal(options.handover,selectionHeld);return realRun.runLanding({...options,build:f.options([]).build,owned:f.options([]).owned,env:{...options.env,HOME:f.options([]).env.HOME}});}}});
 const before=process.cwd(),beforeEnvironment=process.env;process.env=hostEnvironment(f.options([]).env);process.chdir(f.tree);process.argv=[process.execPath,${JSON.stringify(CHECK)},commit,'--here'];
 try{
  await import(${JSON.stringify(new URL('./check.ts',import.meta.url).href)});
@@ -208,6 +211,8 @@ try{
  assert.equal(result.state,'green');assert.equal(result.steps.find(row=>row.name==='rustfmt').attempt,2);
  const retry=JSON.parse(readFileSync(join(actualRun,'attempt-2/summary.json'),'utf8'));assert.equal(retry.environment.canonical,true);
  assert.equal(retry.steps.find(row=>row.name==='rustfmt').verdict,'PASS');
+ assert.match(readFileSync(join(actualRun,'build.log'),'utf8'),/memory: landing build of [0-9a-f]{12} took over landing selection of [0-9a-f]{12} \\(--here\\)'s reservation/);
+ assert.equal(selectionHeld.active(),false);
 }finally{process.env=beforeEnvironment;process.chdir(before);for(const fn of cleanup.reverse())await fn();}`;
  const imports=process.execArgv.flatMap((argument,index,args)=>argument==='--import'&&args[index+1]?[argument,args[index+1]!] : []);
   const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{cwd:dirname(CHECK),encoding:'utf8',env:fixtureEnvironment(t)});
@@ -223,14 +228,16 @@ test('--here refuses a tree whose installation catalog is not current before it 
   // replaced by recorders, and its rank scope declined, so the order is what is seen.
   const here=(commit:string)=>{
     const code=`import {mock} from 'node:test';
-const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)},scope=${JSON.stringify(new URL('../gate/scopes/bound-slice.ts',import.meta.url).href)};
-const realRules=await import(rules),realRun=await import(run),realScope=await import(scope);
+const rules=${JSON.stringify(new URL('./rules.ts',import.meta.url).href)},run=${JSON.stringify(new URL('./run.ts',import.meta.url).href)},scope=${JSON.stringify(new URL('../gate/scopes/bound-slice.ts',import.meta.url).href)},memory=${JSON.stringify(new URL('./selection-memory.ts',import.meta.url).href)};
+const realRules=await import(rules),realRun=await import(run),realScope=await import(scope),realMemory=await import(memory);
 const {landingSelection}=await import(${JSON.stringify(new URL('./selection.ts',import.meta.url).href)});
 const calls=[];
 const selection=landingSelection({owed:{steps:['build']},paths:[],catalogue:['build'],table:{build:{form:'as-is'}},inCorpus:()=>false,rows:new Map(),cost:()=>({cpu:1,measured:true,source:'control'}),budget:{slots:24,frontends:24,seconds:600}});
 mock.module(rules,{exports:{...realRules,ruleSelect:()=>()=>{calls.push('select');return {selection,kind:'other',interop:null,doctests:null};}}});
-mock.module(run,{exports:{...realRun,runLanding:async()=>{calls.push('run');return {state:'green',message:'recorded',steps:[],pending:[],refresh:[],wall_s:0};}}});
+mock.module(run,{exports:{...realRun,runLanding:async options=>{calls.push(options.handover===held?'run with the selection':'run');return {state:'green',message:'recorded',steps:[],pending:[],refresh:[],wall_s:0};}}});
 mock.module(scope,{exports:{...realScope,rankedScopeArgs:()=>null}});
+const held={id:'held',inherited:true,release(){calls.push('release');},closed:Promise.resolve()};
+mock.module(memory,{exports:{...realMemory,holdSelection:async caller=>{calls.push('hold '+caller);return held;}}});
 process.argv=[process.execPath,${JSON.stringify(CHECK)},${JSON.stringify(commit)},'--here'];
 await import(${JSON.stringify(CHECK)});
 console.log('calls='+JSON.stringify(calls)+' exit='+process.exitCode);`;
@@ -243,6 +250,6 @@ console.log('calls='+JSON.stringify(calls)+' exit='+process.exitCode);`;
   assert.match(refused,/calls=\[\] exit=2/,'no step was selected or run');
   const none=c.s.commit({'package.json':null,'pnpm-lock.yaml':null},'no package graph');
   const ran=here(none);
-  assert.match(ran,/calls=\["select","run"\] exit=0/,ran);
+  assert.match(ran,/calls=\["hold here","select","run with the selection","release"\] exit=0/,ran);
   assert.doesNotMatch(ran,/installation catalog/);
 });

@@ -35,6 +35,8 @@ import {createWithdrawalWatch,type WithdrawalWatch} from './withdrawal-watch.ts'
 import {landingLayout} from './layout.ts';
 import { recoverLandingCancellation,removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
+import { closeSelection, holdSelection } from "./selection-memory.ts";
+import type { Reservation } from "../gate/memory-ledger.ts";
 import { landingCpuMeasure, costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
 import { durableRecord } from "../gate/durable-record.ts";
 import { selectionInfrastructure } from "../gate/owed-range.ts";
@@ -53,6 +55,8 @@ export type Config = {
   home: string; root: string; remote: string | null; tree: string; target: string; pool: Pool | null;
   env?: NodeJS.ProcessEnv;
   select: (base: string, tip: string, paths: string[]) => Selected;
+  /** Reserves a selection's memory at the landing's rank, before `select`; the run takes it over (selection-memory.ts). */
+  holdSelection: (tip: string, signal?: AbortSignal) => Promise<Reservation>;
   prepare: (tip: string) => void;
   runSteps: (options: RunOptions) => Promise<Ran>;
   watchWithdrawals:typeof createWithdrawalWatch;
@@ -216,7 +220,7 @@ function pushIfBehind(config: Config): void {
   config.log(pushed.ok ? `pushed main to ${config.remote}` : `main is not on ${config.remote}: ${pushed.reason}`);
 }
 
-export async function landOne(config: Config, queue: Queue, entry: Checking,cancellation?:{signal:AbortSignal;waitForRetry:()=>Promise<void>;hold:(reason:string)=>void}): Promise<Result> {
+export async function landOne(config: Config, queue: Queue, entry: Checking,cancellation?:Cancellation): Promise<Result> {
   const g = git(config);
   if (queue.withdrawRequested(entry.id)) return queue.answer(entry, { state: "withdrawn", message: "withdrawn before its check started" });
   if (!hasCommit(g, entry.sha)) return queue.answer(entry, { state: "refused", message: `${short(entry.sha)} is not a commit in ${config.root}` });
@@ -240,33 +244,9 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
     const tip = issue === null ? rebased.tip : namingIssue(g, base, rebased.tip, issue);
     queue.update({ base, tip, phase: "checking" });
     const paths = changedPaths(g, base, tip);
-    let selected: Selected;
-    try { selected = config.select(base, tip, paths); }
-    catch (error) {
-      const message = `the rules could not select ${short(tip)}'s steps: ${(error as Error).message}`;
-      return queue.answer(entry, { state: selectionInfrastructure(error) ? "held" : "refused", base, tip, message });
-    }
-    const steps = landingSteps(selected.selection);
-    reportRustRecordDecisions(selected.rustRecords,config.log);
-    const run = join(config.home, "runs", `${short(tip)}-${Date.now()}`);
-    queue.update({ run });
-    queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, run, message: `${steps.join(" ")} on ${short(tip)}, ~${Math.round(selected.selection.estimate.seconds)} s` });
-    config.log(`${short(entry.sha)} as ${short(tip)} on main ${short(base)}: ${steps.join(" ") || "nothing to run"}; deferred ${deferredSteps(selected.selection).join(" ") || "none"}`);
-    let ran: Ran;
-    if (!steps.length) ran = { state: "green", message: "nothing to run", run, steps: [], pending: [], refresh: [], wall_s: 0 };
-    else {
-      if(queue.withdrawRequested(entry.id))return queue.answer(entry,{state:'withdrawn',base,tip,run,message:'withdrawn before the landing tree was prepared'});
-      try { config.prepare(tip); }
-      catch (error) { return queue.answer(entry, { state: "held", base, tip, run, message: `the landing tree could not be prepared at ${short(tip)}: ${(error as Error).message}` }); }
-      ran = await config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,
-        rustRecords:selected.rustRecords,
-        ceiling: landingCeiling(selected.selection.estimate.seconds),
-        env: config.env,signal:cancellation?.signal,drainRetry:cancellation?.waitForRetry,
-        cancellationHold:reason=>retainCancellation(config,queue,{...entry,base,tip},run,reason,cancellation?.hold),
-        hold: reason => cancellation?cancellation.hold(reason):queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
-      // What the steps cost is for the next estimate; it never decides this one.
-      try { recordCosts(config.home, ran, selected.kind); } catch (error) { config.log(`costs not recorded: ${String(error)}`); }
-    }
+    const checked = await selectAndRun(config, queue, entry, base, tip, paths, cancellation);
+    if ("answer" in checked) return checked.answer;
+    const { selected, steps, run, ran } = checked;
     const facts = { base, tip, run, landing: steps, deferred: deferredSteps(selected.selection), estimate_s: Math.round(selected.selection.estimate.seconds), wall_s: Math.round(ran.wall_s), pending: ran.pending, refresh: ran.refresh };
     if(ran.state==='cancelled')return queue.answer(entry,{state:'withdrawn',...facts,message:'withdrawn: its owned commands, scopes and reservation have drained'});
     if (ran.state === "red") return queue.answer(entry, { state: "refused", ...facts, message: `red: ${ran.message}` });
@@ -292,6 +272,55 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
     return finishLanding(config, queue, entry, base, tip, selected.selection, ran, null);
   }
   return queue.answer(entry, { state: "held", message: "main moved under three checks of it in a row" });
+}
+
+type Checked = { selected: Selected; steps: string[]; run: string; ran: Ran };
+type Cancellation = { signal: AbortSignal; waitForRetry: () => Promise<void>; hold: (reason: string) => void };
+
+/**
+ * Select `tip`'s landing steps and run them, inside the selection's own
+ * reservation at the landing's rank, which it hands on to the run it chose
+ * (selection-memory.ts): nothing is admitted between the selection and its
+ * build. An answer when the change stops before a verdict.
+ */
+async function selectAndRun(config: Config, queue: Queue, entry: Checking, base: string, tip: string, paths: string[], cancellation?: Cancellation): Promise<Checked | { answer: Result }> {
+  queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, message: `selecting ${short(tip)}'s steps on main ${short(base)}` });
+  let selectionHold: Reservation;
+  try { selectionHold = await config.holdSelection(tip, cancellation?.signal); }
+  catch (error) {
+    if (cancellation?.signal.aborted) return { answer: queue.answer(entry, { state: "withdrawn", base, tip, message: "withdrawn while its selection waited for memory" }) };
+    throw error;
+  }
+  try {
+    let selected: Selected;
+    try { selected = config.select(base, tip, paths); }
+    catch (error) {
+      const message = `the rules could not select ${short(tip)}'s steps: ${(error as Error).message}`;
+      return { answer: queue.answer(entry, { state: selectionInfrastructure(error) ? "held" : "refused", base, tip, message }) };
+    }
+    const steps = landingSteps(selected.selection);
+    reportRustRecordDecisions(selected.rustRecords,config.log);
+    const run = join(config.home, "runs", `${short(tip)}-${Date.now()}`);
+    queue.update({ run });
+    queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, run, message: `${steps.join(" ")} on ${short(tip)}, ~${Math.round(selected.selection.estimate.seconds)} s` });
+    config.log(`${short(entry.sha)} as ${short(tip)} on main ${short(base)}: ${steps.join(" ") || "nothing to run"}; deferred ${deferredSteps(selected.selection).join(" ") || "none"}`);
+    let ran: Ran;
+    if (!steps.length) ran = { state: "green", message: "nothing to run", run, steps: [], pending: [], refresh: [], wall_s: 0 };
+    else {
+      if(queue.withdrawRequested(entry.id))return { answer: queue.answer(entry,{state:'withdrawn',base,tip,run,message:'withdrawn before the landing tree was prepared'}) };
+      try { config.prepare(tip); }
+      catch (error) { return { answer: queue.answer(entry, { state: "held", base, tip, run, message: `the landing tree could not be prepared at ${short(tip)}: ${(error as Error).message}` }) }; }
+      ran = await config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,
+        rustRecords:selected.rustRecords,handover:selectionHold,
+        ceiling: landingCeiling(selected.selection.estimate.seconds),
+        env: config.env,signal:cancellation?.signal,drainRetry:cancellation?.waitForRetry,
+        cancellationHold:reason=>retainCancellation(config,queue,{...entry,base,tip},run,reason,cancellation?.hold),
+        hold: reason => cancellation?cancellation.hold(reason):queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
+      // What the steps cost is for the next estimate; it never decides this one.
+      try { recordCosts(config.home, ran, selected.kind); } catch (error) { config.log(`costs not recorded: ${String(error)}`); }
+    }
+    return { selected, steps, run, ran };
+  } finally { await closeSelection(selectionHold); }
 }
 
 /** After main moved to `tip`: push it, give the task's tree back, delete its branch, answer. */
@@ -362,7 +391,8 @@ export function machineConfig(root: string, select: Config["select"], log: Confi
   const {home,tree,target}=landingLayout();
   return {
     home, root, remote: "origin", tree, target, pool: existsSync(POOL_HOME) ? new Pool(POOL_HOME, { root }, linkInputs(root)) : null,
-    select, prepare: tip => prepareTree(root, tree, tip), runSteps: runLanding,watchWithdrawals:createWithdrawalWatch, log, restartAfter: ownCode,
+    select, holdSelection: (tip, signal) => holdSelection("service", tip, target, { ...(signal ? { signal } : {}), report: log }),
+    prepare: tip => prepareTree(root, tree, tip), runSteps: runLanding,watchWithdrawals:createWithdrawalWatch, log, restartAfter: ownCode,
   };
 }
 

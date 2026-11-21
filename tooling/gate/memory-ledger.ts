@@ -1479,6 +1479,8 @@ export type JobRequest = {
   units?: number;
   /** The most it can ever hold, its own kernel cap where it has one: it never reserves more. */
   atMostBytes?: number;
+  /** An admitted reservation of the same job this one takes over (`ReserveRequest.replaces`): nothing is admitted between the two. */
+  replaces?: string;
 };
 
 /** What a job reserves, why, and the history its peak goes to. */
@@ -1594,7 +1596,8 @@ export async function reserveJob(request: JobRequest,
   const env = options.env ?? process.env;
   const report = options.report ?? (line => process.stderr.write(`${line}\n`));
   const sizing = jobSizing(request, env);
-  const held = await reserve({ bytes: sizing.bytes, what: request.what, priority: priorityOf(env), liveUse: sizing.basis === "live", unmeasured: sizing.basis === "measured" ? [] : [request.key] },
+  const held = await reserve({ bytes: sizing.bytes, what: request.what, priority: priorityOf(env), liveUse: sizing.basis === "live", unmeasured: sizing.basis === "measured" ? [] : [request.key],
+    ...(request.replaces === undefined ? {} : { replaces: request.replaces }) },
     { env, signal: options.signal, report });
   if (held.inherited) return held;
   let sampler:ReturnType<typeof samplePeak>;

@@ -39,6 +39,9 @@ import {pathToFileURL} from 'node:url';
 import {waitFor,spawnTest} from '../gate/test-wait.ts';
 import {ownMemory} from '../gate/test-memory.ts';
 import {DiskBuildAdmissionError} from '../gate/step-result.ts';
+import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
+import {holdSelection} from './selection-memory.ts';
+import {readLedger} from '../gate/memory-ledger.ts';
 
 function selection(steps: string[]): Selection {
   return landingSelection({ owed: { steps: [...steps, "integrity"] }, paths: [], catalogue: [...steps, "integrity"],
@@ -51,6 +54,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
   s.commit({"Cargo.toml":"[workspace]\n[profile.nts-dev]\ndebug=0\n",".gitignore":"target/\n"},"fixture build policy");
   // A fixed disk reading: the host's free disk must not decide whether a fixture's tree can be made.
   assignTestValues(s.env,ownMemory(join(s.dir,'observations')));
+  declareOwnMembers(s.env,[process.pid]);
   const ownedProcesses=new Set<number>();
   const users=(tree:string)=>treeUsers(tree,{pids:[...ownedProcesses]});
   const pool = new Pool(join(s.dir, "pool"), { root: s.root, env: s.env }, undefined,{users,
@@ -60,6 +64,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
   const config: Config = {
     home: join(s.dir, "landing"), root: s.root, remote: "origin", tree: join(s.dir, "landing-tree"), target: join(s.dir, "target"), pool, env: s.env,
     select: () => ({ selection: selection(["build", "tests", "rustfmt"]), kind: "other", interop: null, doctests: null }),
+    holdSelection: (tip, signal) => holdSelection("service", tip, join(s.dir, "target"), { env: s.env, ...(signal ? { signal } : {}), report: line => logs.push(line) }),
     prepare: tip => prepareTree(s.root, join(s.dir, "landing-tree"), tip, s.env),
     runSteps: async (options: RunOptions): Promise<Ran> => {
       checked.push(options.commit);
@@ -108,6 +113,33 @@ test("queued changes land one at a time, each rebased onto the newest main, push
   assert.deepEqual(f.pool.trees().map(t => `${t.state} ${t.head.slice(0, 12)}`), [`free ${ra.tip!.slice(0, 12)}`, `free ${rb.tip!.slice(0, 12)}`]);
   assert.match(rb.message, /^LANDED [0-9a-f]{12} as [0-9a-f]{12}: main is [0-9a-f]{12}; pushed to origin$/);
   assert.equal(f.queue.status().state, "idle");
+});
+
+test("the service's selection reserves at the landing's rank and hands its reservation to the run it chose; a selection that stops a change releases it", async t => {
+  const handed: [string | undefined, string | undefined, boolean | undefined][] = [];
+  let ledger = "";
+  const f = service(t, { runSteps: async options => {
+    const entry = readLedger(ledger).admitted.find(row => row.id === options.handover?.id);
+    handed.push([entry?.what, entry?.priority, options.handover?.active()]);
+    return { state: "green", message: "green", run: options.run, wall_s: 1, pending: [], refresh: [], steps: options.steps.map(name => ({ name, verdict: "PASS" as const, cpu: 1, cpu_measure: landingCpuMeasure(name), wall: 1 })) };
+  } });
+  ledger = f.s.env.NTS_MEMORY_LEDGER!;
+  const a = f.task("fix/a", { "src/a.txt": "a\n" });
+  f.submit("fix/a", a.sha);
+  const landed = await drain(f.config);
+  assert.deepEqual(landed.answered.map(r => r.state), ["landed"]);
+  const tip = f.queue.result(landed.answered[0]!.id)!.tip!;
+  assert.deepEqual(handed, [[`landing selection of ${tip.slice(0, 12)}`, "landing", true]], "its run got the live reservation the selection held");
+  assert.deepEqual(readLedger(ledger), { waiting: [], admitted: [] }, "closed once the run returned");
+  // A selection that refuses, holds or owes nothing ends its reservation too.
+  for (const select of [() => { throw new Error("broken rules"); }, () => ({ selection: selection([]), kind: "other" as const, interop: null, doctests: null })]) {
+    const g = service(t, { select });
+    const b = g.task("fix/b", { "src/b.txt": "b\n" });
+    g.submit("fix/b", b.sha);
+    const drained = await drain(g.config);
+    assert.equal(drained.answered.length, 1);
+    assert.deepEqual(readLedger(g.s.env.NTS_MEMORY_LEDGER!), { waiting: [], admitted: [] }, drained.answered[0]!.message);
+  }
 });
 
 test("a landing whose records are all current reports their refresh requests apart, and no pending row", async t => {

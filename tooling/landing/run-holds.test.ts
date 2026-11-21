@@ -19,6 +19,7 @@ import {peakReservation} from "../gate/step-scheduling.ts";
 import {spawnTest,waitFor} from "../gate/test-wait.ts";
 import {fixture,HOLDER} from './run-fixture.ts';
 import {testScratch} from "../gate/test-scratch.ts";
+import {closeSelection,holdSelection} from "./selection-memory.ts";
 
 test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority, and its gate run takes its reservation over", async t => {
   const f = fixture(t);
@@ -53,6 +54,29 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   assert.doesNotMatch(gate, /memory: .* drew /, "what it takes over it does not also draw on");
   assert.deepEqual(await ended, [0, null], "the holder ended once the build asked");
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
+});
+
+test("the selection hands its reservation on with no admission gap: the build takes it over, or, with nothing to build, the gate run", async t => {
+  for (const steps of [["build", "outcomes"], ["rustfmt"]]) {
+    const f = fixture(t);
+    const commit = spawnTest("git", gitArguments(["-C", f.tree, "rev-parse", "HEAD"]), { encoding: "utf8" }).stdout.trim();
+    // The service's selection, at the landing's rank, in this run's ledger.
+    const selection = await holdSelection("service", commit, f.target, { env: { ...fixtureEnvironment(t), ...f.memory }, report: () => {} });
+    assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER).admitted.map(entry => [entry.what, entry.priority]), [[`landing selection of ${commit.slice(0, 12)}`, "landing"]]);
+    try {
+      const ran = await runLanding(f.options(steps, { handover: selection }));
+      assert.equal(ran.state, "green", ran.message);
+      assert.equal(selection.active(), false, "its run took it over");
+      const taker = steps.includes("build") ? readFileSync(join(f.run, "build.log"), "utf8") : readFileSync(join(f.run, "gate.log"), "utf8");
+      assert.match(taker, new RegExp(`memory: ${steps.includes("build") ? "landing build of [0-9a-f]{12}" : "gate run \\S+"} took over landing selection of ${commit.slice(0, 12)}'s reservation of `),
+        "the decision that admitted its successor ended it, under the ledger's lock");
+      if (steps.includes("build")) {
+        // And the build hands on to the gate run as before: one chain, no gap.
+        assert.match(readFileSync(join(f.run, "gate.log"), "utf8"), /memory: gate run \S+ took over landing build of [0-9a-f]{12}'s reservation of /);
+      }
+    } finally { await closeSelection(selection); }
+    assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "nothing of the landing is left in the ledger");
+  }
 });
 
 test("a --here run at the agent priority yields its unused reservation to a service run on one ledger", async t => {

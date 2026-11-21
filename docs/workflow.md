@@ -399,6 +399,18 @@ cost keeps them under ten minutes, moving the costliest deferrable ones to
 the full check. `node tooling/landing/check.ts <commit> --dry-run` prints the
 landing steps, the deferred ones and the estimate.
 
+**Choosing is heavy work, and it is ledgered.** Evaluating the rules at both
+endpoints holds a few GiB, so every selection reserves through the memory
+ledger under one key, `landing-selection`, sized from that key's measured
+history in the tree it selects for, at the rank its caller's code names
+(`tooling/landing/selection-memory.ts`): the service's is a landing's,
+`--here`'s and `--dry-run`'s an agent's. A dry run therefore waits its turn
+like any agent job, says what it waits for as it starts waiting, and yields
+to a landing. The service and `--here` hand the selection's reservation on
+to the run it chose: the build's reservation takes it over, or, with nothing
+to build, the gate run's first request does, so nothing is admitted between
+choosing the steps and running them.
+
 **Installed packages are current before a step runs.** The landing service's
 tree preparation links each tip with its own linker, which republishes the
 tree's installation catalog. `check.ts <commit> --here` runs in an agent's
@@ -2469,6 +2481,12 @@ death; an absent timestamp remains explicit after forced termination.
   its job uses and a margin, whatever holds it; a landing's build hands its
   reservation to its gate run, so nothing is admitted between them
   ([log](records/notebooks/decisions-log.md#reservations-yield-to-a-request-that-outranks-them-11-09)).
+- **A landing's selection is ledgered at its caller's rank** (11-21):
+  selecting a commit's steps reserves `landing-selection` from its measured
+  history, at the landing's rank in the service and an agent's for `--here`
+  and `--dry-run`, and the service's and `--here`'s selection hands its
+  reservation to the build, or to the gate run when nothing is built
+  ([log](records/notebooks/decisions-log.md#a-landings-selection-is-ledgered-at-its-callers-rank-11-21)).
 - **A reservation made inside another job's draws on it first** (11-10): a
   request from inside another job's reservation takes that one's unused part
   first and asks the ledger only for the rest, so a holder whose child needs

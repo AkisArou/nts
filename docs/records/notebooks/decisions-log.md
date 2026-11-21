@@ -4148,3 +4148,17 @@ closed with a future-version refusal until rebased. It composes with #827
 and #829 by rank order, without special cases. It takes effect once
 `verified` contains #924, because the controller runs `verified`'s code;
 the search that motivated it was not sped up.
+
+### A landing's selection is ledgered at its caller's rank (11-21)
+
+Issue #829: #824's holders census (2026-11-17) found the selector outside the
+ledger: a `check.ts --dry-run` unit peaked at 3.1 GiB in the journal, and the
+landing service's selection held up to 2.05 GiB unledgered before its gate run
+reserved. A dry run at main 8f810b3da3 measured again on 2026-11-21 peaked at
+1.9 GiB over 2 min 35 s. Selection now reserves through `reserveJob` under the
+stable key `landing-selection`, sized only from its measured history, at the
+rank its caller's code names (`tooling/landing/selection-memory.ts`). The
+service's selection hands its reservation to the landing build through the
+ledger's existing `replaces` takeover, or to the gate run when nothing is
+built, as the build already hands to the run. #826 may shrink the peak; this
+makes the selection accountable whatever its size.

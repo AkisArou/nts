@@ -32,6 +32,9 @@ import { ruleSelect } from "./rules.ts";
 import { runLanding } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
 import { describeSelection, landingSteps } from "./selection.ts";
+import { closeSelection, holdSelection, SELECTION_RANK } from "./selection-memory.ts";
+import type { Selected } from "./service.ts";
+import type { Reservation } from "../gate/memory-ledger.ts";
 import { BUDGET, drain, KEEP_DAYS, machineConfig, prune } from "./service.ts";
 import {COST_HISTORY_NAME,historyFile,snapshotCostHistory} from '../gate/step-scheduling.ts';
 import {reportRustRecordDecisions} from '../gate/rust-selector-decision.ts';
@@ -52,11 +55,18 @@ function rangeOf(root: string, sha: string): { base: string; note: string } {
   return { base, note: base === main ? `${short(sha)} on main ${short(main)}` : `${short(sha)}, replayed onto main ${short(main)} when it lands` };
 }
 
-function dryRun(root: string, sha: string, argv: string[]): number {
+async function dryRun(root: string, sha: string, argv: string[]): Promise<number> {
+  const ranked = rankAgentWork("--dry-run");
+  if (ranked !== undefined) return ranked;
   const { base, note } = rangeOf(root, sha);
   const paths = changedPaths({ root }, base, sha);
   const costs = option(argv, "--costs") ? resolve(option(argv, "--costs")!) : join(LANDING_HOME, "costs.json");
-  const selected = ruleSelect(root, costs, BUDGET)(base, sha, paths);
+  // A planning command is heavy work too: it waits its turn at an agent's
+  // rank, says what it waits for as the wait starts, and yields to a landing.
+  const hold = await holdSelection("dry-run", sha, join(toplevel() || root, "target"), { report: say });
+  let selected: Selected;
+  try { selected = ruleSelect(root, costs, BUDGET)(base, sha, paths); }
+  finally { await closeSelection(hold); }
   reportRustRecordDecisions(selected.rustRecords,say);
   say(`${note}: ${paths.length} path(s); ${selected.kind === "rust" ? "recompiles Rust" : "recompiles no Rust"}`);
   console.log(describeSelection(selected.selection));
@@ -67,22 +77,22 @@ function dryRun(root: string, sha: string, argv: string[]): number {
 }
 
 /**
- * Run this `--here` check among every rank's work at an agent's CPU rank
- * (gate/ranks.ts): from an agent's shell or unit outside `nts.slice`, become
- * this same command in a scope there, bound to that unit
- * (scopes/bound-slice.ts's `rankedScopeArgs`). Its build and its runner
- * then share a contended machine at the weight a landing outranks, not as
- * one more equal in the user manager's `app.slice`. Returns only when it
- * already runs there, or with the status of a refusal.
+ * Run this `--here` check or `--dry-run` among every rank's work at an
+ * agent's CPU rank (gate/ranks.ts): from an agent's shell or unit outside
+ * `nts.slice`, become this same command in a scope there, bound to that unit
+ * (scopes/bound-slice.ts's `rankedScopeArgs`). Its selection, build and
+ * runner then share a contended machine at the weight a landing outranks,
+ * not as one more equal in the user manager's `app.slice`. Returns only when
+ * it already runs there, or with the status of a refusal.
  */
-function rankHere(): number | undefined {
+function rankAgentWork(mode: "--here" | "--dry-run"): number | undefined {
   let scope: string[] | null;
-  try { scope = rankedScopeArgs("agent"); } catch (error) { say((error as Error).message); return 2; }
+  try { scope = rankedScopeArgs(SELECTION_RANK[mode === "--here" ? "here" : "dry-run"]); } catch (error) { say((error as Error).message); return 2; }
   if (scope === null) return undefined;
   const execve = process.execve?.bind(process);
   if (execve === undefined) { say(`node ${process.version} cannot become another program (process.execve)`); return 2; }
   const systemdRun = spawnSync("sh", ["-c", "command -v systemd-run"], { encoding: "utf8" }).stdout.trim();
-  if (!systemdRun) { say("--here runs in a scope at an agent's rank, and systemd-run is not on PATH"); return 2; }
+  if (!systemdRun) { say(`${mode} runs in a scope at an agent's rank, and systemd-run is not on PATH`); return 2; }
   execve(systemdRun, ["systemd-run", ...scope, process.execPath, ...process.execArgv, ...process.argv.slice(1)], process.env);
   return 2;
 }
@@ -96,7 +106,7 @@ export function catalogRefusal(root: string, tree: string): string | null {
 }
 
 async function here(root: string, sha: string,traceRustInputs=false): Promise<number> {
-  const ranked = rankHere();
+  const ranked = rankAgentWork("--here");
   if (ranked !== undefined) return ranked;
   const tree = toplevel();
   if (spawnSync("git",gitArguments( ["rev-parse", "HEAD"]), { cwd: tree, encoding: "utf8" }).stdout.trim() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
@@ -107,6 +117,14 @@ async function here(root: string, sha: string,traceRustInputs=false): Promise<nu
   const refusal = catalogRefusal(root, tree);
   if (refusal) { say(refusal); return 2; }
   const { base, note } = rangeOf(root, sha);
+  // The selection waits its turn at an agent's rank and hands its
+  // reservation on to the run it chose (selection-memory.ts).
+  const hold = await holdSelection("here", sha, join(tree, "target"), { report: say });
+  try { return await checkHere(root, tree, sha, base, note, hold, traceRustInputs); }
+  finally { await closeSelection(hold); }
+}
+
+async function checkHere(root: string, tree: string, sha: string, base: string, note: string, hold: Reservation, traceRustInputs: boolean): Promise<number> {
   const selected = ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET)(base, sha, changedPaths({ root }, base, sha));
   const steps = landingSteps(selected.selection);
   reportRustRecordDecisions(selected.rustRecords,say);
@@ -117,7 +135,7 @@ async function here(root: string, sha: string,traceRustInputs=false): Promise<nu
   const ran = await runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
     rustRecords:selected.rustRecords,
     // An agent's own pre-check: it yields its unused reservation to a queued landing (#672).
-    priority: "agent",
+    priority: SELECTION_RANK.here, handover: hold,
     ...(traceRustInputs?{owned:{NTS_RUST_INPUT_TRACE:join(run,'rust-inputs'),NTS_GATE_COSTS_DIR:join(run,'observation-costs')}}:{}),
     ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
   for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
@@ -179,7 +197,7 @@ async function main(argv: string[]): Promise<number> {
   if (!first || ["withdraw", "retry"].includes(first)) { console.error("usage: check.ts <commit> [--dry-run | --here [--trace-rust-inputs] | --no-wait] [--branch <name>] | status [--json] | withdraw <id|commit> | retry <id> | serve"); return 2; }
   let sha: string;
   try { sha = revParse({ root: toplevel() || root }, first); } catch (error) { say((error as Error).message); return 2; }
-  if (argv.includes("--dry-run")) return dryRun(root, sha, argv);
+  if (argv.includes("--dry-run")) return await dryRun(root, sha, argv);
   try { assertLandingEnvironment(); } catch (error) { say((error as Error).message); return 2; }
   if (argv.includes("--here")) return here(root, sha,argv.includes('--trace-rust-inputs'));
   // The steps every change with Rust in reach owes need the JVM and the SDK: say so before queueing.

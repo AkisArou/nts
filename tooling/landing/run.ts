@@ -46,6 +46,7 @@ import {hostObservations} from '../gate/host-observations.ts';
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
+import { closeSelection } from "./selection-memory.ts";
 import { nodePin } from "../bootstrap/node.ts";
 import { nodeToolchain } from "../gate/toolchain.ts";
 import { candidateCommandAsync,certifyCandidateGroups } from "./candidate-environment.ts";
@@ -84,6 +85,13 @@ export type RunOptions = {
   env?: NodeJS.ProcessEnv;
   /** The priority this run reserves memory at: the service's landings by default; `check.ts --here` names an agent's. */
   priority?: Priority;
+  /**
+   * The caller's selection reservation (selection-memory.ts), handed on with
+   * no admission gap: the build's reservation takes it over, or, with nothing
+   * to prepare, the gate run's first request does. The caller still closes it
+   * when the run returns; a reservation already taken over closes at once.
+   */
+  handover?: Reservation;
   /** Told when memory pressure sends steps back to run again. */
   hold?: (reason: string) => void;
   /** The command that builds the compiler; cargo in `nts-dev` by default. */
@@ -271,7 +279,10 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
     // decision that admits the run's first request ends it, under the ledger's
     // lock, so nothing is admitted between the two. A job admitted in the
     // seconds between a build and its gate run held that run's growth for the
-    // rest of the run (#615).
+    // rest of the run (#615). The selection that chose the steps hands its own
+    // reservation on the same way: the build's takes it over, or, with nothing
+    // to prepare, the gate run's.
+    const handover=options.handover&&!options.handover.inherited?options.handover:undefined;
     let hold: Reservation | undefined,drain:Promise<void>|undefined,primary:{error:unknown}|undefined;
     const preparationName=options.steps.includes('build')?'build':'doctests';
     let doctestPreparation:StepResult['preparation'];
@@ -286,7 +297,8 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
       if (options.steps.includes("build")||options.steps.includes('doctests')) {
         const log = preparationLog(options,1);
         try {
-          hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}` },
+          hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}`,
+            ...(handover ? { replaces: handover.id } : {}) },
             { env: { ...launcher, ...owned },signal:options.signal, report: line => appendFileSync(log, `${line}\n`) });
           lifetime.move();
         } catch (error) {
@@ -297,6 +309,8 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
           for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", reason: `needs ${preparationName} preparation, which is INSTRUMENT` });
           return finish("held", `${preparationName}: ${reason}`);
         }
+        // Taken over: the selection's peak goes to its history before the build starts.
+        await closeSelection(handover);
         for (let attempt = 1; ; attempt++) {
           options.signal?.throwIfAborted();
           const built = await buildCompiler(options, selected.node, launcher, { ...owned, ...hold.env }, attempt);
@@ -308,7 +322,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
           for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", reason: `needs ${preparationName} preparation, which is ${built.verdict}` });
           return built.verdict === "FAIL" ? finish("red", `${preparationName} FAIL; log ${built.log}`) : finish("held", `${preparationName}: ${built.reason}`);
         }
-      }
+      } else hold = handover;
       if (!rest.length) return finish("green", "green");
       const ran=await finishSteps(options, selected.node, launcher, owned, rest, results, finish, hold,closeBuildHold);
       const doctests=results.find(row=>row.name==='doctests');
@@ -347,7 +361,8 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
 /**
  * The steps after the build, run again, alone, while memory pressure kept
  * some from measuring. The first run takes over `hold`, the build's
- * reservation; a run that did not take it over never needs it again.
+ * reservation (or, with nothing to build, the selection's); a run that did
+ * not take it over never needs it again.
  */
 async function finishSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, rest: readonly string[],
   results: StepResult[], finish: (state: Ran["state"], message: string) => Ran, hold: Reservation | undefined,closeBuildHold:()=>Promise<void>): Promise<Ran> {
