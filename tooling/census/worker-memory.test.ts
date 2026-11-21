@@ -18,6 +18,8 @@ import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from ".
 import { runMemoryWorkers } from "./worker-pool.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
 import {toolingSlice,toolingSliceArgs} from "../gate/tooling-slice.ts";
+import {systemdEnvironment} from "../gate/environment.ts";
+import {randomUUID} from "node:crypto";
 
 // The pools here reserve their memory in a ledger of this file's own, against
 // an 8 GiB reading, never the machine's.
@@ -681,13 +683,14 @@ async function fakeManager(mode, module) {
   const original = { spawn: cp.spawnSync, read: fs.readFileSync, exists: fs.existsSync };
   const units = new Map();
   const calls = [];
-  let root, rootLookups = 0;
+  let root, rootLookups = 0, wall = 0, clockReads = 0;
+  const clock = Date.now;
   const remove = unit => {
     const held = units.get(unit);
     for (const [name, row] of units) if (name === unit || held && row.group.startsWith(held.group + "/")) units.delete(name);
   };
   const response = (stdout = "", status = 0, stderr = "") => ({ stdout, stderr, status });
-  cp.spawnSync = (command, args, options) => {
+  cp.spawnSync = ((command: string, args: readonly string[] = [], options?: import("node:child_process").SpawnSyncOptions) => {
     if (command === "busctl") {
       let at = args.indexOf("StartTransientUnit");
       if (at >= 0) {
@@ -701,7 +704,7 @@ async function fakeManager(mode, module) {
       if (at >= 0) {
         const unit = args[at + 2];
         calls.push(`stop:${unit}`);
-        if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected cleanup failure");
+        if (["failed-cleanup", "realization-cleanup"].includes(mode) && unit !== root) return response("", 1, "injected cleanup failure");
         if (!["queued-stop", "retained-stop"].includes(mode)) remove(unit);
         return response('o "/fake-stop-job"');
       }
@@ -715,19 +718,41 @@ async function fakeManager(mode, module) {
         return response();
       }
       if (operation === "start") {
-        if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected start failure");
+        if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected start failure: invalid unit configuration (job result: dependency)");
+        if (mode === "invalid-start" && unit !== root) return response("", 1, `Job for ${unit} failed: invalid unit configuration (job result: dependency).`);
+        if (mode === "queued-start" && unit !== root) {
+          calls.push(`start-job-queued:${unit}`);
+          // Supplied time passes the former 3 s deadline while the job is
+          // queued. Only the job's completion publishes its realized group.
+          wall += 4000;
+        }
         row.ready = true;
+        calls.push(`start-job-finished:${unit}`);
         return response();
       }
       if (operation === "show") {
+        if (!args.includes("--property=ControlGroup")) return response("LoadState=loaded\nActiveState=active\nSubState=active\nJob=0\n");
         if (!row.ready) throw new Error("ControlGroup read before joining start job");
+        calls.push(`group-read:${unit}`);
         row.reads++;
-        if (mode === "always-empty" && unit !== root || mode === "empty-once" && row.reads === 1) return response();
-        return response(mode === "wrong-parent" && unit !== root ? `/someone-else/${unit}` : row.group);
+        if (["always-empty", "journal-failed", "journal-empty", "journal-throws", "realization-cleanup"].includes(mode) && unit !== root) return response();
+        if (unit !== root) {
+          if (mode === "wrong-parent") return response(`/someone-else/${unit}`);
+          if (mode === "parent-traversal") return response(`/fake-user/${root}/../${unit}`);
+          if (mode === "wrong-unit") return response(row.group + ".other");
+        }
+        return response(row.group);
       }
     }
+    if (command === "journalctl") {
+      calls.push(`journal:${JSON.stringify(args)}`);
+      if (mode === "journal-failed") return response("", 1, "injected journal failure");
+      if (mode === "journal-empty") return response();
+      if (mode === "journal-throws") throw new Error("injected journal spawn error");
+      return response(`${args[args.indexOf("--unit") + 1]}: Failed to create cgroup: Cannot allocate memory`);
+    }
     return original.spawn(command, args, options);
-  };
+  }) as typeof cp.spawnSync;
   fs.existsSync = path => {
     const text = String(path);
     if (text === "/sys/fs/cgroup" || text === "/sys/fs/cgroup/") { rootLookups++; throw new Error("cgroup root was checked"); }
@@ -751,20 +776,34 @@ async function fakeManager(mode, module) {
   };
   syncBuiltinESMExports();
   const { MemoryRun } = await import(module);
+  const { publishPressure, publishToolingFailure, ToolingInstrumentError, instrumentPolicy } = await import(new URL("../gate/step-result.ts", module).href);
   const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20, id: "fake-manager" });
-  let error = null, closeError = null, group = null;
+  const instrumentPath = run.directory + "/slice-start.json";
+  let error = null, closeError = null, group = null, instrument = null;
+  let errorName: string | null = null, causeMessages: string[] = [];
+  if (mode === "queued-start") Date.now = () => { clockReads++; return wall; };
   try { group = run.worker(0, 64 * 2 ** 20).group; }
-  catch (caught) { error = String(caught); }
+  catch (caught) {
+    error = String(caught);
+    errorName = caught instanceof Error ? caught.name : typeof caught;
+    if (caught instanceof Error && caught.cause instanceof AggregateError) causeMessages = caught.cause.errors.map(String);
+    const receipt = { NTS_GATE_STEP_RESULT: instrumentPath, NTS_GATE_STEP: "tooling", NTS_GATE_STEP_ATTEMPT: "slice-start" };
+    if (caught instanceof ToolingInstrumentError) publishToolingFailure(caught, receipt);
+    else publishPressure(caught, receipt);
+    if (original.exists(instrumentPath)) instrument = JSON.parse(original.read(instrumentPath, "utf8"));
+  }
   finally {
+    Date.now = clock;
     // Move a wall clock across the old readiness deadline without sleeping.
     // Job completion, not this clock, must decide whether cleanup is done.
     if (["queued-stop", "retained-stop"].includes(mode)) { let tick = 0; Date.now = () => tick += 4000; }
     try { run.close(); } catch (caught) { closeError = String(caught); }
   }
-  process.stdout.write(JSON.stringify({ error, closeError, group, calls, rootLookups, remaining: units.size }));
+  process.stdout.write(JSON.stringify({ error, errorName, causeMessages, closeError, group, calls, rootLookups, clockReads, wall, instrument,
+    policy: instrument ? instrumentPolicy(instrument.kind) : null, remaining: units.size }));
 }
 
-for (const mode of ["empty-once", "always-empty", "wrong-parent", "failed-cleanup", "queued-stop", "retained-stop"]) {
+for (const mode of ["queued-start", "always-empty", "journal-failed", "journal-empty", "journal-throws", "wrong-parent", "parent-traversal", "wrong-unit", "invalid-start", "failed-cleanup", "realization-cleanup", "queued-stop", "retained-stop"]) {
   test(`slice setup with fake manager: ${mode}`, () => {
     const code = `(${fakeManager.toString()})(${JSON.stringify(mode)},${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});`;
     const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",});
@@ -776,22 +815,116 @@ for (const mode of ["empty-once", "always-empty", "wrong-parent", "failed-cleanu
       assert.ok(actual.remaining > 0);
       assert.ok(actual.calls.includes("kernel-populated-after-stop-job"));
     } else assert.equal(actual.remaining, 0);
-    if (mode === "empty-once" || mode === "queued-stop") {
+    if (mode === "queued-start" || mode === "queued-stop") {
       assert.equal(actual.error, null);
       assert.equal(actual.closeError, null);
       assert.ok(actual.group.endsWith("-w0.slice"));
+      if (mode === "queued-start") {
+        assert.equal(actual.wall, 4000, "the job remained queued past the former readiness deadline");
+        assert.equal(actual.clockReads, 0, "readiness never consults a wall clock");
+        const groups = actual.calls.filter((call: string) => call.startsWith("group-read:"));
+        assert.equal(groups.length, 2, "each group is read exactly once");
+        for (const call of groups) assert.ok(actual.calls.indexOf("start-job-finished:" + call.slice("group-read:".length)) < actual.calls.indexOf(call));
+      }
       if (mode === "queued-stop") assert.equal(actual.calls.filter(call => call.startsWith("stop-job-finished:")).length, 2);
     } else if (mode === "retained-stop") {
       assert.equal(actual.error, null);
     } else if (mode === "failed-cleanup") {
       assert.match(actual.error, /injected start failure/);
+      assert.match(actual.error, /invalid unit configuration \(job result: dependency\)/);
       assert.match(actual.error, /injected cleanup failure/);
-    } else {
+      assert.equal(actual.errorName, "Error", "cleanup preserves the primary refusal's class");
+      assert.equal(actual.instrument, null, "a refusal with failed cleanup stays refused");
+      assert.ok(actual.causeMessages.some((message: string) => message.includes("injected cleanup failure")));
+    } else if (mode === "invalid-start") {
+      assert.match(actual.error, /resident cap: .*?-w0.slice start job failed:.*invalid unit configuration \(job result: dependency\)/);
+      assert.equal(actual.instrument, null, "a refused start remains a failure, never a memory-pressure retry");
+      assert.equal(actual.calls.filter((call: string) => call.startsWith("group-read:")).length, 1, "a failed worker start never reads its group");
+    } else if (["wrong-parent", "parent-traversal", "wrong-unit"].includes(mode)) {
       assert.match(actual.error, /resident cap: .*?-w0.slice has no valid ControlGroup/);
+      assert.equal(actual.errorName, "Error");
+      assert.equal(actual.instrument, null, "an invalid non-empty group is a failure, never an instrument hold");
+      assert.equal(actual.policy, null);
+      assert.doesNotMatch(actual.error, /realization failed/);
+      if (mode === "wrong-parent") assert.match(actual.error, /\/someone-else\//);
+      else if (mode === "parent-traversal") assert.match(actual.error, /\/\.\.\//);
+      else assert.match(actual.error, /-w0\.slice\.other/);
+    } else {
+      assert.match(actual.error, /resident cap: .*?-w0.slice cgroup realization failed after start job completed successfully \(systemctl exit 0\)/);
+      assert.match(actual.error, /ControlGroup is empty/);
       assert.doesNotMatch(actual.error, /cgroup was not removed/);
+      assert.equal(actual.instrument.kind, "tooling-setup");
+      assert.equal(actual.errorName, "ToolingInstrumentError");
+      assert.equal(actual.instrument.verdict, "INSTRUMENT", "a failed realization holds the landing instead of failing the code");
+      assert.deepEqual(actual.policy, { verdict: "INSTRUMENT", disposition: "operator-hold" });
+      assert.match(actual.error, /diagnostic only: LoadState=loaded/);
+      if (mode === "journal-failed") assert.match(actual.error, /unit journal unavailable: injected journal failure/);
+      else if (mode === "journal-empty") assert.match(actual.error, /no unit journal entries/);
+      else if (mode === "journal-throws") assert.match(actual.error, /unit journal unavailable: Error: injected journal spawn error/);
+      else assert.match(actual.error, /Failed to create cgroup: Cannot allocate memory/);
+      if (mode === "realization-cleanup") {
+        assert.match(actual.error, /cleanup also failed: .*injected cleanup failure/);
+        assert.ok(actual.causeMessages.some((message: string) => message.includes("injected cleanup failure")));
+      }
+      const journal = JSON.parse(actual.calls.find((call: string) => call.startsWith("journal:")).slice("journal:".length));
+      assert.ok(journal.includes("--lines=20"));
+      assert.match(journal[journal.indexOf("--since") + 1], /^\d{4}-\d\d-\d\dT/);
+      assert.ok(journal[journal.indexOf("--unit") + 1].endsWith("-w0.slice"));
     }
   });
 }
+
+test("slice start realizes empty worker groups under ready-signalled CPU load", t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const env = fixtureEnvironment(t, writeOwnMemory(join(directory, "observations"), {
+    resident: { kind: "live" }, scopePeak: { kind: "live" }, cpu: { kind: "live" }, clock: { kind: "live" }, pressure: { kind: "live" },
+  }));
+  const unit = `nts-test-880-realization-${randomUUID()}.service`;
+  t.after(() => spawnTest("systemctl", ["--user", "stop", unit], { encoding: "utf8", env }));
+  const member = `import {hostObservations} from ${JSON.stringify(new URL("../gate/host-observations.ts", import.meta.url).href)};
+process.stdout.write(hostObservations().ownCgroup());`;
+  const code = `import assert from 'node:assert/strict';
+import {MemoryRun} from ${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)};
+import {startCpuLoad} from ${JSON.stringify(new URL("../gate/cpu-load.ts", import.meta.url).href)};
+import {spawnTest} from ${JSON.stringify(new URL("../gate/test-wait.ts", import.meta.url).href)};
+import {hostObservations,CgroupDeparted} from ${JSON.stringify(new URL("../gate/host-observations.ts", import.meta.url).href)};
+const load=await startCpuLoad(4);
+const host=hostObservations();
+let run;
+try {
+ assert.ok(load.progress().every(value=>value>0),'all load workers acknowledged completed work');
+ run=new MemoryRun({budgetBytes:256*2**20,id:'realization-under-load'});
+ host.acquireCgroup(run.group);
+ const groups=[run.group];
+ for(let index=0;index<4;index++){
+  const worker=run.worker(index,64*2**20);
+  groups.push(worker.group);
+  assert.ok(worker.group.startsWith(run.group+'/'));
+  assert.equal(host.cgroupText(worker.group,'cgroup.events').includes('populated 0'),true,'the empty slice was realized before its first member');
+  assert.ok(host.cgroupCpu(worker.group).usageUsec>=0);
+  const scope=worker.scope(process.execPath,['--input-type=module','-e',${JSON.stringify(member)}]);
+  const child=spawnTest('systemd-run',scope.argv,{env:scope.env,encoding:'utf8'});
+  assert.equal(child.status,0,child.stderr);assert.ok(child.stdout.trim().startsWith(worker.group+'/'));
+  assert.ok(worker.ready(scope));worker.stop(scope);worker.close();await worker.closed;
+ }
+ run.close();await run.closed;
+ for(const group of groups)assert.throws(()=>host.acquireCgroup(group),error=>error instanceof CgroupDeparted&&error.group===group,'all groups drained under load');
+ process.stdout.write(JSON.stringify({groups:groups.length,load:load.progress()}));
+}finally{try{if(run){run.close();await run.closed;}}finally{await load.close();}}`;
+  const script = join(directory, "realization.mjs");
+  writeFileSync(script, code);
+  const result = spawnTest("systemd-run", ["--user", "--collect", "--wait", "--pipe", "--quiet", `--unit=${unit}`,
+    ...toolingSliceArgs(env, "agent"), ...systemdEnvironment(env),
+    ...Object.entries(env).filter(([, value]) => value !== undefined).map(([key, value]) => `--setenv=${key}=${value}`),
+    "-p", "Nice=19", "-p", "CPUWeight=20", "-p", "RuntimeMaxSec=300", "-p", "LimitCORE=0",
+    "taskset", "-c", "0-3,6-31", process.execPath, script], { env, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const actual = JSON.parse(result.stdout);
+  assert.equal(actual.groups, 5);
+  assert.equal(actual.load.length, 4);
+  assert.ok(actual.load.every((value: number) => value > 0));
+});
 
 
 test("an exclusive case exceeding its step aggregate is a named failure, never pressure", t => {

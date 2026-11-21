@@ -36,7 +36,6 @@ const WORKER_CAP_KB = 6_000_000;
 export function workerCapBytes(env: NodeJS.ProcessEnv = process.env): number {
   return Number(env.NTS_CENSUS_MEMORY_CAP_KB ?? WORKER_CAP_KB) * 1024;
 }
-const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const integer = (value: number, what: string) => {
   if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${what} must be a positive integer, got ${value}`);
   return value;
@@ -67,18 +66,46 @@ const validGroup = (unit: string, group: string, parent?: string) => {
   }
   return group;
 };
-const groupOf = (unit: string, parent?: string) => {
-  const deadline = Date.now() + 3000;
-  for (;;) {
-    const group = systemctl("show", unit, "--property=ControlGroup", "--value");
-    if (group || Date.now() >= deadline) return validGroup(unit, group, parent);
-    pause(10);
+/** Diagnostic reads never decide whether a start or realization succeeded. */
+function sliceDiagnostics(unit: string, since: string): string {
+  let state: string;
+  try { state = systemctl("show", unit, "--property=LoadState", "--property=ActiveState", "--property=SubState", "--property=Job"); }
+  catch (error) { if (isCommandExit(error)) throw error; state = `unit state unavailable: ${String(error)}`; }
+  let text: string;
+  try {
+    const journal = spawnSync("journalctl", ["--user", "--unit", unit, "--since", since, "--lines=20", "--no-pager", "--output=cat"],
+      { encoding: "utf8", timeout: STOP_HANG_MS, maxBuffer: 64 * 1024 });
+    text = journal.status === 0 ? journal.stdout.trim() || "no unit journal entries"
+      : `unit journal unavailable: ${journal.stderr || journal.error?.message || journal.signal || journal.status}`;
+  } catch (error) { if (isCommandExit(error)) throw error; text = `unit journal unavailable: ${String(error)}`; }
+  return `diagnostic only: ${state}; ${text}`;
+}
+const groupOf = (unit: string, parent: string | undefined, since: string) => {
+  // StartTransientUnit returns a queued job. systemctl start joins its
+  // completion even on a loaded manager; elapsed time is no readiness signal.
+  try { systemctl("start", unit); }
+  catch (error) { if (isCommandExit(error)) throw error;
+    throw new Error(`resident cap: ${unit} start job failed: ${String(error)}; ${sliceDiagnostics(unit, since)}`, { cause: error });
   }
+  const group = systemctl("show", unit, "--property=ControlGroup", "--value");
+  if (!group) {
+    // systemd's slice_start discards unit_realize_cgroup's error and can
+    // report a successful job after mkdir failed (for example, ENOMEM).
+    // The unit diagnostics inform an operator; they do not establish which
+    // resource failed or authorize an automatic retry.
+    throw new ToolingInstrumentError("tooling-setup", `resident cap: ${unit} cgroup realization failed after start job completed successfully (systemctl exit 0): ControlGroup is empty; ${sliceDiagnostics(unit, since)}`);
+  }
+  return validGroup(unit, group, parent);
 };
 const failedSetup = (error: unknown, cleanup: () => void): never => {
   try { cleanup(); }
   catch (cleanupError) {if(isCommandExit(cleanupError))throw cleanupError;
-    throw new AggregateError([error, cleanupError], `resident cap: setup failed: ${String(error)}; cleanup also failed: ${String(cleanupError)}`, { cause: error });
+    // Cleanup adds evidence; it cannot turn a held setup into a code failure
+    // or erase a refusal. Retain the primary instance, class and verdict.
+    const primary = error instanceof Error ? error : new Error(String(error), { cause: error });
+    primary.cause = new AggregateError([...(primary.cause === undefined ? [] : [primary.cause]), cleanupError], "resident cap: setup cleanup also failed");
+    primary.message += `; cleanup also failed: ${String(cleanupError)}`;
+    throw primary;
   }
   throw error;
 };
@@ -282,14 +309,12 @@ export class MemoryRun {
     }
   }
   #slice(unit: string, bytes: number | null, boundTo: string | undefined, parent?: string) {
+    const since = new Date().toISOString();
     try {
       const cap = bytes === null ? [] : ["MemoryMax", "t", String(bytes)];
       const binds = bindsToProperties(boundTo), cpu = rankProperties(unit, priorityOf());
       manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3 + cpu.length / 3 + binds.length / 4), "Description", "s", this.#description, ...cap, ...cpu, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, "0");
-      // StartTransientUnit returns a queued job, not an active slice. Join
-      // that job before reading ControlGroup or any kernel memory controls.
-      systemctl("start", unit);
-      const group = groupOf(unit, parent);
+      const group = groupOf(unit, parent, since);
       this.#verify(group, bytes);
       return group;
     } catch (error) {if(isCommandExit(error))throw error;
