@@ -369,6 +369,13 @@ of selection instructions and 22% of retained heap (136 MB). It exceeds the
 construction in the shared project-read owner, not a change to this step's
 declarations.
 
+Decision: on 2026-11-21 the coordinator waived the 1.10 condition for #546,
+at the measured 1.157 times main's selector instructions, 1.150 times its
+conditional-census instructions and 1.22 times its retained heap. The cause is
+the shared project-read owner's per-read cost (`projectInputOwner` routes each
+filesystem call through JavaScript and authenticates each source), not this
+step's one-Program-per-case declaration. That cost is tracked in #930.
+
 The 40 raw outputs, perf files, JSONL samples and scripts are listed in
 `~/.cache/nts-scratch/546/post798/manifest.sha256.json`, SHA-256
 `83cd3c4d459a002390c89db35e3e754b5a3816286a3895ba66024d79634d0c16`. The unit
