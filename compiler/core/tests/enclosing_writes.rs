@@ -7,7 +7,8 @@
 //! reads, so the store vanished and the caller answered the old value. It now
 //! refuses where a read of the same name does, with the read's reason. A first
 //! write to the body's own local (`var z; z = n`, or before a hoisted `var`)
-//! still takes the fresh binding, which is right for it.
+//! still takes the fresh binding, which is right for it, inside an inline
+//! promise executor too.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -81,7 +82,13 @@ fn a_first_write_to_the_bodys_own_local_still_binds() {
         "the control compiles whole: {:?}",
         lowered.diagnostics
     );
-    for name in ["afterMethod", "afterArrow", "firstWrite", "hoistedWrite"] {
+    for name in [
+        "afterMethod",
+        "afterArrow",
+        "firstWrite",
+        "hoistedWrite",
+        "executorFirstWrite",
+    ] {
         assert!(
             lowered.program.funcs.iter().any(|func| func.name == name),
             "{name} is compiled"

@@ -44,3 +44,16 @@ export function hoistedWrite(n: number): number {
   var w: number;
   return w;
 }
+
+/**
+ * The same first write, inside a promise executor: the builder of the body
+ * around it lowers the executor inline, so `z` is still that builder's own.
+ */
+export function executorFirstWrite(n: number): number {
+  new Promise<void>((resolve) => {
+    z = n;
+    resolve();
+  });
+  var z!: number;
+  return n;
+}

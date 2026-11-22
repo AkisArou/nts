@@ -765,26 +765,29 @@ impl FuncBuilder<'_> {
     }
 
     /// Whether `symbol` is a local of another function: every declaration of
-    /// it is evaluated by a function body, and none by the one that evaluates
-    /// `target`.
+    /// it is lowered by a function's builder, and none by the builder that
+    /// lowers `target` ([`initialization::lowered_owner`], which counts a
+    /// promise executor as the body around it, since that body's builder
+    /// lowers it inline).
     ///
     /// A module-scope name is not one. One with a slot is a
-    /// [`Place::Global`] before this is asked; one without a slot is one no
-    /// read compiles (each refuses with the module's reason, the module's own
-    /// initializer included), so nothing can observe a write to it.
+    /// [`Place::Global`] before this is asked. One without a slot keeps the
+    /// fresh binding: a read of it in another builder refuses with the
+    /// module's reason, and a read after the write in the same builder reads
+    /// that binding, which holds what was written.
     fn a_local_of_another_function(
         &self,
         target: NodeId,
         symbol: nts_semantic_schema::SymbolId,
     ) -> bool {
-        let owner = initialization::execution_owner(self, target);
+        let owner = initialization::lowered_owner(self, target);
         self.snapshot
             .symbols
             .get(symbol.0 as usize)
             .is_some_and(|record| {
                 !record.declarations.is_empty()
                     && record.declarations.iter().all(|declaration| {
-                        initialization::execution_owner(self, *declaration)
+                        initialization::lowered_owner(self, *declaration)
                             .is_some_and(|declared| Some(declared) != owner)
                     })
             })
@@ -893,9 +896,11 @@ impl FuncBuilder<'_> {
         // enclosing bindings, so `value = next` vanished there and the caller
         // read its old value, where a read of the same name refused
         // (`refusals/a-literal-setter-writing-an-enclosing-local`). A capture
-        // binds the name here, cell or copy, and so does an inline callback's
-        // shared builder, so neither reaches this: the write refuses exactly
-        // where the read does, and with its reason.
+        // binds the name here, cell or copy, and an inline executor is the
+        // enclosing body's own (a hoisted `var` first written in one takes the
+        // fresh binding, `programs/a-literal-method-writing-an-enclosing-local-is-a-closure`),
+        // so the write refuses exactly where the read does, and with its
+        // reason.
         if !self.bindings.contains_key(&symbol.0)
             && self.a_local_of_another_function(target, symbol)
         {

@@ -434,13 +434,29 @@ fn head_source_of(probe: &FuncBuilder, declaration: NodeId) -> Option<NodeId> {
 /// accessor or constructor around it, or the instance field initializer it
 /// sits in; `None` at module scope.
 ///
-/// One answer for "which execution owns this", shared by the direct lexical
-/// accesses here and by where an assignment to a name writes
-/// ([`FuncBuilder::place_for_symbol`]).
-pub(super) fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
+/// Syntactic: a promise executor is a body of its own here, which is what the
+/// direct lexical accesses below ask about. Where a *builder's* scope is the
+/// question, ask [`lowered_owner`].
+fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
+    owner_of(probe, at, false)
+}
+
+/// The body whose builder lowers `at`: [`execution_owner`], except that a
+/// promise executor is lowered inline by the builder of the body around it
+/// ([`inline_executor`]), so it is that body's.
+///
+/// Where an assignment to a name writes asks this
+/// ([`FuncBuilder::place_for_symbol`]): a hoisted `var` of the enclosing
+/// function first written inside its executor is the builder's own local.
+pub(super) fn lowered_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
+    owner_of(probe, at, true)
+}
+
+fn owner_of(probe: &FuncBuilder, at: NodeId, through_executors: bool) -> Option<NodeId> {
     let mut child = at;
     for parent in std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent) {
-        if names_a_body(probe.kind_of(parent))
+        if (names_a_body(probe.kind_of(parent))
+            && !(through_executors && inline_executor(probe, parent)))
             || probe.kind_of(parent) == Some(syntax::CONSTRUCTOR)
             || instance_initializer(probe, parent) == Some(child)
         {
@@ -449,6 +465,21 @@ pub(super) fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId>
         child = parent;
     }
     None
+}
+
+/// A promise executor, `new Promise((resolve) => ...)`: an arrow the builder
+/// of the body around it lowers inline where the promise is built, so it
+/// shares that body's bindings and runs once, synchronously.
+fn inline_executor(probe: &FuncBuilder, at: NodeId) -> bool {
+    probe.kind_of(at) == Some(syntax::ARROW_FUNCTION)
+        && syntax_parent(probe, at).is_some_and(|parent| {
+            probe.kind_of(parent) == Some(syntax::NEW_EXPRESSION)
+                && probe.arguments_of(parent).first() == Some(&at)
+                && matches!(
+                    probe.type_of(parent),
+                    Some(HirType::Managed(ManagedType::Promise(_)))
+                )
+        })
 }
 
 fn inner_class_binding(probe: &FuncBuilder, at: NodeId, declaration: NodeId) -> bool {
@@ -470,16 +501,7 @@ fn inner_class_binding(probe: &FuncBuilder, at: NodeId, declaration: NodeId) -> 
 
 pub(super) fn reentered_scope(probe: &FuncBuilder, declaration: NodeId) -> bool {
     for at in std::iter::successors(probe.node(declaration).parent, |at| probe.node(*at).parent) {
-        let inline_executor = probe.kind_of(at) == Some(syntax::ARROW_FUNCTION)
-            && syntax_parent(probe, at).is_some_and(|parent| {
-                probe.kind_of(parent) == Some(syntax::NEW_EXPRESSION)
-                    && probe.arguments_of(parent).first() == Some(&at)
-                    && matches!(
-                        probe.type_of(parent),
-                        Some(HirType::Managed(ManagedType::Promise(_)))
-                    )
-            });
-        if !inline_executor
+        if !inline_executor(probe, at)
             && (names_a_body(probe.kind_of(at))
                 || probe.kind_of(at).is_some_and(binds_its_own_this))
         {
