@@ -390,12 +390,12 @@ fn the_source_audit_checks_support_calls_and_allows_callback_addresses() {
             r#"runtime_call::call(site, platform, "{}", &arguments)?"#,
             known.name
         );
-        assert!(unchecked_calls(&control, &declared).is_empty());
+        assert_eq!(unchecked_calls(&control, &declared), [] as [&str; 0]);
     }
     // Passing the callback's address is data, not a call. Its typed declaration
     // still belongs to the support set and a direct call is audited above.
     let address = r#"Operand::new("ptr", "@nts_gtk_init_template")"#;
-    assert!(unchecked_calls(address, &declared).is_empty());
+    assert_eq!(unchecked_calls(address, &declared), [] as [&str; 0]);
 }
 
 #[test]
