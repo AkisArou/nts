@@ -363,16 +363,21 @@ typedef struct NtsDescriptor {
    * backend; uncaught throws and unhandled rejections read this one projection.
    * It never invokes a getter or converts a non-string property. */
   uint32_t message_offset;
-  /* Give up the foreign contents of this layout's own slots -- the handles in
-   * its erased fields, its foreign fields -- each slot cleared before its
-   * release runs, so a release that reaches back into this runtime finds
-   * nothing to give up twice. Called wherever `nts_free` would walk them:
-   * when the object is freed, whether its count reached zero or the cycle
-   * collector found it garbage, and when a buffered candidate is emptied to a
-   * shell. NULL selects the generic walk over `erased_offsets` and
-   * `foreign_slots`; every generated descriptor says NULL. A layout of the
-   * runtime's own sets it where it knows the one slot that can hold a handle,
-   * which is cheaper than a walk asking every table. */
+  /* How this layout's foreign contents are given up -- the handles in its
+   * erased slots, its foreign fields, a foreign array's elements -- each slot
+   * cleared before its release runs, so a release that reaches back into this
+   * runtime finds nothing to give up twice. Called when the object is freed,
+   * whether its count reached zero or the cycle collector found it garbage,
+   * and when a buffered candidate is emptied to a shell.
+   *
+   * **NULL means the layout holds nothing foreign**, and it is the whole of
+   * the question: every block freed asks this one field, and a layout that
+   * can hold no handle pays one load and one branch for it. A layout with
+   * erased slots, foreign slots or foreign elements names
+   * `nts_release_foreign`, the walk over those tables; one that knows its
+   * only such slot names a function for it (a promise's value). Every
+   * generated descriptor says which. A build with `NTS_POISON` stops by name
+   * at a descriptor that holds foreign contents and names nothing. */
   void (*release_foreign)(struct NtsHeader *object);
 } NtsDescriptor;
 
@@ -3081,6 +3086,11 @@ NtsString *nts_array_to_string(NtsHeader *object);
  * descriptor names it, and so does the descriptor the compiler writes for a
  * class extending a typed array, which prints as its base does. */
 NtsString *nts_view_to_string(NtsHeader *object);
+/* What a descriptor's `release_foreign` points at for a layout with erased
+ * slots, foreign slots or foreign elements: each handle and foreign object
+ * they hold given back, its slot cleared first. Called only by the runtime,
+ * through the descriptor. */
+void nts_release_foreign(NtsHeader *object);
 /* `f.name` where the type does not settle it: the function's descriptor's
  * `function_name`. */
 NtsString *nts_function_name(NtsValue function);

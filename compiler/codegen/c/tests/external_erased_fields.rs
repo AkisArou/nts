@@ -127,7 +127,7 @@ fn a_recovered_external_field_survives_folding_and_reads_the_callers_value() {
 #include <stdio.h>
 int main(void) {
   const double inputs[] = { 0.125, -0.0, NAN, INFINITY, -INFINITY, 9007199254740992.0, -17.75 };
-  const NtsDescriptor array_desc = { .kind = NTS_KIND_ARRAY, .size = sizeof(NtsValue), .erased = 1 };
+  const NtsDescriptor array_desc = { .kind = NTS_KIND_ARRAY, .size = sizeof(NtsValue), .erased = 1, .release_foreign = nts_release_foreign };
   const NtsDescriptor payload_desc = { .kind = NTS_KIND_OBJECT, .size = sizeof(NtsObj_Payload) };
   NtsObj_Payload payload = {0};
   payload.header.descriptor = &payload_desc;

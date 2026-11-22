@@ -84,6 +84,7 @@ static const NtsDescriptor value_array = {
     .erased = 1,
     .element = NTS_ARRAY_VALUE,
     .to_string = print_array,
+    .release_foreign = nts_release_foreign,
 };
 
 static NtsValue object_value(NtsHeader *object) {

@@ -185,6 +185,7 @@ int main(void) {
       .name = "NtsValue[]",
       .erased = 1,
       .element = NTS_ARRAY_VALUE,
+      .release_foreign = nts_release_foreign,
   };
   retained = 0;
   released = 0;

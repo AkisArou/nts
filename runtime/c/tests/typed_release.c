@@ -66,7 +66,8 @@ static const NtsDescriptor typed = {.kind = NTS_KIND_OBJECT,
                                     .erased_offsets = erased,
                                     .foreign = 1,
                                     .foreign_slots = foreign,
-                                    .release_fields = release_fields};
+                                    .release_fields = release_fields,
+                                    .release_foreign = nts_release_foreign};
 static const NtsDescriptor generic = {.kind = NTS_KIND_OBJECT,
                                       .size = sizeof(Node),
                                       .references = 2,
@@ -76,7 +77,8 @@ static const NtsDescriptor generic = {.kind = NTS_KIND_OBJECT,
                                       .erased = 1,
                                       .erased_offsets = erased,
                                       .foreign = 1,
-                                      .foreign_slots = foreign};
+                                      .foreign_slots = foreign,
+                                      .release_foreign = nts_release_foreign};
 static const NtsDescriptor leaf = {
     .kind = NTS_KIND_OBJECT, .size = sizeof(NtsHeader), .name = "leaf"};
 static const NtsDescriptor refs = {.kind = NTS_KIND_ARRAY,

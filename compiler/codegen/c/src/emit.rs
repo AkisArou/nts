@@ -1989,6 +1989,7 @@ const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_region_keep", 0),
     ("nts_region_keep", 1),
     ("nts_release", 0),
+    ("nts_release_foreign", 0),
     ("nts_retain", 0),
     ("nts_set_timeout", 0),
     ("nts_str_at_into", 0),
@@ -4040,10 +4041,19 @@ fn emit_object_descriptors(
             || "0u".to_owned(),
             |field| format!("offsetof({name}, {})", c_member_at(layout, field as usize)),
         );
+        // How its foreign contents are given up: the runtime's walk where it
+        // has an erased or a foreign slot, and nothing where it can hold none,
+        // which is what spares every free of such an object the walk's tests.
+        let release_foreign = if erased.is_empty() && foreign == 0 {
+            "NULL"
+        } else {
+            "nts_release_foreign"
+        };
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {}, \
-                 {function_name}, {release_fields}, {trace_fields}, {message_offset}, NULL",
+                 {function_name}, {release_fields}, {trace_fields}, {message_offset}, \
+                 {release_foreign}",
                 erased.len(),
                 to_string(class)
             )
@@ -4276,9 +4286,11 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL, NULL, NULL, 0u, NULL }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL, NULL, NULL, 0u, {} }};",
                 descriptor_name(element),
                 array_element_kind(element),
+                // Erased elements can be handles, which the walk gives back.
+                if erased == 1 { "nts_release_foreign" } else { "NULL" },
             ),
         );
     }
@@ -7851,7 +7863,7 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Emi
             writer.line(
                 origin,
                 format!(
-                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL, NULL, NULL, 0u, NULL }};"
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL, NULL, NULL, 0u, nts_release_foreign }};"
                 ),
             );
         }

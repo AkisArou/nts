@@ -1756,6 +1756,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_region_suspend", None, None, Raising::NoRaise),
     ("nts_register_holders", None, None, Raising::NoRaise),
     ("nts_release", None, None, Raising::NoRaise),
+    ("nts_release_foreign", None, None, Raising::NoRaise),
     ("nts_rem_i32", None, None, Raising::NoRaise),
     ("nts_retain", None, None, Raising::NoRaise),
     (

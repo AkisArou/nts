@@ -83,13 +83,17 @@ static const NtsDescriptor descriptor = {.kind = NTS_KIND_OBJECT,
                                          .size = sizeof(Owner),
                                          .name = "Owner",
                                          .foreign = 1,
-                                         .foreign_slots = slots};
+                                         .foreign_slots = slots,
+                                         .release_foreign =
+                                             nts_release_foreign};
 static const NtsDescriptor array_descriptor = {.kind = NTS_KIND_ARRAY,
                                                .size = sizeof(void *),
                                                .name = "foreign[]",
                                                .element = NTS_ARRAY_FOREIGN,
                                                .foreign = 1,
-                                               .foreign_slots = slots};
+                                               .foreign_slots = slots,
+                                               .release_foreign =
+                                                   nts_release_foreign};
 
 /* Each runtime-owned way to invoke a foreign release: a field, array death,
  * an erased handle, replacing a foreign array element, and shrinking it. */

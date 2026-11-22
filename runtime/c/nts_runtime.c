@@ -1325,8 +1325,9 @@ static void nts_call_foreign_release(void (*release)(void *), void *object) {
 
 /* Give up the foreign objects an object's fields hold. Each slot is cleared
  * before its release runs, so a release that reaches back into this runtime
- * finds nothing to give up twice. */
-static void nts_release_foreign(NtsHeader *object) {
+ * finds nothing to give up twice. What a descriptor with such fields names as
+ * its `release_foreign`. */
+void nts_release_foreign(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
   /* The handles its erased slots hold. `nts_each_reference` visits managed
    * references only, and a handle is not one: a container's own death gives
@@ -1359,27 +1360,40 @@ static void nts_release_foreign(NtsHeader *object) {
   }
 }
 
-/* A fixed object with no erased/foreign fields cannot hold a foreign handle.
- * Maps hold tags in implicit columns; foreign arrays have an implicit family
- * slot. Keep those on the existing protocol even without erased fields. */
+#if NTS_POISON
+/* Whether a layout can hold foreign contents at all, from its tables: the
+ * question `release_foreign` answers, asked again only to check that a
+ * descriptor answered it. A fixed object with no erased or foreign fields
+ * cannot hold a handle; maps hold tags in implicit columns, and foreign arrays
+ * have an implicit family slot. */
 static bool nts_has_foreign_contents(const NtsDescriptor *descriptor) {
   return descriptor->erased || descriptor->foreign ||
          descriptor->kind == NTS_KIND_MAP ||
          (descriptor->kind == NTS_KIND_ARRAY &&
           descriptor->element == NTS_ARRAY_FOREIGN);
 }
+#endif
 
-/* Give up an object's foreign contents: through its layout's own function
- * where the descriptor names one (`release_foreign`), else through the walk
- * where it can hold any. Inline, so a layout that names its own pays one test
- * and one call where it is freed, and none of the walk's setup. */
+/* Give up an object's foreign contents, through what its descriptor names
+ * (`release_foreign`). NULL is a layout that holds nothing foreign, so a free
+ * of one pays one load and one branch here. Inline, so a layout that names its
+ * own pays one test and one call where it is freed. */
 static inline void nts_give_up_foreign(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
   if (descriptor->release_foreign) {
     descriptor->release_foreign(object);
-  } else if (nts_has_foreign_contents(descriptor)) {
-    nts_release_foreign(object);
   }
+#if NTS_POISON
+  /* A descriptor written by hand can leave the field out, and then every
+   * handle its objects held would be kept for ever without a word. */
+  else if (nts_has_foreign_contents(descriptor)) {
+    fprintf(stderr,
+            "nts: descriptor %s holds foreign contents and names no "
+            "release_foreign\n",
+            descriptor->name ? descriptor->name : "(unnamed)");
+    abort();
+  }
+#endif
 }
 
 /* Reclaim an object: what hangs off it, then the block itself. */
@@ -9239,6 +9253,7 @@ static const NtsDescriptor nts_desc_map = {
     .erased = 1u,
     .element = NTS_ARRAY_UNKNOWN,
     .to_string = nts_map_to_string,
+    .release_foreign = nts_release_foreign,
 };
 
 /* A table: an object used as a dictionary (`Record<string, T>`, an index
@@ -9255,6 +9270,7 @@ static const NtsDescriptor nts_desc_table = {
     .erased = 1u,
     .element = NTS_ARRAY_UNKNOWN,
     .to_string = nts_object_to_string,
+    .release_foreign = nts_release_foreign,
 };
 
 static NtsMap *nts_map_alloc(const NtsDescriptor *descriptor, uint32_t kind,

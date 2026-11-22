@@ -27,6 +27,7 @@ const NtsDescriptor nts_node_desc_value = {
     .name = "NtsValue[]",
     .erased = 1,
     .element = NTS_ARRAY_VALUE,
+    .release_foreign = nts_release_foreign,
 };
 
 /* A loaded addon can be shared by Node workers. Result-plus-status calls are

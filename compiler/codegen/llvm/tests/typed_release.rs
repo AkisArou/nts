@@ -76,6 +76,8 @@ int main(void) {
    * from an erased value. A differently typed field precedes the message. */
   NtsHeader *message = messageObject();
   if (!message->descriptor->message_offset) return 20;
+  /* Numbers and strings only: nothing foreign, so nothing to give up. */
+  if (message->descriptor->release_foreign) return 26;
   NtsString *detail = *(NtsString **)((char *)message + message->descriptor->message_offset);
   if (!detail || detail->length != 4 || nts_unit(detail, 0) != 'k') return 21;
   if (setjmp(message_landing.frame) == 0) {
@@ -106,9 +108,10 @@ int main(void) {
     return 3;
   }
   if (!descriptor->references || !descriptor->erased) return 4;
-  /* A generated layout's foreign contents are the generic walk's: its
-   * erased slot is in the table that walk reads. */
-  if (descriptor->release_foreign) return 25;
+  /* A generated layout with an erased slot gives its foreign contents up
+   * through the runtime's walk over its tables; one with none names nothing,
+   * so its frees ask one field and stop. */
+  if (descriptor->release_foreign != nts_release_foreign) return 25;
   nts_release(owned);
 #ifdef NTS_PROVIDER_RC
   for (int n = 4; n < 8; n++) {

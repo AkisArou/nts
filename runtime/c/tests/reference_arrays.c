@@ -38,13 +38,17 @@ static const NtsDescriptor foreign_array = {.kind = NTS_KIND_ARRAY,
                                             .name = "foreign[]",
                                             .element = NTS_ARRAY_FOREIGN,
                                             .foreign = 1,
-                                            .foreign_slots = family};
+                                            .foreign_slots = family,
+                                            .release_foreign =
+                                                nts_release_foreign};
 static const NtsDescriptor value_array = {.kind = NTS_KIND_ARRAY,
                                           .size = sizeof(NtsValue),
                                           .cyclic = 1,
                                           .name = "unknown[]",
                                           .erased = 1,
-                                          .element = NTS_ARRAY_VALUE};
+                                          .element = NTS_ARRAY_VALUE,
+                                          .release_foreign =
+                                              nts_release_foreign};
 
 static NtsArray *array_of(const NtsDescriptor *descriptor, uint32_t length) {
   return nts_array_new(descriptor, (double)length);

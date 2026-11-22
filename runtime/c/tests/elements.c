@@ -77,6 +77,7 @@ static const NtsDescriptor desc_value = {
     .name = "NtsValue[]",
     .erased = 1u,
     .element = NTS_ARRAY_VALUE,
+    .release_foreign = nts_release_foreign,
 };
 
 /* The erased receiver the lowering hands the helper. */

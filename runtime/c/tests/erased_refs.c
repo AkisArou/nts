@@ -52,6 +52,7 @@ static const NtsDescriptor desc_box = {
     .erased = 1u,
     .erased_offsets = box_erased,
     .element = NTS_ARRAY_UNKNOWN,
+    .release_foreign = nts_release_foreign,
 };
 
 /* An array whose elements are erased values. `erased` is 1 for an array in the
@@ -63,6 +64,7 @@ static const NtsDescriptor desc_values = {
     .name = "unknown[]",
     .erased = 1u,
     .element = NTS_ARRAY_VALUE,
+    .release_foreign = nts_release_foreign,
 };
 
 /* Through the runtime's own constructors, like every other reader: the

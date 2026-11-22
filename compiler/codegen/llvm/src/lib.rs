@@ -1000,8 +1000,8 @@ fn template_data(
 /// And `to_string`, how an object of the type prints (`Program::printed`), and
 /// `function_name`, what a function of it is called (`Program::function_names`),
 /// the owned managed-edge release/trace callbacks, the fixed string-message
-/// offset, and `release_foreign`, last -- null in every descriptor emitted here,
-/// which selects the runtime's generic walk.
+/// offset, and `release_foreign`, last: the runtime's walk for a layout with an
+/// erased or a foreign slot, and null for one that can hold nothing foreign.
 const DESCRIPTOR_TYPE: &str = "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, \
      ptr, i32, i32, ptr, ptr, ptr, ptr, ptr, i32, ptr }";
 
@@ -1255,10 +1255,19 @@ fn descriptors(
         let message_offset = layout
             .message_field()
             .map_or(0, |field| placed.offsets[field as usize]);
+        // How its foreign contents are given up: the runtime's walk where it
+        // has an erased or a foreign slot, and nothing where it can hold none
+        // (the C backend's `emit_descriptors` says why).
+        let release_foreign = if erased.is_empty() && foreign == 0 {
+            "ptr null"
+        } else {
+            "ptr @nts_release_foreign"
+        };
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {}, \
-                 {function_name}, {release_fields}, {trace_fields}, i32 {message_offset}, ptr null",
+                 {function_name}, {release_fields}, {trace_fields}, i32 {message_offset}, \
+                 {release_foreign}",
                 erased.len(),
                 to_string_slot(program, layout, class)
             )
@@ -1474,7 +1483,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
              ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null, \
-             ptr null, ptr null, ptr null, i32 0, ptr null }}",
+             ptr null, ptr null, ptr null, i32 0, ptr @nts_release_foreign }}",
             u32::from(family.holds_closures()),
             nts_codegen_common::counting::ARRAY_FOREIGN
         );
@@ -1521,9 +1530,15 @@ fn array_descriptors(out: &mut String, program: &Program) {
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 {erased}, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null, ptr null, i32 0, ptr null }}",
+                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null, ptr null, i32 0, {} }}",
                 shape.size,
-                nts_codegen_common::counting::array_element(element)
+                nts_codegen_common::counting::array_element(element),
+                // Erased elements can be handles, which the walk gives back.
+                if erased == 1 {
+                    "ptr @nts_release_foreign"
+                } else {
+                    "ptr null"
+                }
             );
         }
     }
@@ -3293,6 +3308,9 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_bound_function_to_string",
     "nts_array_to_string",
     "nts_view_to_string",
+    // How a layout's foreign contents are given up: named by the descriptor
+    // of every layout with an erased or a foreign slot, never called.
+    "nts_release_foreign",
     // Gives a view just made its class (`OpKind::ViewOfClass`), named by the
     // backend rather than by the program.
     "nts_view_make_instance",

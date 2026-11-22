@@ -2240,6 +2240,12 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_release_foreign",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_retain",
         returns: "void",
         params: &["ptr"],

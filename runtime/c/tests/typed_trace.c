@@ -68,7 +68,8 @@ static const NtsDescriptor typed = {.kind = NTS_KIND_OBJECT,
                                     .erased = 1,
                                     .erased_offsets = erased,
                                     .release_fields = release_fields,
-                                    .trace_fields = trace_fields};
+                                    .trace_fields = trace_fields,
+                                    .release_foreign = nts_release_foreign};
 static const NtsDescriptor generic = {.kind = NTS_KIND_OBJECT,
                                       .size = sizeof(Node),
                                       .references = 2,
@@ -76,7 +77,8 @@ static const NtsDescriptor generic = {.kind = NTS_KIND_OBJECT,
                                       .offsets = references,
                                       .name = "generic-trace",
                                       .erased = 1,
-                                      .erased_offsets = erased};
+                                      .erased_offsets = erased,
+                                      .release_foreign = nts_release_foreign};
 static const NtsDescriptor refs = {.kind = NTS_KIND_ARRAY,
                                    .size = sizeof(NtsHeader *),
                                    .references = 1,
@@ -223,6 +225,7 @@ static void foreign_holder(const NtsDescriptor *descriptor) {
   NtsDescriptor with_holder = *descriptor;
   with_holder.foreign = 1;
   with_holder.foreign_slots = foreign_slots;
+  with_holder.release_foreign = nts_release_foreign;
   Node *a = make(&with_holder);
   Holder holder = {
       .held = a, .owner = a, .epoch = UINT64_MAX, .native_count = 1};
