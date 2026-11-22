@@ -1,4 +1,4 @@
-import {targetLeftovers} from '../gate/disk-reclamation.ts';
+import {DISK_TRASH,targetLeftovers} from '../gate/disk-reclamation.ts';
 import {binaryPinDiagnostics,type PinOwnerObservation} from '../gate/binary-pins.ts';
 import {listedCgroupPopulated} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
@@ -166,7 +166,13 @@ const real = (path: string) => { try { return realpathSync(path); } catch { retu
 
 export function poolWorktree(path: string, cache: string): string | null {
   const p = real(path), c = real(cache);
-  if (inside(p, join(c, "nts-pool"))) return /^\d+$/.test(relative(join(c, "nts-pool"), p)) ? "the pool" : null;
+  if (inside(p, join(c, "nts-pool"))) {
+    const path=relative(join(c,'nts-pool'),p);
+    if(/^\d+$/.test(path))return 'the pool';
+    const [trash,id,payload,...rest]=path.split('/');
+    if(trash===DISK_TRASH&&id&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)&&payload==='payload'&&!rest.length&&existsSync(join(p,'..','manifest.json')))return 'disk reclamation trash (pool.ts status)';
+    return null;
+  }
   if (inside(p, join(c, "nts-landing"))) return "the landing check's";
   if (inside(p, join(c, "nts-full-check"))) return "the full check's";
   if (p === join(c, "nts-pins", "tree")) return "pin.ts's build tree";
@@ -305,6 +311,7 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
     case "kept": break;
     case "pool":
       for (const child of children) {
+        if(child.name===DISK_TRASH){notices.push(`${display(child.path,context)}: disk reclamation trash; pool.ts status reports bytes, age and stuck drains`);continue;}
         if (!/^\d+$/.test(child.name)) lines.push(`${display(child.path, context)}: not a pool slot (~/.cache/nts-pool/<n>)`);
         else try{
           for(const row of targetLeftovers(child.path))notices.push(`${display(row.root,context)}: retained target sibling; writer: ${row.writer}`);

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {fileURLToPath} from 'node:url';
 import { test, type TestContext } from "node:test";
-import { count, populated, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
+import { count, poolWorktree, populated, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
 import {scratchRepo} from '../landing/scratch-repo.ts';
 import {acceptedRevision} from '../gate/accepted-revision-data.ts';
 import { spawnTest, waitFor } from "../gate/test-wait.ts";
@@ -21,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 
 import {CgroupObservations,CgroupDeparted,HostObservationError,type CgroupFiles} from '../gate/host-observations.ts';
+import {DISK_TRASH} from '../gate/disk-reclamation.ts';
 import {workerPresenceFile,writeWorkerPresence} from '../landing/pool-presence.ts';
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
@@ -102,6 +103,7 @@ function cacheFixture(t: TestContext): string {
   folder("nts/outcomes/12345", 9);
   folder(`nts-pins/${OTHER.slice(0, 12)}`);
   folder("nts-pool/scratch");
+  folder("nts-pool/"+DISK_TRASH);
   writeWorkerPresence(join(cache,'nts-pool/1'),'compiler/a-task','attached',NOW);
   folder("nts-gate/tree");
   folder("nts/snapshots");
@@ -215,6 +217,7 @@ test("the count names every branch, worktree and cache folder outside its rules,
   has(/^~\/\.cache\/nts-full-check\/runs: 1 folder\(s\), 4\.0 days old \(four-days\) of the full check/);
   has(new RegExp(`^~/\\.cache/nts-pins/${OTHER.slice(0, 12)}: a pin main does not use`));
   has(/^~\/\.cache\/nts-pool\/scratch: not a pool slot/);
+  lacks(new RegExp(DISK_TRASH.replaceAll('.','\\.')));
   has(/^~\/\.cache\/nts-gate\/runs: 1 folder\(s\), 7\.0 days old \(last-week\) of gates run by hand; logs are kept three days$/);
   lacks(/nts-gate\/(tree|runs\/(today|latest))/);
   has(/^~\/\.cache\/nts\/snapshots: kept by no entry of keep\.json under nts\/$/);
@@ -635,4 +638,13 @@ test('the count names retained pool target siblings and known writers without de
   for(const [name,writer] of [['gate-scope-owner.json','tooling/gate/run.mjs; tooling/landing/run.ts'],['gate-scope-owner.json.lock','tooling/gate/run.mjs; tooling/landing/run.ts'],['.gate-run.lock','tooling/gate/run.mjs'],['tooling-types.tsbuildinfo','tooling/tsconfig.json']])assert.ok(lines.includes('target/'+name+': retained target sibling; writer: '+writer),lines);
   assert.ok(result.removable.every(row=>!row.path.startsWith(join(tree,'target'))));
   assert.ok(existsSync(join(tree,'target/test-scratch')));
+});
+
+test('only a manifest-backed owner trash checkout layout is a registered pool worktree',t=>{
+  const cache=cacheFixture(t),root=join(cache,'nts-pool',DISK_TRASH),entry=join(root,'00000000-0000-0000-0000-000000000000');
+  mkdirSync(join(entry,'payload'),{recursive:true});
+  assert.equal(poolWorktree(join(entry,'payload'),cache),null,'missing manifest remains red');
+  writeFileSync(join(entry,'manifest.json'),'{}');
+  assert.equal(poolWorktree(join(entry,'payload'),cache),'disk reclamation trash (pool.ts status)');
+  for(const suffix of ['/foreign/payload','/00000000-0000-0000-0000-000000000000/payload/nested','/00000000-0000-0000-0000-000000000000/other'])assert.equal(poolWorktree(root+suffix,cache),null);
 });

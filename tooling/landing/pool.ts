@@ -45,7 +45,7 @@ import { describeUsers, treeUsers, type TreeUser } from "./tree-users.ts";
 import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from '../gate/disk-capacity.ts';
 import {completedBuild} from '../gate/build-completion.ts';
 import type {HostObservations} from '../gate/host-observations.ts';
-import {describeReclamation,type ReclaimReport} from '../gate/disk-reclamation.ts';
+import {describeReclamation,diskTrash,type TrashEntry,type ReclaimReport} from '../gate/disk-reclamation.ts';
 import {workerPresence,writeWorkerPresence,assertWorkerPresenceWritable,removeWorkerPresence,type WorkerPresence} from './pool-presence.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 
@@ -223,9 +223,8 @@ export class Pool {
         snapshot.leases.filter(lease=>lease.root!==path&&lease.remainingBytes>0).length,bytes);
     };
     if(resuming&&measure().treeBytes===0)return;
-    const reclamation=this.capacity.poolReclaim(this.dir,undefined,[pending]);
     const room=measure();
-    if(!room.ok)throw new PoolFull({...room,why:room.why+describeReclamation(previous,reclamation)});
+    if(!room.ok)throw new PoolFull({...room,why:room.why+describeReclamation(previous)});
   }
   private roomFor(freeBytes:number,reservedBytes:number,unbuilt:number,treeBytes:number):Room {
     const floorBytes = treeBytes + DISK_MARGIN_BYTES;
@@ -258,8 +257,8 @@ export class Pool {
   /** Prewarm: create the trees 1..n that are missing, as the disk allows. Never a cap: `take` grows past it. */
   init(n: number): PoolTree[] {
     if (!Number.isSafeInteger(n) || n < 1) throw new Error(`a pool of ${n} trees`);
+    this.capacity.reclaim(this.dir);
     return this.locked(() => {
-      this.capacity.poolReclaim(this.dir);
       for (let i = 1; i <= n; i++) if (!existsSync(join(this.dir, String(i)))) this.grow(String(i));
       return this.trees();
     });
@@ -274,6 +273,7 @@ export class Pool {
    */
   take(branch: string): PoolTree {
     if (!taskBranch(branch)) throw new Error(`not a task branch: ${branch}`);
+    const previous=this.prepareAdmission(branch);
     return this.locked(() => {
       const trees = this.trees();
       const mine = trees.find(t => t.branch === branch);
@@ -283,7 +283,7 @@ export class Pool {
         this.inputs(mine.path);
         return this.trees().find(t=>t.name===mine.name)!;
       }
-      const reclamation=this.capacity.poolReclaim(this.dir);
+      const reclamation=previous;
       // Reclamation may remove free unbuilt trees. Refresh before selection.
       const available=this.trees();
       const elsewhere = worktrees(this.git).find(t => t.branch === branch);
@@ -306,6 +306,17 @@ export class Pool {
       return this.trees().find(t => t.name === tree)!;
     });
   }
+
+  private prepareAdmission(branch:string):ReclaimReport|null{
+    const existing=this.capacity.locked(()=>{
+      const tree=this.trees().find(tree=>tree.branch===branch);
+      return tree?{pending:{root:tree.path,target:join(tree.path,'target')},counted:this.leases([tree]).length>0}:null;
+    });
+    if(existing?.counted)return null;
+    return this.capacity.reclaim(this.dir,0,undefined,existing?[existing.pending]:[]);
+  }
+  /** Trash retains disk bytes until reclamation drains it. Status never deletes. */
+  trash():TrashEntry[]{return diskTrash(this.dir,this.capacity.host.wallNow());}
 
   private find(asked: string): PoolTree {
     const trees = this.trees();
@@ -356,6 +367,7 @@ export class Pool {
   attach(branch:string):PoolTree{return this.presence(branch,'attached');}
   detach(branch:string):PoolTree{return this.presence(branch,'detached');}
   private presence(branch:string,state:WorkerPresence['state']):PoolTree{
+    if(state==='attached')this.prepareAdmission(branch);
     return this.locked(()=>{
       const tree=this.trees().find(tree=>tree.branch===branch);
       if(!tree)throw Error('no pool tree holds branch '+branch);
@@ -467,9 +479,9 @@ export class Pool {
       const heads = new Map(this.trees().flatMap(t => t.branch ? [[t.branch, t.head] as const] : []));
       for (const [branch, landed] of this.landed()) if (heads.get(branch) !== landed) this.forget(branch);
     });
+    const trees=this.capacity.locked(()=>this.trees());
+    out.reclamation=this.capacity.reclaim(this.dir,0,{before:now-idleMs,keep});
     this.locked(()=>{
-      const trees=this.trees();
-      out.reclamation=this.capacity.poolReclaim(this.dir,{before:now-idleMs,keep});
       for(const removal of out.reclamation?.removed??[]){
         const tree=trees.find(row=>row.path===removal.root);
         if(tree&&removal.kind==='unbuilt-checkout')out.removed.push({tree,targetBytes:null});
@@ -517,9 +529,9 @@ export function describeRoom(room: Room): string {
 }
 
 /** What the pool's status says, for a scheduler (`status --json`). */
-export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Room, now = Date.now()) {
+export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Room, now = Date.now(),trash:readonly TrashEntry[]=[]) {
   return {
-    version: 2, pool: dir, idle_limit_ms: IDLE_LIMIT_MS, warm_minimum: WARM_MINIMUM,
+    version: 2, pool: dir, trash, idle_limit_ms: IDLE_LIMIT_MS, warm_minimum: WARM_MINIMUM,
     room: { ok: room.ok, free_bytes: room.freeBytes, tree_bytes: room.treeBytes, unbuilt: room.unbuilt, reserved_bytes: room.reservedBytes, floor_bytes: room.floorBytes, why: room.why },
     trees: trees.map(t => ({
       name: t.name, path: t.path, state: t.state, task: t.branch, head: t.head, ahead: t.ahead, behind: t.behind, uncommitted: t.changes.length,
@@ -534,9 +546,10 @@ export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Ro
 
 /** Read-only reporting never turns an unknown owner into a reset decision. */
 export function reportPoolStatus(pool:Pool,json=false):number{
-  const trees=pool.measured(pool.statusTrees()),room=pool.room(trees);
-  if(json)console.log(JSON.stringify(statusJson(pool.dir,trees,room),null,2));
+  const trees=pool.measured(pool.statusTrees()),room=pool.room(trees),trash=pool.trash();
+  if(json)console.log(JSON.stringify(statusJson(pool.dir,trees,room,undefined,trash),null,2));
   else console.log(`pool ${pool.dir}: ${trees.length} tree${trees.length===1?"":"s"}, ${describeRoom(room)}\n${describePool(trees)}`);
+  if(!json)for(const entry of trash)console.log(`disk trash: ${entry.path}; ${entry.allocatedBytes??'unknown'} allocated bytes; age ${Math.floor(entry.ageMs/1000)}s${entry.ageMs>3_600_000?'; stuck drain':''}${entry.diagnostic?'; '+entry.diagnostic:''}`);
   return 0;
 }
 

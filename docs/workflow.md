@@ -1201,8 +1201,19 @@ the tooling strict checker owns the source's type checking.
   names it and its last measured shortfall. Withdrawal answers this already
   drained entry immediately, and the service exits when no work remains.
 - **Pressure reclaims rebuildable disk state.** DiskCapacity explicitly reclaims
-  under its pool lock before admission and during upkeep; status reads do not
-  delete. Below the floor plus live promises and one measured cold build, it
+  before admission and during upkeep; status reads do not delete. Inventory
+  and recursive allocated-byte measurements run outside the pool lock. Fresh
+  ownership fences, a durable manifest and a same-filesystem rename into
+  `nts-pool/.disk-trash/<uuid>/payload` run under it; permission traversal and
+  recursive deletion run after release, holding only that entry's drainer lock.
+  The manifest preserves the approved removal kind and physical identity.
+  Reclamation resumes interrupted entries, including partial deletions, before
+  considering new candidates. A rename credits no capacity: only observed disk
+  free bytes enter admission, so undrained trash still consumes space. A grant
+  reacquires the pool lock and recomputes current promises before publication.
+  Pool status and its JSON show trash bytes and age; reclamation names drains
+  older than an hour as stuck. The count recognizes only the owner's trash
+  directory and manifest-backed UUID/payload worktrees, and never deletes them. Below the floor plus live promises and one measured cold build, it
   removes in cost order until another cold build of headroom is free: obsolete
   whole profile generations, clean unbuilt pool checkouts, then free pool build
   output while keeping two compatible warm targets, then held trees' Cargo `target/`
@@ -1213,7 +1224,8 @@ the tooling strict checker owns the source's type checking.
   a Cargo cache tag or a validated owner completion marker proves the profile.
   Unknown siblings remain by path, with their writer where known; they cannot
   veto removal of an independently proven profile. Each profile removal holds
-  both pool and tree locks and repeats the physical, claim and owner checks.
+  both pool and tree locks through detachment and repeats the physical, claim
+  and owner checks; neither lock spans byte deletion.
   Taking the tree afterwards rebuilds missing output normally. Admission
   refusals include their removal and retention decisions, including the warm
   minimum. The hourly count reports retained target siblings by path and
@@ -1226,7 +1238,10 @@ the tooling strict checker owns the source's type checking.
   only obsolete generations, never their current build output. Unknown or corrupt
   generation markers keep the candidate. A removed checkout must be Git-detached, clean,
   registered and have no unpublished commits; ignored local data also keeps it.
-  Git removes checkouts, preserving its worktree registry.
+  Git moves an unbuilt checkout into trash under the pool lock and removes
+  it outside the lock, preserving its worktree registry. A removal refusal
+  keeps its registration, payload and manifest; it never falls back to
+  recursive filesystem removal of a registered worktree.
   Each removal rechecks physical root identity, the resource lock, leases, build
   claims, unit working/root directories and ExecStartPre/ExecStart/ExecStartPost
   paths and arguments, and process cwd/exe/open files. Unit environments and
@@ -1272,7 +1287,12 @@ the tooling strict checker owns the source's type checking.
   exists. Empty or malformed
   bytes fail by path and contents, with instructions to establish that no
   named process is alive before removing the corrupt file. A process never
-  takes over an incompletely published or unparseable owner.
+  takes over an incompletely published or unparseable owner. A bounded lock
+  wait raises a `tooling-setup` instrument result naming the lock path,
+  holder PID and birth identity, and its unit when known. A build or temporary
+  claim release that exhausts this wait logs the named holder and defers
+  cleanup until the claim owner exits; it preserves the finished command's
+  result. The unreleased claim continues to reserve capacity until then.
 - **One Clippy cache.** Contributors run `node tooling/gate/clippy.ts`. The
   gate and inner route use that same owner with an explicitly selected cache.
   `clippyTarget` declares `target/clippy`; no current test or Clippy route

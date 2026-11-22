@@ -23,6 +23,7 @@ import {testScratch} from '../gate/test-scratch.ts';
 import {lockChild,replaceOnce,LOCK_BARRIER} from './lock-fixture.ts';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {workerPresence,workerPresenceFile} from './pool-presence.ts';
+import {DISK_TRASH} from '../gate/disk-reclamation.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 import {cargoSync} from '../gate/cargo.ts';
 import {spawnTest} from '../gate/test-wait.ts';
@@ -754,4 +755,15 @@ test('a reclaimed free tree is taken and Cargo rebuilds its removed profile',t=>
   try{const result=cargoSync(['build','--offline','--profile','nts-dev'],{cwd:old,env:f.s.env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}finally{finish();}
   assert.equal(execFileSync(join(old,'target/nts-dev/reclaimed-free'),{cwd:old,env:f.s.env,encoding:'utf8'}).trim(),'rebuilt free tree');
   assert.equal(readFileSync(evidence,'utf8'),'preserve');
+});
+
+test('status names trash bytes and age in text and JSON without deleting it',t=>{
+  const {p}=pool(t,0),entry=join(p.dir,DISK_TRASH,'unknown-entry');mkdirSync(entry,{recursive:true});
+  writeFileSync(join(entry,'evidence'),'preserve unknown trash');
+  const messages:string[]=[];t.mock.method(console,'log',(value:string)=>messages.push(value));
+  assert.equal(reportPoolStatus(p),0);assert.match(messages.join('\n'),/disk trash: .*unknown-entry; unknown allocated bytes; age/);
+  messages.length=0;assert.equal(reportPoolStatus(p,true),0);
+  const json=JSON.parse(messages.join(''));assert.equal(json.trash[0].path,entry);assert.equal(json.trash[0].allocatedBytes,null);
+  assert.equal(typeof json.trash[0].ageMs,'number');assert.ok(json.trash[0].diagnostic);
+  assert.equal(readFileSync(join(entry,'evidence'),'utf8'),'preserve unknown trash');
 });

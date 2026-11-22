@@ -4,6 +4,7 @@
 import { closeSync, openSync, readFileSync, readdirSync, linkSync, unlinkSync, writeFileSync } from "node:fs";
 import {randomUUID} from 'node:crypto';
 import {basename,dirname,join} from 'node:path';
+import {ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 import {infrastructureProbe} from '../gate/infrastructure-probe.ts';
 
 export function processIdentity(pid: number): string | null {
@@ -94,6 +95,16 @@ export function holder(path: string): number | null {
   return held&&processIdentity(held.pid)===held.text?held.pid:null;
 }
 
+export class LockWaitError extends ToolingInstrumentError {
+  constructor(path:string){
+    const held=readOwner(path);
+    let unit:string|undefined;
+    if(held)try{unit=readFileSync(`/proc/${held.pid}/cgroup`,'utf8').split(/[\n/]/).reverse().find(part=>/\.(?:service|scope)$/.test(part));}catch{}
+    super('tooling-setup',`${path} lock wait exhausted; held by process ${held?.pid??'?'}; birth identity ${held?.text??'unavailable'}${unit?'; unit '+unit:''}`);
+    this.name='LockWaitError';
+  }
+}
+
 const pause = new Int32Array(new SharedArrayBuffer(4));
 /** Run `body` holding the lock at `path`, waiting for it up to `waitMs`. */
 export function withLock<T>(path: string, body: () => T, waitMs = 30_000): T {
@@ -101,7 +112,7 @@ export function withLock<T>(path: string, body: () => T, waitMs = 30_000): T {
   for (;;) {
     const lock = acquire(path);
     if (lock) { try { return body(); } finally { lock.release(); } }
-    if (Date.now() > until) throw new Error(`${path} is held by process ${holder(path) ?? "?"}`);
+    if (Date.now() >= until) throw new LockWaitError(path);
     Atomics.wait(pause, 0, 0, 50);
   }
 }

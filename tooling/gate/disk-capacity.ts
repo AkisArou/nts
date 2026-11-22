@@ -11,7 +11,7 @@ import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {worktrees,type Git} from '../landing/git.ts';
 import {workerPresence} from '../landing/pool-presence.ts';
-import {withLock,processIdentity} from '../landing/lock.ts';
+import {withLock,processIdentity,LockWaitError} from '../landing/lock.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {completedBuild,type BuildOutputName} from './build-completion.ts';
 import {hostObservations,type HostObservations} from './host-observations.ts';
@@ -72,10 +72,11 @@ export class DiskCapacity {
   readonly host:HostObservations;readonly forecast:BuildForecast;readonly pool:PoolCapacitySource|null;readonly stateFile:string;readonly temporaryStateFile:string;
   private readonly reclamation:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};
   private readonly handed:string|undefined;
+  private readonly lockWaitMs:number;
   constructor(options:{env?:NodeJS.ProcessEnv;host?:HostObservations;forecast?:BuildForecast;pool?:PoolCapacitySource|null;
-    reclamation?:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership}}={}){
+    reclamation?:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};lockWaitMs?:number}={}){
     const env=options.env??process.env;
-    this.handed=env[DISK_BUILD_ADMISSION];
+    this.handed=env[DISK_BUILD_ADMISSION];this.lockWaitMs=options.lockWaitMs??30_000;
     if(env[FIXTURE_ENVIRONMENT]!==undefined&&env[DISK_CAPACITY]===undefined)throw Error('fixture has no '+DISK_CAPACITY+' capability');
     this.host=options.host??hostObservations(env);this.forecast=options.forecast??coldBuildForecast();
     this.pool=options.pool===undefined?poolSource(env):options.pool;
@@ -100,7 +101,7 @@ export class DiskCapacity {
   /** The same lock take() holds across its capacity check and branch switch. */
   locked<T>(body:()=>T):T {
     const dir=this.pool?.dir??dirname(this.stateFile);
-    mkdirSync(dir,{recursive:true});return withLock(join(dir,this.pool?'.lock':'.disk-lock'),body);
+    mkdirSync(dir,{recursive:true});return withLock(join(dir,this.pool?'.lock':'.disk-lock'),body,this.lockWaitMs);
   }
   private claims():BuildClaim[]{
     if(!existsSync(this.stateFile))return [];
@@ -178,15 +179,15 @@ export class DiskCapacity {
     if(!path||!Number.isSafeInteger(bytes)||bytes<=0)throw Error('invalid temporary disk reservation');
     const pid=process.pid,identity=processIdentity(pid),id=randomUUID();path=resolve(path);
     if(!identity)throw Error('temporary disk owner has no process birth identity');
+    this.reclaim(path,bytes);
     return this.locked(()=>{
       const leases=[...this.activeLeases(),...this.claims()];
-      this.reclaimLocked(path,leases,undefined,bytes);
       const snapshot=this.snapshot(path,leases);
       if(snapshot.availableBytes<bytes)return {snapshot,lease:null};
       const claim:TemporaryDiskClaim={id,pid,identity,path,bytes};
       this.recordTemporaries([...snapshot.temporaries,claim]);
       let released=false;
-      const release=()=>{if(released)return;this.locked(()=>{this.recordTemporaries(this.temporaryClaims().filter(row=>row.id!==id));this.signalChange();});released=true;};
+      const release=()=>{if(released)return;this.releaseClaim(()=>{this.recordTemporaries(this.temporaryClaims().filter(row=>row.id!==id));this.signalChange();});released=true;};
       return {snapshot,lease:Object.freeze({...claim,release})};
     });
   }
@@ -208,16 +209,17 @@ export class DiskCapacity {
     }
     const id=randomUUID(),pid=process.pid,identity=processIdentity(pid);
     if(!identity)throw Error('disk build owner has no process birth identity');
+    const next={...lease,id,pid,identity};
+    const reclamation=this.reclaim(lease.target,0,undefined,[next]);
     this.locked(()=>{
-      const claims=this.claims(),next={...lease,id,pid,identity};
-      const reclamation=this.reclaimLocked(lease.target,[...this.activeLeases(),...claims,next]);
+      const claims=this.claims();
       const snapshot=this.snapshot(lease.target,[...this.activeLeases(),...claims,next]);
       if(snapshot.availableBytes<0)throw new DiskBuildAdmissionError({root:resolve(lease.root),target:resolve(lease.target),outputs:[...(lease.outputs??['nts-dev','clippy'])],
         shortBytes:-snapshot.availableBytes,freeBytes:snapshot.freeBytes,floorBytes:snapshot.floorBytes,buildReservedBytes:snapshot.buildReservedBytes,temporaryReservedBytes:snapshot.temporaryReservedBytes},describeReclamation(reclamation));
       this.record([...claims,next]);
     });
     let released=false;
-    const release=()=>{if(released)return;this.locked(()=>{this.record(this.claims().filter(claim=>claim.id!==id));this.signalChange();});released=true;};
+    const release=()=>{if(released)return;this.releaseClaim(()=>{this.record(this.claims().filter(claim=>claim.id!==id));this.signalChange();});released=true;};
     return Object.assign(release,{env:{[DISK_BUILD_ADMISSION]:id}});
   }
   /** Read-only retry readiness: no build attempt, claim, or reclamation. */
@@ -226,22 +228,23 @@ export class DiskCapacity {
   }
   /** Pool callers already own this lock and pass Git facts from that instant. */
   poolSnapshot(path:string,leases:readonly BuildLease[]):CapacitySnapshot{return this.snapshot(path,[...leases,...this.claims()]);}
-  /** Explicit mutation; status/snapshot remains an observation. Admission and
-   * upkeep use this same owner and lock, with a measured cold-build margin. */
-  reclaim(path:string,extraReservedBytes=0):ReclaimReport|null {
-    return this.locked(()=>{try{return this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],undefined,extraReservedBytes);}finally{this.signalChange();}});
+  /** A finished build must not become a failed step because cleanup met a
+   * busy pool. The durable claim remains conservative until its birth expires. */
+  private releaseClaim(body:()=>void):void{
+    try{this.locked(body);}catch(error){
+      if(!(error instanceof LockWaitError))throw error;
+      console.error('disk claim release deferred until owner exit: '+error.message);
+    }
   }
-  private reclaimLocked(path:string,leases:readonly BuildLease[],maintenance?:{before:number;keep:number},extraReservedBytes=0):ReclaimReport|null {
+  /** Reclaim outside admission's transaction. Every subsequent grant rechecks
+   * current promises and actual free bytes under the capacity lock. Pending
+   * leases protect the prospective target throughout reclamation. */
+  reclaim(path:string,extraReservedBytes=0,maintenance?:{before:number;keep:number},pending:readonly BuildLease[]=[]):ReclaimReport|null {
     if(!this.pool)return null;
-    const report=reclaimDisk({pool:this.pool,host:this.host,coldBytes:this.forecast.bytes,...this.reclamation,maintenance,
-      snapshot:()=>{const snapshot=this.snapshot(path,leases);return {...snapshot,reservedBytes:snapshot.reservedBytes+extraReservedBytes};},
-      protectedRoots:()=>[...this.activeLeases(),...this.claims(),...leases,...this.temporaryClaims().map(claim=>({root:claim.path,target:claim.path}))]});
-    if(report.removed.length)this.signalChange();
-    return report;
-  }
-  /** Already inside the pool lock. Prospective takes/reattachments protect
-   * their target and include its promise while making room, before publication. */
-  poolReclaim(path:string,maintenance?:{before:number;keep:number},pending:readonly BuildLease[]=[]):ReclaimReport|null {
-    try{return this.reclaimLocked(path,[...this.activeLeases(),...this.claims(),...pending],maintenance);}finally{this.signalChange();}
+    try{return reclaimDisk({pool:this.pool,host:this.host,coldBytes:this.forecast.bytes,...this.reclamation,maintenance,
+      locked:body=>this.locked(body),
+      snapshot:()=>{const snapshot=this.snapshot(path,[...this.activeLeases(),...this.claims(),...pending]);return {...snapshot,reservedBytes:snapshot.reservedBytes+extraReservedBytes};},
+      protectedRoots:()=>[...this.activeLeases(),...this.claims(),...pending,...this.temporaryClaims().map(claim=>({root:claim.path,target:claim.path}))]});
+    }finally{this.signalChange();}
   }
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test,type TestContext} from 'node:test';
-import {chmodSync,existsSync,lstatSync,mkdirSync,readFileSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {chmodSync,existsSync,lstatSync,mkdirSync,readFileSync,readdirSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
@@ -11,9 +11,9 @@ import {ownMemory} from './test-memory.ts';
 import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
 import {DiskBuildAdmissionError} from '../differential/command-entry/instrument.ts';
-import {reclaimDisk,assertNoUnitUsers,assertUnitTreeUnused,parseUnitTreeOwnership,type UnitTreeOwnership,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
+import {reclaimDisk,diskTrash,DISK_TRASH,assertNoUnitUsers,assertUnitTreeUnused,parseUnitTreeOwnership,type UnitTreeOwnership,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
 import {GateResource} from './gate-resource.ts';
-import {processIdentity} from '../landing/lock.ts';
+import {acquire,processIdentity} from '../landing/lock.ts';
 import {assertNoProcessUsers,observeTreeProcesses,processCgroup} from '../landing/tree-users.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
@@ -30,10 +30,20 @@ function fixture(t:TestContext){
   // happened to cross while the machine ran other checks.
   s.env.GIT_COMMITTER_DATE='@1000000000 +0000';
   const dir=join(s.dir,'pool');mkdirSync(dir);
-  const env=ownMemory(join(s.dir,'observations'),{disk:{freeBytes:44*GiB,freeInodes:1000}});
+  const env=ownMemory(join(s.dir,'observations'),{disk:{freeBytes:44*GiB,freeInodes:1000},wallClock:{kind:'fixed',now:1_800_000_000_000}});
   const original=hostObservations(env),outputs=new Map<string,number>();
   let initialFree=44*GiB;
-  const free=()=>initialFree+[...outputs].filter(([path])=>!existsSync(path)).reduce((sum,[,bytes])=>sum+bytes,0);
+  const allocated=(path:string)=>{
+    if(existsSync(path))return true;
+    const trash=join(dir,DISK_TRASH);
+    if(!existsSync(trash))return false;
+    return readdirSync(trash).some(name=>{
+      const file=join(trash,name,'manifest.json');if(!existsSync(file))return false;
+      const row=JSON.parse(readFileSync(file,'utf8')) as {removal:{root:string}};
+      return (path===row.removal.root||path.startsWith(row.removal.root+'/'))&&existsSync(join(trash,name,'payload',path.slice(row.removal.root.length)));
+    });
+  };
+  const free=()=>initialFree+[...outputs].filter(([path])=>!allocated(path)).reduce((sum,[,bytes])=>sum+bytes,0);
   const host={...original,disk:(path:string)=>({...original.disk(path),freeBytes:free()}),allocatedBytes:(path:string)=>[...outputs].filter(([root])=>existsSync(root)&&(root===path||root.startsWith(path+'/'))).reduce((sum,[,bytes])=>sum+bytes,0)};
   const tree=(name:string)=>{const path=join(dir,name);s.git(['worktree','add','-q','--detach',path,'main']);return path;};
   const output=(tree:string,name='nts-dev',bytes=4*GiB)=>{
@@ -570,4 +580,85 @@ test('a tagless target offers debug only through obsolete-profile ownership',t=>
   const report=reclaimDisk(f.options);
   assert.deepEqual(report.removed.map(row=>[row.root,row.kind]),[[debug,'obsolete-profile']],JSON.stringify(report));
   assert.equal(report.kept.some(row=>row.root===debug),false,'one report cannot both remove and retain the same debug profile');
+});
+
+for(const bytes of [GiB,16*GiB])test('slow deletion releases the pool lock before draining '+bytes+' bytes',t=>{
+  const f=fixture(t),tree=f.tree('1'),profile=f.output(tree,'debug',bytes);mkdirSync(join(tree,'target/evidence'));
+  let entered=0,now=0;
+  const report=reclaimDisk({...f.options,host:{...f.host,now:()=>now},removePayload:(payload,kind,remove)=>{
+    entered++;now+=bytes/GiB*60_000;assert.equal(kind,'obsolete-profile');assert.equal(existsSync(profile),false);
+    const lock=acquire(join(f.dir,'.lock'));assert.ok(lock,'pool lock is available throughout the deletion barrier');
+    try{
+      assert.equal(f.host.disk(f.dir).freeBytes,44*GiB,'rename credits no bytes');
+      assert.ok(existsSync(payload));
+      const row=diskTrash(f.dir,f.host.wallNow())[0]!;
+      assert.equal(row.allocatedBytes,bytes);assert.equal(row.kind,kind);
+    }finally{lock.release();}
+    const nested=reclaimDisk(f.options);assert.deepEqual(nested.removed,[],'a live drainer keeps its payload');
+    remove();
+  }});
+  assert.equal(report.lockHeldMs,0,'supplied slow-delete minutes are excluded from measured lock hold');
+  t.diagnostic(JSON.stringify({bytes,deleteMs:now,lockHeldMs:report.lockHeldMs}));
+  assert.equal(entered,1);assert.equal(report.removed.length,1);assert.equal(report.after,44*GiB+bytes);
+  assert.deepEqual(diskTrash(f.dir,f.host.wallNow()),[]);
+});
+
+test('interrupted partial deletion is resumed and accounted once, even after pressure ends',t=>{
+  const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);mkdirSync(join(tree,'target/evidence'));
+  const interrupted=reclaimDisk({...f.options,removePayload:(payload,_kind)=>{
+    rmSync(join(payload,'built'));throw Error('deliberate interrupted drain');
+  }});
+  assert.equal(interrupted.removed.length,0);assert.match(interrupted.kept.map(row=>row.reason).join('\n'),/interrupted drain/);
+  assert.equal(f.host.disk(f.dir).freeBytes,44*GiB,'partial trash still occupies its supplied bytes');
+  const entry=diskTrash(f.dir,f.host.wallNow())[0]!;
+  const file=join(entry.path,'manifest.json'),row=JSON.parse(readFileSync(file,'utf8'));row.at=f.host.wallNow()-3_600_001;writeFileSync(file,JSON.stringify(row));
+  f.setFree(60*GiB);const resumed=reclaimDisk(f.options);
+  assert.equal(resumed.triggered,false);assert.equal(resumed.removed.length,1);
+  assert.ok(resumed.kept.some(row=>row.root===entry.path&&row.reason.includes('stuck')));
+  assert.deepEqual(diskTrash(f.dir,f.host.wallNow()),[]);
+  const log=readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8').trim().split('\n');assert.equal(log.length,1);
+  assert.deepEqual(reclaimDisk(f.options).removed,[]);
+});
+
+test('unknown manifest kinds never gain a trash deletion grant',t=>{
+  const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);mkdirSync(join(tree,'target/evidence'));
+  reclaimDisk({...f.options,removePayload:()=>{throw Error('leave payload');}});
+  const entry=diskTrash(f.dir,f.host.wallNow())[0]!,file=join(entry.path,'manifest.json'),row=JSON.parse(readFileSync(file,'utf8'));
+  row.removal.kind='user-data';writeFileSync(file,JSON.stringify(row));
+  const report=reclaimDisk(f.options);
+  assert.ok(existsSync(join(entry.path,'payload')));assert.deepEqual(report.removed,[]);
+  assert.match(report.kept.map(row=>row.reason).join('\n'),/invalid disk trash manifest/);
+});
+
+test('a killed drainer identity is reclaimed without losing the payload or its accounting',t=>{
+  const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);mkdirSync(join(tree,'target/evidence'));
+  reclaimDisk({...f.options,removePayload:()=>{throw Error('crash boundary');}});
+  const entry=diskTrash(f.dir,f.host.wallNow())[0]!;
+  writeFileSync(join(entry.path,'.owner'),'00000000-0000-0000-0000-000000000000 2147483647 1\n');
+  assert.equal(f.host.disk(f.dir).freeBytes,44*GiB);
+  assert.equal(reclaimDisk(f.options).removed.length,1);
+  assert.deepEqual(diskTrash(f.dir,f.host.wallNow()),[]);
+});
+
+test('a failed Git trash removal stays registered and never falls back to recursive removal',t=>{
+  const f=fixture(t),tree=f.tree('1');
+  const report=reclaimDisk({...f.options,removePayload:(payload,_kind,remove)=>{
+    writeFileSync(join(payload,'unexpected.txt'),'retain this new data');remove();
+  }});
+  assert.equal(report.removed.length,0);assert.equal(existsSync(tree),false);
+  const entry=diskTrash(f.dir,f.host.wallNow())[0]!,payload=join(entry.path,'payload');
+  assert.equal(readFileSync(join(payload,'unexpected.txt'),'utf8'),'retain this new data');
+  assert.ok(f.s.git(['worktree','list','--porcelain']).includes(payload));
+  const resumed=reclaimDisk(f.options);assert.equal(resumed.removed.length,0);
+  assert.equal(readFileSync(join(payload,'unexpected.txt'),'utf8'),'retain this new data');
+});
+
+test('recovery retires Git registration after a crash between payload removal and registry cleanup',t=>{
+  const f=fixture(t);f.tree('1');
+  reclaimDisk({...f.options,removePayload:(payload)=>{rmSync(payload,{recursive:true});throw Error('removed bytes before registry');}});
+  const entry=diskTrash(f.dir,f.host.wallNow())[0]!,payload=join(entry.path,'payload');
+  assert.equal(existsSync(payload),false);assert.ok(f.s.git(['worktree','list','--porcelain']).includes(payload));
+  const report=reclaimDisk(f.options);assert.equal(report.removed.length,1,JSON.stringify(report));
+  assert.equal(f.s.git(['worktree','list','--porcelain']).includes(payload),false);
+  assert.deepEqual(diskTrash(f.dir,f.host.wallNow()),[]);
 });

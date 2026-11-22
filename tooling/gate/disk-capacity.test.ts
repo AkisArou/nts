@@ -8,10 +8,11 @@ import {hostObservations} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {TemporaryAdmission} from './admission.ts';
-import {processIdentity} from '../landing/lock.ts';
+import {acquire,processIdentity} from '../landing/lock.ts';
 import {spawn} from 'node:child_process';
 import {fixtureEnvironment} from './test-environment.ts';
-import {waitFor} from './test-wait.ts';
+import {spawnTest,waitFor} from './test-wait.ts';
+import {generatedJavaScript} from './generated-javascript.ts';
 import {DiskBuildAdmissionError,ToolingInstrumentError} from './step-result.ts';
 const GiB=2**30;
 
@@ -208,4 +209,60 @@ test('a build handed its owner\'s admission is not admitted again, and a handed 
     assert.ok(error instanceof ToolingInstrumentError);assert.equal(error.kind,'tooling-setup');
     assert.match(error.message,/is not held by a live build owner/);return true;
   },'an ended admission is never replaced by a fresh one');
+});
+
+test('a build lock timeout is a named tooling instrument, while an unlocked build passes',t=>{
+  const root=testScratch(t,'build-lock-timeout'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:60*GiB,freeInodes:100}});
+  const capacity=new DiskCapacity({env,pool:null,lockWaitMs:0});
+  // Derive the exact lock namespace from the capacity owner.
+  const actual=join(capacity.stateFile.slice(0,capacity.stateFile.lastIndexOf('/')),'.disk-lock');
+  const lock=acquire(actual);assert.ok(lock);
+  try{assert.throws(()=>capacity.beginBuild({root,target:join(root,'target')}),error=>{
+    assert.ok(error instanceof ToolingInstrumentError);assert.equal(error.kind,'tooling-setup');
+    for(const expected of [actual,String(process.pid),processIdentity(process.pid)!])assert.ok(error.message.includes(expected),error.message);
+    return true;
+  });}finally{lock.release();}
+  const release=capacity.beginBuild({root,target:join(root,'target')});release();
+  assert.equal(capacity.snapshot(root).buildReservedBytes,0);
+});
+
+for(const kind of ['build','temporary'])test('a completed '+kind+' keeps PASS when claim release meets a held lock',t=>{
+  const root=testScratch(t,'release-lock-timeout'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:60*GiB,freeInodes:100}});
+  const capacity=new DiskCapacity({env,pool:null,lockWaitMs:0});
+  const release=kind==='build'?capacity.beginBuild({root,target:join(root,'target')}):capacity.tryTemporary(root,GiB).lease!.release;
+  const actual=join(capacity.stateFile.slice(0,capacity.stateFile.lastIndexOf('/')),'.disk-lock'),lock=acquire(actual);assert.ok(lock);
+  const messages:string[]=[];t.mock.method(console,'error',(message:string)=>messages.push(message));
+  try{assert.doesNotThrow(()=>release());assert.doesNotThrow(()=>release());}finally{lock.release();}
+  assert.equal(messages.length,1);assert.match(messages[0]!,/release deferred until owner exit/);
+  assert.ok(messages[0]!.includes(actual));assert.ok(messages[0]!.includes(processIdentity(process.pid)!));
+  assert.ok(capacity.snapshot(root).reservedBytes>0,'deferred claim remains conservative until its process birth expires');
+});
+
+for(const mode of ['admission','release'])test('command receipt preserves '+mode+' lock contention outcome',t=>{
+  const root=testScratch(t,'lock-command-receipt'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:60*GiB,freeInodes:100}});
+  const entry=join(root,'entry.mjs'),receipt=join(root,'receipt.json');
+  writeFileSync(entry,generatedJavaScript(`
+import {join,dirname} from 'node:path';
+import {DiskCapacity} from ${JSON.stringify(new URL('./disk-capacity.ts',import.meta.url).href)};
+import {acquire} from ${JSON.stringify(new URL('../landing/lock.ts',import.meta.url).href)};
+import {runAsCommand} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
+runAsCommand(import.meta.url,()=>{
+ const capacity=new DiskCapacity({pool:null,lockWaitMs:0});
+ const lease={root:${JSON.stringify(root)},target:${JSON.stringify(root)}+'/target'};
+ const release=${mode==='release'?'capacity.beginBuild(lease)':'null'};
+ const lock=acquire(join(dirname(capacity.stateFile),'.disk-lock'));
+ if(!lock)throw Error('control did not hold lock');
+ try{${mode==='release'?"release();console.log('completed step PASS');":"capacity.beginBuild(lease);"}}
+ finally{lock.release();}
+ return 0;
+});`));
+  const result=spawnTest(process.execPath,[entry],{env:{...fixtureEnvironment(t),...env,NTS_GATE_STEP:'clippy',NTS_GATE_STEP_ATTEMPT:'lock-control',NTS_GATE_STEP_RESULT:receipt},encoding:'utf8'});
+  if(mode==='release'){
+    assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/completed step PASS/);
+    assert.match(result.stderr,/release deferred.*held by process/);assert.equal(existsSync(receipt),false);
+  }else{
+    assert.equal(result.status,1,result.stderr);const row=JSON.parse(readFileSync(receipt,'utf8'));
+    assert.equal(row.verdict,'INSTRUMENT');assert.equal(row.kind,'tooling-setup');
+    assert.match(row.reason,/held by process [0-9]+; birth identity/);assert.match(row.reason,/unit .*\.(?:service|scope)/);
+  }
 });
