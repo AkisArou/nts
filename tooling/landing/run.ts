@@ -427,7 +427,11 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
   const launch = gateCommand(timed[0]!, timed.slice(1), { rank: runRank(options), env: launcher });
   // The gate runner's step-result protocol (run.mjs): the build owner publishes
   // a typed instrument failure (a disk refusal, a setup fault) there, and it
-  // is the build's verdict whatever the exit status says.
+  // is the build's verdict whatever the exit status says. The owner classifies
+  // its own Cargo's end as the gate's build step reads it: a compile error
+  // publishes nothing and stays FAIL; a Cargo killed by a signal is
+  // tooling-setup, held for a person, since a signal alone is no measured
+  // memory pressure. Only the owner's own death by a signal is retried below.
   rmSync(instrumentFile,{force:true});
   const step={NTS_GATE_STEP:name,NTS_GATE_STEP_ATTEMPT:String(attempt),NTS_GATE_STEP_RESULT:instrumentFile};
   const r = await runCandidate(options,node, { tree: options.tree, run: options.run, owned:{...owned,CARGO_BUILD_JOBS:String(slots),...step}, command: [launch.command, ...launch.args] }, launcher,false,log);

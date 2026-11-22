@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test,type TestContext} from 'node:test';
 import {randomUUID} from 'node:crypto';
-import {chmodSync,readFileSync,writeFileSync} from 'node:fs';
+import {chmodSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fixture} from './run-fixture.ts';
 import {fixtureEnvironment} from '../gate/test-environment.ts';
@@ -56,16 +56,19 @@ test('compiler and doctest-only preparation disk refusals drain without an immed
  * fixture's disk observation, as other trees' builds did between the
  * landing's admission and its build's command on 2026-11-21 (#951).
  */
-function buildOwner(t:TestContext,f:ReturnType<typeof fixture>,freeBytes:number,target='"$CARGO_TARGET_DIR"'):{commit:string;build:string[]}{
+function buildOwner(t:TestContext,f:ReturnType<typeof fixture>,freeBytes:number,{target='"$CARGO_TARGET_DIR"',cargo}:{target?:string;cargo?:string}={}):{commit:string;build:string[]}{
   copyModuleClosure(['tooling/gate/build.ts'],f.tree);
   for(const args of [['add','.'],['commit','-qm','private build owner']]){
     const wrote=spawnTest('git',gitArguments(args),{cwd:f.tree,env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(wrote.status,0,wrote.stderr);
   }
   const head=spawnTest('git',gitArguments(['rev-parse','HEAD']),{cwd:f.tree,env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(head.status,0,head.stderr);
   const script=join(f.own,'build-owner.sh'),memory=JSON.stringify(join(f.own,'memory'));
+  // With a fixture `cargo` first on PATH the owner compiles through it; without one it only admits (--no-compiler).
+  const bin=join(f.own,'cargo-bin');
+  if(cargo!==undefined){mkdirSync(bin,{recursive:true});writeFileSync(join(bin,'cargo'),'#!/bin/sh\n'+cargo);chmodSync(join(bin,'cargo'),0o755);}
   writeFileSync(script,`#!/bin/sh
 ${JSON.stringify(process.execPath)} --input-type=module -e 'import {ownMemory} from ${JSON.stringify(new URL('../gate/test-memory.ts',import.meta.url).href)};ownMemory(${memory},{disk:{freeBytes:${freeBytes},freeInodes:100}});' || exit 1
-CARGO_TARGET_DIR=${target} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(join(f.tree,'tooling/gate/build.ts'))} --profile nts-dev --no-compiler
+${cargo===undefined?'':`PATH=${JSON.stringify(bin)}:"$PATH" `}CARGO_TARGET_DIR=${target} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(join(f.tree,'tooling/gate/build.ts'))} --profile nts-dev${cargo===undefined?' --no-compiler':''}
 `);
   chmodSync(script,0o755);
   return {commit:head.stdout.trim(),build:[script]};
@@ -82,7 +85,7 @@ test('the build owner runs inside the landing\'s admission when the disk moves b
 test('the build owner\'s typed disk refusal holds the landing for disk, whatever its exit status',t=>{
   // A build of another target is another admission: the owner refuses it and exits 2.
   const f=fixture(t);ownMemory(join(f.own,'memory'),{disk:{freeBytes:60*2**30,freeInodes:100}});
-  const {commit,build}=buildOwner(t,f,45*2**30,'"$CARGO_TARGET_DIR/other"');
+  const {commit,build}=buildOwner(t,f,45*2**30,{target:'"$CARGO_TARGET_DIR/other"'});
   const result=inUnit(t,f,['build','tests'],commit,{build});
   assert.equal(result.state,'held',result.message);
   assert.deepEqual(result.steps.map(row=>row.name+' '+row.verdict),['build INSTRUMENT','tests NOT RUN']);
@@ -108,4 +111,18 @@ test('the actual test-profile core step preserves the disk cause through the gat
   assert.equal(result.state,'held',result.message);
   for(const row of result.steps){assert.equal(row.verdict,'INSTRUMENT',JSON.stringify(row));assert.equal(row.instrument?.kind,'disk-capacity');}
   const read=readSummary(f.run,head.stdout.trim(),['tests']);assert.deepEqual(read.steps,{tests:'HELD'});assert.equal(verdictOf(read.steps),'held');
+});
+
+test('a compile error in the real build owner publishes no instrument and refuses the change',t=>{
+  // The landing's build now carries the step-result protocol: a compile error must stay the change's own failure.
+  const f=fixture(t);ownMemory(join(f.own,'memory'),{disk:{freeBytes:60*2**30,freeInodes:100}});
+  const {commit,build}=buildOwner(t,f,60*2**30,{cargo:'echo "error[E0308]: mismatched types" >&2\nexit 101\n'});
+  const result=inUnit(t,f,['build','tests'],commit,{build});
+  const log=readFileSync(join(f.run,'build.log'),'utf8');
+  assert.equal(result.state,'red',result.message+'\n'+log);assert.match(log,/error\[E0308\]/);
+  assert.match(result.message,/^build FAIL; log /);
+  assert.deepEqual(result.steps.map(row=>row.name+' '+row.verdict),['build FAIL','tests NOT RUN']);
+  assert.equal(result.steps[0]?.reason,'exit 101');assert.equal(result.steps[0]?.instrument,undefined);
+  assert.equal(result.steps[1]?.needs,'build');
+  assert.equal(diskRetry({tree:f.tree,target:f.target},result),undefined);
 });

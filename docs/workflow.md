@@ -1165,7 +1165,16 @@ the tooling strict checker owns the source's type checking.
   completion. Profile values and the pinned toolchain define compatibility.
   Non-pool test and Clippy builds hold claims for their selected outputs in the
   same owner, with process birth identity and dead-owner reclamation. Claims
-  for one target merge with its pool promise. Temporary admission checks and
+  for one target merge with its pool promise. One build is admitted once: an
+  owner that admitted a build hands its admission to the command doing that
+  build (`NTS_DISK_BUILD_ADMISSION`), as the landing check does to
+  `tooling/gate/build.ts` and `build.ts` to its doctest preparation. A handed
+  admission that covers the build's target and outputs is not admitted again,
+  so a disk that moves between the two never refuses work its owner admitted;
+  one that does not cover them admits the uncovered build on its own. A handed
+  admission whose owner no longer holds it is a `tooling-setup` instrument
+  failure, never a fresh admission. Only its owner releases it, and a
+  launcher's admission never reaches a new landing run. Temporary admission checks and
   durably claims its measured byte allowance under that same capacity lock.
   Its explicit lease stays held through preparation, publication and resource
   drain, then releases in `finally`; a denied attempt owns nothing. Temporary
