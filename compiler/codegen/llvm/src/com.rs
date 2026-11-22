@@ -3,6 +3,8 @@
 
 use std::fmt::Write as _;
 
+use crate::runtime_call::{self, Operand, Site};
+
 use super::Emission as Program;
 use nts_codegen_common::com::{
     Answer, OUTER_SLOTS, adapter_symbol, class_symbol, delegate_hop_symbol, delegate_invoke_symbol,
@@ -21,7 +23,11 @@ use super::{Platform, conversion, is_not_zero, refuse, text_constant, ty_of};
 /// bridge, the context, a word each), the bridge called with the context
 /// last, and `S_OK` -- or, called off the thread owning the closure, the call
 /// carried there (`nts_com_carry`), as the C backend's adapter carries it.
-pub(super) fn delegates(program: &Program, platform: Platform) -> String {
+#[expect(
+    clippy::too_many_lines,
+    reason = "one complete delegate entry and its thread handoff"
+)]
+pub(super) fn delegates(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut text = String::new();
     for signature in delegate_signatures(program) {
         let mut parameters = vec!["ptr %self".to_owned()];
@@ -65,8 +71,13 @@ pub(super) fn delegates(program: &Program, platform: Platform) -> String {
             };
             let _ = writeln!(
                 text,
-                "  %owned = call {}i1 @nts_is_owner_thread()",
-                platform.extension(&HirType::Bool)
+                "  %owned = {runtime_0}",
+                runtime_0 = runtime_call::call(
+                    Site::synthetic(program, "delegates"),
+                    platform,
+                    "nts_is_owner_thread",
+                    &[]
+                )?
             );
             let _ = writeln!(text, "  br i1 %owned, label %here, label %carry");
             let _ = writeln!(text, "carry:");
@@ -86,7 +97,20 @@ pub(super) fn delegates(program: &Program, platform: Platform) -> String {
             let _ = writeln!(text, "  %size = ptrtoint ptr %size.at to i64");
             let _ = writeln!(
                 text,
-                "  call void @nts_com_carry(ptr %self, ptr %h, i64 %size, ptr {objects}, i32 {counted}, ptr @{hop}.run)"
+                "  {runtime_0}",
+                runtime_0 = runtime_call::call(
+                    Site::synthetic(program, "delegates"),
+                    platform,
+                    "nts_com_carry",
+                    &[
+                        Operand::new("ptr", "%self"),
+                        Operand::new("ptr", "%h"),
+                        Operand::new("i64", "%size"),
+                        Operand::new("ptr", objects.as_str()),
+                        Operand::new("i32", format!("{counted}")),
+                        Operand::new("ptr", format!("@{hop}.run"))
+                    ]
+                )?
             );
             let _ = writeln!(text, "  ret i32 0");
             let _ = writeln!(text, "here:");
@@ -110,7 +134,7 @@ pub(super) fn delegates(program: &Program, platform: Platform) -> String {
         let _ = writeln!(text, "  ret i32 0");
         let _ = writeln!(text, "}}");
     }
-    text
+    Ok(text)
 }
 
 /// A signature's carried call: the arguments' type, the offsets of the
@@ -243,12 +267,12 @@ pub(super) fn classes(
         };
         for (at, forward) in composition.forwarded.iter().enumerate() {
             forwarder(
+                Site::function(first),
                 &mut out,
                 platform,
                 &forward_symbol(&class.name, at),
                 forward,
-            )
-            .map_err(|why| refuse(first, &why))?;
+            )?;
         }
         let answered = interfaces(class);
         let mut rows = Vec::new();
@@ -315,8 +339,20 @@ pub(super) fn classes(
                 let maker = format!("__nts_com_state_{}", class.name);
                 let _ = writeln!(
                     out,
-                    "define internal ptr @{maker}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
-                    program.source_function(&compiled.name)
+                    "define internal ptr @{maker}() nounwind {{\n  {runtime_0}\n  %made = call ptr {0}()\n  {runtime_1}\n  ret ptr %made\n}}",
+                    program.source_function(&compiled.name),
+                    runtime_0 = runtime_call::call(
+                        Site::synthetic(program, "classes"),
+                        platform,
+                        "nts_callback_enter",
+                        &[]
+                    )?,
+                    runtime_1 = runtime_call::call(
+                        Site::synthetic(program, "classes"),
+                        platform,
+                        "nts_callback_leave",
+                        &[]
+                    )?
                 );
                 format!("ptr @{maker}")
             }
@@ -331,7 +367,15 @@ pub(super) fn classes(
             answered.len(),
             u8::from(composition.xaml)
         );
-        registrations.push(format!("  call void @nts_com_register(ptr @{descriptor})"));
+        registrations.push(format!(
+            "  {runtime_0}",
+            runtime_0 = runtime_call::call(
+                Site::synthetic(program, "classes"),
+                platform,
+                "nts_com_register",
+                &[Operand::new("ptr", format!("@{descriptor}"))]
+            )?
+        ));
     }
     let _ = writeln!(
         out,
@@ -366,7 +410,15 @@ fn adapter(
     }
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
-    let mut body = String::from("  call void @nts_callback_enter()\n");
+    let mut body = format!(
+        "  {}\n",
+        runtime_call::call(
+            Site::function(compiled),
+            platform,
+            "nts_callback_enter",
+            &[]
+        )?
+    );
     for (slot, foreign) in method.signature.parameters.iter().enumerate() {
         // A record by value, as Win64 passes it, to the address of a copy the
         // method reads, as an Objective-C entry point passes one.
@@ -398,7 +450,16 @@ fn adapter(
         let to = compiled.params[slot].ty.clone();
         let to_ty = ty_of(&to, compiled)?;
         if slot == 0 {
-            let _ = writeln!(body, "  %p0 = call ptr @nts_com_outer_instance(ptr %a0)");
+            let _ = writeln!(
+                body,
+                "  %p0 = {runtime_0}",
+                runtime_0 = runtime_call::call(
+                    Site::function(compiled),
+                    platform,
+                    "nts_com_outer_instance",
+                    &[Operand::new("ptr", "%a0")]
+                )?
+            );
             arguments.push(format!("{to_ty} %p0"));
         } else if from == to {
             arguments.push(format!("{to_ty} %a{slot}"));
@@ -483,7 +544,16 @@ fn adapter(
             );
         }
     }
-    let _ = writeln!(out, "  call void @nts_callback_leave()\n  ret i32 0\n}}");
+    let _ = writeln!(
+        out,
+        "  {runtime_0}\n  ret i32 0\n}}",
+        runtime_0 = runtime_call::call(
+            Site::function(compiled),
+            platform,
+            "nts_callback_leave",
+            &[]
+        )?
+    );
     Ok(())
 }
 
@@ -518,18 +588,21 @@ fn win64_register(
 /// `i64` does, and a `Size` spelled by its `float` fields would read XMM
 /// registers the caller never wrote.
 fn forwarder(
+    site: Site<'_>,
     out: &mut String,
     platform: Platform,
     name: &str,
     forward: &nts_core::hir::native::Forwarded,
-) -> Result<(), String> {
+) -> Result<(), Diagnostic> {
     let mut spelled = Vec::new();
     for ty in &forward.signature.parameters {
         spelled.push(match ty {
-            Type::Record(record) => match win64_register(record, platform)? {
-                Some(bits) => format!("i{bits}"),
-                None => "ptr".to_owned(),
-            },
+            Type::Record(record) => {
+                match win64_register(record, platform).map_err(|why| site.refuse(&why))? {
+                    Some(bits) => format!("i{bits}"),
+                    None => "ptr".to_owned(),
+                }
+            }
             other => abi_parameter(other, platform),
         });
     }
@@ -552,7 +625,16 @@ fn forwarder(
         "define internal i32 @{name}({}) nounwind {{",
         parameters.join(", ")
     );
-    let _ = writeln!(out, "  %base = call ptr @nts_com_outer_base(ptr %a0)");
+    let _ = writeln!(
+        out,
+        "  %base = {runtime_0}",
+        runtime_0 = runtime_call::call(
+            site,
+            platform,
+            "nts_com_outer_base",
+            &[Operand::new("ptr", "%a0")]
+        )?
+    );
     let _ = writeln!(out, "  %table = load ptr, ptr %base");
     let _ = writeln!(
         out,

@@ -8,6 +8,8 @@
 
 use std::fmt::Write as _;
 
+use crate::runtime_call::{self, Operand, Site};
+
 use super::Emission as Program;
 
 use nts_core::hir::native::{Family, GObjectThunk, GType, PropertyOperation, Type};
@@ -124,8 +126,20 @@ pub(super) fn classes(
                 };
                 let _ = writeln!(
                     out,
-                    "define internal ptr @__nts_gobject_state_maker_{name}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
-                    program.source_function(&compiled.name)
+                    "define internal ptr @__nts_gobject_state_maker_{name}() nounwind {{\n  {runtime_0}\n  %made = call ptr {0}()\n  {runtime_1}\n  ret ptr %made\n}}",
+                    program.source_function(&compiled.name),
+                    runtime_0 = runtime_call::call(
+                        Site::synthetic(program, "classes"),
+                        platform,
+                        "nts_callback_enter",
+                        &[]
+                    )?,
+                    runtime_1 = runtime_call::call(
+                        Site::synthetic(program, "classes"),
+                        platform,
+                        "nts_callback_leave",
+                        &[]
+                    )?
                 );
                 format!("@__nts_gobject_state_maker_{name}")
             }
@@ -140,7 +154,7 @@ pub(super) fn classes(
             (class, &interfaces),
             &mut parents,
         ));
-        if let Some(table) = properties(&mut out, program, class)? {
+        if let Some(table) = properties(&mut out, program, platform, class)? {
             let _ = writeln!(
                 signals,
                 "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})",
@@ -320,15 +334,47 @@ fn template(
                 };
             };
             let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
-                "  call void @nts_release(ptr %text)\n"
+                format!(
+                    "  {}\n",
+                    runtime_call::call(
+                        Site::function(compiled),
+                        platform,
+                        "nts_release",
+                        &[Operand::new("ptr", "%text")]
+                    )?
+                )
             } else {
-                ""
+                String::new()
             };
             format!(
-                "  call void @nts_callback_enter()\n  %text = call ptr {}()\n  %c = call ptr @nts_string_to_cstring(ptr %text)\n  \
-                 call void @nts_gtk_class_template_text(ptr %klass, ptr %c)\n  call void @nts_cstring_release(ptr %text, ptr %c)\n{release}  \
-                 call void @nts_callback_leave()\n",
-                program.source_function(&compiled.name)
+                "  {runtime_0}\n  %text = call ptr {0}()\n  %c = {runtime_1}\n  \
+                 call void @nts_gtk_class_template_text(ptr %klass, ptr %c)\n  {runtime_2}\n{release}  \
+                 {runtime_3}\n",
+                program.source_function(&compiled.name),
+                runtime_0 = runtime_call::call(
+                    Site::synthetic(program, "template"),
+                    platform,
+                    "nts_callback_enter",
+                    &[]
+                )?,
+                runtime_1 = runtime_call::call(
+                    Site::synthetic(program, "template"),
+                    platform,
+                    "nts_string_to_cstring",
+                    &[Operand::new("ptr", "%text")]
+                )?,
+                runtime_2 = runtime_call::call(
+                    Site::synthetic(program, "template"),
+                    platform,
+                    "nts_cstring_release",
+                    &[Operand::new("ptr", "%text"), Operand::new("ptr", "%c")]
+                )?,
+                runtime_3 = runtime_call::call(
+                    Site::synthetic(program, "template"),
+                    platform,
+                    "nts_callback_leave",
+                    &[]
+                )?
             )
         }
     };
@@ -523,6 +569,7 @@ fn registrations(out: &mut String, class: &ForeignClass) -> String {
 fn properties(
     out: &mut String,
     program: &Program,
+    platform: Platform,
     class: &ForeignClass,
 ) -> Result<Option<String>, Diagnostic> {
     if class.properties.is_empty() {
@@ -542,13 +589,37 @@ fn properties(
         let value = ty_of(&get.return_type, get)?;
         let _ = writeln!(
             out,
-            "define internal {value} @__nts_gobject_get_{name}_{at}(ptr %self) nounwind {{\n  call void @nts_callback_enter()\n  %r = call {value} {}(ptr %self)\n  call void @nts_callback_leave()\n  ret {value} %r\n}}",
-            program.source_function(&get.name)
+            "define internal {value} @__nts_gobject_get_{name}_{at}(ptr %self) nounwind {{\n  {runtime_0}\n  %r = call {value} {0}(ptr %self)\n  {runtime_1}\n  ret {value} %r\n}}",
+            program.source_function(&get.name),
+            runtime_0 = runtime_call::call(
+                Site::synthetic(program, "properties"),
+                platform,
+                "nts_callback_enter",
+                &[]
+            )?,
+            runtime_1 = runtime_call::call(
+                Site::synthetic(program, "properties"),
+                platform,
+                "nts_callback_leave",
+                &[]
+            )?
         );
         let _ = writeln!(
             out,
-            "define internal void @__nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  call void @nts_callback_enter()\n  call void {}(ptr %self, {value} %v)\n  call void @nts_callback_leave()\n  ret void\n}}",
-            program.source_function(&set.name)
+            "define internal void @__nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  {runtime_0}\n  call void {0}(ptr %self, {value} %v)\n  {runtime_1}\n  ret void\n}}",
+            program.source_function(&set.name),
+            runtime_0 = runtime_call::call(
+                Site::synthetic(program, "properties"),
+                platform,
+                "nts_callback_enter",
+                &[]
+            )?,
+            runtime_1 = runtime_call::call(
+                Site::synthetic(program, "properties"),
+                platform,
+                "nts_callback_leave",
+                &[]
+            )?
         );
         bytes_constant(
             out,
@@ -1014,9 +1085,24 @@ fn entry_point(
         if nts_core::hir::native::lent_string(foreign, &want.ty) {
             let _ = writeln!(
                 copies,
-                "  %s{slot} = call ptr @nts_string_from_cstring(ptr %a{slot})"
+                "  %s{slot} = {runtime_0}",
+                runtime_0 = runtime_call::call(
+                    Site::function(compiled),
+                    platform,
+                    "nts_string_from_cstring",
+                    &[Operand::new("ptr", format!("%a{slot}"))]
+                )?
             );
-            let _ = writeln!(releases, "  call void @nts_release(ptr %s{slot})");
+            let _ = writeln!(
+                releases,
+                "  {runtime_0}",
+                runtime_0 = runtime_call::call(
+                    Site::function(compiled),
+                    platform,
+                    "nts_release",
+                    &[Operand::new("ptr", format!("%s{slot}"))]
+                )?
+            );
             arguments.push(format!("ptr %s{slot}"));
             continue;
         }
@@ -1065,7 +1151,19 @@ fn entry_point(
         out.push_str(&body);
         let _ = writeln!(
             out,
-            "  call void @nts_callback_enter()\n{copies}  {call}\n{releases}  call void @nts_callback_leave()\n  ret void\n}}"
+            "  {runtime_0}\n{copies}  {call}\n{releases}  {runtime_1}\n  ret void\n}}",
+            runtime_0 = runtime_call::call(
+                Site::function(compiled),
+                platform,
+                "nts_callback_enter",
+                &[]
+            )?,
+            runtime_1 = runtime_call::call(
+                Site::function(compiled),
+                platform,
+                "nts_callback_leave",
+                &[]
+            )?
         );
     } else {
         let want_ty = ty_of(&want, compiled)?;
@@ -1077,7 +1175,19 @@ fn entry_point(
         out.push_str(&body);
         let _ = writeln!(
             out,
-            "  call void @nts_callback_enter()\n{copies}  %r = {call}\n{releases}  call void @nts_callback_leave()"
+            "  {runtime_0}\n{copies}  %r = {call}\n{releases}  {runtime_1}",
+            runtime_0 = runtime_call::call(
+                Site::function(compiled),
+                platform,
+                "nts_callback_enter",
+                &[]
+            )?,
+            runtime_1 = runtime_call::call(
+                Site::function(compiled),
+                platform,
+                "nts_callback_leave",
+                &[]
+            )?
         );
         // And back: the method's `GtkLabel *` as the slot's `gpointer`
         // (`GListModelInterface get_item`) is the same pointer.

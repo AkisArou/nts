@@ -48,6 +48,7 @@ mod indirect;
 mod native;
 mod objc;
 mod optional;
+mod runtime_call;
 /// How many sixteen-byte arguments a Win64 runtime call can pass; see `indirect`.
 pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
 pub mod signatures;
@@ -287,8 +288,21 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         let _ = writeln!(text, "{line}");
     }
     text.push_str(&native_memory::helpers(program));
-    text.push_str(&objc::module(program, platform));
-    text.push_str(&com::delegates(program, platform));
+    for helpers in [
+        objc::module(program, platform),
+        com::delegates(program, platform),
+    ] {
+        match helpers {
+            Ok(helpers) => text.push_str(&helpers),
+            Err(diagnostic) => {
+                diagnostics.push(diagnostic);
+                return Emitted {
+                    text: String::new(),
+                    diagnostics,
+                };
+            }
+        }
+    }
     text.push_str(&counting_declarations(program));
     text.push_str(&open_chains(program, platform));
     // What the runtime offers this backend, declared up front.

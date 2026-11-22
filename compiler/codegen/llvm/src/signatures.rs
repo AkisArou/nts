@@ -2958,34 +2958,44 @@ pub const SIGNATURES: &[Signature] = &[
 /// the declaration a given platform links against.
 #[must_use]
 pub fn signature(name: &str) -> Option<&'static Signature> {
-    find(SIGNATURES, name)
+    signature_on(name, crate::Platform::SYSV_X86_64)
+}
+
+const TABLES: [&[Signature]; 5] = [
+    SIGNATURES,
+    super::signatures_win64::SIGNATURES_WIN64,
+    super::signatures_arm64::SIGNATURES_ARM64,
+    super::signatures_arm64_linux::SIGNATURES_ARM64_LINUX,
+    super::signatures_arm64_windows::SIGNATURES_ARM64_WINDOWS,
+];
+
+fn table_index(platform: crate::Platform) -> usize {
+    use nts_core::hir::native::PlatformConvention::{SysV, Win64};
+    match (platform.abi.convention, platform.arch) {
+        (_, crate::Arch::Aarch64) if platform.darwin => 2,
+        (SysV, crate::Arch::Aarch64) => 3,
+        (Win64, crate::Arch::Aarch64) => 4,
+        (Win64, crate::Arch::X86_64) => 1,
+        (SysV, crate::Arch::X86_64) => 0,
+    }
 }
 
 /// The signature of a runtime function as `platform`'s C compiler declares it.
+/// Each target's index is built once; call emission never scans the tables.
 #[must_use]
 pub fn signature_on(name: &str, platform: crate::Platform) -> Option<&'static Signature> {
-    find(table(platform), name)
+    type Index = std::collections::HashMap<&'static str, &'static Signature>;
+    static INDICES: std::sync::LazyLock<[Index; 5]> = std::sync::LazyLock::new(|| {
+        TABLES.map(|table| table.iter().map(|known| (known.name, known)).collect())
+    });
+    INDICES[table_index(platform)].get(name).copied()
 }
 
 /// The table clang generated for `platform`: its data model, its arch, and on
 /// arm64 whether it is Apple's, whose convention widens what AAPCS64 does not.
 #[must_use]
 pub fn table(platform: crate::Platform) -> &'static [Signature] {
-    use nts_core::hir::native::PlatformConvention::{SysV, Win64};
-    match (platform.abi.convention, platform.arch) {
-        (_, crate::Arch::Aarch64) if platform.darwin => super::signatures_arm64::SIGNATURES_ARM64,
-        (SysV, crate::Arch::Aarch64) => super::signatures_arm64_linux::SIGNATURES_ARM64_LINUX,
-        (Win64, crate::Arch::Aarch64) => super::signatures_arm64_windows::SIGNATURES_ARM64_WINDOWS,
-        (Win64, crate::Arch::X86_64) => super::signatures_win64::SIGNATURES_WIN64,
-        (SysV, crate::Arch::X86_64) => SIGNATURES,
-    }
-}
-
-fn find(table: &'static [Signature], name: &str) -> Option<&'static Signature> {
-    table
-        .binary_search_by(|known| known.name.cmp(name))
-        .ok()
-        .map(|at| &table[at])
+    TABLES[table_index(platform)]
 }
 
 #[cfg(test)]
@@ -3033,18 +3043,8 @@ mod tests {
         }
     }
 
-    /// The table is searched with `binary_search_by`, so its order is not a
-    /// matter of taste.
-    ///
-    /// An entry in the wrong place is not found, `signature` answers `None`,
-    /// and the backend refuses the call as one "the runtime declares only as a
-    /// `static inline` and so exposes no symbol for" -- which is a sentence
-    /// about the runtime that is simply false. `nts_str_to_lower_case` was
-    /// added three rows too late and cost the LLVM column of a whole benchmark
-    /// row, with a refusal message pointing at the wrong file.
-    ///
-    /// Nothing checked this before, and a lookup that silently answers `None`
-    /// for a name that is right there is the worst shape a table can have.
+    /// Generated rows keep a deterministic order independently of the lookup
+    /// index, so regeneration cannot hide a misplaced or duplicated helper.
     #[test]
     fn the_table_is_sorted_because_it_is_binary_searched() {
         for pair in SIGNATURES

@@ -6,6 +6,8 @@
 
 use std::fmt::Write as _;
 
+use crate::runtime_call::{self, Operand, Site};
+
 use nts_codegen_common::objc::{
     block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol,
     lookups, selector_symbol,
@@ -48,10 +50,10 @@ fn lookup(text: &mut String, symbol: &str, lookup: &str, spelled: &str) {
 }
 
 /// The runtime declarations and the lookups, when the program sends anything.
-pub(super) fn module(program: &Program, platform: Platform) -> String {
-    let mut text = blocks(program, platform);
+pub(super) fn module(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
+    let mut text = blocks(program, platform)?;
     if !program.objc {
-        return text;
+        return Ok(text);
     }
     let found = lookups(program);
     // Each declared once: a program that binds the runtime's C API itself
@@ -111,7 +113,7 @@ pub(super) fn module(program: &Program, platform: Platform) -> String {
             class,
         );
     }
-    text
+    Ok(text)
 }
 
 /// `%out = call R (ptr, ptr, A...) @objc_msgSend(ptr %receiver, ptr %sel, A %a...)`.
@@ -278,7 +280,11 @@ fn bound(program: &Program, symbol: &str) -> bool {
 /// The C backend's `objc::blocks`, in the other spelling: the block layout,
 /// the owner-checked copy and dispose helpers, and one invoke adapter and
 /// descriptor per signature. See there for why each piece is what it is.
-fn blocks(program: &Program, platform: Platform) -> String {
+#[expect(
+    clippy::too_many_lines,
+    reason = "the block ABI and its copy/dispose entries share one descriptor"
+)]
+fn blocks(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let signatures = block_signatures(program);
     let mut text = String::new();
     // A block returning an object hands it back at +0, as ARC's caller
@@ -304,7 +310,7 @@ fn blocks(program: &Program, platform: Platform) -> String {
         let _ = writeln!(text, "declare ptr @objc_autoreleaseReturnValue(ptr)");
     }
     if signatures.is_empty() {
-        return text;
+        return Ok(text);
     }
     let message = "nts: a block was %s off the thread that owns its closure";
     for line in [
@@ -322,8 +328,13 @@ fn blocks(program: &Program, platform: Platform) -> String {
         constant("@nts.block.released", "released"),
         "define internal void @nts_block_on_owner(ptr %what) {".to_owned(),
         format!(
-            "  %owned = call {}i1 @nts_is_owner_thread()",
-            platform.extension(&HirType::Bool)
+            "  %owned = {runtime_0}",
+            runtime_0 = runtime_call::call(
+                Site::synthetic(program, "blocks"),
+                platform,
+                "nts_is_owner_thread",
+                &[]
+            )?
         ),
         "  br i1 %owned, label %fine, label %foreign".to_owned(),
         "fine:".to_owned(),
@@ -338,7 +349,15 @@ fn blocks(program: &Program, platform: Platform) -> String {
         "  call void @nts_block_on_owner(ptr @nts.block.copied)".to_owned(),
         "  %slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5".to_owned(),
         "  %context = load ptr, ptr %slot".to_owned(),
-        "  %lent = call ptr @nts_closure_lend(ptr %context)".to_owned(),
+        format!(
+            "  %lent = {}",
+            runtime_call::call(
+                Site::synthetic(program, "blocks"),
+                platform,
+                "nts_closure_lend",
+                &[Operand::new("ptr", "%context")]
+            )?
+        ),
         "  ret void".to_owned(),
         "}".to_owned(),
         // A platform lets go of a handler on whatever thread called it; the
@@ -347,22 +366,43 @@ fn blocks(program: &Program, platform: Platform) -> String {
         "  %slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5".to_owned(),
         "  %context = load ptr, ptr %slot".to_owned(),
         format!(
-            "  %owned = call {}i1 @nts_is_owner_thread()",
-            platform.extension(&HirType::Bool)
+            "  %owned = {runtime_0}",
+            runtime_0 = runtime_call::call(
+                Site::synthetic(program, "blocks"),
+                platform,
+                "nts_is_owner_thread",
+                &[]
+            )?
         ),
         "  br i1 %owned, label %here, label %carry".to_owned(),
         "carry:".to_owned(),
-        "  call void @nts_block_unlend(ptr %context)".to_owned(),
+        format!(
+            "  {}",
+            runtime_call::call(
+                Site::synthetic(program, "blocks"),
+                platform,
+                "nts_block_unlend",
+                &[Operand::new("ptr", "%context")]
+            )?
+        ),
         "  ret void".to_owned(),
         "here:".to_owned(),
-        "  call void @nts_closure_unlend(ptr %context)".to_owned(),
+        format!(
+            "  {}",
+            runtime_call::call(
+                Site::synthetic(program, "blocks"),
+                platform,
+                "nts_closure_unlend",
+                &[Operand::new("ptr", "%context")]
+            )?
+        ),
         "  ret void".to_owned(),
         "}".to_owned(),
     ] {
         let _ = writeln!(text, "{line}");
     }
     for signature in signatures {
-        adapter(&mut text, signature, counted, platform);
+        adapter(program, &mut text, signature, counted, platform)?;
         let encoding = format!("@{}.signature", block_descriptor_symbol(signature));
         let _ = writeln!(text, "{}", constant(&encoding, &block_encoding(signature)));
         let _ = writeln!(
@@ -371,7 +411,7 @@ fn blocks(program: &Program, platform: Platform) -> String {
             block_descriptor_symbol(signature)
         );
     }
-    text
+    Ok(text)
 }
 
 /// A native ABI type as an LLVM result type, with the extension C gives it:
@@ -420,7 +460,13 @@ pub(super) fn returns_object(result: &Type) -> bool {
 }
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-fn adapter(text: &mut String, signature: &FnPointer, counted: bool, platform: Platform) {
+fn adapter(
+    program: &Program,
+    text: &mut String,
+    signature: &FnPointer,
+    counted: bool,
+    platform: Platform,
+) -> Result<(), Diagnostic> {
     let result = abi(&signature.result, platform);
     let mut parameters = vec!["ptr %block".to_owned()];
     let mut types = Vec::new();
@@ -455,8 +501,13 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool, platform: Pl
         let hop = nts_codegen_common::objc::block_hop_symbol(signature);
         let _ = writeln!(
             text,
-            "  %owned = call {}i1 @nts_is_owner_thread()",
-            platform.extension(&HirType::Bool)
+            "  %owned = {runtime_0}",
+            runtime_0 = runtime_call::call(
+                Site::synthetic(program, "adapter"),
+                platform,
+                "nts_is_owner_thread",
+                &[]
+            )?
         );
         let _ = writeln!(text, "  br i1 %owned, label %here, label %carry");
         let _ = writeln!(text, "carry:");
@@ -488,7 +539,20 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool, platform: Pl
             .count();
         let _ = writeln!(
             text,
-            "  call void @nts_block_carry(ptr %block, ptr %h, i64 %size, ptr {objects}, i32 {count}, ptr @{hop}.run)"
+            "  {runtime_0}",
+            runtime_0 = runtime_call::call(
+                Site::synthetic(program, "adapter"),
+                platform,
+                "nts_block_carry",
+                &[
+                    Operand::new("ptr", "%block"),
+                    Operand::new("ptr", "%h"),
+                    Operand::new("i64", "%size"),
+                    Operand::new("ptr", objects.as_str()),
+                    Operand::new("i32", format!("{count}")),
+                    Operand::new("ptr", format!("@{hop}.run"))
+                ]
+            )?
         );
         let _ = writeln!(text, "  ret void");
         let _ = writeln!(text, "here:");
@@ -530,6 +594,7 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool, platform: Pl
         }
     }
     let _ = writeln!(text, "}}");
+    Ok(())
 }
 
 /// The carried call of a block signature: the arguments' type, the offsets of
