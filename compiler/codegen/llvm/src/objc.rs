@@ -6,7 +6,7 @@
 
 use std::fmt::Write as _;
 
-use crate::runtime_call::{self, Operand, Site};
+use crate::runtime_call::{self, DirectCallee, Operand, Site};
 
 use nts_codegen_common::objc::{
     block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol,
@@ -205,9 +205,9 @@ pub(super) fn send(
                 "{at}.slot = getelementptr inbounds {{ ptr, ptr }}, ptr {at}, i32 0, i32 1"
             ));
             before.push(format!("store ptr {at}.base, ptr {at}.slot"));
-            (at, "msgSendSuper")
+            (at, "objc_msgSendSuper")
         }
-        None => (receiver, "msgSend"),
+        None => (receiver, "objc_msgSend"),
     };
     let selector = format!("{out}.selector");
     before.push(format!(
@@ -223,10 +223,10 @@ pub(super) fn send(
     let mut types = Vec::new();
     let mut values = Vec::new();
     if let (Some(passing), Some(destination)) = (&plan.result, destination)
-        && let Some(hidden) = aggregate::sret(passing, &name(destination))
+        && let Some(hidden) = aggregate::sret(passing, name(destination))
     {
         types.push("ptr".to_owned());
-        values.push(hidden);
+        values.push(hidden.to_string());
     }
     types.extend(["ptr".to_owned(), "ptr".to_owned()]);
     values.extend([format!("ptr {receiver}"), format!("ptr {selector}")]);
@@ -247,13 +247,11 @@ pub(super) fn send(
             } else {
                 types.extend(aggregate::parameter_types(passing));
             }
-            values.extend(aggregate::load_argument(
-                passing,
-                align,
-                &name(*arg),
-                &temp,
-                &mut before,
-            ));
+            values.extend(
+                aggregate::load_argument(passing, align, &name(*arg), &temp, &mut before)
+                    .iter()
+                    .map(ToString::to_string),
+            );
         } else {
             types.push(ty_of(ty, func)?.to_owned());
             values.extend(
@@ -271,9 +269,9 @@ pub(super) fn send(
             // pointer, in `x8`.
             Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => (
                 if send.super_of.is_some() {
-                    "msgSendSuper_stret"
+                    "objc_msgSendSuper_stret"
                 } else {
-                    "msgSend_stret"
+                    "objc_msgSend_stret"
                 },
                 String::new(),
             ),
@@ -284,9 +282,12 @@ pub(super) fn send(
         };
         let spelled = aggregate::result_type(passing);
         before.push(format!(
-            "{prefix}call {spelled} ({}) @objc_{entry}({})",
-            types.join(", "),
-            values.join(", ")
+            "{prefix}{}",
+            runtime_call::direct(
+                format_args!("{spelled} ({})", types.join(", ")),
+                &DirectCallee::symbol(Site::function(func), platform, entry)?,
+                values.join(", ")
+            )
         ));
         aggregate::store_result(passing, align, &returned, &name(destination), &mut before);
         return Ok(before.join("\n"));
@@ -297,11 +298,17 @@ pub(super) fn send(
         format!("{out} = ")
     };
     before.push(format!(
-        "{prefix}call {}{} ({}) @objc_{entry}({})",
-        platform.extension(result),
-        ty_of(result, func)?,
-        types.join(", "),
-        values.join(", ")
+        "{prefix}{}",
+        runtime_call::direct(
+            format_args!(
+                "{}{} ({})",
+                platform.extension(result),
+                ty_of(result, func)?,
+                types.join(", ")
+            ),
+            &DirectCallee::symbol(Site::function(func), platform, entry)?,
+            values.join(", ")
+        )
     ));
     Ok(before.join("\n"))
 }

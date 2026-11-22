@@ -121,12 +121,16 @@ pub(super) fn printers(
         let mut args = vec!["ptr %receiver".to_owned()];
         let mut before = String::new();
         pad(program, function, &mut args, platform, &mut before)?;
-        let target = crate::definition(program, function, platform).1;
+        let target = crate::runtime_call::DirectCallee::global(
+            crate::runtime_call::Site::function(function),
+            platform,
+            crate::definition(program, function, platform).1,
+        )?;
         let _ = writeln!(
             text,
-            "define internal ptr @{}(ptr %receiver) nounwind {{\nentry:\n{before}  %answer = call ptr {target}({})\n  ret ptr %answer\n}}",
+            "define internal ptr @{}(ptr %receiver) nounwind {{\nentry:\n{before}  %answer = {}\n  ret ptr %answer\n}}",
             adapter,
-            args.join(", ")
+            crate::runtime_call::direct("ptr", &target, args.join(", "))
         );
     }
     Ok(())

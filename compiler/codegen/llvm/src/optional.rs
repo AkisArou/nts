@@ -1,6 +1,6 @@
 //! Logical optional SSA and the shared target ABI plan. The aggregate is an
 //! SSA value inside a function; only ABI coercions need temporary native slots.
-use crate::runtime_call::{self, Operand, Site};
+use crate::runtime_call::{self, Called, DirectCallee, Operand, Site};
 use crate::{Arch, Platform};
 use crate::{Diagnostic, Func, HirType, OpKind, ValueId, name, refuse, ty_of};
 use nts_codegen_common::optional::{self as abi, Passing};
@@ -299,8 +299,7 @@ pub(super) fn has_call(func: &Func, id: ValueId, platform: Platform) -> bool {
 pub(super) fn call(
     func: &Func,
     id: ValueId,
-    callable: &str,
-    helper: Option<&str>,
+    called: &Called<'_>,
     platform: Platform,
     mut lines: Vec<String>,
 ) -> Result<String, Diagnostic> {
@@ -350,11 +349,14 @@ pub(super) fn call(
         }
     }
     let checked_call = |returns: &str, extension: &str| -> Result<String, Diagnostic> {
-        match helper {
-            Some(helper) => runtime_call::call(Site::function(func), platform, helper, &rendered),
-            None => Ok(format!(
-                "call {extension}{returns} {callable}({})",
-                runtime_call::operands_text(&rendered)
+        match called {
+            Called::Runtime(helper) => {
+                runtime_call::call(Site::function(func), platform, helper, &rendered)
+            }
+            Called::Direct(direct) => Ok(runtime_call::direct(
+                format_args!("{extension}{returns}"),
+                direct,
+                runtime_call::operands_text(&rendered),
             )),
         }
     };
@@ -541,7 +543,7 @@ pub(super) fn operation(func: &Func, id: ValueId) -> Result<String, Diagnostic> 
 /// ABI authority as `signature` rather than guessing the LLVM return type.
 pub(super) fn discard_result(
     function: &Func,
-    callee: &str,
+    callee: &DirectCallee<'_>,
     mut arguments: Vec<String>,
     platform: Platform,
     release: Option<nts_codegen_common::counting::Counter>,
@@ -571,8 +573,8 @@ pub(super) fn discard_result(
     }
     let result = if returns == "void" { "" } else { "%ignored = " };
     lines.push(format!(
-        "{result}call {returns} {callee}({})",
-        arguments.join(", ")
+        "{result}{}",
+        runtime_call::direct(&returns, callee, arguments.join(", "))
     ));
     if let Some(counter) = release {
         // All counted optional payloads currently use a pointer; erased

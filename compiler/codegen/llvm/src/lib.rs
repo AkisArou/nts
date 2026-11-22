@@ -77,7 +77,7 @@ use nts_core::hir::{
     UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
-use runtime_call::{Operand, Site};
+use runtime_call::{Called, DirectCallee, Operand, Site};
 
 /// What the backend produced, and what it declined to.
 #[derive(Debug)]
@@ -462,7 +462,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     if let Err(diagnostic) = entry_parameters::printers(program, &kept, platform, &mut text) {
         diagnostics.push(diagnostic);
     }
-    let descriptors = descriptors(program, &pool, &mut diagnostics);
+    let descriptors = descriptors(program, &pool, platform, &mut diagnostics);
     let _ = writeln!(text, "{descriptors}");
     let _ = writeln!(text, "{}", literals(program, &pool, &kept));
     text.push_str(&entry_points(program, platform, &mut diagnostics));
@@ -521,13 +521,14 @@ fn callback_adapters(
                 args.extend(["i32 0".to_owned(), "i64 0".to_owned()]);
             }
         }
-        match optional::discard_result(
-            function,
-            &definition(program, function, platform).1,
-            args,
+        match DirectCallee::global(
+            Site::function(function),
             platform,
-            adapter.release,
-        ) {
+            definition(program, function, platform).1,
+        )
+        .and_then(|callee| {
+            optional::discard_result(function, &callee, args, platform, adapter.release)
+        }) {
             Ok(lines) => {
                 let _ = writeln!(
                     text,
@@ -1130,6 +1131,7 @@ fn native_column(
 fn descriptors(
     program: &Emission<'_>,
     pool: &LiteralPool,
+    platform: Platform,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> String {
     let mut out = String::new();
@@ -1172,10 +1174,27 @@ fn descriptors(
         let reference_table = offsets("refs", &references);
         let erased_table = offsets("erased", &erased);
         let (foreign, foreign_table) = foreign_slots(&mut out, layout, &placed.offsets, &tag);
-        let release_fields =
-            reference_fields(&mut out, &tag, &references, &erased, Action::Release);
+        let fields = (&tag[..], &references[..], &erased[..]);
+        let release_fields = match reference_fields(
+            &mut out,
+            (program.source, platform),
+            fields,
+            Action::Release,
+        ) {
+            Ok(fields) => fields,
+            Err(diagnostic) => {
+                diagnostics.push(diagnostic);
+                continue;
+            }
+        };
         let trace_fields = if program.provider == nts_core::hir::Memory::ReferenceCounting {
-            reference_fields(&mut out, &tag, &references, &erased, Action::Trace)
+            match reference_fields(&mut out, (program.source, platform), fields, Action::Trace) {
+                Ok(fields) => fields,
+                Err(diagnostic) => {
+                    diagnostics.push(diagnostic);
+                    continue;
+                }
+            }
         } else {
             "ptr null".to_owned()
         };
@@ -1352,19 +1371,33 @@ fn view_descriptor(program: &Program, class: nts_core::hir::ClassId) -> Option<S
 /// The runtime owns collection, the dying drain and foreign finalization.
 fn reference_fields(
     out: &mut String,
-    tag: &str,
-    managed: &[u32],
-    erased: &[u32],
+    (program, platform): (&Program, Platform),
+    (tag, managed, erased): (&str, &[u32], &[u32]),
     action: nts_codegen_common::release::Action,
-) -> String {
+) -> Result<String, Diagnostic> {
     use nts_core::hir::tags;
     if managed.is_empty() && erased.is_empty() {
-        return "ptr null".to_owned();
+        return Ok("ptr null".to_owned());
     }
     let callback = format!("{}_{tag}", action.symbol_prefix());
-    let (parameters, visit) = match action {
-        nts_codegen_common::release::Action::Release => ("ptr %object", "@nts_release"),
-        nts_codegen_common::release::Action::Trace => ("ptr %object, ptr %visit", "%visit"),
+    let parameters = match action {
+        nts_codegen_common::release::Action::Release => "ptr %object",
+        nts_codegen_common::release::Action::Trace => "ptr %object, ptr %visit",
+    };
+    // Release calls the runtime's checked `nts_release`; trace calls the
+    // collector's visitor, an SSA value.
+    let visit = |field: String| match action {
+        nts_codegen_common::release::Action::Release => runtime_call::call(
+            Site::synthetic(program, "descriptors"),
+            platform,
+            "nts_release",
+            &[Operand::new("ptr", field)],
+        ),
+        nts_codegen_common::release::Action::Trace => Ok(runtime_call::direct(
+            "void",
+            &runtime_call::DirectCallee::value("%visit"),
+            Operand::new("ptr", field),
+        )),
     };
     let _ = writeln!(
         out,
@@ -1381,7 +1414,7 @@ fn reference_fields(
             out,
             "  br i1 %m{at}.live, label %m{at}.release, label %m{at}.next\nm{at}.release:"
         );
-        let _ = writeln!(out, "  call void {visit}(ptr %m{at})");
+        let _ = writeln!(out, "  {}", visit(format!("%m{at}"))?);
         let _ = writeln!(out, "  br label %m{at}.next\nm{at}.next:");
     }
     for (at, offset) in erased.iter().enumerate() {
@@ -1404,11 +1437,11 @@ fn reference_fields(
             "  br i1 %owned{at}, label %release{at}, label %next{at}\nrelease{at}:"
         );
         let _ = writeln!(out, "  %p{at} = inttoptr i64 %bits{at} to ptr");
-        let _ = writeln!(out, "  call void {visit}(ptr %p{at})");
+        let _ = writeln!(out, "  {}", visit(format!("%p{at}"))?);
         let _ = writeln!(out, "  br label %next{at}\nnext{at}:");
     }
     let _ = writeln!(out, "  ret void\n}}");
-    format!("ptr @{callback}")
+    Ok(format!("ptr @{callback}"))
 }
 
 /// One descriptor per scalar element type an array is made of. An array of
@@ -1985,21 +2018,21 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 /// What a bridge calls: the compiled function by name, or the one in the
 /// receiver's table at `dispatched`, whose loads go on the end of `body`.
 fn bridge_callee(
-    program: &Emission<'_>,
+    (program, platform): (&Emission<'_>, Platform),
     compiled: &Func,
     dispatched: Option<u32>,
     receiver: &str,
     body: &mut String,
-) -> String {
+) -> Result<DirectCallee<'static>, Diagnostic> {
     let Some(slot) = dispatched else {
-        return program.source_function(&compiled.name);
+        return DirectCallee::compiled(Site::function(compiled), platform, program, &compiled.name);
     };
     let mut loads = Vec::new();
     let pointer = method_pointer("%d", receiver, slot, &mut loads);
     for load in loads {
         let _ = writeln!(body, "  {load}");
     }
-    pointer
+    Ok(DirectCallee::value(pointer))
 }
 
 /// The one instance of a closure class that captures nothing.
@@ -2174,16 +2207,16 @@ fn bridges(program: &Emission<'_>, platform: Platform) -> Result<String, Diagnos
                 )
             };
             let callee = bridge_callee(
-                program,
+                (program, platform),
                 compiled,
                 dispatched,
                 &format!("%a{last}"),
                 &mut body,
-            );
-            let call = format!(
-                "call {} {callee}({})",
+            )?;
+            let call = runtime_call::direct(
                 return_ty_of(&have, compiled)?,
-                arguments.join(", ")
+                &callee,
+                arguments.join(", "),
             );
             let parameters = parameters.join(", ");
             if want == HirType::Void {
@@ -2330,8 +2363,17 @@ fn bridge_argument(
     if let Some(converted) = converted {
         let _ = writeln!(
             body,
-            "  %q{at} = call {to_ty} {}({from_ty} %a{at})",
-            program.source_function(&converted.function)
+            "  %q{at} = {}",
+            runtime_call::direct(
+                to_ty,
+                &DirectCallee::compiled(
+                    Site::function(compiled),
+                    platform,
+                    program,
+                    &converted.function
+                )?,
+                format!("{from_ty} %a{at}")
+            )
         );
         if counted && matches!(to, HirType::Managed(_)) {
             let _ = writeln!(
@@ -2831,6 +2873,8 @@ fn imp(
                 "an Objective-C method returning a record this backend cannot place",
             )
         })?;
+        let callee =
+            DirectCallee::compiled(Site::function(compiled), platform, program, &compiled.name)?;
         let call_args = |slot: &str| {
             let mut all = arguments.clone();
             all.push(format!("ptr {slot}"));
@@ -2840,7 +2884,7 @@ fn imp(
             let _ = writeln!(
                 out,
                 "define internal void @{imp}({}) nounwind {{",
-                std::iter::once(hidden)
+                std::iter::once(hidden.to_string())
                     .chain(parameters.iter().cloned())
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -2848,9 +2892,8 @@ fn imp(
             out.push_str(&body);
             let _ = writeln!(
                 out,
-                "  {runtime_0}\n  call void {0}({1})\n  {runtime_1}\n  ret void\n}}",
-                program.source_function(&compiled.name),
-                call_args("%ret"),
+                "  {runtime_0}\n  {0}\n  {runtime_1}\n  ret void\n}}",
+                runtime_call::direct("void", &callee, call_args("%ret")),
                 runtime_0 = runtime_call::call(
                     Site::function(compiled),
                     platform,
@@ -2875,9 +2918,8 @@ fn imp(
             let _ = writeln!(out, "  %slot = alloca [{size} x i8], align {align}");
             let _ = writeln!(
                 out,
-                "  {runtime_0}\n  call void {0}({1})\n  {runtime_1}",
-                program.source_function(&compiled.name),
-                call_args("%slot"),
+                "  {runtime_0}\n  {0}\n  {runtime_1}",
+                runtime_call::direct("void", &callee, call_args("%slot")),
                 runtime_0 = runtime_call::call(
                     Site::function(compiled),
                     platform,
@@ -2910,11 +2952,10 @@ fn imp(
     entry_parameters::pad(program, compiled, &mut arguments, platform, &mut body)?;
     let want = method.signature.result.abi(platform.abi);
     let have = compiled.return_type.clone();
-    let call = format!(
-        "call {} {}({})",
+    let call = runtime_call::direct(
         ty_of(&have, compiled)?,
-        program.source_function(&compiled.name),
-        arguments.join(", ")
+        &DirectCallee::compiled(Site::function(compiled), platform, program, &compiled.name)?,
+        arguments.join(", "),
     );
     if want == HirType::Void {
         let _ = writeln!(
@@ -3058,8 +3099,13 @@ fn state_maker(
     let maker = nts_codegen_common::objc::state_symbol(&class.name);
     let _ = writeln!(
         out,
-        "define internal ptr @{maker}() nounwind {{\n  {runtime_0}\n  %made = call ptr {0}()\n  {runtime_1}\n  ret ptr %made\n}}",
-        program.source_function(&compiled.name),
+        "define internal ptr @{maker}() nounwind {{\n  {runtime_0}\n  %made = {0}\n  {runtime_1}\n  ret ptr %made\n}}",
+        runtime_call::direct(
+            "ptr",
+            &DirectCallee::compiled(Site::function(compiled), platform, program, &compiled.name)
+                .map_err(Some)?,
+            ""
+        ),
         runtime_0 = runtime_call::call(
             Site::function(compiled),
             platform,
@@ -4059,7 +4105,11 @@ fn c_entry(
 ) -> Result<String, Diagnostic> {
     let win64 = indirect::applies(platform);
     let exported = program.source_function(&func.name);
-    let body = indirect::body_symbol(&exported);
+    let body = DirectCallee::global(
+        Site::function(func),
+        platform,
+        indirect::body_symbol(&exported),
+    )?;
     let mut params = Vec::new();
     let mut lines = Vec::new();
     let mut arguments = Vec::new();
@@ -4102,12 +4152,13 @@ fn c_entry(
             }
         }
     }
-    let call = format!("{body}({})", arguments.join(", "));
+    let arguments = arguments.join(", ");
+    let call = |returns: &str| runtime_call::direct(returns, &body, &arguments);
     let (result, finish) = match &func.return_type {
         HirType::Erased if !win64 => (
             "[2 x i64]".to_owned(),
             vec![
-                format!("%r = call {ERASED_TYPE} {call}"),
+                format!("%r = {}", call(ERASED_TYPE)),
                 format!("%r.tag = extractvalue {ERASED_TYPE} %r, 0"),
                 format!("%r.bits = extractvalue {ERASED_TYPE} %r, 1"),
                 "%r.lo = zext i32 %r.tag to i64".to_owned(),
@@ -4119,7 +4170,7 @@ fn c_entry(
         HirType::Erased => (
             "void".to_owned(),
             vec![
-                format!("%r = call {ERASED_TYPE} {call}"),
+                format!("%r = {}", call(ERASED_TYPE)),
                 format!("store {ERASED_TYPE} %r, ptr %result, align 8"),
                 "ret void".to_owned(),
             ],
@@ -4127,19 +4178,16 @@ fn c_entry(
         HirType::BigInt if win64 => (
             "<2 x i64>".to_owned(),
             vec![
-                format!("%r = call i128 {call}"),
+                format!("%r = {}", call("i128")),
                 "%r.v = bitcast i128 %r to <2 x i64>".to_owned(),
                 "ret <2 x i64> %r.v".to_owned(),
             ],
         ),
-        _ if returns == "void" => (
-            "void".to_owned(),
-            vec![format!("call void {call}"), "ret void".to_owned()],
-        ),
+        _ if returns == "void" => ("void".to_owned(), vec![call("void"), "ret void".to_owned()]),
         other => (
             format!("{}{returns}", platform.extension(other)),
             vec![
-                format!("%r = call {returns} {call}"),
+                format!("%r = {}", call(returns)),
                 format!("ret {returns} %r"),
             ],
         ),
@@ -5879,11 +5927,14 @@ fn call(
             // receiver. `args[0]` is the receiver, and its descriptor is where
             // the table lives.
             let callable = match dispatched {
-                None => match callee {
-                    Callee::Direct(name) => program.source_function(name),
-                    _ => global(&called),
-                },
-                Some(slot) => {
+                None if into_c => Called::Runtime(&called),
+                None => Called::Direct(DirectCallee::compiled(
+                    Site::function(func),
+                    platform,
+                    program,
+                    &called,
+                )?),
+                Some(slot) => Called::Direct(DirectCallee::value({
                     let default = match callee {
                         Callee::Virtual { slot: selector, .. } => {
                             program.interface_access.default_for(*selector)
@@ -5896,7 +5947,7 @@ fn call(
                     } else {
                         method_pointer(&out, &receiver_name(args), slot, &mut before)
                     }
-                }
+                })),
             };
             if optional_call {
                 if framed.is_some() {
@@ -5905,14 +5956,7 @@ fn call(
                         "an optional call through a legacy frame adapter",
                     ));
                 }
-                return optional::call(
-                    func,
-                    value,
-                    &callable,
-                    into_c.then_some(called.as_str()),
-                    platform,
-                    before,
-                );
+                return optional::call(func, value, &callable, platform, before);
             }
             // A runtime helper is called at its declared result (`declared_result`).
             let declared = if into_c {
@@ -5930,13 +5974,15 @@ fn call(
                 || (platform.extension(&op.ty).to_owned(), call_returns),
                 |known| declared_result(known.returns),
             );
-            let call = if into_c {
-                runtime_call::call(Site::function(func), platform, &called, &rendered)?
-            } else {
-                format!(
-                    "call {attribute}{call_returns} {callable}({})",
-                    runtime_call::operands_text(&rendered)
-                )
+            let call = match &callable {
+                Called::Runtime(helper) => {
+                    runtime_call::call(Site::function(func), platform, helper, &rendered)?
+                }
+                Called::Direct(direct) => runtime_call::direct(
+                    format_args!("{attribute}{call_returns}"),
+                    direct,
+                    runtime_call::operands_text(&rendered),
+                ),
             };
             let call = if returns == "void" && call_returns != "void" {
                 format!("{out}.unused = {call}")
@@ -6389,15 +6435,8 @@ fn checked_bigint(
         }
         _ => return Ok(None),
     };
-    let checked = runtime_call::external(
-        Site::function(func),
-        platform,
-        &format!("llvm.{intrinsic}.with.overflow.i128"),
-        "{ i128, i1 }",
-        &[Operand::new("i128", left), Operand::new("i128", right)],
-    )?;
     Ok(Some(format!(
-        "{out}.checked = {checked}\n  \
+        "{out}.checked = call {{ i128, i1 }} @llvm.{intrinsic}.with.overflow.i128(i128 {left}, i128 {right})\n  \
          {out} = extractvalue {{ i128, i1 }} {out}.checked, 0\n  \
          {out}.overflow = extractvalue {{ i128, i1 }} {out}.checked, 1\n  {}",
         bigint_overflow_guard(func, platform, out, &format!("{out}.overflow"))?
@@ -7073,6 +7112,8 @@ fn unary(
         // `Math.abs(digits) > 0` in `tests/programs/a-tofixed-digit-count-is-truncated`
         // specialize: "defined with type 'double' but expected 'i32'".
         UnOp::Abs if float => {
+            // The arm64 runtime tables declare this intrinsic, so the call is
+            // checked against that declaration wherever one exists.
             let fabs = runtime_call::external(
                 Site::function(func),
                 platform,
@@ -7101,14 +7142,8 @@ fn unary(
             let want = ty_of(&func.values[value.0 as usize].ty, func)?;
             if want == ty {
                 format!(
-                    "{out} = {}",
-                    runtime_call::external(
-                        Site::function(func),
-                        platform,
-                        &format!("llvm.abs.{ty}"),
-                        ty,
-                        &[Operand::new(ty, name(operand)), Operand::new("i1", "false")]
-                    )?
+                    "{out} = call {ty} @llvm.abs.{ty}({ty} {}, i1 false)",
+                    name(operand)
                 )
             } else {
                 let signed = matches!(
@@ -7117,18 +7152,8 @@ fn unary(
                 );
                 let ext = if signed { "sext" } else { "zext" };
                 format!(
-                    "{out}.w = {ext} {ty} {} to {want}\n  {out} = {}",
-                    name(operand),
-                    runtime_call::external(
-                        Site::function(func),
-                        platform,
-                        &format!("llvm.abs.{want}"),
-                        want,
-                        &[
-                            Operand::new(want, format!("{out}.w")),
-                            Operand::new("i1", "false")
-                        ]
-                    )?
+                    "{out}.w = {ext} {ty} {} to {want}\n  {out} = call {want} @llvm.abs.{want}({want} {out}.w, i1 false)",
+                    name(operand)
                 )
             }
         }

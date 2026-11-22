@@ -234,47 +234,115 @@ fn template_matches(template: &str, name: &str) -> bool {
         .any(|at| template_matches(suffix, &rest[at..]))
 }
 
-/// Inspect literal and interpolated direct callees in source templates. The
-/// declaration tables alone decide whether a template could name a helper.
+/// The contents of the Rust string literals in `source`. Comments, character
+/// literals and lifetimes are skipped, so only text the emitter can render is
+/// read as IR.
+fn literals(source: &str) -> Vec<&str> {
+    let bytes = source.as_bytes();
+    let ident = |at: usize| bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_';
+    let mut found = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        let rest = &source[at..];
+        if rest.starts_with("//") {
+            at += rest.find('\n').unwrap_or(rest.len());
+        } else if rest.starts_with("/*") {
+            at += rest.find("*/").map_or(rest.len(), |end| end + 2);
+        } else if (at == 0 || !ident(at - 1))
+            && let Some(raw) = rest
+                .strip_prefix("br")
+                .or_else(|| rest.strip_prefix('r'))
+                .filter(|raw| raw.trim_start_matches('#').starts_with('"'))
+        {
+            let hashes = raw.len() - raw.trim_start_matches('#').len();
+            let open = at + (rest.len() - raw.len()) + hashes + 1;
+            let close = format!("\"{}", "#".repeat(hashes));
+            let end = source[open..]
+                .find(&close)
+                .map_or(source.len(), |end| open + end);
+            found.push(&source[open..end]);
+            at = end + close.len();
+        } else if bytes[at] == b'"' {
+            let open = at + 1;
+            let mut end = open;
+            while end < bytes.len() && bytes[end] != b'"' {
+                end += if bytes[end] == b'\\' { 2 } else { 1 };
+            }
+            found.push(&source[open..end.min(bytes.len())]);
+            at = end + 1;
+        } else if bytes[at] == b'\'' {
+            // A character literal is skipped whole, so `'"'` opens nothing;
+            // a lifetime is a single quote.
+            let mut chars = rest[1..].char_indices();
+            at += match chars.next() {
+                Some((_, '\\')) => rest[2..].find('\'').map_or(1, |end| end + 3),
+                Some((_, c)) if rest[1 + c.len_utf8()..].starts_with('\'') => 2 + c.len_utf8(),
+                _ => 1,
+            };
+        } else {
+            at += 1;
+        }
+    }
+    found
+}
+
+/// Inspect every IR call template in the sources' string literals. Its callee
+/// is the token written directly before the argument list (a function type,
+/// written with a space before its parenthesis, is skipped). A callee may stay
+/// outside the checked constructor only when the audit can prove it is not a
+/// helper: an SSA value, or a global template disjoint from every
+/// declaration. A format field as callee proves nothing; it is reported, as
+/// is a call template ending in one, which may hold the whole call.
 fn unchecked_calls<'a>(
     source: &'a str,
     declared: &std::collections::HashSet<&str>,
 ) -> Vec<&'a str> {
     let mut found = Vec::new();
-    for (start, _) in source.match_indices("call ") {
-        let line = source[..start].rsplit('\n').next().unwrap_or("");
-        if line.trim_start().starts_with("//") {
-            continue;
-        }
-        let rest = &source[start + "call ".len()..];
-        let Some(at) = rest.find('@') else {
-            continue;
-        };
-        // A Rust quote ends this call's prefix; a later unrelated literal
-        // naming a helper is not this call's callee.
-        if !rest[..at].chars().all(|c| {
-            c.is_ascii_alphanumeric() || c.is_whitespace() || "{}[]<>,().:_%\\".contains(c)
-        }) {
-            continue;
-        }
-        let target = &rest[at + 1..];
-        let target = target
-            .strip_prefix("\\\"")
-            .or_else(|| target.strip_prefix('"'))
-            .unwrap_or(target);
-        let Some(end) = target.find('(') else {
-            continue;
-        };
-        let name = target[..end].trim_end();
-        let name = name
-            .strip_suffix("\\\"")
-            .or_else(|| name.strip_suffix('"'))
-            .unwrap_or(name);
-        if declared
-            .iter()
-            .any(|declared| template_matches(name, declared))
-        {
-            found.push(name);
+    for literal in literals(source) {
+        for (start, _) in literal.match_indices("call ") {
+            let before = &literal[..start];
+            if !(before.is_empty()
+                || before.ends_with("\\n")
+                || before.ends_with("\\t")
+                || before.ends_with(|c: char| !(c.is_ascii_alphanumeric() || c == '_')))
+            {
+                continue;
+            }
+            let rest = &literal[start + "call ".len()..];
+            let mut tokens = rest.split_ascii_whitespace();
+            let callee = tokens
+                .by_ref()
+                .find_map(|token| token.find('(').filter(|&at| at > 0).map(|at| &token[..at]));
+            let callee = match callee {
+                Some(callee) => callee,
+                // No argument list: a template ending in a field may hold the
+                // callee and its arguments together.
+                None => match rest.split_ascii_whitespace().last() {
+                    Some(last) if last.starts_with('{') && last.ends_with('}') => last,
+                    _ => continue,
+                },
+            };
+            if callee.starts_with('{') {
+                found.push(callee);
+                continue;
+            }
+            let Some(name) = callee.strip_prefix('@') else {
+                continue; // An SSA value (`%f`) or prose.
+            };
+            let name = name
+                .strip_prefix("\\\"")
+                .or_else(|| name.strip_prefix('"'))
+                .unwrap_or(name);
+            let name = name
+                .strip_suffix("\\\"")
+                .or_else(|| name.strip_suffix('"'))
+                .unwrap_or(name);
+            if declared
+                .iter()
+                .any(|declared| template_matches(name, declared))
+            {
+                found.push(name);
+            }
         }
     }
     found
@@ -310,6 +378,41 @@ fn the_source_audit_catches_a_bypass_and_follows_declared_membership() {
     // to the audit or a hand-kept helper exception list.
     declared.insert("external_now_declared");
     assert_eq!(unchecked_calls(outside, &declared), ["external_{entry}"]);
+    // A callee held in a format field is reported whatever it holds today;
+    // only the named direct-callee owner may spell one.
+    for (source, callee) in [
+        (
+            r#"writeln!(out, "  call void {visit}(ptr %m{at})")"#,
+            "{visit}",
+        ),
+        (
+            r#"format!("{prefix}call {}{} {callee}({})", a, b, c)"#,
+            "{callee}",
+        ),
+        (r#"format!("%r = call {returns} {call}")"#, "{call}"),
+        (
+            r##"format!(r#"call ptr @nts_str_split(ptr %s)"#)"##,
+            "nts_str_split",
+        ),
+    ] {
+        assert_eq!(unchecked_calls(source, &declared), [callee], "{source}");
+    }
+    for proved in [
+        r#"format!("  call void %visit(ptr %m{at})")"#,
+        r#"format!("call void ({}) %bridge({})", a, b)"#,
+        r#"format!("{out} = call {ty} @llvm.abs.{ty}({ty} {}, i1 false)", x)"#,
+        r#"format!("call ptr (ptr, ...) @printf(ptr %f)")"#,
+        r#"runtime_call::direct("void", &callee, arguments)"#,
+        r#"refuse(func, "a call to {target}, which has no symbol for")"#,
+        "// call ptr @nts_str_split(ptr %s, double %bad)",
+        r#"let quote = '"'; format!("{quote}call ptr %f()")"#,
+    ] {
+        assert_eq!(
+            unchecked_calls(proved, &declared),
+            [] as [&str; 0],
+            "{proved}"
+        );
+    }
 }
 
 #[test]

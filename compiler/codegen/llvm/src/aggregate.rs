@@ -49,6 +49,7 @@
 //! - a record whose eightbytes do not all fit in the registers left goes to
 //!   memory whole, as an erased value does.
 
+use crate::runtime_call::Operand;
 use crate::{Arch, Platform};
 use nts_core::hir::HirType;
 use nts_core::hir::layout::{native_place, native_shape};
@@ -480,11 +481,16 @@ pub(crate) fn result_type(passing: &Passing) -> String {
 }
 
 /// The hidden first parameter of a call whose record result is in memory.
-pub(crate) fn sret(passing: &Passing, pointer: &str) -> Option<String> {
+pub(crate) fn sret<'a>(
+    passing: &Passing,
+    pointer: impl Into<std::borrow::Cow<'a, str>>,
+) -> Option<Operand<'a>> {
     match passing {
-        Passing::Memory { size, align } => {
-            Some(format!("ptr sret([{size} x i8]) align {align} {pointer}"))
-        }
+        Passing::Memory { size, align } => Some(Operand::with_attributes(
+            "ptr",
+            pointer,
+            format!("sret([{size} x i8]) align {align} "),
+        )),
         Passing::Registers(_) | Passing::Homogeneous { .. } => None,
     }
 }
@@ -503,7 +509,7 @@ pub(crate) fn load_argument(
     pointer: &str,
     temp: &str,
     before: &mut Vec<String>,
-) -> Vec<String> {
+) -> Vec<Operand<'static>> {
     match passing {
         Passing::Registers(eightbytes) => eightbytes
             .iter()
@@ -523,17 +529,21 @@ pub(crate) fn load_argument(
                     eightbyte.ty,
                     eightbyte_align(align)
                 ));
-                format!("{} {temp}.e{at}", eightbyte.ty)
+                Operand::new(eightbyte.ty.clone(), format!("{temp}.e{at}"))
             })
             .collect(),
-        Passing::Memory { .. } => vec![format!("{} {pointer}", parameter_types(passing)[0])],
+        Passing::Memory { size, align } => vec![Operand::with_attributes(
+            "ptr",
+            pointer.to_owned(),
+            format!("byval([{size} x i8]) align {align} "),
+        )],
         Passing::Homogeneous { .. } => {
             let ty = &parameter_types(passing)[0];
             before.push(format!(
                 "{temp}.e0 = load {ty}, ptr {pointer}, align {}",
                 eightbyte_align(align)
             ));
-            vec![format!("{ty} {temp}.e0")]
+            vec![Operand::new(ty.clone(), format!("{temp}.e0"))]
         }
     }
 }

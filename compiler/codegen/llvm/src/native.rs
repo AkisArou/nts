@@ -7,6 +7,7 @@ use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId, native::Fun
 use nts_diagnostics::Diagnostic;
 
 use super::aggregate::{self, Crossing, Plan};
+use super::runtime_call::{self, Called, DirectCallee, Operand, Site};
 use super::{Platform, name, refuse, signatures, ty_of};
 
 /// How this call's arguments and result cross, or the refusal that names why
@@ -203,7 +204,7 @@ fn declaration(func: &Func, target: &Function, platform: Platform) -> Result<Str
         .result
         .as_ref()
         .and_then(|passing| aggregate::sret(passing, ""))
-        .map(|hidden| hidden.trim_end().to_owned())
+        .map(|hidden| hidden.to_string().trim_end().to_owned())
         .into_iter()
         .collect();
     for (ty, crossing) in target.parameters.iter().zip(&plan.arguments) {
@@ -308,10 +309,10 @@ pub(super) fn call(
     }
     let (args, destination) = split_destination(target, args);
     let mut before = Vec::new();
-    let callee = callee(target, args, out, &mut before, symbol);
-    let mut parameters = Vec::new();
+    let called = callee(func, platform, target, args, out, &mut before, symbol)?;
+    let mut parameters: Vec<Operand<'_>> = Vec::new();
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
-        parameters.extend(aggregate::sret(passing, &name(destination)));
+        parameters.extend(aggregate::sret(passing, name(destination)));
     }
     // The tail is never a memory argument: every type that would be passed
     // that way is refused as a variadic tail where the declaration is read.
@@ -331,7 +332,11 @@ pub(super) fn call(
                     "store {{ i32, i64 }} {}, ptr {temp}.storage, align 8",
                     name(*arg)
                 ));
-                parameters.push(format!("ptr byval({{ i32, i64 }}) align 8 {temp}.storage"));
+                parameters.push(Operand::with_attributes(
+                    "ptr",
+                    format!("{temp}.storage"),
+                    "byval({ i32, i64 }) align 8 ",
+                ));
             }
             Crossing::Record(passing) => {
                 let align = record_alignment(func, declared, platform)?;
@@ -356,17 +361,35 @@ pub(super) fn call(
                         "{temp}.narrow = trunc {from} {} to {to}",
                         name(*arg)
                     ));
-                    parameters.push(format!("{to} {}{temp}.narrow", platform.extension(&slot)));
+                    parameters.push(Operand::with_attributes(
+                        to,
+                        format!("{temp}.narrow"),
+                        platform.extension(&slot),
+                    ));
                 } else {
-                    parameters.extend(
-                        super::arguments(func, &temp, &[*arg], &mut before, platform)?
-                            .into_iter()
-                            .map(|argument| argument.to_string()),
-                    );
+                    parameters.extend(super::arguments(
+                        func,
+                        &temp,
+                        &[*arg],
+                        &mut before,
+                        platform,
+                    )?);
                 }
             }
         }
     }
+    // A managed declaration of a runtime helper, already proved equal to the
+    // header's, is still called through the checked constructor.
+    let render = |returns: &dyn std::fmt::Display| match &called {
+        Called::Runtime(helper) => {
+            runtime_call::call(Site::function(func), platform, helper, &parameters)
+        }
+        Called::Direct(direct) => Ok(runtime_call::direct(
+            returns,
+            direct,
+            runtime_call::operands_text(&parameters),
+        )),
+    };
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
         let align = record_alignment(func, Some(&target.result), platform)?;
         let returned = format!("{out}.returned");
@@ -376,9 +399,8 @@ pub(super) fn call(
             format!("{returned} = ")
         };
         before.push(format!(
-            "{prefix}call {} {callee}({})",
-            aggregate::result_type(passing),
-            parameters.join(", ")
+            "{prefix}{}",
+            render(&aggregate::result_type(passing))?
         ));
         aggregate::store_result(passing, align, &returned, &name(destination), &mut before);
         return Ok(before.join("\n"));
@@ -404,10 +426,8 @@ pub(super) fn call(
         None => ty_of(&returned, func)?.to_owned(),
     };
     before.push(format!(
-        "{prefix}call {}{} {callee}({})",
-        platform.extension(&returned),
-        spelled,
-        parameters.join(", ")
+        "{prefix}{}",
+        render(&format_args!("{}{spelled}", platform.extension(&returned)))?
     ));
     if let Some(widen) = widened {
         before.push(format!(
@@ -422,15 +442,20 @@ pub(super) fn call(
 /// What a native call calls: the symbol, or for a COM method the function in
 /// its slot of the receiver's table -- the table the receiver's first word
 /// points at, as C's `(*(void ***)r)[slot]` reads it.
-fn callee(
+fn callee<'a>(
+    func: &Func,
+    platform: Platform,
     target: &Function,
     args: &[ValueId],
     out: &str,
     before: &mut Vec<String>,
-    symbol: &str,
-) -> String {
+    symbol: &'a str,
+) -> Result<Called<'a>, Diagnostic> {
     let (Some(vtable), Some(receiver)) = (&target.vtable, args.first()) else {
-        return format!("@{symbol}");
+        if signatures::signature_on(symbol, platform).is_some() {
+            return Ok(Called::Runtime(symbol));
+        }
+        return DirectCallee::symbol(Site::function(func), platform, symbol).map(Called::Direct);
     };
     before.push(format!(
         "{out}.table = load ptr, ptr {}, align 8",
@@ -441,7 +466,7 @@ fn callee(
         vtable.slot
     ));
     before.push(format!("{out}.method = load ptr, ptr {out}.at, align 8"));
-    format!("{out}.method")
+    Ok(Called::Direct(DirectCallee::value(format!("{out}.method"))))
 }
 
 /// The alignment of a record crossing by value, for the loads and stores that

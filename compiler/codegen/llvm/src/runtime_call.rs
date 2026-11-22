@@ -75,6 +75,112 @@ impl<'a> Site<'a> {
     }
 }
 
+/// The callee of a direct call that is not a runtime helper: a function the
+/// program defines, a foreign symbol, or an SSA value holding a function
+/// pointer. These constructors are the only spelling of such a callee outside
+/// this module, so a declared helper can only be called through [`call`].
+#[derive(Clone, Debug)]
+pub(super) struct DirectCallee<'a>(Cow<'a, str>);
+
+impl<'a> DirectCallee<'a> {
+    /// A spelled global. A helper's declared name, bare or quoted, is refused:
+    /// its call is the checked constructor's to render.
+    pub(super) fn global(
+        site: Site<'_>,
+        platform: Platform,
+        spelling: impl Into<Cow<'a, str>>,
+    ) -> Result<Self, Diagnostic> {
+        let spelling = spelling.into();
+        let Some(name) = global_name(&spelling) else {
+            return Err(site.refuse(&format!("an invalid callee spelling {spelling}")));
+        };
+        if signatures::signature_on(&name, platform).is_some() {
+            return Err(site.refuse(&format!(
+                "a direct call to the runtime helper {name}, which only its checked constructor renders"
+            )));
+        }
+        Ok(Self(spelling))
+    }
+
+    /// A symbol by its bare name, such as a foreign function's.
+    pub(super) fn symbol(
+        site: Site<'_>,
+        platform: Platform,
+        name: &str,
+    ) -> Result<DirectCallee<'static>, Diagnostic> {
+        DirectCallee::global(site, platform, global(name))
+    }
+
+    /// A function this program defines, by its source symbol.
+    pub(super) fn compiled(
+        site: Site<'_>,
+        platform: Platform,
+        program: &crate::Emission<'_>,
+        function: &str,
+    ) -> Result<DirectCallee<'static>, Diagnostic> {
+        DirectCallee::global(site, platform, program.source_function(function))
+    }
+
+    /// An SSA value holding the address to call.
+    pub(super) fn value(value: impl Into<Cow<'a, str>>) -> Self {
+        let value = value.into();
+        debug_assert!(value.starts_with('%'), "{value} is not an SSA value");
+        Self(value)
+    }
+}
+
+/// What a call op calls: a runtime helper, rendered by the checked
+/// constructor at its declaration, or a direct callee at the op's own types.
+pub(super) enum Called<'a> {
+    Runtime(&'a str),
+    Direct(DirectCallee<'a>),
+}
+
+impl fmt::Display for DirectCallee<'_> {
+    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        out.write_str(&self.0)
+    }
+}
+
+/// The symbol a valid global spelling names: `@name`, or `@"..."` with its
+/// hex escapes decoded, so a quoted spelling cannot hide a helper's name.
+fn global_name(spelling: &str) -> Option<Cow<'_, str>> {
+    if !crate::valid_global_spelling(spelling) {
+        return None;
+    }
+    let name = &spelling[1..];
+    let Some(quoted) = name
+        .strip_prefix('"')
+        .and_then(|name| name.strip_suffix('"'))
+    else {
+        return Some(Cow::Borrowed(name));
+    };
+    let mut bytes = Vec::with_capacity(quoted.len());
+    let mut rest = quoted.as_bytes();
+    while let Some((&byte, tail)) = rest.split_first() {
+        if byte == b'\\' {
+            let hex = std::str::from_utf8(tail.get(..2)?).ok()?;
+            bytes.push(u8::from_str_radix(hex, 16).ok()?);
+            rest = &tail[2..];
+        } else {
+            bytes.push(byte);
+            rest = tail;
+        }
+    }
+    String::from_utf8(bytes).ok().map(Cow::Owned)
+}
+
+/// Render a direct call whose callee is not a runtime helper. `returns` is
+/// the call's return type, with any result attributes or explicit function
+/// type a variadic callee needs.
+pub(super) fn direct(
+    returns: impl fmt::Display,
+    callee: &DirectCallee<'_>,
+    arguments: impl fmt::Display,
+) -> String {
+    format!("call {returns} {callee}({arguments})")
+}
+
 /// The type prefix of a declared parameter, without its parameter attributes.
 /// This reads the declaration, never a rendered argument or call.
 fn parameter_type(spec: &str) -> &str {
@@ -149,18 +255,11 @@ fn external_spelled(
         let callee = if quoted {
             // These entries are generated identifiers. Preserve their quoted
             // spelling while retaining the global-name owner's validation.
-            let spelling = format!("@\"{helper}\"");
-            if !crate::valid_global_spelling(&spelling) {
-                return Err(site.refuse("an invalid quoted synthesized callee"));
-            }
-            spelling
+            DirectCallee::global(site, platform, format!("@\"{helper}\""))?
         } else {
-            global(helper)
+            DirectCallee::symbol(site, platform, helper)?
         };
-        Ok(format!(
-            "call {returns} {callee}({})",
-            operands_text(operands)
-        ))
+        Ok(direct(returns, &callee, operands_text(operands)))
     }
 }
 
@@ -353,5 +452,42 @@ mod tests {
                 .expect_err("arity mismatch");
             assert!(error.message.contains(message), "{}", error.message);
         }
+    }
+
+    #[test]
+    fn a_direct_callee_cannot_spell_a_declared_runtime_helper() {
+        for platform in [
+            Platform::SYSV_X86_64,
+            Platform::WIN64_X86_64,
+            Platform::APPLE_ARM64,
+            Platform::LINUX_ARM64,
+            Platform::WINDOWS_ARM64,
+        ] {
+            for spelling in ["@nts_release", "@\"nts_release\"", "@\"nts\\5Frelease\""] {
+                let refused = DirectCallee::global(site(), platform, spelling)
+                    .expect_err("a helper is called only through `call`");
+                assert_eq!(refused.code, "NTS3001");
+                assert!(
+                    refused
+                        .message
+                        .contains("a direct call to the runtime helper nts_release"),
+                    "{}",
+                    refused.message
+                );
+            }
+            assert!(DirectCallee::symbol(site(), platform, "nts_release").is_err());
+            let control = DirectCallee::symbol(site(), platform, "objc_msgSend")
+                .expect("a foreign symbol is a direct callee");
+            assert_eq!(
+                direct("ptr (ptr, ptr)", &control, "ptr %r, ptr %s"),
+                "call ptr (ptr, ptr) @objc_msgSend(ptr %r, ptr %s)"
+            );
+        }
+        assert!(DirectCallee::global(site(), Platform::SYSV_X86_64, "nts_release").is_err());
+        assert!(DirectCallee::global(site(), Platform::SYSV_X86_64, "@\"bad\\G0\"").is_err());
+        assert_eq!(
+            direct("void", &DirectCallee::value("%visit"), "ptr %m0"),
+            "call void %visit(ptr %m0)"
+        );
     }
 }

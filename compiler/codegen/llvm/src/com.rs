@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use crate::runtime_call::{self, Operand, Site};
+use crate::runtime_call::{self, DirectCallee, Operand, Site};
 
 use super::Emission as Program;
 use nts_codegen_common::com::{
@@ -339,8 +339,17 @@ pub(super) fn classes(
                 let maker = format!("__nts_com_state_{}", class.name);
                 let _ = writeln!(
                     out,
-                    "define internal ptr @{maker}() nounwind {{\n  {runtime_0}\n  %made = call ptr {0}()\n  {runtime_1}\n  ret ptr %made\n}}",
-                    program.source_function(&compiled.name),
+                    "define internal ptr @{maker}() nounwind {{\n  {runtime_0}\n  %made = {0}\n  {runtime_1}\n  ret ptr %made\n}}",
+                    runtime_call::direct(
+                        "ptr",
+                        &DirectCallee::compiled(
+                            Site::synthetic(program, "classes"),
+                            platform,
+                            program,
+                            &compiled.name
+                        )?,
+                        ""
+                    ),
                     runtime_0 = runtime_call::call(
                         Site::synthetic(program, "classes"),
                         platform,
@@ -494,10 +503,10 @@ fn adapter(
     out.push_str(&body);
     let have = compiled.return_type.clone();
     let have_ty = ty_of(&have, compiled)?;
-    let call = format!(
-        "call {have_ty} {}({})",
-        program.source_function(&compiled.name),
-        arguments.join(", ")
+    let call = runtime_call::direct(
+        have_ty,
+        &DirectCallee::compiled(Site::function(compiled), platform, program, &compiled.name)?,
+        arguments.join(", "),
     );
     if matches!(result, Type::Void | Type::Record(_)) {
         let _ = writeln!(out, "  {call}");

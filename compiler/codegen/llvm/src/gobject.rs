@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use crate::runtime_call::{self, Operand, Site};
+use crate::runtime_call::{self, DirectCallee, Operand, Site};
 
 use super::Emission as Program;
 
@@ -126,8 +126,17 @@ pub(super) fn classes(
                 };
                 let _ = writeln!(
                     out,
-                    "define internal ptr @__nts_gobject_state_maker_{name}() nounwind {{\n  {runtime_0}\n  %made = call ptr {0}()\n  {runtime_1}\n  ret ptr %made\n}}",
-                    program.source_function(&compiled.name),
+                    "define internal ptr @__nts_gobject_state_maker_{name}() nounwind {{\n  {runtime_0}\n  %made = {0}\n  {runtime_1}\n  ret ptr %made\n}}",
+                    runtime_call::direct(
+                        "ptr",
+                        &DirectCallee::compiled(
+                            Site::synthetic(program, "classes"),
+                            platform,
+                            program,
+                            &compiled.name
+                        )?,
+                        ""
+                    ),
                     runtime_0 = runtime_call::call(
                         Site::synthetic(program, "classes"),
                         platform,
@@ -361,10 +370,19 @@ fn template(
                 String::new()
             };
             format!(
-                "  {runtime_0}\n  %text = call ptr {0}()\n  %c = {runtime_1}\n  \
+                "  {runtime_0}\n  %text = {0}\n  %c = {runtime_1}\n  \
                  call void @nts_gtk_class_template_text(ptr %klass, ptr %c)\n  {runtime_2}\n{release}  \
                  {runtime_3}\n",
-                program.source_function(&compiled.name),
+                runtime_call::direct(
+                    "ptr",
+                    &DirectCallee::compiled(
+                        Site::function(compiled),
+                        platform,
+                        program,
+                        &compiled.name
+                    )?,
+                    ""
+                ),
                 runtime_0 = runtime_call::call(
                     Site::synthetic(program, "template"),
                     platform,
@@ -610,8 +628,12 @@ fn properties(
         let value = ty_of(&get.return_type, get)?;
         let _ = writeln!(
             out,
-            "define internal {value} @__nts_gobject_get_{name}_{at}(ptr %self) nounwind {{\n  {runtime_0}\n  %r = call {value} {0}(ptr %self)\n  {runtime_1}\n  ret {value} %r\n}}",
-            program.source_function(&get.name),
+            "define internal {value} @__nts_gobject_get_{name}_{at}(ptr %self) nounwind {{\n  {runtime_0}\n  %r = {0}\n  {runtime_1}\n  ret {value} %r\n}}",
+            runtime_call::direct(
+                value,
+                &DirectCallee::compiled(Site::function(get), platform, program, &get.name)?,
+                "ptr %self"
+            ),
             runtime_0 = runtime_call::call(
                 Site::synthetic(program, "properties"),
                 platform,
@@ -627,8 +649,12 @@ fn properties(
         );
         let _ = writeln!(
             out,
-            "define internal void @__nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  {runtime_0}\n  call void {0}(ptr %self, {value} %v)\n  {runtime_1}\n  ret void\n}}",
-            program.source_function(&set.name),
+            "define internal void @__nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  {runtime_0}\n  {0}\n  {runtime_1}\n  ret void\n}}",
+            runtime_call::direct(
+                "void",
+                &DirectCallee::compiled(Site::function(set), platform, program, &set.name)?,
+                format!("ptr %self, {value} %v")
+            ),
             runtime_0 = runtime_call::call(
                 Site::synthetic(program, "properties"),
                 platform,
@@ -1170,11 +1196,10 @@ fn entry_point(
     crate::entry_parameters::pad(program, compiled, &mut arguments, platform, &mut body)?;
     let want = method.signature.result.abi(platform.abi);
     let have = compiled.return_type.clone();
-    let call = format!(
-        "call {} {}({})",
+    let call = runtime_call::direct(
         ty_of(&have, compiled)?,
-        program.source_function(&compiled.name),
-        arguments.join(", ")
+        &DirectCallee::compiled(Site::function(compiled), platform, program, &compiled.name)?,
+        arguments.join(", "),
     );
     if want == HirType::Void {
         let _ = writeln!(
