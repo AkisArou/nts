@@ -46,7 +46,6 @@ benchmarks/cases/closure-merge	{"kind":"agrees"}
 benchmarks/cases/closures	{"kind":"agrees"}
 benchmarks/cases/cyclic-churn	{"kind":"agrees"}
 benchmarks/cases/dispatch	{"kind":"agrees"}
-benchmarks/cases/elementwise	{"kind":"no-scalar-exports"}
 benchmarks/cases/erasure-stored-typed	{"kind":"agrees"}
 benchmarks/cases/erasure-stored-unknown	{"kind":"agrees"}
 benchmarks/cases/erasure-typed	{"kind":"agrees"}
