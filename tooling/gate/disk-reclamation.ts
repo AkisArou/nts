@@ -220,19 +220,25 @@ function readTrash(entry:string):TrashManifest{
     ||!Number.isSafeInteger(row.removal.allocatedBytes)||row.removal.allocatedBytes<0||!Array.isArray(row.removal.facts))throw Error('invalid disk trash manifest: '+file);
   return row;
 }
+/** One current entry observation. A retired entry is absence, not a damaged
+ * manifest. Reclamation calls this again under the pool lock before adopting
+ * a listed entry; status may use it without changing ownership. */
+function observeTrash(path:string,now:number):TrashEntry|undefined{
+  try{const row=readTrash(path);return {path,allocatedBytes:row.removal.allocatedBytes,ageMs:Math.max(0,now-row.at),kind:row.removal.kind};}
+  catch(error){
+    let info;try{info=lstatSync(path);}catch(departed){if(missing(departed))return;throw departed;}
+    return {path,allocatedBytes:null,ageMs:Math.max(0,now-info.mtimeMs),kind:null,diagnostic:errorText(error)};
+  }
+}
 /** Read-only visibility. Unknown entries stay named and gain no deletion grant. */
 export function diskTrash(pool:string,now:number):TrashEntry[]{
   const root=trashRoot(pool);if(!existsSync(root))return [];
   physical(root);
-  return readdirSync(root).sort().flatMap<TrashEntry>(name=>{
-    const path=join(root,name);
-    try{const row=readTrash(path);return [{path,allocatedBytes:row.removal.allocatedBytes,ageMs:Math.max(0,now-row.at),kind:row.removal.kind}];}
-    catch(error){
-      let info;try{info=lstatSync(path);}catch(departed){if(missing(departed))return [];throw departed;}
-      return [{path,allocatedBytes:null,ageMs:Math.max(0,now-info.mtimeMs),kind:null,diagnostic:errorText(error)}];
-    }
+  return readdirSync(root).sort().flatMap(name=>{
+    const entry=observeTrash(join(root,name),now);return entry?[entry]:[];
   });
 }
+
 function payloadIdentity(path:string,row:TrashManifest):void{
   const info=lstatSync(path);
   if(!info.isDirectory()||info.isSymbolicLink()||info.dev!==row.identity.dev||info.ino!==row.identity.ino||info.uid!==row.identity.uid)throw Error('disk trash payload identity changed: '+path);
@@ -246,9 +252,7 @@ function removeTrashCheckout(options:ReclaimOptions,payload:string,drainer:GateR
 function present(path:string):boolean{try{lstatSync(path);return true;}catch(error){if(missing(error))return false;throw error;}}
 /** Each drainer acquires under the pool lock, but keeps only its entry owner
  * during deletion. A crash at any point leaves a manifest for the next pass. */
-function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>T,owned?:GateResource):ReclaimRemoval|null{
-  const owner=owned??locked(()=>{physical(entry);return GateResource.tryAcquire(join(entry,'.drain.lock'));});
-  if(!owner)return null;
+function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>T,owner:GateResource):ReclaimRemoval|null{
   let open=true;
   try{
     const row=readTrash(entry),payload=join(entry,'payload'),before=locked(options.snapshot).freeBytes;
@@ -311,13 +315,26 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     const start=host.now();try{return body();}finally{lockHeldMs+=host.now()-start;}
   });
   const recovered:ReclaimRemoval[]=[],trashKept:ReclaimReport['kept']=[];
-  for(const entry of diskTrash(pool.dir,host.wallNow())){
-    if(entry.ageMs>3_600_000)trashKept.push({root:entry.path,reason:'stuck disk trash drain (older than one hour)',routine:false});
-    if(entry.diagnostic&&locked(()=>emptyEnvelope(entry.path)))continue;
-    if(entry.diagnostic){trashKept.push({root:entry.path,reason:entry.diagnostic,routine:false});continue;}
-    try{const row=drainTrash(options,entry.path,locked);if(row)recovered.push(row);}
+  for(const listed of diskTrash(pool.dir,host.wallNow())){
+    // Listing is only a discovery hint. The previous owner may publish or
+    // retire this envelope before we acquire the pool lock. Classify afresh
+    // and acquire its drainer in one transaction, so no stale diagnostic or
+    // second acquisition can race retirement.
+    const pending=locked(()=>{
+      const entry=observeTrash(listed.path,host.wallNow());
+      if(!entry)return null;
+      if(entry.diagnostic&&emptyEnvelope(entry.path))return null;
+      if(entry.ageMs>3_600_000)trashKept.push({root:entry.path,reason:'stuck disk trash drain (older than one hour)',routine:false});
+      if(entry.diagnostic){trashKept.push({root:entry.path,reason:entry.diagnostic,routine:false});return null;}
+      const owner=GateResource.tryAcquire(join(entry.path,'.drain.lock'));
+      return owner?{entry,owner}:null;
+    });
+    if(!pending)continue;
+    const {entry,owner}=pending;
+    try{const row=drainTrash(options,entry.path,locked,owner);if(row)recovered.push(row);}
     catch(error){if(error instanceof ToolingInstrumentError)throw error;trashKept.push({root:entry.path,reason:'disk trash drain retained: '+errorText(error),routine:false});}
   }
+
   const first=locked(options.snapshot),trigger=first.floorBytes+first.reservedBytes+coldBytes;
   const report:ReclaimReport={get lockHeldMs(){return lockHeldMs;},triggered:first.freeBytes<trigger,before:first.freeBytes,after:first.freeBytes,
     triggerBytes:trigger,goalBytes:trigger+coldBytes,removed:recovered,kept:trashKept};

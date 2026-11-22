@@ -1209,7 +1209,9 @@ the tooling strict checker owns the source's type checking.
   drainer lock. Git's removal child inherits its descriptor, so an exited
   parent cannot expire the lock while that child still removes bytes.
   The manifest preserves the approved removal kind and physical identity.
-  Reclamation resumes interrupted entries, including partial deletions, before
+  Reclamation rechecks each listed trash entry under the pool lock before
+  classifying it and acquiring its drainer; an entry its owner retired is
+  skipped. It resumes interrupted entries, including partial deletions, before
   considering new candidates. A rename credits no capacity: only observed disk
   free bytes enter admission, so undrained trash still consumes space. A grant
   reacquires the pool lock and recomputes current promises before publication.
