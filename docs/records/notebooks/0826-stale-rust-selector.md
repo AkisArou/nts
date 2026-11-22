@@ -144,10 +144,13 @@ The quadratic-union mutant changed set membership back to an array scan. Its
 guard failed with 24,512 comparisons for 128 input causes; the enabled guard
 passed. Both staged files were restored from their saved copies before cleanup.
 
-All 55 focused projection, trust, mutation and view tests passed. The additional
-pure cause-union test passed. Strict tooling types passed for six projects and
-1,210 modules before the final pure guard was added; the final gate checks the
-complete final inventory.
+After rebasing onto main, all 56 focused projection, trust, mutation, view and
+cause-union tests passed. Strict tooling types passed for six projects and
+1,211 modules with zero pending projects. The eight authored tooling and test
+files are byte-identical to the measured implementation. The prepared
+`node tooling/gate/inner.ts --no-agree` passed formatting, Clippy, the fresh
+compiler build, and the required frontend and C, LLVM and JVM tests. Its tests
+retain `--no-fail-fast`; no failed binary is hidden by an early exit.
 
 ## Retained raw evidence
 
@@ -169,3 +172,7 @@ admission. Memory admission waits are outside the reported selection wall.
 | `control-proof/recapture.stdout` | `19f8d5ad7e0bf64a9fb78e0450b252e75a8ec760dcb2d6afcefd6a47eb5bcd71` |
 | `control-proof/cause-scan.stdout` | `817eb7f1c95aed58cf49887fa7f9e392c589762ecdef29e825daf2e7107ca6fb` |
 | `focused4/stdout.log` | `f51d444f29e24484879f46adb85f27c1819ff390bdae09b90586a35467dcc4c4` |
+| `validation/focused.stdout` | `d52126c9b98b96a619450214196bbf946154c761d577ab777a49b1c0effba956` |
+| `validation/types.stdout` | `eb7dcea43b1134f8d5018fbde4867b63f4c4a76e836ede3786b865e16b45de4b` |
+| `inner/stdout.log` | `fcbefca3d5ea6138146166a34fdfcf3850e023ede40139f2b0c770183a872fd7` |
+| `inner/time.txt` | `63cc164461db9494299057a0f9ea8c9b5d8c91163f14493d360d0b959052ca7e` |
