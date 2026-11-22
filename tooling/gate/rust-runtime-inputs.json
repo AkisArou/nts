@@ -8172,6 +8172,13 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/settled.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/core/src/hir/signatures.rs",
       "declarations": {
         "imports": [],
@@ -10848,6 +10855,19 @@
           {
             "kind": "file",
             "path": "../../../runtime/c/nts_string_view.h"
+          }
+        ]
+      }
+    },
+    {
+      "source": "compiler/core/tests/settled_awaits.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/an-await-of-a-call-that-settled-in-it/tsconfig.json"
           }
         ]
       }
