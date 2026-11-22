@@ -133,6 +133,30 @@ fn execute(
 }
 
 const LIVE: &str = r#"
+static int foreign_references;
+static void foreign_retain(void *value) { ++*(int *)value; }
+static void foreign_release(void *value) { --*(int *)value; }
+__attribute__((constructor)) static void register_foreign(void) {
+    nts_handle_family_register(NTS_TAG_HANDLE_HOST, foreign_retain, foreign_release, "payload fixture");
+}
+static napi_value foreign_refs(napi_env env,napi_callback_info info) {
+    (void)info;
+    napi_value result;
+    napi_create_int32(env,foreign_references,&result);
+    return result;
+}
+static napi_value unsupported(napi_env env,napi_callback_info info) {
+    (void)info;
+    NtsLanding landing;
+    if (setjmp(landing.frame) == 0) {
+        nts_landing_push(&landing);
+        ++foreign_references;
+        nts_uncaught(nts_value_of_handle(&foreign_references,NTS_TAG_HANDLE_HOST),NULL);
+    }
+    nts_napi_raise(env,&landing);
+    nts_landing_pop(&landing);
+    return NULL;
+}
 static napi_value live(napi_env env,napi_callback_info info) {
     (void)info;
     nts_collect_cycles();
@@ -144,6 +168,10 @@ NAPI_MODULE_INIT() {
     napi_value probe;
     napi_create_function(env,"live",NAPI_AUTO_LENGTH,live,NULL,&probe);
     napi_set_named_property(env,exports,"live",probe);
+    napi_create_function(env,"unsupported",NAPI_AUTO_LENGTH,unsupported,NULL,&probe);
+    napi_set_named_property(env,exports,"unsupported",probe);
+    napi_create_function(env,"foreignRefs",NAPI_AUTO_LENGTH,foreign_refs,NULL,&probe);
+    napi_set_named_property(env,exports,"foreignRefs",probe);
 "#;
 
 const CLIENT: &str = r"
@@ -161,6 +189,8 @@ for(let n=0;n<100;n++) {
   assert.equal(a.live(),baseline,'a temporary moves to the landing');
   assert.throws(()=>a.error(n),e=>e instanceof RangeError && e.message==='error '+n);
   assert.equal(a.live(),baseline,'the thrown object releases its message');
+  assert.throws(()=>a.unsupported(),Error);
+  assert.equal(a.foreignRefs(),0,'conversion failure releases a foreign payload through its family');
 }
 console.log('landing payload: balanced');
 ";

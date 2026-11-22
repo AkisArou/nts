@@ -1484,8 +1484,7 @@ static void nts_napi_throw(napi_env env, NtsValue thrown, const NtsString *detai
 static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
     NtsValue thrown = nts_landing_thrown(landing);
     nts_napi_throw(env, thrown, nts_landing_detail(landing));
-    if (NTS_TAG_IS_MANAGED(nts_value_tag(thrown)) && nts_value_reference(thrown) != NULL)
-        nts_release(nts_value_reference(thrown));
+    nts_value_release(thrown);
 }
 static void nts_napi_throw(napi_env env, NtsValue thrown, const NtsString *detail) {
     /* A thrown primitive is the primitive itself, including BigInt. Use the
