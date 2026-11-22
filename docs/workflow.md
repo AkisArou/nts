@@ -376,6 +376,12 @@ these is reached:
   steps' baseline CPU. This is the backstop a slowed run cannot reach. A run
   with a step that has no baseline and no green run behind it has no CPU bound.
 
+The bounds start when the run's command is in its slice: its scope reports
+that with a readiness byte before it becomes the command, so the
+measurement's own setup (its slice, and the scope it asks the user manager
+for) is not the run's. That setup has its own hang bound, and a setup that
+ends without the run holds it, naming the stage it reached.
+
 There is no wall bound: every wait it excuses ends when the admitted work it
 waits on ends, and that work has its own bound. The run
 folder's `measurement-progress.json` is kept up to date while the run lasts.

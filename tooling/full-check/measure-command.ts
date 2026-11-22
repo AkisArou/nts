@@ -19,6 +19,13 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // every wait it excuses ends when the admitted work it waits on ends, and
 // that work has its own bound.
 //
+// **The bound starts when the run's command is in its slice.** The run's
+// scope says so with a byte on READY_FD, written just before it execs the
+// command; the measurement's own setup (its slice, and the scope it asks the
+// user manager for) is not the run's. That setup has its own hang bound
+// (MEASUREMENT_SETUP_HANG_MS on the host's clock), and a setup that ends
+// without the run holds it with the stage it reached.
+//
 // **The run competes at the rank its controller names** (ranks.ts): the full
 // check's own, or a culprit search's for a probe. Its slice takes that rank's
 // CPU weight, its processes that rank's OOM score (`placeForOom`: a probe
@@ -30,11 +37,14 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import type { Readable, Writable } from "node:stream";
 
 import { requireOwnUnit, startBoundSlice } from "../gate/scopes/bound-slice.ts";
 import { populated, waitForEmptyCgroup } from "../gate/scopes/step-scope.ts";
 import { stopToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 import { hostObservations } from "../gate/host-observations.ts";
+import { HostStateError } from "../gate/host-state.ts";
+import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { LEDGER_DIR, LEDGER_ENV, ledgerWait, placeForOom, PRIORITIES, processIdentity, type LedgerWait, type Priority, type ProcessIdentity } from "../gate/memory-ledger.ts";
 import { ProgressBound, progressSummary, type CpuSample, type ProgressState, type StepLifecycle } from "../gate/step-bound.ts";
 import { readRunLifecycle } from "../gate/run-lifecycle.ts";
@@ -44,6 +54,10 @@ export const MEASUREMENT_HOLD = "measurement-hold.txt";
 export const MEASUREMENT_PROGRESS = "measurement-progress.json";
 const SAMPLE_MS = 1000;
 const RECEIPT_MS = 5000;
+/** How long the user manager may take to start the run's scope once asked. */
+export const MEASUREMENT_SETUP_HANG_MS = 30_000;
+/** The scope's descriptor for its readiness byte, closed before the command runs. */
+const READY_FD = 9;
 
 /** A run's bounds: stalled seconds; seconds with no step progress, or null for
  * a runner that publishes no lifecycle; and CPU seconds, or null when no
@@ -113,8 +127,10 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
     catch (error) { console.error("full check run bound could not stop its slice:", error); }
   };
   let group = "", state: ProgressState | undefined, waiting: MeasurementProgress["waiting"] = null, written = -Infinity;
-  const bound = new ProgressBound({ stall_s: bounds.stall_s, ...(bounds.lifecycle_s === null ? {} : { lifecycle_s: bounds.lifecycle_s }),
-    ...(bounds.cpu_s === null ? {} : { cpu_s: bounds.cpu_s }) }, host.now());
+  const limits = { stall_s: bounds.stall_s, ...(bounds.lifecycle_s === null ? {} : { lifecycle_s: bounds.lifecycle_s }),
+    ...(bounds.cpu_s === null ? {} : { cpu_s: bounds.cpu_s }) };
+  // Made when the run's command is in its slice: until then nothing of the run exists to measure.
+  let bound: ProgressBound | undefined;
   const receipt = (live: boolean) => {
     if (!state) return;
     const { wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s } = state;
@@ -146,6 +162,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
     return { events: published?.events ?? 0, running: published?.running.length ?? 0 };
   };
   const sample = () => {
+    if (!bound) return;
     const now = host.now(), found = wait();
     state = bound.observe(now, found?.kind, cpu(), steps());
     waiting = found === null ? null
@@ -156,28 +173,52 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
   let timer:NodeJS.Timeout|undefined,acquired=false;
   let status = 124;
   let cleanupFailed = false;
+  // The setup stage reached, which a setup that ends without the run names.
+  let stage = "finding its own unit";
   try {
     const owner = requireOwnUnit();
     // The measurement competes for CPU at its rank, and the scope's processes,
     // this one's children, are killed in that rank's turn (ranks.ts).
+    stage = `starting its slice ${slice}`;
     group = startBoundSlice(slice,owner,{rank});acquired=true;
+    stage = "placing its OOM score";
     placeForOom(rank, line => console.error(line));
-    sample();
+    stage = `starting the run's scope ${unit}`;
+    // Preserve the candidate's receipt and its open description of the tree lock.
+    const inherited: (number | "inherit" | null)[] = process.env.NTS_GATE_LOCK_FD === "8"
+      ? ["inherit", "inherit", "inherit", 3, null, null, null, null, 8] : ["inherit", "inherit", "inherit"];
+    const stdio: (number | "inherit" | "pipe" | null)[] = [...inherited, ...Array<null>(READY_FD - inherited.length).fill(null), "pipe"];
+    // The scope's process says it is in the slice, then becomes the command,
+    // whose exit status and signals are its own.
     const child = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", "--expand-environment=no",
       `--unit=${unit}`, `--slice=${slice}`, "--property=TimeoutStopSec=5s",
       `--property=BindsTo=${owner}`, `--property=After=${owner}`,
-      "--", ...command], {
-      // Preserve the candidate's receipt and its open description of the tree lock.
-      stdio: process.env.NTS_GATE_LOCK_FD === "8" ? ["inherit", "inherit", "inherit", 3, null, null, null, null, 8] : "inherit",
-    });
-    timer = setInterval(() => {
-      if (expired) return;
-      try { sample(); }
-      catch (error) { expire(`full check run bound cannot observe its slice: ${String(error)}`); }
-    }, SAMPLE_MS);
+      "--", "sh", "-c", `printf r >&${READY_FD}; exec ${READY_FD}>&-; exec "$@"`, "sh", ...command], { stdio });
+    const asked = host.now();
     status = await new Promise<number>((resolve, reject) => {
+      const ready = (child.stdio as readonly (Readable | Writable | null | undefined)[])[READY_FD] as Readable;
+      ready.once("data", () => {
+        bound = new ProgressBound(limits, host.now()); stage = "running";
+        try { sample(); }
+        catch (error) { expire(`full check run bound cannot observe its slice: ${String(error)}`); }
+      });
+      ready.resume();
+      timer = setInterval(() => {
+        if (expired) return;
+        if (!bound) {
+          if (host.now() - asked < MEASUREMENT_SETUP_HANG_MS) return;
+          clearInterval(timer); timer = undefined;
+          child.kill("SIGKILL");
+          reject(new HostStateError("tooling-setup", `the run's command did not reach its slice within ${MEASUREMENT_SETUP_HANG_MS / 1000} s of asking the user manager for its scope`));
+          return;
+        }
+        try { sample(); }
+        catch (error) { expire(`full check run bound cannot observe its slice: ${String(error)}`); }
+      }, SAMPLE_MS);
       child.once("error", reject);
-      child.once("close", code => resolve(code ?? 1));
+      // Every descriptor has closed, the readiness byte's included.
+      child.once("close", (code, signal) => bound ? resolve(code ?? 1)
+        : reject(new ToolingInstrumentError("tooling-setup", `systemd-run ended (${signal ?? `exit ${code}`}) before the run's command reached its slice`)));
     });
     clearInterval(timer); timer = undefined;
     if (!expired) sample();
@@ -187,7 +228,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
     if (status === 124) status = 1;
   } catch (error) {
     cleanupFailed = true;
-    if (!expired) hold(`full check measurement scope: ${String(error)}`);
+    if (!expired) hold(`full check measurement ${stage === "running" ? "scope" : `setup, ${stage}`}: ${String(error)}`);
   } finally {
     clearInterval(timer);
     receipt(false);

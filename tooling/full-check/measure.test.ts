@@ -6,7 +6,7 @@ import {generatedJavaScript} from '../gate/generated-javascript.ts';
 // step unless the policy lets that platform stay unrun, and a summary of
 // another commit or from a non-canonical environment vouches for nothing.
 import assert from "node:assert/strict";
-import { chmodSync,existsSync,mkdirSync,mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync,existsSync,mkdirSync,mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import {spawn} from "node:child_process";
 import { fullCheckBound, pinnedGate, readSummary, RUN_BOUND_FLOOR_S, verdictOf } from "./measure.ts";
-import { MEASUREMENT_PROGRESS, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
+import { MEASUREMENT_HOLD, MEASUREMENT_PROGRESS, MEASUREMENT_SETUP_HANG_MS, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
 import { fullCheckStatus, liveMeasurement, statusText } from "./service.ts";
 import { readState } from "./state.ts";
 import { OOM_SCORE, processIdentity, readLedger, reserve, type Priority } from "../gate/memory-ledger.ts";
@@ -72,17 +72,26 @@ test("the full check's run bounds: stalled three times the last canonical green 
 const GiB=2**30;
 // A measurement in its own unit, as the controller starts it: `command` in a
 // slice of the full check's rank, with an owned ledger and live CPU.
-// A machine of `availableKiB` measures its jobs' resident memory live.
-function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{stall:number;lifecycle?:number},command:(run:string)=>string[],options:{slice?:string;availableKiB?:number;rank?:Priority;oomScore?:number}={}){
+// A machine of `availableKiB` measures its jobs' resident memory live. With
+// `ownedClock`, the measurement's clock is the fixture's: it stands until
+// `advance` moves it, so no time before the fixture's own readiness events
+// spends a bound, however slowly the machine brings the run up.
+// `path` goes ahead of the measurement's PATH, for a stubbed tool.
+function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{stall:number;lifecycle?:number},command:(run:string)=>string[],options:{slice?:string;availableKiB?:number;rank?:Priority;oomScore?:number;ownedClock?:boolean;path?:string}={}){
   const dir=newTestScratch(name),runs=join(dir,"runs"),run=join(runs,`core-${COMMIT.slice(0,12)}-${randomUUID()}`);
   mkdirSync(run,{recursive:true});
-  const memory=ownMemory(join(dir,"machine"),{cpu:{kind:"live"},pressure:{kind:"live"},wallClock:{kind:"live"},...(options.availableKiB===undefined?{}:{availableKiB:options.availableKiB,resident:{kind:"live"}})});
+  const clockFile=join(dir,"clock");let clockMs=0;
+  const setClock=()=>{writeFileSync(`${clockFile}.next`,String(clockMs));renameSync(`${clockFile}.next`,clockFile);};
+  if(options.ownedClock)setClock();
+  const memory=ownMemory(join(dir,"machine"),{cpu:{kind:"live"},pressure:{kind:"live"},wallClock:{kind:"live"},...(options.ownedClock?{clock:{kind:"file",file:clockFile}}:{}),
+    ...(options.availableKiB===undefined?{}:{availableKiB:options.availableKiB,resident:{kind:"live"}})});
   mkdirSync(join(memory.NTS_MEMORY_LEDGER,"waiting"),{recursive:true});
   const slice=options.slice??newToolingSlice(true),unit=`nts-test-full-check-${name}-${randomUUID()}`;
   const args=["--user",`--unit=${unit}`,...toolingSliceArgs(process.env,"agent"),"--collect","--quiet","--pipe","--wait",
     "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=120s",
     ...(options.oomScore===undefined?[]:["-p",`OOMScoreAdjust=${options.oomScore}`]),
     ...Object.entries(memory).map(([key,value])=>`--setenv=${key}=${value}`),
+    ...(options.path===undefined?[]:[`--setenv=PATH=${options.path}:${process.env.PATH}`]),
     process.execPath,fileURLToPath(new URL("./measure-command.ts",import.meta.url)),String(bounds.stall),String(bounds.lifecycle??"none"),"none",run,slice,options.rank??"full-check",...command(run)];
   t.after(()=>{
     spawnTest("systemctl",["--user","stop",unit],{encoding:"utf8"});
@@ -91,6 +100,8 @@ function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{
   });
   let output="",ended=false,status:Promise<number|null>|undefined;
   return {run,runs,unit,args,memory,progress:()=>readMeasurementProgress(run),
+    /** Moves the owned clock on by `seconds`; the clock's new reading in seconds. */
+    advance(seconds:number){if(!options.ownedClock)throw Error("the measurement's clock is live");clockMs+=seconds*1000;setClock();return clockMs/1000;},
     stopped:()=>ended?output:undefined,
     /** Starts it without waiting; `status` then ends with it. */
     start(){
@@ -100,6 +111,12 @@ function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{
       t.after(async()=>{spawnTest("systemctl",["--user","stop",unit],{encoding:"utf8"});await status;});
     },
     status:()=>status!,output:()=>output};
+}
+
+/** Moves an owned clock on by one receipt's interval, and waits for the receipt that observed it, or for the measurement to end. */
+async function tick(m:ReturnType<typeof measured>):Promise<void>{
+  const at=m.advance(5);
+  await waitFor(`the measurement to observe its clock at ${at} s`,()=>(m.progress()?.wall_s??-1)>=at||m.stopped()!==undefined);
 }
 
 const entry=(fields:Record<string,unknown>)=>{
@@ -161,15 +178,19 @@ test("a run whose own request waits behind a never-released higher-ranked one is
     +`its request gate run of the full check \\(${own.id}\\) waits behind a landing that never ends \\(landing, ${landing.id}\\) since \\S+, \\d+ min$`,"m"));
 });
 
-test("a run holding memory at no CPU, which a higher-ranked request waits on, is held at its stall bound, and the request then goes ahead",async t=>{
+// The holder of the slowed variant stays unready for longer than its stall
+// bound: as a loaded machine may bring it up, that time is the fixture's
+// setup, and spends nothing of the bound its clock decides.
+const slowed=["sh","-c","sleep 3; exec \"$@\"","sh"];
+for(const slow of [false,true])test(`a run holding memory at no CPU, which a higher-ranked request waits on, is held at its stall bound${slow?", however slowly it came to hold it,":""} and the request then goes ahead`,async t=>{
   // The machine as the kernel would show it with the holder's 512 MiB in use:
   // 256 MiB beyond the floor, too little for the landing's 512 MiB, which could
   // fit were the holder to end.
   const MiB=2**20,floor=2*GiB/1024;
-  const m=measured(t,"circular",{stall:10},run=>[process.execPath,fileURLToPath(new URL("../gate/admit.ts",import.meta.url)),
-    "--bytes","600M","--priority","full-check","--what","a hung holder","--",process.execPath,"-e",
+  const m=measured(t,"circular",{stall:2},run=>[process.execPath,fileURLToPath(new URL("../gate/admit.ts",import.meta.url)),
+    "--bytes","600M","--priority","full-check","--what","a hung holder","--",...(slow?slowed:[]),process.execPath,"-e",
     "globalThis.held=Buffer.alloc(512*2**20,1);require('fs').writeFileSync(process.argv[1],'');require('child_process').spawnSync('tail',['-f','/dev/null'])",join(run,"holding")],
-    {availableKiB:floor+GiB/1024});
+    {availableKiB:floor+GiB/1024,ownedClock:true});
   const ledger=m.memory.NTS_MEMORY_LEDGER,machine=join(dirname(m.runs),"machine");
   m.start();
   await waitFor("the holder to hold its memory",()=>existsSync(join(m.run,"holding")),{stopped:m.stopped});
@@ -178,8 +199,12 @@ test("a run holding memory at no CPU, which a higher-ranked request waits on, is
   const landing=reserve({bytes:512*MiB,what:"a landing that needs the holder's memory",priority:"landing"},{env:{...m.memory},everyMs:10,signal:ending.signal});
   landing.catch(()=>{});
   await waitFor("the landing to wait on the holder's memory",()=>readLedger(ledger).waiting.some(row=>row.priority==="landing"&&row.fits===true),{stopped:m.stopped});
+  // Only now does the run's clock move: each tick is time it holds the memory, idle.
+  for(let ticks=0;!m.progress()?.held;ticks++){assert.ok(ticks<4,`held within four ticks: ${JSON.stringify(m.progress())}`);await tick(m);}
   assert.equal(await m.status(),124,m.output());
-  assert.match(readFileSync(join(m.run,"measurement-hold.txt"),"utf8"),/^full check run made no progress outside waits for its stall bound of 10 s: /,"being outranked while it holds memory is no wait");
+  assert.match(readFileSync(join(m.run,MEASUREMENT_HOLD),"utf8"),/^full check run made no progress outside waits for its stall bound of 2 s: /,"being outranked while it holds memory is no wait");
+  const progress=m.progress()!;
+  assert.ok(progress.stalled_s>=2&&progress.wall_s<=20,`its stall is the time it held the memory, none of its setup: ${JSON.stringify(progress)}`);
   // Stopped, its memory returns to the machine.
   ownMemory(machine,{availableKiB:floor+768*1024});
   const admitted=await landing;
@@ -194,7 +219,7 @@ for(const small of [false,true])test(`a run that yields to a higher-ranked reque
     "globalThis.held=Buffer.alloc(512*2**20,1);require('fs').writeFileSync(process.argv[1],'');require('child_process').spawnSync('tail',['-f','/dev/null'])",marker];
   // The run holds an admitted reservation it does not use, and is idle, as a yielding runner is.
   const m=measured(t,"yield",{stall:8},()=>[process.execPath,admit,"--bytes","100M","--priority","full-check","--what","an idle run","--","tail","-f","/dev/null"],
-    {availableKiB:floor+2*GiB/1024});
+    {availableKiB:floor+2*GiB/1024,ownedClock:true});
   const ledger=m.memory.NTS_MEMORY_LEDGER,machine=join(dirname(m.runs),"machine"),marker=join(m.run,"unrelated-holding");
   // Other work, outside the run, holds 512 MiB at an agent's rank.
   const other=`nts-test-full-check-other-${randomUUID()}`;
@@ -217,7 +242,11 @@ for(const small of [false,true])test(`a run that yields to a higher-ranked reque
     reserve({bytes:32*MiB,what:"an agent's small job behind it",priority:"agent"},{env:{...m.memory},everyMs:10,signal:ending.signal}).catch(()=>{});
     await waitFor("the small job to wait",()=>readLedger(ledger).waiting.some(row=>row.what==="an agent's small job behind it"),{stopped:m.stopped});
   }
-  await waitFor("the run to yield past its stall bound",()=>(m.progress()?.waited_s.priority??0)>10,{stopped:m.stopped});
+  // Only now does the run's clock move: at most the first tick precedes a sample that sees the wait.
+  for(let ticks=0;(m.progress()?.waited_s.priority??0)<=10;ticks++){
+    assert.ok(ticks<6&&m.stopped()===undefined,`yielded past its stall bound within six ticks: ${JSON.stringify(m.progress())}\n${m.output()}`);
+    await tick(m);
+  }
   assert.equal(existsSync(join(m.run,"measurement-hold.txt")),false,m.output());
   const progress=m.progress()!;
   assert.deepEqual([progress.waiting?.kind,progress.waiting?.what,progress.stalled_s<8],["priority","an agent's job behind the other work",true],JSON.stringify(progress));
@@ -233,6 +262,31 @@ for(const rank of ["culprit-search","full-check"] as const)test(`a ${rank} measu
   assert.equal(result.status,0,result.stdout+result.stderr);
   assert.equal(Number(readFileSync(join(m.run,"oom"),"utf8")),OOM_SCORE[rank]);
   assert.equal(m.progress()?.rank,rank);
+});
+
+test("a scope that never brings the run's command into its slice holds the run at its setup bound, naming the stage, with nothing of the run measured",async t=>{
+  // A user manager that accepts the scope's request and never starts it.
+  const stubs=newTestScratch("measure-scope-stub");t.after(()=>rmSync(stubs,{recursive:true,force:true}));
+  const asked=join(stubs,"asked");
+  writeFileSync(join(stubs,"systemd-run"),`#!/bin/sh\n: > '${asked}'\nexec tail -f /dev/null\n`);chmodSync(join(stubs,"systemd-run"),0o755);
+  const m=measured(t,"setup-hang",{stall:2,lifecycle:2},run=>["sh","-c",'touch "$1"',"sh",join(run,"ran")],{ownedClock:true,path:stubs});
+  m.start();
+  await waitFor("the measurement to ask for its scope",()=>existsSync(asked),{stopped:m.stopped});
+  m.advance(MEASUREMENT_SETUP_HANG_MS/1000);
+  assert.equal(await m.status(),124,m.output());
+  assert.match(readFileSync(join(m.run,MEASUREMENT_HOLD),"utf8"),
+    new RegExp(`^full check measurement setup, starting the run's scope nts-full-check-measure-[0-9a-f-]+: HostStateError: the run's command did not reach its slice within ${MEASUREMENT_SETUP_HANG_MS/1000} s of asking the user manager for its scope\n$`));
+  assert.deepEqual([m.progress(),existsSync(join(m.run,"ran"))],[null,false],"no bound ran, and the command never did");
+});
+
+// The scope's readiness wrapper becomes the command: an exit status and a
+// signal reach the measurement as the command's own, as without it.
+for(const [what,script,status] of [["exits 3","process.exit(3)",3],["is killed by a signal","process.kill(process.pid,'SIGKILL')",1]] as const)test(`a run whose command ${what} ends the measurement with ${status}, unheld`,t=>{
+  const m=measured(t,`exit-${status}`,{stall:30},()=>[process.execPath,"-e",script]);
+  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
+  assert.equal(result.status,status,result.stdout+result.stderr);
+  assert.equal(existsSync(join(m.run,MEASUREMENT_HOLD)),false,"never held");
+  assert.equal(m.progress()?.held,null);
 });
 
 test("a run that spins after its last step is held at its lifecycle bound, with no step progress named",t=>{
