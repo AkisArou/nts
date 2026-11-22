@@ -5271,6 +5271,35 @@ mod tests {
         }
     }
 
+    /// test262's `S11.5.2_A4_T4` reduced to its one quotient: `Infinity /
+    /// Infinity` is only NaN. Its fact was once spelled `whole: false` while
+    /// every join of a NaN-only set says `whole: true`, so the full sweep this
+    /// analysis runs under test re-joined the converged fact into another
+    /// spelling and failed (#849, #492).
+    #[test]
+    fn a_quotient_of_infinities_is_stable_on_a_full_sweep() {
+        let values = vec![
+            op(OpKind::ConstFloat(f64::INFINITY)), // %0
+            op(OpKind::ConstFloat(f64::INFINITY)), // %1
+            op(Op_binary(BinOp::Div, 0, 1)),       // %2  Infinity / Infinity
+        ];
+        let analysis = analyze(&func(
+            values,
+            vec![block(
+                Vec::new(),
+                vec![ValueId(0), ValueId(1), ValueId(2)],
+                Terminator::Return(Some(ValueId(2))),
+            )],
+            0,
+        ));
+        let quotient = analysis.get(ValueId(2));
+        assert!(
+            quotient.maybe_nan && quotient.lo > quotient.hi,
+            "{quotient:?}"
+        );
+        assert!(!quotient.integral());
+    }
+
     #[test]
     fn a_constant_bounded_counter_is_provably_an_integer() {
         let analysis = analyze(&counted_loop(10.0));

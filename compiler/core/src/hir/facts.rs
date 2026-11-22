@@ -160,6 +160,20 @@ impl Facts {
         // is spelled one way.
         let lo = if lo == 0.0 { 0.0 } else { lo };
         let hi = if hi == 0.0 { 0.0 } else { hi };
+
+        // A set with no numeric member is spelled one way too: BOTTOM's
+        // crossed infinities, vacuously whole, plus whether NaN may reach.
+        // Two spellings of one set make `join` non-idempotent -- `Infinity /
+        // Infinity`'s NaN-only quotient came out `whole: false` while every
+        // join of such a set says `whole: true` -- and flow's monotone
+        // `slot.join(computed)` then changes a converged fact on a repeat
+        // visit, so its sparse fixpoint was not one.
+        if lo > hi {
+            return Self {
+                maybe_nan,
+                ..Self::BOTTOM
+            };
+        }
         Self {
             lo,
             hi,
@@ -1675,6 +1689,115 @@ mod tests {
         assert_eq!(
             to_uint32(negative),
             Facts::new(0.0, U32_MAX, true, false, false)
+        );
+    }
+
+    /// Facts over every kind of set the lattice laws could trip on: crossed
+    /// and empty bounds, NaN-only, both zeroes, whole and not, finite and
+    /// infinite bounds, NaN bounds that `new` must reinterpret, and what the
+    /// transfer functions themselves produce from those.
+    fn lattice_population() -> Vec<Facts> {
+        const BOUNDS: &[f64] = &[
+            f64::NAN,
+            f64::NEG_INFINITY,
+            -1.0,
+            -0.0,
+            0.0,
+            2.5,
+            f64::INFINITY,
+        ];
+        let mut sets = vec![Facts::BOTTOM, Facts::TOP];
+        for &lo in BOUNDS {
+            for &hi in BOUNDS {
+                for flags in 0..8_u8 {
+                    sets.push(Facts::new(
+                        lo,
+                        hi,
+                        flags & 1 != 0,
+                        flags & 2 != 0,
+                        flags & 4 != 0,
+                    ));
+                }
+            }
+        }
+        let infinities = [
+            Facts::constant(f64::INFINITY),
+            Facts::constant(f64::NEG_INFINITY),
+        ];
+        for a in infinities {
+            for b in infinities {
+                for (_, op, _) in BINARY {
+                    sets.push(op(a, b));
+                }
+            }
+        }
+        let mut unique: Vec<Facts> = Vec::new();
+        for set in sets {
+            if !unique.contains(&set) {
+                unique.push(set);
+            }
+        }
+        unique
+    }
+
+    /// The solver's change detection is `slot.join(computed) != slot`, so a
+    /// converged fact is stable only if `join` is a semilattice join on the
+    /// representation itself, not merely on the sets it denotes. `Infinity /
+    /// Infinity` once produced a NaN-only fact spelled `whole: false` that
+    /// joined with itself into `whole: true`, and flow's full-sweep check
+    /// failed on three test262 cases (#849, #492).
+    #[test]
+    fn join_is_a_semilattice_join_on_the_representation() {
+        let sets = lattice_population();
+        for &a in &sets {
+            assert_eq!(
+                Facts::new(a.lo, a.hi, a.whole, a.maybe_nan, a.maybe_negative_zero),
+                a,
+                "new is not idempotent on its own output"
+            );
+            assert_eq!(a.join(a), a, "join is not idempotent on {a:?}");
+            assert_eq!(
+                Facts::BOTTOM.join(a),
+                a,
+                "BOTTOM is not the identity of {a:?}"
+            );
+            for &b in &sets {
+                let ab = a.join(b);
+                assert_eq!(ab, b.join(a), "join does not commute on {a:?} and {b:?}");
+                for &c in &sets {
+                    assert_eq!(
+                        ab.join(c),
+                        a.join(b.join(c)),
+                        "join does not associate on {a:?}, {b:?} and {c:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Every set with no numeric member has one spelling, whatever produced it.
+    #[test]
+    fn a_set_with_no_numeric_member_has_one_spelling() {
+        let only_nan = Facts {
+            maybe_nan: true,
+            ..Facts::BOTTOM
+        };
+        for a in [f64::INFINITY, f64::NEG_INFINITY] {
+            for b in [f64::INFINITY, f64::NEG_INFINITY] {
+                assert_eq!(
+                    div(Facts::constant(a), Facts::constant(b)),
+                    only_nan,
+                    "{a} / {b}"
+                );
+            }
+        }
+        assert_eq!(Facts::constant(f64::NAN), only_nan);
+        assert_eq!(Facts::new(5.0, 3.0, false, true, true), only_nan);
+        assert_eq!(Facts::new(5.0, 3.0, false, false, false), Facts::BOTTOM);
+        assert_eq!(
+            Facts::new(0.0, 1.0, true, true, false)
+                .narrow(Facts::new(2.0, 3.0, false, true, false)),
+            only_nan
         );
     }
 }
