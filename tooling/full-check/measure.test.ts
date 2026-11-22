@@ -236,9 +236,10 @@ for(const small of [false,true])test(`a run that yields to a higher-ranked reque
   const ending=new AbortController();t.after(()=>ending.abort());
   const agent=reserve({bytes:512*MiB,what:"an agent's job behind the other work",priority:"agent"},{env:{...m.memory},everyMs:10,signal:ending.signal});
   agent.catch(()=>{});
+  // The clock moves only once the request the run yields to waits.
+  await waitFor("the agent's job to wait",()=>readLedger(ledger).waiting.some(row=>row.what==="an agent's job behind the other work"),{stopped:m.stopped});
   if(small){
     // It would fit alone, but the queue admits nothing behind its blocked head, the run gone or not.
-    await waitFor("the agent's job to wait",()=>readLedger(ledger).waiting.some(row=>row.what==="an agent's job behind the other work"),{stopped:m.stopped});
     reserve({bytes:32*MiB,what:"an agent's small job behind it",priority:"agent"},{env:{...m.memory},everyMs:10,signal:ending.signal}).catch(()=>{});
     await waitFor("the small job to wait",()=>readLedger(ledger).waiting.some(row=>row.what==="an agent's small job behind it"),{stopped:m.stopped});
   }

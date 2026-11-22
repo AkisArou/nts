@@ -190,11 +190,12 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
     const stdio: (number | "inherit" | "pipe" | null)[] = [...inherited, ...Array<null>(READY_FD - inherited.length).fill(null), "pipe"];
     // The scope's process says it is in the slice, then becomes the command,
     // whose exit status and signals are its own.
+    // The setup bound counts from asking, the spawn itself included.
+    const asked = host.now();
     const child = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", "--expand-environment=no",
       `--unit=${unit}`, `--slice=${slice}`, "--property=TimeoutStopSec=5s",
       `--property=BindsTo=${owner}`, `--property=After=${owner}`,
       "--", "sh", "-c", `printf r >&${READY_FD}; exec ${READY_FD}>&-; exec "$@"`, "sh", ...command], { stdio });
-    const asked = host.now();
     status = await new Promise<number>((resolve, reject) => {
       const ready = (child.stdio as readonly (Readable | Writable | null | undefined)[])[READY_FD] as Readable;
       ready.once("data", () => {
