@@ -4353,26 +4353,31 @@ impl Program {
     }
 
     /// Which layouts can be stored in a slot of another one, beyond its
-    /// subclasses: `(target, source)` for every explicit cast the program performs.
+    /// subclasses, as the program's own casts say: `(target, source)` for every
+    /// explicit cast it performs, and the object types it erases and unerases.
     /// Implicit structural-prefix casts are shared by the cycle graph trie.
     ///
     /// A `Convert` between object types is a structural prefix cast, and
     /// stores its source wherever its target is wanted. An `Unerase` is
     /// unchecked by construction -- narrowing licensed it, nothing tested the
-    /// layout -- so anything erased anywhere can arrive at any type unerased
-    /// to, and the pairs are every erased type against every unerased one.
-    /// Both are read from the operations themselves rather than predicted from
-    /// which layouts *could* be cast, because a cast nobody performs stores
-    /// nothing.
-    fn explicit_cast_sources(&self) -> Vec<(usize, usize)> {
-        let mut pairs = Vec::new();
+    /// layout -- so what it can produce is not a pair the operation names: it
+    /// is any object an erased value can hold that can be read as the type it
+    /// is narrowed to. `cycles` decides that from these two lists and its own
+    /// slot graph. Pairing every erased type with every unerased one instead
+    /// made one erased cyclic `Link` and one `instanceof Leaf` mark every
+    /// `Leaf[]` in the program cyclic, though no `Link` can be read as a `Leaf`.
+    /// All of it is read from the operations themselves rather than predicted
+    /// from which layouts *could* be cast, because a cast nobody performs
+    /// stores nothing.
+    fn explicit_cast_sources(&self) -> CastSources {
+        let mut casts = CastSources::default();
         let mut erased: Vec<&HirType> = Vec::new();
         let mut unerased: Vec<&HirType> = Vec::new();
         for func in &self.funcs {
             for op in &func.values {
                 match &op.kind {
                     OpKind::Convert(from) | OpKind::FieldView { value: from, .. } => {
-                        self.cast_pairs(&func.values[from.0 as usize].ty, &op.ty, &mut pairs);
+                        self.cast_pairs(&func.values[from.0 as usize].ty, &op.ty, &mut casts.pairs);
                     }
                     OpKind::Erase { value, .. } => {
                         let ty = &func.values[value.0 as usize].ty;
@@ -4385,12 +4390,41 @@ impl Program {
                 }
             }
         }
-        for to in &unerased {
-            for from in &erased {
-                self.cast_pairs(from, to, &mut pairs);
-            }
+        for ty in erased {
+            self.cast_objects(ty, &mut casts.erased);
         }
-        pairs
+        for ty in unerased {
+            self.cast_objects(ty, &mut casts.unerased);
+        }
+        casts.erased.sort_unstable();
+        casts.erased.dedup();
+        casts.unerased.sort_unstable();
+        casts.unerased.dedup();
+        casts
+    }
+
+    /// The object types an erased or unerased value of `ty` carries, by layout,
+    /// with `None` for an object type that has no layout here. Through every
+    /// container, as [`Self::cast_pairs`] follows them, and through a possible
+    /// absence, which carries its payload.
+    fn cast_objects(&self, ty: &HirType, into: &mut Vec<Option<usize>>) {
+        match ty {
+            HirType::PossiblyUndefined(payload) => self.cast_objects(payload, into),
+            HirType::Managed(ManagedType::Object(id)) => {
+                into.push(self.layouts.iter().position(|l| l.types.contains(id)));
+            }
+            HirType::Managed(
+                ManagedType::Array(element)
+                | ManagedType::View(element)
+                | ManagedType::Set(element)
+                | ManagedType::Promise(element),
+            ) => self.cast_objects(element, into),
+            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+                self.cast_objects(key, into);
+                self.cast_objects(value, into);
+            }
+            _ => {}
+        }
     }
 
     /// The `(target, source)` layout pairs a cast from `from` to `to` implies,
@@ -4949,6 +4983,21 @@ fn strongly_connected(edges: &[Vec<usize>]) -> Vec<usize> {
         }
     }
     component
+}
+
+/// What the program's casts say about which layouts a slot can hold, as
+/// [`Program::explicit_cast_sources`] reads them for [`Program::cycles`].
+#[derive(Debug, Default)]
+struct CastSources {
+    /// `(target, source)` layout pairs for every explicit `Convert` and
+    /// `FieldView`.
+    pairs: Vec<(usize, usize)>,
+    /// The layouts of the object types erased anywhere, sorted; `None` for an
+    /// object type with no layout, which could be anything.
+    erased: Vec<Option<usize>>,
+    /// The layouts of the object types unerased anywhere, sorted; `None` as
+    /// above, for a target that already reaches everything.
+    unerased: Vec<Option<usize>>,
 }
 
 /// What [`Program::cycles`] decided: which layouts can be in a reference cycle,

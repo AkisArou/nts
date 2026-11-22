@@ -73,7 +73,13 @@ impl Program {
             .enumerate()
             .flat_map(|(above, below)| below.iter().map(move |at| (above, *at)))
             .collect();
-        for (target, source) in self.cast_sources_by_scan() {
+        let (casts, erased, unerased) = self.cast_sources_by_scan();
+        for (target, source) in casts {
+            if held.insert((target, source)) {
+                subtypes[target].push(source);
+            }
+        }
+        for (target, source) in self.unerase_sources_by_scan(&subtypes, &erased, &unerased) {
             if held.insert((target, source)) {
                 subtypes[target].push(source);
             }
@@ -159,7 +165,12 @@ impl Program {
         }
     }
 
-    fn cast_sources_by_scan(&self) -> Vec<(usize, usize)> {
+    /// The explicit and structural cast pairs, and the layouts of the object
+    /// types erased and unerased (`None` for one with no layout).
+    #[expect(clippy::type_complexity, reason = "an oracle's three scans, read once")]
+    fn cast_sources_by_scan(
+        &self,
+    ) -> (Vec<(usize, usize)>, Vec<Option<usize>>, Vec<Option<usize>>) {
         let mut pairs = Vec::new();
         let mut erased: Vec<&HirType> = Vec::new();
         let mut unerased: Vec<&HirType> = Vec::new();
@@ -180,11 +191,14 @@ impl Program {
                 }
             }
         }
-        for to in &unerased {
-            for from in &erased {
-                self.cast_pairs(from, to, &mut pairs);
+        let objects = |types: &[&HirType]| {
+            let mut objects = Vec::new();
+            for ty in types {
+                self.objects_by_scan(ty, &mut objects);
             }
-        }
+            objects
+        };
+        let (erased, unerased) = (objects(&erased), objects(&unerased));
         // **A structural cast usually leaves no operation behind**, which is
         // why the scan above is not enough on its own. `add(node, node)` where
         // `add` takes a `Leaf` is specialized into `add@1obj5`, whose parameter
@@ -221,6 +235,84 @@ impl Program {
                         .iter()
                         .zip(&held.fields)
                         .all(|(want, have)| lower::same_slot(want, have))
+                {
+                    pairs.push((target, source));
+                }
+            }
+        }
+        (pairs, erased, unerased)
+    }
+
+    fn objects_by_scan(&self, ty: &HirType, into: &mut Vec<Option<usize>>) {
+        match ty {
+            HirType::PossiblyUndefined(inner)
+            | HirType::Managed(
+                ManagedType::Array(inner)
+                | ManagedType::View(inner)
+                | ManagedType::Set(inner)
+                | ManagedType::Promise(inner),
+            ) => self.objects_by_scan(inner, into),
+            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+                self.objects_by_scan(key, into);
+                self.objects_by_scan(value, into);
+            }
+            HirType::Managed(ManagedType::Object(id)) => {
+                into.push(self.layouts.iter().position(|l| l.types.contains(id)));
+            }
+            _ => {}
+        }
+    }
+
+    /// `(target, source)` for every layout an `Unerase` to `target` can
+    /// produce, by brute force: every layout an erased type's slot holds,
+    /// transitively through `held`, that holds each member `target` requires
+    /// as a field of the same identity or as an owner of its family.
+    fn unerase_sources_by_scan(
+        &self,
+        held: &[Vec<usize>],
+        erased: &[Option<usize>],
+        unerased: &[Option<usize>],
+    ) -> Vec<(usize, usize)> {
+        let count = self.layouts.len();
+        if erased.is_empty() {
+            return Vec::new();
+        }
+        let mut erasable = vec![erased.contains(&None); count];
+        let mut work = Vec::new();
+        for &at in erased.iter().flatten() {
+            if !std::mem::replace(&mut erasable[at], true) {
+                work.push(at);
+            }
+        }
+        while let Some(at) = work.pop() {
+            for &next in &held[at] {
+                if !std::mem::replace(&mut erasable[next], true) {
+                    work.push(next);
+                }
+            }
+        }
+        let supplies = |target: usize, source: usize, wanted: &Field| {
+            self.layouts[source]
+                .fields
+                .iter()
+                .any(|have| wanted.names_the_same_member(have))
+                || self.interface_access.families.iter().any(|family| {
+                    family.member == wanted.name
+                        && self.layouts[target].types.contains(&family.face)
+                        && family
+                            .owners
+                            .iter()
+                            .any(|owner| self.layouts[source].types.contains(owner))
+                })
+        };
+        let mut pairs = Vec::new();
+        for &target in unerased.iter().flatten() {
+            for source in (0..count).filter(|&source| source != target && erasable[source]) {
+                if self.layouts[target]
+                    .fields
+                    .iter()
+                    .filter(|field| super::cycles::requires(field))
+                    .all(|wanted| supplies(target, source, wanted))
                 {
                     pairs.push((target, source));
                 }
@@ -475,82 +567,182 @@ fn all_small_prefix_graphs_keep_the_scan_answers() {
     }
 }
 
+fn origin() -> nts_semantic_schema::Origin {
+    nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+        file: nts_diagnostics::SourceId(0),
+        span: nts_diagnostics::Span::new(0, 1),
+    })
+}
+
+/// One exported function allocating a `from` and casting it to `to`: through
+/// an `Erase` and an `Unerase` when `erasure`, else through a `Convert`.
+fn cast(from: HirType, to: HirType, erasure: bool) -> Func {
+    let mut values = vec![Op {
+        kind: OpKind::ObjectNew { frame: false },
+        ty: from,
+        origin: origin(),
+    }];
+    if erasure {
+        values.push(Op {
+            kind: OpKind::Erase {
+                value: ValueId(0),
+                absent: Absent::Null,
+                slots: Absent::Impossible,
+            },
+            ty: HirType::Erased,
+            origin: origin(),
+        });
+        values.push(Op {
+            kind: OpKind::unerase(ValueId(1)),
+            ty: to,
+            origin: origin(),
+        });
+    } else {
+        values.push(Op {
+            kind: OpKind::Convert(ValueId(0)),
+            ty: to,
+            origin: origin(),
+        });
+    }
+    let ops = (0..values.len())
+        .map(|at| ValueId(u32::try_from(at).expect("small fixture value id")))
+        .collect();
+    Func {
+        name: "cast".into(),
+        params: Vec::new(),
+        return_type: HirType::Void,
+        values,
+        blocks: vec![Block {
+            params: Vec::new(),
+            ops,
+            terminator: Terminator::Return(None),
+        }],
+        origin: origin(),
+        exported: true,
+        initializes_receiver: false,
+        async_result: None,
+        frame: None,
+        abstract_declaration: false,
+        obligations: Vec::new(),
+        exact: rustc_hash::FxHashMap::default(),
+        written_return: None,
+        result_absent: crate::hir::Absent::Impossible,
+        validation: None,
+        written_return_elements: Vec::new(),
+    }
+}
+
 #[test]
 fn explicit_casts_and_erased_container_pairs_keep_the_scan_answers() {
     let array = |ty| HirType::Managed(ManagedType::Array(Box::new(ty)));
-    let origin = || {
-        nts_semantic_schema::Origin::source(nts_diagnostics::Location {
-            file: nts_diagnostics::SourceId(0),
-            span: nts_diagnostics::Span::new(0, 1),
-        })
-    };
     for container in [false, true] {
         let wrap = |ty| if container { array(ty) } else { ty };
         for erasure in [false, true] {
-            let mut values = vec![Op {
-                kind: OpKind::ObjectNew { frame: false },
-                ty: wrap(object(3)),
-                origin: origin(),
-            }];
-            if erasure {
-                values.push(Op {
-                    kind: OpKind::Erase {
-                        value: ValueId(0),
-                        absent: Absent::Null,
-                        slots: Absent::Impossible,
-                    },
-                    ty: HirType::Erased,
-                    origin: origin(),
-                });
-                values.push(Op {
-                    kind: OpKind::unerase(ValueId(1)),
-                    ty: wrap(object(1)),
-                    origin: origin(),
-                });
-            } else {
-                values.push(Op {
-                    kind: OpKind::Convert(ValueId(0)),
-                    ty: wrap(object(1)),
-                    origin: origin(),
-                });
+            // `L3` holding `L1`'s field second: never a prefix, so only the
+            // cast or the unerase can put an `L3` in an `L1` slot.
+            for holds_wanted in [false, true] {
+                let mut owner = vec![field("owner", object(2))];
+                if holds_wanted {
+                    owner.push(field("wanted", HirType::NUMBER));
+                }
+                let program = Program {
+                    layouts: vec![
+                        layout(1, vec![field("wanted", HirType::NUMBER)]),
+                        layout(2, vec![field("view", object(1))]),
+                        layout(3, owner),
+                    ],
+                    funcs: vec![cast(wrap(object(3)), wrap(object(1)), erasure)],
+                    ..Program::default()
+                };
+                let answer = equivalent(&program);
+                // A `Convert` stores what it converts. An `Unerase` to `L1`
+                // produces only an object that can be read as one, and an
+                // `L3` without `wanted` cannot.
+                let held = !erasure || holds_wanted;
+                assert_eq!(
+                    answer.cyclic,
+                    [false, held, held],
+                    "container {container}, erasure {erasure}, holds {holds_wanted}"
+                );
+                assert_eq!(answer.array(&object(1)), held);
             }
-            let ops = (0..values.len())
-                .map(|at| ValueId(u32::try_from(at).expect("small fixture value id")))
-                .collect();
-            let program = Program {
-                layouts: vec![
-                    layout(1, vec![field("wanted", HirType::NUMBER)]),
-                    layout(2, vec![field("view", object(1))]),
-                    layout(3, vec![field("owner", object(2))]),
-                ],
-                funcs: vec![Func {
-                    name: "cast".into(),
-                    params: Vec::new(),
-                    return_type: HirType::Void,
-                    values,
-                    blocks: vec![Block {
-                        params: Vec::new(),
-                        ops,
-                        terminator: Terminator::Return(None),
-                    }],
-                    origin: origin(),
-                    exported: true,
-                    initializes_receiver: false,
-                    async_result: None,
-                    frame: None,
-                    abstract_declaration: false,
-                    obligations: Vec::new(),
-                    exact: rustc_hash::FxHashMap::default(),
-                    written_return: None,
-                    result_absent: crate::hir::Absent::Impossible,
-                    validation: None,
-                    written_return_elements: Vec::new(),
-                }],
-                ..Program::default()
-            };
-            let answer = equivalent(&program);
-            assert_eq!(answer.cyclic, [false, true, true]);
-            assert!(answer.array(&object(1)));
         }
+    }
+}
+
+/// An erased `Base` can be any layout a `Base` slot holds, so an `Unerase` to
+/// `Leaf` reaches a `Derived` erased as its base when `Derived` holds `n`,
+/// and an `Unerase` to an interface reaches an owner of its family that holds
+/// the member only as a getter. Neither is a prefix of the unerased type.
+#[test]
+fn unerasures_follow_what_an_erased_slot_holds_and_what_reads_as_the_type() {
+    for supplies in [false, true] {
+        let mut derived = layout(
+            3,
+            vec![field("a", HirType::NUMBER), field("back", object(3))],
+        );
+        if supplies {
+            derived.fields.push(field("n", HirType::NUMBER));
+        }
+        derived.base = Some(TypeId(2));
+        let program = Program {
+            layouts: vec![
+                layout(
+                    1,
+                    vec![
+                        field("n", HirType::NUMBER),
+                        // Optional: an object without it is still read as one.
+                        field(
+                            "note",
+                            HirType::PossiblyUndefined(Box::new(HirType::NUMBER)),
+                        ),
+                    ],
+                ),
+                layout(2, vec![field("a", HirType::NUMBER)]),
+                derived,
+            ],
+            funcs: vec![cast(object(2), object(1), true)],
+            ..Program::default()
+        };
+        let answer = equivalent(&program);
+        assert_eq!(answer.cyclic, [false, false, true]);
+        assert_eq!(
+            answer.array(&object(1)),
+            supplies,
+            "subclass supplies n: {supplies}"
+        );
+    }
+    for family in [false, true] {
+        let mut program = Program {
+            layouts: vec![
+                layout(1, vec![field("w", HirType::NUMBER)]),
+                layout(2, vec![field("next", object(2))]),
+            ],
+            funcs: vec![cast(object(2), object(1), true)],
+            ..Program::default()
+        };
+        if family {
+            program
+                .interface_access
+                .families
+                .push(super::interface_access::Family {
+                    face: TypeId(1),
+                    member: "w".into(),
+                    field: Some(0),
+                    getter: super::interface_access::Entry {
+                        slot: 0,
+                        declared: "Face#get w".into(),
+                    },
+                    setter: None,
+                    raising: Vec::new(),
+                    owners: vec![TypeId(1), TypeId(2)],
+                    eager: false,
+                    pending: false,
+                    stored_dispatch: true,
+                });
+        }
+        let answer = equivalent(&program);
+        assert_eq!(answer.cyclic, [false, true]);
+        assert_eq!(answer.array(&object(1)), family, "family owner: {family}");
     }
 }
