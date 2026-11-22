@@ -1878,7 +1878,7 @@ pub const SIGNATURES_ARM64_LINUX: &[Signature] = &[
         name: "nts_promise_is_rejected",
         returns: "i1",
         params: &["ptr"],
-        attributes: &[],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
         name: "nts_promise_join",

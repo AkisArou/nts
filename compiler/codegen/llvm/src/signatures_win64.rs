@@ -2116,7 +2116,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         name: "nts_promise_is_rejected",
         returns: "zeroext i1",
         params: &["ptr"],
-        attributes: &[],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
         name: "nts_promise_join",

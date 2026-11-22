@@ -20,7 +20,10 @@ fn callback_raises(owner: &str, target: &str) -> Option<bool> {
         | ("nts_promise_join", "pump_one") => Some(true),
         ("nts_free_storage", "free")
         | ("nts_each_erased_slot", "each")
-        | ("nts_visit_managed", "visit")
+        | (
+            "nts_visit_managed" | "nts_promise_trace_fields" | "nts_reaction_trace_fields",
+            "visit",
+        )
         | ("nts_each_holder", "node" | "visit")
         | ("nts_each_reference", "each_held" | "trace_fields" | "visit")
         | ("nts_release_contents", "release_fields")
