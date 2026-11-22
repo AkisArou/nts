@@ -161,17 +161,19 @@ impl Declarations {
         signature(name).is_some_and(|(at, _)| self.0 & (1 << at) != 0)
     }
 
-    fn declare(self, out: &mut String, helper: Support) {
+    fn declare(self, out: &mut String, helper: Support) -> bool {
         let known = helper.signature();
-        if self.contains(known.name) {
-            let _ = writeln!(
-                out,
-                "declare {} @{}({})",
-                known.returns,
-                known.name,
-                known.params.join(", ")
-            );
+        if !self.contains(known.name) {
+            return false;
         }
+        let _ = writeln!(
+            out,
+            "declare {} @{}({})",
+            known.returns,
+            known.name,
+            known.params.join(", ")
+        );
+        true
     }
 
     fn for_program(program: &Program, classes: &[&ForeignClass]) -> Self {
@@ -818,6 +820,7 @@ fn children(
     support: Declarations,
 ) -> Result<String, Diagnostic> {
     let mut out = String::new();
+    support.declare(&mut out, Support::TemplateChild);
     let mut done = std::collections::BTreeSet::new();
     for target in program
         .native_funcs()
@@ -847,9 +850,6 @@ fn children(
         else {
             continue;
         };
-        if done.len() == 1 {
-            support.declare(&mut out, Support::TemplateChild);
-        }
         let type_symbol = program.class_gtype(class).ok_or_else(|| {
             refuse(
                 func,
@@ -1014,6 +1014,9 @@ fn notifies(
     support: Declarations,
 ) -> Result<String, Diagnostic> {
     let mut out = String::new();
+    if support.declare(&mut out, Support::PropertySpec) {
+        out.push_str("declare void @g_object_notify_by_pspec(ptr, ptr)\n");
+    }
     let mut done = std::collections::BTreeSet::new();
     for target in program
         .native_funcs()
@@ -1032,10 +1035,6 @@ fn notifies(
         let Some(GObjectThunk::Notify { class, index }) = &target.thunk else {
             continue;
         };
-        if done.len() == 1 {
-            support.declare(&mut out, Support::PropertySpec);
-            out.push_str("declare void @g_object_notify_by_pspec(ptr, ptr)\n");
-        }
         let type_symbol = program.class_gtype(class).ok_or_else(|| {
             refuse(
                 func,
@@ -1101,6 +1100,9 @@ fn emits(
     support: Declarations,
 ) -> Result<String, Diagnostic> {
     let mut out = String::new();
+    if support.declare(&mut out, Support::SignalId) {
+        out.push_str("declare void @g_signal_emit(ptr, i32, i32, ...)\n");
+    }
     let mut done = std::collections::BTreeSet::new();
     for (func, target) in program
         .native_funcs()
@@ -1119,10 +1121,6 @@ fn emits(
         let Some(GObjectThunk::Signal { name: signal, .. }) = &target.thunk else {
             continue;
         };
-        if done.len() == 1 {
-            support.declare(&mut out, Support::SignalId);
-            out.push_str("declare void @g_signal_emit(ptr, i32, i32, ...)\n");
-        }
         let thunk = program.native_name(target);
         bytes_constant(&mut out, &format!("{thunk}.name"), signal);
         let types = target
@@ -1335,6 +1333,7 @@ fn chains(
     support: Declarations,
 ) -> Result<String, Diagnostic> {
     let mut out = String::new();
+    support.declare(&mut out, Support::ParentSlot);
     let mut done = std::collections::BTreeSet::new();
     for (func, target) in program
         .native_funcs()
@@ -1349,9 +1348,6 @@ fn chains(
     {
         if !done.insert(program.native_name(target)) {
             continue;
-        }
-        if done.len() == 1 {
-            support.declare(&mut out, Support::ParentSlot);
         }
         let Some(GObjectThunk::Chain {
             class,

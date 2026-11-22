@@ -13,7 +13,7 @@ use std::process::Command;
 
 use crate::scratch::ScratchDir;
 
-fn fixture(argument_type: &str) -> (ScratchDir, hir::Program) {
+fn source_fixture(source: &str) -> (ScratchDir, hir::Program) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -21,12 +21,10 @@ fn fixture(argument_type: &str) -> (ScratchDir, hir::Program) {
     let dir = ScratchDir::new(&root.join("target/runtime-call-tests"), "argument-types");
     std::fs::write(
         dir.join("tsconfig.json"),
-        format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
+        format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#),
     )
     .unwrap();
-    std::fs::write(dir.join("main.ts"),
-        format!("export function subject(s: string, separator: string, wrong: {argument_type}): string[] {{ return s.split(separator); }}\n")
-    ).unwrap();
+    std::fs::write(dir.join("main.ts"), source).unwrap();
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
@@ -46,6 +44,12 @@ fn fixture(argument_type: &str) -> (ScratchDir, hir::Program) {
         prepared.diagnostics
     );
     (dir, prepared.program)
+}
+
+fn fixture(argument_type: &str) -> (ScratchDir, hir::Program) {
+    source_fixture(&format!(
+        "export function subject(s: string, separator: string, wrong: {argument_type}): string[] {{ return s.split(separator); }}\n"
+    ))
 }
 
 fn wrong_argument(control: &hir::Program, param: u32) -> hir::Program {
@@ -196,6 +200,99 @@ fn a_windows_arm_erased_runtime_argument_is_refused_while_other_target_abis_matc
     assert_eq!(
         refused.diagnostics[0].message,
         "runtime helper nts_value_truthy_fn parameter 1: expected [2 x i64], found ptr (in `subject`)"
+    );
+}
+
+/// A skipped first child must not consume the section's declaration. This
+/// deliberately malformed thunk is a control of the emitter's own authority,
+/// independent of what lowering currently guarantees about child indices.
+#[test]
+fn an_invalid_child_before_a_valid_child_keeps_the_support_declaration() {
+    use hir::native::{Family, ForeignParent, GObjectThunk, GType};
+    let (_dir, mut control) = source_fixture(
+        r#"
+import type { Ptr } from "c:types";
+declare function child(self: Ptr<void>): Ptr<void>;
+export function subject(self: Ptr<void>): Ptr<void> { return child(self); }
+"#,
+    );
+    let func = control
+        .funcs
+        .iter_mut()
+        .find(|func| func.name == "subject")
+        .unwrap();
+    let target = func
+        .values
+        .iter_mut()
+        .find_map(|op| match &mut op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } => Some(target),
+            _ => None,
+        })
+        .expect("the child call");
+    let target = std::sync::Arc::make_mut(target);
+    target.name = "nts_gobject_child_ChildScope_0".into();
+    target.thunk = Some(GObjectThunk::Child {
+        class: "ChildScope".into(),
+        index: 0,
+    });
+    let mut invalid = func.clone();
+    invalid.name = "invalid_first".into();
+    for op in &mut invalid.values {
+        if let OpKind::Call {
+            callee: Callee::Native(target),
+            ..
+        } = &mut op.kind
+        {
+            let target = std::sync::Arc::make_mut(target);
+            target.name = "nts_gobject_child_Missing_0".into();
+            target.thunk = Some(GObjectThunk::Child {
+                class: "Missing".into(),
+                index: 0,
+            });
+        }
+    }
+    control.foreign_classes.push(hir::ForeignClass {
+        family: Family::GObject,
+        name: "ChildScope".into(),
+        type_name: None,
+        superclass: ForeignParent::GObject(GType::Declared("parent_get_type".into())),
+        methods: vec![],
+        protocols: vec![],
+        state: None,
+        composition: None,
+        signals: vec![],
+        properties: vec![],
+        template: Some(hir::Template {
+            text: hir::TemplateText::Literal("<interface/>".into()),
+            children: vec!["child".into()],
+            callbacks: vec![],
+        }),
+    });
+    let clean = nts_codegen_llvm::emit(&control, Platform::SYSV_X86_64);
+    assert!(clean.diagnostics.is_empty(), "{:?}", clean.diagnostics);
+    let declaration = "declare ptr @nts_gtk_template_child(ptr, i64, ptr)";
+    assert_eq!(clean.text.matches(declaration).count(), 1);
+    assert!(clean.text.contains("call ptr @nts_gtk_template_child("));
+    control.funcs.insert(0, invalid);
+    let emitted = nts_codegen_llvm::emit(&control, Platform::SYSV_X86_64);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    assert_eq!(emitted.text.matches(declaration).count(), 1);
+    assert_eq!(
+        emitted
+            .text
+            .matches("call ptr @nts_gtk_template_child(")
+            .count(),
+        1
+    );
+    assert!(
+        emitted.text.find(declaration).unwrap()
+            < emitted
+                .text
+                .find("call ptr @nts_gtk_template_child(")
+                .unwrap()
     );
 }
 
