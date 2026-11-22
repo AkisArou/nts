@@ -1,5 +1,6 @@
 //! Logical optional SSA and the shared target ABI plan. The aggregate is an
 //! SSA value inside a function; only ABI coercions need temporary native slots.
+use crate::runtime_call::{self, Operand, Site};
 use crate::{Arch, Platform};
 use crate::{Diagnostic, Func, HirType, OpKind, ValueId, name, refuse, ty_of};
 use nts_codegen_common::optional::{self as abi, Passing};
@@ -104,17 +105,22 @@ fn load_registers(
         .collect()
 }
 
-fn indirect_parameter(passing: &Passing, name: &str, result: bool) -> String {
+fn indirect_operand(passing: &Passing, name: &str, result: bool) -> Operand<'static> {
     let Passing::Indirect { size, align, byval } = passing else {
         unreachable!("indirect parameter");
     };
-    if result {
-        format!("ptr sret([{size} x i8]) align {align} {name}")
+    let attributes = if result {
+        format!("sret([{size} x i8]) align {align} ")
     } else if *byval {
-        format!("ptr byval([{size} x i8]) align {align} {name}")
+        format!("byval([{size} x i8]) align {align} ")
     } else {
-        format!("ptr align {align} {name}")
-    }
+        format!("align {align} ")
+    };
+    Operand::with_attributes("ptr", name.to_owned(), attributes)
+}
+
+fn indirect_parameter(passing: &Passing, name: &str, result: bool) -> String {
+    indirect_operand(passing, name, result).to_string()
 }
 
 /// Unread trailing physical parameters use the same aggregate classification
@@ -286,10 +292,15 @@ pub(super) fn has_call(func: &Func, id: ValueId, platform: Platform) -> bool {
     call_plan(func, id, platform).is_some()
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one optional ABI call from argument classification through result reconstruction"
+)]
 pub(super) fn call(
     func: &Func,
     id: ValueId,
     callable: &str,
+    helper: Option<&str>,
     platform: Platform,
     mut lines: Vec<String>,
 ) -> Result<String, Diagnostic> {
@@ -303,15 +314,15 @@ pub(super) fn call(
     let result_slot = format!("{out}.optional.result");
     let mut rendered = vec![];
     if let Some(passing @ Passing::Indirect { .. }) = &plan.result {
-        rendered.push(indirect_parameter(passing, &result_slot, true));
+        rendered.push(indirect_operand(passing, &result_slot, true));
     }
     for (at, ((arg, ty), passing)) in args.iter().zip(&types).zip(&plan.arguments).enumerate() {
         let logical = ty_of(ty, func)?;
         let Some(passing) = passing else {
-            rendered.push(format!(
-                "{logical} {}{}",
+            rendered.push(Operand::with_attributes(
+                logical,
+                name(*arg),
                 platform.extension(ty),
-                name(*arg)
             ));
             continue;
         };
@@ -321,7 +332,7 @@ pub(super) fn call(
             name(*arg)
         ));
         match passing {
-            Passing::Indirect { .. } => rendered.push(indirect_parameter(passing, &slot, false)),
+            Passing::Indirect { .. } => rendered.push(indirect_operand(passing, &slot, false)),
             Passing::Registers(registers) => {
                 let values = load_registers(
                     passing,
@@ -333,11 +344,20 @@ pub(super) fn call(
                     registers
                         .iter()
                         .zip(values)
-                        .map(|(r, v)| format!("{} {v}", r.llvm())),
+                        .map(|(r, v)| Operand::new(r.llvm(), v)),
                 );
             }
         }
     }
+    let checked_call = |returns: &str, extension: &str| -> Result<String, Diagnostic> {
+        match helper {
+            Some(helper) => runtime_call::call(Site::function(func), platform, helper, &rendered),
+            None => Ok(format!(
+                "call {extension}{returns} {callable}({})",
+                runtime_call::operands_text(&rendered)
+            )),
+        }
+    };
     match &plan.result {
         None => {
             let returns = crate::return_ty_of(&op.ty, func)?;
@@ -347,19 +367,15 @@ pub(super) fn call(
                 format!("{out} = ")
             };
             lines.push(format!(
-                "{prefix}call {}{returns} {callable}({})",
-                platform.extension(&op.ty),
-                rendered.join(", ")
+                "{prefix}{}",
+                checked_call(returns, platform.extension(&op.ty))?
             ));
         }
         Some(passing) => {
             let returns = passing.result_type();
             if let Passing::Registers(registers) = passing {
                 let returned = format!("{out}.optional.returned");
-                lines.push(format!(
-                    "{returned} = call {returns} {callable}({})",
-                    rendered.join(", ")
-                ));
+                lines.push(format!("{returned} = {}", checked_call(&returns, "")?));
                 let values = if registers.len() == 1 {
                     vec![returned.clone()]
                 } else {
@@ -381,7 +397,7 @@ pub(super) fn call(
                     &mut lines,
                 );
             } else {
-                lines.push(format!("call void {callable}({})", rendered.join(", ")));
+                lines.push(checked_call("void", "")?);
             }
             lines.push(format!(
                 "{out} = load {}, ptr {result_slot}, align 1",
@@ -568,7 +584,7 @@ pub(super) fn discard_result(
                 "a counted callback answer with an unhandled aggregate ABI",
             ));
         }
-        release_result(function, counter, platform, &mut lines);
+        release_result(function, counter, platform, &mut lines)?;
     }
     Ok(lines)
 }
@@ -578,19 +594,30 @@ fn release_result(
     counter: nts_codegen_common::counting::Counter,
     platform: Platform,
     lines: &mut Vec<String>,
-) {
+) -> Result<(), Diagnostic> {
     use nts_codegen_common::counting::Counter;
-    match counter {
-        Counter::Runtime => lines.push("call void @nts_release(ptr %ignored)".to_owned()),
-        Counter::Foreign(counting) => lines.push(format!(
-            "call void @{}(ptr %ignored)",
-            counting.called(false)
-        )),
+    let site = Site::function(function);
+    let call = match counter {
+        Counter::Runtime => runtime_call::call(
+            site,
+            platform,
+            "nts_release",
+            &[Operand::new("ptr", "%ignored")],
+        )?,
+        Counter::Foreign(counting) => runtime_call::external(
+            site,
+            platform,
+            &counting.called(false),
+            "void",
+            &[Operand::new("ptr", "%ignored")],
+        )?,
         Counter::Tagged => {
             debug_assert_eq!(function.return_type, HirType::Erased);
             let argument =
                 crate::erased_argument(platform, "%ignored", "%ignored.release", 0, lines);
-            lines.push(format!("call void @nts_value_release({argument})"));
+            runtime_call::call(site, platform, "nts_value_release", &argument)?
         }
-    }
+    };
+    lines.push(call);
+    Ok(())
 }

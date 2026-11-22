@@ -42,7 +42,7 @@ pub struct Signature {
     pub attributes: &'static [&'static str],
 }
 
-/// Sorted by name, so a lookup is a binary search and a diff is readable.
+/// Sorted by name for stable generation and readable diffs.
 pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "fmod",
@@ -2985,10 +2985,13 @@ fn table_index(platform: crate::Platform) -> usize {
 #[must_use]
 pub fn signature_on(name: &str, platform: crate::Platform) -> Option<&'static Signature> {
     type Index = std::collections::HashMap<&'static str, &'static Signature>;
-    static INDICES: std::sync::LazyLock<[Index; 5]> = std::sync::LazyLock::new(|| {
-        TABLES.map(|table| table.iter().map(|known| (known.name, known)).collect())
-    });
-    INDICES[table_index(platform)].get(name).copied()
+    static INDICES: [std::sync::OnceLock<Index>; TABLES.len()] =
+        [const { std::sync::OnceLock::new() }; TABLES.len()];
+    let at = table_index(platform);
+    INDICES[at]
+        .get_or_init(|| TABLES[at].iter().map(|known| (known.name, known)).collect())
+        .get(name)
+        .copied()
 }
 
 /// The table clang generated for `platform`: its data model, its arch, and on
@@ -3001,6 +3004,27 @@ pub fn table(platform: crate::Platform) -> &'static [Signature] {
 #[cfg(test)]
 mod tests {
     use super::SIGNATURES;
+
+    #[test]
+    fn each_target_index_retains_every_declared_signature() {
+        for platform in [
+            crate::Platform::SYSV_X86_64,
+            crate::Platform::WIN64_X86_64,
+            crate::Platform::APPLE_ARM64,
+            crate::Platform::LINUX_ARM64,
+            crate::Platform::WINDOWS_ARM64,
+        ] {
+            for expected in super::table(platform) {
+                let found =
+                    super::signature_on(expected.name, platform).expect("indexed declaration");
+                assert_eq!(found.name, expected.name);
+                assert_eq!(found.returns, expected.returns);
+                assert_eq!(found.params, expected.params);
+                assert_eq!(found.attributes, expected.attributes);
+            }
+            assert!(super::signature_on("not_a_declared_helper", platform).is_none());
+        }
+    }
 
     #[test]
     fn nonreturning_uncaught_still_has_an_exceptional_outcome() {
@@ -3046,17 +3070,16 @@ mod tests {
     /// Generated rows keep a deterministic order independently of the lookup
     /// index, so regeneration cannot hide a misplaced or duplicated helper.
     #[test]
-    fn the_table_is_sorted_because_it_is_binary_searched() {
-        for pair in SIGNATURES
-            .windows(2)
-            .chain(super::super::signatures_win64::SIGNATURES_WIN64.windows(2))
-        {
-            assert!(
-                pair[0].name < pair[1].name,
-                "signatures out of order: `{}` must come after `{}`",
-                pair[0].name,
-                pair[1].name
-            );
+    fn every_generated_table_has_a_deterministic_unique_order() {
+        for table in super::TABLES {
+            for pair in table.windows(2) {
+                assert!(
+                    pair[0].name < pair[1].name,
+                    "signatures out of order: `{}` must come after `{}`",
+                    pair[0].name,
+                    pair[1].name
+                );
+            }
         }
     }
 }

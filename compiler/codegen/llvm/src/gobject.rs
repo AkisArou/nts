@@ -49,8 +49,8 @@ pub(super) fn classes(
     out.push_str(&emits(program, platform)?);
     out.push_str(&set_by_name(program, platform)?);
     out.push_str(&get_by_name(program, platform)?);
-    out.push_str(&notifies(program, provenance_origin)?);
-    out.push_str(&children(program, provenance_origin)?);
+    out.push_str(&notifies(program, provenance_origin, platform)?);
+    out.push_str(&children(program, provenance_origin, platform)?);
     let classes = nts_codegen_common::gobject::registered(program);
     if classes.is_empty() {
         return Ok(out);
@@ -186,13 +186,20 @@ pub(super) fn classes(
         {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
+        let parent_call = runtime_call::external(
+            Site::function(provenance_origin),
+            platform,
+            parent,
+            "i64",
+            &[],
+        )?;
         let _ = writeln!(
             out,
             "@{type_symbol}.cache = internal global i64 0\n\
              define internal i64 @{type_symbol}() nounwind {{\n\
              entry:\n  %cached = load i64, ptr @{type_symbol}.cache\n  %none = icmp eq i64 %cached, 0\n\
              \x20 br i1 %none, label %register, label %done\n\
-             register:\n  %parent = call i64 @{parent}()\n\
+             register:\n  %parent = {parent_call}\n\
              \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @__nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state}, {hooks})\n\
              {signals}\
              \x20 store i64 %made, ptr @{type_symbol}.cache\n  br label %done\n\
@@ -200,9 +207,16 @@ pub(super) fn classes(
             slots.len()
         );
         if let Some(make) = maker(program, class) {
+            let type_call = runtime_call::external(
+                Site::function(provenance_origin),
+                platform,
+                type_symbol,
+                "i64",
+                &[],
+            )?;
             let _ = writeln!(
                 out,
-                "define ptr @{make}() nounwind {{\n  %type = call i64 @{type_symbol}()\n  %made = call ptr @nts_gobject_new(i64 %type)\n  ret ptr %made\n}}"
+                "define ptr @{make}() nounwind {{\n  %type = {type_call}\n  %made = call ptr @nts_gobject_new(i64 %type)\n  ret ptr %made\n}}"
             );
         }
     }
@@ -451,29 +465,34 @@ fn callbacks(
             .map(|(at, ty)| format!("{ty} %a{at}"))
             .chain(["ptr %self".to_owned()])
             .collect();
-        let arguments: Vec<String> = std::iter::once("ptr %self".to_owned())
+        let arguments: Vec<Operand<'_>> = std::iter::once(Operand::new("ptr", "%self"))
             .chain(
                 types
                     .iter()
                     .enumerate()
                     .skip(1)
-                    .map(|(at, ty)| format!("{ty} %a{at}")),
+                    .map(|(at, ty)| Operand::new(ty.as_str(), format!("%a{at}"))),
             )
             .collect();
         let shim = format!("__nts_gobject_callback_{name}_{at}");
+        let called = runtime_call::external(
+            Site::function(compiled),
+            platform,
+            &entry,
+            &returns,
+            &arguments,
+        )?;
         if returns == "void" {
             let _ = writeln!(
                 out,
-                "define internal void @{shim}({}) nounwind {{\n  call void @{entry}({})\n  ret void\n}}",
-                parameters.join(", "),
-                arguments.join(", ")
+                "define internal void @{shim}({}) nounwind {{\n  {called}\n  ret void\n}}",
+                parameters.join(", ")
             );
         } else {
             let _ = writeln!(
                 out,
-                "define internal {returns} @{shim}({}) nounwind {{\n  %r = call {returns} @{entry}({})\n  ret {returns} %r\n}}",
-                parameters.join(", "),
-                arguments.join(", ")
+                "define internal {returns} @{shim}({}) nounwind {{\n  %r = {called}\n  ret {returns} %r\n}}",
+                parameters.join(", ")
             );
         }
         let handler = callback.selector().trim_start_matches("callback ");
@@ -488,7 +507,7 @@ fn callbacks(
 
 /// Each `nts_gobject_child_{Class}_{index}` the program calls, defined as
 /// `gtk_widget_get_template_child` by the child's id, which lends it.
-fn children(program: &Program, func: &Func) -> Result<String, Diagnostic> {
+fn children(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
@@ -530,9 +549,11 @@ fn children(program: &Program, func: &Func) -> Result<String, Diagnostic> {
         })?;
         let thunk = program.native_name(target);
         bytes_constant(&mut out, &format!("{thunk}.id"), id);
+        let type_call =
+            runtime_call::external(Site::function(func), platform, type_symbol, "i64", &[])?;
         let _ = writeln!(
             out,
-            "define ptr @{thunk}(ptr %self) nounwind {{\n  %type = call i64 @{type_symbol}()\n  %child = call ptr @nts_gtk_template_child(ptr %self, i64 %type, ptr @{thunk}.id)\n  ret ptr %child\n}}"
+            "define ptr @{thunk}(ptr %self) nounwind {{\n  %type = {type_call}\n  %child = call ptr @nts_gtk_template_child(ptr %self, i64 %type, ptr @{thunk}.id)\n  ret ptr %child\n}}"
         );
     }
     Ok(out)
@@ -643,7 +664,7 @@ fn properties(
 /// Each `nts_gobject_notify_{Class}_{index}` the program calls -- a write of
 /// a property's field -- defined as `g_object_notify_by_pspec` with the
 /// property's spec, found once and kept.
-fn notifies(program: &Program, func: &Func) -> Result<String, Diagnostic> {
+fn notifies(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
@@ -673,12 +694,14 @@ fn notifies(program: &Program, func: &Func) -> Result<String, Diagnostic> {
             )
         })?;
         let thunk = program.native_name(target);
+        let type_call =
+            runtime_call::external(Site::function(func), platform, type_symbol, "i64", &[])?;
         let _ = writeln!(
             out,
             "@{thunk}.spec = internal global ptr null\n\
              define void @{thunk}(ptr %self) nounwind {{\nentry:\n\
              \x20 %kept = load ptr, ptr @{thunk}.spec\n  %none = icmp eq ptr %kept, null\n  br i1 %none, label %find, label %have\n\
-             find:\n  %type = call i64 @{type_symbol}()\n  %found = call ptr @nts_gobject_property_spec(i64 %type, i32 {index})\n\
+             find:\n  %type = {type_call}\n  %found = call ptr @nts_gobject_property_spec(i64 %type, i32 {index})\n\
              \x20 store ptr %found, ptr @{thunk}.spec\n  br label %have\n\
              have:\n  %spec = phi ptr [ %kept, %entry ], [ %found, %find ]\n\
              \x20 call void @g_object_notify_by_pspec(ptr %self, ptr %spec)\n  ret void\n}}"
@@ -861,9 +884,18 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
             let value = ty_of(&slot, func)?.to_owned();
             let mut body = String::new();
             let passed = promoted(&mut body, 1, &value, &slot);
+            let called = match operation {
+                PropertyOperation::Set => format!(
+                    "call void (ptr, ptr, ...) @g_object_set(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)"
+                ),
+                PropertyOperation::Construct => format!(
+                    "call void (ptr, ptr, ...) @nts_gobject_with_builder_add(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)"
+                ),
+                PropertyOperation::Get => unreachable!("the property setter's two operations"),
+            };
             let _ = writeln!(
                 out,
-                "define void @{thunk}(ptr %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 call void (ptr, ptr, ...) @{callee}(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)\n  ret void\n}}"
+                "define void @{thunk}(ptr %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 {called}\n  ret void\n}}"
             );
         }
     }
@@ -998,9 +1030,11 @@ fn chains(
         } else {
             ty_of(&result, func)?.to_owned()
         };
+        let parent_call =
+            runtime_call::external(Site::function(func), platform, parent, "i64", &[])?;
         let _ = writeln!(
             out,
-            "define {returns} @{}({}) nounwind {{\nentry:\n  %parent = call i64 @{parent}()\n  %slot = call ptr @nts_gobject_parent_slot(i64 %parent, i64 {offset})\n  %none = icmp eq ptr %slot, null\n  br i1 %none, label %skip, label %call\ncall:",
+            "define {returns} @{}({}) nounwind {{\nentry:\n  %parent = {parent_call}\n  %slot = call ptr @nts_gobject_parent_slot(i64 %parent, i64 {offset})\n  %none = icmp eq ptr %slot, null\n  br i1 %none, label %skip, label %call\ncall:",
             program.native_name(target),
             parameters.join(", ")
         );

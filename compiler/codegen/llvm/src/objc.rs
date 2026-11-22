@@ -32,7 +32,14 @@ fn constant(global: &str, text: &str) -> String {
 /// One cached lookup: `define internal ptr @symbol()` loading `@symbol.cache`,
 /// and on the first call asking `lookup(name)` and storing the answer. The
 /// symbol is the C backend's, from `nts_codegen_common::objc`.
-fn lookup(text: &mut String, symbol: &str, lookup: &str, spelled: &str) {
+fn lookup(
+    text: &mut String,
+    symbol: &str,
+    lookup: &str,
+    spelled: &str,
+    site: Site<'_>,
+    platform: Platform,
+) -> Result<(), Diagnostic> {
     let base = format!("@{symbol}");
     let _ = writeln!(text, "{}", constant(&format!("{base}.name"), spelled));
     let _ = writeln!(text, "{base}.cache = internal global ptr null");
@@ -43,10 +50,18 @@ fn lookup(text: &mut String, symbol: &str, lookup: &str, spelled: &str) {
     let _ = writeln!(text, "hit:");
     let _ = writeln!(text, "  ret ptr %cached");
     let _ = writeln!(text, "miss:");
-    let _ = writeln!(text, "  %found = call ptr @{lookup}(ptr {base}.name)");
+    let called = runtime_call::external(
+        site,
+        platform,
+        lookup,
+        "ptr",
+        &[Operand::new("ptr", format!("{base}.name"))],
+    )?;
+    let _ = writeln!(text, "  %found = {called}");
     let _ = writeln!(text, "  store ptr %found, ptr {base}.cache");
     let _ = writeln!(text, "  ret ptr %found");
     let _ = writeln!(text, "}}");
+    Ok(())
 }
 
 /// The runtime declarations and the lookups, when the program sends anything.
@@ -103,7 +118,9 @@ pub(super) fn module(program: &Program, platform: Platform) -> Result<String, Di
             &selector_symbol(selector),
             "sel_registerName",
             selector,
-        );
+            Site::synthetic(program, "Objective-C selector lookup"),
+            platform,
+        )?;
     }
     for class in found.classes {
         lookup(
@@ -111,7 +128,9 @@ pub(super) fn module(program: &Program, platform: Platform) -> Result<String, Di
             &class_symbol(class),
             "objc_getRequiredClass",
             class,
-        );
+            Site::synthetic(program, "Objective-C class lookup"),
+            platform,
+        )?;
     }
     Ok(text)
 }
@@ -147,7 +166,16 @@ pub(super) fn send(
     let receiver = match &send.class {
         Some(class) => {
             let receiver = format!("{out}.receiver");
-            before.push(format!("{receiver} = call ptr @{}()", class_symbol(class)));
+            before.push(format!(
+                "{receiver} = {}",
+                runtime_call::external(
+                    Site::function(func),
+                    platform,
+                    &class_symbol(class),
+                    "ptr",
+                    &[]
+                )?
+            ));
             receiver
         }
         None => name(args[0]),
@@ -160,7 +188,16 @@ pub(super) fn send(
             let at = format!("{out}.super");
             before.push(format!("{at} = alloca {{ ptr, ptr }}"));
             before.push(format!("store ptr {receiver}, ptr {at}"));
-            before.push(format!("{at}.class = call ptr @{}()", class_symbol(class)));
+            before.push(format!(
+                "{at}.class = {}",
+                runtime_call::external(
+                    Site::function(func),
+                    platform,
+                    &class_symbol(class),
+                    "ptr",
+                    &[]
+                )?
+            ));
             before.push(format!(
                 "{at}.base = call ptr @class_getSuperclass(ptr {at}.class)"
             ));
@@ -168,14 +205,20 @@ pub(super) fn send(
                 "{at}.slot = getelementptr inbounds {{ ptr, ptr }}, ptr {at}, i32 0, i32 1"
             ));
             before.push(format!("store ptr {at}.base, ptr {at}.slot"));
-            (at, "objc_msgSendSuper")
+            (at, "msgSendSuper")
         }
-        None => (receiver, "objc_msgSend"),
+        None => (receiver, "msgSend"),
     };
     let selector = format!("{out}.selector");
     before.push(format!(
-        "{selector} = call ptr @{}()",
-        selector_symbol(&send.selector)
+        "{selector} = {}",
+        runtime_call::external(
+            Site::function(func),
+            platform,
+            &selector_symbol(&send.selector),
+            "ptr",
+            &[]
+        )?
     ));
     let mut types = Vec::new();
     let mut values = Vec::new();
@@ -213,13 +256,11 @@ pub(super) fn send(
             ));
         } else {
             types.push(ty_of(ty, func)?.to_owned());
-            values.extend(super::arguments(
-                func,
-                &temp,
-                &[*arg],
-                &mut before,
-                platform,
-            )?);
+            values.extend(
+                super::arguments(func, &temp, &[*arg], &mut before, platform)?
+                    .into_iter()
+                    .map(|argument| argument.to_string()),
+            );
         }
     }
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
@@ -230,9 +271,9 @@ pub(super) fn send(
             // pointer, in `x8`.
             Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => (
                 if send.super_of.is_some() {
-                    "objc_msgSendSuper_stret"
+                    "msgSendSuper_stret"
                 } else {
-                    "objc_msgSend_stret"
+                    "msgSend_stret"
                 },
                 String::new(),
             ),
@@ -243,7 +284,7 @@ pub(super) fn send(
         };
         let spelled = aggregate::result_type(passing);
         before.push(format!(
-            "{prefix}call {spelled} ({}) @{entry}({})",
+            "{prefix}call {spelled} ({}) @objc_{entry}({})",
             types.join(", "),
             values.join(", ")
         ));
@@ -256,7 +297,7 @@ pub(super) fn send(
         format!("{out} = ")
     };
     before.push(format!(
-        "{prefix}call {}{} ({}) @{entry}({})",
+        "{prefix}call {}{} ({}) @objc_{entry}({})",
         platform.extension(result),
         ty_of(result, func)?,
         types.join(", "),

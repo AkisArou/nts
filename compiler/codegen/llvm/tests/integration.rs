@@ -70,6 +70,9 @@ mod rounding_width;
 #[path = "runtime_abi.rs"]
 mod runtime_abi;
 
+#[path = "runtime_calls.rs"]
+mod runtime_calls;
+
 #[path = "signatures.rs"]
 mod signatures;
 

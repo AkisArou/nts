@@ -400,6 +400,26 @@ fn cross_compile(dir: &Utf8Path, program: &hir::Program) {
     ];
     for (platform, target) in targets {
         let module = nts_codegen_llvm::emit(program, platform);
+        if platform == Platform::WINDOWS_ARM64 {
+            // Windows ARM's erased runtime arguments still take Win64-x64's
+            // pointer adapter (#957). The checked constructor exposes it.
+            assert!(
+                !module.diagnostics.is_empty(),
+                "{target}: #957 must be refused by name"
+            );
+            assert!(
+                module.diagnostics.iter().all(|diagnostic| {
+                    diagnostic.code == "NTS3001"
+                        && diagnostic.message.starts_with("runtime helper nts_")
+                        && diagnostic
+                            .message
+                            .contains("parameter 1: expected [2 x i64], found ptr")
+                }),
+                "{target}: {:?}",
+                module.diagnostics
+            );
+            continue;
+        }
         assert!(
             module.diagnostics.is_empty(),
             "{target}: {:?}",

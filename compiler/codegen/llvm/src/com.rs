@@ -508,9 +508,15 @@ fn adapter(
         Type::Managed(nts_core::hir::ManagedType::String) => Some("nts_com_answer_string"),
         _ => None,
     } {
+        let answered = runtime_call::call(
+            Site::function(compiled),
+            platform,
+            answer,
+            &[Operand::new(have_ty, "%r")],
+        )?;
         let _ = writeln!(
             out,
-            "  %r = {call}\n  %answered = call ptr @{answer}(ptr %r)\n  store ptr %answered, ptr %out"
+            "  %r = {call}\n  %answered = {answered}\n  store ptr %answered, ptr %out"
         );
     } else {
         // A number or a `boolean` the method answers, converted to the slot's

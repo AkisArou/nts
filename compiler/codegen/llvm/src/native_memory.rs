@@ -1,7 +1,9 @@
 //! Address native storage using the shared C layout. Never attach managed
 //! TBAA, noalias, or inbounds promises to a caller-owned address.
 use super::{Diagnostic, Func, HirType, OpKind, Platform, name, refuse, ty_of, widening};
+use crate::runtime_call::{self, Operand, Site};
 use nts_core::hir::native::Pointee;
+use std::fmt::Write as _;
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(super) fn operation(
@@ -62,14 +64,25 @@ pub(super) fn operation(
             };
             let shape = nts_core::hir::layout::native_shape(element, platform.abi)
                 .ok_or_else(|| refuse(func, "a copy of a native type with no size"))?;
-            return Ok(format!(
-                "call void @llvm.memcpy.p0.p0.i64(ptr align {} {}, ptr align {} {}, i64 {}, i1 false)",
-                shape.align,
-                name(destination),
-                shape.align,
-                name(source),
-                shape.size
-            ));
+            return runtime_call::call(
+                Site::function(func),
+                platform,
+                "llvm.memcpy.p0.p0.i64",
+                &[
+                    Operand::with_attributes(
+                        "ptr",
+                        name(destination),
+                        format!("align {} ", shape.align),
+                    ),
+                    Operand::with_attributes(
+                        "ptr",
+                        name(source),
+                        format!("align {} ", shape.align),
+                    ),
+                    Operand::new("i64", shape.size.to_string()),
+                    Operand::new("i1", "false"),
+                ],
+            );
         }
         _ => {}
     }
@@ -191,7 +204,7 @@ pub(super) fn stack_storage(func: &Func, platform: Platform) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn helpers(program: &super::Program) -> String {
+pub(super) fn helpers(program: &super::Program, platform: Platform) -> Result<String, Diagnostic> {
     let allocate = program.native_funcs().any(|f| {
         f.values
             .iter()
@@ -236,13 +249,14 @@ pub(super) fn helpers(program: &super::Program) -> String {
         text.push_str("declare ptr @malloc(i64)\n");
     }
     if allocate {
-        text.push_str(
-            r"define internal ptr @__nts_native_malloc(double %bytes, i64 %minimum) {
+        let _ = write!(
+            text,
+            r"define internal ptr @__nts_native_malloc(double %bytes, i64 %minimum) {{
 entry:
   %min = uitofp i64 %minimum to double
   %lower = fcmp oge double %bytes, %min
   %upper = fcmp ole double %bytes, 0x433FFFFFFFFFFFFF
-  %truncated = call double @llvm.trunc.f64(double %bytes)
+  %truncated = {truncated}
   %integral = fcmp oeq double %truncated, %bytes
   %range = and i1 %lower, %upper
   %valid = and i1 %range, %integral
@@ -253,11 +267,17 @@ allocate:
   ret ptr %p
 invalid:
   ret ptr null
-}
+}}
 ",
+            truncated = runtime_call::call(
+                Site::synthetic(program, "__nts_native_malloc"),
+                platform,
+                "llvm.trunc.f64",
+                &[Operand::new("double", "%bytes")]
+            )?
         );
     }
-    text
+    Ok(text)
 }
 
 /// A bit-field, which C reaches with a mask and a shift its own compiler

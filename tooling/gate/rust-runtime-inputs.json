@@ -4593,6 +4593,13 @@
       }
     },
     {
+      "source": "compiler/codegen/llvm/src/runtime_call.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/codegen/llvm/src/signatures.rs",
       "declarations": {
         "imports": [],
@@ -5558,6 +5565,27 @@
       "declarations": {
         "imports": [],
         "assets": []
+      }
+    },
+    {
+      "source": "compiler/codegen/llvm/tests/runtime_calls.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "inspection",
+            "path": "../src/"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "fixtures/windows-arm-erased-argument/tsconfig.json"
+          }
+        ]
       }
     },
     {

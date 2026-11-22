@@ -358,13 +358,11 @@ pub(super) fn call(
                     ));
                     parameters.push(format!("{to} {}{temp}.narrow", platform.extension(&slot)));
                 } else {
-                    parameters.extend(super::arguments(
-                        func,
-                        &temp,
-                        &[*arg],
-                        &mut before,
-                        platform,
-                    )?);
+                    parameters.extend(
+                        super::arguments(func, &temp, &[*arg], &mut before, platform)?
+                            .into_iter()
+                            .map(|argument| argument.to_string()),
+                    );
                 }
             }
         }

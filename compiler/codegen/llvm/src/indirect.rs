@@ -19,6 +19,8 @@
 use nts_core::hir::{Func, HirType};
 
 use crate::Platform;
+use crate::runtime_call::{self, Operand, Site};
+use nts_diagnostics::Diagnostic;
 
 /// The most sixteen-byte arguments one runtime helper takes on Win64.
 /// `tests/signatures.rs` holds the generated table to it, so a helper that
@@ -50,15 +52,22 @@ pub(crate) fn is_indirect(ty: &HirType) -> bool {
 
 /// An argument passed as a pointer to its copy in slot `at`, which `spelled`
 /// (`{ i32, i64 }` or `i128`) is stored into first.
-pub(crate) fn argument(spelled: &str, value: &str, at: usize, before: &mut Vec<String>) -> String {
+pub(crate) fn argument(
+    spelled: &str,
+    value: &str,
+    at: usize,
+    before: &mut Vec<String>,
+) -> Operand<'static> {
     before.push(format!(
         "store {spelled} {value}, ptr %win64.a{at}, align 16"
     ));
-    format!("ptr %win64.a{at}")
+    Operand::new("ptr", format!("%win64.a{at}"))
 }
 
 /// The hidden first argument of a call returning an erased value.
-pub(crate) const RESULT: &str = "ptr sret({ i32, i64 }) align 8 %win64.r";
+pub(crate) fn result() -> Operand<'static> {
+    Operand::with_attributes("ptr", "%win64.r", "sret({ i32, i64 }) align 8 ")
+}
 
 /// Read an erased result back out of the slot its call wrote.
 pub(crate) fn erased_result(out: &str) -> String {
@@ -69,25 +78,23 @@ pub(crate) fn erased_result(out: &str) -> String {
 /// hidden pointer, read back from its slot, or an `i128` as `<2 x i64>` in
 /// XMM0, which is the same 128 bits.
 pub(crate) fn call_returning(
+    site: Site<'_>,
+    platform: Platform,
     out: &str,
-    callable: &str,
-    arguments: Vec<String>,
-    result: &HirType,
-) -> String {
-    if *result == HirType::Erased {
-        let with_result: Vec<String> = std::iter::once(RESULT.to_owned())
-            .chain(arguments)
-            .collect();
-        format!(
-            "call void {callable}({})\n  {}",
-            with_result.join(", "),
-            erased_result(out)
-        )
+    helper: &str,
+    arguments: &[Operand<'_>],
+    result_type: &HirType,
+) -> Result<String, Diagnostic> {
+    if *result_type == HirType::Erased {
+        let mut with_result = vec![result()];
+        with_result.extend_from_slice(arguments);
+        let call = runtime_call::call(site, platform, helper, &with_result)?;
+        Ok(format!("{call}\n  {}", erased_result(out)))
     } else {
-        format!(
-            "{out}.v = call <2 x i64> {callable}({})\n  {out} = bitcast <2 x i64> {out}.v to i128",
-            arguments.join(", ")
-        )
+        let call = runtime_call::call(site, platform, helper, arguments)?;
+        Ok(format!(
+            "{out}.v = {call}\n  {out} = bitcast <2 x i64> {out}.v to i128"
+        ))
     }
 }
 
