@@ -1,5 +1,6 @@
 //! The landing owns one thrown value, whether the throw moved a temporary or
 //! acquired a reference to a borrowed host argument.
+//! The error arm avoids the public `error` symbol collision tracked by #972.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 
@@ -12,7 +13,7 @@ use std::process::Command;
 const SOURCE: &str = r"
 export function fresh(n:number):number { throw 'thrown '+n; }
 export function borrowed(value:string):number { throw value; }
-export function error(n:number):number { throw new RangeError('error '+n); }
+export function throwError(n:number):number { throw new RangeError('error '+n); }
 export function control(value:string):string { return value; }
 ";
 
@@ -187,7 +188,7 @@ for(let n=0;n<100;n++) {
   assert.equal(a.live(),baseline,'the landing and argument cleanup each release their own reference');
   assert.throws(()=>a.fresh(n),e=>e==='thrown '+n);
   assert.equal(a.live(),baseline,'a temporary moves to the landing');
-  assert.throws(()=>a.error(n),e=>e instanceof RangeError && e.message==='error '+n);
+  assert.throws(()=>a.throwError(n),e=>e instanceof RangeError && e.message==='error '+n);
   assert.equal(a.live(),baseline,'the thrown object releases its message');
   assert.throws(()=>a.unsupported(),Error);
   assert.equal(a.foreignRefs(),0,'conversion failure releases a foreign payload through its family');
