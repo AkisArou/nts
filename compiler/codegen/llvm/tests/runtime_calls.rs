@@ -240,9 +240,18 @@ fn erased_runtime_arguments_match_each_targets_abi() {
             .position(|line| line == "bnts_value_truthy_fn" || line == "blnts_value_truthy_fn")
             .unwrap_or_else(|| panic!("{input}: no truthy call:\n{assembly}"));
         let setup = &instructions[call.saturating_sub(3)..call];
-        // C copies the padding with ldp; the LLVM adapter zero-extends the
-        // 32-bit tag with ldr w0. Both pass the value in x0/x1, never its address.
-        let pair = setup.iter().any(|line| line.starts_with("ldpx0,x1,"));
+        // C copies padding with ldp, possibly through a temporary to avoid
+        // overwriting the source pointer. LLVM zero-extends the tag with ldr w0.
+        let pair = setup.iter().enumerate().any(|(at, line)| {
+            line.strip_prefix("ldp")
+                .and_then(|operands| operands.split_once(",x1,"))
+                .is_some_and(|(tag, _)| {
+                    tag == "x0"
+                        || setup[at + 1..]
+                            .iter()
+                            .any(|next| *next == format!("movx0,{tag}"))
+                })
+        });
         let tag = setup
             .iter()
             .any(|line| line.starts_with("ldrw0,") || line.starts_with("ldrx0,"));
