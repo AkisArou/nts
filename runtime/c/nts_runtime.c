@@ -11601,22 +11601,29 @@ struct uv_loop_s *nts_host_loop(void) {
  * mask: every `await` pushes and shifts once, and the two divisions `%` cost
  * were a twentieth of `event-loop-promises`. */
 
-static void nts_queue_push(NtsQueue *queue, NtsTask task) {
-  if (queue->len == queue->capacity) {
-    uint32_t capacity = queue->capacity ? queue->capacity * 2u : 16u;
-    NtsTask *items = (NtsTask *)malloc((size_t)capacity * sizeof(NtsTask));
-    if (!items) {
-      fprintf(stderr, "nts: out of memory growing a task queue\n");
-      abort();
-    }
-    /* Unrolled into the new order, so the ring starts at zero again. */
-    for (uint32_t i = 0; i < queue->len; i++) {
-      items[i] = queue->items[(queue->head + i) & (queue->capacity - 1u)];
-    }
-    free(queue->items);
-    queue->items = items;
-    queue->head = 0;
-    queue->capacity = capacity;
+/* Doubling, out of line: it runs a few times in a program's life, and inline
+ * it kept the push -- once per `await` -- from being inlined where it is
+ * queued. */
+static NTS_NOINLINE void nts_queue_grow(NtsQueue *queue) {
+  uint32_t capacity = queue->capacity ? queue->capacity * 2u : 16u;
+  NtsTask *items = (NtsTask *)malloc((size_t)capacity * sizeof(NtsTask));
+  if (!items) {
+    fprintf(stderr, "nts: out of memory growing a task queue\n");
+    abort();
+  }
+  /* Unrolled into the new order, so the ring starts at zero again. */
+  for (uint32_t i = 0; i < queue->len; i++) {
+    items[i] = queue->items[(queue->head + i) & (queue->capacity - 1u)];
+  }
+  free(queue->items);
+  queue->items = items;
+  queue->head = 0;
+  queue->capacity = capacity;
+}
+
+static inline void nts_queue_push(NtsQueue *queue, NtsTask task) {
+  if (__builtin_expect(queue->len == queue->capacity, 0)) {
+    nts_queue_grow(queue);
   }
   queue->items[(queue->head + queue->len) & (queue->capacity - 1u)] = task;
   queue->len++;
