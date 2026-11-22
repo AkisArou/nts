@@ -105,9 +105,14 @@ fn variant(func: &Func) -> Option<Func> {
     let mut made = None;
     let mut answers: Vec<(usize, Option<ValueId>)> = Vec::new();
     for (at, block) in func.blocks.iter().enumerate() {
-        let returns =
-            matches!(block.terminator, Terminator::Return(Some(value)) if value == result);
-        // The terminator reads the promise only by returning it.
+        // Every return hands back the promise: a body that returns anything
+        // else, or nothing, is not one whose answer is its fulfilment.
+        let returns = match block.terminator {
+            Terminator::Return(Some(value)) if value == result => true,
+            Terminator::Return(_) => return None,
+            _ => false,
+        };
+        // Any other terminator does not read the promise at all.
         if !returns && super::operands_of_terminator(&block.terminator).contains(&result) {
             return None;
         }
