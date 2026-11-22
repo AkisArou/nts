@@ -74,6 +74,9 @@ use nts_codegen_common::release::Action;
 use nts_core::hir::JsText;
 use std::fmt::Write as _;
 
+use nts_codegen_common::publication::{
+    ConstructionEntry, claim_construction_entries, construction_entries,
+};
 use nts_core::hir::native::{NativeAbi, PlatformConvention};
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, FunctionName, HirType, OpKind, Printed, Program, Terminator,
@@ -271,6 +274,26 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
             diagnostics: public_errors,
         };
     }
+    // The factories a host constructs published classes through, from the one
+    // publication record C reads too. They share the functions' namespace.
+    let constructions = construction_entries(program);
+    let mut claimed: std::collections::HashMap<String, String> = program
+        .native_funcs()
+        .map(|func| {
+            (
+                program.source_symbols.function(&func.name),
+                func.name.clone(),
+            )
+        })
+        .collect();
+    let collisions =
+        claim_construction_entries(&constructions, &mut claimed, dispatch_location(program));
+    if !collisions.is_empty() {
+        return Emitted {
+            text,
+            diagnostics: collisions,
+        };
+    }
     let native = match native::declarations(program, platform) {
         Ok(lines) => lines,
         Err(diagnostics) => return Emitted { text, diagnostics },
@@ -465,7 +488,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     if let Err(diagnostic) = entry_parameters::printers(program, &kept, platform, &mut text) {
         diagnostics.push(diagnostic);
     }
-    let descriptors = descriptors(program, &pool, platform, &mut diagnostics);
+    let descriptors = descriptors(program, &pool, platform, &constructions, &mut diagnostics);
     let _ = writeln!(text, "{descriptors}");
     let _ = writeln!(text, "{}", literals(program, &pool, &kept));
     text.push_str(&entry_points(program, platform, &mut diagnostics));
@@ -1076,6 +1099,40 @@ fn class_descriptors(
     }
 }
 
+/// The construction entry of each published class laid out as `layout`: the
+/// one symbol the Node-API layer needs from the program besides its
+/// functions. It allocates with the class's own descriptor, chosen by the
+/// constructor's receiver as the C backend's construction hole chooses it,
+/// and hands back the header, so nothing outside reads a field without a
+/// method. Written only after the layout's descriptor, which it names.
+fn construction_factories<'e>(
+    out: &mut String,
+    program: &Emission<'_>,
+    platform: Platform,
+    layout: &nts_core::hir::Layout,
+    entries: impl Iterator<Item = &'e ConstructionEntry<'e>>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for entry in entries {
+        let descriptor = descriptor_for(program, layout, Some(entry.class.receiver));
+        match runtime_call::call(
+            Site::synthetic(program, entry.class.emitted),
+            platform,
+            "nts_object_new",
+            &[Operand::new("ptr", format!("@nts_desc_{descriptor}"))],
+        ) {
+            Ok(allocate) => {
+                let _ = writeln!(
+                    out,
+                    "define ptr {}() nounwind {{\nentry:\n  %made = {allocate}\n  ret ptr %made\n}}",
+                    global(&entry.symbol())
+                );
+            }
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+}
+
 /// A layout's name as a C string constant, terminator and all: the runtime
 /// prints it, so the NUL is part of the data rather than an artefact.
 fn name_constant(out: &mut String, tag: &str, name: &str) {
@@ -1136,6 +1193,7 @@ fn descriptors(
     program: &Emission<'_>,
     pool: &LiteralPool,
     platform: Platform,
+    constructions: &[ConstructionEntry<'_>],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> String {
     let mut out = String::new();
@@ -1282,6 +1340,8 @@ fn descriptors(
             tail(None)
         );
         class_descriptors(&mut out, program, layout, &tag, (&head, &tail));
+        let entries = constructions.iter().filter(|entry| entry.layout == index);
+        construction_factories(&mut out, program, platform, layout, entries, diagnostics);
     }
     array_descriptors(&mut out, program);
     view_class_descriptors(&mut out, program);

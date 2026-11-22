@@ -2812,6 +2812,13 @@
       }
     },
     {
+      "source": "compiler/codegen/common/src/publication.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/codegen/common/src/release.rs",
       "declarations": {
         "imports": [],
@@ -4866,6 +4873,19 @@
           {
             "kind": "conservative",
             "path": "../../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "compiler/codegen/llvm/tests/class_factories.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json"
           }
         ]
       }

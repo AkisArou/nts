@@ -37,6 +37,7 @@ pub mod native_symbols;
 pub mod objc;
 pub mod optional;
 pub mod provider;
+pub mod publication;
 pub mod release;
 pub mod string_hash;
 

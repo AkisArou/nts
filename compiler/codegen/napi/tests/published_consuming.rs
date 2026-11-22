@@ -280,6 +280,9 @@ fn execute(
             "-DNTS_PROVIDER_RC",
             "-DNTS_POISON",
             "-Wno-override-module",
+            // Bound at load, so a symbol a backend did not define fails the
+            // load rather than hiding until its first call.
+            "-Wl,-z,now",
             "-I",
         ])
         .arg(&out)

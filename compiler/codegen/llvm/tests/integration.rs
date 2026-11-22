@@ -25,6 +25,9 @@ mod callback_abi;
 #[path = "callback_result_ownership.rs"]
 mod callback_result_ownership;
 
+#[path = "class_factories.rs"]
+mod class_factories;
+
 #[path = "com_classes.rs"]
 mod com_classes;
 

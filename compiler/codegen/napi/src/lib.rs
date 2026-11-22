@@ -23,6 +23,7 @@
 //! two disagree.
 
 use nts_codegen_c::{c_global, c_identifier};
+use nts_codegen_common::publication::{ConstructionEntry, construction_entry, object_type_name};
 use std::fmt::Write as _;
 
 use nts_core::hir::reachable::declared_members;
@@ -496,7 +497,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Managed(ManagedType::Object(id)) => {
             layouts.iter().find(|l| l.types.contains(id)).map_or_else(
                 || "void *".to_owned(),
-                |l| format!("{} *", nts_codegen_c::object_type_name(l)),
+                |l| format!("{} *", object_type_name(l)),
             )
         }
         HirType::Float { bits: 32 } => "float".to_owned(),
@@ -2039,12 +2040,14 @@ fn member_callback(
 /// called on.
 fn constructor_callback(
     constructor: &hir::Func,
-    instance: &str,
+    entry: &ConstructionEntry<'_>,
     layouts: &[hir::Layout],
     classes: &FxHashSet<String>,
     release_managed: bool,
     skipped: &mut Vec<Skipped>,
 ) -> Option<String> {
+    let instance = entry.instance.as_str();
+    let factory = entry.symbol();
     let mut out = String::new();
     let (ctor_ret, ctor_crossings) = match member_crossings(constructor, layouts, classes) {
         Ok(both) => both,
@@ -2107,7 +2110,7 @@ fn constructor_callback(
     }
     let _ = write!(
         out,
-        "    {instance} *nts_self = ({instance} *)nts_construct_{instance}();\n    if (nts_self == NULL) {{\n        napi_throw_error(env, NULL, \"could not allocate the instance\");\n        goto nts_napi_cleanup;\n    }}\n    if (setjmp(nts_landing.frame) != 0) {{\n        nts_napi_raise(env, &nts_landing);\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    nts_landing_push(&nts_landing);\n    {ctor_symbol}({});\n    if (!nts_napi_check(env, napi_wrap(env, self, nts_self, nts_finalize_{instance}, NULL, NULL), \"could not attach the instance\")) {{\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    if (!nts_napi_define_{instance}_fields(env, self)) {{\n        goto nts_napi_cleanup;\n    }}\n    out = self;\nnts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n",
+        "    {instance} *nts_self = ({instance} *){factory}();\n    if (nts_self == NULL) {{\n        napi_throw_error(env, NULL, \"could not allocate the instance\");\n        goto nts_napi_cleanup;\n    }}\n    if (setjmp(nts_landing.frame) != 0) {{\n        nts_napi_raise(env, &nts_landing);\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    nts_landing_push(&nts_landing);\n    {ctor_symbol}({});\n    if (!nts_napi_check(env, napi_wrap(env, self, nts_self, nts_finalize_{instance}, NULL, NULL), \"could not attach the instance\")) {{\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    if (!nts_napi_define_{instance}_fields(env, self)) {{\n        goto nts_napi_cleanup;\n    }}\n    out = self;\nnts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n",
         args.join(", ")
     );
     if release_managed {
@@ -2214,11 +2217,9 @@ fn class_definition(
     let physical = c_type(&receiver.ty, layouts)
         .trim_end_matches(" *")
         .to_owned();
-    let identity = program
-        .published_classes()
-        .find(|identity| identity.emitted == class)?;
-    let layout = program.layout(identity.receiver)?;
-    let instance = nts_codegen_c::class_instance_name(program, layout, identity);
+    let entry = construction_entry(program, class)?;
+    let layout = &program.layouts[entry.layout];
+    let instance = entry.instance.as_str();
 
     // The field definer is emitted below the constructor and called from it, so
     // its prototype goes here with the other two.
@@ -2229,7 +2230,8 @@ fn class_definition(
     };
     let _ = write!(
         out,
-        "NtsHeader *nts_construct_{instance}(void);\nstatic bool nts_napi_define_{instance}_fields(napi_env env, napi_value self);\n"
+        "NtsHeader *{}(void);\nstatic bool nts_napi_define_{instance}_fields(napi_env env, napi_value self);\n",
+        entry.symbol()
     );
 
     // The finalizer, which is the whole of the ownership story: the instance is
@@ -2242,7 +2244,7 @@ fn class_definition(
 
     out.push_str(&constructor_callback(
         constructor,
-        &instance,
+        &entry,
         layouts,
         classes,
         release_managed,
@@ -2256,7 +2258,7 @@ fn class_definition(
         match member_entry(context, func).and_then(|entry| {
             member_callback(
                 &entry,
-                &instance,
+                instance,
                 layouts,
                 classes,
                 release_managed,
@@ -2287,12 +2289,12 @@ fn class_definition(
     // The data, which is not in `program.funcs` and so was never reached by the
     // loop above. Appended after the methods so a class reads the way it is
     // declared: behaviour first, then state.
-    let (bodies, fields) = field_accessors(layout, &instance, class, layouts, classes, skipped);
+    let (bodies, fields) = field_accessors(layout, instance, class, layouts, classes, skipped);
     out.push_str(&bodies);
     descriptors.extend(fields);
 
     // A re-export changes the property key, never the constructor's name.
-    let constructor_name = c_string_literal(&identity.identity.name);
+    let constructor_name = c_string_literal(&entry.class.identity.name);
     let property = c_string_literal(publish);
     let init = if descriptors.is_empty() {
         format!(
@@ -2304,7 +2306,8 @@ fn class_definition(
             descriptors.join(",\n            ")
         )
     };
-    let export = manifest::Export::class(publish, &identity.identity.name, &instance, constructor);
+    let export =
+        manifest::Export::class(publish, &entry.class.identity.name, instance, constructor);
     Some((out, init, export))
 }
 
@@ -3009,7 +3012,7 @@ fn marshal(
         }
         Cross::Object(at) => {
             let layout = &layouts[*at];
-            let struct_name = nts_codegen_c::object_type_name(layout);
+            let struct_name = object_type_name(layout);
             let helper = object_helper(layout);
             let mut text = format!(
                 "    {struct_name} *result = {call};\n{after_call}    napi_status result_status = {helper}(env, result, &out);\n"
@@ -3043,7 +3046,7 @@ fn object_helper(layout: &hir::Layout) -> String {
 /// changes is the failure path, which returns a status where the inline form
 /// jumped to the wrapper's cleanup label.
 fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::Layout]) {
-    let struct_name = nts_codegen_c::object_type_name(layout);
+    let struct_name = object_type_name(layout);
     let name = object_helper(layout);
     let _ = write!(
         out,
@@ -4201,7 +4204,7 @@ fn emit_layouts(
     mentioned.dedup();
 
     for at in &mentioned {
-        let name = nts_codegen_c::object_type_name(&program.layouts[*at]);
+        let name = object_type_name(&program.layouts[*at]);
         let _ = writeln!(out, "typedef struct {name} {name};");
     }
     if !mentioned.is_empty() {
@@ -4209,7 +4212,7 @@ fn emit_layouts(
     }
     for at in &structs {
         let layout = &program.layouts[*at];
-        let name = nts_codegen_c::object_type_name(layout);
+        let name = object_type_name(layout);
         let _ = writeln!(out, "struct {name} {{");
         out.push_str("    NtsHeader header;\n");
         for (at, field) in layout.fields.iter().enumerate() {
@@ -4228,7 +4231,7 @@ fn emit_layouts(
             out,
             "static napi_status {}(napi_env env, const {} *result, napi_value *into);",
             object_helper(layout),
-            nts_codegen_c::object_type_name(layout)
+            object_type_name(layout)
         );
     }
     if !needed.is_empty() {

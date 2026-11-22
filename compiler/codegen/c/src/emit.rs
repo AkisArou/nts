@@ -13,6 +13,10 @@
 //! it (`drop_orphaned_bodies`). Rather than emit plausible C and pretend, the
 //! failure has to be visible.
 
+use nts_codegen_common::publication::{
+    ConstructionEntry, claim_construction_entries, construction_entries,
+};
+pub use nts_codegen_common::publication::{class_instance_name, object_type_name};
 pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct, release::Action};
 use nts_core::hir::native::NativeAbi;
@@ -1187,23 +1191,11 @@ pub fn emit_planned(plan: &EntryAbi<'_>, abi: NativeAbi) -> Emitted {
 
     // Factories share C's ordinary identifier namespace with native functions.
     // Check complete emitted names, including every prefix and identity suffix.
-    for class in program.published_classes() {
-        let Some(layout) = program.layout(class.receiver) else {
-            continue;
-        };
-        let c_name = format!(
-            "nts_construct_{}",
-            class_instance_name(program, layout, class)
-        );
-        let owner = format!("the constructor factory for {}", class.emitted);
-        if let Some(previous) = claimed.insert(c_name.clone(), owner.clone()) {
-            diagnostics.push(Diagnostic::error(
-                "NTS2004",
-                format!("`{owner}` and `{previous}` both need the C name `{c_name}`"),
-                origin.location,
-            ));
-        }
-    }
+    diagnostics.extend(claim_construction_entries(
+        &construction_entries(program),
+        &mut claimed,
+        origin.location,
+    ));
 
     // Bodies intern at actual use. Their request scopes are retained only if
     // the body survives backend refusal and orphan pruning.
@@ -2363,36 +2355,10 @@ fn by_value_arguments(
 /// that allocates and returns the header, so the wrapper can construct without
 /// being handed a layout it could then misread.
 fn published_class_layouts(program: &Emission<'_>) -> rustc_hash::FxHashSet<usize> {
-    program
-        .published_classes()
-        .filter_map(|class| {
-            program
-                .layouts
-                .iter()
-                .position(|layout| layout.types.contains(&class.receiver))
-        })
+    construction_entries(program)
+        .iter()
+        .map(|entry| entry.layout)
         .collect()
-}
-
-/// A factory and wrapper prefix over C's already-unique physical type name.
-/// The first semantic identity keeps the original prefix. Other identities on
-/// that storage get their declaration symbol, never a separately mangled name.
-#[must_use]
-pub fn class_instance_name(
-    program: &Program,
-    layout: &nts_core::hir::Layout,
-    class: nts_core::hir::PublishedClass<'_>,
-) -> String {
-    let physical = object_type_name(layout);
-    if program
-        .classes_laid_out_as(layout)
-        .first()
-        .is_some_and(|first| first.symbol == class.identity.symbol)
-    {
-        physical
-    } else {
-        format!("{physical}__Class{}", class.identity.symbol)
-    }
 }
 
 /// Layouts allocated, published for construction, or named by a descriptor test.
@@ -4064,16 +4030,10 @@ fn emit_object_descriptors(
             // One hole per semantic class, even when their storage is shared.
             // The constructor receiver chooses an instantiated layout; the
             // class type chooses the descriptor carrying its own identity.
-            for class in program.published_classes() {
-                if layout.types.contains(&class.receiver) {
-                    let descriptor = descriptor_for(program, layout, Some(class.receiver));
-                    writer.line(
-                        origin,
-                        construction_hole(
-                            &class_instance_name(program, layout, class),
-                            &descriptor,
-                        ),
-                    );
+            for entry in construction_entries(program) {
+                if entry.layout == index {
+                    let descriptor = descriptor_for(program, layout, Some(entry.class.receiver));
+                    writer.line(origin, construction_hole(&entry, &descriptor));
                 }
             }
         }
@@ -4148,8 +4108,11 @@ fn view_descriptor_name(view: &nts_core::hir::ViewClass) -> String {
 /// and a caller holding one of these can allocate and nothing else. That keeps
 /// the rule which refuses object *parameters* at the boundary -- `program.c`
 /// keeps its own layouts -- while letting a wrapper build the one thing it must.
-fn construction_hole(name: &str, descriptor: &str) -> String {
-    format!("NtsHeader *nts_construct_{name}(void) {{ return nts_object_new(&{descriptor}); }}")
+fn construction_hole(entry: &ConstructionEntry<'_>, descriptor: &str) -> String {
+    format!(
+        "NtsHeader *{}(void) {{ return nts_object_new(&{descriptor}); }}",
+        entry.symbol()
+    )
 }
 
 /// Managed edges only: foreign values retain the runtime's separate,
@@ -4599,33 +4562,6 @@ fn descriptor_for(
         // own and the shape's descriptor is the honest answer.
         None => format!("__nts_desc_{shape}"),
     }
-}
-
-/// The physical C type spelling shared by the program and its addon wrappers.
-/// The prefix makes a layout named after a C keyword an ordinary identifier.
-///
-/// ASCII punctuation is `_`, which keeps the names a generic instantiation or
-/// a frame gets readable in the header (`Box<number>` is `NtsObj_Box_number_`).
-/// `$` and every other character that is neither alphanumeric nor ASCII
-/// punctuation are escaped as `c_identifier` escapes them, `_uXXXX_`: both had
-/// been `_`, so the frames of `static async #$`, `#_` and `#\u2118` were all
-/// `NtsObj_Type47____frame`, and clang refused the redefinition -- eight of
-/// test262's private-name cases. Two layouts that still spell one name are
-/// refused by name in `emit_object_types`.
-#[must_use]
-pub fn object_type_name(layout: &nts_core::hir::Layout) -> String {
-    use std::fmt::Write as _;
-    let mut name = String::from("NtsObj_");
-    for c in layout.name.chars() {
-        if c.is_alphanumeric() {
-            name.push(c);
-        } else if (c.is_ascii_punctuation() && c != '$') || c == ' ' {
-            name.push('_');
-        } else {
-            let _ = write!(name, "_u{:04x}_", c as u32);
-        }
-    }
-    name
 }
 
 /// The C spelling of an array's element type.
