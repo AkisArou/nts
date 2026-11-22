@@ -413,3 +413,26 @@ fn the_read_only_helpers_are_the_ones_the_header_marks() {
         );
     }
 }
+
+/// The payload readers an `await` resumes through stop by name on a promise in
+/// the wrong state, so none is `NTS_READS_ONLY` -- a `pure` call may be
+/// deleted -- and each stores nothing, so a borrow of the awaited promise
+/// survives it.
+#[test]
+fn a_settlement_reader_stores_nothing_without_becoming_pure() {
+    let header = include_str!("../../../runtime/c/nts_runtime.h");
+    for name in runtime::READS_A_SETTLEMENT {
+        let declaration = header
+            .lines()
+            .map(str::trim_start)
+            .find(|line| line.contains(&format!("{name}(const NtsPromise *promise)")))
+            .unwrap_or_else(|| panic!("the runtime must still declare `{name}`"));
+        assert!(
+            !declaration.starts_with("NTS_READS_ONLY"),
+            "`{name}` may stop"
+        );
+        assert!(!runtime::reads_only(name), "`{name}` may stop");
+        assert!(runtime::stores_nothing(name));
+    }
+    assert!(runtime::reads_only("nts_promise_is_rejected"));
+}

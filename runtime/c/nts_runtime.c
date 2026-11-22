@@ -11596,7 +11596,10 @@ struct uv_loop_s *nts_host_loop(void) {
 /* A growable ring of tasks.
  *
  * A ring rather than a list because the drain is FIFO and the whole point is
- * that it stays FIFO: reaction order is what the specification pins. */
+ * that it stays FIFO: reaction order is what the specification pins. Its
+ * capacity is a power of two -- sixteen, doubled -- so a position wraps with a
+ * mask: every `await` pushes and shifts once, and the two divisions `%` cost
+ * were a twentieth of `event-loop-promises`. */
 
 static void nts_queue_push(NtsQueue *queue, NtsTask task) {
   if (queue->len == queue->capacity) {
@@ -11608,14 +11611,14 @@ static void nts_queue_push(NtsQueue *queue, NtsTask task) {
     }
     /* Unrolled into the new order, so the ring starts at zero again. */
     for (uint32_t i = 0; i < queue->len; i++) {
-      items[i] = queue->items[(queue->head + i) % queue->capacity];
+      items[i] = queue->items[(queue->head + i) & (queue->capacity - 1u)];
     }
     free(queue->items);
     queue->items = items;
     queue->head = 0;
     queue->capacity = capacity;
   }
-  queue->items[(queue->head + queue->len) % queue->capacity] = task;
+  queue->items[(queue->head + queue->len) & (queue->capacity - 1u)] = task;
   queue->len++;
 }
 
@@ -11624,7 +11627,7 @@ static bool nts_queue_shift(NtsQueue *queue, NtsTask *out) {
     return false;
   }
   *out = queue->items[queue->head];
-  queue->head = (queue->head + 1u) % queue->capacity;
+  queue->head = (queue->head + 1u) & (queue->capacity - 1u);
   queue->len--;
   return true;
 }
@@ -12091,6 +12094,49 @@ static const uint32_t nts_reaction_offsets[] = {
     (uint32_t)offsetof(NtsReaction, next),
 };
 
+/* A reaction's and a promise's owned edges, as the compiler emits them for a
+ * layout of its own (`NtsDescriptor::release_fields`): one function releases
+ * them when the count reaches zero and its twin hands the same slots to the
+ * collector, so trial deletion sees exactly what destruction gives up. Every
+ * `await` destroys a promise, and the generic walk -- the descriptor's offset
+ * table, then the erased table, each through a visitor -- was a quarter of
+ * `event-loop-promises`' instructions. Neither reads anything but its own
+ * slots; a handle in a promise's value stays on the clear-before-release
+ * protocol, as an erased field's does (`nts_release_foreign`). */
+static void nts_reaction_release_fields(NtsHeader *object) {
+  NtsReaction *reaction = (NtsReaction *)object;
+  nts_release(reaction->state);
+  nts_release((NtsHeader *)reaction->next);
+}
+
+static void nts_reaction_trace_fields(NtsHeader *object,
+                                      void (*visit)(NtsHeader *)) {
+  NtsReaction *reaction = (NtsReaction *)object;
+  if (reaction->state) {
+    visit(reaction->state);
+  }
+  if (reaction->next) {
+    visit((NtsHeader *)reaction->next);
+  }
+}
+
+static void nts_promise_release_fields(NtsHeader *object) {
+  NtsPromise *promise = (NtsPromise *)object;
+  nts_release((NtsHeader *)promise->reactions);
+  if (NTS_TAG_IS_MANAGED(nts_value_tag(promise->value))) {
+    nts_release(nts_value_reference(promise->value));
+  }
+}
+
+static void nts_promise_trace_fields(NtsHeader *object,
+                                     void (*visit)(NtsHeader *)) {
+  NtsPromise *promise = (NtsPromise *)object;
+  if (promise->reactions) {
+    visit((NtsHeader *)promise->reactions);
+  }
+  nts_visit_managed(&promise->value, visit);
+}
+
 /* Cyclic, both of them: a reaction's state is an async frame, and a frame can
  * hold the promise it will settle. That is an ordinary cycle and the collector
  * has to be able to see it. */
@@ -12102,6 +12148,8 @@ static const NtsDescriptor nts_desc_reaction = {
     .offsets = nts_reaction_offsets,
     .name = "Reaction",
     .element = NTS_ARRAY_UNKNOWN,
+    .release_fields = nts_reaction_release_fields,
+    .trace_fields = nts_reaction_trace_fields,
 };
 
 /* The settlement payload is *not* here: it is an erased slot, listed below, and
@@ -12127,6 +12175,8 @@ static const NtsDescriptor nts_desc_promise = {
     .erased_offsets = nts_promise_erased,
     .element = NTS_ARRAY_UNKNOWN,
     .to_string = nts_promise_to_string,
+    .release_fields = nts_promise_release_fields,
+    .trace_fields = nts_promise_trace_fields,
 };
 
 bool nts_is_promise(NtsValue value) {

@@ -3213,6 +3213,7 @@ pub const READS_ONLY: &[&str] = &[
     "nts_json_first_escape",
     "nts_landing_detail",
     "nts_landing_thrown",
+    "nts_promise_is_rejected",
     "nts_promise_pair",
     "nts_promise_state",
     "nts_table_membership",
@@ -3281,6 +3282,25 @@ pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &[
 /// survives it as it survives any read.
 pub const READS_A_SHAPE: &[&str] = &["nts_map_entry"];
 
+/// Helpers that read a settled promise's payload, store nothing, release
+/// nothing, run no program code, and stop by name when the promise is not in
+/// the state the compiler said it was. The stop keeps them off [`READS_ONLY`],
+/// whose calls may be deleted, as it keeps `nts_refused` off it; what they
+/// hand back is a borrow of the promise's slot (`own::RUNTIME_LENDS_A_SLOT`).
+///
+/// A borrow survives them. An `await` resumes by reading the frame's awaited
+/// promise through one of these, and while they ended the borrow, every
+/// resumption retained that promise and released it again -- a release of a
+/// cyclic object at a count above one, so the promise became a cycle candidate
+/// on every `await` and was taken out of the buffer again when it died.
+pub const READS_A_SETTLEMENT: &[&str] = &[
+    "nts_promise_number",
+    "nts_promise_pointer",
+    "nts_promise_reason",
+    "nts_promise_reference",
+    "nts_promise_value",
+];
+
 /// Whether a call overwrites no program storage a borrow depends on.
 ///
 /// This is not purity: diagnostics and stopping are observable effects.
@@ -3293,6 +3313,7 @@ pub fn stores_nothing(name: &str) -> bool {
     reads_only(name)
         || RETAINS_ONLY_ITS_RESULT.contains(&name)
         || READS_A_SHAPE.contains(&name)
+        || READS_A_SETTLEMENT.contains(&name)
         || REGION_CALLS.contains(&name)
         || name == "nts_refused"
 }

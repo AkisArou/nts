@@ -4489,7 +4489,7 @@ uint32_t nts_array_length(NtsValue array);
 /* Whether the resumed state machine has to propagate a rejection rather than
  * read a value. A rejected promise has no payload and both readers above
  * assert, so an `await` asks this first. */
-bool nts_promise_is_rejected(const NtsPromise *promise);
+NTS_READS_ONLY bool nts_promise_is_rejected(const NtsPromise *promise);
 /* Reject `result` with whatever `source` was rejected with. One call, so the
  * reason never has to become a typed value on the compiler's side. */
 void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
