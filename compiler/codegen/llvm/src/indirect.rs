@@ -118,14 +118,12 @@ pub(crate) fn behind_entry(
             || test(&func.return_type)
     };
     public
-        && match (applies(platform), platform.arch) {
-            (true, crate::Arch::X86_64) => crosses(&is_indirect),
-            (false, crate::Arch::Aarch64)
-                if RuntimeAbi::of(platform) != RuntimeAbi::WindowsArm64 =>
-            {
+        && match RuntimeAbi::of(platform) {
+            RuntimeAbi::WindowsX86_64 => crosses(&is_indirect),
+            RuntimeAbi::AppleArm64 | RuntimeAbi::LinuxArm64 => {
                 crosses(&|ty: &HirType| *ty == HirType::Erased)
             }
-            _ => false,
+            RuntimeAbi::SysVX86_64 | RuntimeAbi::WindowsArm64 => false,
         }
 }
 
