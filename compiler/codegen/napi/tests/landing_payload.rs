@@ -138,14 +138,14 @@ fn execute(
     );
 }
 
-const FAILURE: &str = r#"
+const FAILURE: &str = r"
 static int fail_error_conversion;
 static napi_status fixture_create_error(napi_env env,napi_value code,napi_value message,napi_value *result) {
     if (fail_error_conversion) return napi_generic_failure;
     return napi_create_error(env,code,message,result);
 }
 #define napi_create_error fixture_create_error
-static void nts_napi_throw("#;
+static void nts_napi_throw(";
 
 const LIVE: &str = r#"
 #undef napi_create_error
