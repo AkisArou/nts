@@ -1,8 +1,9 @@
 {
   "run": "build",
-  "category": "uncompilable-c",
-  "nts": "error: incompatible type for argument 2 of 'nts_concat'",
+  "category": "refused",
+  "nts": "NTS1001 `concat` with an argument that is not a string",
+  "ran": "exit 1; nts: uncaught Observed: ",
   "node": "exit 1; nts: uncaught Observed: concat=legonull;padEnd=abcfalsefa;",
-  "measured_with": "1c4825476e64cde1",
+  "measured_with": "f886d8f024608e70",
   "source": "measured"
 }

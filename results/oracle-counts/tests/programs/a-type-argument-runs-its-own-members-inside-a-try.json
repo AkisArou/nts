@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-type-argument-runs-its-own-members-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-type-argument-runs-its-own-members-inside-a-try/src/main.ts",
+      "signature": "07df8cdebaea945e989edf15d53514195237db24552efb2b6caa5f472e7239f7",
+      "keys": {
+        "c": "53b3b779c0d0958000687f8e07f1621e",
+        "jvm": "e6d20c53eaf565aff196c87d35342f92",
+        "llvm": "99941ceecec343e2935a697c7660ac13"
+      },
+      "cases_sha256": "ea9241392abd95e6be72583bf2943dbbdd41322b2901ab08da3b47f90bfd03c0",
+      "driver_sha256": "28d2a292c5843ff54cde80b429aff0c7ea8c66ffcff9b7377c715823247f7cc2",
+      "populations": {
+        "accessor": {
+          "count": 29,
+          "cases_sha256": "0cc87467b5e5fd429a8f7b126fbf3dcf8171b72dbf4c3f95d923e1fadf626a52"
+        },
+        "field": {
+          "count": 29,
+          "cases_sha256": "ec1b3a480613cb1a3aa727740bd7859104567e640659c0b286ac4bebc1b9418a"
+        },
+        "fieldControl": {
+          "count": 29,
+          "cases_sha256": "345dbfd2b2c362350a9c27869e32a1a6638b3c4d887d97614fc4d97e183691e8"
+        },
+        "getterMethod": {
+          "count": 29,
+          "cases_sha256": "b61758a82be3b584dfbbf4abfb6361c24eccf71e3d5ea649d91c3571378cfef8"
+        },
+        "getterMethodControl": {
+          "count": 29,
+          "cases_sha256": "13cf5d6e28e381121f250ea4fdb62470f406b2bb69a6cb3801234d3428f16100"
+        },
+        "inClass": {
+          "count": 29,
+          "cases_sha256": "0b596dd0efbf80712d81f7ce39aee49ea4c839d842d7d91eba7b74695856e93f"
+        },
+        "interfaceBound": {
+          "count": 29,
+          "cases_sha256": "2d6890ac8bf205caece0bf280de43a6aefed61bf5f8b8c8e55f2e892c77ee8c6"
+        },
+        "literal": {
+          "count": 29,
+          "cases_sha256": "147970903a8cd61e2fa568054ee9b8835eb3694d1918403b1d3c668d4ea8e8c9"
+        },
+        "literalControl": {
+          "count": 29,
+          "cases_sha256": "9a117eb34caaf0413c593db87649eadb9ca5cf892789e5d9965e310a9c4e2216"
+        },
+        "mixed": {
+          "count": 29,
+          "cases_sha256": "9e66fe499e69a583fb69a5e174cb820802a9ab81ea8e68379ccf782e73096835"
+        },
+        "primitiveControl": {
+          "count": 29,
+          "cases_sha256": "30106be36e77d6ce3a1f4097c4b31c0f4e0a7c83fc8bbac1b87b74e0b647530d"
+        },
+        "quietCopy": {
+          "count": 29,
+          "cases_sha256": "e6939172eebbb7818fdb89a84aa7cad08d21fbc486171d6cd51da54036889c7f"
+        }
+      },
+      "complete": true,
+      "count": 348
+    }
+  ]
+}

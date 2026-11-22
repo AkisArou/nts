@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/adaptive-sort",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/adaptive-sort/src/main.ts",
+      "signature": "c658d1bff12bc980b87bf5a60061719f0235f3f0a931df22a12da94bf2042cad",
+      "keys": {
+        "c": "cb02e1b47ad698bc64a04571a7af9866",
+        "jvm": "bfd464718d0520fcf22569de3ca113dd",
+        "llvm": "b27ffe44e5a1b3cc9ef6f75be17b8875"
+      },
+      "cases_sha256": "ad8e5eed7616d88163877940bce005309472f7b4aed7f6cdd3d34f4fdc473cdf",
+      "driver_sha256": "01e4c7ac39a64b403643679f59545455ff7ef430e9e8444585cc064130f5daf3",
+      "populations": {
+        "copied": {
+          "count": 29,
+          "cases_sha256": "697fb7075798fb99a74b905958353f28207e0b5fdfbf8e1b3461f3c743ae777a"
+        },
+        "copiedMutating": {
+          "count": 29,
+          "cases_sha256": "aae8c80b445abad40e64ce823ceb8d52237c0a492571002664d349625ae87a4c"
+        },
+        "copiedThrow": {
+          "count": 29,
+          "cases_sha256": "aade002e2c5a70a35b6631cc054ee8c8156c018401d10697936de6ca4681c1af"
+        },
+        "mutating": {
+          "count": 29,
+          "cases_sha256": "26e6df44d6133da9bff8eb008dcaaaea5f8a4ac2de221007e9206e74f98a227c"
+        },
+        "mutatingThrow": {
+          "count": 29,
+          "cases_sha256": "e1e87426c03b5bff993b160a4e1edbb652ef3924b04d34eef4a6728bd974ef34"
+        },
+        "nanComparator": {
+          "count": 29,
+          "cases_sha256": "4c916820bc523589ed7912d407a4338511e74d2597cce67d025212b5cdafdbac"
+        },
+        "ordered": {
+          "count": 29,
+          "cases_sha256": "65214f38d3295f29c899aee697951ae0e429fa7823d422ac186a6dd911a30d97"
+        },
+        "reversed": {
+          "count": 29,
+          "cases_sha256": "b8b7b65a238daa4d2294faac5f4c9cdc1f5071287335bddb1712034ee29a9d32"
+        },
+        "reversedEqual": {
+          "count": 29,
+          "cases_sha256": "93535ac929350496b046f69afa6ff2d4e948909ea1ad079ccf0011484790448c"
+        },
+        "separatedRunsControl": {
+          "count": 29,
+          "cases_sha256": "7c66af0fab9b7125872b9e2e9703199f1e3476e091aeecca4e8f188925f8f3cb"
+        },
+        "sharedHelpers": {
+          "count": 29,
+          "cases_sha256": "34751094abad357b057e944a924fae974873a413300d4cf9f9729a206a49e258"
+        },
+        "shuffled": {
+          "count": 29,
+          "cases_sha256": "d3fad6b984ea896d9775e3e346c80f67dbe0c0201df977aa10e1f9b275bebfc7"
+        },
+        "throwing": {
+          "count": 29,
+          "cases_sha256": "eb4d1f3b3575a70f55f05c70b1001b4fd8a95e547be4dec82695be34242d8c86"
+        },
+        "throwingGallop": {
+          "count": 29,
+          "cases_sha256": "f303bd4d5248137a288d18884e3aa682294d9c8f63f504ae12da38c62adc5e36"
+        },
+        "throwingInsertion": {
+          "count": 29,
+          "cases_sha256": "b41a3ac7caef58736c296e5738d327c35039d999e3f6532649cb5ff9a5c7b38d"
+        },
+        "throwingMerge": {
+          "count": 29,
+          "cases_sha256": "2a9e17a1d8dd4f1edccb07dc6bc502a775d6cecc7abbb46015eed9ba05725828"
+        },
+        "unevenRuns": {
+          "count": 29,
+          "cases_sha256": "751928fc8e38219b5ca71f404555bfae438d70c45dbb4dc3c6f1a3441d59804f"
+        }
+      },
+      "complete": true,
+      "count": 493
+    }
+  ]
+}

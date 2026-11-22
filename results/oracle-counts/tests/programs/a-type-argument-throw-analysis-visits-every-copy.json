@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-type-argument-throw-analysis-visits-every-copy",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-type-argument-throw-analysis-visits-every-copy/src/main.ts",
+      "signature": "80b59077fb53ba262f43ae409ded84ca8bb08ff674f9451ceb3a223b33c13782",
+      "keys": {
+        "c": "c6d99f76dd2e862ab2fdbf867de636d1",
+        "jvm": "1b131285063000eaa740e911fe3705c9",
+        "llvm": "25d02e3414028101289cbfc4eef4ab3c"
+      },
+      "cases_sha256": "b55db001be28d921e57a418bde62b4e9819908837f1f91a1d3dde2da10ca8ee2",
+      "driver_sha256": "6e64fb9126807effea01763ee64d2de4b69051442e5e395b63d87401f72ee321",
+      "populations": {
+        "fewer": {
+          "count": 29,
+          "cases_sha256": "2e383ad69ce6e5360caa6f875d22604985fbd53f60360c8af52fcb3f293c5e19"
+        },
+        "many": {
+          "count": 29,
+          "cases_sha256": "9a85ed1d8e50961fd3716cae4337c4bb341c6f9f60c512aa32232e4f399b8baa"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

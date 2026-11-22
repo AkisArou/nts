@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-initializer-throwing-in-a-class-with-no-constructor-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-initializer-throwing-in-a-class-with-no-constructor-control/src/main.ts",
+      "signature": "7dbde2faef45fbbedf7b1787fc26ac3a6615887c5f88bcba28e71c5f78659a6c",
+      "keys": {
+        "c": "9c2e6956be74ddc41ff8ee7100881f20",
+        "jvm": "2d0fec9ffc36ab2434d4da6602736463",
+        "llvm": "2416b94103a54365888262cd4810dcdc"
+      },
+      "cases_sha256": "5316e972e1a0c414d956cc05782ea6ca04fb7779435820920c6893f936cc0d03",
+      "driver_sha256": "bbe71ee536e2c4ac1acb35505f9058a154c072facfe981b6f9cbe90a95fa12a9",
+      "populations": {
+        "chained": {
+          "count": 29,
+          "cases_sha256": "408877559df478206950d6189794088abdd22634821064010c29c2d27377eca0"
+        },
+        "direct": {
+          "count": 29,
+          "cases_sha256": "3aa32d7d3a8d2988894064aa3f7a826dd0be67d2a0f33e75130562b024fc51eb"
+        },
+        "inherited": {
+          "count": 29,
+          "cases_sha256": "9e32b684580ac88ae58c6d1c0594f80fc2b80089c4c9d69f530a956159507818"
+        },
+        "inheritedThroughAClosure": {
+          "count": 29,
+          "cases_sha256": "8fd6a46d911688fc210b69e8611c7315a29318ab4bdb9105564d33b5aa03f046"
+        },
+        "throughAClosure": {
+          "count": 29,
+          "cases_sha256": "194ffc12330c3a59559d5f2cd771a21a8850e985651cdc6f6de96985d3e6cecd"
+        }
+      },
+      "complete": true,
+      "count": 145
+    }
+  ]
+}

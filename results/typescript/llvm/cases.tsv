@@ -1566,21 +1566,21 @@ tests/typescript/call-routes/receiver-object-bind.ts	{"kind":"refused","diagnost
 tests/typescript/call-routes/receiver-object-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/call-routes/receiver-static-value.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/call-routes/shape-default-array.ts	{"kind":"pass"}
-tests/typescript/call-routes/shape-default-field.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}
-tests/typescript/call-routes/shape-default-map.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}
+tests/typescript/call-routes/shape-default-field.ts	{"kind":"pass"}
+tests/typescript/call-routes/shape-default-map.ts	{"kind":"pass"}
 tests/typescript/call-routes/shape-default-omitted-variable.ts	{"kind":"invalid-hir","validator":"CallArgumentCount { func: \"module#init\", callee: \"target@raises\", expected: 2, found: 1 }"}
 tests/typescript/call-routes/shape-default-variable.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"module#init\", callee: \"target@raises\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
 tests/typescript/call-routes/shape-destructured-array.ts	{"kind":"pass"}
-tests/typescript/call-routes/shape-destructured-field.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}
-tests/typescript/call-routes/shape-destructured-map.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}
+tests/typescript/call-routes/shape-destructured-field.ts	{"kind":"pass"}
+tests/typescript/call-routes/shape-destructured-map.ts	{"kind":"pass"}
 tests/typescript/call-routes/shape-destructured-variable.ts	{"kind":"pass"}
 tests/typescript/call-routes/shape-fewer-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/call-routes/shape-fewer-field.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/call-routes/shape-fewer-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/call-routes/shape-fewer-variable.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/call-routes/shape-optional-array.ts	{"kind":"pass"}
-tests/typescript/call-routes/shape-optional-field.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}
-tests/typescript/call-routes/shape-optional-map.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}
+tests/typescript/call-routes/shape-optional-field.ts	{"kind":"pass"}
+tests/typescript/call-routes/shape-optional-map.ts	{"kind":"pass"}
 tests/typescript/call-routes/shape-optional-omitted-variable.ts	{"kind":"invalid-hir","validator":"CallArgumentCount { func: \"module#init\", callee: \"target@raises\", expected: 2, found: 1 }"}
 tests/typescript/call-routes/shape-optional-variable.ts	{"kind":"pass"}
 tests/typescript/call-routes/shape-rest-array.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGSEGV","output":""}}
@@ -1588,7 +1588,7 @@ tests/typescript/call-routes/shape-rest-field.ts	{"kind":"runtime-abort","failur
 tests/typescript/call-routes/shape-rest-map.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGSEGV","output":""}}
 tests/typescript/call-routes/shape-rest-variable.ts	{"kind":"invalid-hir","validator":"CallArgumentCount { func: \"module#init\", callee: \"target@raises\", expected: 2, found: 3 }"}
 tests/typescript/call-routes/shape-this-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/call-routes/shape-this-field.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError: negative:-2"}}
+tests/typescript/call-routes/shape-this-field.ts	{"kind":"pass"}
 tests/typescript/call-routes/shape-this-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/call-routes/shape-this-variable.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/call-routes/throw-array-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -5350,6 +5350,7 @@ tests/typescript/library-addition-routes-controls/promises-try-field-returned-pr
 tests/typescript/library-addition-routes-controls/promises-try-generic-object-identity-control.ts	{"kind":"pass"}
 tests/typescript/library-addition-routes-controls/promises-try-interface-synchronous-value-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/library-addition-routes-controls/promises-try-map-returned-rejection-control.ts	{"kind":"pass"}
+tests/typescript/library-addition-routes-controls/promises-try-private-throwing-callback-control.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused at run time: calling `Closure0#call@raises` through an erased signature with an argument not admitted by parameter `value`"}}
 tests/typescript/library-addition-routes-controls/promises-try-readonly-callback-array-control.ts	{"kind":"pass"}
 tests/typescript/library-addition-routes-controls/promises-try-static-throwing-callback-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/library-addition-routes-controls/promises-try-this-parameter-unbound-callback-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -7104,7 +7105,7 @@ tests/typescript/proofs-controls/call-target-loop-closure-replacement-control.ts
 tests/typescript/proofs-controls/call-target-loop-static-this-replacement-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-merge-static-this-constructor-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/capture-accessor-setter-writes-binding-control.ts	{"kind":"pass"}
-tests/typescript/proofs-controls/capture-suspension-await-rejected-promise-writer-control.ts	{"kind":"wrong","errorClass":"Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Error: after write"}}
+tests/typescript/proofs-controls/capture-suspension-await-rejected-promise-writer-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/capture-suspension-await-rejected-promise-writer-no-rejection-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/element-kind-call-static-this-compound-assignment-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/element-kind-call-static-this-destructuring-default-control.ts	{"kind":"pass"}
@@ -7418,7 +7419,7 @@ tests/typescript/proofs/capture-merge-conditional-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-suspension-async-generator-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/capture-suspension-await-microtask-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-suspension-await-nested-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/proofs/capture-suspension-await-rejected-promise-writer.ts	{"kind":"wrong","errorClass":"Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Error: after write"}}
+tests/typescript/proofs/capture-suspension-await-rejected-promise-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-suspension-per-iteration-await-resume-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/capture-suspension-per-iteration-yield-resume-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/capture-suspension-yield-caller-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -9816,9 +9817,9 @@ tests/typescript/throw-routes/async-then-rejection.ts	{"kind":"refused","diagnos
 tests/typescript/throw-routes/call-abstract-method.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/throw-routes/call-default-parameters.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/throw-routes/call-function-array.ts	{"kind":"pass"}
-tests/typescript/throw-routes/call-function-field.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError"}}
-tests/typescript/throw-routes/call-function-map.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError"}}
-tests/typescript/throw-routes/call-function-variable.ts	{"kind":"wrong","errorClass":"RangeError","failure":{"exit":1,"signal":null,"output":"nts: uncaught RangeError"}}
+tests/typescript/throw-routes/call-function-field.ts	{"kind":"pass"}
+tests/typescript/throw-routes/call-function-map.ts	{"kind":"pass"}
+tests/typescript/throw-routes/call-function-variable.ts	{"kind":"pass"}
 tests/typescript/throw-routes/call-generic-callback.ts	{"kind":"pass"}
 tests/typescript/throw-routes/call-interface-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/throw-routes/call-interface-literal.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}

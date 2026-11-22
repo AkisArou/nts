@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/string-split-with-an-undefined-separator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/string-split-with-an-undefined-separator/src/main.ts",
+      "signature": "f9efb5d195f18a038ba0a31e89749e7c4994fbb8251fcbdd7e1bb8c97a0d2077",
+      "keys": {
+        "c": "275f6483caf1d3b33fe775284e56b6f6",
+        "jvm": "d5c547b2acb2b044439464ae24d54bf8",
+        "llvm": "c9af96986352f521791657a5eaa7151f"
+      },
+      "cases_sha256": "1c4b0b4a32d884ec09fc42c8ac85e7dd15c1a28c43cc0a918174767f55575f46",
+      "driver_sha256": "a892050b5179d08acd736f38d2202f7bac6cdfeda34db686fa56d674c8c04dea",
+      "populations": {
+        "computedLimit": {
+          "count": 29,
+          "cases_sha256": "22b816d5c928141be314196c5b352a77b10060a86ad39d32e1b26f9d33f12802"
+        },
+        "concatAbsent": {
+          "count": 29,
+          "cases_sha256": "0d1299e969039271c45e21e8260b0de49110fa05babc6e07bfbc453adf242779"
+        },
+        "concatAbsentControl": {
+          "count": 29,
+          "cases_sha256": "f8bf806f07c450fd3de26f76c55585fa040e7ecc952f7d6de6e8dbceb9d10019"
+        },
+        "control": {
+          "count": 29,
+          "cases_sha256": "6393f453fde83f0eb54ff20426d78ecf53819ace3a51bd2c8dc3dc79297a7dfb"
+        },
+        "controlLimit": {
+          "count": 29,
+          "cases_sha256": "07f9067aa277934b96ab9bd7340e2847ac0058ac249e0dbb898bfaff209d8630"
+        },
+        "grown": {
+          "count": 29,
+          "cases_sha256": "b9dbd7cf8b3f5fbe8be4a1718915617e689a1fc325e2b68f7c9051bbb8e1655a"
+        },
+        "nullSeparator": {
+          "count": 29,
+          "cases_sha256": "37f0a0701ad1b351a16b27712e4965e6f311ab836f71652f8f5b3b71dbf9f99c"
+        },
+        "padAbsentFill": {
+          "count": 29,
+          "cases_sha256": "f1d5f778c7a9a15ba19d37a197b30badf16cb58997621636ad259593bf122ef0"
+        },
+        "whole": {
+          "count": 29,
+          "cases_sha256": "4768cd0d3a894029f1c0b8d721c32ec80510ad286fb5d88adb5041f9bcc21ed6"
+        },
+        "zeroLimit": {
+          "count": 29,
+          "cases_sha256": "2581b6ddeb3c2dab613be1e863df7d5ced6bb5e68de6d3ada96390e38f3b45f0"
+        }
+      },
+      "complete": true,
+      "count": 290
+    }
+  ]
+}

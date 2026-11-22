@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-typeof-bound-type-argument-calls-the-bound-static-method-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-typeof-bound-type-argument-calls-the-bound-static-method-control/src/main.ts",
+      "signature": "fd6c86a4ec7d9341202d8d126f024c4db3696858365c980841abc2e46cbafafc",
+      "keys": {
+        "c": "b19bfaf0098801e55d74013cfd552a4c",
+        "jvm": "fb2fbcab3a06aafab7d545c01fd9e246",
+        "llvm": "8c3a452abdce1eaa0bb7905984ad5289"
+      },
+      "cases_sha256": "a54c599bdf1066a2ca0b54c2021d2bdcf5e41fa8dfe08c19d2630d574588d81f",
+      "driver_sha256": "77569a528e97b1be5a99dc0666f6af092adf1b486cea8cd79aa7db68f76ee0f4",
+      "populations": {
+        "derived": {
+          "count": 29,
+          "cases_sha256": "4e69dbe65dc663a43498e8ba427c9efe5598cdcd9847e45b2671321fed177645"
+        },
+        "structural": {
+          "count": 29,
+          "cases_sha256": "8b04d323aab4fe3d6e29f1df959d6014878660e5293f14e4c1c411e8ed41891d"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}
