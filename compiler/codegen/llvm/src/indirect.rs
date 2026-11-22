@@ -1,4 +1,4 @@
-//! The runtime's sixteen-byte values under Win64.
+//! The runtime's sixteen-byte values under x86-64 Windows.
 //!
 //! An erased value and an `i128` cross a call into C as a pointer to a copy,
 //! and come back through a hidden pointer (erased) or as `<2 x i64>` in an SSE
@@ -20,6 +20,7 @@ use nts_core::hir::{Func, HirType};
 
 use crate::Platform;
 use crate::runtime_call::{self, Operand, Site};
+use crate::target_abi::RuntimeAbi;
 use nts_diagnostics::Diagnostic;
 
 /// The most sixteen-byte arguments one runtime helper takes on Win64.
@@ -29,7 +30,7 @@ pub const SLOTS: usize = 2;
 
 /// Whether calls into the C runtime pass sixteen-byte values through memory.
 pub(crate) fn applies(platform: Platform) -> bool {
-    platform.abi.convention == nts_core::hir::native::PlatformConvention::Win64
+    RuntimeAbi::of(platform) == RuntimeAbi::WindowsX86_64
 }
 
 /// The entry-block slots of a function emitted for `platform`.
@@ -119,7 +120,11 @@ pub(crate) fn behind_entry(
     public
         && match (applies(platform), platform.arch) {
             (true, crate::Arch::X86_64) => crosses(&is_indirect),
-            (false, crate::Arch::Aarch64) => crosses(&|ty: &HirType| *ty == HirType::Erased),
+            (false, crate::Arch::Aarch64)
+                if RuntimeAbi::of(platform) != RuntimeAbi::WindowsArm64 =>
+            {
+                crosses(&|ty: &HirType| *ty == HirType::Erased)
+            }
             _ => false,
         }
 }
@@ -130,7 +135,7 @@ pub(crate) fn behind_entry(
 pub(crate) fn unexportable(func: &Func, platform: Platform, public: bool) -> Option<&'static str> {
     let crosses =
         func.params.iter().any(|param| is_indirect(&param.ty)) || is_indirect(&func.return_type);
-    (public && applies(platform) && platform.arch == crate::Arch::Aarch64 && crosses).then_some(
+    (public && RuntimeAbi::of(platform) == RuntimeAbi::WindowsArm64 && crosses).then_some(
         "an exported function taking or returning an erased value or a bigint on arm64 Windows, whose convention this backend does not implement; the C backend builds it",
     )
 }

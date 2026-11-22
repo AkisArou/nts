@@ -2976,13 +2976,13 @@ const TABLES: [&[Signature]; 5] = [
 ];
 
 fn table_index(platform: crate::Platform) -> usize {
-    use nts_core::hir::native::PlatformConvention::{SysV, Win64};
-    match (platform.abi.convention, platform.arch) {
-        (_, crate::Arch::Aarch64) if platform.darwin => 2,
-        (SysV, crate::Arch::Aarch64) => 3,
-        (Win64, crate::Arch::Aarch64) => 4,
-        (Win64, crate::Arch::X86_64) => 1,
-        (SysV, crate::Arch::X86_64) => 0,
+    use crate::target_abi::RuntimeAbi;
+    match RuntimeAbi::of(platform) {
+        RuntimeAbi::SysVX86_64 => 0,
+        RuntimeAbi::WindowsX86_64 => 1,
+        RuntimeAbi::AppleArm64 => 2,
+        RuntimeAbi::LinuxArm64 => 3,
+        RuntimeAbi::WindowsArm64 => 4,
     }
 }
 

@@ -165,7 +165,7 @@ fn a_split_erased_argument_is_refused_where_c_rejects_the_same_hir() {
 }
 
 #[test]
-fn a_windows_arm_erased_runtime_argument_is_refused_while_other_target_abis_match() {
+fn erased_runtime_arguments_match_each_targets_abi() {
     let input = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/windows-arm-erased-argument/tsconfig.json");
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
@@ -184,6 +184,7 @@ fn a_windows_arm_erased_runtime_argument_is_refused_while_other_target_abis_matc
     for (platform, argument) in [
         (Platform::WIN64_X86_64, "ptr "),
         (Platform::LINUX_ARM64, "[2 x i64] "),
+        (Platform::WINDOWS_ARM64, "[2 x i64] "),
     ] {
         let control = nts_codegen_llvm::emit(&prepared.program, platform);
         assert!(control.diagnostics.is_empty(), "{:?}", control.diagnostics);
@@ -193,14 +194,79 @@ fn a_windows_arm_erased_runtime_argument_is_refused_while_other_target_abis_matc
                 .contains(&format!("@nts_value_truthy_fn({argument}"))
         );
     }
-    // #957 owns the incorrect Win64-x64 adapter selected on Windows ARM.
-    let refused = nts_codegen_llvm::emit(&prepared.program, Platform::WINDOWS_ARM64);
-    assert_eq!(refused.diagnostics.len(), 1, "{:?}", refused.diagnostics);
-    assert_eq!(refused.diagnostics[0].code, "NTS3001");
-    assert_eq!(
-        refused.diagnostics[0].message,
-        "runtime helper nts_value_truthy_fn parameter 1: expected [2 x i64], found ptr (in `subject`)"
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let dir = ScratchDir::new(
+        &root.join("target/runtime-call-tests"),
+        "windows-arm-assembly",
     );
+    let module = nts_codegen_llvm::emit(&prepared.program, Platform::WINDOWS_ARM64);
+    std::fs::write(dir.join("program.ll"), module.text).unwrap();
+    // Clang's C caller is an independent ABI control of the same sixteen bytes.
+    std::fs::write(
+        dir.join("control.c"),
+        r"
+        typedef struct { int tag; unsigned long long bits; } NtsValue;
+        extern _Bool nts_value_truthy_fn(NtsValue);
+        _Bool control(const NtsValue *value) { return nts_value_truthy_fn(*value); }
+    ",
+    )
+    .unwrap();
+    for input in ["program.ll", "control.c"] {
+        let output = Command::new("clang")
+            .args([
+                "-target",
+                "aarch64-pc-windows-msvc",
+                "-Werror",
+                "-Wno-override-module",
+                "-O1",
+                "-S",
+            ])
+            .arg(dir.join(input))
+            .args(["-o", "-"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{input}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let assembly = String::from_utf8(output.stdout).unwrap();
+        let compact: String = assembly.chars().filter(|ch| !ch.is_whitespace()).collect();
+        assert!(
+            compact.contains("ldpx0,x1,"),
+            "{input}: the erased value must occupy x0/x1:\n{assembly}"
+        );
+        assert!(
+            compact.contains("bnts_value_truthy_fn") || compact.contains("blnts_value_truthy_fn"),
+            "{input}: {assembly}"
+        );
+    }
+}
+
+#[test]
+fn windows_arm_public_erased_and_bigint_exports_remain_refused() {
+    let (_dir, program) = source_fixture(
+        r"
+        export function erased(value: unknown): unknown { return value; }
+        export function bigint(value: bigint): bigint { return value; }
+    ",
+    );
+    for platform in [Platform::WIN64_X86_64, Platform::LINUX_ARM64] {
+        let control = nts_codegen_llvm::emit(&program, platform);
+        assert!(
+            control.diagnostics.is_empty(),
+            "{platform:?}: {:?}",
+            control.diagnostics
+        );
+    }
+    let refused = nts_codegen_llvm::emit(&program, Platform::WINDOWS_ARM64);
+    assert_eq!(refused.diagnostics.len(), 2, "{:?}", refused.diagnostics);
+    for name in ["erased", "bigint"] {
+        assert!(refused.diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("an exported function taking or returning an erased value or a bigint on arm64 Windows")
+                && diagnostic.message.contains(&format!("in `{name}`"))
+        }), "{name}: {:?}", refused.diagnostics);
+    }
 }
 
 /// A skipped first child must not consume the section's declaration. This
