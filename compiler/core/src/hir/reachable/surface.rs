@@ -4,7 +4,25 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::Roots;
-use crate::hir::{HirType, ManagedType, Program, TypeId, has_a_closure_body};
+use crate::hir::{Func, HirType, ManagedType, Program, TypeId, has_a_closure_body};
+
+/// Source members a published class exposes. A second `#` names a compiler
+/// specialization, not another member. Constructors have a separate entry.
+pub(super) fn declared_members<'p>(program: &'p Program, class: &str) -> Vec<(&'p Func, &'p str)> {
+    program
+        .funcs
+        .iter()
+        .filter_map(|func| {
+            let (owner, member) = declared_member(&func.name)?;
+            (owner == class).then_some((func, member))
+        })
+        .collect()
+}
+
+pub(super) fn declared_member(name: &str) -> Option<(&str, &str)> {
+    let (owner, member) = name.split_once('#')?;
+    (member != "constructor" && !member.contains('#')).then_some((owner, member))
+}
 
 #[derive(Clone, Copy)]
 enum Work {
@@ -34,6 +52,18 @@ pub(super) fn functions(
     selection: Roots<'_>,
 ) -> FxHashSet<TypeId> {
     observed(program, roots, selection, &mut ())
+}
+
+/// Entries reached through the selected surface's callable types. Publication
+/// and pruning share this walk, including its exclusion of refused entries.
+pub(super) fn entries<'p>(
+    program: &'p Program,
+    roots: &[&str],
+    selection: Roots<'_>,
+    by_name: &FxHashMap<&str, usize>,
+) -> Vec<&'p str> {
+    let surface = functions(program, roots, selection);
+    super::closure_entries_from_outside(program, &surface, by_name)
 }
 
 fn observed(

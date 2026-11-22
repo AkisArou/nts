@@ -254,20 +254,13 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
     // it (`Derived#keep(b, h) { h.box = b }` through a `Base`, which freed a live
     // `Box`). That case is the **parameter** half; `hands_back` is the **return**
     // half, and it was still wrong.
-    let lent: rustc_hash::FxHashSet<&str> = program
-        .foreign_classes
-        .iter()
-        .flat_map(super::ForeignClass::entered)
-        .chain(program.dispatch_targets())
+    let lent: rustc_hash::FxHashSet<&str> = super::reachable::borrowed_names(program)
+        .into_iter()
         // A foreign caller holds its input through both return and a throw.
         // A wrapper cannot observe whether a consuming store ran before an
         // uncaught call jumped to its landing pad. Published entries therefore
         // use the same borrowed-input, owned-result convention as dispatch.
         // Keep the publication decision in the existing surface enumeration.
-        .chain(super::reachable::root_names(
-            program,
-            super::reachable::Roots::EntrySurface,
-        ))
         // A region's clone counts nothing, so it takes nothing over: it is lent
         // its arguments, and its caller gives up its own (`regions`).
         .chain(
@@ -364,9 +357,37 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
                     (!slots.is_empty()).then(|| (func.name.clone(), slots))
                 })
                 .collect();
-            appended_parameters(program, layouts, &lent, stored)
+            let mut consumes = appended_parameters(program, layouts, &lent, stored);
+            if super::reachable::host_may_reenter_after_uncaught(program) {
+                // A host landing can skip an intermediate compiled frame.
+                // Do not put an incoming owned reference in that frame unless
+                // every producer returns through it. Closed executables need
+                // no such guard: their uncaught throw ends the process.
+                let effects = super::memory::outcomes::DirectEffects::of(program);
+                for func in &program.funcs {
+                    if consumes.contains_key(&func.name) && can_raise_past_frame(func, &effects) {
+                        consumes.remove(&func.name);
+                    }
+                }
+            }
+            consumes
         },
     }
+}
+
+fn can_raise_past_frame(func: &Func, effects: &super::memory::outcomes::DirectEffects<'_>) -> bool {
+    func.blocks.iter().any(|block| block.ops.iter().enumerate().any(|(at, id)| {
+        let op = func.value(*id);
+        // This throw leaves its own frame, whose incoming reference can be
+        // released before the terminal transfer. Count operations may already
+        // follow it when a diagnostic reader asks the summary after counting.
+        let local_throw = matches!(block.terminator, super::Terminator::Unreachable)
+            && matches!(&op.kind, OpKind::Call { callee: super::Callee::External(name), .. } if name == "nts_uncaught")
+            && block.ops[at + 1..].iter().all(|tail| {
+                matches!(func.value(*tail).kind, OpKind::Retain(_) | OpKind::Release(_))
+            });
+        !local_throw && effects.unsealed(op)
+    }))
 }
 
 /// One function's answer, for every value in it.

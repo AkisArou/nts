@@ -1,5 +1,7 @@
 //! One pre-counting memory graph. Stage 2 publishes diagnostics only: no
 //! allocator, counting pass or backend may consult this report yet.
+//! The shared escaping-outcome primitive also seals entry conventions; that
+//! primitive computes neither memory homes nor per-value ownership.
 //!
 //! SSA copies are directional inclusions. Heap slots are keyed by allocation
 //! identity and semantic field identity, and weakly join all possible writes.
@@ -13,7 +15,7 @@ mod comparison;
 mod events;
 mod graph;
 mod lifetime;
-mod outcomes;
+pub(super) mod outcomes;
 mod report;
 mod summary;
 

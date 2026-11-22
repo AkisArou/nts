@@ -6,6 +6,52 @@ use std::collections::{BTreeMap, VecDeque};
 
 use super::super::{Callee, HirType, Op, OpKind, Program, runtime};
 
+/// A direct-call view of the existing escaping-outcome column. An indirect
+/// producer is unsealed by `intrinsic`, so no dispatch precision is assumed.
+/// This exposes effects only; it computes no memory homes or value ownership.
+pub(in crate::hir) struct DirectEffects<'p> {
+    by_name: BTreeMap<&'p str, usize>,
+    raises: Vec<bool>,
+}
+
+impl<'p> DirectEffects<'p> {
+    pub(in crate::hir) fn of(program: &'p Program) -> Self {
+        let by_name: BTreeMap<_, _> = program
+            .funcs
+            .iter()
+            .enumerate()
+            .map(|(at, func)| (func.name.as_str(), at))
+            .collect();
+        let edges = program
+            .funcs
+            .iter()
+            .map(|func| {
+                func.blocks
+                    .iter()
+                    .flat_map(|block| &block.ops)
+                    .filter_map(|id| {
+                        if let OpKind::Call {
+                            callee: Callee::Direct(name),
+                            ..
+                        } = &func.value(*id).kind
+                        {
+                            by_name.get(name.as_str()).copied()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .collect::<Vec<_>>();
+        let (raises, _, _) = escaping(program, &edges, &by_name);
+        Self { by_name, raises }
+    }
+
+    pub(in crate::hir) fn unsealed(&self, op: &Op) -> bool {
+        unsealed(op, &self.by_name, &self.raises).is_some()
+    }
+}
+
 /// Whether this operation itself has an outcome not represented by a complete
 /// exceptional successor. Direct body calls are propagated by the call index.
 fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>) -> bool {

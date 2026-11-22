@@ -132,6 +132,14 @@ impl OwnedRoots {
     }
 }
 
+/// Whether an outside host may keep running after an uncaught compiled throw.
+/// A closed executable terminates instead. Before root selection the product
+/// is unknown, so it must keep the open-program convention.
+#[must_use]
+pub fn host_may_reenter_after_uncaught(program: &Program) -> bool {
+    !matches!(&program.roots, Some(OwnedRoots::Entry(_)))
+}
+
 /// The functions something outside the program can call, with arguments the
 /// program does not show: the roots the build chose, and every callback the
 /// runtime was handed.
@@ -588,7 +596,10 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
                     // name is what `EveryExport` did anyway. Over-rooting is the
                     // safe direction here; under-rooting is a jar that does not
                     // link.
-                    || func.name.split_once('#').is_some_and(|(owner, _)| {
+                    // Source members only: a numeric specialization is a
+                    // direct implementation, not a second published member.
+                    // Boundary emission reads this same member rule.
+                    || func.name.split_once('#').is_some_and(|(owner, member)| {
                         // **A published *class*, not anything with a `#` in its
                         // name.** The first version asked only whether the owner
                         // was in `public_api`, and `eachUpTo#Closure0` -- a
@@ -613,6 +624,7 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
                         // asking that name dropped the class's entire surface.
                         published_classes.contains(owner)
                             && !program.funcs.iter().any(|func| func.name == owner)
+                            && (member == "constructor" || surface::declared_member(&func.name).is_some())
                     })
             })
             .map(|func| func.name.as_str())
@@ -708,6 +720,73 @@ fn closure_entries_from_outside<'p>(
         .collect()
 }
 
+/// Every entry the artifact publishes, including closures carried only by its
+/// callable surface. Ownership and materialization use pruning's enumeration.
+#[must_use]
+pub fn published_names(program: &Program) -> Vec<&str> {
+    let by_name = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(at, func)| (func.name.as_str(), at))
+        .collect();
+    entries(program, Roots::EntrySurface, &by_name)
+}
+
+/// The source members of a published class, shared with boundary emitters.
+#[must_use]
+pub fn declared_members<'p>(program: &'p Program, class: &str) -> Vec<(&'p Func, &'p str)> {
+    surface::declared_members(program, class)
+}
+
+/// Entries reached with borrowed arguments: the published surface, table
+/// rows, foreign methods and the actual callback/bridge targets. Direct calls
+/// can use another entry, but none of these uses may take over its argument.
+#[must_use]
+pub fn borrowed_names(program: &Program) -> FxHashSet<&str> {
+    let converted = program
+        .funcs
+        .iter()
+        .flat_map(placed)
+        .filter_map(|op| {
+            if let OpKind::NativeBridge { bridging, .. } = &op.kind {
+                Some(bridging)
+            } else {
+                None
+            }
+        })
+        .flat_map(|bridging| {
+            bridging
+                .converted
+                .iter()
+                .map(|converted| converted.function.as_str())
+        });
+    published_names(program)
+        .into_iter()
+        .chain(
+            program
+                .foreign_classes
+                .iter()
+                .flat_map(super::ForeignClass::entered),
+        )
+        .chain(program.dispatch_targets())
+        .chain(callback_names(program))
+        .chain(converted)
+        .collect()
+}
+
+fn entries<'p>(
+    program: &'p Program,
+    roots: Roots<'_>,
+    by_name: &FxHashMap<&str, usize>,
+) -> Vec<&'p str> {
+    let mut names = root_names(program, roots);
+    if !matches!(roots, Roots::Entry(_)) {
+        names.extend(surface::entries(program, &names, roots, by_name));
+    }
+    names
+}
+
 /// What can run in a function: the operations placed in its blocks.
 ///
 /// The arena also keeps operations a pass took out of every block -- `dce`
@@ -739,7 +818,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     let mut dispatch = dispatch::Dispatch::build(program);
     let mut printers = Printers::new(program, &hierarchy.layouts);
     let mut reached: FxHashSet<&str> = FxHashSet::default();
-    let mut pending: Vec<&str> = root_names(program, roots);
+    let mut pending: Vec<&str> = entries(program, roots, &by_name);
     // **And what the outside calls through a function it is handed.** A
     // library whose surface carries a function type gives a caller this
     // program cannot see a value to call, or a slot to fill, and that caller
@@ -752,12 +831,6 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     // than every closure: keeping every closure's entries in a library made
     // whatever they call reachable too, and with it refusals nothing could
     // reach before. An executable has no outside.
-    if !matches!(roots, Roots::Entry(_)) {
-        let surface = surface::functions(program, &pending, roots);
-        if !surface.is_empty() {
-            pending.extend(closure_entries_from_outside(program, &surface, &by_name));
-        }
-    }
     reached.extend(pending.iter().copied());
 
     while let Some(name) = pending.pop() {
