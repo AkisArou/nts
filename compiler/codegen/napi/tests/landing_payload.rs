@@ -78,7 +78,7 @@ fn execute(
     let out = dir.join(backend);
     std::fs::create_dir_all(&out).unwrap();
     std::fs::write(out.join(name), source).unwrap();
-    std::fs::write(out.join("addon.c"), &observed).unwrap();
+    std::fs::write(out.join("addon.c"), observed).unwrap();
     let mut sources = vec![
         out.join(name).into_std_path_buf(),
         out.join("addon.c").into_std_path_buf(),

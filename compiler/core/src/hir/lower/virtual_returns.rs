@@ -317,7 +317,7 @@ fn projected_bridge(name: String, target: &Func, projection: &Projection) -> Fun
         }],
         origin,
         exported: false,
-        raises: false,
+        raises: target.raises,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

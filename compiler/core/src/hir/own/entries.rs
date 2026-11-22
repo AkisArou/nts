@@ -115,7 +115,7 @@ pub(in crate::hir) fn materialize(program: &mut Program) -> Vec<EntryDecision> {
 /// | Owner / table | Disposition |
 /// | --- | --- |
 /// | `Func values, blocks, exact, validation` | Move with the executable body. |
-/// | `Func signature, origins, result absence` | Same contract on both entries. |
+/// | `Func signature, raises, origins, result absence` | Same contract on both entries. |
 /// | `Func name, exported` | Source identity on entry; private, unexported body. |
 /// | `Func obligations` | Already discharged; must be empty. |
 /// | `Func constructor, abstract, async/frame roles` | Excluded, never copied. |
