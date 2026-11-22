@@ -618,6 +618,11 @@ in two ways:
   previous records commit's landing answer. A commit that landed or was
   withdrawn during the run settles in that cycle, through the same rules
   used at cycle entry.
+  At landing replay, a full-check records submission's oracle shards are held
+  to the same fixture and generator source digests at the measured commit and
+  the new base. A changed fixture's shard edit is dropped and named as left
+  pending; other records still land. If no edits remain, the submission is
+  withdrawn. Ordinary task commits retain their fixture and record edits.
 - **One records run is one transaction over its families.** Families record
   in the table's order in one tree. The run keeps its own write ledger: each
   record path it changed from its committed bytes, with the bytes it left.

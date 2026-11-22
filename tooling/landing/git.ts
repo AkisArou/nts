@@ -5,7 +5,11 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // working tree except the one that has main checked out, which `git merge
 // --ff-only` keeps in step.
 import { spawnSync } from "node:child_process";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import {mkdirSync,mkdtempSync,rmSync} from 'node:fs';
+import {homedir} from 'node:os';
+import {oracleSourceDigests} from '../differential/oracle-source-digests.ts';
+import {RECORDS,recordPath} from '../differential/oracle-record-paths.ts';
 import { issuesNamed, withFixes } from "../tasks/links.ts";
 
 export type Git = { root: string; env?: NodeJS.ProcessEnv };
@@ -16,10 +20,13 @@ function run(git: Git, args: readonly string[], cwd = git.root, env = git.env ??
   if (r.error) throw new GitError(`git ${args[0]}: ${r.error.message}`);
   return { status: r.status ?? 1, stdout: r.stdout ?? "", stderr: (r.stderr ?? "").trim() };
 }
-function checked(git: Git, args: readonly string[], cwd = git.root, env?: NodeJS.ProcessEnv, input?: string): string {
+function checkedOutput(git: Git, args: readonly string[], cwd = git.root, env?: NodeJS.ProcessEnv, input?: string): string {
   const r = run(git, args, cwd, env, input);
   if (r.status !== 0) throw new GitError(`git ${args.join(" ")}: ${r.stderr || `exit ${r.status}`}`);
-  return r.stdout.trim();
+  return r.stdout;
+}
+function checked(git: Git, args: readonly string[], cwd = git.root, env?: NodeJS.ProcessEnv, input?: string): string {
+  return checkedOutput(git, args, cwd, env, input).trim();
 }
 
 /** The checkout every worktree shares: main lives there. */
@@ -49,7 +56,58 @@ export function changedPaths(git: Git, base: string, tip: string): string[] {
   return checked(git, ["diff", "--name-only", "--no-renames", "-z", base, tip]).split("\0").filter(Boolean);
 }
 
-export type Rebased = { tip: string; replayed: number; skipped: number } | { conflict: string; files: string[]; reason?: string };
+export type Rebased = { tip: string; replayed: number; skipped: number; leftPending?:string[] } | { conflict: string; files: string[]; reason?: string };
+
+/** Explicit records provenance, or the exact protocol older controllers write. */
+function recordsMeasuredAt(git:Git,commit:string,message:string):string|null{
+  const trailers=checked(git,['interpret-trailers','--parse'],git.root,undefined,message);
+  const measured=[...trailers.matchAll(/^Records-measured-at: (.*)$/gm)];
+  if(measured.length){
+    if(measured.length!==1||! /^[0-9a-f]{40,64}$/.test(measured[0]![1]!))throw new GitError(`${commit}: invalid Records-measured-at trailer`);
+    return revParse(git,measured[0]![1]!);
+  }
+  // Remove this compatibility arm once verified includes the new writer.
+  const subject=/^records: the pending and accepted rows at ([0-9a-f]{12})$/.exec(message.split('\n')[0]!);
+  if(!subject||[...trailers.matchAll(/^Full-check-run: \S.*$/gm)].length!==1)return null;
+  return revParse(git,subject[1]!);
+}
+
+/** Remove stale oracle edits before replay, preserving even a newer base shard.
+ * The private index never becomes a checkout's index or changes its files. */
+function filterOracleSubmission(git:Git,commit:string,base:string):{commit:string|null;leftPending:string[]}{
+  // Legacy recognition requires the subject's exact original leading bytes.
+  const message=checkedOutput(git,['log','-1','--format=%B',commit]).trimEnd();
+  const measured=recordsMeasuredAt(git,commit,message);
+  if(measured===null)return {commit,leftPending:[]};
+  const parent=revParse(git,`${commit}^`);
+  const paths=checked(git,['diff','--name-only','--no-renames','--diff-filter=AMT','-z',parent,commit,'--',RECORDS]).split('\0').filter(Boolean);
+  const shards=paths.flatMap(path=>{
+    const fixture=path.startsWith(`${RECORDS}/`)?path.slice(RECORDS.length+1,-'.json'.length):'';
+    try{return recordPath(fixture)===path?[{path,fixture}]:[];}catch{return [];}
+  });
+  if(!shards.length)return {commit,leftPending:[]};
+  const names=shards.map(one=>one.fixture);
+  const was=oracleSourceDigests(git.root,names,{commit:measured,...(git.env?{env:git.env}:{})});
+  const now=oracleSourceDigests(git.root,names,{commit:base,...(git.env?{env:git.env}:{})});
+  const stale=shards.filter(one=>was.get(one.fixture)!==now.get(one.fixture));
+  if(!stale.length)return {commit,leftPending:[]};
+  const scratch=git.env?.TMPDIR??process.env.TMPDIR??join(homedir(),'.cache/nts-landing');
+  mkdirSync(scratch,{recursive:true});
+  const temporary=mkdtempSync(join(scratch,'oracle-replay-'));
+  try{
+    const env={...(git.env??process.env),GIT_INDEX_FILE:join(temporary,'index')};
+    checked(git,['read-tree',commit],git.root,env);
+    checked(git,['--literal-pathspecs','restore',`--source=${parent}`,'--staged','--',...stale.map(one=>one.path)],git.root,env);
+    const tree=checked(git,['write-tree'],git.root,env);
+    const leftPending=stale.map(one=>one.fixture);
+    if(tree===treeOf(git,parent))return {commit:null,leftPending};
+    const [name,email,date]=checked(git,['log','-1','--format=%an%x00%ae%x00%ad','--date=raw',commit]).split('\0');
+    const author={...env,GIT_AUTHOR_NAME:name!,GIT_AUTHOR_EMAIL:email!,GIT_AUTHOR_DATE:date!};
+    const note=leftPending.map(fixture=>`Oracle-left-pending: ${fixture} (sources changed since ${measured.slice(0,12)} at landing base ${base.slice(0,12)})`).join('\n');
+    const filtered=checked(git,['commit-tree',tree,'-p',parent,'-F','-'],git.root,author,`${message}\n${note}\n`);
+    return {commit:filtered,leftPending};
+  }finally{rmSync(temporary,{recursive:true,force:true});}
+}
 
 /**
  * `sha` replayed onto `onto`, without touching a working tree (`git replay`).
@@ -59,21 +117,26 @@ export type Rebased = { tip: string; replayed: number; skipped: number } | { con
  * files it conflicts in.
  */
 export function rebaseOnto(git: Git, onto: string, sha: string): Rebased {
-  if (isAncestor(git, onto, sha)) return { tip: sha, replayed: 0, skipped: 0 };
+  const onLine=isAncestor(git, onto, sha);
   const from = checked(git, ["merge-base", onto, sha]);
   // `git replay` does not replay merges, and a task's branch is a line of commits.
   const merge = checked(git, ["rev-list", "--merges", `${from}..${sha}`]).split("\n").filter(Boolean).at(-1);
   if (merge) return { conflict: merge, files: [], reason: "it is a merge: rebase the branch onto main by hand, as a line of commits" };
-  const marks = checked(git, ["cherry", onto, sha, from]).split("\n").filter(Boolean);
+  const marks = onLine?checked(git,['rev-list','--reverse',`${from}..${sha}`]).split('\n').filter(Boolean).map(commit=>`+ ${commit}`):checked(git, ["cherry", onto, sha, from]).split("\n").filter(Boolean);
   const pending = marks.filter(line => line.startsWith("+ ")).map(line => line.slice(2));
   let tip = onto;
+  const leftPending:string[]=[];
   for (const commit of pending) {
-    const replay = run(git, ["replay", "--onto", tip, "--ref", "refs/landing/replayed", "--ref-action", "print", `${commit}^..${commit}`]);
+    const filtered=filterOracleSubmission(git,commit,tip);
+    leftPending.push(...filtered.leftPending);
+    if(filtered.commit===null)continue;
+    if(revParse(git,`${filtered.commit}^`)===tip){tip=filtered.commit;continue;}
+    const replay = run(git, ["replay", "--onto", tip, "--ref", "refs/landing/replayed", "--ref-action", "print", `${filtered.commit}^..${filtered.commit}`]);
     const update = /^update \S+ ([0-9a-f]{40,64}) /m.exec(replay.stdout);
     if (replay.status !== 0 || !update) return { conflict: commit, files: conflictedFiles(git, commit, tip) };
     tip = update[1]!;
   }
-  return { tip, replayed: pending.length, skipped: marks.length - pending.length };
+  return { tip, replayed: onLine?0:pending.length, skipped: marks.length - pending.length,...(leftPending.length?{leftPending:[...new Set(leftPending)]}:{}) };
 }
 
 /**

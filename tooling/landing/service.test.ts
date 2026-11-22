@@ -42,6 +42,8 @@ import {DiskBuildAdmissionError} from '../gate/step-result.ts';
 import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
 import {holdSelection} from './selection-memory.ts';
 import {readLedger} from '../gate/memory-ledger.ts';
+import {recordsMessage} from '../full-check/records.ts';
+import {recordPath} from '../differential/oracle-record-paths.ts';
 
 function selection(steps: string[]): Selection {
   return landingSelection({ owed: { steps: [...steps, "integrity"] }, paths: [], catalogue: [...steps, "integrity"],
@@ -85,6 +87,49 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
   const submit = (branch: string, sha: string, first = false) => queue.submit(sha, { branch, first });
   return { s, pool, config, queue, logs, checked, task, submit, ownedProcesses, main: () => s.git(["rev-parse", "main"]), origin: () => s.git(["ls-remote", "origin", "refs/heads/main"]).split("\t")[0] };
 }
+
+test('a replay names stale oracle fixtures and lands its remaining records; an all-stale submission is withdrawn',async t=>{
+  for(const keepOther of [true,false]){
+    const f=service(t),fixture='tests/programs/changed',source=`${fixture}/main.ts`,shard=recordPath(fixture);
+    const measured=f.s.commit({[source]:'export function old(){return 1;}\n'},'A: measured fixture');
+    const task=f.task('records',{[shard]:'measured at A\n',...(keepOther?{'results/other.tsv':'fresh\n'}:{})});
+    f.s.git(['commit','--amend','-q','-m',recordsMessage({commit:measured,part:'core',main:measured,run:'/runs/core',attempt:1,output:''})],task.tree);
+    const submission=f.s.git(['rev-parse','HEAD'],task.tree);
+    const base=f.s.commit({[source]:'export function old(){return 1;}\nexport function added(){return 2;}\n'},'B: new cases');
+    const entry=f.submit('records',submission);
+    await drain(f.config);
+    const result=f.queue.result(entry.id)!;
+    assert.equal(result.state,keepOther?'landed':'withdrawn',result.message);
+    assert.ok(f.logs.some(line=>line.includes(`left pending: ${fixture}`)),f.logs.join('\n'));
+    assert.equal(existsSync(join(f.s.root,shard)),false,'the stale oracle row never reaches main');
+    if(keepOther)assert.equal(readFileSync(join(f.s.root,'results/other.tsv'),'utf8'),'fresh\n');
+    else{
+      assert.equal(f.main(),base,'nothing is left to land');
+      assert.match(result.message,/all records were dropped; left pending: tests\/programs\/changed/);
+      assert.deepEqual(f.checked,[],'an empty submission starts no checks');
+    }
+  }
+});
+
+test('a moved landing base rechecks oracle identity before running the next check',async t=>{
+  const f=service(t),fixture='tests/programs/changed',source=`${fixture}/main.ts`,shard=recordPath(fixture);
+  const measured=f.s.commit({[source]:'old\n'},'A');
+  const task=f.task('records',{[shard]:'measurement\n','results/other.tsv':'keep\n'});
+  f.s.git(['commit','--amend','-q','-m',recordsMessage({commit:measured,part:'core',main:measured,run:'/runs/core',attempt:1,output:''})],task.tree);
+  const submission=f.s.git(['rev-parse','HEAD'],task.tree),run=f.config.runSteps;
+  let checks=0;
+  f.config.runSteps=async options=>{
+    checks++;
+    assert.equal(existsSync(join(options.tree,shard)),checks===1,'the second check sees only rows still fresh at its base');
+    if(checks===1)f.s.commit({[source]:'new cases\n'},'B lands during the check');
+    return run(options);
+  };
+  const entry=f.submit('records',submission);await drain(f.config);
+  assert.equal(f.queue.result(entry.id)!.state,'landed');
+  assert.equal(checks,2);
+  assert.equal(existsSync(join(f.s.root,shard)),false);
+  assert.ok(f.logs.some(line=>line.includes(`left pending: ${fixture}`)));
+});
 
 test("queued changes land one at a time, each rebased onto the newest main, pushed, its branch deleted and its tree freed", async t => {
   const f = service(t);

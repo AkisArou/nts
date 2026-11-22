@@ -52,10 +52,11 @@ export type RecordTable=Readonly<Record<string,{family:RecordFamily;steps:readon
 const read=(root:string,file:string)=>readFileSync(join(root,file),'utf8');
 const inCheckout = (root: string) => existsSync(join(root, ".git"));
 
-/** The files under each of `paths` (a file or a directory): those git tracks in a checkout, else every regular file there. */
-function filesUnder(root: string, paths: readonly string[]): Map<string, string[]> {
+export type SourceRevision = { commit: string; env?: NodeJS.ProcessEnv };
+/** The files under each path at a revision, in the checkout's index, or in a non-checkout fixture. */
+function filesUnder(root: string, paths: readonly string[], revision?: SourceRevision): Map<string, string[]> {
   const under = new Map(paths.map(path => [path, [] as string[]]));
-  if (!inCheckout(root)) {
+  if (!revision && !inCheckout(root)) {
     for (const path of paths) {
       const full = join(root, path);
       if (!existsSync(full)) continue;
@@ -66,8 +67,9 @@ function filesUnder(root: string, paths: readonly string[]): Map<string, string[
     return under;
   }
   // One listing of the whole tree, each file then given to the path it is under.
-  const listed = spawnSync("git", gitArguments(["ls-files", "-z"]), { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
-  if (listed.status !== 0) throw new Error(`git ls-files in ${root}: ${(listed.stderr ?? listed.error?.message ?? "").trim()}`);
+  const args = revision ? ["--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", revision.commit, "--", ...paths] : ["ls-files", "-z"];
+  const listed = spawnSync("git", gitArguments(args), { cwd: root, encoding: "utf8", maxBuffer: 1 << 28, ...(revision?.env ? {env:revision.env} : {}) });
+  if (listed.status !== 0) throw new Error(`git source listing in ${root}${revision ? ` at ${revision.commit}` : ''}: ${(listed.error?.message || listed.stderr || "").trim()}`);
   for (const file of listed.stdout.split("\0").filter(Boolean)) {
     for (let at = file; ; at = at.slice(0, at.lastIndexOf("/"))) {
       under.get(at)?.push(file);
@@ -79,12 +81,23 @@ function filesUnder(root: string, paths: readonly string[]): Map<string, string[
 
 const sha256 = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-export function digestSources(root:string,cases:readonly {name:string;paths:readonly string[];except:string|null}[]):Map<string,string|null>{
+export function digestSources(root:string,cases:readonly {name:string;paths:readonly string[];except:string|null}[],revision?:SourceRevision):Map<string,string|null>{
  const wanted=new Map(cases.map(one=>[one.name,one]));
- const files=filesUnder(root,[...new Set([...wanted.values()].flatMap(one=>one.paths))]);
- const content=new Map<string,string>();const digestOf=(file:string)=>{if(!content.has(file))content.set(file,sha256(readFileSync(join(root,file))));return content.get(file)!;};
+ const files=filesUnder(root,[...new Set([...wanted.values()].flatMap(one=>one.paths))],revision);
+ const content=new Map<string,string>();const digestOf=(file:string)=>{
+  if(!content.has(file)){
+   let bytes:Uint8Array;
+   if(revision){
+    const shown=spawnSync('git',gitArguments(['cat-file','blob',`${revision.commit}:${file}`]),{cwd:root,maxBuffer:1<<28,...(revision.env?{env:revision.env}:{})});
+    if(shown.status!==0)throw Error(`cannot read ${file} at ${revision.commit}: ${shown.stderr?.toString().trim()||shown.error?.message}`);
+    bytes=shown.stdout;
+   }else bytes=readFileSync(join(root,file));
+   content.set(file,sha256(bytes));
+  }
+  return content.get(file)!;
+ };
  const digests=new Map<string,string|null>();
- for(const [id,{paths,except}]of wanted){const present=[...new Set(paths.flatMap(path=>files.get(path)??[]))].filter(file=>file!==except&&existsSync(join(root,file))).sort();digests.set(id,present.length?sha256(JSON.stringify(present.map(file=>[file,digestOf(file)]))):null);}return digests;
+ for(const [id,{paths,except}]of wanted){const present=[...new Set(paths.flatMap(path=>files.get(path)??[]))].filter(file=>file!==except&&(revision||existsSync(join(root,file)))).sort();digests.set(id,present.length?sha256(JSON.stringify(present.map(file=>[file,digestOf(file)]))):null);}return digests;
 }
 /** The path's text at HEAD, or null when HEAD has no such file. */
 function committedBytes(root: string, file: string): string | null {

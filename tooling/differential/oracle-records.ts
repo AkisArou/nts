@@ -9,9 +9,9 @@ import {createHash} from "node:crypto";
 import {homedir} from "node:os";
 import type {OracleBudget} from "./oracle-runtime.ts";
 import { execFileSync } from "node:child_process";
+import {RECORDS,GENERATOR,recordPath} from './oracle-record-paths.ts';
+export {RECORDS,GENERATOR,recordPath} from './oracle-record-paths.ts';
 
-export const RECORDS = "results/oracle-counts";
-export const GENERATOR = `${RECORDS}/_generator.json`;
 export type NumericDomain = { min?: number; max?: number; integer?: boolean; allowNaN?: boolean; reason: string };
 export type RecordedDomain = { identity: string; declaration: { version: number; functions: Record<string, Record<string, NumericDomain>> } };
 export type Populations = Record<string, { count: number; cases_sha256: string }>;
@@ -110,12 +110,6 @@ export function generatedBenchmarkProject(directory: string, root: string, name:
   renameSync(temporary, config);
   return config;
 }
-export function recordPath(fixture: string): string {
-  if (!/^(?:tests\/programs|benchmarks\/cases)\/[^/]+$/.test(fixture)
-    || /[\x00-\x1f\x7f\\]/.test(fixture) || posix.normalize(fixture) !== fixture) fail(`invalid fixture ${JSON.stringify(fixture)}`);
-  return `${RECORDS}/${fixture}.json`;
-}
-
 export function parseGenerator(value: unknown): Generator {
   const header = object(value, "generator header");
   fields(header, ["version", "generator_version", "generator_digest", "seed"], "generator header");

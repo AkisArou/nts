@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import {existsSync,readFileSync,readdirSync,rmSync} from 'node:fs';
 import {join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {digestSources,type RecordFamily} from '../records/recorder-core.ts';
+import {type RecordFamily} from '../records/recorder-core.ts';
+import {oracleSourceDigests} from './oracle-source-digests.ts';
+import {recordPath,RECORDS} from './oracle-record-paths.ts';
 import {wholeRow,mergeWhole} from '../records/recorder-format.ts';
 
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const read=(root:string,file:string)=>readFileSync(join(root,file),'utf8');
-import {GENERATOR,recordPath,RECORDS,hintedOracleImprovements,parseShard,oracleImprovementPath,oracleBudgetFixtures,pendingFixtures,type OracleRow} from './oracle-records.ts';
+import {hintedOracleImprovements,parseShard,oracleImprovementPath,oracleBudgetFixtures,pendingFixtures,type OracleRow} from './oracle-records.ts';
 import {oracleBudgetRevision,oracleUnplannedRevision} from './record-oracles.ts';
 import type {Pending} from '../records/recorder-core.ts';
 export function oracleRefreshes(root:string):Pending[]{
@@ -73,6 +75,6 @@ pending:root=>pendingFixtures(root).map(name=>({name,record:recordPath(name)})),
  audit:(file,before,after,pending)=>{const fixture=file.slice(`${RECORDS}/`.length,-'.json'.length);if(before!==null)return auditOracleRefresh(file,fixture,before,after);assert.ok(pending.has(fixture),`${file} was written for ${fixture}, which was not pending`);return [`${fixture} (pending)`];},
  rows:()=>null,validate:wholeRow,merge:mergeWhole,
  changes:(kind,file,before,after)=>{const name=file.slice(`${RECORDS}/`.length,-'.json'.length);return [{kind,record:file,case:name,key:name,before,after}];},
- sourceDigests:(root,names)=>digestSources(root,names.map(name=>({name,paths:[name,GENERATOR],except:null}))),
+ sourceDigests:(root,names)=>oracleSourceDigests(root,names),
 
 };

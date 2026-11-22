@@ -7,9 +7,68 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { advanceMain, changedPaths, deleteBranch, namingIssue, openPullBases, pushedMain, pushMain, rebaseOnto, worktrees, type Git } from "./git.ts";
 import { scratchRepo } from "./scratch-repo.ts";
+import {recordsMessage} from '../full-check/records.ts';
+import {GENERATOR,recordPath} from '../differential/oracle-record-paths.ts';
 
 const DECISIONS_LOG = "docs/records/notebooks/decisions-log.md";
 const ATTRIBUTES = readFileSync(new URL("../../.gitattributes", import.meta.url), "utf8");
+
+test('oracle replay drops changed fixture, declaration and generator measurements, preserving other records and the base shard',t=>{
+  const fixture='tests/programs/a [fixture]',source=`${fixture}/src/main.ts`,shard=recordPath(fixture);
+  const edits:Readonly<Record<string,string|null>>[]=[
+    {[source]:'export function work(n:number){return n;}\nexport function added(){return 2;}\n'},
+    {[`${fixture}/src/main.domains.json`]:'{"version":1,"functions":{}}\n'},
+    {[GENERATOR]:'new generator\n'},
+    {[source]:null},
+    {[source]:'changed\n',[shard]:'base owns this shard\n'},
+  ];
+  for(const edit of edits){
+    const s=scratchRepo(t,'oracle-replay'),git:Git={root:s.root,env:s.env};
+    const measured=s.commit({[source]:'export function work(n:number){return n;}\n',[GENERATOR]:'generator\n'},'measure here');
+    s.git(['switch','-q','-c','records']);
+    const records=s.commit({[shard]:'measured at A\n','results/other.tsv':'keep this\n'},recordsMessage({commit:measured,part:'core',main:measured,run:'/runs/core',attempt:1,output:''}));
+    s.git(['switch','-q','main']);
+    const base=s.commit(edit,'fixture changes before landing');
+    const index=s.git(['write-tree']),status=s.git(['status','--porcelain']);
+    const result=rebaseOnto(git,base,records);assert.ok('tip' in result,JSON.stringify(result));
+    assert.deepEqual(result.leftPending,[fixture]);
+    assert.equal(s.git(['show',`${result.tip}:results/other.tsv`]),'keep this');
+    if(shard in edit)assert.equal(s.git(['show',`${result.tip}:${shard}`]),'base owns this shard');
+    else assert.deepEqual(changedPaths(git,base,result.tip),['results/other.tsv']);
+    assert.equal(s.git(['write-tree']),index,'the checkout index is unchanged');
+    assert.equal(s.git(['status','--porcelain']),status,'the checkout files are unchanged');
+  }
+});
+
+test('records provenance is checked even when the submission is already based on the landing base',t=>{
+  const s=scratchRepo(t,'oracle-already-based'),git:Git={root:s.root,env:s.env},fixture='tests/programs/changed',shard=recordPath(fixture);
+  const measured=s.commit({[`${fixture}/main.ts`]:'old\n'},'measured A');
+  const base=s.commit({[`${fixture}/main.ts`]:'new\n'},'fixture B');
+  const records=s.commit({[shard]:'old measurement\n'},recordsMessage({commit:measured,part:'core',main:base,run:'/runs/core',attempt:1,output:''}));
+  assert.deepEqual(rebaseOnto(git,base,records),{tip:base,replayed:0,skipped:0,leftPending:[fixture]},'an all-stale submission has no empty commit');
+});
+
+test('only full-check provenance enables oracle filtering; ordinary fixture and shard edits replay as written',t=>{
+  const fixture='tests/programs/changed',source=`${fixture}/main.ts`,shard=recordPath(fixture);
+  for(const provenance of ['subject only','trailer only','lookalike subject','indented subject','ordinary','delete','legacy']){
+    const s=scratchRepo(t,'oracle-recognition'),git:Git={root:s.root,env:s.env};
+    const measured=s.commit({[source]:'old\n',...(provenance==='delete'?{[shard]:'old row\n'}:{})},'measured A');
+    const subject=`records: the pending and accepted rows at ${measured.slice(0,12)}`;
+    const message=provenance==='subject only'?subject:provenance==='trailer only'?'ordinary\n\nFull-check-run: /runs/core':provenance==='lookalike subject'?`${subject} extra\n\nFull-check-run: /runs/core`:provenance==='indented subject'?` ${subject}\n\nFull-check-run: /runs/core`:provenance==='legacy'?`${subject}\n\nFull-check-run: /runs/core`:'ordinary fixture update';
+    s.git(['switch','-q','-c','task']);
+    const task=s.commit({[shard]:provenance==='delete'?null:'row written by task\n',...(provenance==='ordinary'?{[`${fixture}/extra.ts`]:'new export\n'}:{})},message);
+    s.git(['switch','-q','main']);
+    const base=s.commit({[source]:'main edits the source\n'},'B');
+    const result=rebaseOnto(git,base,task);assert.ok('tip' in result,JSON.stringify(result));
+    if(provenance==='legacy'){
+      assert.deepEqual(result.leftPending,[fixture]);assert.equal(result.tip,base);
+    }else{
+      assert.equal(result.leftPending,undefined);
+      assert.ok(changedPaths(git,base,result.tip).includes(shard),'the task shard edit or deletion survives');
+      if(provenance!=='delete')assert.equal(s.git(['show',`${result.tip}:${shard}`]),'row written by task');
+    }
+  }
+});
 
 function concurrentAppends(t: TestContext, union: boolean, path = DECISIONS_LOG) {
   const s = scratchRepo(t, "landing-appends"), git: Git = {root:s.root, env:s.env};

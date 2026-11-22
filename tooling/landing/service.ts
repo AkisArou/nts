@@ -240,7 +240,9 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
         : `${short(entry.sha)} conflicts with main ${short(base)} in ${rebased.files.join(", ") || "files git did not name"} (at ${short(rebased.conflict)}): rebase it onto main and submit it again`;
       return queue.answer(entry, { state: "refused", base, message });
     }
+    for(const fixture of rebased.leftPending??[])config.log(`left pending: ${fixture}: oracle sources changed at landing base ${short(base)}; its recorded rows were dropped`);
     if (isAncestor(g, rebased.tip, base)) {
+      if(rebased.leftPending?.length)return queue.answer(entry,{state:'withdrawn',base,message:`withdrawn: all records were dropped; left pending: ${rebased.leftPending.join(', ')}`});
       return finishLanding(config, queue, entry, base, base, null, null, `${short(entry.sha)} is on main already`);
     }
     // A task's issue closes when main reaches the change; the commit checked

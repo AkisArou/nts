@@ -21,6 +21,10 @@ import {oracleBudgetRevision,oracleUnplannedRevision} from "../differential/reco
 import {requestOracleImprovement,recordPath,oracleImprovementPath} from "../differential/oracle-records.ts";
 import { testScratch } from "../gate/test-scratch.ts";
 import { calibrationRecord, compileTimeModules, COMPILE_ARMS, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, COUNTER_SCOPE, withCalibratedModule, type CompileArm } from "../gate/compile-counter.ts";
+import {scratchRepo} from '../landing/scratch-repo.ts';
+import {advanceMain,rebaseOnto} from '../landing/git.ts';
+import {recordsMessage} from '../full-check/records.ts';
+import {oracleSourceDigests} from '../differential/oracle-source-digests.ts';
 
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 const refused: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1001", where: "body" }] };
@@ -391,6 +395,46 @@ async function applied(main: string, delta: Delta, benchmarks = asRecorded) {
   const lines: string[] = [];
   return { counts: await applyDelta(main, delta, { say: line => lines.push(line), identities:benchmarks }), lines };
 }
+
+test('oracle rows measured at A are filtered when their submission is replayed onto fixture edit B',async t=>{
+  const repo=scratchRepo(t,'records-replay'),root=repo.root;
+  cpSync(tree(t),root,{recursive:true});
+  repo.git(['add','.']);repo.git(['commit','-q','-m','A: fixtures before recording']);
+  const measured=repo.git(['rev-parse','HEAD']),git={root,env:repo.env};
+  const fixture='tests/programs/new',unchanged='benchmarks/cases/new';
+  const names=[fixture,unchanged];
+  assert.deepEqual(oracleSourceDigests(root,names,{commit:measured,env:repo.env}),oracleSourceDigests(root,names),'revision and apply reads use exactly the same digest');
+  const file=join(testScratch(t,'records-replay-delta'),DELTA_FILE),lines:string[]=[];
+  const runner:Runner=args=>{
+    const name=args[1]!;
+    write(root,recordPath(name),JSON.stringify({version:1,fixture:name,rows:[{kind:'measured',source:`${name}/${name===fixture?'src/main.ts':'case.ts'}`,
+      signature:'b'.repeat(64),keys:{c:'c'.repeat(32),llvm:'d'.repeat(32),jvm:'e'.repeat(32)},cases_sha256:'f'.repeat(64),driver_sha256:'a'.repeat(64),count:87,complete:true}]}));
+    return 0;
+  };
+  assert.equal(recordPending(root,['oracle-counts'],runner,line=>lines.push(line),new Map(),file),0,lines.join('\n'));
+  const delta=parseDelta(readFileSync(file,'utf8'));
+  assert.equal(delta.commit,measured);
+  repo.git(['switch','-q','-c','records']);
+  const submission=repo.commit(Object.fromEntries(delta.rows.map(row=>[row.record,row.after])),recordsMessage({commit:measured,part:'core',run:'/runs/core-A',main:measured,attempt:1,output:''}));
+  repo.git(['switch','-q','main']);
+  const base=repo.commit({[`${fixture}/src/main.ts`]:'export function work(n:number):number{return n;}\nexport function inherited(n:number):number{return n+1;}\n'},'B: add exported cases');
+  const rebased=rebaseOnto(git,base,submission);
+  assert.ok('tip' in rebased,JSON.stringify(rebased));
+  assert.deepEqual(rebased.leftPending,[fixture]);
+  assert.deepEqual(advanceMain(git,base,rebased.tip),{ok:true,via:root});
+  assert.equal(existsSync(join(root,recordPath(fixture))),false,'the 87-case row never lands on the expanded fixture');
+  assert.equal(JSON.parse(readFileSync(join(root,recordPath(unchanged)),'utf8')).rows[0].count,87,'an unchanged fixture retains its measured row');
+  assert.deepEqual(findPending(root,'oracle-counts').map(one=>one.name),[fixture]);
+  assert.match(repo.git(['log','-1','--format=%B']),/Oracle-left-pending: tests\/programs\/new/);
+  assert.equal(repo.git(['status','--porcelain']), '','the private replay index leaves the checkout clean');
+  // Replaying onto yet another base repeats validation rather than trusting
+  // the first replay's source check or its already filtered tree.
+  repo.git(['switch','-q','--detach',base]);
+  const later=repo.commit({[`${unchanged}/case.ts`]:'export function added(n:number){return n;}\n'},'C: the control fixture changes too');
+  const again=rebaseOnto(git,later,submission);
+  assert.ok('tip' in again,JSON.stringify(again));
+  assert.deepEqual(again.leftPending,names.slice().sort(),'both stale measurements are reconsidered');
+});
 
 test("the recorder writes the delta of what it recorded: each case's row before and after, and a digest of its sources", t => {
   const { root, main, lines, file, delta } = recordedBeside(t);

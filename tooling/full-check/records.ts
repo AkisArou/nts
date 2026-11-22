@@ -150,6 +150,7 @@ export function recordsMessage(records: { commit: string; part: Part; run: strin
     `${counts ? countsText(counts) : "its log says what applied"}.`,
     "",
     `Full-check-run: ${records.run}`,
+    `Records-measured-at: ${records.commit}`,
     "",
   ].join("\n");
 }

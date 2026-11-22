@@ -52,7 +52,7 @@ test("a delta is applied in the tree set up at main, and what it wrote under the
   assert.deepEqual(repo.git.run(["diff", "--name-only", main, applied.commit]).split("\n"), ["results/a.tsv"]);
   const message = repo.git.run(["log", "-1", "--format=%B", applied.commit]);
   assert.match(message, new RegExp(`^records: the pending and accepted rows at ${recorded.slice(0, 12)}\n`));
-  assert.match(message, new RegExp(`on main ${main.slice(0, 12)} \\(attempt 2\\):\n1 row\\(s\\) applied, 0 already recorded, 0 skipped\\.\n\nFull-check-run: /runs/core$`));
+  assert.match(message, new RegExp(`on main ${main.slice(0, 12)} \\(attempt 2\\):\n1 row\\(s\\) applied, 0 already recorded, 0 skipped\\.\n\nFull-check-run: /runs/core\nRecords-measured-at: ${recorded}$`));
 });
 
 test("an apply that fails commits nothing, and one that applies nothing has nothing to commit", t => {
