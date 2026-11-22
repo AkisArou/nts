@@ -563,6 +563,7 @@ mod tests {
             }],
             origin: origin(),
             exported: false,
+            raises: false,
             initializes_receiver: false,
             abstract_declaration: false,
             async_result: None,

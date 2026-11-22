@@ -821,6 +821,7 @@ mod tests {
             values,
             origin: origin(),
             exported: true,
+            raises: false,
             initializes_receiver: false,
             async_result: None,
             frame: None,

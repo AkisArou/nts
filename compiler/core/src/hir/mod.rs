@@ -26,6 +26,7 @@
 
 pub mod accumulators;
 mod appended_results;
+pub mod backend;
 pub mod bounds;
 mod boxing;
 pub mod builtin;
@@ -716,6 +717,10 @@ pub struct RaisingMember {
 
 /// One function.
 #[derive(Debug, Clone)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "publication, exception mode, declaration and receiver initialization are independent contracts"
+)]
 pub struct Func {
     pub name: String,
     pub params: Vec<Param>,
@@ -769,6 +774,9 @@ pub struct Func {
     /// slot held, because the slot held nothing. Without this a class costs a
     /// load, a null test and a call per reference field per construction.
     pub initializes_receiver: bool,
+    /// Unhandled throws return through the pending-raise convention. Produced
+    /// by the lowering builder's mode and preserved by clones and adapters.
+    pub raises: bool,
     /// An `abstract` method: a signature the program declares and no body.
     ///
     /// It is in `funcs` because a call through the slot takes its
@@ -3686,6 +3694,8 @@ pub struct Program {
     /// question the provider does not answer. Without this field the backend
     /// could not tell the two cases apart.
     pub provider: Memory,
+    /// The backend being prepared for; absent on raw lowering.
+    pub backend: Option<backend::Backend>,
     /// The C ABIs the program is built for ([`Options::targets`]): a store
     /// into a written scalar kind must fit on every one, and a read of one is
     /// what C may hand in on any. Every row until `prepare` names the build's.
@@ -6132,6 +6142,8 @@ pub enum Memory {
 /// What to compile, and how.
 #[derive(Debug, Clone, Copy)]
 pub struct Options<'a> {
+    /// The backend this preparation serves.
+    pub backend: backend::Backend,
     /// The memory discipline. See [`Memory`].
     pub provider: Memory,
     /// Whether a callback returning to the program's foreign loop is a
@@ -6187,6 +6199,7 @@ pub struct Options<'a> {
 impl Default for Options<'_> {
     fn default() -> Self {
         Self {
+            backend: backend::Backend::C,
             provider: Memory::NoGc,
             // No loop is known to checkpoint after a callback until a build
             // says whose loop the program runs.
@@ -6233,6 +6246,8 @@ pub const HOST: native::NativeAbi = if cfg!(windows) {
 /// They cannot be replaced while preparing a branch of that raw program.
 #[derive(Debug, Clone, Copy)]
 pub struct PreparationOptions<'a> {
+    /// [`Options::backend`].
+    pub backend: backend::Backend,
     pub provider: Memory,
     pub callbacks_checkpoint: bool,
     pub specialize_numbers: bool,
@@ -6260,6 +6275,7 @@ impl PreparationOptions<'_> {
 impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
     fn from(options: &Options<'a>) -> Self {
         Self {
+            backend: options.backend,
             provider: options.provider,
             callbacks_checkpoint: options.callbacks_checkpoint,
             specialize_numbers: options.specialize_numbers,
@@ -8498,6 +8514,7 @@ fn prepare_lowered(
     // Before the check, and every analysis after it, reads them.
     lowered.program.targets = options.targets;
     lowered.program.roots = Some(options.roots.to_owned());
+    lowered.program.backend = Some(options.backend);
     // On the program the lowering produced, before any pass renumbers a value
     // the lowering recorded an obligation about.
     let mut rejected = std::mem::take(&mut lowered.rejected);
@@ -9730,6 +9747,7 @@ mod tests {
                     }],
                     origin: origin(),
                     exported: true,
+                    raises: false,
                     initializes_receiver: false,
                     async_result: None,
                     frame: None,
@@ -9762,10 +9780,7 @@ mod tests {
         let OpKind::OpenFieldGet { arms, .. } = &subject.funcs[0].values[1].kind else {
             panic!("the op is still an open read");
         };
-        assert_eq!(
-            arms[0].field, 1,
-            "the first arm's index moved with its layout"
-        );
+        assert_eq!(arms[0].field, 1, "the first arm moves with its layout");
         assert_eq!(arms[1].field, 0, "and the second arm's moved the other way");
 
         // **The control.** An identity permutation must leave the op alone, or
@@ -9864,6 +9879,7 @@ mod tests {
                 }],
                 origin: origin(),
                 exported: true,
+                raises: false,
                 initializes_receiver: false,
                 async_result: None,
                 frame: None,
@@ -10108,6 +10124,7 @@ mod tests {
                 }],
                 origin: origin(),
                 exported: true,
+                raises: false,
                 initializes_receiver: false,
                 async_result: None,
                 frame: None,

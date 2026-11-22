@@ -62,6 +62,7 @@ fn body(name: &str, receiver: u32) -> Func {
         }],
         origin,
         exported: false,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         written_return: None,

@@ -56,6 +56,7 @@ fn function(name: &str, signed: bool, forward: bool) -> hir::Func {
         }],
         origin,
         exported: true,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

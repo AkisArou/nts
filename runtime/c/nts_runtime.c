@@ -11801,7 +11801,9 @@ static void nts_report_unhandled_rejections(void) {
       /* The list is not cleared first: `nts_uncaught` does not return, and an
          embedder that survives it will see the same promise again only if it
          rejects again. */
-      nts_uncaught(nts_promise_reason(promise), 0);
+      NtsValue reason = nts_promise_reason(promise);
+      nts_value_retain(reason);
+      nts_uncaught(reason, 0);
     }
     nts_release((NtsHeader *)promise);
   }

@@ -61,6 +61,7 @@ fn function(
         blocks,
         origin: origin(),
         exported: true,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

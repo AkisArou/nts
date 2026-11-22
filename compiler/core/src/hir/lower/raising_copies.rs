@@ -1573,6 +1573,7 @@ pub(super) fn fill_raising_member_slots(program: &mut Program) {
         // improvements: a module that emits nothing has no refusals to count.
         let mut copy = ordinary.clone();
         copy.name = name;
+        copy.raises = true;
         program.funcs.push(copy);
     }
 }

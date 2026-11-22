@@ -31,6 +31,7 @@ fn a_discarded_jvm_body_keeps_no_literal_from_its_unwritten_code() {
     let mut prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
+            backend: hir::backend::Backend::Jvm,
             specialize_numbers: false,
             ..hir::Options::default()
         },

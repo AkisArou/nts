@@ -4367,3 +4367,22 @@ is not excused, because a build promise held by an idle tree is not bounded
 by any other work. Who may hold disk promises and at which rank is #981's.
 
 The contract is in [workflow](../../workflow.md#landing-the-landing-check).
+
+## Uncaught payload handover (11-23)
+
+`nts_uncaught` takes ownership of its thrown argument, as `nts_raise` does.
+A landing moves it into `landing->thrown`; the Node-API wrapper converts the
+value and releases it exactly once. Argument cleanup owns a separate reference.
+An unhandled promise rejection retains its borrowed reason before delivery;
+the callback path already takes its owned value from `nts_raise_take`.
+The process-exit path need not release the transferred value. Its possible
+retain is accepted on that path, including in standalone and JVM programs:
+a runtime helper has one ownership convention on every product.
+
+Preparation retains the backend identity beside the product roots. `Func::raises`
+is required in each constructor, published from the builder's existing mode,
+and preserved by clones and adapters. These metadata additions activate no
+new carrying forms or body sharing.
+
+The contracts are in [errors](../../language/errors.md#how-a-throw-travels) and
+[Node addons](../../targets/node-addon.md#errors).

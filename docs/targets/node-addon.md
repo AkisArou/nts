@@ -93,6 +93,10 @@ node's own class (`napi_create_type_error`, `napi_create_range_error`), so
 `instanceof` and the prototype chain hold, with its message and properties such
 as `code` ([errors](../language/errors.md#callbacks-a-host-invokes)).
 
+The landing owns the thrown native value. The wrapper converts it while that
+reference is alive and releases it after conversion, including when conversion
+fails. Input argument cleanup releases its own references separately.
+
 ## The event loop
 
 An addon runs on node's main thread and adds no loop: an exported call runs
@@ -127,6 +131,10 @@ a parameter with workers ([Decisions](#decisions)); the refusal is not built.
 
 ## Decisions
 
+- A native landing transfers one owned thrown value to the wrapper, which
+  releases it after conversion. Borrowed incoming arguments retain their
+  separate cleanup
+  ([log](../records/notebooks/decisions-log.md#uncaught-payload-handover-11-23)).
 - Objects cross an exported boundary by proof: copied where invisible, live
   otherwise, a cached wrapper, borrowed typed-array bytes, never a silent copy
   ([record 0356](../records/0356-objects-cross-an-exported-boundary-by-proof-copied-where-invisible-live-otherwise.md)).

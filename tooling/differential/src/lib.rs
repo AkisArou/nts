@@ -975,6 +975,7 @@ fn corpus_source(entry: &Utf8Path) -> Option<String> {
 
 fn pool_options(backend: Backend, provider: hir::Memory) -> hir::Options<'static> {
     hir::Options {
+        backend,
         provider,
         table_entries: backend.table_entries(),
         // What the backend provides, for a `typeof` of an intrinsic

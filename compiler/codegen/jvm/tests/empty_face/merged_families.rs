@@ -65,6 +65,7 @@ fn function(name: &str, params: &[HirType], returned: HirType, value: Option<Val
         values,
         origin,
         exported: true,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

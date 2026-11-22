@@ -4990,6 +4990,7 @@ mod frame_tests {
                 span: Span::new(0, 1),
             }),
             exported: false,
+            raises: false,
             initializes_receiver: false,
             abstract_declaration: false,
             async_result: None,

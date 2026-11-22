@@ -50,6 +50,7 @@ fn function(left: Op, right: Op, bin: BinOp) -> Func {
         values,
         origin: origin(),
         exported: true,
+        raises: false,
         initializes_receiver: false,
         async_result: None,
         frame: None,

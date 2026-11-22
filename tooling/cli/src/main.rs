@@ -2862,6 +2862,7 @@ fn prepare_as(
     let options = hir::Options {
         provider,
         foreign: &foreign,
+        backend,
         entry_files: &entry_files,
         targets,
         // Through `selected_roots`, so this prints the program a backend

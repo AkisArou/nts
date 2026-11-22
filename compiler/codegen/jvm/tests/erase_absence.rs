@@ -54,6 +54,7 @@ fn eraser(name: &str, ty: &HirType, absent: Absent) -> hir::Func {
         }],
         origin: origin(),
         exported: true,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

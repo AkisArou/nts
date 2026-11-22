@@ -48,14 +48,19 @@ fn the_real_stream_constructor_prepares_with_both_ambient_contracts() {
                 .iter()
                 .all(|source| !source.uri.contains(root.to_str().unwrap()))
         );
-        for (mode, provider) in [
-            ("native NoGC", Memory::NoGc),
-            ("native RC", Memory::ReferenceCounting),
-            ("JVM host GC", Memory::HostGc),
+        for (mode, backend, provider) in [
+            ("native NoGC", hir::backend::Backend::C, Memory::NoGc),
+            (
+                "native RC",
+                hir::backend::Backend::C,
+                Memory::ReferenceCounting,
+            ),
+            ("JVM host GC", hir::backend::Backend::Jvm, Memory::HostGc),
         ] {
             let prepared = hir::prepare_with(
                 &snapshot,
                 &hir::Options {
+                    backend,
                     provider,
                     ..hir::Options::default()
                 },

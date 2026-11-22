@@ -507,6 +507,7 @@ fn two_roots_of_one_name_declare_one_shell() {
         }],
         origin: here(),
         exported: false,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

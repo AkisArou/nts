@@ -219,6 +219,7 @@ pub(super) fn passing_undefined(name: String, body: &Func, this_at: usize) -> Fu
         }],
         origin,
         exported: false,
+        raises: body.raises,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,
@@ -513,6 +514,7 @@ pub(super) fn erased_call(
         }],
         origin,
         exported: false,
+        raises: call.raises,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,
@@ -644,6 +646,7 @@ fn refuses_to_cross(
         }],
         origin: origin.clone(),
         exported: false,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,
@@ -932,6 +935,7 @@ fn declare_erased_entries(
                 }],
                 origin,
                 exported: false,
+                raises: false,
                 initializes_receiver: false,
                 abstract_declaration: true,
                 async_result: None,
@@ -1037,6 +1041,7 @@ fn declare_raising_entries(hierarchy: &Hierarchy, program: &mut Program) {
         };
         let mut second = shape.clone();
         second.name = format!("{name}{RAISING_SUFFIX}");
+        second.raises = true;
         program.funcs.push(second);
     }
     for (at, name) in fill {

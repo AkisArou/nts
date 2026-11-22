@@ -3504,6 +3504,9 @@ void nts_raise(NtsValue value);
 int nts_raising(void);
 NtsValue nts_raise_take(void);
 
+/* Takes ownership of `value`, like `nts_raise`. A landing moves that reference
+ * into `thrown`, and its host releases it after conversion. The process-exit
+ * path need not give it back. `detail` is borrowed until delivery finishes. */
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
 
 /* No arm of an open field access matched the value that arrived.

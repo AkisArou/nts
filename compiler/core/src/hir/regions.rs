@@ -1674,6 +1674,7 @@ mod tests {
             }],
             origin: origin(),
             exported: false,
+            raises: false,
             initializes_receiver: false,
             async_result: None,
             frame: None,

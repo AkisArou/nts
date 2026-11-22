@@ -338,6 +338,7 @@ fn error_to_string(layout: &Layout) -> Option<Func> {
         blocks,
         origin,
         exported: false,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

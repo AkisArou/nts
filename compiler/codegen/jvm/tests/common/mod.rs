@@ -36,6 +36,7 @@ pub fn prepare(
     nts_core::hir::prepare_with(
         snapshot,
         &nts_core::hir::Options {
+            backend: nts_core::hir::backend::Backend::Jvm,
             provider,
             ..nts_core::hir::Options::default()
         },

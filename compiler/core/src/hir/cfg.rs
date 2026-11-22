@@ -207,6 +207,7 @@ mod tests {
                 span: Span::new(0, 1),
             }),
             exported: false,
+            raises: false,
             initializes_receiver: false,
             frame: None,
             abstract_declaration: false,

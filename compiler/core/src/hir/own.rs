@@ -2855,9 +2855,10 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
 /// are made before counting (`hir::destinations`), so the move is decided
 /// here, where `nts_str_append`'s is decided in `rc`'s concatenation arm.
 ///
-/// **`nts_raise` too**, its one argument. The raise slot takes the caller's
-/// reference, uncounted, and `nts_raise_take` hands that same reference to the
-/// handler as its own. Missing from here, the raising copy of a method released
+/// **`nts_raise` and `nts_uncaught` too**, their thrown argument. The runtime
+/// takes the caller's reference, uncounted: either `nts_raise_take` hands it to
+/// a handler or a landing hands it to the host wrapper. Missing from here,
+/// the raising copy of a method released
 /// what it had just thrown: the object died while the slot still named it, and
 /// the handler read freed memory -- `throw new Oops(v)` inside `check.call(..)`
 /// in a `try`, a use after free under the address sanitizer on main and invisible
@@ -2867,6 +2868,7 @@ pub(super) fn consumes(name: &str) -> Option<usize> {
     match name {
         "nts_array_push_ref" | "nts_array_unshift_ref" | "nts_array_push_value" => Some(1),
         "nts_raise"
+        | "nts_uncaught"
         | "nts_str_append_at"
         | "nts_str_append_char_at"
         | "nts_str_append_char_code"
@@ -4883,6 +4885,7 @@ mod tests {
             blocks: Vec::new(),
             origin: origin.clone(),
             exported: false,
+            raises: false,
             initializes_receiver: false,
             abstract_declaration: false,
             async_result: None,
@@ -5054,6 +5057,7 @@ mod tests {
             blocks,
             origin: origin.clone(),
             exported: false,
+            raises: false,
             initializes_receiver: false,
             abstract_declaration: false,
             async_result: None,

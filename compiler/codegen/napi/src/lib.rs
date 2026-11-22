@@ -1480,8 +1480,14 @@ void nts_napi_set_env(void *env);
 __attribute__((weak)) void nts_napi_set_env(void *env) { (void)env; }
 #endif
 
+static void nts_napi_throw(napi_env env, NtsValue thrown, const NtsString *detail);
 static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
     NtsValue thrown = nts_landing_thrown(landing);
+    nts_napi_throw(env, thrown, nts_landing_detail(landing));
+    if (NTS_TAG_IS_MANAGED(nts_value_tag(thrown)) && nts_value_reference(thrown) != NULL)
+        nts_release(nts_value_reference(thrown));
+}
+static void nts_napi_throw(napi_env env, NtsValue thrown, const NtsString *detail) {
     /* A thrown primitive is the primitive itself, including BigInt. Use the
      * ordinary erased-result conversion while its native owner is alive. */
     switch (nts_value_tag(thrown)) {
@@ -1504,7 +1510,6 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
     default:
         break;
     }
-    const NtsString *detail = nts_landing_detail(landing);
     const char *class_name = nts_thrown_class(thrown);
 
     /* Through the same conversion every returned string goes through, so a

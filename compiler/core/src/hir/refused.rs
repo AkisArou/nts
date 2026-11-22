@@ -344,6 +344,7 @@ fn stopped_entry(name: String, contract: &Func, receiver: super::TypeId, message
         blocks: Vec::new(),
         origin: contract.origin.clone(),
         exported: false,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

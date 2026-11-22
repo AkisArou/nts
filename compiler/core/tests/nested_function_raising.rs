@@ -26,6 +26,10 @@ fn captured_and_plain_nested_functions_both_reach_their_handler() {
             .iter()
             .find(|func| func.name == name)
             .expect("export retained");
+        assert!(
+            !function.raises,
+            "the source entry catches the throw locally"
+        );
         assert!(function.values.iter().any(|op| matches!(
             &op.kind, OpKind::Call { callee: Callee::External(name), .. } if name == "nts_raise_take"
         )), "{name} must retain its handler edge");
@@ -42,13 +46,13 @@ fn captured_and_plain_nested_functions_both_reach_their_handler() {
                                 .methods
                                 .get(*slot as usize)
                                 .and_then(Option::as_deref)
-                                .is_some_and(|entry| entry.ends_with("@raises"))
+                                .is_some_and(|entry| prepared.program.funcs.iter().any(|target| target.name == entry && target.raises))
                         })
                     } else {
                         matches!(
                             &op.kind,
                             OpKind::Call { callee: Callee::Direct(entry), .. }
-                                if entry.starts_with("Closure") && entry.ends_with("@raises")
+                                if prepared.program.funcs.iter().any(|target| target.name == *entry && target.raises)
                         )
                     }
                 }),
@@ -56,7 +60,7 @@ fn captured_and_plain_nested_functions_both_reach_their_handler() {
             );
         } else {
             assert!(function.values.iter().any(|op| matches!(
-                &op.kind, OpKind::Call { callee: Callee::Direct(name), .. } if name.ends_with("@raises")
+                &op.kind, OpKind::Call { callee: Callee::Direct(name), .. } if prepared.program.funcs.iter().any(|target| target.name == *name && target.raises)
             )), "the parameter-only control must keep its direct raising copy");
         }
     }

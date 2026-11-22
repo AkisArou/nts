@@ -38,6 +38,11 @@ after each call that can raise, and the releases reference counting inserts
 run on the way out as on any other return (record
 [0343](../records/0343-a-handler-edge-across-a-call.md)).
 
+Both runtime transfer points, `nts_raise` and `nts_uncaught`, take ownership of
+the thrown value. A borrowed value acquires its own reference; an owned
+temporary moves. A handler or surviving host boundary releases that reference
+after using the value. The process-exit path need not release it.
+
 ## Which run-time errors a program can catch
 
 Every explicit `throw` is catchable. So are the errors compiled code raises
@@ -153,6 +158,10 @@ from them on demand ([Decisions](#decisions)).
 
 ## Decisions
 
+- `nts_raise` and `nts_uncaught` both take ownership of the thrown value.
+  The handler or surviving host releases it after delivery; the ownership
+  contract is independent of the product
+  ([log](../records/notebooks/decisions-log.md#uncaught-payload-handover-11-23)).
 - Uncaught throws and unhandled rejections read the actual object's fixed
   string `message` field through one layout-owned projection. Reporting invokes
   no getter or coercion and keeps no separate promise-side message. Capture,

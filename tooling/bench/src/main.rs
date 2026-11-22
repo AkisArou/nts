@@ -2590,6 +2590,7 @@ fn prepare_snapshot(
     let prepared = match hir::prepare_with(
         snapshot,
         &hir::Options {
+            backend,
             specialize_numbers: specialize,
             provider,
             roots: hir::reachable::Roots::Entry(entry),

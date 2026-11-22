@@ -425,6 +425,7 @@ mod tests {
             values,
             origin,
             exported: true,
+            raises: false,
             initializes_receiver: false,
             async_result: None,
             frame: None,

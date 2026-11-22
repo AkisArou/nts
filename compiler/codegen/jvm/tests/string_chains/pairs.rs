@@ -55,6 +55,7 @@ fn function(
         validation: None,
         written_return_elements: vec![],
         result_absent: hir::Absent::Impossible,
+        raises: false,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,

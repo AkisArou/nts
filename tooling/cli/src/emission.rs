@@ -109,6 +109,7 @@ impl Metadata {
     ) -> Result<hir::PreparationOptions<'_>> {
         let provider = provider_for(backend)?;
         Ok(hir::PreparationOptions {
+            backend,
             provider,
             roots: product_roots(emission.shape, self.entry.as_deref(), self.configured),
             callbacks_checkpoint: matches!(backend, Backend::C | Backend::Llvm)

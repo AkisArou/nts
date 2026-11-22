@@ -32,6 +32,11 @@ fn independent_preparations_match_fresh_lowering_and_leave_the_raw_program_uncha
         ] {
             for abi in [native::NativeAbi::LP64, native::NativeAbi::LLP64] {
                 let options = Options {
+                    backend: match provider {
+                        Memory::NoGc => hir::backend::Backend::Llvm,
+                        Memory::ReferenceCounting => hir::backend::Backend::C,
+                        Memory::HostGc => hir::backend::Backend::Jvm,
+                    },
                     provider,
                     roots,
                     entry_files: &entry,
@@ -53,6 +58,7 @@ fn independent_preparations_match_fresh_lowering_and_leave_the_raw_program_uncha
                     "preparation must not mutate the shared input"
                 );
                 assert_eq!(branch.program.provider, provider);
+                assert_eq!(branch.program.backend, Some(options.backend));
                 assert_eq!(
                     branch.program.callbacks_checkpoint,
                     options.callbacks_checkpoint

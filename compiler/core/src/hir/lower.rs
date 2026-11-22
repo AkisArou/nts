@@ -2067,6 +2067,7 @@ impl<'a> FuncBuilder<'a> {
             // Set by the caller: `finish` does not know what it is assembling,
             // and a seventh positional bool next to `exported` would be a
             // parameter waiting to be passed in the wrong order.
+            raises: self.raises,
             initializes_receiver: false,
             abstract_declaration: false,
             // Not the caller's, because this one is not a property of what is
