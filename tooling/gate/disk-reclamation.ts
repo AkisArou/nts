@@ -2,7 +2,7 @@
 // owner fences and detaches under the pool lock, then drains outside it.
 import {appendFileSync,chmodSync,existsSync,lstatSync,readFileSync,readdirSync,realpathSync,rmSync,mkdirSync,renameSync,rmdirSync,unlinkSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
-import {acquire,withLock,type Lock} from '../landing/lock.ts';
+import {withLock} from '../landing/lock.ts';
 import {durableRecord} from './durable-record.ts';
 import {ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 import {basename,dirname,join,resolve,sep} from 'node:path';
@@ -205,6 +205,7 @@ export function describeReclamation(...reports:(ReclaimReport|null|undefined)[])
 }
 
 export const DISK_TRASH='.disk-trash';
+const trashId=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const reclaimKinds:readonly ReclaimKind[]=['obsolete-profile','unbuilt-checkout','free-build-output','detached-build-output'];
 type TrashManifest={version:1;id:string;at:number;state:'prepared'|'detached';identity:{dev:number;ino:number;uid:number};removal:ReclaimRemoval};
 export type TrashEntry={path:string;allocatedBytes:number|null;ageMs:number;kind:ReclaimKind|null;diagnostic?:string};
@@ -213,7 +214,7 @@ function readTrash(entry:string):TrashManifest{
   physical(entry);
   const file=join(entry,'manifest.json'),row=JSON.parse(readFileSync(file,'utf8')) as TrashManifest;
   assertStateVersion(row,1,file);
-  if(row.version!==1||row.id!==basename(entry)||!Number.isSafeInteger(row.at)||row.at<0||!['prepared','detached'].includes(row.state)
+  if(row.version!==1||!trashId.test(row.id)||row.id!==basename(entry)||!Number.isSafeInteger(row.at)||row.at<0||!['prepared','detached'].includes(row.state)
     ||!row.identity||[row.identity.dev,row.identity.ino,row.identity.uid].some(value=>!Number.isSafeInteger(value)||value<0)
     ||!row.removal||!reclaimKinds.includes(row.removal.kind)||typeof row.removal.root!=='string'||resolve(row.removal.root)!==row.removal.root
     ||!Number.isSafeInteger(row.removal.allocatedBytes)||row.removal.allocatedBytes<0||!Array.isArray(row.removal.facts))throw Error('invalid disk trash manifest: '+file);
@@ -236,25 +237,26 @@ function payloadIdentity(path:string,row:TrashManifest):void{
   const info=lstatSync(path);
   if(!info.isDirectory()||info.isSymbolicLink()||info.dev!==row.identity.dev||info.ino!==row.identity.ino||info.uid!==row.identity.uid)throw Error('disk trash payload identity changed: '+path);
 }
-function removeTrashCheckout(options:ReclaimOptions,payload:string,absent=false):void{
+function removeTrashCheckout(options:ReclaimOptions,payload:string,drainer:GateResource,absent=false):void{
   const {git}=options.pool;
   const removed=infrastructureProbe({purpose:'remove detached disk trash checkout',command:'git',
-    args:gitArguments(['worktree','remove',...(absent?['--force']:[]),'--',payload]),cwd:git.root,...(git.env?{env:git.env}:{}),exits:'classify'});
+    args:gitArguments(['worktree','remove',...(absent?['--force']:[]),'--',payload]),cwd:git.root,stdio:drainer.stdio('pipe'),...(git.env?{env:git.env}:{}),exits:'classify'});
   if(removed.status!==0)throw Error('Git retained disk trash checkout '+payload+': '+removed.stderr.trim());
 }
 function present(path:string):boolean{try{lstatSync(path);return true;}catch(error){if(missing(error))return false;throw error;}}
 /** Each drainer acquires under the pool lock, but keeps only its entry owner
  * during deletion. A crash at any point leaves a manifest for the next pass. */
-function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>T,owned?:Lock):ReclaimRemoval|null{
-  const owner=owned??locked(()=>acquire(join(entry,'.owner')));
+function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>T,owned?:GateResource):ReclaimRemoval|null{
+  const owner=owned??locked(()=>{physical(entry);return GateResource.tryAcquire(join(entry,'.drain.lock'));});
   if(!owner)return null;
+  let open=true;
   try{
     const row=readTrash(entry),payload=join(entry,'payload'),before=locked(options.snapshot).freeBytes;
     if(present(payload)){
       payloadIdentity(payload,row);
       if(row.state==='prepared'){row.state='detached';durableRecord(join(entry,'manifest.json'),row);}
       const remove=()=>{
-        if(row.removal.kind==='unbuilt-checkout')removeTrashCheckout(options,payload);
+        if(row.removal.kind==='unbuilt-checkout')removeTrashCheckout(options,payload,owner);
         else{writable(payload);rmSync(payload,{recursive:true});}
       };
       if(options.removePayload)options.removePayload(payload,row.removal.kind,remove);else remove();
@@ -265,7 +267,7 @@ function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>
       // a missing worktree. Force is allowed only for that absent payload;
       // this transaction removes metadata, never unexpected checkout bytes.
       if(present(payload))throw Error('disk trash payload reappeared: '+payload);
-      if(worktrees(options.pool.git).some(tree=>resolve(tree.path)===payload))removeTrashCheckout(options,payload,true);
+      if(worktrees(options.pool.git).some(tree=>resolve(tree.path)===payload))removeTrashCheckout(options,payload,owner,true);
     });
     // Prepared but never renamed: the original remains outside our grant.
     const removal=row.state==='detached'?{...row.removal,freeBytesChange:0}:null;
@@ -277,14 +279,28 @@ function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>
         if(!seen)appendFileSync(log,JSON.stringify({at:options.host.wallNow(),trashId:row.id,...removal})+'\n');
       }
       // Only small owner metadata is removed under the pool lock.
-      owner.release();
-      // Acquisition is serialized by the pool lock, including dead-owner
-      // recovery; no drainer can still hold this sibling recovery flock.
-      if(existsSync(join(entry,'.owner.reclaim')))unlinkSync(join(entry,'.owner.reclaim'));
+      owner.close();open=false;unlinkSync(join(entry,'.drain.lock'));
       unlinkSync(join(entry,'manifest.json'));rmdirSync(entry);
     });
     return removal;
-  }finally{owner.release();}
+  }finally{if(open)owner.close();}
+}
+
+/** Setup and final metadata cleanup can leave no manifest. Only an empty
+ * UUID envelope with its one known lock file is eligible; no payload grant
+ * is inferred from a missing manifest. Caller holds the pool lock. */
+function emptyEnvelope(entry:string):boolean{
+  if(!trashId.test(basename(entry)))return false;
+  physical(entry);
+  const children=readdirSync(entry);
+  if(children.some(name=>name!=='.drain.lock'))return false;
+  const file=join(entry,'.drain.lock');
+  if(children.length){const info=lstatSync(file);if(!info.isFile()||info.isSymbolicLink()||info.size!==0||info.uid!==process.getuid?.())return false;}
+  const owner=GateResource.tryAcquire(file);if(!owner)return false;
+  try{
+    if(readdirSync(entry).some(name=>name!=='.drain.lock'))return false;
+  }finally{owner.close();}
+  unlinkSync(file);rmdirSync(entry);return true;
 }
 
 export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
@@ -297,6 +313,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const recovered:ReclaimRemoval[]=[],trashKept:ReclaimReport['kept']=[];
   for(const entry of diskTrash(pool.dir,host.wallNow())){
     if(entry.ageMs>3_600_000)trashKept.push({root:entry.path,reason:'stuck disk trash drain (older than one hour)',routine:false});
+    if(entry.diagnostic&&locked(()=>emptyEnvelope(entry.path)))continue;
     if(entry.diagnostic){trashKept.push({root:entry.path,reason:entry.diagnostic,routine:false});continue;}
     try{const row=drainTrash(options,entry.path,locked);if(row)recovered.push(row);}
     catch(error){if(error instanceof ToolingInstrumentError)throw error;trashKept.push({root:entry.path,reason:'disk trash drain retained: '+errorText(error),routine:false});}
@@ -407,7 +424,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     if(kind==='free-build-output'&&retained.has(candidate.target)){if(!report.kept.some(row=>row.root===candidate.target&&row.reason==='two warm free targets retained'))keep(candidate.target,'two warm free targets retained',true);continue;}
     // A previous obsolete-profile removal may have consumed this candidate.
     if(!existsSync(root))continue;
-    const held:{lock:GateResource|null;drainer:Lock|undefined;entry:string|undefined}={lock:null,drainer:undefined,entry:undefined};
+    const held:{lock:GateResource|null;drainer:GateResource|null;entry:string|undefined}={lock:null,drainer:null,entry:undefined};
     try{
       // Recursive allocation measurement is outside the pool lock too.
       const allocatedBytes=host.allocatedBytes(root);
@@ -461,7 +478,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
         if(!reclaimKinds.includes(kind))throw Error('unapproved disk reclamation kind: '+kind);
         const trash=trashRoot(pool.dir);mkdirSync(trash,{recursive:true});physical(trash);
         if(lstatSync(trash).dev!==candidate.identity[0]!.dev)throw Error('disk trash is on a different filesystem: '+root);
-        held.entry=join(trash,randomUUID());mkdirSync(held.entry);held.drainer=acquire(join(held.entry,'.owner'))??undefined;
+        held.entry=join(trash,randomUUID());mkdirSync(held.entry);held.drainer=GateResource.tryAcquire(join(held.entry,'.drain.lock'));
         if(!held.drainer)throw Error('new disk trash entry has an owner: '+held.entry);
         const {dev,ino,uid}=candidate.identity[0]!;
         const manifest:TrashManifest={version:1,id:basename(held.entry),at:host.wallNow(),state:'prepared',identity:{dev,ino,uid},removal};
@@ -475,13 +492,14 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
         return {entry:held.entry,drainer:held.drainer,before};
       });
       held.lock?.close();held.lock=null;
-      const removal=drainTrash(options,staged.entry,locked,staged.drainer);held.drainer=undefined;
+      held.drainer=null; // drainTrash owns close, including on failure.
+      const removal=drainTrash(options,staged.entry,locked,staged.drainer);
       report.after=locked(options.snapshot).freeBytes;
       if(removal){removal.freeBytesChange=report.after-staged.before;report.removed.push(removal);}
     }catch(error){
       if(error instanceof ToolingInstrumentError)throw error;
       keep(held.entry??root,error);
-    }finally{held.lock?.close();held.drainer?.release();}
+    }finally{held.lock?.close();held.drainer?.close();}
 
   }
   return report;

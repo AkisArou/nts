@@ -4,6 +4,7 @@
 import { closeSync, openSync, readFileSync, readdirSync, linkSync, unlinkSync, writeFileSync } from "node:fs";
 import {randomUUID} from 'node:crypto';
 import {basename,dirname,join} from 'node:path';
+import {processCgroup} from './tree-users.ts';
 import {ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 import {infrastructureProbe} from '../gate/infrastructure-probe.ts';
 
@@ -99,7 +100,7 @@ export class LockWaitError extends ToolingInstrumentError {
   constructor(path:string){
     const held=readOwner(path);
     let unit:string|undefined;
-    if(held)try{unit=readFileSync(`/proc/${held.pid}/cgroup`,'utf8').split(/[\n/]/).reverse().find(part=>/\.(?:service|scope)$/.test(part));}catch{}
+    if(held)try{unit=processCgroup(held.pid).split(/[\n/]/).reverse().find(part=>/\.(?:service|scope)$/.test(part));}catch{}
     super('tooling-setup',`${path} lock wait exhausted; held by process ${held?.pid??'?'}; birth identity ${held?.text??'unavailable'}${unit?'; unit '+unit:''}`);
     this.name='LockWaitError';
   }

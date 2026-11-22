@@ -648,3 +648,11 @@ test('only a manifest-backed owner trash checkout layout is a registered pool wo
   assert.equal(poolWorktree(join(entry,'payload'),cache),'disk reclamation trash (pool.ts status)');
   for(const suffix of ['/foreign/payload','/00000000-0000-0000-0000-000000000000/payload/nested','/00000000-0000-0000-0000-000000000000/other'])assert.equal(poolWorktree(root+suffix,cache),null);
 });
+
+test("a manifest-backed missing trash payload remains the reclamation owner's registration",t=>{
+  const cache=cacheFixture(t),entry=join(cache,'nts-pool',DISK_TRASH,'00000000-0000-0000-0000-000000000000'),payload=join(entry,'payload');mkdirSync(entry,{recursive:true});
+  const fixture=input(t,{cache,worktrees:[{path:payload,head:MAIN,prunable:true}]});
+  assert.ok(count(fixture,KEEP).red.some(line=>line.startsWith('worktree '+payload)));
+  writeFileSync(join(entry,'manifest.json'),'{}');
+  assert.equal(count(fixture,KEEP).red.some(line=>line.startsWith('worktree '+payload)),false);
+});

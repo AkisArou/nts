@@ -1205,7 +1205,9 @@ the tooling strict checker owns the source's type checking.
   and recursive allocated-byte measurements run outside the pool lock. Fresh
   ownership fences, a durable manifest and a same-filesystem rename into
   `nts-pool/.disk-trash/<uuid>/payload` run under it; permission traversal and
-  recursive deletion run after release, holding only that entry's drainer lock.
+  recursive deletion run after release, holding only that entry's kernel
+  drainer lock. Git's removal child inherits its descriptor, so an exited
+  parent cannot expire the lock while that child still removes bytes.
   The manifest preserves the approved removal kind and physical identity.
   Reclamation resumes interrupted entries, including partial deletions, before
   considering new candidates. A rename credits no capacity: only observed disk

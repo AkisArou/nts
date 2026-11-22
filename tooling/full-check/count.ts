@@ -185,6 +185,7 @@ function worktreeLines(input: CountInput, red: string[]): void {
   const named = new Set([...planNames(input.plan).paths].map(path => real(path.startsWith("~/") ? join(home, path.slice(2)) : path)));
   for (const tree of [...input.worktrees].sort((a, b) => a.path.localeCompare(b.path))) {
     const what = tree.branch ? tree.branch.replace(/^refs\/heads\//, "") : tree.head ? `detached at ${tree.head.slice(0, 12)}` : "no HEAD";
+    if(poolWorktree(tree.path,input.cache)==='disk reclamation trash (pool.ts status)')continue;
     if (tree.prunable) { red.push(`worktree ${tree.path} (${what}): its folder is gone; \`git worktree prune\` forgets it`); continue; }
     if(tree.branch&&poolWorktree(tree.path,input.cache)==='the pool'){
       const presence=workerPresence(real(tree.path),tree.branch.replace(/^refs\/heads\//,''));

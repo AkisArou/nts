@@ -630,11 +630,17 @@ test('unknown manifest kinds never gain a trash deletion grant',t=>{
   assert.match(report.kept.map(row=>row.reason).join('\n'),/invalid disk trash manifest/);
 });
 
-test('a killed drainer identity is reclaimed without losing the payload or its accounting',t=>{
+test('a child that exits holding the kernel drainer lock leaves recoverable trash',t=>{
   const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);mkdirSync(join(tree,'target/evidence'));
   reclaimDisk({...f.options,removePayload:()=>{throw Error('crash boundary');}});
   const entry=diskTrash(f.dir,f.host.wallNow())[0]!;
-  writeFileSync(join(entry.path,'.owner'),'00000000-0000-0000-0000-000000000000 2147483647 1\n');
+  const source=generatedJavaScript(`
+import {GateResource} from ${JSON.stringify(new URL('./gate-resource.ts',import.meta.url).href)};
+const owner=GateResource.tryAcquire(${JSON.stringify(join(entry.path,'.drain.lock'))});
+if(!owner)throw Error('control did not acquire trash lock');
+console.log('kernel drainer lock held');throw Error('deliberate drainer crash');`);
+  const crashed=spawnTest(process.execPath,['--input-type=module','-e',source],{env:f.s.env,encoding:'utf8'});
+  assert.equal(crashed.status,1,crashed.stderr);assert.match(crashed.stdout,/kernel drainer lock held/);assert.match(crashed.stderr,/deliberate drainer crash/);
   assert.equal(f.host.disk(f.dir).freeBytes,44*GiB);
   assert.equal(reclaimDisk(f.options).removed.length,1);
   assert.deepEqual(diskTrash(f.dir,f.host.wallNow()),[]);
@@ -661,4 +667,21 @@ test('recovery retires Git registration after a crash between payload removal an
   const report=reclaimDisk(f.options);assert.equal(report.removed.length,1,JSON.stringify(report));
   assert.equal(f.s.git(['worktree','list','--porcelain']).includes(payload),false);
   assert.deepEqual(diskTrash(f.dir,f.host.wallNow()),[]);
+});
+
+test('only empty UUID envelopes with unheld empty lock metadata are recovered without a manifest',t=>{
+  const f=fixture(t),root=join(f.dir,DISK_TRASH);mkdirSync(root);
+  const ids=[0,1,2,3,4].map(n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0'));
+  for(const id of ids)mkdirSync(join(root,id));
+  writeFileSync(join(root,ids[1]!,'.drain.lock'),'');
+  writeFileSync(join(root,ids[2]!,'payload'),'unknown bytes');
+  writeFileSync(join(root,ids[3]!,'.drain.lock'),'');
+  const held=GateResource.tryAcquire(join(root,ids[3]!,'.drain.lock'));assert.ok(held);
+  writeFileSync(join(root,ids[4]!,'manifest.json'),'{broken');
+  try{
+    reclaimDisk(f.options);
+    assert.deepEqual(readdirSync(root).sort(),ids.slice(2));
+    assert.equal(readFileSync(join(root,ids[2]!,'payload'),'utf8'),'unknown bytes');
+  }finally{held.close();}
+  reclaimDisk(f.options);assert.deepEqual(readdirSync(root).sort(),[ids[2],ids[4]]);
 });
