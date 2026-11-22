@@ -79,12 +79,19 @@ if [ "${1-}" = --case ]; then
       # variable, and the compiler asks whether it is set. Setting it empty made
       # both halves of this measurement naive and the ratio a flat 1.00, which
       # reads exactly like an elision pass that does nothing.
-      if ! env "${@:2}" "${NTS_BIN:-./target/release/nts}" emit-c "$dir/tsconfig.json" --out "$where" --rc \
+      # The harness owns a closed executable: it enters work and module init,
+      # then drains the runtime. --entry alone would still name an open library
+      # surface; --main selects product_roots' closed executable contract.
+      if ! env "${@:2}" "${NTS_BIN:-./target/release/nts}" emit-c "$dir/tsconfig.json" --out "$where" --main --entry work --rc \
            >/dev/null 2>&1; then
         echo "  $name: emit failed" >&2
         return 1
       fi
-      # Every `.c` the emitter wrote, not a fixed pair: a case that converts case
+      if ! grep -qE '^double work\(double [^)]*\);$' "$where/program.h"; then
+        echo "  $name: no exported work(number): number entry" >&2
+        return 1
+      fi
+      # Every program/runtime source the emitter wrote, not a fixed pair: a case that converts case
       # gets `nts_unicode.c` beside the runtime, and one that does not still gets
       # exactly the two. Naming them here meant the first case to need a third
       # file reported "did not compile" with nothing saying which file was
@@ -94,13 +101,32 @@ if [ "${1-}" = --case ]; then
       # arm's compile. With NTS_MEMORY_OBJECTS (a directory the parent makes
       # fresh for each run) every .c other than program.c is compiled to an
       # object named by the bytes of everything it could include -- every file
-      # emit-c wrote except the program's own -- plus the compiler and the
-      # flags, and linked as before. A runtime that included the program's
+      # emit-c wrote except the program's own and the excluded CLI launcher and
+      # host files -- plus the compiler and the flags, and linked as before.
+      # In particular, main.c varies with module initialization but is not a
+      # runtime input: it must not split otherwise identical runtime objects.
+      # A runtime that included the program's
       # header would make that key wrong, so then nothing is reused.
+      # write_standalone in tooling/cli/src/main.rs emits main.c and
+      # nts_uv_host.c for --main. harness.c supplies both entry and draining,
+      # so those two CLI sources are knowingly excluded. Reject a new host by
+      # name rather than silently linking another loop into the measurement.
+      # This single selection serves cached and uncached compilation: every
+      # emitted .c is either compiled or accounted for here.
+      emitted_sources=""
+      for c in "$where"/*.c; do
+        case "$(basename "$c")" in
+          main.c|nts_uv_host.c) continue ;;
+          *_host.c)
+            echo "  $name: unknown CLI host source $(basename "$c")" >&2
+            return 1 ;;
+        esac
+        emitted_sources="$emitted_sources $c"
+      done
       sources="$where/program.c"
       if [ -n "${NTS_MEMORY_OBJECTS:-}" ] && ! grep -qs '#include "program.h"' "$where"/nts_*; then
-        inputs=$( { clang --version; echo "-O2 -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS"; (cd "$where" && find . -type f ! -name program.c ! -name program.h ! -name run | LC_ALL=C sort | xargs sha256sum); } | sha256sum | cut -c1-32)
-        for c in "$where"/*.c; do
+        inputs=$( { clang --version; echo "-O2 -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS"; (cd "$where" && find . -type f ! -name program.c ! -name program.h ! -name run ! -name main.c ! -name 'nts_uv_host.*' | LC_ALL=C sort | xargs sha256sum); } | sha256sum | cut -c1-32)
+        for c in $emitted_sources; do
           [ "$c" = "$where/program.c" ] && continue
           obj="$NTS_MEMORY_OBJECTS/$inputs-$(basename "$c" .c).o"
           if [ ! -f "$obj" ]; then
@@ -109,7 +135,7 @@ if [ "${1-}" = --case ]; then
           sources="$sources $obj"
         done
       else
-        sources="$where/*.c"
+        sources="$emitted_sources"
       fi
       # $sources is a list of paths without spaces, split on purpose.
       clang -O2 -I"$where" -o "$where/run" $sources \
