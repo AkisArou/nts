@@ -1,0 +1,18 @@
+ideal 27
+allocated 18
+because Allocations: eighteen, a `Holder` and a promise for each of nine
+because iterations, and nothing else: the executor is written at the call, so
+because it is lowered into it rather than allocated.
+because
+because What the case is for is the leak check beside these numbers. Each pair
+because is a cycle through the runtime's promise -- `holder.promise` to the
+because promise, its payload back to `holder` -- that only the collector can
+because free, by tracing the promise's payload. A promise traces and releases
+because the same slots (`nts_promise_trace_fields`, `_release_fields`); a trace
+because that missed the payload reports both objects leaked every iteration.
+because
+because Operations: twenty-seven, three an iteration, as naive emits. **A
+because measurement, not an argument**: the store of `holder` into the payload
+because and of the promise into `holder.promise` are each a retain, and the
+because frame gives one of them back; written down so a change that adds
+because counting here is seen rather than absorbed.
