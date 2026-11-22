@@ -49,6 +49,7 @@ impl fmt::Display for Operand<'_> {
 pub(super) struct Site<'a> {
     name: &'a str,
     location: Location,
+    gobject: crate::gobject::Declarations,
 }
 
 impl<'a> Site<'a> {
@@ -56,6 +57,7 @@ impl<'a> Site<'a> {
         Self {
             name: &func.name,
             location: func.origin.location,
+            gobject: crate::gobject::Declarations::default(),
         }
     }
 
@@ -63,7 +65,13 @@ impl<'a> Site<'a> {
         Self {
             name,
             location: dispatch_location(program),
+            gobject: crate::gobject::Declarations::default(),
         }
+    }
+
+    pub(super) fn with_gobject(mut self, declarations: crate::gobject::Declarations) -> Self {
+        self.gobject = declarations;
+        self
     }
 
     pub(super) fn refuse(self, message: &str) -> Diagnostic {
@@ -94,7 +102,7 @@ impl<'a> DirectCallee<'a> {
         let Some(name) = global_name(&spelling) else {
             return Err(site.refuse(&format!("an invalid callee spelling {spelling}")));
         };
-        if signatures::signature_on(&name, platform).is_some() {
+        if declaration(site, platform, &name)?.is_some() {
             return Err(site.refuse(&format!(
                 "a direct call to the runtime helper {name}, which only its checked constructor renders"
             )));
@@ -249,7 +257,7 @@ fn external_spelled(
     operands: &[Operand<'_>],
     quoted: bool,
 ) -> Result<String, Diagnostic> {
-    if signatures::signature_on(helper, platform).is_some() {
+    if declaration(site, platform, helper)?.is_some() {
         call(site, platform, helper, operands)
     } else {
         let callee = if quoted {
@@ -263,8 +271,27 @@ fn external_spelled(
     }
 }
 
+/// Canonical runtime declarations are always present. Product support names
+/// resolve only under the capability that also emits their declarations.
+fn declaration(
+    site: Site<'_>,
+    platform: Platform,
+    helper: &str,
+) -> Result<Option<&'static signatures::Signature>, Diagnostic> {
+    if let Some(known) = signatures::signature_on(helper, platform) {
+        return Ok(Some(known));
+    }
+    let known = crate::gobject::signature(helper).map(|(_, known)| known);
+    if known.is_some() && !site.gobject.contains(helper) {
+        return Err(site.refuse(&format!(
+            "a call to {helper}, whose GObject support declaration this program does not emit"
+        )));
+    }
+    Ok(known)
+}
+
 /// Construct one runtime call, or refuse at the site that tried to make it.
-/// `signature_on` uses an index built once per process, so checking a call
+/// Declaration lookup uses indexes built once per process, so checking a call
 /// costs only its own arguments, independently of the number of helpers.
 pub(super) fn call(
     site: Site<'_>,
@@ -272,7 +299,7 @@ pub(super) fn call(
     helper: &str,
     operands: &[Operand<'_>],
 ) -> Result<String, Diagnostic> {
-    let known = signatures::signature_on(helper, platform).ok_or_else(|| {
+    let known = declaration(site, platform, helper)?.ok_or_else(|| {
         site.refuse(&format!(
             "a call to {helper}, which has no declared runtime signature"
         ))
@@ -310,6 +337,7 @@ mod tests {
     fn site() -> Site<'static> {
         Site {
             name: "subject",
+            gobject: crate::gobject::Declarations::default(),
             location: Location {
                 file: SourceId(0),
                 span: Span::new(0, 0),

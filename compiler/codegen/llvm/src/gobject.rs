@@ -18,6 +18,227 @@ use nts_diagnostics::Diagnostic;
 
 use super::{Platform, conversion, is_not_zero, refuse, text_constant, ty_of};
 
+/// The product support files' fixed ABI, independent of the canonical runtime.
+/// Declaration rendering, call checking and the source audit share these data.
+pub const SUPPORT_SIGNATURES: &[crate::signatures::Signature] = &[
+    crate::signatures::Signature {
+        name: "nts_gobject_register",
+        returns: "i64",
+        params: &["i64", "ptr", "ptr", "i64", "ptr", "ptr", "ptr"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gobject_new",
+        returns: "ptr",
+        params: &["i64"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gtk_class_children",
+        returns: "void",
+        params: &["ptr", "ptr", "i64"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gtk_init_template",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gtk_class_template",
+        returns: "void",
+        params: &["ptr", "ptr", "i64"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gtk_class_template_text",
+        returns: "void",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gtk_bind_callback",
+        returns: "void",
+        params: &["ptr", "ptr", "ptr"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gobject_add_signal",
+        returns: "i32",
+        params: &["i64", "ptr", "ptr"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gobject_set_properties",
+        returns: "void",
+        params: &["i64", "ptr", "i64"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gobject_add_interfaces",
+        returns: "void",
+        params: &["i64", "ptr", "i64"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gtk_template_child",
+        returns: "ptr",
+        params: &["ptr", "i64", "ptr"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gobject_property_spec",
+        returns: "ptr",
+        params: &["i64", "i32"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gobject_signal_id",
+        returns: "i32",
+        params: &["ptr", "ptr", "ptr"],
+        attributes: &[],
+    },
+    crate::signatures::Signature {
+        name: "nts_gobject_parent_slot",
+        returns: "ptr",
+        params: &["i64", "i64"],
+        attributes: &[],
+    },
+];
+
+pub(super) fn signature(name: &str) -> Option<(usize, &'static crate::signatures::Signature)> {
+    type Index =
+        std::collections::HashMap<&'static str, (usize, &'static crate::signatures::Signature)>;
+    static INDEX: std::sync::OnceLock<Index> = std::sync::OnceLock::new();
+    INDEX
+        .get_or_init(|| {
+            SUPPORT_SIGNATURES
+                .iter()
+                .enumerate()
+                .map(|(at, known)| (known.name, (at, known)))
+                .collect()
+        })
+        .get(name)
+        .copied()
+}
+
+#[derive(Clone, Copy)]
+enum Support {
+    Register,
+    New,
+    ClassChildren,
+    InitTemplate,
+    ClassTemplate,
+    ClassTemplateText,
+    BindCallback,
+    AddSignal,
+    SetProperties,
+    AddInterfaces,
+    TemplateChild,
+    PropertySpec,
+    SignalId,
+    ParentSlot,
+}
+
+impl Support {
+    fn signature(self) -> &'static crate::signatures::Signature {
+        &SUPPORT_SIGNATURES[self as usize]
+    }
+}
+
+/// The declarations this emission actually writes. The same selection grants
+/// producer sites authority to call them; ordinary sites have no such grant.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Declarations(u16);
+
+impl Declarations {
+    fn insert(&mut self, helper: Support) {
+        self.0 |= 1 << helper as usize;
+    }
+
+    pub(super) fn contains(self, name: &str) -> bool {
+        signature(name).is_some_and(|(at, _)| self.0 & (1 << at) != 0)
+    }
+
+    fn declare(self, out: &mut String, helper: Support) {
+        let known = helper.signature();
+        if self.contains(known.name) {
+            let _ = writeln!(
+                out,
+                "declare {} @{}({})",
+                known.returns,
+                known.name,
+                known.params.join(", ")
+            );
+        }
+    }
+
+    fn for_program(program: &Program, classes: &[&ForeignClass]) -> Self {
+        let mut selected = Self::default();
+        if program.funcs.is_empty() {
+            return selected;
+        }
+        if !classes.is_empty() {
+            selected.insert(Support::Register);
+            selected.insert(Support::New);
+        }
+        for class in classes {
+            if let Some(template) = &class.template {
+                selected.insert(Support::ClassChildren);
+                selected.insert(Support::InitTemplate);
+                selected.insert(match template.text {
+                    TemplateText::Literal(_) => Support::ClassTemplate,
+                    TemplateText::Read(_) => Support::ClassTemplateText,
+                });
+                if !template.callbacks.is_empty() {
+                    selected.insert(Support::BindCallback);
+                }
+            }
+            if !class.signals.is_empty() {
+                selected.insert(Support::AddSignal);
+            }
+            if !class.properties.is_empty() {
+                selected.insert(Support::SetProperties);
+            }
+            if !class.protocols.is_empty() {
+                selected.insert(Support::AddInterfaces);
+            }
+        }
+        for target in program
+            .native_funcs()
+            .flat_map(|func| &func.values)
+            .filter_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Native(target),
+                    ..
+                } => Some(target),
+                _ => None,
+            })
+        {
+            match &target.thunk {
+                Some(GObjectThunk::Child { class, index })
+                    if program.foreign_classes.iter().any(|foreign| {
+                        foreign.family == Family::GObject
+                            && foreign.name.as_str() == class.as_str()
+                            && foreign
+                                .template
+                                .as_ref()
+                                .is_some_and(|template| template.children.get(*index).is_some())
+                    }) =>
+                {
+                    selected.insert(Support::TemplateChild)
+                }
+                Some(GObjectThunk::Notify { .. }) => selected.insert(Support::PropertySpec),
+                Some(GObjectThunk::Signal { .. }) => selected.insert(Support::SignalId),
+                Some(GObjectThunk::Chain { .. }) => selected.insert(Support::ParentSlot),
+                _ => {}
+            }
+        }
+        selected
+    }
+}
+
 /// The function `new` of `class` calls, which this section defines.
 fn maker<'a>(program: &'a Program, class: &ForeignClass) -> Option<&'a str> {
     nts_codegen_common::gobject::thunks(program).find_map(|(target, thunk)| {
@@ -42,23 +263,24 @@ pub(super) fn classes(
     let Some(provenance_origin) = program.funcs.first() else {
         return Ok(String::new());
     };
+    let classes = nts_codegen_common::gobject::registered(program);
+    let support = Declarations::for_program(program, &classes);
     // A parent's `get_type`, declared once however many classes extend it
     // and chain up to it: LLVM, unlike C, refuses a second declaration.
     let mut parents = std::collections::BTreeSet::new();
-    let mut out = chains(program, platform, &mut parents)?;
-    out.push_str(&emits(program, platform)?);
+    let mut out = chains(program, platform, &mut parents, support)?;
+    out.push_str(&emits(program, platform, support)?);
     out.push_str(&set_by_name(program, platform)?);
     out.push_str(&get_by_name(program, platform)?);
-    out.push_str(&notifies(program, provenance_origin, platform)?);
-    out.push_str(&children(program, provenance_origin, platform)?);
-    let classes = nts_codegen_common::gobject::registered(program);
+    out.push_str(&notifies(program, provenance_origin, platform, support)?);
+    out.push_str(&children(program, provenance_origin, platform, support)?);
     if classes.is_empty() {
         return Ok(out);
     }
     if !callbacks_declared {
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
-    declarations(&mut out, &classes);
+    declarations(&mut out, support);
     for class in classes {
         let name = &class.name;
         let mut slots = Vec::new();
@@ -155,19 +377,30 @@ pub(super) fn classes(
             None => "null".to_owned(),
         };
         // Its signals, added to the type the moment it exists.
-        let hooks = template(&mut out, program, platform, class)?;
-        let mut signals = registrations(&mut out, class);
+        let hooks = template(&mut out, program, platform, class, support)?;
+        let mut signals = registrations(&mut out, program, platform, class, support)?;
         signals.push_str(&implementations(
             &mut out,
             program,
             (class, &interfaces),
             &mut parents,
-        ));
+            platform,
+            support,
+        )?);
         if let Some(table) = properties(&mut out, program, platform, class)? {
             let _ = writeln!(
                 signals,
-                "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})",
-                class.properties.len()
+                "  {}",
+                runtime_call::call(
+                    Site::synthetic(program, "classes").with_gobject(support),
+                    platform,
+                    "nts_gobject_set_properties",
+                    &[
+                        Operand::new("i64", "%made"),
+                        Operand::new("ptr", table),
+                        Operand::new("i64", class.properties.len().to_string())
+                    ]
+                )?
             );
         }
         // A parent the program wrote is defined here, not declared.
@@ -202,6 +435,20 @@ pub(super) fn classes(
             "i64",
             &[],
         )?;
+        let register = runtime_call::call(
+            Site::synthetic(program, "classes").with_gobject(support),
+            platform,
+            "nts_gobject_register",
+            &[
+                Operand::new("i64", "%parent"),
+                Operand::new("ptr", format!("@__nts_gobject_name_{name}")),
+                Operand::new("ptr", table),
+                Operand::new("i64", slots.len().to_string()),
+                Operand::new("ptr", make_state),
+                hooks[0].clone(),
+                hooks[1].clone(),
+            ],
+        )?;
         let _ = writeln!(
             out,
             "@{type_symbol}.cache = internal global i64 0\n\
@@ -209,11 +456,10 @@ pub(super) fn classes(
              entry:\n  %cached = load i64, ptr @{type_symbol}.cache\n  %none = icmp eq i64 %cached, 0\n\
              \x20 br i1 %none, label %register, label %done\n\
              register:\n  %parent = {parent_call}\n\
-             \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @__nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state}, {hooks})\n\
+             \x20 %made = {register}\n\
              {signals}\
              \x20 store i64 %made, ptr @{type_symbol}.cache\n  br label %done\n\
-             done:\n  %type = phi i64 [ %cached, %entry ], [ %made, %register ]\n  ret i64 %type\n}}",
-            slots.len()
+             done:\n  %type = phi i64 [ %cached, %entry ], [ %made, %register ]\n  ret i64 %type\n}}"
         );
         if let Some(make) = maker(program, class) {
             let type_call = runtime_call::external(
@@ -225,7 +471,13 @@ pub(super) fn classes(
             )?;
             let _ = writeln!(
                 out,
-                "define ptr @{make}() nounwind {{\n  %type = {type_call}\n  %made = call ptr @nts_gobject_new(i64 %type)\n  ret ptr %made\n}}"
+                "define ptr @{make}() nounwind {{\n  %type = {type_call}\n  %made = {make_call}\n  ret ptr %made\n}}",
+                make_call = runtime_call::call(
+                    Site::synthetic(program, "classes").with_gobject(support),
+                    platform,
+                    "nts_gobject_new",
+                    &[Operand::new("i64", "%type")]
+                )?
             );
         }
     }
@@ -242,7 +494,9 @@ fn implementations(
     program: &Program,
     (class, tables): (&ForeignClass, &[Vec<String>]),
     declared: &mut std::collections::BTreeSet<String>,
-) -> String {
+    platform: Platform,
+    support: Declarations,
+) -> Result<String, Diagnostic> {
     let name = &class.name;
     let mut rows = Vec::new();
     for (at, (interface, slots)) in class.protocols.iter().zip(tables).enumerate() {
@@ -271,7 +525,7 @@ fn implementations(
         ));
     }
     if rows.is_empty() {
-        return String::new();
+        return Ok(String::new());
     }
     let _ = writeln!(
         out,
@@ -279,47 +533,37 @@ fn implementations(
         rows.len(),
         rows.join(", ")
     );
-    format!(
-        "  call void @nts_gobject_add_interfaces(i64 %made, ptr @__nts_gobject_interfaces_{name}, i64 {})\n",
-        rows.len()
-    )
+    Ok(format!(
+        "  {}\n",
+        runtime_call::call(
+            Site::synthetic(program, "implementations").with_gobject(support),
+            platform,
+            "nts_gobject_add_interfaces",
+            &[
+                Operand::new("i64", "%made"),
+                Operand::new("ptr", format!("@__nts_gobject_interfaces_{name}")),
+                Operand::new("i64", rows.len().to_string())
+            ]
+        )?
+    ))
 }
 
 /// The support files' functions the classes' registrations call, each declared
 /// once, and only where a class calls it.
-fn declarations(out: &mut String, classes: &[&ForeignClass]) {
-    out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr, ptr, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
-    if classes.iter().any(|class| class.template.is_some()) {
-        out.push_str("declare void @nts_gtk_class_children(ptr, ptr, i64)\ndeclare void @nts_gtk_init_template(ptr)\n");
-    }
-    let texts = || {
-        classes
-            .iter()
-            .filter_map(|class| class.template.as_ref())
-            .map(|template| &template.text)
-    };
-    if texts().any(|text| matches!(text, TemplateText::Literal(_))) {
-        out.push_str("declare void @nts_gtk_class_template(ptr, ptr, i64)\n");
-    }
-    if texts().any(|text| matches!(text, TemplateText::Read(_))) {
-        out.push_str("declare void @nts_gtk_class_template_text(ptr, ptr)\n");
-    }
-    if classes.iter().any(|class| {
-        class
-            .template
-            .as_ref()
-            .is_some_and(|template| !template.callbacks.is_empty())
-    }) {
-        out.push_str("declare void @nts_gtk_bind_callback(ptr, ptr, ptr)\n");
-    }
-    if classes.iter().any(|class| !class.signals.is_empty()) {
-        out.push_str("declare i32 @nts_gobject_add_signal(i64, ptr, ptr)\n");
-    }
-    if classes.iter().any(|class| !class.properties.is_empty()) {
-        out.push_str("declare void @nts_gobject_set_properties(i64, ptr, i64)\n");
-    }
-    if classes.iter().any(|class| !class.protocols.is_empty()) {
-        out.push_str("declare void @nts_gobject_add_interfaces(i64, ptr, i64)\n");
+fn declarations(out: &mut String, support: Declarations) {
+    for helper in [
+        Support::Register,
+        Support::New,
+        Support::ClassChildren,
+        Support::InitTemplate,
+        Support::ClassTemplate,
+        Support::ClassTemplateText,
+        Support::BindCallback,
+        Support::AddSignal,
+        Support::SetProperties,
+        Support::AddInterfaces,
+    ] {
+        support.declare(out, helper);
     }
 }
 
@@ -331,18 +575,28 @@ fn template(
     program: &Program,
     platform: Platform,
     class: &ForeignClass,
-) -> Result<String, Diagnostic> {
+    support: Declarations,
+) -> Result<[Operand<'static>; 2], Diagnostic> {
     let Some(template) = &class.template else {
-        return Ok("ptr null, ptr null".to_owned());
+        return Ok([Operand::new("ptr", "null"), Operand::new("ptr", "null")]);
     };
     let name = &class.name;
-    let binds = callbacks(out, program, platform, class, &template.callbacks)?;
+    let binds = callbacks(out, program, platform, class, &template.callbacks, support)?;
     let set = match &template.text {
         TemplateText::Literal(text) => {
             bytes_constant(out, &format!("__nts_gobject_template_{name}"), text);
             format!(
-                "  call void @nts_gtk_class_template(ptr %klass, ptr @__nts_gobject_template_{name}, i64 {})\n",
-                text.len()
+                "  {}\n",
+                runtime_call::call(
+                    Site::synthetic(program, "template").with_gobject(support),
+                    platform,
+                    "nts_gtk_class_template",
+                    &[
+                        Operand::new("ptr", "%klass"),
+                        Operand::new("ptr", format!("@__nts_gobject_template_{name}")),
+                        Operand::new("i64", text.len().to_string())
+                    ]
+                )?
             )
         }
         // The reader's string, lent to GTK for the call, entered and left
@@ -353,7 +607,7 @@ fn template(
                 let missing = "a template whose reader this program does not define";
                 return match program.funcs.first() {
                     Some(func) => Err(refuse(func, missing)),
-                    None => Ok("ptr null, ptr null".to_owned()),
+                    None => Ok([Operand::new("ptr", "null"), Operand::new("ptr", "null")]),
                 };
             };
             let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
@@ -371,7 +625,7 @@ fn template(
             };
             format!(
                 "  {runtime_0}\n  %text = {0}\n  %c = {runtime_1}\n  \
-                 call void @nts_gtk_class_template_text(ptr %klass, ptr %c)\n  {runtime_2}\n{release}  \
+                 {set_template}\n  {runtime_2}\n{release}  \
                  {runtime_3}\n",
                 runtime_call::direct(
                     "ptr",
@@ -383,6 +637,12 @@ fn template(
                     )?,
                     ""
                 ),
+                set_template = runtime_call::call(
+                    Site::synthetic(program, "template").with_gobject(support),
+                    platform,
+                    "nts_gtk_class_template_text",
+                    &[Operand::new("ptr", "%klass"), Operand::new("ptr", "%c")]
+                )?,
                 runtime_0 = runtime_call::call(
                     Site::synthetic(program, "template"),
                     platform,
@@ -428,12 +688,22 @@ fn template(
     };
     let _ = writeln!(
         out,
-        "define internal void @__nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n{set}  call void @nts_gtk_class_children(ptr %klass, ptr {table}, i64 {})\n{binds}  ret void\n}}",
-        names.len()
+        "define internal void @__nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n{set}  {children}\n{binds}  ret void\n}}",
+        children = runtime_call::call(
+            Site::synthetic(program, "template").with_gobject(support),
+            platform,
+            "nts_gtk_class_children",
+            &[
+                Operand::new("ptr", "%klass"),
+                Operand::new("ptr", table),
+                Operand::new("i64", names.len().to_string())
+            ]
+        )?
     );
-    Ok(format!(
-        "ptr @__nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template"
-    ))
+    Ok([
+        Operand::new("ptr", format!("@__nts_gobject_class_setup_{name}")),
+        Operand::new("ptr", "@nts_gtk_init_template"),
+    ])
 }
 
 /// Each method a template names as a signal's handler: the entry point a
@@ -446,6 +716,7 @@ fn callbacks(
     platform: Platform,
     class: &ForeignClass,
     callbacks: &[ForeignMethod],
+    support: Declarations,
 ) -> Result<String, Diagnostic> {
     let name = &class.name;
     let mut binds = String::new();
@@ -517,7 +788,17 @@ fn callbacks(
         bytes_constant(out, &format!("{shim}.name"), handler);
         let _ = writeln!(
             binds,
-            "  call void @nts_gtk_bind_callback(ptr %klass, ptr @{shim}.name, ptr @{shim})"
+            "  {}",
+            runtime_call::call(
+                Site::function(compiled).with_gobject(support),
+                platform,
+                "nts_gtk_bind_callback",
+                &[
+                    Operand::new("ptr", "%klass"),
+                    Operand::new("ptr", format!("@{shim}.name")),
+                    Operand::new("ptr", format!("@{shim}"))
+                ]
+            )?
         );
     }
     Ok(binds)
@@ -525,7 +806,12 @@ fn callbacks(
 
 /// Each `nts_gobject_child_{Class}_{index}` the program calls, defined as
 /// `gtk_widget_get_template_child` by the child's id, which lends it.
-fn children(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
+fn children(
+    program: &Program,
+    func: &Func,
+    platform: Platform,
+    support: Declarations,
+) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
@@ -557,7 +843,7 @@ fn children(program: &Program, func: &Func, platform: Platform) -> Result<String
             continue;
         };
         if done.len() == 1 {
-            out.push_str("declare ptr @nts_gtk_template_child(ptr, i64, ptr)\n");
+            support.declare(&mut out, Support::TemplateChild);
         }
         let type_symbol = program.class_gtype(class).ok_or_else(|| {
             refuse(
@@ -571,7 +857,17 @@ fn children(program: &Program, func: &Func, platform: Platform) -> Result<String
             runtime_call::external(Site::function(func), platform, type_symbol, "i64", &[])?;
         let _ = writeln!(
             out,
-            "define ptr @{thunk}(ptr %self) nounwind {{\n  %type = {type_call}\n  %child = call ptr @nts_gtk_template_child(ptr %self, i64 %type, ptr @{thunk}.id)\n  ret ptr %child\n}}"
+            "define ptr @{thunk}(ptr %self) nounwind {{\n  %type = {type_call}\n  %child = {child_call}\n  ret ptr %child\n}}",
+            child_call = runtime_call::call(
+                Site::function(func).with_gobject(support),
+                platform,
+                "nts_gtk_template_child",
+                &[
+                    Operand::new("ptr", "%self"),
+                    Operand::new("i64", "%type"),
+                    Operand::new("ptr", format!("@{thunk}.id"))
+                ]
+            )?
         );
     }
     Ok(out)
@@ -579,7 +875,13 @@ fn children(program: &Program, func: &Func, platform: Platform) -> Result<String
 
 /// The calls adding a class's signals to its `GType` (`%made`), one per
 /// signal, with the constants they name written to `out`.
-fn registrations(out: &mut String, class: &ForeignClass) -> String {
+fn registrations(
+    out: &mut String,
+    program: &Program,
+    platform: Platform,
+    class: &ForeignClass,
+    support: Declarations,
+) -> Result<String, Diagnostic> {
     let name = &class.name;
     let mut calls = String::new();
     for (at, signal) in class.signals.iter().enumerate() {
@@ -595,10 +897,20 @@ fn registrations(out: &mut String, class: &ForeignClass) -> String {
         );
         let _ = writeln!(
             calls,
-            "  call i32 @nts_gobject_add_signal(i64 %made, ptr @__nts_gobject_signal_{name}_{at}, ptr @__nts_gobject_kinds_{name}_{at})"
+            "  {}",
+            runtime_call::call(
+                Site::synthetic(program, "registrations").with_gobject(support),
+                platform,
+                "nts_gobject_add_signal",
+                &[
+                    Operand::new("i64", "%made"),
+                    Operand::new("ptr", format!("@__nts_gobject_signal_{name}_{at}")),
+                    Operand::new("ptr", format!("@__nts_gobject_kinds_{name}_{at}"))
+                ]
+            )?
         );
     }
-    calls
+    Ok(calls)
 }
 
 /// A class's properties as the runtime's `get_property` and `set_property`
@@ -690,7 +1002,12 @@ fn properties(
 /// Each `nts_gobject_notify_{Class}_{index}` the program calls -- a write of
 /// a property's field -- defined as `g_object_notify_by_pspec` with the
 /// property's spec, found once and kept.
-fn notifies(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
+fn notifies(
+    program: &Program,
+    func: &Func,
+    platform: Platform,
+    support: Declarations,
+) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
@@ -711,7 +1028,8 @@ fn notifies(program: &Program, func: &Func, platform: Platform) -> Result<String
             continue;
         };
         if done.len() == 1 {
-            out.push_str("declare ptr @nts_gobject_property_spec(i64, i32)\ndeclare void @g_object_notify_by_pspec(ptr, ptr)\n");
+            support.declare(&mut out, Support::PropertySpec);
+            out.push_str("declare void @g_object_notify_by_pspec(ptr, ptr)\n");
         }
         let type_symbol = program.class_gtype(class).ok_or_else(|| {
             refuse(
@@ -727,10 +1045,19 @@ fn notifies(program: &Program, func: &Func, platform: Platform) -> Result<String
             "@{thunk}.spec = internal global ptr null\n\
              define void @{thunk}(ptr %self) nounwind {{\nentry:\n\
              \x20 %kept = load ptr, ptr @{thunk}.spec\n  %none = icmp eq ptr %kept, null\n  br i1 %none, label %find, label %have\n\
-             find:\n  %type = {type_call}\n  %found = call ptr @nts_gobject_property_spec(i64 %type, i32 {index})\n\
+             find:\n  %type = {type_call}\n  %found = {spec_call}\n\
              \x20 store ptr %found, ptr @{thunk}.spec\n  br label %have\n\
              have:\n  %spec = phi ptr [ %kept, %entry ], [ %found, %find ]\n\
-             \x20 call void @g_object_notify_by_pspec(ptr %self, ptr %spec)\n  ret void\n}}"
+             \x20 call void @g_object_notify_by_pspec(ptr %self, ptr %spec)\n  ret void\n}}",
+            spec_call = runtime_call::call(
+                Site::function(func).with_gobject(support),
+                platform,
+                "nts_gobject_property_spec",
+                &[
+                    Operand::new("i64", "%type"),
+                    Operand::new("i32", index.to_string())
+                ]
+            )?
         );
     }
     Ok(out)
@@ -763,7 +1090,11 @@ fn bytes_constant(out: &mut String, name: &str, value: &str) {
 /// `nts_gobject_signal_id` finds on the instance's type once and keeps in
 /// the thunk's cache. `g_signal_emit` is variadic, and C promotes what it
 /// passes there: a `bool` is widened to the `int` a `gboolean` is.
-fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
+fn emits(
+    program: &Program,
+    platform: Platform,
+    support: Declarations,
+) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for (func, target) in program
@@ -784,7 +1115,8 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
             continue;
         };
         if done.len() == 1 {
-            out.push_str("declare i32 @nts_gobject_signal_id(ptr, ptr, ptr)\ndeclare void @g_signal_emit(ptr, i32, i32, ...)\n");
+            support.declare(&mut out, Support::SignalId);
+            out.push_str("declare void @g_signal_emit(ptr, i32, i32, ...)\n");
         }
         let thunk = program.native_name(target);
         bytes_constant(&mut out, &format!("{thunk}.name"), signal);
@@ -830,10 +1162,20 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
             out,
             "@{thunk}.cache = internal global [2 x i64] zeroinitializer\n\
              define {returns} @{thunk}({}) nounwind {{\nentry:\n{slot}\
-             \x20 %id = call i32 @nts_gobject_signal_id(ptr %a0, ptr @{thunk}.name, ptr @{thunk}.cache)\n\
+             \x20 %id = {id_call}\n\
              {body}\
              \x20 call void (ptr, i32, i32, ...) @g_signal_emit(ptr %a0, i32 %id, i32 0{rest})\n{answer}}}",
-            parameters.join(", ")
+            parameters.join(", "),
+            id_call = runtime_call::call(
+                Site::function(func).with_gobject(support),
+                platform,
+                "nts_gobject_signal_id",
+                &[
+                    Operand::new("ptr", "%a0"),
+                    Operand::new("ptr", format!("@{thunk}.name")),
+                    Operand::new("ptr", format!("@{thunk}.cache"))
+                ]
+            )?
         );
     }
     Ok(out)
@@ -985,6 +1327,7 @@ fn chains(
     program: &Program,
     platform: Platform,
     parents: &mut std::collections::BTreeSet<String>,
+    support: Declarations,
 ) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
@@ -1003,7 +1346,7 @@ fn chains(
             continue;
         }
         if done.len() == 1 {
-            out.push_str("declare ptr @nts_gobject_parent_slot(i64, i64)\n");
+            support.declare(&mut out, Support::ParentSlot);
         }
         let Some(GObjectThunk::Chain {
             class,
@@ -1060,9 +1403,18 @@ fn chains(
             runtime_call::external(Site::function(func), platform, parent, "i64", &[])?;
         let _ = writeln!(
             out,
-            "define {returns} @{}({}) nounwind {{\nentry:\n  %parent = {parent_call}\n  %slot = call ptr @nts_gobject_parent_slot(i64 %parent, i64 {offset})\n  %none = icmp eq ptr %slot, null\n  br i1 %none, label %skip, label %call\ncall:",
+            "define {returns} @{}({}) nounwind {{\nentry:\n  %parent = {parent_call}\n  %slot = {slot_call}\n  %none = icmp eq ptr %slot, null\n  br i1 %none, label %skip, label %call\ncall:",
             program.native_name(target),
-            parameters.join(", ")
+            parameters.join(", "),
+            slot_call = runtime_call::call(
+                Site::function(func).with_gobject(support),
+                platform,
+                "nts_gobject_parent_slot",
+                &[
+                    Operand::new("i64", "%parent"),
+                    Operand::new("i64", offset.to_string())
+                ]
+            )?
         );
         let arguments = parameters.join(", ");
         if returns == "void" {
@@ -1266,4 +1618,100 @@ fn entry_point(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn support_calls_require_their_declaration_and_check_each_argument() {
+        let program = nts_core::hir::Program::default();
+        let site = Site::synthetic(&program, "support-control");
+        for (at, known) in SUPPORT_SIGNATURES.iter().enumerate() {
+            let selected = Declarations(1 << at);
+            let scoped = site.with_gobject(selected);
+            let unselected = &SUPPORT_SIGNATURES[(at + 1) % SUPPORT_SIGNATURES.len()];
+            let error = runtime_call::call(scoped, Platform::SYSV_X86_64, unselected.name, &[])
+                .expect_err("a different support declaration is not granted");
+            assert!(error.message.contains("this program does not emit"));
+            let operands: Vec<_> = known
+                .params
+                .iter()
+                .map(|ty| Operand::new(*ty, "%v"))
+                .collect();
+            for platform in [
+                Platform::SYSV_X86_64,
+                Platform::WIN64_X86_64,
+                Platform::APPLE_ARM64,
+                Platform::LINUX_ARM64,
+                Platform::WINDOWS_ARM64,
+            ] {
+                let refused = runtime_call::call(site, platform, known.name, &operands)
+                    .expect_err("missing scope");
+                assert!(refused.message.contains(&format!(
+                    "{}, whose GObject support declaration this program does not emit",
+                    known.name
+                )));
+                let control = runtime_call::call(scoped, platform, known.name, &operands)
+                    .expect("selected declaration");
+                assert_eq!(
+                    control.strip_prefix("call ").unwrap(),
+                    format!(
+                        "{} @{}({})",
+                        known.returns,
+                        known.name,
+                        runtime_call::operands_text(&operands)
+                    )
+                );
+                assert_eq!(
+                    runtime_call::external(scoped, platform, known.name, known.returns, &operands)
+                        .unwrap(),
+                    control
+                );
+                assert!(
+                    runtime_call::external(site, platform, known.name, known.returns, &operands)
+                        .is_err()
+                );
+                for position in 0..operands.len() {
+                    let mut wrong = operands.clone();
+                    wrong[position].ty = "double".into();
+                    let error = runtime_call::call(scoped, platform, known.name, &wrong)
+                        .expect_err("wrong producer type");
+                    assert_eq!(error.code, "NTS3001");
+                    assert_eq!(
+                        error.message,
+                        format!(
+                            "runtime helper {} parameter {}: expected {}, found double (in `support-control`)",
+                            known.name,
+                            position + 1,
+                            known.params[position]
+                        )
+                    );
+                    assert!(
+                        runtime_call::external(scoped, platform, known.name, known.returns, &wrong)
+                            .is_err()
+                    );
+                    assert!(
+                        runtime_call::external_quoted(
+                            scoped,
+                            platform,
+                            known.name,
+                            known.returns,
+                            &wrong
+                        )
+                        .is_err()
+                    );
+                }
+                for spelling in [
+                    format!("@{}", known.name),
+                    format!("@\"{}\"", known.name),
+                    format!("@\"{}\"", known.name.replacen('_', "\\5F", 1)),
+                ] {
+                    assert!(DirectCallee::global(scoped, platform, spelling).is_err());
+                }
+            }
+        }
+    }
 }

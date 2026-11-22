@@ -209,6 +209,7 @@ fn runtime_names() -> std::collections::HashSet<&'static str> {
     ]
     .into_iter()
     .flat_map(nts_codegen_llvm::signatures::table)
+    .chain(nts_codegen_llvm::GOBJECT_SUPPORT_SIGNATURES)
     .map(|declaration| declaration.name)
     .collect()
 }
@@ -346,6 +347,55 @@ fn unchecked_calls<'a>(
         }
     }
     found
+}
+
+#[test]
+fn support_declarations_are_disjoint_from_every_canonical_table() {
+    let mut support = std::collections::HashSet::new();
+    for known in nts_codegen_llvm::GOBJECT_SUPPORT_SIGNATURES {
+        assert!(
+            support.insert(known.name),
+            "duplicate support name {}",
+            known.name
+        );
+        for platform in [
+            Platform::SYSV_X86_64,
+            Platform::WIN64_X86_64,
+            Platform::APPLE_ARM64,
+            Platform::LINUX_ARM64,
+            Platform::WINDOWS_ARM64,
+        ] {
+            assert!(
+                nts_codegen_llvm::signatures::signature_on(known.name, platform).is_none(),
+                "{} collides on {platform:?}",
+                known.name
+            );
+        }
+    }
+}
+
+#[test]
+fn the_source_audit_checks_support_calls_and_allows_callback_addresses() {
+    let declared = runtime_names();
+    for known in nts_codegen_llvm::GOBJECT_SUPPORT_SIGNATURES {
+        for callee in [
+            known.name.to_owned(),
+            format!("{}{{suffix}}", known.name),
+            format!(r#"\"{}\""#, known.name),
+        ] {
+            let source = format!(r#"format!("call {} @{callee}()")"#, known.returns);
+            assert!(!unchecked_calls(&source, &declared).is_empty(), "{source}");
+        }
+        let control = format!(
+            r#"runtime_call::call(site, platform, "{}", &arguments)?"#,
+            known.name
+        );
+        assert!(unchecked_calls(&control, &declared).is_empty());
+    }
+    // Passing the callback's address is data, not a call. Its typed declaration
+    // still belongs to the support set and a direct call is audited above.
+    let address = r#"Operand::new("ptr", "@nts_gtk_init_template")"#;
+    assert!(unchecked_calls(address, &declared).is_empty());
 }
 
 #[test]

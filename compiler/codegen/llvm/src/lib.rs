@@ -44,6 +44,8 @@ mod aggregate;
 mod com;
 mod entry_parameters;
 mod gobject;
+/// Product support declarations checked by the runtime-call constructor.
+pub use gobject::SUPPORT_SIGNATURES as GOBJECT_SUPPORT_SIGNATURES;
 mod indirect;
 mod native;
 mod objc;
