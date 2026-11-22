@@ -100,9 +100,9 @@ The branch was then rebased cleanly onto main `2d933c741d6043de6d989f6ae343b96a7
 
 ## Local landing proof
 
-`check.ts 6ceb9d2d45465294c385d56cb12b84d7749308d6 --here` passed in 873 seconds: the build and every selected step are green. Rust/native tests report 3161 passed, zero failures, eight intentionally ignored tests, 57 binaries and 19 doctest crates; seven native probe files have zero failures or unavailable results. The tooling suite and input census also passed.
+`check.ts 99019e6efe374a994fa4e2fd52135d87bcab9e38 --here`, the branch rebased onto #960's main, passed in 939 seconds: the build and every selected step are green. Rust/native tests report 3173 passed, zero failures, eight intentionally ignored tests, 57 binaries and 19 doctest crates. The tooling suite and input census also passed. `inner.ts --no-agree` on the same commit passed formatting, Clippy, a fresh compiler build and tests (2308 passed, zero failed). Its first attempt failed only `node_dependencies::linked_library_apis_and_process_versions_agree_with_the_pinned_node`, because that unit's `PATH` resolved node 26.13.1 ahead of the `.tool-versions` 26.13.0 shim; the rerun resolved the pinned node.
 
-The first launcher stopped at environment setup before any test because the systemd manager had no `JAVA_HOME` or `ANDROID_HOME`. The successful named unit supplied the existing login-shell SDK paths explicitly. The canonical environment retained its normal policy; no gate parallelism, floor or verdict variable was overridden. The final evidence edit only records this result and removes procedural handoff wording from the record; compiler, runtime, tooling and fixture bytes are identical to the checked commit.
+Each launcher was a named low-priority unit supplied with the login shell's `JAVA_HOME` and `ANDROID_HOME`, without which the check stops at environment setup. The canonical environment retained its normal policy; no gate parallelism, floor or verdict variable was overridden. This record's later edits are documentation only: the branch's own compiler, runtime, tooling and fixture changes are byte-identical to the checked commit. Main code that landed after the check is checked again by the landing check when the change is replayed onto it.
 
 ## Kept artifacts
 
@@ -127,13 +127,15 @@ Paths below are relative to `~/.cache/nts-scratch/900/`. The JSON audits retain 
 | `sittings/resume-20261122/stdout` | `217ce87c28c93f73f669881a6da8f3c6c366c729f4ac596b4bfcc919725e950a` |
 | `resume/oracle-diagnosis.json` | `9fdef22c8cefd36cb0ff7351dbc326d5b5a58501b7ae78ca22f0c5c31d226ee2` |
 | `resume/count-main-resume.log` | `6bf886d7541bc9012113ec412b40141dfd7a063858565e96a1ef799488085564` |
-| `resume/local-check/summary.json` | `b410464db590abb5154c1c64446e4d4347127e21b4904d6aafbce01fab5d312e` |
-| `resume/local-check/summary.tsv` | `cd4be15e2fe441923b4e1b23c20c5dc6139f513eb62c13d8dd3f3979b3e494a5` |
-| `resume/local-check/tests.log` | `78a0ac97f4b9451beedc11d50e545b10e7fe9fbaba31fea857dfc71329ab7216` |
-| `resume/local-check/tooling.log` | `e11009f40259eaa7e8dc0cee4cba58317efc4be32e7c1b6cfcdde5dbd393fa33` |
-| `resume/check-here2.log` | `ae043dda596a661855c05e325b6d8a96fbe5bd3e3b7a3f621fe73bc0bfb674cf` |
 | `rebase960/release.log` | `c5e37dc2989941583ca7011eece92d559ebaa36b6d828810436d1735b4fd31cb` |
 | `rebase960/memory.log` | `414521fad6d41f95f91bab6d0bb1e43396279f10c1ffd86630c0b1c1ecab97b1` |
 | `rebase960/rebase960-candidate-focused.json` | `8b9ff24f69bd03a0d4a2407f51d05ce8daa467774803ef4fa39d32be91030eaf` |
 | `rebase960/test262/summary.json` | `0a7cf3650a8802312682344cfb86864433fc23e0efd42d4a15ebecf6bbdf1cb3` |
 | `rebase960/proof-status.json` | `145a316146b15127d39c917d3cf0c1bd56a65e5c7f49c61cb0189b45ba3006a3` |
+| `rebase960/check-here.log` | `1a90cd49c282e6f445098c4f3fc9afdda3dba82151cb66c6c5497c6941b2625c` |
+| `rebase960/local-check/summary.json` | `0d676c000ef7ef9d259c5444a79a82a1e935c02e472064ffdcd8a43d68fbcd2a` |
+| `rebase960/local-check/summary.tsv` | `04545d73c3aefa0b14b8cf47fe74faeadc209abfc76c84f88b1e206a5e569053` |
+| `rebase960/local-check/tests.log` | `03bf5bc84ea5940e40571cf56f37b7872ea62fea0e99e6962960254a6fa2fe7a` |
+| `rebase960/local-check/tooling.log` | `cbe208ba3785eb9b99cb64c94c3bd1cc5bc5915689753e17f927958c7d404607` |
+| `rebase960/inner.log` | `25f6ed2074d9d06e10fd6f2fa8698a6e6581f600953aa20c2e52be2396241aeb` |
+| `rebase960/inner-path-26.13.1.log` | `534dc3627f220d3ddc0d5ec59d9ab5aa1ec640dedb62dacb6701f8ce4a2bf376` |
