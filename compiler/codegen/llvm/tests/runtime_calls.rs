@@ -205,7 +205,7 @@ fn erased_runtime_arguments_match_each_targets_abi() {
     std::fs::write(
         dir.join("control.c"),
         r"
-        typedef struct { int tag; unsigned long long bits; } NtsValue;
+        typedef struct { unsigned int tag; unsigned long long bits; } NtsValue;
         extern _Bool nts_value_truthy_fn(NtsValue);
         _Bool control(const NtsValue *value) { return nts_value_truthy_fn(*value); }
     ",
@@ -231,14 +231,25 @@ fn erased_runtime_arguments_match_each_targets_abi() {
             String::from_utf8_lossy(&output.stderr)
         );
         let assembly = String::from_utf8(output.stdout).unwrap();
-        let compact: String = assembly.chars().filter(|ch| !ch.is_whitespace()).collect();
+        let instructions: Vec<String> = assembly
+            .lines()
+            .map(|line| line.chars().filter(|ch| !ch.is_whitespace()).collect())
+            .collect();
+        let call = instructions
+            .iter()
+            .position(|line| line == "bnts_value_truthy_fn" || line == "blnts_value_truthy_fn")
+            .unwrap_or_else(|| panic!("{input}: no truthy call:\n{assembly}"));
+        let setup = &instructions[call.saturating_sub(3)..call];
+        // C copies the padding with ldp; the LLVM adapter zero-extends the
+        // 32-bit tag with ldr w0. Both pass the value in x0/x1, never its address.
+        let pair = setup.iter().any(|line| line.starts_with("ldpx0,x1,"));
+        let tag = setup
+            .iter()
+            .any(|line| line.starts_with("ldrw0,") || line.starts_with("ldrx0,"));
+        let payload = setup.iter().any(|line| line.starts_with("ldrx1,"));
         assert!(
-            compact.contains("ldpx0,x1,"),
+            pair || (tag && payload),
             "{input}: the erased value must occupy x0/x1:\n{assembly}"
-        );
-        assert!(
-            compact.contains("bnts_value_truthy_fn") || compact.contains("blnts_value_truthy_fn"),
-            "{input}: {assembly}"
         );
     }
 }

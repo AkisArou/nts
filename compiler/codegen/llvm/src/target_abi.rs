@@ -72,7 +72,18 @@ mod tests {
                 ),
             };
             assert_eq!(RuntimeAbi::of(platform), abi);
-            assert!(std::ptr::eq(crate::signatures::table(platform), table));
+            let selected = crate::signatures::table(platform);
+            assert_eq!(selected.len(), table.len(), "{abi:?}");
+            for (actual, expected) in selected.iter().zip(table) {
+                assert_eq!(actual.name, expected.name, "{abi:?}");
+                assert_eq!(actual.returns, expected.returns, "{abi:?}: {}", actual.name);
+                assert_eq!(actual.params, expected.params, "{abi:?}: {}", actual.name);
+                assert_eq!(
+                    actual.attributes, expected.attributes,
+                    "{abi:?}: {}",
+                    actual.name
+                );
+            }
             assert_eq!(crate::indirect::applies(platform), indirect);
             let signature = crate::signatures::signature_on("nts_value_truthy_fn", platform)
                 .expect("erased argument declaration");
