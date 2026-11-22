@@ -253,8 +253,10 @@ impl<'a> Graph<'a> {
         if targets.is_empty() || casts.erased.is_empty() {
             return;
         }
-        let erasable: Vec<bool> = if casts.erased.contains(&None) {
-            vec![true; count]
+        // The erasable layouts, ascending, listed once: each target filters
+        // this list, so the work is targets times erasable layouts.
+        let erasable: Vec<usize> = if casts.erased.contains(&None) {
+            (0..count).collect()
         } else {
             let mut seen = vec![false; self.edges.len()];
             let mut work: Vec<usize> = casts.erased.iter().flatten().map(|at| count + at).collect();
@@ -268,7 +270,7 @@ impl<'a> Graph<'a> {
                     }
                 }
             }
-            seen[count..2 * count].to_vec()
+            (0..count).filter(|&at| seen[count + at]).collect()
         };
         // Who supplies each member, ascending by layout so a membership test
         // is a binary search: as a field, by member identity, and as an owner
@@ -300,8 +302,10 @@ impl<'a> Graph<'a> {
         }
         let none: &[usize] = &[];
         for target in targets {
-            let mut candidates: Vec<usize> = (0..count)
-                .filter(|&at| at != target && erasable[at])
+            let mut candidates: Vec<usize> = erasable
+                .iter()
+                .copied()
+                .filter(|&at| at != target)
                 .collect();
             for field in program.layouts[target]
                 .fields

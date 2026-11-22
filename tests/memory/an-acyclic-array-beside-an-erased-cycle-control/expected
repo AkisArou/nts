@@ -1,0 +1,18 @@
+ideal 17
+allocated 7
+candidates 1
+because The control for `an-acyclic-array-beside-an-erased-cycle`, with one
+because change: `Knot` also holds `w`, after `next`. A `Knot` can then be read
+because as a `Weighted` through the interface's family, so an unerase to
+because `Weighted` can produce the erased cyclic `Knot`, `Weighted[]` keeps the
+because cyclic descriptor, and `kept.items = second` releasing `first` from 2 to
+because 1 buffers it: one candidate, on the compiler before #926 and after.
+because
+because Allocations, seven, as in the case: the parked `{ w }`, two arrays, their
+because first elements, `first`'s grown storage and the `Holder`.
+because
+because The thirteen operations of the case, and four more for the family read
+because the `Knot` makes necessary: `first[0].w` now dispatches on the
+because receiver's layout, so the element is retained across that call and
+because released after it, and the erased view the dispatch tests is retained
+because and released around the test.

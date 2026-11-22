@@ -1,0 +1,25 @@
+ideal 13
+allocated 7
+candidates 0
+because `Weighted[]`, released above zero, is not offered to the collector:
+because its element holds a number, and the erased cyclic `Knot` holds no
+because `w`, so no unerase can put one in a `Weighted` slot (#926). Before, every
+because type erased anywhere paired with every type unerased anywhere, the
+because array got the cyclic descriptor, and this case counted one candidate:
+because `kept.items = second` releasing `first` from 2 to 1.
+because
+because Allocations, seven: the `{ w }` parked in the global, the two arrays and
+because their first elements, the storage `first` grows into on its push, and
+because the `Holder`. The `Knot` is made only on a path that never runs.
+because
+because Retains, three: the global taking the parked `{ w }`, `first` taking it
+because as an element, and the `Holder` taking `first` while its local still
+because holds it.
+because
+because Releases, ten: the local `{ w }` once the global holds it; the global
+because `kept`'s previous value, which nothing proves null; `first`, replaced in
+because the `Holder` -- the release this case is about; `first` again at its
+because last read, which frees it and its two elements; the `Holder` as `kept`
+because is cleared, its `items` (`second`) as it frees, and `second`'s element;
+because and the parked `{ w }` as `parked` is cleared, which frees it. Clearing a
+because global that held null releases nothing.
