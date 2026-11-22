@@ -79,6 +79,7 @@ export function projectObservationCapture(root:string){
   const capture=readerObservationCapture(root),facts=new Map<string,CapturedReaderObservation>();
   const descriptors=new Map<string,object>(),identities=new WeakMap<object,{key:string;value:object}>();
   const causes=new Map<string,ReaderObservation['causes'][number]>();
+  const causeMembers=new Map<CapturedReaderObservation,Set<ReaderObservation['causes'][number]>>();
   let closed=false;
   function descriptor<T extends object>(input:T):{key:string;value:T}{
     const previous=identities.get(input);if(previous)return previous as {key:string;value:T};
@@ -93,11 +94,12 @@ export function projectObservationCapture(root:string){
       if(!sameOracleObservation(retained.observation.value,row.observation.value))throw Error('project observation changed during capture: '+row.observation.kind+' '+row.observation.path);
     }else{
       retained={observation:structuredClone(row.observation),causes:[],...(capability?{capability:capability.value}:{}),...(environment?{environment:environment.value}:{}),...(dependency?{dependency:dependency.value}:{}),...(row.selectorOnly?{selectorOnly:true as const}:{}),...(row.observationOnly?{observationOnly:true as const}:{})};
-      facts.set(key,retained);
+      facts.set(key,retained);causeMembers.set(retained,new Set());
     }
+    const members=causeMembers.get(retained)!;
     for(const cause of row.causes){
       const key=JSON.stringify(cause);let shared=causes.get(key);if(!shared){shared={...cause};causes.set(key,shared);}
-      if(!retained.causes.some(previous=>previous===shared))retained.causes.push(shared);
+      if(!members.has(shared)){members.add(shared);retained.causes.push(shared);}
     }
     if(!row.observationOnly)delete retained.observationOnly;
   }
