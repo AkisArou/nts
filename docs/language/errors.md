@@ -172,6 +172,9 @@ from them on demand ([Decisions](#decisions)).
   no getter or coercion and keeps no separate promise-side message. Capture,
   cell, frame and box storage fields are not object properties
   ([log](../records/notebooks/decisions-log.md#stored-callbacks-and-rejected-message-objects-11-21)).
+  Uncaught lowering leaves that read to the runtime so the original reference
+  can move into the thrown value
+  ([log](../records/notebooks/decisions-log.md#uncaught-messages-come-from-the-handed-over-value-11-23)).
 - An exception that escapes a callback a host invokes is the program's
   uncaught error, handled per target as the table above states, and never
   unwinds through the host's frames (10-27, on the user's delegation,

@@ -1,5 +1,5 @@
 //! Synchronous throws use the value's fixed message projection on every backend.
-pub const CASES: &[(&str, &str)] = &[
+pub(crate) const CASES: &[(&str, &str)] = &[
     (
         "class SourceError extends Error {constructor(message:string){super(message)}} throw new SourceError('kept');",
         "nts: uncaught SourceError: kept\n",
