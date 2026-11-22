@@ -1207,8 +1207,9 @@ the tooling strict checker owns the source's type checking.
   whole profile generations, clean unbuilt pool checkouts, then free pool build
   output while keeping two compatible warm targets, then held trees' Cargo `target/`
   whose workers are explicitly detached, oldest detachment first. This last
-  kind runs only under pressure, never from elapsed idleness. Free targets
-  containing unknown siblings offer their recognized Cargo profiles separately:
+  kind runs only under pressure, never from elapsed idleness. Free and
+  detached held targets containing unknown siblings offer their recognized
+  Cargo profiles separately:
   a Cargo cache tag or a validated owner completion marker proves the profile.
   Unknown siblings remain by path, with their writer where known; they cannot
   veto removal of an independently proven profile. Each profile removal holds
@@ -1217,8 +1218,10 @@ the tooling strict checker owns the source's type checking.
   refusals include their removal and retention decisions, including the warm
   minimum. The hourly count reports retained target siblings by path and
   known writer without granting deletion. Held target removal preserves
-  branches, commits and uncommitted work outside `target/`, and requires Cargo
-  cache identity, recognized build contents and no tracked target files.
+  branches, commits and uncommitted work outside `target/`. Its whole-target
+  grant requires Cargo cache identity, recognized build contents and no tracked
+  target files; each independent profile grant requires its own provenance
+  and no tracked files inside that profile.
   The landing and full-check trees offer
   only obsolete generations, never their current build output. Unknown or corrupt
   generation markers keep the candidate. A removed checkout must be Git-detached, clean,

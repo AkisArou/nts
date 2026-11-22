@@ -247,6 +247,21 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const add=(target:ReclaimTarget,root:string,kind:ReclaimKind,movedAt:number,branch?:string):void=>{
     candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,target:target.target,movedAt,...(branch?{branch}:{})});
   };
+  const offerBuildOutput=(target:ReclaimTarget,kind:'free-build-output'|'detached-build-output',movedAt:number,branch?:string):void=>{
+    const leftovers=targetLeftovers(target.tree),cache=cargoCache(target.target);
+    for(const row of leftovers)keep(row.root,'unrecognized target content; writer: '+row.writer,true);
+    if(!leftovers.length&&cache)add(target,target.target,kind,movedAt,branch);
+    else for(const name of cargoProfiles){
+      if(name==='debug'&&kind==='free-build-output')continue; // The obsolete-profile owner already offered it.
+      const output=join(target.target,name);
+      if(!isDirectory(output))continue;
+      // A successful owner marker proves the profile even where older
+      // writers omitted the top-level Cargo tag. Unknown siblings survive.
+      const proven=cache||((name==='nts-dev'||name==='clippy')&&marker(output,name)!=='unknown');
+      if(proven)add(target,output,kind,movedAt,branch);
+      else keep(output,'profile has neither Cargo cache identity nor a completion marker');
+    }
+  };
   for(const target of [...poolTargets,...options.services]){
     const start=candidates.length;
     try{
@@ -255,7 +270,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       if(branch){
         // An explicit detached worker lease offers only Cargo output, never
         // the checkout, its branch, or any work left in it. No upkeep eviction.
-        if(report.triggered&&isDirectory(target.target))add(target,target.target,'detached-build-output',detached(target.tree,branch),branch);
+        if(report.triggered&&isDirectory(target.target))offerBuildOutput(target,'detached-build-output',detached(target.tree,branch),branch);
         else keep(target.tree,new TaskBranch('branch remains owned: '+branch));
         continue;
       }
@@ -270,21 +285,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       // debug is the retired top-level test profile, never clippy/debug.
       if(isDirectory(join(target.target,'debug')))add(target,join(target.target,'debug'),'obsolete-profile',movedAt);
       for(const name of ['nts-dev','clippy'] as const)if(isDirectory(join(target.target,name))&&marker(join(target.target,name),name)==='obsolete')add(target,join(target.target,name),'obsolete-profile',movedAt);
-      if(!target.service){
-        const leftovers=targetLeftovers(target.tree),cache=cargoCache(target.target);
-        for(const row of leftovers)keep(row.root,'unrecognized target content; writer: '+row.writer,true);
-        if(!leftovers.length&&cache)add(target,target.target,'free-build-output',movedAt);
-        else for(const name of cargoProfiles){
-          if(name==='debug')continue; // The obsolete-profile owner already offered it.
-          const output=join(target.target,name);
-          if(!isDirectory(output))continue;
-          // A successful owner marker proves the profile even where older
-          // writers omitted the top-level Cargo tag. Unknown siblings survive.
-          const proven=cache||((name==='nts-dev'||name==='clippy')&&marker(output,name)!=='unknown');
-          if(proven)add(target,output,'free-build-output',movedAt);
-          else keep(output,'profile has neither Cargo cache identity nor a completion marker');
-        }
-      }
+      if(!target.service)offerBuildOutput(target,'free-build-output',movedAt);
     }catch(error){candidates.length=start;if(!missing(error))keep(target.tree,error);}
   }
   // Keep two useful free targets. Stale markers and mere empty folders cannot
@@ -321,7 +322,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
           if(!lstatSync(join(tree,path)).isSymbolicLink()||realpathSync(join(tree,path))!==realpathSync(join(pool.git.root,path)))throw Error('ignored local data: '+path);
         }
         if(existsSync(join(tree,'target')))throw Error('checkout acquired build output');
-      }else if(kind==='free-build-output'&&root!==candidate.target){
+      }else if((kind==='free-build-output'||kind==='detached-build-output')&&root!==candidate.target){
         const name=basename(root);
         if(dirname(root)!==candidate.target||!cargoProfiles.some(profile=>profile===name))throw Error('unrecognized Cargo profile');
         if(gitRead(pool.git,['ls-files','--','target/'+name],tree))throw Error('tracked target content');
@@ -344,7 +345,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       if(candidate.branch)detached(tree,candidate.branch);
       assertUnclaimed(root);
       sameRoot(candidate.identity);
-      if(kind==='free-build-output'&&root!==candidate.target){
+      if((kind==='free-build-output'||kind==='detached-build-output')&&root!==candidate.target){
         const name=basename(root);
         if(gitRead(pool.git,['ls-files','--','target/'+name],tree))throw Error('tracked target content');
         const completed=(name==='nts-dev'||name==='clippy')&&marker(root,name)!=='unknown';
