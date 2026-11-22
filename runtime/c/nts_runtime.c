@@ -1328,11 +1328,6 @@ static void nts_call_foreign_release(void (*release)(void *), void *object) {
  * finds nothing to give up twice. */
 static void nts_release_foreign(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
-  /* A layout that names its own: no table to ask. */
-  if (descriptor->release_foreign) {
-    descriptor->release_foreign(object);
-    return;
-  }
   /* The handles its erased slots hold. `nts_each_reference` visits managed
    * references only, and a handle is not one: a container's own death gives
    * them back here, where the typed foreign slots are. A box used to be
@@ -1368,18 +1363,29 @@ static void nts_release_foreign(NtsHeader *object) {
  * Maps hold tags in implicit columns; foreign arrays have an implicit family
  * slot. Keep those on the existing protocol even without erased fields. */
 static bool nts_has_foreign_contents(const NtsDescriptor *descriptor) {
-  return descriptor->release_foreign || descriptor->erased ||
-         descriptor->foreign || descriptor->kind == NTS_KIND_MAP ||
+  return descriptor->erased || descriptor->foreign ||
+         descriptor->kind == NTS_KIND_MAP ||
          (descriptor->kind == NTS_KIND_ARRAY &&
           descriptor->element == NTS_ARRAY_FOREIGN);
+}
+
+/* Give up an object's foreign contents: through its layout's own function
+ * where the descriptor names one (`release_foreign`), else through the walk
+ * where it can hold any. Inline, so a layout that names its own pays one test
+ * and one call where it is freed, and none of the walk's setup. */
+static inline void nts_give_up_foreign(NtsHeader *object) {
+  const NtsDescriptor *descriptor = object->descriptor;
+  if (descriptor->release_foreign) {
+    descriptor->release_foreign(object);
+  } else if (nts_has_foreign_contents(descriptor)) {
+    nts_release_foreign(object);
+  }
 }
 
 /* Reclaim an object: what hangs off it, then the block itself. */
 static void nts_free(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
-  if (nts_has_foreign_contents(descriptor)) {
-    nts_release_foreign(object);
-  }
+  nts_give_up_foreign(object);
   /* These layouts keep all storage in their own block. Other kinds retain
    * their existing backing-store/finalizer dispatch. */
   if (descriptor->kind != NTS_KIND_OBJECT &&
@@ -2023,9 +2029,7 @@ static void nts_destroy(NtsHeader *object) {
        * back twice. The count word is a count again, zero; `NTS_DYING` stays,
        * and with `NTS_BUFFERED` beside it that pair is the shell's mark --
        * nothing else ever carries both. */
-      if (nts_has_foreign_contents(dead->descriptor)) {
-        nts_release_foreign(dead);
-      }
+      nts_give_up_foreign(dead);
       dead->reserved = 0;
       continue;
     }
