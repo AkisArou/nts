@@ -1957,7 +1957,8 @@ death; an absent timestamp remains explicit after forced termination.
   returning. The scoped callback closes when its body returns, and its query
   answers clear on success or failure. Endpoint views cannot share answers
   through relative config names. Standalone descriptions retain fresh reads
-  ([log](records/notebooks/decisions-log.md#project-reads-belong-to-one-selection-run-11-18)).
+  ([scope log](records/notebooks/decisions-log.md#project-reads-belong-to-one-selection-run-11-18),
+  [identity log](records/notebooks/decisions-log.md#program-transactions-produce-reader-identities-once-11-22)).
 
 - **Rust publication belongs to one owner.** `nts-publication` stages files,
   links and immutable directories in an exclusively acquired sibling claim
@@ -2320,11 +2321,11 @@ death; an absent timestamp remains explicit after forced termination.
   witness genuine ancestor config absences outside the source; a positive
   external config refuses. Type-check-only inputs keep their declared config.
   Within a snapshot, each reader and namespace context composes the detached
-  observations produced by its Program transactions. Equal answers retain the union of their causes;
-  conflicting answers refuse. Typed facts share a detached authority descriptor
+  observations produced by its Program transactions. Equal answers retain the
+  union of their causes; conflicting answers refuse. Typed facts share a detached authority descriptor
   only when it is identical; different authority or Program provenance retains
-  separate rows and validation. No Program answer survives its graph scope. The producer
-  canonically orders capture owners, requests and role bags, and consumes
+  separate rows and validation. No Program answer survives its graph scope.
+  The producer canonically orders capture owners, requests and role bags, and consumes
   snapshots in Cargo inventory order. The codec retains its ordered byte
   contract; verification still requires exact output from that producer
   ([alias log](records/notebooks/decisions-log.md#matched-source-deletions-use-committed-alias-identities-11-19),
