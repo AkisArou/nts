@@ -148,20 +148,26 @@ fn the_receiver_is_in_the_frame() {
         .iter()
         .map(|field| field.name.clone())
         .collect();
+    // Two fixed fields, not three: its one `await` is of `this.scaled`, which
+    // settles inside the call (`hir::settled`), so no promise is ever kept in
+    // an `awaited` slot.
     assert_eq!(
-        &names[..3],
+        &names[..2],
         &[
             hir::suspend::FrameField::State.key(),
             hir::suspend::FrameField::Result.key(),
-            hir::suspend::FrameField::Awaited.key(),
         ],
-        "the three fixed fields come first",
+        "the fixed fields come first",
+    );
+    assert!(
+        !names.contains(&hir::suspend::FrameField::Awaited.key()),
+        "and nothing is awaited through a promise: {names:?}",
     );
     assert!(
         frame
             .fields
             .iter()
-            .skip(3)
+            .skip(2)
             .any(|field| matches!(field.ty, hir::HirType::Managed(ManagedType::Object(_)))),
         "and the receiver is a parameter field among the rest: {names:?}",
     );
@@ -170,7 +176,7 @@ fn the_receiver_is_in_the_frame() {
 /// A `static` async method has no receiver, and its frame does not invent one.
 ///
 /// The other half of the parameter question. `Statics.viaAnother` takes one
-/// number, so its frame holds the three fixed fields, exactly one parameter
+/// number, so its frame holds the fixed fields, exactly one parameter
 /// and the value it awaits -- a `this` would mean the receiver had been
 /// counted for a method that has none, which is the mirror of losing it for
 /// one that does.
@@ -193,13 +199,14 @@ fn a_static_async_method_has_no_receiver_in_its_frame() {
         .iter()
         .filter_map(|field| field.name.public_name())
         .collect();
-    // The fifth is the awaited value: `Statics.doubled` settles inside the
+    // The fourth is the awaited value: `Statics.doubled` settles inside the
     // call, so the frame keeps its number rather than a promise to read it
-    // from (`hir::settled`). It is a spill, with no public name.
+    // from (`hir::settled`), and has no `awaited` slot. It is a spill, with no
+    // public name.
     assert_eq!(
         frame.fields.len(),
-        5,
-        "state, result, awaited, the one declared parameter and the settled value: {named:?}",
+        4,
+        "state, result, the one declared parameter and the settled value: {named:?}",
     );
     assert!(named.contains(&"n"), "the parameter: {named:?}");
     assert!(!named.contains(&"this"), "no receiver: {named:?}");

@@ -108,7 +108,12 @@ pub const FIELD_YIELDED: u32 = 1;
 /// resumption returns *done*, to the caller that is still standing there.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
-    Async,
+    /// `awaits`: whether any `await` in it waits on a promise. One whose every
+    /// `await` takes a value in hand ([`super::settled`]) has nothing to keep
+    /// in an `awaited` slot, so its frame has none.
+    Async {
+        awaits: bool,
+    },
     Generator,
     /// `async function*`: both protocols, in one frame.
     ///
@@ -132,7 +137,9 @@ impl Mode {
     /// How many fields sit before the parameters.
     fn fixed(self) -> u32 {
         match self {
-            Self::Async => FIXED_FIELDS,
+            Self::Async { awaits: true } => FIXED_FIELDS,
+            // `state` and `result`: no promise is ever awaited.
+            Self::Async { awaits: false } => FIXED_FIELDS - 1,
             // `state` and `yielded`, and nothing else.
             Self::Generator => 2,
             // `state`, `yielded`, `awaited`, `result`.
@@ -150,7 +157,7 @@ impl Mode {
     /// the two it cannot displace.
     fn result(self) -> Option<u32> {
         match self {
-            Self::Async => Some(FIELD_RESULT),
+            Self::Async { .. } => Some(FIELD_RESULT),
             Self::Generator => None,
             Self::AsyncGenerator => Some(FIELD_STEP_RESULT),
         }
@@ -159,14 +166,14 @@ impl Mode {
     /// Where the thing most recently awaited lives.
     fn awaited(self) -> Option<u32> {
         match self {
-            Self::Async | Self::AsyncGenerator => Some(FIELD_AWAITED),
-            Self::Generator => None,
+            Self::Async { awaits: true } | Self::AsyncGenerator => Some(FIELD_AWAITED),
+            Self::Async { awaits: false } | Self::Generator => None,
         }
     }
 
     /// Whether this mode's resumption answers its caller or settles a promise.
     fn settles(self) -> bool {
-        matches!(self, Self::Async | Self::AsyncGenerator)
+        matches!(self, Self::Async { .. } | Self::AsyncGenerator)
     }
 }
 
@@ -702,10 +709,15 @@ fn rewrite(
     let mode = match generator.map(|frame| frame.kind) {
         Some(super::GeneratorKind::Sync) => Mode::Generator,
         Some(super::GeneratorKind::Async) => Mode::AsyncGenerator,
-        None => Mode::Async,
+        None => Mode::Async {
+            awaits: points.iter().any(|(_, _, value)| {
+                matches!(func.values[value.0 as usize].kind, OpKind::Await { .. })
+                    && !settled.contains(value)
+            }),
+        },
     };
     let result = match mode {
-        Mode::Async => Some(
+        Mode::Async { .. } => Some(
             func.async_result
                 .ok_or_else(|| refuse(func, "an `await` outside an `async` function"))?,
         ),
@@ -925,7 +937,7 @@ fn entry_function(
     let zero = build.constant(0);
     build.set(frame, FIELD_STATE, zero);
 
-    if mode == Mode::Async {
+    if matches!(mode, Mode::Async { .. }) {
         let promise = build.push(
             OpKind::Call {
                 callee: super::Callee::External("nts_promise_new".to_owned()),
@@ -960,7 +972,7 @@ fn entry_function(
     // generator's resumption does not give it back the way the `async` one
     // does.
     let handed_back = match mode {
-        Mode::Async => {
+        Mode::Async { .. } => {
             build.push(OpKind::Retain(frame), HirType::Void);
             build.push(
                 OpKind::Call {
@@ -1245,26 +1257,32 @@ fn frame_fields(
     yields: Option<&HirType>,
 ) -> Vec<Field> {
     let mut fields = match mode {
-        Mode::Async => vec![
-            state_field(),
-            Field {
-                name: FrameField::Result.key(),
-                ty: func.return_type.clone(),
-                readonly: false,
-                declared_by: None,
-                written: None,
-            },
-            Field {
-                name: FrameField::Awaited.key(),
-                // Whatever was most recently awaited. The payload varies between
-                // suspension points, and the *reader* knows which it is because the
-                // resume block was generated beside the `await` that set it.
-                ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
-                readonly: false,
-                declared_by: None,
-                written: None,
-            },
-        ],
+        Mode::Async { awaits } => {
+            let mut fields = vec![
+                state_field(),
+                Field {
+                    name: FrameField::Result.key(),
+                    ty: func.return_type.clone(),
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                },
+            ];
+            if awaits {
+                fields.push(Field {
+                    name: FrameField::Awaited.key(),
+                    // Whatever was most recently awaited. The payload varies
+                    // between suspension points, and the *reader* knows which it
+                    // is because the resume block was generated beside the
+                    // `await` that set it.
+                    ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                });
+            }
+            fields
+        }
         Mode::Generator => generator_prefix(yields.unwrap_or(&HirType::Void)),
         // The generator prefix **first**, unchanged, and the async fields after
         // it. That order is the whole of why an async generator can be walked
@@ -1504,7 +1522,7 @@ fn complete_generator(
     terminator: Terminator,
     mode: Mode,
 ) -> Terminator {
-    if mode == Mode::Async || !matches!(terminator, Terminator::Return(_)) {
+    if matches!(mode, Mode::Async { .. }) || !matches!(terminator, Terminator::Return(_)) {
         return terminator;
     }
     let completed = build.constant(-1);
@@ -1518,7 +1536,7 @@ fn complete_generator(
             settle_step(build, frame, mode, true);
             Terminator::Return(None)
         }
-        Mode::Async => unreachable!("async returns are unchanged"),
+        Mode::Async { .. } => unreachable!("async returns are unchanged"),
     }
 }
 
@@ -1542,6 +1560,17 @@ fn pause(
         // The value is in its frame slot already, stored where it was made
         // (`carry`); only the state and the resumption are left to write.
         OpKind::Await { .. } if in_hand => {
+            // A frame that also waits on promises keeps the last one in
+            // `awaited` until something overwrites it; this suspension waits on
+            // none, so it gives that one back now rather than carry it through
+            // a turn that never reads it.
+            if let Some(slot) = mode.awaited() {
+                let none = build.push(
+                    OpKind::ConstNull,
+                    HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+                );
+                build.set(frame, slot, none);
+            }
             let marker = build.constant(marker);
             build.set(frame, FIELD_STATE, marker);
             build.push(
@@ -1622,7 +1651,7 @@ fn assembled_resume(
         // the walk needs to decide whether to go round again; the element it
         // left in the frame.
         return_type: match mode {
-            Mode::Async | Mode::AsyncGenerator => HirType::Void,
+            Mode::Async { .. } | Mode::AsyncGenerator => HirType::Void,
             Mode::Generator => HirType::Bool,
         },
         values: build.values,
@@ -1791,7 +1820,7 @@ fn entry_owned(
     mode: Mode,
 ) -> bool {
     slot_of.get(&value).is_some_and(|slot| {
-        (mode == Mode::Async && *slot == FIELD_RESULT)
+        (matches!(mode, Mode::Async { .. }) && *slot == FIELD_RESULT)
             || *slot < mode.fixed() + u32::try_from(func.params.len()).unwrap_or(0)
     })
 }
@@ -2229,7 +2258,7 @@ fn dispatch_chain(
     // Async functions are resumed by a single pending reaction, whereas a
     // generator can be stepped any number of times after completion.
     let terminator = match mode {
-        Mode::Async => Terminator::Unreachable,
+        Mode::Async { .. } => Terminator::Unreachable,
         Mode::Generator => {
             let done = build.push(OpKind::ConstBool(true), HirType::Bool);
             Terminator::Return(Some(done))

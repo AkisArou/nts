@@ -139,3 +139,75 @@ fn an_await_of_a_settled_call_queues_its_own_resumption() {
         );
     }
 }
+
+/// The index of a frame's `awaited` field, where it has one.
+fn awaited_field(program: &hir::Program, export: &str) -> Option<u32> {
+    let frame = program
+        .layouts
+        .iter()
+        .find(|layout| layout.name == format!("{export}#frame"))
+        .unwrap_or_else(|| panic!("`{export}` has a frame"));
+    let awaited = hir::suspend::FrameField::Awaited.key();
+    frame
+        .fields
+        .iter()
+        .position(|field| field.name == awaited)
+        .map(|at| u32::try_from(at).unwrap())
+}
+
+/// A frame whose every `await` takes a value in hand keeps no promise slot:
+/// nothing is ever awaited through one. A frame that also waits on a promise
+/// keeps it, as a control.
+#[test]
+fn a_frame_whose_awaits_all_settle_has_no_awaited_slot() {
+    let program = machine();
+    assert_eq!(
+        awaited_field(&program, "summed"),
+        None,
+        "`summed` awaits only `settled`"
+    );
+    for export in ["settledOrdering", "otherPayloads", "suspendingOrdering"] {
+        assert!(
+            awaited_field(&program, export).is_some(),
+            "`{export}` also awaits a promise"
+        );
+    }
+}
+
+/// In a frame that waits on promises too, a settled `await` gives back the
+/// promise its `awaited` slot still holds from an earlier one -- it stores
+/// nothing there over the turn it waits -- so no promise lives past its own
+/// `await`.
+#[test]
+fn a_settled_await_in_a_mixed_frame_clears_the_awaited_slot() {
+    let program = machine();
+    for export in ["settledOrdering", "otherPayloads"] {
+        let slot = awaited_field(&program, export).unwrap();
+        let resume = func(&program, &format!("{export}__resume")).unwrap();
+        let mut settled_suspensions = 0;
+        for block in &resume.blocks {
+            let Some(at) = block.ops.iter().position(|value| {
+                matches!(
+                    resume.value(*value).kind,
+                    OpKind::Suspend { promise: None, .. }
+                )
+            }) else {
+                continue;
+            };
+            settled_suspensions += 1;
+            let cleared = block.ops[..at].iter().any(|value| {
+                matches!(
+                    resume.value(*value).kind,
+                    OpKind::FieldSet { field, value: put, .. }
+                        if field == slot
+                            && matches!(resume.value(put).kind, OpKind::ConstNull)
+                )
+            });
+            assert!(
+                cleared,
+                "`{export}` clears `awaited` before a settled suspension"
+            );
+        }
+        assert!(settled_suspensions > 0, "`{export}` has a settled await");
+    }
+}
