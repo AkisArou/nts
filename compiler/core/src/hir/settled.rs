@@ -51,14 +51,20 @@ fn variant_name(callee: &str) -> String {
     format!("{callee}@settled")
 }
 
-/// The fulfilments a settled callee may end in, with the position of the value
-/// each carries. `nts_promise_fulfill_value` and `_reference` are not here:
-/// their callers do not know the value's kind, which is the case a thenable
-/// hides in.
-fn fulfilment(name: &str) -> Option<Option<usize>> {
+/// A fulfilment a settled callee may end in. `nts_promise_fulfill_value` and
+/// `_reference` are not one: their callers do not know the value's kind,
+/// which is the case a thenable hides in.
+enum Fulfilment {
+    /// With nothing: `Promise<void>`.
+    Nothing,
+    /// With the value at this argument position.
+    Value(usize),
+}
+
+fn fulfilment(name: &str) -> Option<Fulfilment> {
     match name {
-        "nts_promise_fulfill_void" => Some(None),
-        "nts_promise_fulfill_number" | "nts_promise_fulfill_tagged" => Some(Some(1)),
+        "nts_promise_fulfill_void" => Some(Fulfilment::Nothing),
+        "nts_promise_fulfill_number" | "nts_promise_fulfill_tagged" => Some(Fulfilment::Value(1)),
         _ => None,
     }
 }
@@ -131,7 +137,10 @@ fn variant(func: &Func) -> Option<Func> {
             if args.iter().skip(1).any(|arg| *arg == result) {
                 return None;
             }
-            let answer = carried.map(|at| args[at]);
+            let answer = match carried {
+                Fulfilment::Nothing => None,
+                Fulfilment::Value(at) => Some(args[at]),
+            };
             if let Some(answer) = answer
                 && func.values[answer.0 as usize].ty != **payload
             {
