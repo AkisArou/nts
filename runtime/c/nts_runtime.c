@@ -1396,8 +1396,13 @@ static inline void nts_give_up_foreign(NtsHeader *object) {
 #endif
 }
 
-/* Reclaim an object: what hangs off it, then the block itself. */
-static void nts_free(NtsHeader *object) {
+/* Reclaim an object: what hangs off it, then the block itself.
+ *
+ * Inline where it is called: every death ends here, and as a call of its own
+ * it cost `release-acyclic` 2% more instructions than the same work folded into
+ * `nts_destroy`'s loop, which the optimiser stops doing by itself as soon as
+ * this body grows by a branch. */
+static inline __attribute__((always_inline)) void nts_free(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
   nts_give_up_foreign(object);
   /* These layouts keep all storage in their own block. Other kinds retain
