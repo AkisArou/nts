@@ -170,9 +170,10 @@ fn the_receiver_is_in_the_frame() {
 /// A `static` async method has no receiver, and its frame does not invent one.
 ///
 /// The other half of the parameter question. `Statics.viaAnother` takes one
-/// number, so its frame holds the three fixed fields and exactly one parameter
-/// — a fourth would mean the receiver had been counted for a method that has
-/// none, which is the mirror of losing it for one that does.
+/// number, so its frame holds the three fixed fields, exactly one parameter
+/// and the value it awaits -- a `this` would mean the receiver had been
+/// counted for a method that has none, which is the mirror of losing it for
+/// one that does.
 ///
 /// `viaAnother` rather than `doubled` because only it *awaits*: a body with no
 /// suspension keeps its promise prologue and is never split, so it has no frame
@@ -187,19 +188,21 @@ fn the_receiver_is_in_the_frame() {
 fn a_static_async_method_has_no_receiver_in_its_frame() {
     let program = machine("async-methods");
     let frame = layout(&program, "Statics.viaAnother#frame");
+    let named: Vec<_> = frame
+        .fields
+        .iter()
+        .filter_map(|field| field.name.public_name())
+        .collect();
+    // The fifth is the awaited value: `Statics.doubled` settles inside the
+    // call, so the frame keeps its number rather than a promise to read it
+    // from (`hir::settled`). It is a spill, with no public name.
     assert_eq!(
         frame.fields.len(),
-        4,
-        "state, result, awaited, and the one declared parameter: {:?}",
-        frame
-            .fields
-            .iter()
-            .map(|field| field
-                .name
-                .public_name()
-                .expect("this fixture uses public fields"))
-            .collect::<Vec<_>>(),
+        5,
+        "state, result, awaited, the one declared parameter and the settled value: {named:?}",
     );
+    assert!(named.contains(&"n"), "the parameter: {named:?}");
+    assert!(!named.contains(&"this"), "no receiver: {named:?}");
 }
 
 /// An overridden `async` method is two state machines, not one.
