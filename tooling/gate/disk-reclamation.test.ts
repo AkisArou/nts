@@ -13,7 +13,7 @@ import {DiskCapacity} from './disk-capacity.ts';
 import {DiskBuildAdmissionError} from '../differential/command-entry/instrument.ts';
 import {reclaimDisk,diskTrash,DISK_TRASH,assertNoUnitUsers,assertUnitTreeUnused,parseUnitTreeOwnership,type UnitTreeOwnership,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
 import {GateResource} from './gate-resource.ts';
-import {acquire,processIdentity} from '../landing/lock.ts';
+import {acquire,processIdentity,withLock} from '../landing/lock.ts';
 import {assertNoProcessUsers,observeTreeProcesses,processCgroup} from '../landing/tree-users.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
@@ -684,4 +684,47 @@ test('only empty UUID envelopes with unheld empty lock metadata are recovered wi
     assert.equal(readFileSync(join(root,ids[2]!,'payload'),'utf8'),'unknown bytes');
   }finally{held.close();}
   reclaimDisk(f.options);assert.deepEqual(readdirSync(root).sort(),[ids[2],ids[4]]);
+});
+
+for(const published of [false,true])test('a listed trash envelope retired before locking is silent; published '+published,t=>{
+  const f=fixture(t);
+  let entry:string;
+  if(published){
+    const tree=f.tree('1');f.output(tree,'debug',16*GiB);mkdirSync(join(tree,'target/evidence'));
+    reclaimDisk({...f.options,removePayload:()=>{throw Error('leave published envelope');}});
+    entry=diskTrash(f.dir,f.host.wallNow())[0]!.path;
+  }else{
+    entry=join(f.dir,DISK_TRASH,'00000000-0000-0000-0000-000000000001');mkdirSync(entry,{recursive:true});
+  }
+  f.setFree(60*GiB);
+  let retired=false;
+  const report=reclaimDisk({...f.options,locked:<T>(body:()=>T)=>withLock(join(f.dir,'.lock'),()=>{
+    if(!retired){retired=true;rmSync(entry,{recursive:true});}
+    return body();
+  })});
+  assert.equal(retired,true,'retirement happens after the listing and before the first locked observation');
+  assert.deepEqual(report.removed,[],'the retiring owner already completed this entry');
+  assert.deepEqual(report.kept.filter(row=>!row.routine),[],'a stale listing produces no retention diagnostic');
+  assert.equal(existsSync(entry),false);
+});
+
+test('a listed staging envelope gains its manifest and payload before locking without a stale diagnostic',t=>{
+  const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);mkdirSync(join(tree,'target/evidence'));
+  reclaimDisk({...f.options,removePayload:()=>{throw Error('leave envelope for staging control');}});
+  const entry=diskTrash(f.dir,f.host.wallNow())[0]!.path,file=join(entry,'manifest.json'),payload=join(entry,'payload');
+  const manifest=readFileSync(file),saved=join(f.s.dir,'staging-payload');renameSync(payload,saved);rmSync(file);
+  const owner=GateResource.tryAcquire(join(entry,'.drain.lock'));assert.ok(owner);
+  f.setFree(60*GiB);
+  let published=false;
+  try{
+    const report=reclaimDisk({...f.options,locked:<T>(body:()=>T)=>withLock(join(f.dir,'.lock'),()=>{
+      if(!published){published=true;renameSync(saved,payload);writeFileSync(file,manifest);}
+      return body();
+    })});
+    assert.equal(published,true,'publication happens after the listing and before the locked classification');
+    assert.deepEqual(report.removed,[],'the live drainer retains its payload');
+    assert.deepEqual(report.kept.filter(row=>!row.routine),[],'the published manifest replaces the stale missing-manifest observation');
+    assert.ok(existsSync(payload));assert.deepEqual(readFileSync(file),manifest);
+  }finally{owner.close();}
+  assert.equal(reclaimDisk(f.options).removed.length,1,'recovery drains the payload after its owner releases');
 });
