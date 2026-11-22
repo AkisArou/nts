@@ -3,7 +3,7 @@
 use super::{
     Absent, Callee, Declares, Diagnostic, FuncBuilder, HirType, ManagedType, MethodAccessor,
     NodeId, OpKind, Origin, PRESENCE_INDEX, PropertyKey, TypeId, ValueId, access, claimed_reads,
-    is_static_member_symbol, property_keys, syntax,
+    initialization, is_static_member_symbol, property_keys, syntax,
 };
 
 /// Why a name is [`Place::Unwritable`].
@@ -764,6 +764,32 @@ impl FuncBuilder<'_> {
             })
     }
 
+    /// Whether `symbol` is a local of another function: every declaration of
+    /// it is evaluated by a function body, and none by the one that evaluates
+    /// `target`.
+    ///
+    /// A module-scope name is not one. One with a slot is a
+    /// [`Place::Global`] before this is asked; one without a slot is one no
+    /// read compiles (each refuses with the module's reason, the module's own
+    /// initializer included), so nothing can observe a write to it.
+    fn a_local_of_another_function(
+        &self,
+        target: NodeId,
+        symbol: nts_semantic_schema::SymbolId,
+    ) -> bool {
+        let owner = initialization::execution_owner(self, target);
+        self.snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .is_some_and(|record| {
+                !record.declarations.is_empty()
+                    && record.declarations.iter().all(|declaration| {
+                        initialization::execution_owner(self, *declaration)
+                            .is_some_and(|declared| Some(declared) != owner)
+                    })
+            })
+    }
+
     pub(super) fn place_for_symbol(
         &mut self,
         target: NodeId,
@@ -856,6 +882,24 @@ impl FuncBuilder<'_> {
                 symbol: symbol.0,
                 why: Unwritable::ClassName,
             });
+        }
+        // **A local of another function, which this builder holds no binding
+        // for, is not this builder's to bind.** The binding below is a fresh
+        // one of this builder's own: right for the first write to a local of
+        // this body (`var z; z = n`, or before its hoisted `var`), and a store
+        // nobody reads for a local of an enclosing function, which that
+        // function goes on reading. An object literal's setter or a local
+        // class's method assigning one is lowered by a builder with no
+        // enclosing bindings, so `value = next` vanished there and the caller
+        // read its old value, where a read of the same name refused
+        // (`refusals/a-literal-setter-writing-an-enclosing-local`). A capture
+        // binds the name here, cell or copy, and so does an inline callback's
+        // shared builder, so neither reaches this: the write refuses exactly
+        // where the read does, and with its reason.
+        if !self.bindings.contains_key(&symbol.0)
+            && self.a_local_of_another_function(target, symbol)
+        {
+            return Err(self.refuse_nameless(target, &self.describe_name(target, symbol)));
         }
         // From the target, which is where the checker gives the *declared*
         // type: the left of an assignment is not narrowed by what came before

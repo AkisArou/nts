@@ -430,7 +430,14 @@ fn head_source_of(probe: &FuncBuilder, declaration: NodeId) -> Option<NodeId> {
     (head == list).then_some(source)
 }
 
-fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
+/// The body whose execution evaluates `at`: the nearest function, method,
+/// accessor or constructor around it, or the instance field initializer it
+/// sits in; `None` at module scope.
+///
+/// One answer for "which execution owns this", shared by the direct lexical
+/// accesses here and by where an assignment to a name writes
+/// ([`FuncBuilder::place_for_symbol`]).
+pub(super) fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
     let mut child = at;
     for parent in std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent) {
         if names_a_body(probe.kind_of(parent))

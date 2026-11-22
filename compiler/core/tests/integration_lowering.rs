@@ -4,6 +4,9 @@
 #[path = "destructuring_reference.rs"]
 mod destructuring_reference;
 
+#[path = "enclosing_writes.rs"]
+mod enclosing_writes;
+
 #[path = "hir_lowering.rs"]
 mod hir_lowering;
 

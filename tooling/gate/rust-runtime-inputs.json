@@ -8899,6 +8899,37 @@
       }
     },
     {
+      "source": "compiler/core/tests/enclosing_writes.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/refusals/a-literal-setter-writing-an-enclosing-local/tsconfig.json"
+          },
+          {
+            "kind": "file",
+            "path": "../../../tests/refusals/a-literal-setter-writing-an-enclosing-local/src/main.ts"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/refusals/a-local-class-method-writing-an-enclosing-local/tsconfig.json"
+          },
+          {
+            "kind": "file",
+            "path": "../../../tests/refusals/a-local-class-method-writing-an-enclosing-local/src/main.ts"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-literal-method-writing-an-enclosing-local-is-a-closure/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
       "source": "compiler/core/tests/entry_surface.rs",
       "declarations": {
         "imports": [],
