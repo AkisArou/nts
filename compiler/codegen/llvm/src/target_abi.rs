@@ -50,7 +50,7 @@ mod tests {
                     Platform::WIN64_X86_64,
                     crate::signatures_win64::SIGNATURES_WIN64,
                     true,
-                    &["ptr"],
+                    &["ptr align 8 dead_on_return"],
                 ),
                 AppleArm64 => (
                     Platform::APPLE_ARM64,
