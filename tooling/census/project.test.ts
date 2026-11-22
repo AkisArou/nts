@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { EventEmitter, once } from "node:events";
+import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import { caseRoot, collectCaseRoots, environment, materialise, negativePhaseOf, workspace } from "./project.ts";
 import { parseDiagnostics } from "./attempt262.ts";
@@ -146,17 +148,47 @@ test("a backend decline is one root entry, placed nowhere", () => {
   assert.deepEqual(rows[0].named, ["Holder", "WithParent", "makeWith"]);
 });
 
-test("concurrent publishers agree on the complete read-only root", async (t) => {
-  const base = scratch(t);
-  const source = `import {caseRoot,workspace,materialise} from ${JSON.stringify(new URL("./project.ts", import.meta.url).href)}; process.stdout.write(JSON.stringify(caseRoot(d=>{workspace(d);materialise(d,'same input');},{base:process.argv[1]})));`;
-  const publish = () => new Promise<any>((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", source, base], {env:fixtureEnvironment(t)});
+function publicationOutput(child: Pick<ChildProcessWithoutNullStreams, "stdout" | "stderr"> & Pick<EventEmitter, "on">): Promise<string> {
+  return new Promise((resolve, reject) => {
     let output = "", error = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     child.stdout.on("data", (bytes) => output += bytes);
     child.stderr.on("data", (bytes) => error += bytes);
     child.on("error", reject);
-    child.on("exit", (code) => code === 0 ? resolve(JSON.parse(output)) : reject(new Error(error)));
+    // Only close guarantees that the final stdout and stderr bytes arrived.
+    child.on("close", (code: number | null, signal: NodeJS.Signals | null) => code === 0 ? resolve(output) : reject(new Error(`publisher ended ${signal ?? code}: ${error}`)));
   });
+}
+
+test("publication output waits for the final fragment after exit", async () => {
+  const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+  const output = publicationOutput(child);
+  let completed = false;
+  void output.then(() => { completed = true; });
+  child.stdout.write('{"value":"');
+  child.emit("exit", 0, null);
+  await Promise.resolve();
+  assert.equal(completed, false, "exit does not complete the output");
+  const drained = Promise.all([once(child.stdout, "end"), once(child.stderr, "end")]);
+  child.stdout.end('complete"}');
+  child.stderr.end();
+  await drained;
+  child.emit("close", 0, null);
+  assert.deepEqual(JSON.parse(await output), { value: "complete" });
+});
+
+test("publication output parses a large JSON write before immediate exit", async (t) => {
+  const source = `process.stdout.write(JSON.stringify({value:'x'.repeat(1024*1024)}),()=>process.exit(0));`;
+  const child = spawn(process.execPath, ["-e", source], {env:fixtureEnvironment(t)});
+  const result = await publicationOutput(child).then(JSON.parse);
+  assert.deepEqual(result, { value: "x".repeat(1024 * 1024) });
+});
+
+test("concurrent publishers agree on the complete read-only root", async (t) => {
+  const base = scratch(t);
+  const source = `import {caseRoot,workspace,materialise} from ${JSON.stringify(new URL("./project.ts", import.meta.url).href)}; process.stdout.write(JSON.stringify(caseRoot(d=>{workspace(d);materialise(d,'same input');},{base:process.argv[1]})));`;
+  const publish = () => publicationOutput(spawn(process.execPath, ["--input-type=module", "-e", source, base], {env:fixtureEnvironment(t)})).then(JSON.parse);
   const results = await Promise.all([publish(), publish(), publish(), publish()]);
   assert.equal(new Set(results.map((r) => r.key)).size, 1);
   assert.equal(results.filter((r) => r.created).length, 1);
