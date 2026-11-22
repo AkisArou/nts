@@ -4286,6 +4286,12 @@ fn build(rest: &[String]) -> Result<()> {
                 && matches!(product.kind.as_str(), "application" | "executable"))
             .then(|| android_sdk(name, target))
             .transpose()?;
+            // Resolve before bindings: an unsupported IR driver must not start
+            // a binding, compilation or link step. Carry this same toolchain
+            // through the build, including its cached compiler identification.
+            let tools = matches!(target.backend.as_str(), "c" | "llvm")
+                .then(|| toolchain_for(name, target))
+                .transpose()?;
             // **Declarations before bodies.** A `c:` module the program imports
             // has no `.d.ts` until one is generated from the header a config
             // names, and the program does not typecheck without it -- so this
@@ -4332,18 +4338,6 @@ fn build(rest: &[String]) -> Result<()> {
             // a link error about a symbol, in a file the reader did not write,
             // for a platform the package never claimed.
             refuse_unclaimed_target(name, &config_roots, target, &tsconfig)?;
-            // **The toolchain before the dependencies**, because a machine
-            // that cannot build for this target at all is the fact to act on.
-            //
-            // `apps/ios` reported that `packages/notifications` declares a
-            // SwiftPM claim this cannot read -- true, and not the reason the
-            // build was never going to work on Linux, which is that there is no
-            // Apple SDK here. The dependency refusal was standing in front of
-            // it. Asking first costs one `zig version` on a cross build and
-            // returns the same answer `link_c` will get.
-            if matches!(target.backend.as_str(), "c" | "llvm") {
-                toolchain_for(name, target)?;
-            }
             // **Before the output directory is announced**, because an
             // unsatisfiable claim is a configuration error and printing
             // `building ...` first says a build started that never could.
@@ -4377,6 +4371,7 @@ fn build(rest: &[String]) -> Result<()> {
                         &native,
                         cache_dir.as_deref(),
                         &needs,
+                        tools.context("native build toolchain")?,
                     )?
                 }
                 "jvm" => build_jvm(
@@ -5057,6 +5052,7 @@ fn build_c(
     native: &[NativeSource],
     cache_dir: Option<&Utf8Path>,
     needs: &nts_build::dependencies::Resolution,
+    tools: Toolchain,
 ) -> Result<build_manifest::Refusals> {
     let mut report = EmissionReport::live();
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
@@ -5081,7 +5077,9 @@ fn build_c(
         },
         &mut report,
     )?;
-    let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
+    let artifact = link_c(
+        name, product, out, &wrote, native, cache_dir, target, needs, tools,
+    )?;
     println!("  {artifact}");
     let shipped: Vec<Utf8PathBuf> = vendored_frameworks(needs, target)?
         .into_iter()
@@ -5163,7 +5161,7 @@ fn compile_program(
     with: &Compiling<'_>,
     objects: &mut Vec<Utf8PathBuf>,
 ) -> Result<()> {
-    let pic_flags = with.tools.owned_pic_flags(out, pic)?;
+    let pic_flags = with.tools.owned_pic_flags(pic)?;
     for source in sources {
         let object = out.join(format!("{source}.o"));
         // An LLVM module has no headers to find and no C to read a define:
@@ -6766,6 +6764,12 @@ fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
     Some(format!("{arch}-{rest}"))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CompilerFamily {
+    Clang,
+    Gcc,
+}
+
 /// The C compiler for a target, and the refusal where there is none.
 ///
 /// **Measured before it was written, because the goal said to.** `zig cc` is a
@@ -6797,6 +6801,7 @@ fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
 /// re-answer a question that cannot change during a build.
 #[derive(Clone)]
 struct Toolchain {
+    family: std::cell::OnceCell<CompilerFamily>,
     program: String,
     leading: Vec<String>,
     /// Flags only a link takes. Kept out of `leading` because every compile
@@ -6823,17 +6828,15 @@ struct Toolchain {
 }
 
 impl Toolchain {
-    /// Interposition policy for nts-owned units, decided once before compiling
-    /// any of them. The link still owns visibility; foreign sources keep their
-    /// own semantics. GCC's PIC default prevents mandatory runtime inlining.
-    /// Clang already permits that inlining, and keeps its existing arguments.
-    fn owned_pic_flags(&self, directory: &Utf8Path, pic: bool) -> Result<Vec<String>> {
-        if !pic {
-            return Ok(Vec::new());
+    /// Identify the actual command once, including wrappers and target args.
+    /// LLVM preflight and the PIC policy consume the same answer.
+    fn compiler_family(&self) -> Result<CompilerFamily> {
+        if let Some(family) = self.family.get() {
+            return Ok(*family);
         }
         // Ask the actual command, including wrappers and target arguments.
         // Its filename (cc, ccache, etc.) cannot identify the compiler.
-        let mut command = self.command_in(directory)?;
+        let mut command = self.command();
         let output = command
             .args(["-dM", "-E", "-x", "c", "-"])
             .stdin(std::process::Stdio::null())
@@ -6852,20 +6855,33 @@ impl Toolchain {
         );
         let macros = std::str::from_utf8(&output.stdout)
             .context("detecting C compiler interposition policy: non-UTF-8 predefined macros")?;
-        if macros
+        let family = if macros
             .lines()
             .any(|line| line.starts_with("#define __clang__ "))
         {
-            return Ok(Vec::new());
+            CompilerFamily::Clang
+        } else {
+            ensure!(
+                macros
+                    .lines()
+                    .any(|line| line.starts_with("#define __GNUC__ ")),
+                "detecting C compiler interposition policy for {}: expected GCC or clang predefined macros",
+                self.key()
+            );
+            CompilerFamily::Gcc
+        };
+        let _ = self.family.set(family);
+        Ok(family)
+    }
+
+    /// The link owns visibility; foreign sources keep their own semantics.
+    /// GCC's PIC default prevents mandatory runtime inlining.
+    fn owned_pic_flags(&self, pic: bool) -> Result<Vec<String>> {
+        if pic && self.compiler_family()? == CompilerFamily::Gcc {
+            Ok(vec!["-fno-semantic-interposition".to_owned()])
+        } else {
+            Ok(Vec::new())
         }
-        ensure!(
-            macros
-                .lines()
-                .any(|line| line.starts_with("#define __GNUC__ ")),
-            "detecting C compiler interposition policy for {}: expected GCC or clang predefined macros",
-            self.key()
-        );
-        Ok(vec!["-fno-semantic-interposition".to_owned()])
     }
 
     /// The SDK and target triple of an Apple toolchain, from its leading
@@ -6984,7 +7000,7 @@ fn cpu_flags_at_link(target: &nts_build::config::Target) -> Vec<String> {
 }
 
 fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
-    if is_host(target) || std::env::var_os("CC").is_some() {
+    let tools = if is_host(target) || std::env::var_os("CC").is_some() {
         // `CC` split on whitespace, for the reason `bind.rs` states: it is a
         // command line and not a program name, so `zig cc`, `ccache clang` and
         // `xcrun clang` are all unusable when it is read as a file to execute.
@@ -6994,7 +7010,8 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         let lto = Utf8Path::new(&program)
             .file_name()
             .is_some_and(|name| name.starts_with("clang"));
-        return Ok(Toolchain {
+        Toolchain {
+            family: std::cell::OnceCell::new(),
             program,
             leading: words.map(str::to_owned).collect(),
             link: Vec::new(),
@@ -7002,50 +7019,60 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
             lto,
             cpu: cpu_flags(target)?,
             cpu_at_link: cpu_flags_at_link(target),
-        });
-    }
-    if target.os == "macos" {
-        return apple_toolchain(name, target);
-    }
-    if target.os == "windows" {
-        return windows_toolchain(name, target);
-    }
-    if target.os == "ios" {
-        return ios_toolchain(name, target);
-    }
-    if target.os == "linux" {
-        return linux_toolchain(name, target);
-    }
-    let Some(triple) = zig_triple(target) else {
-        bail!(
-            "product `{name}` targets {} and this is a {} machine, and there is no \
+        }
+    } else if target.os == "macos" {
+        apple_toolchain(name, target)?
+    } else if target.os == "windows" {
+        windows_toolchain(name, target)?
+    } else if target.os == "ios" {
+        ios_toolchain(name, target)?
+    } else if target.os == "linux" {
+        linux_toolchain(name, target)?
+    } else {
+        let Some(triple) = zig_triple(target) else {
+            bail!(
+                "product `{name}` targets {} and this is a {} machine, and there is no \
              cross compiler configured for that pair. Set CC to one",
-            target.id,
-            host_os()
-        )
-    };
-    if std::process::Command::new("zig")
-        .arg("version")
-        .output()
-        .is_err()
-    {
-        bail!(
-            "product `{name}` targets {} and this is a {} machine, so it has to be \
+                target.id,
+                host_os()
+            )
+        };
+        if std::process::Command::new("zig")
+            .arg("version")
+            .output()
+            .is_err()
+        {
+            bail!(
+                "product `{name}` targets {} and this is a {} machine, so it has to be \
              cross-compiled. `zig` is what this uses and it is not on PATH -- install \
              it, or set CC to a cross compiler for {triple}",
-            target.id,
-            host_os()
-        )
+                target.id,
+                host_os()
+            )
+        }
+        Toolchain {
+            family: std::cell::OnceCell::new(),
+            program: "zig".to_owned(),
+            leading: vec!["cc".to_owned(), "-target".to_owned(), triple],
+            link: Vec::new(),
+            linker: None,
+            lto: false,
+            cpu: Vec::new(),
+            cpu_at_link: Vec::new(),
+        }
+    };
+    if target.backend == "llvm" {
+        ensure!(
+            tools.compiler_family().with_context(|| format!(
+                "identifying compiler for product `{name}` with backend `llvm`"
+            ))? == CompilerFamily::Clang,
+            "product `{name}` uses backend `llvm`, but compiler command `{}` cannot compile LLVM IR; \
+             supported drivers: clang and zig cc (including wrappers). Set CC to one of these, \
+             or use backend `c` with GCC",
+            tools.key()
+        );
     }
-    Ok(Toolchain {
-        program: "zig".to_owned(),
-        leading: vec!["cc".to_owned(), "-target".to_owned(), triple],
-        link: Vec::new(),
-        linker: None,
-        lto: false,
-        cpu: Vec::new(),
-        cpu_at_link: Vec::new(),
-    })
+    Ok(tools)
 }
 
 /// Clang checks and compiles against Zig's target libc headers; Zig supplies
@@ -7078,6 +7105,7 @@ fn linux_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
         leading.extend(["-isystem".to_owned(), headers.join(directory).to_string()]);
     }
     Ok(Toolchain {
+        family: std::cell::OnceCell::new(),
         program: "clang".to_owned(),
         leading,
         link: if libc == "musl" {
@@ -7148,6 +7176,7 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
     ];
     let link = vec!["-fuse-ld=lld".to_owned()];
     Ok(Toolchain {
+        family: std::cell::OnceCell::new(),
         program: "clang".to_owned(),
         leading,
         link,
@@ -7192,6 +7221,7 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
     ];
     let link = vec!["-fuse-ld=lld".to_owned()];
     Ok(Toolchain {
+        family: std::cell::OnceCell::new(),
         program: "clang".to_owned(),
         leading,
         link,
@@ -7253,6 +7283,7 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
         format!("{arch}-windows-gnu"),
     ];
     Ok(Toolchain {
+        family: std::cell::OnceCell::new(),
         program: "clang".to_owned(),
         leading,
         link,
@@ -7402,11 +7433,8 @@ fn check_witness(
 
 /// Compile everything this product is made of and link it into one artifact.
 ///
-/// **Eight arguments, and they are eight different things**: what it is called,
-/// what it declares, where it goes, what the emitter wrote, the native roots,
-/// where objects are kept, the target, and what its packages pinned. A struct
-/// grouping them would exist to satisfy a lint rather than to name anything --
-/// which is the test the `Compiling` bundle passes and this does not.
+/// The preflight's resolved toolchain travels with the product so compiler
+/// identification is shared with compilation and no driver is resolved twice.
 #[allow(clippy::too_many_arguments)]
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn link_c(
@@ -7418,11 +7446,8 @@ fn link_c(
     cache_dir: Option<&Utf8Path>,
     target: &nts_build::config::Target,
     needs: &nts_build::dependencies::Resolution,
+    mut tools: Toolchain,
 ) -> Result<Utf8PathBuf> {
-    // **Before the witness, because the witness is compiled too.** A native
-    // root is checked against the headers of the platform it will run on, and
-    // doing that with the host compiler asks the wrong question.
-    let mut tools = toolchain_for(name, target)?;
     // **A static archive is linked by its consumer**, with whatever linker
     // that is, and LTO objects are bitcode: `ld` without clang's plugin reads
     // `libviaC.a` as "file format not recognized". So an archive's objects are
@@ -8209,6 +8234,7 @@ mod module_cache_tests {
         )
         .unwrap();
         let tools = Toolchain {
+            family: std::cell::OnceCell::new(),
             program: "clang".to_owned(),
             leading: Vec::new(),
             link: Vec::new(),
@@ -8279,6 +8305,7 @@ mod module_cache_tests {
         }
         let root = crate::scratch::ScratchDir::path_in_target("nts-native-cache-dirs");
         let tools = Toolchain {
+            family: std::cell::OnceCell::new(),
             program: "clang".to_owned(),
             leading: Vec::new(),
             link: Vec::new(),

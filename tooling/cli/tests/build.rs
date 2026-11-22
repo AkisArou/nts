@@ -404,6 +404,165 @@ fn a_shared_library_publishes_its_entry_and_nothing_else() {
     );
 }
 
+/// #918: GCC accepts `-c program.ll` without producing program.ll.o.
+/// Identify the driver before bindings or generated output, including wrappers.
+#[test]
+fn llvm_build_refuses_gcc_before_any_compilation() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if !available()
+        || !Command::new("gcc")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    {
+        skip("node, clang, gcc and nm");
+        return;
+    }
+    for wrapped in [false, true] {
+        let project = llvm_driver_fixture(&format!("llvm-gcc-{wrapped}"), false);
+        if wrapped {
+            // A real binding request makes preflight-before-bindings observable.
+            let config = std::fs::read_to_string(project.join("nts.config.ts")).expect("config");
+            std::fs::write(
+                project.join("nts.config.ts"),
+                config
+                    .replace("defineConfig,app", "defineConfig,app,sources")
+                    .replace(
+                        "products:",
+                        "native:[sources({dir:'native',header:'native/probe.h'})],products:",
+                    ),
+            )
+            .expect("native config");
+            std::fs::create_dir(project.join("native")).expect("native directory");
+            std::fs::write(
+                project.join("native/probe.h"),
+                "#error binding-must-not-start\n",
+            )
+            .expect("header");
+            std::fs::write(
+                project.join("src/main.ts"),
+                "import { probe } from 'c:probe'; console.log(probe());\n",
+            )
+            .expect("binding request");
+        }
+        let trace = project.join("compiler.trace");
+        let compiler = if wrapped {
+            let wrapper = project.join("clang-wrapper");
+            // Its name deliberately says clang: identity comes from the command.
+            std::fs::write(&wrapper, "#!/bin/sh\nprintf '%s\\t' \"$@\" >> \"$NTS_CC_TRACE\"\nprintf '\\n' >> \"$NTS_CC_TRACE\"\nexec \"$@\"\n").expect("wrapper");
+            std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755))
+                .expect("executable wrapper");
+            format!("{} gcc", wrapper.display())
+        } else {
+            "gcc".to_owned()
+        };
+        let built = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("CC", &compiler)
+                .env("NTS_CC_TRACE", &trace),
+        )
+        .expect("build");
+        let error = String::from_utf8_lossy(&built.stderr);
+        assert!(!built.status.success(), "{built:?}");
+        for named in [
+            "product `program`",
+            "backend `llvm`",
+            &compiler,
+            "clang",
+            "zig cc",
+        ] {
+            assert!(error.contains(named), "missing {named}: {error}");
+        }
+        assert!(!project.join(".nts/build").exists(), "{built:?}");
+        assert!(!project.join("types").exists(), "bindings were generated");
+        if wrapped {
+            let calls = std::fs::read_to_string(trace).expect("compiler trace");
+            assert_eq!(calls.lines().count(), 1, "{calls}");
+            assert_eq!(calls.trim_end(), "gcc\t-dM\t-E\t-x\tc\t-", "{calls}");
+        }
+    }
+}
+
+fn llvm_driver_fixture(name: &str, shared: bool) -> scratch::StdScratchDir {
+    let config = if shared {
+        r"import {defineConfig,library,target} from '@nts/config';
+export default defineConfig({products:{program:library.native({entry:'./src/main.ts',targets:[target.linux({backend:'llvm'})]})}});"
+    } else {
+        r"import {defineConfig,app} from '@nts/config';
+export default defineConfig({products:{program:app.cli({entry:'./src/main.ts',backend:'llvm'})}});"
+    };
+    let project = fixture(name, config);
+    std::fs::write(project.join("src/main.ts"), "console.log(42);\n").expect("entry");
+    project
+}
+
+/// Clang compiles the CLI fixture; a scalar library also compiles through a
+/// wrapper. PIC consumes identification again without starting a second probe.
+#[test]
+fn llvm_build_keeps_clang_and_reuses_its_identification_for_pic() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if !available() {
+        skip("node, clang and nm");
+        return;
+    }
+    for (wrapped, shared) in [(false, false), (true, true)] {
+        let project = llvm_driver_fixture(&format!("llvm-clang-{wrapped}-{shared}"), shared);
+        if wrapped {
+            // Bundled Node dependencies require a direct ELF compiler, so the
+            // wrapper control uses a scalar program needing no Node archive.
+            std::fs::write(
+                project.join("src/main.ts"),
+                "export function answer(): number { return 42; }\n",
+            )
+            .expect("scalar entry");
+        }
+        let trace = project.join("compiler.trace");
+        let compiler = if wrapped {
+            let wrapper = project.join("gcc-wrapper");
+            std::fs::write(&wrapper, "#!/bin/sh\nprintf '%s\\t' \"$@\" >> \"$NTS_CC_TRACE\"\nprintf '\\n' >> \"$NTS_CC_TRACE\"\nexec \"$@\"\n").expect("wrapper");
+            std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755))
+                .expect("executable wrapper");
+            format!("{} clang", wrapper.display())
+        } else {
+            "clang".to_owned()
+        };
+        let built = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("CC", compiler)
+                .env("NTS_CC_TRACE", &trace),
+        )
+        .expect("build");
+        assert!(built.status.success(), "{built:?}");
+        let out = project.join(".nts/build/program/linux-gnu-x86_64");
+        assert!(out.join("program.ll.o").is_file(), "{built:?}");
+        if shared {
+            assert!(out.join("libprogram.so").is_file(), "{built:?}");
+        } else {
+            let run = Command::new(out.join("program")).output().expect("run");
+            assert!(run.status.success(), "{run:?}");
+            assert_eq!(String::from_utf8_lossy(&run.stdout), "42\n");
+        }
+        if wrapped {
+            let calls = std::fs::read_to_string(trace).expect("compiler trace");
+            assert_eq!(
+                calls
+                    .lines()
+                    .filter(|line| line.contains("\t-dM\t"))
+                    .count(),
+                1,
+                "{calls}"
+            );
+            assert!(!calls.contains("-fno-semantic-interposition"), "{calls}");
+        }
+    }
+}
+
 /// `backend: "llvm"` builds a program: the LLVM module in `program.c`'s place,
 /// linked with the runtime and the entry point the C build writes.
 ///

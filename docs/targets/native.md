@@ -28,6 +28,9 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
 - **LLVM** (`nts emit-llvm`) writes textual IR that `clang -x ir` compiles. The
   `nts` binary links no LLVM library, so no LLVM version is pinned into it
   (register [T-2](../open-questions.md#6-bindings-products-toolchains-dependencies)).
+  `nts build` uses the Clang-family driver named by `CC` (`clang` or `zig cc`,
+  including wrappers). Other drivers, including GCC, refuse before binding
+  generation, compilation or linking, naming the product and compiler command.
   It classifies records passed by value for System V, Win64 and AAPCS64.
 - **LLVM is the frontier native backend, and C is held equally.** Both meet
   [the bar](../README.md#the-bar) on every row, and a row where one of them is
@@ -237,6 +240,12 @@ int main(void) {
 
 ## Decisions
 
+- The LLVM backend compiles IR with the Clang-family driver `CC` names.
+  Toolchain selection identifies the resolved command once through its predefined
+  macros, including wrappers; LLVM preflight and PIC policy share that answer.
+  Unsupported drivers refuse before binding generation or compilation. A future
+  nts-owned IR compiler would change this driver requirement
+  ([log](../records/notebooks/decisions-log.md#llvm-build-driver-11-22)).
 - PIC products use one compile-time interposition policy for nts-owned code:
   GCC receives `-fno-semantic-interposition`, including through compiler wrappers;
   clang's arguments stay unchanged. Visibility remains the linker's published

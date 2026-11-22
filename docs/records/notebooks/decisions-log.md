@@ -4280,3 +4280,15 @@ assumption that an interposed definition preserves semantics, as documented in
 [GCC's optimization options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#index-fsemantic-interposition).
 
 The contract is in [native](../../targets/native.md#decisions).
+
+### LLVM build driver (11-22)
+
+The LLVM backend compiles IR with the Clang-family driver named by `CC`, including
+wrappers around `clang` and `zig cc`. Toolchain selection reuses the resolved
+command's predefined-macro identification for both LLVM preflight and PIC policy.
+A non-Clang driver refuses before binding generation, compilation or linking,
+naming the product, command and supported drivers. `CC` remains authoritative;
+substituting a different driver would change its target and argument contract.
+A future nts-owned IR compiler would change this requirement.
+
+The contract is in [native](../../targets/native.md#decisions).
