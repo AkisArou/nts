@@ -4292,3 +4292,22 @@ substituting a different driver would change its target and argument contract.
 A future nts-owned IR compiler would change this requirement.
 
 The contract is in [native](../../targets/native.md#decisions).
+
+## Program transactions produce reader identities once (11-22)
+
+#826 profiled a stale Rust selector record. The canonical graph resolved each
+Program request once in its batch, but captured its physical reader identities
+again for each Cargo consumer. Program transactions now produce context-free
+reader and pin facts once; compiled-program requests also produce the emitter's
+nearest-config facts. Graph snapshots compose them with independent reader,
+namespace and target provenance, retaining cause unions and rejecting conflicts.
+Scope-end answer, match, ownership and population validation remains mandatory.
+There is no persistent Program or projection cache, and stale accepted records
+still require live projection.
+
+The owed CLI also gives its self-test and requested selection one committed
+Rust-source lifetime and trust context. The JS view keeps working bytes and the
+Rust view keeps committed bytes. Rendering and running the selection follow
+the source fence and cleanup. Independent endpoints retain separate lifetimes.
+
+The contract is in [workflow](../../workflow.md#landing-the-landing-check).

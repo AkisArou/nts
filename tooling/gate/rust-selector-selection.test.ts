@@ -10,6 +10,48 @@ import {fixtureEnvironment} from './test-environment.ts';
 import {spawnTest} from './test-wait.ts';
 import {gitArguments} from './git-arguments/main.ts';
 import {dependencyCache} from '../inputs/dependency-inputs.ts';
+import {withCommittedSelectorSource} from './owed-range.ts';
+import {installationCatalog,dependencyHash} from '../inputs/dependency-catalog.ts';
+import {durableRecord} from './durable-record.ts';
+
+test('one selection keeps working JS readers distinct from committed Rust reader inputs',t=>{
+  const root=testScratch(t,'rust-selector-distinct-views'),env=fixtureEnvironment(t);
+  const put=(path:string,body:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),body);};
+  put('Cargo.toml','[package]\nname="distinct-views"\nversion="0.0.0"\nedition="2021"\n');
+  put('src/lib.rs','');put('package.json','{"type":"module"}');
+  put('shared.mjs',"export const input=new URL('./committed.txt',import.meta.url);\n");
+  put('committed.txt','original');put('working.txt','original');
+  put('tooling/reader.test.ts',"import '../shared.mjs';\n");
+  put('tooling/gate/all.sh','#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" tests doctests tooling; exit; fi\nstep "tests" true\nstep "doctests" true\nstep "tooling" node tooling/reader.test.ts\n');
+  put('tooling/gate/run.mjs','');put('tooling/gate/tooling-test-exclusions.json','[]');
+  put('tooling/gate/rust-runtime-inputs.json',JSON.stringify({version:1,targets:[{target:{source:'src/lib.rs',name:'distinct_views',kind:['lib']},declarations:{imports:['../shared.mjs'],assets:[]}}]}));
+  for(const args of [['init','-q','-b','main'],['add','.'],['commit','-qm','committed readers']]){
+    const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  }
+  const identity={version:2 as const,pnpm:'supplied',manager:'supplied',node:process.versions.node,platform:process.platform,arch:process.arch,inputs:[],importers:[]};
+  const catalog=join(testScratch(t,'distinct-view-catalog'),'catalog.json');
+  durableRecord(catalog,installationCatalog(root,{...identity,key:dependencyHash(JSON.stringify(identity))},[]));
+  const dependencyCatalog={catalogPath:catalog,catalogSha256:dependencyHash(readFileSync(catalog))};
+  put('shared.mjs',"export const input=new URL('./working.txt',import.meta.url);\n");
+  put('src/lib.rs','mod uncommitted_reader;\n');
+  const url=new URL('./owed.mjs',import.meta.url).href;
+  withCommittedSelectorSource(root,source=>{
+    const code=`import {owed} from ${JSON.stringify(url)};
+const trust=${JSON.stringify({acceptedRustRecordBlob:null,dependencyCatalog,committedSource:{...source,dependencyCatalog}})};
+// Compare reader obligations independently of the policy's unconditional checks.
+const choose=path=>[...new Set(owed([{path,before:'original',after:'changed',sameMode:true}],trust).filter(row=>row.name!=='every change').flatMap(row=>row.steps))];
+console.log(JSON.stringify({committed:choose('committed.txt'),working:choose('working.txt'),rules:owed([{path:'working.txt',before:'original',after:'changed',sameMode:true}],trust)}));`;
+    const selected=spawnTest(process.execPath,['--input-type=module','-e',code],{cwd:root,env,encoding:'utf8'});
+    assert.equal(selected.status,0,selected.stdout+selected.stderr);
+    const result=JSON.parse(selected.stdout) as {committed:string[];working:string[]};
+    for(const step of ['tests','doctests']){
+      assert.ok(result.committed.includes(step),'Rust retains the committed reader: '+step);
+      assert.ok(!result.working.includes(step),'working reader bytes never enter the Rust view: '+step+' '+JSON.stringify(result)+' '+selected.stderr);
+    }
+    assert.ok(!result.committed.includes('tooling'),'JS no longer reads the committed-only input');
+    assert.ok(result.working.includes('tooling'),'JS observes its uncommitted reader bytes');
+  });
+});
 
 test('final owed composition retains supplied exact file and file-stat bytes through precision and handover',t=>{
   const root=testScratch(t,'rust-selector-owed'),env=fixtureEnvironment(t);

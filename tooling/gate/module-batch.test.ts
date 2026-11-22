@@ -6,6 +6,51 @@ import {pathToFileURL} from 'node:url';
 import {testScratch} from './test-scratch.ts';
 import {moduleGraph,type ModuleDescriptionRequest,type ByteInputDeclaration} from './module-closure.ts';
 import {fixtureInput,type ModuleDeclarations} from './reader-inputs/main.ts';
+import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
+import {createRequire} from 'node:module';
+
+test('Program identity capture belongs to its transaction, independently of reader and target count',t=>{
+  const root=testScratch(t,'module-batch-capture-count');
+  writeFileSync(join(root,'package.json'),'{"type":"module"}');
+  writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[],"noLib":true},"files":["main.ts"]}');
+  writeFileSync(join(root,'main.ts'),"export {value} from './later.js';");
+  const declarations=new Map<string,ModuleDeclarations>();
+  const requests=Array.from({length:12},(_,index)=>{
+    const name='reader-'+index+'.rs';writeFileSync(join(root,name),'');
+    declarations.set(name,{imports:[],assets:[{kind:'project-config',role:'compiled-program',path:'./tsconfig.json'}]});
+    return {entries:[name]};
+  });
+  let physical=0,programs=0;
+  const identity=OracleFilesystem.prototype.inputIdentity;
+  t.mock.method(OracleFilesystem.prototype,'inputIdentity',function(this:OracleFilesystem,...args:Parameters<typeof identity>){
+    if(args[1]===root)physical++;return identity.apply(this,args);
+  });
+  const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
+  const acquire=Object.getOwnPropertyDescriptor(API.prototype,'createProgram')!.get!;
+  t.mock.getter(API.prototype,'createProgram',function(this:import('typescript/sync').API){
+    const native=acquire.call(this) as import('typescript/sync').API['createProgram'];
+    const counted=Object.assign((...args:Parameters<typeof native>)=>{programs++;return native(...args);},native);
+    Object.defineProperty(this,'createProgram',{value:counted,configurable:true});return counted;
+  });
+  const graph=moduleGraph({sourceRoot:root,declarations});
+  try{
+    graph.describeBatch(requests.slice(0,1));
+    const one=physical;assert.ok(one>0);assert.equal(programs,1);
+    physical=0;programs=0;
+    const results=graph.describeBatch(requests);
+    assert.equal(programs,1,'one fresh native Program for the complete repeated request');
+    assert.equal(physical,one,'more readers and targets compose detached facts without physical recapture');
+    for(const [index,result]of results.entries()){
+      assert.ok(result.snapshot.observations.some(row=>row.reader==='reader-'+index+'.rs'));
+      assert.ok(!result.snapshot.moduleFiles.includes('later.ts'));
+    }
+    const original=structuredClone(results[1]);results[0]!.snapshot.observations[0]!.observation.value=null;
+    assert.deepEqual(results[1],original,'returned target facts stay independently mutable');
+    writeFileSync(join(root,'later.ts'),'export const value=1;');programs=0;
+    assert.ok(graph.describeBatch(requests).every(result=>result.snapshot.moduleFiles.includes('later.ts')));
+    assert.equal(programs,1,'a later scope constructs a fresh Program and observes the formerly missing source');
+  }finally{graph.close();}
+});
 
 test('batch snapshots and byte reports equal separate canonical visitors with target provenance',t=>{
   const root=testScratch(t,'module-batch-equality');

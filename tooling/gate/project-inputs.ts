@@ -1,16 +1,20 @@
 // Project discovery and parsed config inputs have one owner for selectors and staging.
 import {createRequire} from 'node:module';
-import {dirname,join,relative,resolve,sep} from 'node:path';
+import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {captureToolchain,toolchainFact,toolchainDescriptor,type Capture,type InstalledTypeScript} from '../differential/oracle-toolchain.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {type HostObservation} from '../differential/oracle-runtime.ts';
 import {prepareGeneratedProject,generatedProjectFact,type GeneratedProjectCapability} from './generated-project.ts';
 import {projectMatch,type ProjectMatch,type ProjectRequest} from './project-discovery.ts';
-import {projectAncestorAbsence,type ProjectEnvironmentAbsence,type ProjectProgramProvenance} from './project-environment.ts';
+import {projectAncestorAbsence,projectOwnerAncestorAbsence,type ProjectEnvironmentAbsence,type ProjectProgramProvenance} from './project-environment.ts';
 import {projectDependencies,type InstalledProjectDependency} from './project-dependencies.ts';
 import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
+import {readerObservationCapture,type CapturedReaderObservation} from './reader-observations.ts';
 
 export type ProjectInputs={configs:string[];roots:string[];modules:{path:string;imports:string[]}[];observations:HostObservation[];installedObservations:{observation:HostObservation;capability:InstalledTypeScript}[];
+  /** Detached transaction outputs. Readers attach their own provenance;
+   * physical identity capture is independent of the consuming Cargo target. */
+  readerInputs:CapturedReaderObservation[];pinInputs:CapturedReaderObservation[];
   hostObservations:{observation:HostObservation;environment:ProjectEnvironmentAbsence}[];
   dependencyObservations:{observation:HostObservation;dependency:InstalledProjectDependency}[];pinObservations:HostObservation[];
   generatedObservations:{observation:HostObservation;capability:GeneratedProjectCapability}[];
@@ -52,7 +56,7 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
       },
     }});
   }
-  return {read(entries:readonly ProjectRequest[]):ProjectInputs{
+  return {read(entries:readonly ProjectRequest[],compiled=false):ProjectInputs{
     if(closed)throw Error('project input owner is closed');
     if(active)throw Error('project input owner already has an active transaction');
     let programContext:ProjectProgramProvenance|undefined;
@@ -159,6 +163,34 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
       }
       const pinFilesystem=new OracleFilesystem();
       if(dependencyObservations.length&&dependencies.state==='current')for(const path of dependencies.pins)pinFilesystem.readFile(resolve(source,path));
+      const matchingEntries=[...transaction.matchingEntries].filter(path=>!transaction.ordinaryEntries.has(path));
+      const reader=readerObservationCapture(source);reader.add(observations,new Set(matchingEntries));
+      if(compiled){
+        const lookups=new OracleFilesystem(),ancestorLookups:string[]=[];
+        for(const module of modules.keys()){
+          if(/\.d\.[cm]?ts$/.test(module))continue;
+          const physical=lookups.realpath(resolve(source,module)),name=relative(source,physical);
+          if(name==='..'||name.startsWith('..'+sep)||isAbsolute(name))throw Error('compiled project module resolves outside source: '+module);
+          const nearest=lookups.projectFor(physical);
+          if(nearest){
+            const name=relative(source,nearest);
+            if(name==='..'||name.startsWith('..'+sep)||isAbsolute(name))throw Error('compiled project nearest config is outside source: '+nearest+' ('+module+')');
+            lookups.readBytes(nearest);
+          }else ancestorLookups.push(module);
+        }
+        const environment:ProjectEnvironmentAbsence={kind:'project-environment-absence',source,
+          programs:entries.map(request=>({request:structuredClone(request),config:request.path,imports:[],types:[],ownerLookups:[...ancestorLookups]}))};
+        const local:HostObservation[]=[];
+        for(const observation of lookups.captured()){
+          const name=relative(source,observation.path);
+          if(name!=='..'&&!name.startsWith('..'+sep)&&!isAbsolute(name)){local.push(observation);continue;}
+          if(!projectOwnerAncestorAbsence(source,observation)||lookups.runtimeKind(observation.path)!==null)
+            throw Error('compiled project owner lookup has no genuine ancestor absence: '+observation.path);
+          for(const fact of [observation,{kind:'runtimeKind' as const,path:observation.path,value:null}])hostObservations.push({observation:fact,environment});
+        }
+        reader.add(local);
+      }
+      const pinInputs=readerObservationCapture(source);pinInputs.add(pinFilesystem.captured());
       // A package is named by an import's resolved identity when any of its
       // files has one; types and triple-slash reach keep the package directory.
       const labels=new Map<string,string>(),reached=new Map<string,string>();
@@ -168,7 +200,7 @@ export function projectInputOwner(source:string,installed?:()=>Capture,generated
       const installationReach:InstallationReach|undefined=dependencies.state==='pending'&&reached.size
         ?{reason:dependencies.reason,packages:[...reached].map(([name,file])=>({package:name,file}))}:undefined;
       return {configs:[...configs],roots:[...roots],modules:[...modules].map(([path,imports])=>({path,imports:[...imports]})),observations,installedObservations,generatedObservations,hostObservations,dependencyObservations,pinObservations:pinFilesystem.captured(),matches,
-        matchingEntries:[...transaction.matchingEntries].filter(path=>!transaction.ordinaryEntries.has(path)),
+        readerInputs:reader.finish(),pinInputs:pinInputs.finish(),matchingEntries,
         ...(installationReach?{installationReach}:{})};
     }catch(error){failure={error};throw error;}
     finally{active=undefined;const failures:unknown[]=[];for(const generated of transaction.generated)try{generated.close();}catch(error){failures.push(error);}if(failures.length)throw new AggregateError(failure?[failure.error,...failures]:failures,'generated project cleanup failed',failure?{cause:failure.error}:undefined);}

@@ -169,6 +169,10 @@ test('stale keys log pending and use the canonical live graph, never stale roles
   assert.equal(selected.decision.record,'stale-live');assert.match(selected.decision.reason,/runtimeKind .*missing.txt/);
   assert.ok(selected.targets[0]!.roles.files.includes('missing.txt'));assert.match(messages.join('\n'),/pending: runtimeKind .*missing.txt/);
   assert.equal(verifyRustSelectorDerivation({...f,report:()=>{},build:()=>{throw Error('stale record required rebuild equality');}}),'pending');
+  writeFileSync(f.path,JSON.stringify(f.build())+'\n');f.git(['add',RUST_SELECTOR_RECORD]);
+  f.git(['-c','user.name=selector control','-c','user.email=control@example.invalid','commit','-qm','accept fresh projection']);
+  const fresh=selectRustInputs({...f,report:()=>{},live:()=>{throw Error('fresh accepted record rebuilt');}});
+  assert.equal(fresh.state,'record');assert.deepEqual(selected.targets,fresh.targets,'stale live and fresh accepted selection expose exactly the same target roles');
 });
 test('missing or stale installation catalogs conservatively owe all Rust targets with a structured reason',t=>{
   const f=fixture(t),messages:string[]=[];

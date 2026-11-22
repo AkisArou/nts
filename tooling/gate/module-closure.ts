@@ -18,7 +18,7 @@ import {directoryEntries,metadataParents,membershipIndex} from './reader-metadat
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
 import {captureReaderObservations,projectObservationCapture,validateReaderBatchObservations} from './reader-observations.ts';
-import {projectOwnerAncestorAbsence,type ProjectEnvironmentAbsence} from './project-environment.ts';
+import type {ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
 import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 import {cargoInputNames} from './cargo-input-population.ts';
@@ -168,8 +168,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       references.set(path,result);return result;
     });
   }
-  type ProjectRead=(request:ProjectRequest,context:ReaderContext)=>ProjectInputs;
-  const readProject:ProjectRead=request=>(projects??=projectInputOwner(root,installed,options.generatedTemporaryParent,options.dependencyCatalog??null)).read([request]);
+  type ProjectRead=(request:ProjectRequest,context:ReaderContext,compiled:boolean)=>ProjectInputs;
+  const readProject:ProjectRead=(request,_context,compiled)=>(projects??=projectInputOwner(root,installed,options.generatedTemporaryParent,options.dependencyCatalog??null)).read([request],compiled);
   function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory,reportByteInput:ModuleClosureOptions['byteInput']=options.byteInput,buildModules?:BuildModuleInputs):InputSnapshot {
     return describeUsing(entries,reportDirectory,reportByteInput,buildModules,readProject);
   }
@@ -204,29 +204,6 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured});
       }
     };
-    /** Every Program and emitter probe of one reader/context contributes to
-     * its snapshot transaction, retaining one answer and all actual causes. */
-    function observeCompiledProject(context:Context,reader:string,project:ProjectInputs,request:ProjectRequest,config:string):void{
-      const modules=project.modules.map(row=>row.path).filter(path=>! /\.d\.[cm]?ts$/.test(path)),lookups=new OracleFilesystem(),ancestorLookups:string[]=[];
-      for(const module of modules){
-        const physical=lookups.realpath(resolve(root,module));if(!inside(root,physical))throw Error('compiled project module resolves outside source: '+module);
-        const nearest=lookups.projectFor(physical);
-        if(nearest){
-          if(!inside(root,nearest))throw Error('compiled project nearest config is outside source: '+nearest+' ('+module+')');
-          lookups.readBytes(nearest);
-        }else ancestorLookups.push(module);
-      }
-      const local:HostObservation[]=[];
-      const environment:ProjectEnvironmentAbsence={kind:'project-environment-absence',source:root,programs:[{request:structuredClone(request),config,imports:[],types:[],ownerLookups:ancestorLookups}]};
-      for(const observation of lookups.captured()){
-        if(inside(root,observation.path)){local.push(observation);continue;}
-        if(!projectOwnerAncestorAbsence(root,observation)||lookups.runtimeKind(observation.path)!==null)
-          throw Error('compiled project owner lookup has no genuine ancestor absence: '+observation.path);
-        for(const fact of [observation,{kind:'runtimeKind' as const,path:observation.path,value:null}])
-          projectCapture(context,reader).retain({observation:fact,environment,causes:[{kind:fact.kind,path:fact.path}]});
-      }
-      observe(context,reader,'project',[...project.observations,...local],new Set(project.matchingEntries));
-    }
     function optionalPresence(context:Context,reader:string,path:string,inspectionOnly=false,observationOnly=false):boolean{
       metadataParents(root,path,'optional file');
       let stat:ReturnType<typeof lstatSync>|undefined;
@@ -417,8 +394,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           request=optionalPresence(context,reader,supplied)?{kind:'config',path:nameOf(supplied)}:{kind:'generated',path:entry,directory:nameOf(directory),include:input.include};
         }
         if(kind!=='generated-project'||request.kind==='generated')visit(context,path,false,true,false);
-        const project=projectRead(request,{entry:context.entry,dataNamespaces:context.namespaces});
-        if(role!=='compiled-program')observe(context,reader,'project',project.observations,new Set(project.matchingEntries));
+        const project=projectRead(request,{entry:context.entry,dataNamespaces:context.namespaces},role==='compiled-program');
+        for(const path of projectCapture(context,reader).merge(project.readerInputs))if(inside(root,path))visit(context,path,false,false,false);
         for(const match of project.matches)projectMatches.push({...structuredClone(match),reader,context:{entry:context.entry,dataNamespaces:structuredClone(context.namespaces)}});
         // Selection forces the reader's steps; a materializing consumer refuses
         // before any source-parent check; an unasked graph keeps its reads.
@@ -428,10 +405,9 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           if(options.unavailableInputs==='refuse')throw new InstalledPackageReachUnavailable(rows);
           unavailableInputs.push(...rows);
         }
-        if(role==='compiled-program')observeCompiledProject(context,reader,project,request,entry);
         for(const fact of project.dependencyObservations)projectCapture(context,reader).retain({
           observation:fact.observation,dependency:fact.dependency,causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
-        for(const fact of captureReaderObservations(root,project.pinObservations)){
+        for(const fact of project.pinInputs){
           if(fact.observation.kind==='file'&&fact.observation.value!==null)visit(context,fact.observation.path,false,false,false,true);
           projectCapture(context,reader).retain({...fact,selectorOnly:true});
         }
@@ -561,10 +537,10 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     references.clear();sourceInputs.clear();sourceTexts.clear();ownedSources.clear();hostImports.clear();localTypeImports.clear();
     tracked=undefined;directoryFiles.clear();memberFiles.clear();metadataIndex=undefined;
     const discoveries=new Map<string,ProjectInputs>();
-    const batchRead:ProjectRead=(request,context)=>{
-      const key=JSON.stringify([request,context.entry,Object.entries(context.dataNamespaces).sort(([a],[b])=>a.localeCompare(b))]);
+    const batchRead:ProjectRead=(request,context,compiled)=>{
+      const key=JSON.stringify([request,context.entry,Object.entries(context.dataNamespaces).sort(([a],[b])=>a.localeCompare(b)),compiled]);
       let result=discoveries.get(key);
-      if(!result){result=readProject(request,context);discoveries.set(key,result);}
+      if(!result){result=readProject(request,context,compiled);discoveries.set(key,result);}
       return result;
     };
     let active=true;

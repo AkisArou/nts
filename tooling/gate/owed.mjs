@@ -2411,21 +2411,25 @@ export function selfTest(options) {
 /** Accepted-source trust is acquired through one owner for preflight and selection. */
 function acceptedSourceTrust() { return rustSelectorTrust(TREE); }
 
+/** @template T @param {(trust:import('./rust-selector-selection.ts').RustSelectorOptions)=>T} operation */
+function withAcceptedSource(operation) {
+  const accepted=acceptedSourceTrust();
+  return readsRustInputs(allSteps())
+    ?withRustSelectorSource(TREE,source=>operation({...accepted,committedSource:source}))
+    :operation(accepted);
+}
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} trust */
+function checkAcceptedSource(trust) {
+  const broken=selfTest(trust);
+  if(!broken&&trust.committedSource){
+    const decision=rustRecordDecision(trust);
+    if(decision)reportRustRecordDecisions([{revision:trust.committedSource.revision,decision}],line=>console.log('  '+line));
+  }
+  return broken;
+}
 /** The CLI and pooled entry run this same accepted-source self-test. */
 export function acceptedSourceSelfTest() {
-  const accepted=acceptedSourceTrust();
-  /** @param {import('./rust-selector-selection.ts').RustSelectorOptions} trust */
-  const check=trust=>{
-    const broken=selfTest(trust);
-    if(!broken&&trust.committedSource){
-      const decision=rustRecordDecision(trust);
-      if(decision)reportRustRecordDecisions([{revision:trust.committedSource.revision,decision}],line=>console.log('  '+line));
-    }
-    return broken;
-  };
-  return readsRustInputs(allSteps())
-    ?withRustSelectorSource(TREE,source=>check({...accepted,committedSource:source}))
-    :check(accepted);
+  return withAcceptedSource(checkAcceptedSource);
 }
 
 function main() {
@@ -2453,74 +2457,81 @@ function main() {
     if(problems.length){console.error(problems.join("\n"));process.exitCode=1;}
     return;
   }
-  const broken=acceptedSourceSelfTest();
-  if (broken) {
-    console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-    process.exit(2);
-  }
-  if (argv.includes("--self-test")) {
-    console.log("  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff; a .ts tool is an instrument and a blockers fixture owes integrity");
-    process.exit(0);
-  }
+  // The self-test and the requested change observe one committed Rust source.
+  // Printing/running follows the fence and source cleanup, as for selection.
+  const render=withAcceptedSource(trust=>{
+    const broken=checkAcceptedSource(trust);
+    if (broken) {
+      console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
+      process.exitCode=2;return;
+    }
+    if (argv.includes("--self-test")) {
+      console.log("  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff; a .ts tool is an instrument and a blockers fixture owes integrity");
+      return;
+    }
 
-  const changes = changedPaths(argv);
-  if (changes.length === 0) {
-    console.log(`  no change in ${TREE}: nothing owed`);
-    process.exit(0);
-  }
-  const rangeAt = argv.indexOf("--range");
-  const selection = rangeAt < 0 ? null : selectRange(TREE, argv[rangeAt + 1]);
-  const currentRules=()=>{
-    if(!changes.some(change=>change.deleted))return owed(changes);
-    const revision=execFileSync('git',gitArguments(['rev-parse','--verify','--end-of-options',`${changeBase(argv)}^{commit}`]),{cwd:TREE,encoding:'utf8'}).trim();
-    return withSelectorSources(TREE,[revision],sources=>owed(changes,{...acceptedSourceTrust(),projectBase:{tree:sources.prepare(0),revision}}));
-  };
-  const rules = selection ? [...new Map(selection.views.flatMap(v => v.rules).map(r => [JSON.stringify(r), r])).values()] : currentRules();
-  const steps = selection ? selection.checks.steps === "all" ? selection.views[1].catalogue : selection.checks.steps : gateSteps(rules);
-  const projects = selection ? selection.checks.interop?.split(/\s+/) ?? null : interopOwed(rules);
-  const narrowed = Array.isArray(projects) ? ` NTS_INTEROP_PROJECTS="${projects.join(" ")}"` : "";
-  const docCrates = selection ? selection.checks.doctests?.split(/\s+/) ?? [] : [...new Set(rules.flatMap(r => r.doctests ?? []))];
-  const docEnv = docCrates.length ? ` NTS_DOCTEST_CRATES="${docCrates.join(" ")}"` : "";
-  // A bare all.sh is every step there is, which only the runner and the gate
-  // trees' inputs owe; the full gate is every core step, so it is a list
-  // (`WIDE` is what the full check adds after landing).
-  const every = selection ? selection.checks.steps === "all" : rules.some((r) => r.full && r.wide);
-  const gate = every
-    ? "sh tooling/gate/all.sh   # the full gate"
-    : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed}${docEnv} sh tooling/gate/all.sh${rules.some((r) => r.full) ? "   # every core step" : ""}`;
-  const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
-  console.log(`  ${changes.length} path(s) changed in ${TREE}`);
-  if (selection) console.log(`  rules: union of base ${selection.base.slice(0,12)} and candidate ${selection.tip.slice(0,12)}`);
-  if(selection?.candidateNewPaths?.paths.length)console.log(`  new paths: candidate reach with unchanged selector ${selection.candidateNewPaths.identity.slice(0,12)} (${selection.candidateNewPaths.paths.length} path(s))`);
-  for (const r of rules) {
-    console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
-    for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);
-    if (r.steps.length > 0) console.log(`    gate: ${r.steps.join(" ")}`);
-  }
-  console.log("\n  the gate steps owed, and what each asks:");
-  for (const step of steps) console.log(`    ${step.padEnd(18)} [${(ASKS[step] ?? ["?"])[0]}] ${(ASKS[step] ?? ["", "(not described in ASKS)"])[1]}`);
-  console.log(`  in one run:\n    ${gate}`);
-  // Which questions the change owes, by kind: four instruments asking one
-  // question is the failure this prints against.
-  const kinds = new Map();
-  for (const k of [...steps.map((st) => (ASKS[st] ?? ["?"])[0]), ...rules.flatMap((r) => r.arms.filter((a) => !a.if).map((a) => a.kind))]) kinds.set(k, (kinds.get(k) ?? 0) + 1);
-  console.log(`\n  owed, by what they ask: ${[...kinds].map(([k, n]) => `${n} ${k}`).join(", ")}`);
-  const compiler = rules.some((r) => ["lowering", "the C backend", "the LLVM backend", "the JVM backend", "the frontend or the snapshot schema", "the C runtime"].includes(r.name));
-  if (compiler && !rules.some((r) => r.arms.some((a) => a.kind === "answers" && !a.if && /<before> <after>/.test(a.run)))) {
-    console.log("  NOTE: nothing owed here compares what programs answer across the change; counts rise with unsoundness too");
-  }
-  if (argv.includes("--run")) {
-    console.log(`\n  running them in ${TREE}\n`);
-    const env = { ...process.env, NTS_GATE_STEPS: steps.join(" ") };
-    delete env.NTS_INTEROP_PROJECTS;
-    delete env.NTS_DOCTEST_CRATES;
-    if (Array.isArray(projects)) env.NTS_INTEROP_PROJECTS = projects.join(" ");
-    if (docCrates.length) env.NTS_DOCTEST_CRATES = docCrates.join(" ");
-    const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env });
-    const left = rules.flatMap((r) => r.arms).length;
-    console.log(`\n  gate steps: ${run.status === 0 ? "green" : `FAILED (exit ${run.status ?? run.signal})`}; ${left} arm(s) above are still yours`);
-    process.exit(run.status === 0 ? 0 : 1);
-  }
+    const changes = changedPaths(argv);
+    if (changes.length === 0) {
+      console.log(`  no change in ${TREE}: nothing owed`);
+      return;
+    }
+    const rangeAt = argv.indexOf("--range");
+    const selection = rangeAt < 0 ? null : selectRange(TREE, argv[rangeAt + 1]);
+    const currentRules=()=>{
+      if(!changes.some(change=>change.deleted))return owed(changes,trust);
+      const revision=execFileSync('git',gitArguments(['rev-parse','--verify','--end-of-options',`${changeBase(argv)}^{commit}`]),{cwd:TREE,encoding:'utf8'}).trim();
+      return withSelectorSources(TREE,[revision],sources=>owed(changes,{...trust,projectBase:{tree:sources.prepare(0),revision}}));
+    };
+    const rules = selection ? [...new Map(selection.views.flatMap(v => v.rules).map(r => [JSON.stringify(r), r])).values()] : currentRules();
+    const steps = selection ? selection.checks.steps === "all" ? selection.views[1].catalogue : selection.checks.steps : gateSteps(rules);
+    const projects = selection ? selection.checks.interop?.split(/\s+/) ?? null : interopOwed(rules);
+    return ()=>{
+      const narrowed = Array.isArray(projects) ? ` NTS_INTEROP_PROJECTS="${projects.join(" ")}"` : "";
+      const docCrates = selection ? selection.checks.doctests?.split(/\s+/) ?? [] : [...new Set(rules.flatMap(r => r.doctests ?? []))];
+      const docEnv = docCrates.length ? ` NTS_DOCTEST_CRATES="${docCrates.join(" ")}"` : "";
+      // A bare all.sh is every step there is, which only the runner and the gate
+      // trees' inputs owe; the full gate is every core step, so it is a list
+      // (`WIDE` is what the full check adds after landing).
+      const every = selection ? selection.checks.steps === "all" : rules.some((r) => r.full && r.wide);
+      const gate = every
+        ? "sh tooling/gate/all.sh   # the full gate"
+        : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed}${docEnv} sh tooling/gate/all.sh${rules.some((r) => r.full) ? "   # every core step" : ""}`;
+      const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
+      console.log(`  ${changes.length} path(s) changed in ${TREE}`);
+      if (selection) console.log(`  rules: union of base ${selection.base.slice(0,12)} and candidate ${selection.tip.slice(0,12)}`);
+      if(selection?.candidateNewPaths?.paths.length)console.log(`  new paths: candidate reach with unchanged selector ${selection.candidateNewPaths.identity.slice(0,12)} (${selection.candidateNewPaths.paths.length} path(s))`);
+      for (const r of rules) {
+        console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
+        for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);
+        if (r.steps.length > 0) console.log(`    gate: ${r.steps.join(" ")}`);
+      }
+      console.log("\n  the gate steps owed, and what each asks:");
+      for (const step of steps) console.log(`    ${step.padEnd(18)} [${(ASKS[step] ?? ["?"])[0]}] ${(ASKS[step] ?? ["", "(not described in ASKS)"])[1]}`);
+      console.log(`  in one run:\n    ${gate}`);
+      // Which questions the change owes, by kind: four instruments asking one
+      // question is the failure this prints against.
+      const kinds = new Map();
+      for (const k of [...steps.map((st) => (ASKS[st] ?? ["?"])[0]), ...rules.flatMap((r) => r.arms.filter((a) => !a.if).map((a) => a.kind))]) kinds.set(k, (kinds.get(k) ?? 0) + 1);
+      console.log(`\n  owed, by what they ask: ${[...kinds].map(([k, n]) => `${n} ${k}`).join(", ")}`);
+      const compiler = rules.some((r) => ["lowering", "the C backend", "the LLVM backend", "the JVM backend", "the frontend or the snapshot schema", "the C runtime"].includes(r.name));
+      if (compiler && !rules.some((r) => r.arms.some((a) => a.kind === "answers" && !a.if && /<before> <after>/.test(a.run)))) {
+        console.log("  NOTE: nothing owed here compares what programs answer across the change; counts rise with unsoundness too");
+      }
+      if (argv.includes("--run")) {
+        console.log(`\n  running them in ${TREE}\n`);
+        const env = { ...process.env, NTS_GATE_STEPS: steps.join(" ") };
+        delete env.NTS_INTEROP_PROJECTS;
+        delete env.NTS_DOCTEST_CRATES;
+        if (Array.isArray(projects)) env.NTS_INTEROP_PROJECTS = projects.join(" ");
+        if (docCrates.length) env.NTS_DOCTEST_CRATES = docCrates.join(" ");
+        const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env });
+        const left = rules.flatMap((r) => r.arms).length;
+        console.log(`\n  gate steps: ${run.status === 0 ? "green" : `FAILED (exit ${run.status ?? run.signal})`}; ${left} arm(s) above are still yours`);
+        process.exit(run.status === 0 ? 0 : 1);
+      }
+    };
+  });
+  render?.();
 }
 
 // Run as a command; imported (owed.test.mjs), it only exports.

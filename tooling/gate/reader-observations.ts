@@ -72,7 +72,7 @@ export function captureReaderObservations(root:string,rows:readonly HostObservat
   const capture=readerObservationCapture(root);capture.add(rows);return capture.finish();
 }
 
-type CapturedReaderObservation=Omit<ReaderObservation,'reader'|'context'|'protocol'>;
+export type CapturedReaderObservation=Omit<ReaderObservation,'reader'|'context'|'protocol'>;
 /** One reader/context's snapshot transaction. Identical authority can share
  * an answer; another descriptor must still pass its own validator. */
 export function projectObservationCapture(root:string){
@@ -85,11 +85,7 @@ export function projectObservationCapture(root:string){
     const key=JSON.stringify(input),value=descriptors.get(key)??structuredClone(input),entry={key,value};
     descriptors.set(key,value);identities.set(input,entry);return entry as {key:string;value:T};
   }
-  return {add(rows:readonly HostObservation[],matchingEntries?:ReadonlySet<string>):string[]{
-    if(closed)throw Error('project observation capture is closed');return capture.add(rows,matchingEntries);
-  },retain(row:CapturedReaderObservation):void{
-    if(closed)throw Error('project observation capture is closed');
-    if(!row.capability&&!row.environment&&!row.dependency&&!row.selectorOnly)throw Error('typed project observation needs its authority');
+  function merge(row:CapturedReaderObservation):void{
     const capability=row.capability?descriptor(row.capability):undefined,environment=row.environment?descriptor(row.environment):undefined,dependency=row.dependency?descriptor(row.dependency):undefined;
     const key=JSON.stringify([row.observation.kind,row.observation.path,capability?.key,environment?.key,dependency?.key,!!row.selectorOnly]);
     let retained=facts.get(key);
@@ -104,11 +100,23 @@ export function projectObservationCapture(root:string){
       if(!retained.causes.some(previous=>previous===shared))retained.causes.push(shared);
     }
     if(!row.observationOnly)delete retained.observationOnly;
+  }
+  return {add(rows:readonly HostObservation[],matchingEntries?:ReadonlySet<string>):string[]{
+    if(closed)throw Error('project observation capture is closed');return capture.add(rows,matchingEntries);
+  },merge(rows:readonly CapturedReaderObservation[]):string[]{
+    if(closed)throw Error('project observation capture is closed');
+    for(const row of rows)merge(row);
+    return rows.flatMap(row=>row.observation.kind==='file'&&row.observation.value!==null?[row.observation.path]:[]);
+  },retain(row:CapturedReaderObservation):void{
+    if(closed)throw Error('project observation capture is closed');
+    if(!row.capability&&!row.environment&&!row.dependency&&!row.selectorOnly)throw Error('typed project observation needs its authority');
+    merge(row);
   },finish():CapturedReaderObservation[]{
-    if(closed)throw Error('project observation capture is closed');closed=true;
-    const rows=capture.finish().map(row=>[JSON.stringify([row.observation.kind,row.observation.path,null,null,null,false]),row] as const);
-    for(const [key,row]of facts){row.causes.sort((a,b)=>{const x=JSON.stringify(a),y=JSON.stringify(b);return x<y?-1:x>y?1:0;});rows.push([key,row]);}
-    return rows.sort(([a],[b])=>a<b?-1:a>b?1:0).map(([,row])=>row);
+    if(closed)throw Error('project observation capture is closed');
+    for(const row of capture.finish())merge(row);
+    closed=true;
+    for(const row of facts.values())row.causes.sort((a,b)=>{const x=JSON.stringify(a),y=JSON.stringify(b);return x<y?-1:x>y?1:0;});
+    return [...facts].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([,row])=>row);
   }};
 }
 

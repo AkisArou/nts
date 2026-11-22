@@ -231,6 +231,14 @@ config's original options. The pinned Program owns per-usage import/require
 conditions, package goals, explicit resolution-mode attributes, ambient roots and actual source
 edges. Authenticated installed SDK observations remain capabilities, separate
 from repository ownership.
+Each Program transaction produces its context-free reader identities and pin
+facts once. A compiled-program request also captures the emitter's nearest-config
+lookups; other project roles keep their declared config semantics. Snapshots
+compose these detached facts under their own reader and namespace context,
+unioning causes and refusing conflicting answers. Composition performs no new
+physical identity capture. Scope-end validation still replays every distinct
+answer and checks project matches, source ownership and populations before
+returning. A later scope constructs fresh Programs and captures fresh identities.
 Only a declared config or generated Program can retain an absent `node_modules`
 on a strict ancestor of the source root as a host-environment observation.
 Its descriptor names the request, config and Program's unresolved imports and
@@ -965,6 +973,11 @@ source-population control through the exact tooling-test ownership table and
 the ordinary scoped test runner; it is excluded from landing's tooling group.
 Missing or stale accepted records log their kind/path, remain pending and
 use a live projection. The full check refreshes pending records after landing.
+The owed CLI's self-test and requested selection share one committed Rust-source
+lifetime and trust context. Their JS graph still observes the working tree;
+the Rust graph observes that committed source. The source fence closes and its
+temporary drains before the selected work runs. Independent endpoints retain
+their own graph and source lifetimes.
 New record bytes require an actual rebuild comparison before gaining future
 authority; malformed payloads and unverified stale candidates refuse by name.
 The byte-bounded reader decodes untrusted material without acquiring a compiler.
@@ -1937,6 +1950,9 @@ death; an absent timestamp remains explicit after forced termination.
   Each complete request, entry and namespace key is resolved once within the
   graph's fixed source, installation and catalog view. Independent cases keep
   independent Programs; the Rust selector retains its independent batch.
+  The complete request key includes whether it performs compiled-program
+  nearest-config lookups. Each fresh Program transaction produces its canonical
+  reader identities once, before snapshots attach reader and target provenance.
   Validation preserves observations, source ownership and populations before
   returning. The scoped callback closes when its body returns, and its query
   answers clear on success or failure. Endpoint views cannot share answers
@@ -2303,11 +2319,11 @@ death; an absent timestamp remains explicit after forced termination.
   selection facts, including absent nearer configs. Queried Program modules
   witness genuine ancestor config absences outside the source; a positive
   external config refuses. Type-check-only inputs keep their declared config.
-  Within a snapshot, every Program of one reader and namespace context shares
-  one capture transaction. Equal answers retain the union of their causes;
+  Within a snapshot, each reader and namespace context composes the detached
+  observations produced by its Program transactions. Equal answers retain the union of their causes;
   conflicting answers refuse. Typed facts share a detached authority descriptor
   only when it is identical; different authority or Program provenance retains
-  separate rows and validation. No capture survives its snapshot. The producer
+  separate rows and validation. No Program answer survives its graph scope. The producer
   canonically orders capture owners, requests and role bags, and consumes
   snapshots in Cargo inventory order. The codec retains its ordered byte
   contract; verification still requires exact output from that producer
