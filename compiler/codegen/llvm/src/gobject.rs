@@ -227,7 +227,7 @@ impl Declarations {
                                 .is_some_and(|template| template.children.get(*index).is_some())
                     }) =>
                 {
-                    selected.insert(Support::TemplateChild)
+                    selected.insert(Support::TemplateChild);
                 }
                 Some(GObjectThunk::Notify { .. }) => selected.insert(Support::PropertySpec),
                 Some(GObjectThunk::Signal { .. }) => selected.insert(Support::SignalId),
@@ -610,64 +610,7 @@ fn template(
                     None => Ok([Operand::new("ptr", "null"), Operand::new("ptr", "null")]),
                 };
             };
-            let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
-                format!(
-                    "  {}\n",
-                    runtime_call::call(
-                        Site::function(compiled),
-                        platform,
-                        "nts_release",
-                        &[Operand::new("ptr", "%text")]
-                    )?
-                )
-            } else {
-                String::new()
-            };
-            format!(
-                "  {runtime_0}\n  %text = {0}\n  %c = {runtime_1}\n  \
-                 {set_template}\n  {runtime_2}\n{release}  \
-                 {runtime_3}\n",
-                runtime_call::direct(
-                    "ptr",
-                    &DirectCallee::compiled(
-                        Site::function(compiled),
-                        platform,
-                        program,
-                        &compiled.name
-                    )?,
-                    ""
-                ),
-                set_template = runtime_call::call(
-                    Site::synthetic(program, "template").with_gobject(support),
-                    platform,
-                    "nts_gtk_class_template_text",
-                    &[Operand::new("ptr", "%klass"), Operand::new("ptr", "%c")]
-                )?,
-                runtime_0 = runtime_call::call(
-                    Site::synthetic(program, "template"),
-                    platform,
-                    "nts_callback_enter",
-                    &[]
-                )?,
-                runtime_1 = runtime_call::call(
-                    Site::synthetic(program, "template"),
-                    platform,
-                    "nts_string_to_cstring",
-                    &[Operand::new("ptr", "%text")]
-                )?,
-                runtime_2 = runtime_call::call(
-                    Site::synthetic(program, "template"),
-                    platform,
-                    "nts_cstring_release",
-                    &[Operand::new("ptr", "%text"), Operand::new("ptr", "%c")]
-                )?,
-                runtime_3 = runtime_call::call(
-                    Site::synthetic(program, "template"),
-                    platform,
-                    "nts_callback_leave",
-                    &[]
-                )?
-            )
+            read_template(program, platform, compiled, support)?
         }
     };
     let mut names = Vec::new();
@@ -704,6 +647,68 @@ fn template(
         Operand::new("ptr", format!("@__nts_gobject_class_setup_{name}")),
         Operand::new("ptr", "@nts_gtk_init_template"),
     ])
+}
+
+/// The runtime template reader lends its string only for the GTK setup call.
+fn read_template(
+    program: &Program,
+    platform: Platform,
+    compiled: &Func,
+    support: Declarations,
+) -> Result<String, Diagnostic> {
+    let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
+        format!(
+            "  {}\n",
+            runtime_call::call(
+                Site::function(compiled),
+                platform,
+                "nts_release",
+                &[Operand::new("ptr", "%text")]
+            )?
+        )
+    } else {
+        String::new()
+    };
+    Ok(format!(
+        "  {runtime_0}\n  %text = {0}\n  %c = {runtime_1}\n  \
+                 {set_template}\n  {runtime_2}\n{release}  \
+                 {runtime_3}\n",
+        runtime_call::direct(
+            "ptr",
+            &DirectCallee::compiled(Site::function(compiled), platform, program, &compiled.name)?,
+            ""
+        ),
+        set_template = runtime_call::call(
+            Site::synthetic(program, "template").with_gobject(support),
+            platform,
+            "nts_gtk_class_template_text",
+            &[Operand::new("ptr", "%klass"), Operand::new("ptr", "%c")]
+        )?,
+        runtime_0 = runtime_call::call(
+            Site::synthetic(program, "template"),
+            platform,
+            "nts_callback_enter",
+            &[]
+        )?,
+        runtime_1 = runtime_call::call(
+            Site::synthetic(program, "template"),
+            platform,
+            "nts_string_to_cstring",
+            &[Operand::new("ptr", "%text")]
+        )?,
+        runtime_2 = runtime_call::call(
+            Site::synthetic(program, "template"),
+            platform,
+            "nts_cstring_release",
+            &[Operand::new("ptr", "%text"), Operand::new("ptr", "%c")]
+        )?,
+        runtime_3 = runtime_call::call(
+            Site::synthetic(program, "template"),
+            platform,
+            "nts_callback_leave",
+            &[]
+        )?
+    ))
 }
 
 /// Each method a template names as a signal's handler: the entry point a
@@ -1416,27 +1421,31 @@ fn chains(
                 ]
             )?
         );
-        let arguments = parameters.join(", ");
-        if returns == "void" {
-            let _ = writeln!(
-                out,
-                "  call void %slot({arguments})\n  ret void\nskip:\n  ret void\n}}"
-            );
-        } else {
-            let zero = if returns == "ptr" {
-                "null".to_owned()
-            } else if returns.starts_with('i') {
-                "0".to_owned()
-            } else {
-                "0.0".to_owned()
-            };
-            let _ = writeln!(
-                out,
-                "  %r = call {returns} %slot({arguments})\n  ret {returns} %r\nskip:\n  ret {returns} {zero}\n}}"
-            );
-        }
+        chain_call(&mut out, &returns, &parameters.join(", "));
     }
     Ok(out)
+}
+
+/// A missing parent slot has the same zero result as the C support thunk.
+fn chain_call(out: &mut String, returns: &str, arguments: &str) {
+    if returns == "void" {
+        let _ = writeln!(
+            out,
+            "  call void %slot({arguments})\n  ret void\nskip:\n  ret void\n}}"
+        );
+    } else {
+        let zero = if returns == "ptr" {
+            "null".to_owned()
+        } else if returns.starts_with('i') {
+            "0".to_owned()
+        } else {
+            "0.0".to_owned()
+        };
+        let _ = writeln!(
+            out,
+            "  %r = call {returns} %slot({arguments})\n  ret {returns} %r\nskip:\n  ret {returns} {zero}\n}}"
+        );
+    }
 }
 
 /// One override's entry point, `nts_gobject_<Class>_<at>`: the slot's C
