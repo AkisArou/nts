@@ -1014,7 +1014,10 @@ fn declined_stub(
     code.const_string(
         &origin,
         pool,
-        &format!("`{}` was declined: {why}", func.name),
+        &format!(
+            "`{}` was declined: {why}",
+            nts_core::hir::own::source_name(&func.name)
+        ),
     );
     code.invoke_static(
         &origin,
@@ -2864,7 +2867,10 @@ fn lambda_forward(
     let body = code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4003",
-            format!("the lambda overload for `{}`: {error}", func.name),
+            format!(
+                "the lambda overload for `{}`: {error}",
+                nts_core::hir::own::source_name(&func.name)
+            ),
             origin.location,
         )
     })?;

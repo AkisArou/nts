@@ -81,7 +81,7 @@ fn model(n: usize, recursive: bool) -> (Report, Program, rustc_hash::FxHashMap<S
 #[test]
 fn merged_context_keeps_all_actual_variants() {
     let (mut report, program, clones) = model(4, false);
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
     let merged = report
         .sites
         .iter()
@@ -100,7 +100,7 @@ fn missing_arrival_does_not_erase_a_known_variant() {
         unreachable!()
     };
     *callee = Callee::Direct("unavailable-body".to_owned());
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
     let merged = report
         .sites
         .iter()
@@ -119,7 +119,7 @@ fn missing_arrival_does_not_erase_a_known_variant() {
 #[test]
 fn recursive_arrivals_follow_the_actual_recursive_variant() {
     let (mut report, program, clones) = model(1, true);
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
     assert_eq!(report.sites.len(), 1);
     assert_eq!(report.sites[0].legacy, ["call-region"]);
     assert_eq!(
@@ -133,7 +133,7 @@ fn recursive_arrivals_follow_the_actual_recursive_variant() {
 fn comparison_exhaustion_is_named_for_every_site() {
     let (mut report, program, clones) = model(4, false);
     report.work_limit = report.work;
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
     assert!(report.comparison_failure.is_some());
     assert!(
         report
@@ -148,7 +148,7 @@ fn frame_storage_in_a_clone_keeps_its_physical_frame_home() {
     let (mut report, mut program, clones) = model(1, false);
     program.funcs[2].values[0].kind = OpKind::ObjectNew { frame: true };
     verify::verify(&program).expect("the framed actual clone verifies");
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
     assert_eq!(report.sites[0].legacy, ["frame"]);
 }
 
@@ -156,7 +156,7 @@ fn frame_storage_in_a_clone_keeps_its_physical_frame_home() {
 fn comparison_work_tracks_actual_sparse_arrivals() {
     for n in [16, 64, 256] {
         let (mut report, program, clones) = model(n, false);
-        report.compare_legacy(&program, Memory::ReferenceCounting, &clones);
+        report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
         assert!(report.comparison_failure.is_none());
         assert!(
             report.comparison_work <= 16 * n + 64,
@@ -168,4 +168,48 @@ fn comparison_work_tracks_actual_sparse_arrivals() {
             report.comparison_work
         );
     }
+}
+
+#[test]
+fn a_consuming_entry_resolves_the_moved_body_without_region_ownership() {
+    let (mut report, mut program, clones) = model(4, false);
+    let mut body = program.funcs[1].clone();
+    body.name = "@consuming:factory".to_owned();
+    body.values[0].kind = OpKind::ObjectNew { frame: true };
+    program.funcs[1] = function(
+        "factory".to_owned(),
+        vec![OpKind::Call {
+            callee: Callee::Direct(body.name.clone()),
+            args: Vec::new(),
+            frame: None,
+        }],
+    );
+    let entries = vec![crate::hir::own::EntryDecision {
+        function: body.name.clone(),
+        kind: crate::hir::own::EntryDecisionKind::Implementation,
+        reason: "consuming implementation for direct callers",
+    }];
+    program.funcs.push(body);
+    verify::verify(&program).expect("the borrowed adapter and its moved body verify");
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &entries);
+    let merged = report
+        .sites
+        .iter()
+        .find(|site| site.obligations.contains(&Reason::ContextBudget))
+        .unwrap();
+    assert_eq!(merged.legacy, ["call-region", "frame"]);
+    assert!(
+        merged
+            .legacy_variants
+            .iter()
+            .any(|variant| variant.function == "factory" && variant.home == "frame")
+    );
+    assert!(merged.legacy_unknown.is_none());
+    assert!(
+        report
+            .legacy_clones
+            .iter()
+            .all(|(variant, _)| variant != "@consuming:factory")
+    );
+    assert!(report.comparison_failure.is_none());
 }

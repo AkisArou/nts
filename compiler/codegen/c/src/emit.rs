@@ -1045,7 +1045,11 @@ fn drop_orphaned_bodies(
         };
         diagnostics.push(Diagnostic::error(
             "NTS2009",
-            format!("`{orphaned}` cannot be emitted because it {how} `{missing}`, {why}"),
+            format!(
+                "`{}` cannot be emitted because it {how} `{}`, {why}",
+                nts_core::hir::own::source_name(&orphaned),
+                nts_core::hir::own::source_name(&missing)
+            ),
             origin.location,
         ));
         refused.push(orphaned);

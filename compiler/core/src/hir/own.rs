@@ -51,6 +51,9 @@
 use super::liveness;
 use super::{BlockId, Func, HirType, Layout, ManagedType, OpKind, Program, ValueId};
 
+pub(super) mod entries;
+pub use entries::{EntryDecision, EntryDecisionKind, source_name};
+
 /// What one value holds.
 ///
 /// Exactly one of these per value. The counting pass does no reasoning of its

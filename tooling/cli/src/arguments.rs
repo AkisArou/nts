@@ -234,7 +234,7 @@ pub(crate) const COMMANDS: &[Command] = &[
             PROVIDER,
             SHAPE,
             LISTING,
-            &[switch("--prepared")],
+            &[switch("--prepared"), switch("--entry-decisions")],
         ],
     ),
     command(

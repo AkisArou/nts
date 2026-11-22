@@ -158,8 +158,9 @@ impl Report {
         program: &Program,
         provider: Memory,
         clones: &rustc_hash::FxHashMap<String, String>,
+        entries: &[super::own::EntryDecision],
     ) {
-        comparison::compare(self, program, provider, clones);
+        comparison::compare(self, program, provider, clones, entries);
     }
 }
 

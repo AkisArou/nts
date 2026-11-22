@@ -3835,7 +3835,10 @@ fn widening(slot: &HirType, value: &HirType) -> Option<&'static str> {
 fn refuse(func: &Func, what: &str) -> Diagnostic {
     Diagnostic::error(
         "NTS3001",
-        format!("{what} (in `{}`)", func.name),
+        format!(
+            "{what} (in `{}`)",
+            nts_core::hir::own::source_name(&func.name)
+        ),
         func.origin.location,
     )
 }

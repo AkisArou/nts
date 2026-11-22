@@ -715,6 +715,7 @@ INSPECTING
   frontend     what the frontend answered, before lowering
   types        every type the frontend resolved, as the schema records it
   hir          the lowered program; --prepared [--backend c|llvm|jvm] shows backend preparation
+               --entry-decisions lists the prepared --rc entry decisions
   stats        what preparation did to the program, as `key value` counts (takes hir --prepared's flags)
   regions      which calls a region could serve under --rc, and why each other one cannot
   contents-census  JSON census of bounded content proofs and failed writer contracts (requires --rc)
@@ -3201,6 +3202,10 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let (program, diagnostics) = if want_passes {
         let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
         println!("{header}");
+        print_entry_decisions(
+            &prepared,
+            std::env::args().any(|arg| arg == "--entry-decisions"),
+        );
         print_contents(&prepared.contents, &mut locations);
         println!(
             "// accumulators: {} candidate(s), {} wrapping rewrite(s), {} operation visit(s), {} budget exhaustion(s)",
@@ -3275,6 +3280,22 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn print_entry_decisions(prepared: &hir::Prepared, requested: bool) {
+    if !requested {
+        return;
+    }
+    for decision in &prepared.entry_decisions {
+        println!(
+            "entry-decision {}",
+            serde_json::json!({
+                "function": decision.function,
+                "decision": decision.kind.as_str(),
+                "reason": decision.reason,
+            })
+        );
+    }
 }
 
 fn print_contents(report: &hir::contents::Report, locations: &mut SourceLocations<'_>) {

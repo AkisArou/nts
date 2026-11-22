@@ -5651,6 +5651,9 @@ pub fn operands_of_terminator(terminator: &Terminator) -> Vec<ValueId> {
 /// checked. Both have happened; neither is visible in the output.
 #[derive(Debug)]
 pub struct Prepared {
+    /// Decisions consumed by the borrowed-entry rewrite, for opt-in inspection.
+    /// Kept out of Program and its snapshots and executable identity.
+    pub entry_decisions: Vec<own::EntryDecision>,
     /// Requested pre-counting memory diagnostics. Ordinary preparation does
     /// not run this analysis while no build consumes it.
     pub memory: Option<memory::Report>,
@@ -8291,22 +8294,34 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
 /// What the provider inserts: reference counting's retains and releases, or,
 /// without counting, the sink that keeps a floating `GObject` the program's
 /// rather than the first container's (`floating`).
+#[derive(Default)]
+struct ProvidedMemory {
+    counting: rc::Report,
+    contents: contents::Report,
+    entry_decisions: Vec<own::EntryDecision>,
+}
+
 fn provide(
     program: &mut Program,
     provider: Memory,
-) -> Result<(rc::Report, contents::Report), nts_diagnostics::Diagnostic> {
+) -> Result<ProvidedMemory, nts_diagnostics::Diagnostic> {
     match provider {
         Memory::ReferenceCounting => {
+            let entry_decisions = own::entries::materialize(program);
             let old_lengths: Vec<_> = program.funcs.iter().map(|func| func.values.len()).collect();
             let mut counted = rc::insert(program)?;
             let contents = contents::elide(program, &old_lengths);
             counted.retains -= contents.inserted_retains_removed;
             counted.releases -= contents.inserted_releases_removed;
-            Ok((counted, contents))
+            Ok(ProvidedMemory {
+                counting: counted,
+                contents,
+                entry_decisions,
+            })
         }
         Memory::NoGc => {
             floating::sink(program);
-            Ok((rc::Report::default(), contents::Report::default()))
+            Ok(ProvidedMemory::default())
         }
         Memory::HostGc => {
             // Lowering also records native frame lifetimes (`for await`).
@@ -8325,7 +8340,7 @@ fn provide(
                     });
                 }
             }
-            Ok((rc::Report::default(), contents::Report::default()))
+            Ok(ProvidedMemory::default())
         }
     }
 }
@@ -8629,9 +8644,13 @@ fn prepare_lowered(
     // Reference counting, after everything that could move or remove an
     // operation: a retain inserted before dead-code elimination would keep
     // alive exactly what that pass was about to drop.
-    let (counting, contents) = provide(&mut program, options.provider).unwrap_or_else(|failure| {
+    let ProvidedMemory {
+        counting,
+        contents,
+        entry_decisions,
+    } = provide(&mut program, options.provider).unwrap_or_else(|failure| {
         rejected.push(failure);
-        (rc::Report::default(), contents::Report::default())
+        ProvidedMemory::default()
     });
     // Recorded on the program rather than left in the options, because a
     // backend is handed the program alone and one of them has to act on this.
@@ -8686,7 +8705,12 @@ fn prepare_lowered(
     native_dispatch::plan(&mut program);
 
     if let Some(memory) = &mut memory {
-        memory.compare_legacy(&program, options.provider, &region_lineage);
+        memory.compare_legacy(
+            &program,
+            options.provider,
+            &region_lineage,
+            &entry_decisions,
+        );
     }
 
     // Report against final value/function identities. This inventory only
@@ -8696,6 +8720,7 @@ fn prepare_lowered(
     }
 
     Prepared {
+        entry_decisions,
         memory,
         accumulators,
         contents,

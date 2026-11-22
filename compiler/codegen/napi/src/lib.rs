@@ -25,6 +25,7 @@
 use nts_codegen_c::{c_global, c_identifier};
 use std::fmt::Write as _;
 
+use nts_core::hir::reachable::declared_members;
 use nts_core::hir::{self, HirType, ManagedType};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -1850,29 +1851,6 @@ fn defined_classes(program: &hir::Program) -> Vec<(&str, &str)> {
         .collect()
 }
 
-/// The members of `class` a wrapper is attempted for, each with its member name.
-///
-/// Neither the constructor nor a specialization variant: `#` separates a class
-/// from its member *and* a function from its specialization, so
-/// `Holder#constructor#whole` is neither and was once published as a prototype
-/// method under that literal name.
-///
-/// **One collection, so the emitter and the declaration pass cannot disagree
-/// about which members exist.** Whether each *crosses* is then
-/// [`member_crossings`]' single answer, asked by both -- the emitter to write
-/// the wrapper, the declaration pass to declare what that wrapper calls.
-fn declared_members<'a>(program: &'a hir::Program, class: &str) -> Vec<(&'a hir::Func, &'a str)> {
-    let prefix = format!("{class}#");
-    program
-        .funcs
-        .iter()
-        .filter_map(|func| {
-            let member = func.name.strip_prefix(&prefix)?;
-            (member != "constructor" && !member.contains('#')).then_some((func, member))
-        })
-        .collect()
-}
-
 fn emit_classes<'a>(
     context: &ClassProgram<'_, 'a>,
     classes: &FxHashSet<String>,
@@ -2470,7 +2448,11 @@ fn class_names(program: &hir::Program) -> FxHashSet<String> {
     program
         .funcs
         .iter()
-        .filter_map(|f| f.name.split_once('#').map(|(owner, _)| owner.to_owned()))
+        .filter_map(|f| {
+            hir::own::source_name(&f.name)
+                .split_once('#')
+                .map(|(owner, _)| owner.to_owned())
+        })
         .collect()
 }
 

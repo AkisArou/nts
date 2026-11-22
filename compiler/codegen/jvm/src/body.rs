@@ -56,7 +56,10 @@ pub fn program_class(package: &str) -> String {
 pub fn refuse(func: &Func, what: &str) -> Diagnostic {
     Diagnostic::error(
         "NTS4001",
-        format!("{what} (in `{}`)", func.name),
+        format!(
+            "{what} (in `{}`)",
+            nts_core::hir::own::source_name(&func.name)
+        ),
         func.origin.location,
     )
 }

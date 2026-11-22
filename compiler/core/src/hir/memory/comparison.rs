@@ -86,6 +86,7 @@ struct Index<'p> {
     program: &'p Program,
     by_name: FxHashMap<&'p str, usize>,
     origins: Vec<String>,
+    display: Vec<String>,
     region: FxHashSet<usize>,
     placed: Vec<FxHashSet<ValueId>>,
     dispatch: FxHashMap<u32, Vec<&'p str>>,
@@ -93,11 +94,17 @@ struct Index<'p> {
 }
 
 impl<'p> Index<'p> {
-    fn of(program: &'p Program, clones: &FxHashMap<String, String>, budget: &mut Budget) -> Self {
+    fn of(
+        program: &'p Program,
+        clones: &FxHashMap<String, String>,
+        entries: &[super::super::own::EntryDecision],
+        budget: &mut Budget,
+    ) -> Self {
         let mut index = Self {
             program,
             by_name: FxHashMap::default(),
             origins: Vec::new(),
+            display: Vec::new(),
             region: FxHashSet::default(),
             placed: Vec::new(),
             dispatch: FxHashMap::default(),
@@ -108,6 +115,7 @@ impl<'p> Index<'p> {
                 return index;
             }
             index.by_name.insert(function.name.as_str(), at);
+            index.display.push(function.name.clone());
             let original = clones.get(&function.name);
             index
                 .origins
@@ -123,6 +131,23 @@ impl<'p> Index<'p> {
                 placed.insert(value);
             }
             index.placed.push(placed);
+        }
+        // A detached context's ValueIds describe the original body, never the
+        // adapter's new parameter arena. Use the writer's actual decisions to
+        // resolve both borrowed and direct arrivals to that same moved body.
+        // This is source lineage only: unlike a region clone, the consuming
+        // body still owns its normal heap/frame allocations.
+        for (entry, body) in super::super::own::entries::implementations(entries) {
+            if !budget.charge() {
+                return index;
+            }
+            if let Some(&body_at) = index.by_name.get(body) {
+                if let Some(target) = index.by_name.get_mut(entry) {
+                    *target = body_at;
+                }
+                entry.clone_into(&mut index.origins[body_at]);
+                entry.clone_into(&mut index.display[body_at]);
+            }
         }
         for (selector, target) in program.dispatch_entries() {
             if !budget.charge() {
@@ -160,7 +185,7 @@ impl<'p> Index<'p> {
             if names.is_empty() {
                 targets.unknown = Some(format!(
                     "no actual compiled call at {}:%{}",
-                    function.name, operation.0
+                    self.display[variant], operation.0
                 ));
             }
             for &name in names {
@@ -200,7 +225,7 @@ impl<'p> Index<'p> {
             .ok_or_else(|| {
                 format!(
                     "allocation is no longer placed at {}:%{value}",
-                    function.name
+                    self.display[variant]
                 )
             })?;
         if storage == Storage::Native {
@@ -342,7 +367,7 @@ fn publish(
                 }
                 match index.home(variant, site.id.value, site.id.storage, provider) {
                     Ok(home) => site.legacy_variants.push(Variant {
-                        function: index.program.funcs[variant].name.clone(),
+                        function: index.display[variant].clone(),
                         home,
                     }),
                     Err(reason) => {
@@ -387,6 +412,7 @@ pub(super) fn compare(
     program: &Program,
     provider: Memory,
     clones: &FxHashMap<String, String>,
+    entries: &[super::super::own::EntryDecision],
 ) {
     let mut budget = Budget {
         used: 0,
@@ -404,7 +430,7 @@ pub(super) fn compare(
         let _ = budget.charge();
         left.cmp(right)
     });
-    let mut index = Index::of(program, clones, &mut budget);
+    let mut index = Index::of(program, clones, entries, &mut budget);
     let states = follow(&report.comparison_inputs, &mut index, &mut budget);
     publish(report, &index, &states, provider, &mut budget);
 }
