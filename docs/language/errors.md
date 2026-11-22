@@ -121,6 +121,11 @@ actual object's fixed string `message` field (`nts: uncaught RangeError: boom`;
 [async.md](async.md#unhandled-rejections)). Node's report format is decided,
 its cost measured first ([Decisions](#decisions)).
 
+Compiled uncaught throws hand over the value without a separate message read.
+The runtime reads the same fixed projection from the value's descriptor (or
+the JVM's `NtsThrownMessage` protocol), so reporting needs no second reference
+to the original object beside the handover.
+
 ## Callbacks a host invokes
 
 An exception that escapes a callback a host invokes (a GTK signal, a Windows

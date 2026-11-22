@@ -367,7 +367,7 @@ impl FuncBuilder<'_> {
                 self.lower_arm(|this| {
                     let thrown = this.open_handler(handler, &frame, &entry, &origin);
                     this.switch_to(handler);
-                    this.throw_erased(at, thrown, thrown, &HirType::Erased)
+                    this.throw_erased(at, thrown)
                 })?;
                 self.current = tail;
                 if !open {

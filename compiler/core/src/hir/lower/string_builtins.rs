@@ -254,7 +254,7 @@ impl FuncBuilder<'_> {
             self.lower_arm(|this| {
                 let thrown =
                     this.runtime_call("nts_raise_take", Vec::new(), HirType::Erased, origin);
-                this.throw_erased(from, thrown, thrown, &HirType::Erased)
+                this.throw_erased(from, thrown)
             })?;
             self.switch_to(carry_on);
         }

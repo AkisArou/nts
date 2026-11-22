@@ -7,6 +7,9 @@ mod published_consuming;
 #[path = "../../../test-support/scratch.rs"]
 mod scratch;
 
+#[path = "../../../test-support/uncaught_text.rs"]
+mod uncaught_text;
+
 #[path = "../../../test-support/runtime_jar.rs"]
 mod runtime_jar_support;
 

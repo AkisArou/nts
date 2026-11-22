@@ -1,23 +1,9 @@
 //! Lower try, catch, finally, and throw, including the exceptional control edges and local bindings.
 
 use super::{
-    BlockId, Callee, Diagnostic, FuncBuilder, HirType, Layout, ManagedType, NodeId, OpKind, Origin,
+    BlockId, Callee, Diagnostic, FuncBuilder, HirType, ManagedType, NodeId, OpKind, Origin,
     SemanticSnapshot, Terminator, ValueId, direct_children, iterator_close, kind_at, syntax,
 };
-
-/// The index of a `message: string` field, if a type has one.
-///
-/// Used by `throw` to hand the runtime something to print. By shape, not by
-/// name: the error classes in [`super::builtin`](crate::hir::builtin) have such a field, and so does
-/// every user class that extends one, and nothing here needs to tell them
-/// apart.
-fn message_field(layouts: &[Layout], ty: &HirType) -> Option<u32> {
-    let HirType::Managed(ManagedType::Object(id)) = ty else {
-        return None;
-    };
-    let layout = layouts.iter().find(|layout| layout.types.contains(id))?;
-    layout.message_field()
-}
 
 /// One reason a `try` has to be noticed while the statements inside it lower.
 ///
@@ -169,10 +155,8 @@ impl FuncBuilder<'_> {
         // with `error: Error | null` holding null throws `null`, not an object
         // tag over a null pointer that is neither `null` nor an `Error`.
         let value = self.lower_expression(thrown)?;
-        let thrown_ty = self.values[value.0 as usize].ty.clone();
-
         let erased = self.coerce(value, &HirType::Erased, thrown)?;
-        self.throw_erased(id, value, erased, &thrown_ty)
+        self.throw_erased(id, erased)
     }
 
     /// Throw a value that has already been computed and erased.
@@ -183,17 +167,9 @@ impl FuncBuilder<'_> {
     /// promise carried, and that value arrives from `nts_promise_reason`
     /// already erased.
     ///
-    /// `value` is the unerased form where there is one, because rejecting a
-    /// promise wants the reference and printing an uncaught throw wants the
-    /// `message` field. A rethrow has only the erased form, and passes it for
-    /// both -- the runtime reads the reference out of the tag.
-    pub(super) fn throw_erased(
-        &mut self,
-        id: NodeId,
-        value: ValueId,
-        erased: ValueId,
-        thrown_ty: &HirType,
-    ) -> Result<(), Diagnostic> {
+    /// The value's runtime descriptor owns its fixed message projection, so an
+    /// uncaught throw needs no separate read of the unerased value.
+    pub(super) fn throw_erased(&mut self, id: NodeId, erased: ValueId) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
 
         // A `throw` with a handler in this function is a jump to it and nothing
@@ -294,27 +270,14 @@ impl FuncBuilder<'_> {
             return Ok(());
         }
 
-        // Only on the path that ends the program, and after the check above so
-        // that a caught `throw` does not load a field nothing reads.
-        //
-        // The layout owns the same fixed string projection that descriptors
-        // publish for a value arriving erased, such as a promise rejection.
-        // A statically known object can supply its field directly here.
-        let detail = match message_field(&self.layouts, thrown_ty) {
-            Some(field) => self.push(
-                OpKind::FieldGet {
-                    object: value,
-                    field,
-                },
-                HirType::Managed(ManagedType::String),
-                origin.clone(),
-            ),
-            None => self.push(
-                OpKind::ConstNull,
-                HirType::Managed(ManagedType::String),
-                origin.clone(),
-            ),
-        };
+        // The descriptor owns the fixed string-message projection. Reading it
+        // here after erasure keeps the original reference alive beside the
+        // handover; its release would then be skipped by a landing's jump.
+        let detail = self.push(
+            OpKind::ConstNull,
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
         self.push(
             OpKind::Call {
                 callee: Callee::External("nts_uncaught".to_owned()),
@@ -514,7 +477,7 @@ impl FuncBuilder<'_> {
             // language says.
             Ok(())
         } else {
-            self.throw_erased(id, thrown, thrown, &HirType::Erased)
+            self.throw_erased(id, thrown)
         };
         if let Some(above) = above {
             self.exits.extend(above);

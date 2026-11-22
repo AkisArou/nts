@@ -25,6 +25,23 @@ use nts_frontend_ts::Frontend;
 const POOL: &str = "{0.0, 1.0, -1.0, 3.5, -0.0, 1e21, 1.0/0.0, -1.0/0.0, 0.0/0.0, \
                     9007199254740993.0, 2147483648.0}";
 
+#[test]
+fn synchronous_uncaught_text_comes_from_the_value() {
+    let driver = "void module__init(void); int main(void) { module__init(); return 0; }";
+    for (index, (source, expected)) in crate::uncaught_text::CASES.iter().enumerate() {
+        let Some((llvm, c)) =
+            both_backends_ran(&format!("uncaught-text-{index}"), source, driver, &[])
+        else {
+            panic!("the required native toolchain is unavailable");
+        };
+        for (name, run) in [("LLVM", llvm), ("C", c)] {
+            assert_eq!(run.status.code(), Some(1), "{name}: {run:?}");
+            assert!(run.stdout.is_empty(), "{name}: {run:?}");
+            assert_eq!(String::from_utf8_lossy(&run.stderr), *expected, "{name}");
+        }
+    }
+}
+
 /// Lower a fixture, render it both ways, build both, run both, compare.
 fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, String)> {
     both_backends_with(case, source, driver, &[])

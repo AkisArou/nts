@@ -221,7 +221,7 @@ impl FuncBuilder<'_> {
         class: &str,
         message: ValueId,
     ) -> Result<(), Diagnostic> {
-        let (error, object) = self.provided_error(id, class, message)?;
+        let (error, _) = self.provided_error(id, class, message)?;
         let origin = self.origin(id);
         let erased = self.push(
             OpKind::Erase {
@@ -232,7 +232,7 @@ impl FuncBuilder<'_> {
             HirType::Erased,
             origin,
         );
-        self.throw_erased(id, error, erased, &object)
+        self.throw_erased(id, erased)
     }
 
     /// One of the provided error classes, built with `message`: the value, and

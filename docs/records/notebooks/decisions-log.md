@@ -4386,3 +4386,14 @@ new carrying forms or body sharing.
 
 The contracts are in [errors](../../language/errors.md#how-a-throw-travels) and
 [Node addons](../../targets/node-addon.md#errors).
+
+## Uncaught messages come from the handed-over value (11-23)
+
+An uncaught throw passes no separately loaded message. The runtime uses #478's
+descriptor `message_offset`, or the JVM's existing `NtsThrownMessage` protocol.
+Reading a message after erasing the object kept the original reference alive
+beside the runtime's reference, and the landing skipped its local release.
+The descriptor's fixed string field remains the only message authority: no
+getter, conversion, or storage-layout message projection. Slice 1 of #912
+includes this ownership change and checks uncaught output on all three
+backends as well as the Node-API payload's releases.

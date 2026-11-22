@@ -494,7 +494,7 @@ impl FuncBuilder<'_> {
                 HirType::Erased,
                 origin.clone(),
             );
-            this.throw_erased(at, thrown, thrown, &HirType::Erased)
+            this.throw_erased(at, thrown)
         })?;
         self.switch_to(carry_on);
         Ok(())

@@ -167,6 +167,13 @@ fn a_capture_named_message_is_not_a_property_of_the_thrown_function() {
 const AUTHORED: &str = "export class Message{constructor(readonly message:string){} nts$thrownMessage():string{return 'authored'}} export function make(){return new Message('kept')} export function call(){return make().nts$thrownMessage()}";
 
 #[test]
+fn synchronous_uncaught_text_comes_from_the_value() {
+    for (source, expected) in crate::uncaught_text::CASES {
+        Fixture::new(source).run(expected);
+    }
+}
+
+#[test]
 fn an_authored_message_spelling_keeps_its_java_facade() {
     Fixture::new(AUTHORED).facade();
 }
