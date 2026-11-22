@@ -39,9 +39,9 @@ import { gateCommand } from "../gate/affinity.ts";
 import {ENVIRONMENT_EXPERIMENT} from '../gate/canonical-environment.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import { gateEnvironmentError } from "../gate/environment.ts";
-import { instrumentPolicy,DiskBuildAdmissionError,type DiskBuildRefusal } from "../gate/step-result.ts";
+import { instrumentPolicy,readStepInstrument,DiskBuildAdmissionError,type DiskBuildRefusal } from "../gate/step-result.ts";
 import { TEST_PROFILE } from "../gate/test-profile.ts";
-import {DiskCapacity} from '../gate/disk-capacity.ts';
+import {DiskCapacity,DISK_BUILD_ADMISSION,type BuildAdmission} from '../gate/disk-capacity.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { cpus } from "node:os";
@@ -66,6 +66,8 @@ export const PROFILE = TEST_PROFILE;
 type BinaryIdentities = Record<string, string | null>;
 export type StepResult = {
   name: string; verdict: "PASS" | "FAIL" | "INSTRUMENT" | "SKIPPED" | "NOT RUN"; reason?: string;
+  /** A NOT RUN row's cause: the preparation step whose verdict stopped it. */
+  needs?: string;
   cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; accepted?: boolean; attempt?: number;
   instrument?: { kind?: string; verdict?: string; completedFailures?: number;disk?:DiskBuildRefusal };
   binaries?: BinaryIdentities;
@@ -202,6 +204,8 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
   const own = { ...env };
   delete own[ENVIRONMENT_CONTEXT];
   delete own[ENVIRONMENT_EXPERIMENT];
+  // A build admission is handed only by the owner that admitted it.
+  delete own[DISK_BUILD_ADMISSION];
   return own;
 }
 
@@ -306,7 +310,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
           appendFileSync(log, `${String(error)}\n`);
           const reason = `its memory was not reserved: ${(error as Error).message}`;
           results.push({ name: preparationName, verdict: "INSTRUMENT", reason, log });
-          for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", reason: `needs ${preparationName} preparation, which is INSTRUMENT` });
+          for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", needs: preparationName, reason: `needs ${preparationName} preparation, which is INSTRUMENT` });
           return finish("held", `${preparationName}: ${reason}`);
         }
         // Taken over: the selection's peak goes to its history before the build starts.
@@ -319,7 +323,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
             const {name:_name,binaries:_binaries,...evidence}=built;doctestPreparation=evidence;
           }else results.push(built);
           if (built.verdict === "PASS") break;
-          for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", reason: `needs ${preparationName} preparation, which is ${built.verdict}` });
+          for (const step of rest.filter(step=>step!==preparationName)) results.push({ name: step, verdict: "NOT RUN", needs: preparationName, reason: `needs ${preparationName} preparation, which is ${built.verdict}` });
           return built.verdict === "FAIL" ? finish("red", `${preparationName} FAIL; log ${built.log}`) : finish("held", `${preparationName}: ${built.reason}`);
         }
       } else hold = handover;
@@ -399,13 +403,14 @@ async function finishSteps(options: RunOptions, node: string, launcher: NodeJS.P
  * waited.
  */
 async function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): Promise<StepResult> {
-  let release:(()=>void)|undefined;
+  let admission:BuildAdmission|undefined;
   try{
-    release=new DiskCapacity({env:{...launcher,...owned}}).beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});
-    return await buildCompilerAdmitted(options,node,launcher,owned,attempt);
+    // The build's one admission: the build owner it starts runs inside it, never admitting the same build again (#951).
+    admission=new DiskCapacity({env:{...launcher,...owned}}).beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});
+    return await buildCompilerAdmitted(options,node,launcher,{...owned,...admission.env},attempt);
   }catch(error){options.signal?.throwIfAborted();return {name:options.steps.includes('build')?'build':'doctests',verdict:'INSTRUMENT',reason:String(error),log:preparationLog(options,attempt),
     ...(error instanceof DiskBuildAdmissionError?{instrument:{kind:error.kind,verdict:'INSTRUMENT',disk:error.disk}}:{})};}
-  finally{release?.();}
+  finally{admission?.();}
 }
 function preparationLog(options:RunOptions,attempt:number):string{
   const name=options.steps.includes('build')?'build':'doctest-preparation';
@@ -413,14 +418,19 @@ function preparationLog(options:RunOptions,attempt:number):string{
 }
 async function buildCompilerAdmitted(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): Promise<StepResult> {
   const compilerSelected=options.steps.includes('build'),name=compilerSelected?'build':'doctests';
-  const log = preparationLog(options,attempt), time = `${log}.time`;
+  const log = preparationLog(options,attempt), time = `${log}.time`, instrumentFile = `${log}.instrument.json`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const slots = machineBudget(cpus().length).slots;
   const command = options.build ?? [node, join(options.tree,relative(fileURLToPath(SOURCE_ROOT),fileURLToPath(BUILD_OWNER))), "--profile", PROFILE,
     ...(options.steps.includes('build')?[]:['--no-compiler'])];
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   const launch = gateCommand(timed[0]!, timed.slice(1), { rank: runRank(options), env: launcher });
-  const r = await runCandidate(options,node, { tree: options.tree, run: options.run, owned:{...owned,CARGO_BUILD_JOBS:String(slots)}, command: [launch.command, ...launch.args] }, launcher,false,log);
+  // The gate runner's step-result protocol (run.mjs): the build owner publishes
+  // a typed instrument failure (a disk refusal, a setup fault) there, and it
+  // is the build's verdict whatever the exit status says.
+  rmSync(instrumentFile,{force:true});
+  const step={NTS_GATE_STEP:name,NTS_GATE_STEP_ATTEMPT:String(attempt),NTS_GATE_STEP_RESULT:instrumentFile};
+  const r = await runCandidate(options,node, { tree: options.tree, run: options.run, owned:{...owned,CARGO_BUILD_JOBS:String(slots),...step}, command: [launch.command, ...launch.args] }, launcher,false,log);
   appendFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
   try {
@@ -428,6 +438,11 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
     if ([e, u, s].every(Number.isFinite)) { wall = e; cpu = u! + s!; }
   } catch { /* unmeasured */ }
   const measured = { ...(cpu !== undefined ? { cpu,cpu_measure:GNU_CPU_MEASURE } : {}), ...(wall !== undefined ? { wall } : {}), log };
+  let instrument:ReturnType<typeof readStepInstrument>;
+  try{instrument=readStepInstrument(instrumentFile,step.NTS_GATE_STEP,step.NTS_GATE_STEP_ATTEMPT);}
+  catch(error){return {name,verdict:'INSTRUMENT',reason:`the build's instrument result was unreadable: ${String(error)}`,...measured};}
+  if(instrument)return {name,verdict:instrument.verdict,reason:instrument.reason,...measured,
+    instrument:{kind:instrument.kind,verdict:instrument.verdict,...(instrument.disk?{disk:instrument.disk}:{})}};
   // Killed rather than failed: the machine's doing (an OOM kill), not the change's.
   if (r.error || r.signal) return { name, verdict: "INSTRUMENT", reason: `the build was ${r.signal ? `killed by ${r.signal}` : `not started: ${r.error?.message}`}`, ...measured };
   if (r.status !== 0) return { name, verdict: "FAIL", reason: `exit ${r.status}`, ...measured };

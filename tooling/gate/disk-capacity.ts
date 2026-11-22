@@ -22,13 +22,20 @@ import {durableRecord} from './durable-record.ts';
 import {describeReclamation,reclaimDisk,liveReclaimOwnership,type ReclaimReport,type ReclaimTarget,type ReclaimOwnership} from './disk-reclamation.ts';
 import {landingLayout} from '../landing/layout.ts';
 import {layout as fullCheckLayout} from '../full-check/layout.ts';
-import {DiskBuildAdmissionError} from '../differential/command-entry/instrument.ts';
+import {DiskBuildAdmissionError,ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 
 export const DISK_CAPACITY='NTS_DISK_CAPACITY';
+/** A build's admission, handed by the owner that admitted it to the command
+ * that does the build, so one build is admitted once (#951). Only its owner
+ * sets it; a launcher's never reaches a new owner. */
+export const DISK_BUILD_ADMISSION='NTS_DISK_BUILD_ADMISSION';
 export const BUILD_FOOTPRINT_FILE=new URL('../../results/builds/cold-inner.json',import.meta.url);
 export type BuildForecast={bytes:number;outputs:Record<BuildOutputName,number>;source:string};
 export type BuildLease={root:string;target:string;outputs?:readonly BuildOutputName[]};
 type BuildClaim=BuildLease&{id:string;pid:number;identity:string};
+/** Ends the admission (its owner's only; a handed one ends with its owner), and
+ * the variables that hand it to the build's command. */
+export type BuildAdmission=(()=>void)&{readonly env:Readonly<Record<typeof DISK_BUILD_ADMISSION,string>>};
 type BuildClaims={version:1;claims:BuildClaim[]};
 export type TemporaryDiskClaim={id:string;pid:number;identity:string;path:string;bytes:number};
 type TemporaryDiskClaims={version:1;claims:TemporaryDiskClaim[]};
@@ -64,9 +71,11 @@ function poolSource(env:NodeJS.ProcessEnv):PoolCapacitySource|null {
 export class DiskCapacity {
   readonly host:HostObservations;readonly forecast:BuildForecast;readonly pool:PoolCapacitySource|null;readonly stateFile:string;readonly temporaryStateFile:string;
   private readonly reclamation:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};
+  private readonly handed:string|undefined;
   constructor(options:{env?:NodeJS.ProcessEnv;host?:HostObservations;forecast?:BuildForecast;pool?:PoolCapacitySource|null;
     reclamation?:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership}}={}){
     const env=options.env??process.env;
+    this.handed=env[DISK_BUILD_ADMISSION];
     if(env[FIXTURE_ENVIRONMENT]!==undefined&&env[DISK_CAPACITY]===undefined)throw Error('fixture has no '+DISK_CAPACITY+' capability');
     this.host=options.host??hostObservations(env);this.forecast=options.forecast??coldBuildForecast();
     this.pool=options.pool===undefined?poolSource(env):options.pool;
@@ -183,8 +192,20 @@ export class DiskCapacity {
   }
   /** A service target, or an explicit build outside a pool lease, promises
    * only its declared output. Pool and build claims merge by target, so the
-   * same work is never promised twice. A killed builder's identity expires. */
-  beginBuild(lease:BuildLease):()=>void {
+   * same work is never promised twice. A killed builder's identity expires.
+   * A build already admitted by the owner that started this command (its
+   * DISK_BUILD_ADMISSION) is that owner's: covering this target and outputs,
+   * it is not admitted again, since a second admission of the same work
+   * refuses a build its owner admitted whenever the disk moves between the
+   * two. A handed admission whose owner no longer holds it is an instrument
+   * failure, never a fresh admission. */
+  beginBuild(lease:BuildLease):BuildAdmission {
+    if(this.handed!==undefined){
+      const id=this.handed,held=this.locked(()=>this.claims().find(claim=>claim.id===id));
+      if(!held)throw new ToolingInstrumentError('tooling-setup',`disk build admission ${id} is not held by a live build owner`);
+      if(resolve(held.target)===resolve(lease.target)&&(lease.outputs??['nts-dev','clippy']).every(name=>(held.outputs??['nts-dev','clippy']).includes(name)))
+        return Object.assign(()=>{},{env:{[DISK_BUILD_ADMISSION]:id}});
+    }
     const id=randomUUID(),pid=process.pid,identity=processIdentity(pid);
     if(!identity)throw Error('disk build owner has no process birth identity');
     this.locked(()=>{
@@ -196,7 +217,8 @@ export class DiskCapacity {
       this.record([...claims,next]);
     });
     let released=false;
-    return ()=>{if(released)return;this.locked(()=>{this.record(this.claims().filter(claim=>claim.id!==id));this.signalChange();});released=true;};
+    const release=()=>{if(released)return;this.locked(()=>{this.record(this.claims().filter(claim=>claim.id!==id));this.signalChange();});released=true;};
+    return Object.assign(release,{env:{[DISK_BUILD_ADMISSION]:id}});
   }
   /** Read-only retry readiness: no build attempt, claim, or reclamation. */
   buildSnapshot(lease:BuildLease):CapacitySnapshot{

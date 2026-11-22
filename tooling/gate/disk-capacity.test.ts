@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {DiskCapacity,coldBuildForecast,DISK_CAPACITY} from './disk-capacity.ts';
+import {DiskCapacity,coldBuildForecast,DISK_CAPACITY,DISK_BUILD_ADMISSION} from './disk-capacity.ts';
 import {completeBuild,completedBuild} from './build-completion.ts';
 import {hostObservations} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
@@ -12,7 +12,7 @@ import {processIdentity} from '../landing/lock.ts';
 import {spawn} from 'node:child_process';
 import {fixtureEnvironment} from './test-environment.ts';
 import {waitFor} from './test-wait.ts';
-import {DiskBuildAdmissionError} from './step-result.ts';
+import {DiskBuildAdmissionError,ToolingInstrumentError} from './step-result.ts';
 const GiB=2**30;
 
 test('the forecast is the tool-written sum of declared peaks, rounded once',()=>{
@@ -185,4 +185,27 @@ test('capacity refuses before a builder starts and never downgrades future claim
   const before=readFileSync(capacity.stateFile,'utf8');
   assert.throws(()=>capacity.beginBuild({root,target,outputs:['clippy']}),/version/);
   assert.equal(readFileSync(capacity.stateFile,'utf8'),before);
+});
+
+test('a build handed its owner\'s admission is not admitted again, and a handed admission must be live',t=>{
+  const root=testScratch(t,'handed-build-disk'),target=join(root,'target'),observations=join(root,'observations');
+  const env=ownMemory(observations,{disk:{freeBytes:60*GiB,freeInodes:100}}),owner=new DiskCapacity({env});
+  const admission=owner.beginBuild({root,target,outputs:['nts-dev']});
+  assert.deepEqual(Object.keys(admission.env),[DISK_BUILD_ADMISSION]);
+  const claims=()=>JSON.parse(readFileSync(owner.stateFile,'utf8')).claims as {id:string}[];
+  assert.deepEqual(claims().map(claim=>claim.id),[admission.env[DISK_BUILD_ADMISSION]]);
+  // The disk moves below the floor between the owner's admission and its build's command.
+  ownMemory(observations,{disk:{freeBytes:39*GiB,freeInodes:100}});
+  const handed={...env,...admission.env},build=new DiskCapacity({env:handed});
+  const inner=build.beginBuild({root,target,outputs:['nts-dev']});
+  assert.deepEqual(inner.env,admission.env,'the build runs inside, and hands on, its owner\'s admission');
+  assert.equal(claims().length,1,'no second claim for the same build');
+  inner();assert.equal(claims().length,1,'only the owner ends its admission');
+  assert.throws(()=>build.beginBuild({root,target,outputs:['clippy']}),DiskBuildAdmissionError,'outputs the admission does not cover are admitted on their own');
+  assert.throws(()=>build.beginBuild({root,target:join(root,'other'),outputs:['nts-dev']}),DiskBuildAdmissionError,'another target is another build');
+  admission();assert.deepEqual(claims(),[]);
+  assert.throws(()=>build.beginBuild({root,target,outputs:['nts-dev']}),(error:unknown)=>{
+    assert.ok(error instanceof ToolingInstrumentError);assert.equal(error.kind,'tooling-setup');
+    assert.match(error.message,/is not held by a live build owner/);return true;
+  },'an ended admission is never replaced by a fresh one');
 });

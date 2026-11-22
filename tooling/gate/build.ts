@@ -25,7 +25,10 @@ export async function build(args:readonly string[],env:NodeJS.ProcessEnv=process
   if(env.NTS_BUILD_DOCTESTS==='1'&&(!preparation||resolve(preparation)!==preparation))
     throw new ToolingInstrumentError('tooling-setup','build: doctests needs an absolute preparation receipt');
   if(preparation)rmSync(preparation,{force:true});
-  const release=(profile==='nts-dev'||preparation)?new DiskCapacity({env}).beginBuild({root:cwd,target:resolve(cwd,env.CARGO_TARGET_DIR??'target'),outputs:['nts-dev']}):()=>{};
+  // One admission for the whole build: the caller's when it handed one
+  // (DISK_BUILD_ADMISSION), and the doctest preparation's Cargo runs inside it.
+  const release=(profile==='nts-dev'||preparation)?new DiskCapacity({env}).beginBuild({root:cwd,target:resolve(cwd,env.CARGO_TARGET_DIR??'target'),outputs:['nts-dev']}):undefined;
+  if(release)env={...env,...release.env};
   try{
     if(!rest.includes('--no-compiler')){
       const ran=cargoSync(['build','--profile',profile!],{cwd,env,stdio:'inherit'});
@@ -33,7 +36,7 @@ export async function build(args:readonly string[],env:NodeJS.ProcessEnv=process
       if(ran.status!==0)return ran.status??2;
     }
     return preparation?await runTestProfile('doctests-build',[],env,cwd,{artifacts:preparation}):0;
-  }finally{release();}
+  }finally{release?.();}
 }
 
 runAsCommand(import.meta.url,async()=>{

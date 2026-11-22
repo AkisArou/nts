@@ -25,7 +25,7 @@ import {createWithdrawalWatch} from './withdrawal-watch.ts';
 import { recordLines, type Ran, type RunOptions } from "./run.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import { landingCpuMeasure,landingSelection, type Selection } from "./selection.ts";
-import { drain,machineConfig, prepareTree, prune, recordCosts, type Config } from "./service.ts";
+import { diskRetry,drain,machineConfig, prepareTree, prune, recordCosts, type Config } from "./service.ts";
 import {holder} from './lock.ts';
 import {lockChild} from './lock-fixture.ts';
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
@@ -228,7 +228,9 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
     try{const release=f.pool.capacity.beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});release();}
     catch(error){
       assert.ok(error instanceof DiskBuildAdmissionError);
-      return {state:'held',message:error.message,run:options.run,pending:[],refresh:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',reason:error.message,instrument:{kind:error.kind,disk:error.disk}}]};
+      // A landing's steps after its build wait on it (run.ts's NOT RUN rows name the preparation they need).
+      return {state:'held',message:error.message,run:options.run,pending:[],refresh:[],wall_s:0,steps:[{name:'build',verdict:'INSTRUMENT',reason:error.message,instrument:{kind:error.kind,disk:error.disk}},
+        {name:'tests',verdict:'NOT RUN',needs:'build',reason:'needs build preparation, which is INSTRUMENT'}]};
     }
     return green(options);
   };
@@ -249,6 +251,18 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   assert.deepEqual(result.answered.map(row=>[row.id,row.state]),[[ea.id,'held'],[eb.id,'landed'],[ea.id,'landed']]);
   assert.equal(f.queue.result(ea.id)?.state,'landed');assert.equal(f.queue.held().length,0);
   assert.ok(f.logs.some(line=>line.includes('returns at its original queue arrival')),f.logs.join('\n'));
+});
+
+test('only a run that disk admission alone kept from finishing waits for disk',()=>{
+  const tree='/fixture/tree',target='/fixture/target';
+  const disk={root:tree,target,outputs:['nts-dev' as const],shortBytes:92524544,freeBytes:42857148416,floorBytes:40*2**30,buildReservedBytes:0,temporaryReservedBytes:0};
+  const build={name:'build',verdict:'INSTRUMENT' as const,reason:'disk',instrument:{kind:'disk-capacity',verdict:'INSTRUMENT',disk}};
+  const after=(needs:string)=>({name:'tests',verdict:'NOT RUN' as const,needs,reason:`needs ${needs} preparation, which is INSTRUMENT`});
+  assert.deepEqual(diskRetry({tree,target},{steps:[build,after('build')]}),[disk],'steps that need the refused build wait with it');
+  assert.equal(diskRetry({tree,target},{steps:[build,{name:'tests',verdict:'NOT RUN',reason:'needs build preparation, which is INSTRUMENT'}]}),undefined,'a reason text is no cause');
+  assert.equal(diskRetry({tree,target},{steps:[build,after('doctests')]}),undefined,'a row stopped by another step is held for a person');
+  assert.equal(diskRetry({tree,target},{steps:[build,{name:'clippy',verdict:'FAIL'}]}),undefined);
+  assert.equal(diskRetry({tree,target},{steps:[{...build,instrument:{kind:'tooling-setup',verdict:'INSTRUMENT'}},after('build')]}),undefined);
 });
 
 test('withdrawing a disk-held entry answers it immediately and the idle service exits',async t=>{

@@ -138,7 +138,7 @@ export async function drain(config: Config): Promise<Drained> {
   } finally { diskWake?.close();withdrawals?.close();lock.release(); }
 }
 
-function checkedDiskRequests(config:Config,requests:readonly unknown[]):DiskBuildRefusal[]{
+function checkedDiskRequests(config:Pick<Config,'tree'|'target'>,requests:readonly unknown[]):DiskBuildRefusal[]{
   return requests.map(value=>{
     const request=readDiskBuildRefusal(value),part=relative(resolve(config.target),request.target);
     if(request.root!==resolve(config.tree)||isAbsolute(part)||part==='..'||part.startsWith('..'+sep))
@@ -161,10 +161,15 @@ function retryDiskHeld(config:Config,queue:Queue,capacity:DiskCapacity):Map<stri
   return shortages;
 }
 
-function diskRetry(config:Config,ran:Ran):DiskBuildRefusal[]|undefined{
+/**
+ * The disk room a held run waits for, when disk admission is all that kept it
+ * from finishing: every unfinished row is a disk refusal, or a NOT RUN row
+ * whose preparation (`needs`) was one. Anything else holds it for a person.
+ */
+export function diskRetry(config:Pick<Config,'tree'|'target'>,ran:Pick<Ran,'steps'>):DiskBuildRefusal[]|undefined{
   const unfinished=ran.steps.filter(row=>row.verdict!=='PASS'&&!(row.verdict==='SKIPPED'&&row.accepted));
   const disk=unfinished.filter(row=>row.verdict==='INSTRUMENT'&&row.instrument?.kind==='disk-capacity');
-  if(!disk.length||unfinished.some(row=>!disk.includes(row)&&!(row.verdict==='NOT RUN'&&disk.some(one=>one.name==='build')&&row.reason==='needs build, which is INSTRUMENT')))return;
+  if(!disk.length||unfinished.some(row=>!disk.includes(row)&&!(row.verdict==='NOT RUN'&&disk.some(one=>one.name===row.needs))))return;
   return checkedDiskRequests(config,disk.map(row=>row.instrument?.disk));
 }
 
