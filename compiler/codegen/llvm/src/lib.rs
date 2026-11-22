@@ -999,10 +999,11 @@ fn template_data(
 ///
 /// And `to_string`, how an object of the type prints (`Program::printed`), and
 /// `function_name`, what a function of it is called (`Program::function_names`),
-/// the owned managed-edge release/trace callbacks, and the fixed string-message
-/// offset, last.
+/// the owned managed-edge release/trace callbacks, the fixed string-message
+/// offset, and `release_foreign`, last -- null in every descriptor emitted here,
+/// which selects the runtime's generic walk.
 const DESCRIPTOR_TYPE: &str = "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, \
-     ptr, i32, i32, ptr, ptr, ptr, ptr, ptr, i32 }";
+     ptr, i32, i32, ptr, ptr, ptr, ptr, ptr, i32, ptr }";
 
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
@@ -1257,7 +1258,7 @@ fn descriptors(
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {}, \
-                 {function_name}, {release_fields}, {trace_fields}, i32 {message_offset}",
+                 {function_name}, {release_fields}, {trace_fields}, i32 {message_offset}, ptr null",
                 erased.len(),
                 to_string_slot(program, layout, class)
             )
@@ -1321,7 +1322,7 @@ fn view_class_descriptors(out: &mut String, program: &Emission<'_>) {
             "@nts_view_desc_{} = internal constant {{ %NtsDescriptor, ptr }} \
              {{ %NtsDescriptor {{ i32 {KIND_VIEW}, i32 {VIEW_SIZE}, i32 1, i32 1, \
              ptr @nts_view_refs, ptr null, ptr @nts_name_{tag}, i32 0, ptr null, i32 0, \
-             i32 0, ptr null, ptr @nts_view_to_string, ptr null, ptr null, ptr null, i32 0 }}, \
+             i32 0, ptr null, ptr @nts_view_to_string, ptr null, ptr null, ptr null, i32 0, ptr null }}, \
              ptr null }}",
             view_tag(view)
         );
@@ -1473,7 +1474,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
              ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null, \
-             ptr null, ptr null, ptr null, i32 0 }}",
+             ptr null, ptr null, ptr null, i32 0, ptr null }}",
             u32::from(family.holds_closures()),
             nts_codegen_common::counting::ARRAY_FOREIGN
         );
@@ -1520,7 +1521,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 {erased}, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null, ptr null, i32 0 }}",
+                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null, ptr null, i32 0, ptr null }}",
                 shape.size,
                 nts_codegen_common::counting::array_element(element)
             );

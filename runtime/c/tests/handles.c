@@ -36,6 +36,13 @@ static void expect(const char *what, bool holds) {
   }
 }
 
+/* Two objects that hold each other, one of them a promise too. */
+typedef struct PromisePair {
+  NtsHeader header;
+  NtsHeader *other;
+  NtsHeader *promise;
+} PromisePair;
+
 /* A family's counting, observed. */
 static int retained;
 static int released;
@@ -155,8 +162,10 @@ int main(void) {
              !NTS_TAG_IS_HANDLE(NTS_TAG_NULL) && !NTS_TAG_IS_HANDLE(16u));
 
   NtsString *name = nts_tag_name(NTS_TAG_HANDLE_GOBJECT);
-  expect("typeof a handle is \"object\"",
-         nts_string_eq(name, nts_string_from_utf8("object", 6)));
+  NtsString *object = nts_string_from_utf8("object", 6);
+  expect("typeof a handle is \"object\"", nts_string_eq(name, object));
+  nts_release((NtsHeader *)object);
+  nts_release((NtsHeader *)name);
   expect("a handle is truthy, and a NULL one is not",
          nts_value_truthy(value) &&
              !nts_value_truthy(handle(NTS_TAG_HANDLE_GOBJECT, NULL)));
@@ -197,6 +206,7 @@ int main(void) {
   NtsString *key = nts_string_from_utf8("k", 1);
   nts_map_set(map, nts_value_of_reference((NtsHeader *)key, NTS_TAG_STRING),
               held, map->kind);
+  nts_release((NtsHeader *)key);
   int before = released;
   nts_release((NtsHeader *)both);
   nts_release((NtsHeader *)xs);
@@ -204,6 +214,57 @@ int main(void) {
   nts_collect_cycles();
   expect("a dying map and erased arrays give back each handle they hold",
          released - before == 4 && released == retained);
+
+  /* A promise settled with a handle, on both ways a promise is freed. Its
+   * descriptor names no erased table: its value slot is its own
+   * (`nts_promise_release_foreign`), so each check fails if that edge is not
+   * given back where the block is. */
+  retained = 0;
+  released = 0;
+  NtsPromise *settled = nts_promise_new();
+  nts_promise_fulfill_value(settled, held);
+  expect("a promise settled with a handle counts it", retained == 1);
+  nts_release((NtsHeader *)settled);
+  expect("a promise whose count reaches zero gives back its handle",
+         released == 1);
+
+  /* Freed white: a promise held only from a cycle the collector finds, so
+   * the collector frees it without its contents' release ever running. */
+  static const uint32_t pair_refs[] = {
+      offsetof(PromisePair, other),
+      offsetof(PromisePair, promise),
+  };
+  static const NtsDescriptor pair = {
+      .kind = NTS_KIND_OBJECT,
+      .size = sizeof(PromisePair),
+      .references = 2u,
+      .cyclic = 1u,
+      .offsets = pair_refs,
+      .name = "PromisePair",
+      .element = NTS_ARRAY_UNKNOWN,
+  };
+  retained = 0;
+  released = 0;
+  /* Each object's one count is the other's field, and `left` has one more,
+   * this function's. */
+  PromisePair *left = (PromisePair *)nts_object_new(&pair);
+  PromisePair *right = (PromisePair *)nts_object_new(&pair);
+  left->other = (NtsHeader *)right;
+  right->other = (NtsHeader *)left;
+  right->promise = 0;
+  nts_retain((NtsHeader *)left);
+  NtsPromise *cycled = nts_promise_new();
+  nts_promise_fulfill_value(cycled, held);
+  left->promise = (NtsHeader *)cycled;
+  nts_collect_cycles();
+  expect("a promise held from a live cycle keeps its handle",
+         retained == 1 && released == 0);
+  nts_release((NtsHeader *)left);
+  expect("dropping the last outside count leaves the cycle to the collector",
+         released == 0);
+  nts_collect_cycles();
+  expect("a promise the collector frees white gives back its handle",
+         released == 1);
 
   printf("%s\n", failures == 0 ? "all handle checks passed"
                                : "some handle checks failed");

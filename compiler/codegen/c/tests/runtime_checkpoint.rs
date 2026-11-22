@@ -285,11 +285,23 @@ fn access_error_keys_describe_primitives_without_program_callbacks() {
 /// A C library's object in an erased value (`runtime/c/tests/handles.c`): the
 /// tag block 8..15 is a pointer and never managed, counts through what its
 /// family registered, answers `typeof` "object", and aborts in its own words
-/// for every way it can go wrong -- before anything produces one.
+/// for every way it can go wrong -- before anything produces one. Containers
+/// give their handles back as they die, a promise among them on both ways a
+/// promise is freed: at a count of zero and found white by the collector.
+/// Under ASan, so a slot given back twice or a block left behind fails too.
 #[test]
 fn a_handle_value_counts_through_its_family() {
-    let report = run_suite("handles", &["-DNTS_PROVIDER_RC"]);
+    let report = run_suite(
+        "handles",
+        &[
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    );
     assert!(report.contains("all handle checks passed"), "{report}");
+    assert_eq!(checks(&report), 22, "every handle check ran: {report}");
 }
 
 #[test]

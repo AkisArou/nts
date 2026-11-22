@@ -1328,6 +1328,11 @@ static void nts_call_foreign_release(void (*release)(void *), void *object) {
  * finds nothing to give up twice. */
 static void nts_release_foreign(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
+  /* A layout that names its own: no table to ask. */
+  if (descriptor->release_foreign) {
+    descriptor->release_foreign(object);
+    return;
+  }
   /* The handles its erased slots hold. `nts_each_reference` visits managed
    * references only, and a handle is not one: a container's own death gives
    * them back here, where the typed foreign slots are. A box used to be
@@ -1363,8 +1368,8 @@ static void nts_release_foreign(NtsHeader *object) {
  * Maps hold tags in implicit columns; foreign arrays have an implicit family
  * slot. Keep those on the existing protocol even without erased fields. */
 static bool nts_has_foreign_contents(const NtsDescriptor *descriptor) {
-  return descriptor->erased || descriptor->foreign ||
-         descriptor->kind == NTS_KIND_MAP ||
+  return descriptor->release_foreign || descriptor->erased ||
+         descriptor->foreign || descriptor->kind == NTS_KIND_MAP ||
          (descriptor->kind == NTS_KIND_ARRAY &&
           descriptor->element == NTS_ARRAY_FOREIGN);
 }
@@ -12108,8 +12113,9 @@ static const uint32_t nts_reaction_offsets[] = {
  * `await` destroys a promise, and the generic walk -- the descriptor's offset
  * table, then the erased table, each through a visitor -- was a quarter of
  * `event-loop-promises`' instructions. Neither reads anything but its own
- * slots; a handle in a promise's value stays on the clear-before-release
- * protocol, as an erased field's does (`nts_release_foreign`). */
+ * slots, and both give up managed references only: a handle in a promise's
+ * value is its foreign edge, which `nts_promise_release_foreign` clears and
+ * gives back when the block is freed. */
 static void nts_reaction_release_fields(NtsHeader *object) {
   NtsReaction *reaction = (NtsReaction *)object;
   nts_release(reaction->state);
@@ -12144,6 +12150,14 @@ static void nts_promise_trace_fields(NtsHeader *object,
   nts_visit_managed(&promise->value, visit);
 }
 
+/* A promise's one foreign edge: a handle it was settled with, in its value
+ * slot, which is cleared before the handle is given back. The descriptor names
+ * no erased table, so freeing a promise -- at a count of zero or found white by
+ * the collector -- asks this rather than walking every table for one slot. */
+static void nts_promise_release_foreign(NtsHeader *object) {
+  nts_release_handle_slot(&((NtsPromise *)object)->value, 0);
+}
+
 /* Cyclic, both of them: a reaction's state is an async frame, and a frame can
  * hold the promise it will settle. That is an ordinary cycle and the collector
  * has to be able to see it. */
@@ -12159,14 +12173,9 @@ static const NtsDescriptor nts_desc_reaction = {
     .trace_fields = nts_reaction_trace_fields,
 };
 
-/* The settlement payload is *not* here: it is an erased slot, listed below, and
- * listing it in both tables would make `nts_each_reference` visit it twice --
- * doubling every retain and release, with the second release freeing something
- * still in use. */
-static const uint32_t nts_promise_erased[] = {
-    (uint32_t)offsetof(NtsPromise, value),
-};
-
+/* The settlement payload is *not* here: it is an erased slot, which the
+ * promise's own release, trace and foreign functions name. Listing it here
+ * would make a walk over this table visit it as a pointer. */
 static const uint32_t nts_promise_offsets[] = {
     (uint32_t)offsetof(NtsPromise, reactions),
 };
@@ -12178,12 +12187,11 @@ static const NtsDescriptor nts_desc_promise = {
     .cyclic = 1u,
     .offsets = nts_promise_offsets,
     .name = "Promise",
-    .erased = 1u,
-    .erased_offsets = nts_promise_erased,
     .element = NTS_ARRAY_UNKNOWN,
     .to_string = nts_promise_to_string,
     .release_fields = nts_promise_release_fields,
     .trace_fields = nts_promise_trace_fields,
+    .release_foreign = nts_promise_release_foreign,
 };
 
 bool nts_is_promise(NtsValue value) {

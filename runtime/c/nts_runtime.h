@@ -363,6 +363,17 @@ typedef struct NtsDescriptor {
    * backend; uncaught throws and unhandled rejections read this one projection.
    * It never invokes a getter or converts a non-string property. */
   uint32_t message_offset;
+  /* Give up the foreign contents of this layout's own slots -- the handles in
+   * its erased fields, its foreign fields -- each slot cleared before its
+   * release runs, so a release that reaches back into this runtime finds
+   * nothing to give up twice. Called wherever `nts_free` would walk them:
+   * when the object is freed, whether its count reached zero or the cycle
+   * collector found it garbage, and when a buffered candidate is emptied to a
+   * shell. NULL selects the generic walk over `erased_offsets` and
+   * `foreign_slots`; every generated descriptor says NULL. A layout of the
+   * runtime's own sets it where it knows the one slot that can hold a handle,
+   * which is cheaper than a walk asking every table. */
+  void (*release_foreign)(struct NtsHeader *object);
 } NtsDescriptor;
 
 /* What an array's slots hold.

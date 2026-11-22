@@ -55,6 +55,7 @@ extern size_t descriptorSize(void);
 extern size_t releaseFieldsOffset(void);
 extern size_t traceFieldsOffset(void);
 extern size_t messageOffsetOffset(void);
+extern size_t releaseForeignOffset(void);
 size_t nts_test_trace_calls;
 static NtsLanding message_landing;
 #ifdef NTS_PROVIDER_RC
@@ -69,7 +70,8 @@ int main(void) {
   if (descriptorSize() != sizeof(NtsDescriptor) ||
       releaseFieldsOffset() != offsetof(NtsDescriptor, release_fields) ||
       traceFieldsOffset() != offsetof(NtsDescriptor, trace_fields) ||
-      messageOffsetOffset() != offsetof(NtsDescriptor, message_offset)) return 2;
+      messageOffsetOffset() != offsetof(NtsDescriptor, message_offset) ||
+      releaseForeignOffset() != offsetof(NtsDescriptor, release_foreign)) return 2;
   /* Exercise the offset the emitter published, and the reporter reading it
    * from an erased value. A differently typed field precedes the message. */
   NtsHeader *message = messageObject();
@@ -104,6 +106,9 @@ int main(void) {
     return 3;
   }
   if (!descriptor->references || !descriptor->erased) return 4;
+  /* A generated layout's foreign contents are the generic walk's: its
+   * erased slot is in the table that walk reads. */
+  if (descriptor->release_foreign) return 25;
   nts_release(owned);
 #ifdef NTS_PROVIDER_RC
   for (int n = 4; n < 8; n++) {
@@ -202,7 +207,8 @@ int main(void) {
 const C_ABI_QUERY: &str = "\nsize_t descriptorSize(void) { return sizeof(NtsDescriptor); }\n\
     size_t releaseFieldsOffset(void) { return offsetof(NtsDescriptor, release_fields); }\n\
     size_t traceFieldsOffset(void) { return offsetof(NtsDescriptor, trace_fields); }\n\
-    size_t messageOffsetOffset(void) { return offsetof(NtsDescriptor, message_offset); }\n";
+    size_t messageOffsetOffset(void) { return offsetof(NtsDescriptor, message_offset); }\n\
+    size_t releaseForeignOffset(void) { return offsetof(NtsDescriptor, release_foreign); }\n";
 const LLVM_ABI_QUERY: &str = "\ndefine i64 @descriptorSize() {\n\
     %p = getelementptr %NtsDescriptor, ptr null, i64 1\n\
     %size = ptrtoint ptr %p to i64\n\
@@ -217,6 +223,10 @@ const LLVM_ABI_QUERY: &str = "\ndefine i64 @descriptorSize() {\n\
     ret i64 %offset\n}\n\
     define i64 @messageOffsetOffset() {\n\
     %p = getelementptr %NtsDescriptor, ptr null, i32 0, i32 16\n\
+    %offset = ptrtoint ptr %p to i64\n\
+    ret i64 %offset\n}\n\
+    define i64 @releaseForeignOffset() {\n\
+    %p = getelementptr %NtsDescriptor, ptr null, i32 0, i32 17\n\
     %offset = ptrtoint ptr %p to i64\n\
     ret i64 %offset\n}\n";
 

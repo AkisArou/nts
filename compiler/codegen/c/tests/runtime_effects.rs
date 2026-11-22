@@ -27,6 +27,7 @@ fn callback_raises(owner: &str, target: &str) -> Option<bool> {
         | ("nts_each_holder", "node" | "visit")
         | ("nts_each_reference", "each_held" | "trace_fields" | "visit")
         | ("nts_release_contents", "release_fields")
+        | ("nts_release_foreign", "release_foreign")
         | ("nts_collect_pass", "sever")
         | ("nts_collect_at_checkpoint", "fallen")
         | ("nts_callback_leave", "returns_to_loop")
