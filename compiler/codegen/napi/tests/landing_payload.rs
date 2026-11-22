@@ -57,7 +57,12 @@ fn the_landing_releases_moved_and_borrowed_payloads_once() {
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     let addon = nts_codegen_napi::emit(&prepared.program);
     assert!(addon.skipped.is_empty(), "{:?}", addon.skipped);
-    let observed = addon.source.replacen("NAPI_MODULE_INIT() {", LIVE, 1);
+    // Interpose only the fallible Node-API operation. The production converter
+    // and its early return still run, as does the landing's final release.
+    let observed = addon
+        .source
+        .replacen("static void nts_napi_throw(", FAILURE, 1)
+        .replacen("NAPI_MODULE_INIT() {", LIVE, 1);
     assert_ne!(observed, addon.source);
     for (backend, name, source) in [
         ("c", "program.c", c.writer.text()),
@@ -133,7 +138,17 @@ fn execute(
     );
 }
 
+const FAILURE: &str = r#"
+static int fail_error_conversion;
+static napi_status fixture_create_error(napi_env env,napi_value code,napi_value message,napi_value *result) {
+    if (fail_error_conversion) return napi_generic_failure;
+    return napi_create_error(env,code,message,result);
+}
+#define napi_create_error fixture_create_error
+static void nts_napi_throw("#;
+
 const LIVE: &str = r#"
+#undef napi_create_error
 static int foreign_references;
 static void foreign_retain(void *value) { ++*(int *)value; }
 static void foreign_release(void *value) { --*(int *)value; }
@@ -158,6 +173,12 @@ static napi_value unsupported(napi_env env,napi_callback_info info) {
     nts_landing_pop(&landing);
     return NULL;
 }
+static napi_value conversion_failure(napi_env env,napi_callback_info info) {
+    fail_error_conversion = 1;
+    napi_value result = unsupported(env,info);
+    fail_error_conversion = 0;
+    return result;
+}
 static napi_value live(napi_env env,napi_callback_info info) {
     (void)info;
     nts_collect_cycles();
@@ -173,6 +194,8 @@ NAPI_MODULE_INIT() {
     napi_set_named_property(env,exports,"unsupported",probe);
     napi_create_function(env,"foreignRefs",NAPI_AUTO_LENGTH,foreign_refs,NULL,&probe);
     napi_set_named_property(env,exports,"foreignRefs",probe);
+    napi_create_function(env,"conversionFailure",NAPI_AUTO_LENGTH,conversion_failure,NULL,&probe);
+    napi_set_named_property(env,exports,"conversionFailure",probe);
 "#;
 
 const CLIENT: &str = r"
@@ -191,6 +214,8 @@ for(let n=0;n<100;n++) {
   assert.throws(()=>a.throwError(n),e=>e instanceof RangeError && e.message==='error '+n);
   assert.equal(a.live(),baseline,'the thrown object releases its message');
   assert.throws(()=>a.unsupported(),Error);
+  assert.equal(a.foreignRefs(),0,'conversion releases a foreign payload through its family');
+  assert.throws(()=>a.conversionFailure(),e=>e instanceof Error && e.message==='compiled code threw');
   assert.equal(a.foreignRefs(),0,'conversion failure releases a foreign payload through its family');
 }
 console.log('landing payload: balanced');
