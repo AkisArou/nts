@@ -6090,12 +6090,23 @@ fn suspension(op: &nts_core::hir::Op, program: &Emission<'_>) -> Result<String, 
         // `nts_promise_subscribe` is the only path in, and it either keeps the
         // task or hands it to the microtask queue.
         OpKind::Suspend {
-            promise,
+            promise: Some(promise),
             frame,
             resume,
         } => Ok(format!(
             "nts_promise_subscribe({}, (NtsTask){{ &{}, 0, {} }});",
             value_name(*promise),
+            program.function(resume),
+            value_name(*frame)
+        )),
+        // An `await` of a value already in hand: the one job a subscription
+        // to a fulfilled promise would have queued, queued directly.
+        OpKind::Suspend {
+            promise: None,
+            frame,
+            resume,
+        } => Ok(format!(
+            "nts_enqueue_microtask((NtsTask){{ &{}, 0, {} }});",
             program.function(resume),
             value_name(*frame)
         )),

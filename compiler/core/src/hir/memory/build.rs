@@ -418,7 +418,7 @@ mod tests {
                     OpKind::ObjectNew { frame: false },
                     if suspension {
                         OpKind::Suspend {
-                            promise: ValueId(0),
+                            promise: Some(ValueId(0)),
                             frame: ValueId(1),
                             resume: "resume".to_owned(),
                         }
@@ -3027,7 +3027,8 @@ impl<'p> Builder<'p> {
             OpKind::Call { callee, args, .. } => self.call(context, id, callee, args, repeated),
             OpKind::Suspend { promise, frame, .. } => {
                 self.contexts[context].effects.suspension = true;
-                self.opaque(context, id, &[*promise, *frame], "suspended continuation");
+                let held: Vec<ValueId> = promise.iter().copied().chain([*frame]).collect();
+                self.opaque(context, id, &held, "suspended continuation");
             }
             OpKind::PromiseSubscribe {
                 promise, reaction, ..

@@ -774,8 +774,13 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                     promise,
                     frame: handed,
                     ..
+                } => {
+                    if let Some(promise) = promise {
+                        escaped(&mut escapes, func, *promise);
+                    }
+                    escaped(&mut escapes, func, *handed);
                 }
-                | OpKind::PromiseSubscribe {
+                OpKind::PromiseSubscribe {
                     promise,
                     reaction: handed,
                     ..

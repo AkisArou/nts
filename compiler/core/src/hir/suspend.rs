@@ -329,12 +329,36 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
     let mut added: Vec<Func> = Vec::new();
     let mut layouts: Vec<Layout> = Vec::new();
     let mut dropped: Vec<usize> = Vec::new();
+    // Read before any function is rewritten: a variant is a copy of a body
+    // that never suspends, which no rewrite below touches.
+    let variants = super::settled::variants(program);
+    let mut called: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     for index in 0..program.funcs.len() {
         if !suspends(&program.funcs[index]) {
             continue;
         }
-        match rewrite(&program.funcs[index], index, &program.layouts) {
+        let settling = super::settled::settle_awaits(&program.funcs[index], &variants);
+        let no_settled = rustc_hash::FxHashSet::default();
+        let (func, settled) = settling
+            .as_ref()
+            .map_or((&program.funcs[index], &no_settled), |(func, settled)| {
+                (func, settled)
+            });
+        let rewritten = rewrite(func, index, &program.layouts, settled);
+        if rewritten.is_ok() {
+            for await_op in settled {
+                if let OpKind::Await { promise, .. } = &func.values[await_op.0 as usize].kind
+                    && let OpKind::Call {
+                        callee: super::Callee::Direct(variant),
+                        ..
+                    } = &func.values[promise.0 as usize].kind
+                {
+                    called.insert(variant.clone());
+                }
+            }
+        }
+        match rewritten {
             Ok(Rewritten {
                 entry,
                 resume,
@@ -400,6 +424,13 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
         program.funcs.remove(index);
     }
     program.funcs.extend(added);
+    // Only the variants some `await` now calls: a static function nothing
+    // calls is a warning C compilers make an error of.
+    program.funcs.extend(
+        variants
+            .into_values()
+            .filter(|variant| called.contains(&variant.name)),
+    );
     answer_for_frames(program, &layouts);
     program.layouts.extend(layouts);
     refusals.extend(declare_resumptions(program));
@@ -640,7 +671,14 @@ fn suspensions(func: &Func) -> Vec<(usize, usize, ValueId)> {
     found
 }
 
-fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, Diagnostic> {
+/// `settled` names the awaits whose operand is a value in hand rather than a
+/// promise ([`super::settled`]).
+fn rewrite(
+    func: &Func,
+    index: usize,
+    layouts: &[Layout],
+    settled: &rustc_hash::FxHashSet<ValueId>,
+) -> Result<Rewritten, Diagnostic> {
     let points = suspensions(func);
     if points.is_empty() && func.frame.is_none() {
         return Err(refuse(func, "an `await`"));
@@ -693,8 +731,20 @@ fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, D
             next = next.max(fixed + slot + 1);
         }
     }
-    let mut spilled: Vec<ValueId> = crossing(func)
-        .map_err(|failure| failure.diagnostic(func))?
+    let mut crossing = crossing(func).map_err(|failure| failure.diagnostic(func))?;
+    // **A settled await's value crosses its own suspension.** It is read at
+    // the `await` as far as liveness is concerned, where a promise would be
+    // read again by the resumption out of `awaited`; a value in hand has no
+    // such field, so it takes a frame slot of its own. A `void` one has
+    // nothing to keep.
+    for await_op in settled {
+        if let OpKind::Await { promise, .. } = &func.values[await_op.0 as usize].kind
+            && func.values[promise.0 as usize].ty != HirType::Void
+        {
+            crossing.insert(*promise);
+        }
+    }
+    let mut spilled: Vec<ValueId> = crossing
         .into_iter()
         .filter(|value| !slot_of.contains_key(value))
         .collect();
@@ -740,7 +790,15 @@ fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, D
         base,
     };
     let entry = entry_function(func, &frame_ty, &resume_name, &slot_of, mode);
-    let resume = resume_function(func, &frame_ty, &resume_name, &slot_of, &points, mode);
+    let resume = resume_function(
+        func,
+        &frame_ty,
+        &resume_name,
+        &slot_of,
+        &points,
+        mode,
+        settled,
+    );
     Ok(Rewritten {
         entry,
         resume,
@@ -1256,6 +1314,7 @@ fn resume_function(
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
     points: &[(usize, usize, ValueId)],
     mode: Mode,
+    settled: &rustc_hash::FxHashSet<ValueId>,
 ) -> Func {
     let shift = |value: ValueId| ValueId(value.0 + 1);
     let values = shifted_arena(func, frame_ty, mode.fixed());
@@ -1273,17 +1332,19 @@ fn resume_function(
 
     // Whether anything still needs the shared exit: an `await` whose rejection
     // the lowering did not give a handler.
+    // A settled await cannot be rejected, so it needs no exit.
     let shared_exit = mode.settles()
         && points.iter().any(|(_, _, value)| {
-            matches!(
-                &func.values[value.0 as usize].kind,
-                OpKind::Await {
-                    rejects_to: None,
-                    ..
-                }
-            )
+            !settled.contains(value)
+                && matches!(
+                    &func.values[value.0 as usize].kind,
+                    OpKind::Await {
+                        rejects_to: None,
+                        ..
+                    }
+                )
         });
-    let (base, starts) = segment_layout(func, points, shared_exit);
+    let (base, starts) = segment_layout(func, points, shared_exit, settled);
     let mut body: Vec<super::Block> = Vec::new();
     let mut resume_at: Vec<super::BlockId> = vec![super::BlockId(starts[0])];
 
@@ -1332,7 +1393,16 @@ fn resume_function(
                 break;
             };
             let marker = i64::try_from(resume_at.len()).unwrap_or(0);
-            let paused = pause(&mut build, frame, slot_of, awaited, name, marker, mode);
+            let in_hand = settled.contains(&ValueId(awaited.0 - 1));
+            let paused = pause(
+                &mut build,
+                frame,
+                slot_of,
+                (awaited, in_hand),
+                name,
+                marker,
+                mode,
+            );
             body.push(super::Block {
                 params: std::mem::take(&mut params),
                 ops: std::mem::take(&mut build.ops),
@@ -1351,6 +1421,14 @@ fn resume_function(
             // a property of the function the moment `await` and `yield` could
             // appear in the same body.
             if matches!(build.values[awaited.0 as usize].kind, OpKind::Yield { .. }) {
+                from = op + 1;
+                continue;
+            }
+            // A value in hand lands straight back in the body as well: it
+            // cannot be rejected, so there is nothing to test before reading
+            // it out of the frame, where its definition left it.
+            if in_hand {
+                read_in_hand(&mut build, frame, awaited, slot_of);
                 from = op + 1;
                 continue;
             }
@@ -1455,12 +1533,27 @@ fn pause(
     build: &mut Build,
     frame: ValueId,
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
-    stopping: ValueId,
+    (stopping, in_hand): (ValueId, bool),
     resume: &str,
     marker: i64,
     mode: Mode,
 ) -> Terminator {
     match build.values[stopping.0 as usize].kind.clone() {
+        // The value is in its frame slot already, stored where it was made
+        // (`carry`); only the state and the resumption are left to write.
+        OpKind::Await { .. } if in_hand => {
+            let marker = build.constant(marker);
+            build.set(frame, FIELD_STATE, marker);
+            build.push(
+                OpKind::Suspend {
+                    promise: None,
+                    frame,
+                    resume: resume.to_owned(),
+                },
+                HirType::Void,
+            );
+            Terminator::Return(None)
+        }
         OpKind::Await { promise, .. } => {
             let promise = reload(build, frame, slot_of, promise);
             let Some(slot) = mode.awaited() else {
@@ -1471,7 +1564,7 @@ fn pause(
             build.set(frame, FIELD_STATE, marker);
             build.push(
                 OpKind::Suspend {
-                    promise,
+                    promise: Some(promise),
                     frame,
                     resume: resume.to_owned(),
                 },
@@ -1594,6 +1687,7 @@ fn segment_layout(
     func: &Func,
     points: &[(usize, usize, ValueId)],
     shared_exit: bool,
+    settled: &rustc_hash::FxHashSet<ValueId>,
 ) -> (u32, Vec<u32>) {
     // The dispatch chain, then one block the whole function shares for
     // propagating a rejection, then the body. A generator has no rejection
@@ -1621,7 +1715,9 @@ fn segment_layout(
     // error.
     // A caught await additionally needs its rejected-edge operand block, so
     // neither the reason nor a handler's frame reload runs on fulfillment.
+    // A settled await is one block, as a `yield` is: nothing rejects it.
     let blocks_for = |value: ValueId| match &func.values[value.0 as usize].kind {
+        OpKind::Await { .. } if settled.contains(&value) => 1,
         OpKind::Await { rejects_to, .. } => 2 + usize::from(rejects_to.is_some()),
         _ => 1,
     };
@@ -1904,6 +2000,28 @@ fn read_by_unerasing(payload: &HirType) -> bool {
         HirType::BigInt => true,
         HirType::NativePointer(pointee) => host_handle(pointee),
         _ => false,
+    }
+}
+
+/// The landing of an `await` of a value in hand: the `await` becomes that
+/// value, read back out of the frame slot its definition was stored in.
+fn read_in_hand(
+    build: &mut Build,
+    frame: ValueId,
+    awaited: ValueId,
+    slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
+) {
+    let OpKind::Await { promise: value, .. } = build.values[awaited.0 as usize].kind else {
+        unreachable!("a settled await is an `await`");
+    };
+    if build.values[value.0 as usize].ty == HirType::Void {
+        return;
+    }
+    let held = reload(build, frame, slot_of, value);
+    build.values[awaited.0 as usize].kind = OpKind::Convert(held);
+    build.ops.push(awaited);
+    if let Some(slot) = slot_of.get(&awaited).copied() {
+        build.set(frame, slot, awaited);
     }
 }
 

@@ -2856,7 +2856,16 @@ pub(crate) fn reads(kind: &OpKind) -> Reads<'_> {
                 .map_or(&[][..], |rejection| rejection.args.as_slice()),
         ),
         OpKind::CellReady { cell, .. } => Reads::One(*cell),
-        OpKind::Suspend { promise, frame, .. } => Reads::Two(*promise, *frame),
+        OpKind::Suspend {
+            promise: Some(promise),
+            frame,
+            ..
+        } => Reads::Two(*promise, *frame),
+        OpKind::Suspend {
+            promise: None,
+            frame,
+            ..
+        } => Reads::One(*frame),
         OpKind::PromiseSubscribe {
             promise, reaction, ..
         } => Reads::Two(*promise, *reaction),

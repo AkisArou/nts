@@ -3132,10 +3132,24 @@ impl Emitter<'_> {
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
-        promise: ValueId,
+        promise: Option<ValueId>,
         frame: ValueId,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
+        let Some(promise) = promise else {
+            // An `await` of a value already in hand (`hir::settled`): the one
+            // job a subscription to a fulfilled promise queues, queued here.
+            code.invoke_static(origin, pool, types::ENV, "current", "()Lnts/rt/NtsEnv;");
+            self.load(code, pool, frame)?;
+            code.invoke_static(
+                origin,
+                pool,
+                types::ENV,
+                "microtask",
+                "(Lnts/rt/NtsEnv;Lnts/rt/NtsResumable;)V",
+            );
+            return Ok(Placed::Stored);
+        };
         self.load(code, pool, promise)?;
         self.load(code, pool, frame)?;
         code.invoke_static(

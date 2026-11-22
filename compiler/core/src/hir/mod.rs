@@ -65,6 +65,7 @@ pub mod obligations;
 pub mod outcomes;
 pub mod possibly_undefined;
 pub mod presence;
+mod settled;
 mod small_dispatch;
 pub mod suspend;
 pub mod tables;
@@ -1972,8 +1973,12 @@ pub enum OpKind {
     /// rather than a diagnostic.
     ///
     /// Produces nothing. The suspension itself is the `Return` that follows.
+    ///
+    /// **With no promise, the resumption is queued as a microtask at once**:
+    /// an `await` of a value already in hand (`super::settled`), which takes
+    /// exactly the one job a subscription to a fulfilled promise queues.
     Suspend {
-        promise: ValueId,
+        promise: Option<ValueId>,
         frame: ValueId,
         resume: String,
     },

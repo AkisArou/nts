@@ -1771,38 +1771,47 @@ fn suspension(
             promise,
             frame,
             resume,
-        } => [
-            format!("{out}.task = alloca %struct.NtsTask, align 8"),
-            format!(
-                "store ptr {}, ptr {out}.task{}",
-                program.source_function(resume),
-                tbaa("ptr")
-            ),
-            format!("{out}.drop = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 1"),
-            format!("store ptr null, ptr {out}.drop{}", tbaa("ptr")),
-            format!("{out}.state = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 2"),
-            format!("store ptr {}, ptr {out}.state{}", name(*frame), tbaa("ptr")),
-            runtime_call::call(
-                Site::function(func),
-                platform,
-                "nts_promise_subscribe",
-                &[
-                    Operand::new("ptr", name(*promise)),
-                    runtime_call::pointer_parameter(
-                        format!("{out}.task"),
-                        signatures::signature_on("nts_promise_subscribe", platform)
-                            .and_then(|known| known.params.get(1))
-                            .ok_or_else(|| {
-                                refuse(
-                                    func,
-                                    "`nts_promise_subscribe` is missing from this platform's table",
-                                )
-                            })?,
-                    ),
-                ],
-            )?,
-        ]
-        .join("\n  "),
+        } => {
+            // With a promise, a subscription; without one, the resumption is
+            // queued at once -- the one job a subscription to a fulfilled
+            // promise would have queued (`hir::settled`).
+            let helper = if promise.is_some() {
+                "nts_promise_subscribe"
+            } else {
+                "nts_enqueue_microtask"
+            };
+            let task = runtime_call::pointer_parameter(
+                format!("{out}.task"),
+                signatures::signature_on(helper, platform)
+                    .and_then(|known| known.params.last())
+                    .ok_or_else(|| {
+                        refuse(
+                            func,
+                            &format!("`{helper}` is missing from this platform's table"),
+                        )
+                    })?,
+            );
+            let operands: Vec<Operand> = match promise {
+                Some(promise) => vec![Operand::new("ptr", name(*promise)), task],
+                None => vec![task],
+            };
+            [
+                format!("{out}.task = alloca %struct.NtsTask, align 8"),
+                format!(
+                    "store ptr {}, ptr {out}.task{}",
+                    program.source_function(resume),
+                    tbaa("ptr")
+                ),
+                format!("{out}.drop = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 1"),
+                format!("store ptr null, ptr {out}.drop{}", tbaa("ptr")),
+                format!(
+                    "{out}.state = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 2"
+                ),
+                format!("store ptr {}, ptr {out}.state{}", name(*frame), tbaa("ptr")),
+                runtime_call::call(Site::function(func), platform, helper, &operands)?,
+            ]
+            .join("\n  ")
+        }
         // **The task is filled by the runtime, not rebuilt here.** `nts_callback_task`
         // allocates the callback entry and takes the reference, which its own
         // documentation calls ownership-critical code where "a second copy of it that
@@ -3325,6 +3334,9 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     // writes -- so no `OpKind::Call` names it and `externals` never would.
     "nts_callback_task",
     "nts_promise_subscribe",
+    // And the resumption an `await` of a value in hand queues directly, by
+    // the raw IR `Suspend` writes when it has no promise.
+    "nts_enqueue_microtask",
     "nts_index_fn",
     "nts_is_class",
     "nts_object_new",

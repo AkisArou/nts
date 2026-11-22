@@ -3605,7 +3605,10 @@ fn suspension(index: usize, op: &nts_core::hir::Op) -> String {
             promise,
             frame,
             resume,
-        } => format!("suspend %{} -> {resume}(%{})", promise.0, frame.0),
+        } => match promise {
+            Some(promise) => format!("suspend %{} -> {resume}(%{})", promise.0, frame.0),
+            None => format!("suspend -> {resume}(%{})", frame.0),
+        },
         _ => unreachable!("only reached for the suspension pair"),
     }
 }

@@ -475,11 +475,6 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             value: second,
             ..
         }
-        | OpKind::Suspend {
-            promise: first,
-            frame: second,
-            ..
-        }
         | OpKind::PromiseSubscribe {
             promise: first,
             reaction: second,
@@ -492,6 +487,12 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         } => {
             *first = of(*first);
             *second = of(*second);
+        }
+        OpKind::Suspend { promise, frame, .. } => {
+            if let Some(promise) = promise {
+                *promise = of(*promise);
+            }
+            *frame = of(*frame);
         }
         OpKind::Await {
             promise,

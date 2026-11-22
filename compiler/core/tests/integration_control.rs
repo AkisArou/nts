@@ -28,6 +28,9 @@ mod refusal_kinds;
 #[path = "refused_virtual_slots.rs"]
 mod refused_virtual_slots;
 
+#[path = "settled_awaits.rs"]
+mod settled_awaits;
+
 #[path = "shadowed_refusal.rs"]
 mod shadowed_refusal;
 
