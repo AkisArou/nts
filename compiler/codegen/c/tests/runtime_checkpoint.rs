@@ -288,7 +288,8 @@ fn access_error_keys_describe_primitives_without_program_callbacks() {
 /// for every way it can go wrong -- before anything produces one. Containers
 /// give their handles back as they die, a promise among them on both ways a
 /// promise is freed: at a count of zero and found white by the collector.
-/// Under ASan, so a slot given back twice or a block left behind fails too.
+/// Under the address sanitizer, so a slot given back twice or a block left
+/// behind fails too.
 #[test]
 fn a_handle_value_counts_through_its_family() {
     let report = run_suite(
