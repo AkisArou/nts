@@ -678,8 +678,81 @@ fn suspensions(func: &Func) -> Vec<(usize, usize, ValueId)> {
     found
 }
 
-/// `settled` names the awaits whose operand is a value in hand rather than a
-/// promise ([`super::settled`]).
+/// The awaits of a value in hand, and where one of them may find a promise
+/// still in the `awaited` slot.
+struct InHand<'a> {
+    /// The awaits whose operand is a value rather than a promise
+    /// ([`super::settled`]).
+    settled: &'a rustc_hash::FxHashSet<ValueId>,
+    /// Those of them an await of a promise can reach: there the slot may hold
+    /// the promise it left, which nothing reads again.
+    held: rustc_hash::FxHashSet<ValueId>,
+}
+
+/// The settled awaits an await of a promise reaches, along any path through
+/// `func`'s blocks, its rejection edges included.
+///
+/// Conservative in the safe direction: a settled await in between, which
+/// empties the slot, is not taken as emptying it for what follows. Where no
+/// promise await comes first -- a loop of settled awaits before the frame's
+/// one `await` of a promise -- the slot is still as the allocator left it, and
+/// clearing it would be a load, a test and a store for nothing at every one.
+fn held_at(
+    func: &Func,
+    settled: &rustc_hash::FxHashSet<ValueId>,
+) -> rustc_hash::FxHashSet<ValueId> {
+    let is_promise_await = |value: &ValueId| {
+        matches!(func.values[value.0 as usize].kind, OpKind::Await { .. })
+            && !settled.contains(value)
+    };
+    let successors = |block: usize| {
+        let body = &func.blocks[block];
+        let mut next: Vec<usize> = body
+            .terminator
+            .successors()
+            .into_iter()
+            .map(|target| target.0 as usize)
+            .collect();
+        for value in &body.ops {
+            if let OpKind::Await {
+                rejects_to: Some(rejection),
+                ..
+            } = &func.values[value.0 as usize].kind
+            {
+                next.push(rejection.handler.0 as usize);
+            }
+        }
+        next
+    };
+    let mut held = rustc_hash::FxHashSet::default();
+    // Blocks entered with a promise possibly in the slot.
+    let mut entered = vec![false; func.blocks.len()];
+    let mut work: Vec<usize> = Vec::new();
+    for (block, body) in func.blocks.iter().enumerate() {
+        if let Some(first) = body.ops.iter().position(is_promise_await) {
+            for value in &body.ops[first + 1..] {
+                if settled.contains(value) {
+                    held.insert(*value);
+                }
+            }
+            work.extend(successors(block));
+        }
+    }
+    while let Some(block) = work.pop() {
+        if block >= entered.len() || entered[block] {
+            continue;
+        }
+        entered[block] = true;
+        for value in &func.blocks[block].ops {
+            if settled.contains(value) {
+                held.insert(*value);
+            }
+        }
+        work.extend(successors(block));
+    }
+    held
+}
+
 fn rewrite(
     func: &Func,
     index: usize,
@@ -802,6 +875,10 @@ fn rewrite(
         base,
     };
     let entry = entry_function(func, &frame_ty, &resume_name, &slot_of, mode);
+    let in_hand = InHand {
+        settled,
+        held: held_at(func, settled),
+    };
     let resume = resume_function(
         func,
         &frame_ty,
@@ -809,7 +886,7 @@ fn rewrite(
         &slot_of,
         &points,
         mode,
-        settled,
+        &in_hand,
     );
     Ok(Rewritten {
         entry,
@@ -1332,8 +1409,9 @@ fn resume_function(
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
     points: &[(usize, usize, ValueId)],
     mode: Mode,
-    settled: &rustc_hash::FxHashSet<ValueId>,
+    awaits: &InHand<'_>,
 ) -> Func {
+    let settled = awaits.settled;
     let shift = |value: ValueId| ValueId(value.0 + 1);
     let values = shifted_arena(func, frame_ty, mode.fixed());
     let moved: rustc_hash::FxHashMap<ValueId, u32> = slot_of
@@ -1412,11 +1490,12 @@ fn resume_function(
             };
             let marker = i64::try_from(resume_at.len()).unwrap_or(0);
             let in_hand = settled.contains(&ValueId(awaited.0 - 1));
+            let clears = awaits.held.contains(&ValueId(awaited.0 - 1));
             let paused = pause(
                 &mut build,
                 frame,
                 slot_of,
-                (awaited, in_hand),
+                (awaited, in_hand, clears),
                 name,
                 marker,
                 mode,
@@ -1551,7 +1630,7 @@ fn pause(
     build: &mut Build,
     frame: ValueId,
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
-    (stopping, in_hand): (ValueId, bool),
+    (stopping, in_hand, clears): (ValueId, bool, bool),
     resume: &str,
     marker: i64,
     mode: Mode,
@@ -1561,10 +1640,11 @@ fn pause(
         // (`carry`); only the state and the resumption are left to write.
         OpKind::Await { .. } if in_hand => {
             // A frame that also waits on promises keeps the last one in
-            // `awaited` until something overwrites it; this suspension waits on
-            // none, so it gives that one back now rather than carry it through
-            // a turn that never reads it.
-            if let Some(slot) = mode.awaited() {
+            // `awaited` until something overwrites it; where one of those can
+            // have run before this suspension, which waits on none, it gives
+            // that promise back now rather than carry it through a turn that
+            // never reads it (`held_at`).
+            if let Some(slot) = mode.awaited().filter(|_| clears) {
                 let none = build.push(
                     OpKind::ConstNull,
                     HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),

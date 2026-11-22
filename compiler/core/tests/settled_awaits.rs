@@ -166,7 +166,12 @@ fn a_frame_whose_awaits_all_settle_has_no_awaited_slot() {
         None,
         "`summed` awaits only `settled`"
     );
-    for export in ["settledOrdering", "otherPayloads", "suspendingOrdering"] {
+    for export in [
+        "settledOrdering",
+        "otherPayloads",
+        "suspendingOrdering",
+        "promiseThenSettled",
+    ] {
         assert!(
             awaited_field(&program, export).is_some(),
             "`{export}` also awaits a promise"
@@ -174,40 +179,51 @@ fn a_frame_whose_awaits_all_settle_has_no_awaited_slot() {
     }
 }
 
-/// In a frame that waits on promises too, a settled `await` gives back the
-/// promise its `awaited` slot still holds from an earlier one -- it stores
-/// nothing there over the turn it waits -- so no promise lives past its own
-/// `await`.
-#[test]
-fn a_settled_await_in_a_mixed_frame_clears_the_awaited_slot() {
-    let program = machine();
-    for export in ["settledOrdering", "otherPayloads"] {
-        let slot = awaited_field(&program, export).unwrap();
-        let resume = func(&program, &format!("{export}__resume")).unwrap();
-        let mut settled_suspensions = 0;
-        for block in &resume.blocks {
-            let Some(at) = block.ops.iter().position(|value| {
-                matches!(
-                    resume.value(*value).kind,
-                    OpKind::Suspend { promise: None, .. }
-                )
-            }) else {
-                continue;
-            };
-            settled_suspensions += 1;
-            let cleared = block.ops[..at].iter().any(|value| {
-                matches!(
-                    resume.value(*value).kind,
-                    OpKind::FieldSet { field, value: put, .. }
-                        if field == slot
-                            && matches!(resume.value(put).kind, OpKind::ConstNull)
-                )
-            });
-            assert!(
-                cleared,
-                "`{export}` clears `awaited` before a settled suspension"
-            );
+/// Of a resumption's settled suspensions, how many clear `awaited` first.
+fn clearing(program: &hir::Program, export: &str) -> (usize, usize) {
+    let slot = awaited_field(program, export).unwrap();
+    let resume = func(program, &format!("{export}__resume")).unwrap();
+    let (mut suspensions, mut cleared) = (0, 0);
+    for block in &resume.blocks {
+        let Some(at) = block.ops.iter().position(|value| {
+            matches!(
+                resume.value(*value).kind,
+                OpKind::Suspend { promise: None, .. }
+            )
+        }) else {
+            continue;
+        };
+        suspensions += 1;
+        if block.ops[..at].iter().any(|value| {
+            matches!(
+                resume.value(*value).kind,
+                OpKind::FieldSet { field, value: put, .. }
+                    if field == slot && matches!(resume.value(put).kind, OpKind::ConstNull)
+            )
+        }) {
+            cleared += 1;
         }
-        assert!(settled_suspensions > 0, "`{export}` has a settled await");
+    }
+    (suspensions, cleared)
+}
+
+/// In a frame that waits on promises too, a settled `await` that an `await`
+/// of a promise can reach gives back the promise the `awaited` slot still
+/// holds -- it stores nothing there over the turn it waits -- so no promise
+/// lives past its own `await`. One that no promise `await` precedes finds the
+/// slot as the allocator left it, and clears nothing: `settledOrdering` awaits
+/// its promise last, as `event-loop-promises` does.
+#[test]
+fn a_settled_await_after_a_promise_clears_the_awaited_slot() {
+    let program = machine();
+    assert_eq!(
+        clearing(&program, "promiseThenSettled"),
+        (2, 2),
+        "both settled awaits follow the promise's"
+    );
+    for export in ["settledOrdering", "otherPayloads"] {
+        let (suspensions, cleared) = clearing(&program, export);
+        assert!(suspensions > 0, "`{export}` has a settled await");
+        assert_eq!(cleared, 0, "`{export}` awaits its promise last");
     }
 }

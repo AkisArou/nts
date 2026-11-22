@@ -138,6 +138,21 @@ export async function otherPayloads(n: number): Promise<string> {
   return log.join(",");
 }
 
+/**
+ * A promise first, then values in hand: the frame keeps the promise in its
+ * `awaited` slot after the first `await`, and gives it back at the next one,
+ * which waits on none.
+ */
+export async function promiseThenSettled(n: number): Promise<string> {
+  const log: string[] = [];
+  const other = ticks(log, 6);
+  log.push("p" + (await Promise.resolve(n)).toString());
+  log.push("a" + (await settled(n)).toString());
+  log.push("b" + (await settled(n + 1)).toString());
+  await other;
+  return log.join(",");
+}
+
 /** Across a loop, so the frame carries the sum through every suspension. */
 export async function summed(n: number): Promise<number> {
   let sum = 0;
