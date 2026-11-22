@@ -144,17 +144,18 @@ fn a_handed_back_receiver_is_a_move() {
 fn a_borrow_ends_at_its_last_read() {
     let prepared = counted("a-borrow-ends-at-its-last-read");
     // `old.next!.value + old.next!.back!.value`, then `ring[slot] = fresh`.
-    // The 7 left: the overwrite giving back what the slot held (1), and on
-    // each of the three throwing paths the error it built (3) and the
-    // `fresh` it was handed (3). The 9 removed were the copies and releases
+    // The 4 left: the overwrite giving back what the slot held (1), and on
+    // each of the three throwing paths the `fresh` it was handed (3).
+    // Each error moves into `nts_uncaught`, which owns the thrown value.
+    // The 9 removed from the reads were the copies and releases
     // of the four reads, and the copy of `old` given back on the first
     // throwing path.
-    assert_eq!(counting_in(&prepared, "replaceAfterBranches"), 7);
+    assert_eq!(counting_in(&prepared, "replaceAfterBranches"), 4);
     // The store pairs with the load of `old.next`, which takes the slot's
     // reference rather than borrowing it: a take is a load fewer than a
     // borrow followed by a store that has to read the slot again.
     assert_eq!(counting_in(&prepared, "relinkAfterEarlyExit"), 2);
-    assert_eq!(counting_in(&prepared, "replaceInLoop"), 3);
+    assert_eq!(counting_in(&prepared, "replaceInLoop"), 2);
     // `at`, carried by the loop's parameter, is read before the store.
     assert_eq!(counting_in(&prepared, "carriedPastNoStore"), 2);
 }
@@ -168,12 +169,12 @@ fn a_borrow_ends_at_its_last_read() {
 fn a_store_before_the_last_read_still_ends_the_borrow() {
     let prepared = counted_at("programs", "a-borrow-read-around-the-store-that-ends-it");
     for (after, before, kept, copied) in [
-        ("afterBranches", "beforeBranches", 8, 17),
-        ("afterCall", "beforeCall", 3, 6),
-        ("afterEarlyExit#whole", "beforeEarlyExit#whole", 5, 11),
-        ("afterLoop#whole", "beforeLoop#whole", 6, 12),
-        ("afterCarried#whole", "beforeCarried#whole", 4, 10),
-        ("afterThrow", "beforeThrow", 5, 10),
+        ("afterBranches", "beforeBranches", 5, 14),
+        ("afterCall", "beforeCall", 2, 5),
+        ("afterEarlyExit#whole", "beforeEarlyExit#whole", 4, 10),
+        ("afterLoop#whole", "beforeLoop#whole", 4, 10),
+        ("afterCarried#whole", "beforeCarried#whole", 3, 9),
+        ("afterThrow", "beforeThrow", 4, 9),
     ] {
         assert_eq!(counting_in(&prepared, after), kept, "{after}");
         assert_eq!(counting_in(&prepared, before), copied, "{before}");
