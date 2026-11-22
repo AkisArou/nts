@@ -21,3 +21,6 @@ mod llvm_class_exports;
 
 #[path = "physical_names.rs"]
 mod physical_names;
+
+#[path = "published_consuming.rs"]
+mod published_consuming;

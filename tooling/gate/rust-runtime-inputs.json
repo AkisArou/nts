@@ -2393,6 +2393,28 @@
       }
     },
     {
+      "source": "compiler/codegen/c/tests/published_consuming.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/programs/a-published-method-specialization-has-no-borrowed-caller/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "./programs/published-consuming-towers/tsconfig.json"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tooling/memory/harness.c"
+          }
+        ]
+      }
+    },
+    {
       "source": "compiler/codegen/c/tests/published_empty.rs",
       "declarations": {
         "imports": [],
@@ -2850,6 +2872,19 @@
       "declarations": {
         "imports": [],
         "assets": []
+      }
+    },
+    {
+      "source": "compiler/codegen/common/test-support/published_consuming.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json"
+          }
+        ]
       }
     },
     {
@@ -4073,6 +4108,13 @@
     },
     {
       "source": "compiler/codegen/jvm/tests/provides.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/codegen/jvm/tests/published_consuming.rs",
       "declarations": {
         "imports": [],
         "assets": []
@@ -5494,6 +5536,13 @@
       }
     },
     {
+      "source": "compiler/codegen/llvm/tests/published_consuming.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/codegen/llvm/tests/refused_names.rs",
       "declarations": {
         "imports": [],
@@ -6086,6 +6135,18 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../core/tests/programs/class-export-keyword-control/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "compiler/codegen/napi/tests/published_consuming.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../../tsconfig.fixtures.json"
           }
         ]
       }
@@ -7986,6 +8047,13 @@
     },
     {
       "source": "compiler/core/src/hir/own.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/own/entries.rs",
       "declarations": {
         "imports": [],
         "assets": []
@@ -10552,6 +10620,24 @@
             "role": "compiled-program",
             "path": "../../../tests/refusals/",
             "prefix": "builtin-study-"
+          }
+        ]
+      }
+    },
+    {
+      "source": "compiler/core/tests/published_consuming_entries.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "./programs/resumable-consuming/tsconfig.json"
           }
         ]
       }
@@ -13502,6 +13588,19 @@
       "declarations": {
         "imports": [],
         "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/entry_decisions.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json"
+          }
+        ]
       }
     },
     {

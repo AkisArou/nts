@@ -1,33 +1,17 @@
-// expect: emit-c --rc -> once-c __nts_guarded_nts_dom_release((void *)
+// expect: emit-c --rc -> once-c ((void *)__nts_v0);
+// #900: ~/.cache/nts-scratch/900/foreign-handle-boundary/; main program.c SHA-256 b68830611ea445de8aa0ca280d007834e2ec834cfffea436cebcfea1e4af6d4e; candidate program.c SHA-256 3417e6852fce2f77320bdbd94c8f864a59e95a75b857907fb20d468f533a532f.
 //
-// **FIXED 2026-10-07, and kept as a guard**: a parameter the function keeps is
-// released where it dies, after the loop. It was counted beside the closure's
-// capture -- two release call sites, `duplicates-c` -- until 2026-10-22, when a
-// closure nothing reads stopped being made (dead-code elimination), and with
-// it the capture that made `each` keep `d` at all. So `make` is now kept in a
-// module variable: `each` keeps `d` through it, the capture is given back by
-// the closure's own release, and the one call site left in `each` is the
-// parameter's. `once-c` holds it: none means that release is gone again. The
-// record follows unchanged.
+// Under resumable roots, `each` borrows its handle across the potentially
+// raising loop. Its closure still takes and releases its own foreign root.
+// The one cast call is that capture retain. Caller retains in `go` and a
+// parameter release at the loop exit use the same cast: either addition
+// breaks this count and reveals an unbalanced ownership convention.
 //
-// A host handle parameter the callee owns -- `each` captures `d` in a
-// closure, so its caller retains `d` before each call -- is never released
-// when its last use is inside a loop. `go` retains twice and nothing gives
-// either back: the only release call in the file is the closure's capture.
-// Found 2026-10-06 in the browser: the Chromium DOM witness's
-// `for (const seed of seeds) fuzz(d, ...)` left the document rooted
-// (NTS_DOM_ROOT HTMLDocument x1), where one straight-line call had not. The
-// same holds for an indexed `for` and a `while`. Under NoGc nothing counts;
-// under RC each call leaks one root of whatever the handle is.
-//
-// Control, one difference -- the loop replaced by its body: `touch(d, 1);`.
-// The parameter's release follows the call (one release call site, the
-// parameter's), and retains and releases balance.
-//
-// Fixed, the loop form has two release call sites -- the closure's and the
-// parameter's after the loop -- and this expectation goes red: the checker
-// has no form for "retains outnumber releases", so `once-c` asserts today's
-// single release site, and a red here means update it to the fixed count.
+// Poison and forced collection dispose 1000/1000 documents on main and the
+// candidate, with identical live references after go and closure cleanup,
+// and zero managed growth. The two temporary caller references of main's
+// old consuming-parameter convention are no longer taken or released.
+// Control: replace the loop by its body, `touch(d, 1);`.
 
 import { document } from "nts:dom";
 import type { Document } from "nts:dom";

@@ -25,6 +25,9 @@ mod placement_sites;
 #[path = "promise_payload_is_borrowed.rs"]
 mod promise_payload_is_borrowed;
 
+#[path = "published_consuming_entries.rs"]
+mod published_consuming_entries;
+
 #[path = "region_sites.rs"]
 mod region_sites;
 

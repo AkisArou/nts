@@ -120,6 +120,10 @@ fn prepared_fixture() -> nts_core::hir::Prepared {
 fn a_declined_optional_carrier_stub_has_every_descriptor_local() {
     use nts_core::hir::{HirType, Op, OpKind, ValueId, native};
     let mut program = pairs::program();
+    // This fixture exercises a closed private ABI, including its refusal stub.
+    program.roots = Some(nts_core::hir::reachable::OwnedRoots::Entry(vec![
+        "pairCaller".into(),
+    ]));
     let writer = program
         .funcs
         .iter_mut()
