@@ -21,10 +21,11 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {FIXED_AMBIENT,hostEnvironment} from '../gate/host-environment.ts';
 import { CPU_WEIGHT, OOM_SCORE } from "../gate/ranks.ts";
+import { hostTool } from "../gate/toolchain.ts";
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs } from "../landing/pool.ts";
 import { DEFAULT_SCHEDULE, parseTimes, type Schedule } from "./schedule.ts";
@@ -56,13 +57,18 @@ const quote = (value: string) => `"${value.replaceAll("\\", "\\\\").replaceAll('
 /** An ExecStart argument, where `$` also expands a variable. */
 const argument = (value: string) => quote(value).replaceAll("$", "$$$$");
 
+const executable = (name: string, path: string) => {
+  if (!isAbsolute(path)) throw new Error(`unit executable ${name} must be absolute: ${JSON.stringify(path)}`);
+  return path;
+};
+
 /** The gate's host capabilities, as the controller and the count are given them. */
 const environment = (env: NodeJS.ProcessEnv) =>
   Object.entries({ ...hostEnvironment(env), ...FIXED_AMBIENT }).filter(([, value]) => value).map(([name, value]) => `Environment=${quote(`${name}=${value}`)}`);
 
 export function unitText(options: UnitOptions): string {
   const { layout, schedule } = options;
-  const exec = [options.node, join(layout.controller, "tooling/full-check/service.ts"), `--nightly-at=${schedule.nightly}`];
+  const exec = [executable("node", options.node), join(layout.controller, "tooling/full-check/service.ts"), `--nightly-at=${schedule.nightly}`];
   return [
     "[Unit]",
     "Description=nts full check: the core on the newest main, the wide steps on verified",
@@ -92,9 +98,9 @@ export function unitText(options: UnitOptions): string {
  * moves the tree to `verified` under it (service.ts's followVerified). A count
  * that hangs is stopped after half an hour, and the next hour counts again.
  */
-export function countServiceText(options: Pick<UnitOptions, "node" | "layout" | "env">): string {
+export function countServiceText(options: Pick<UnitOptions, "node" | "layout" | "env"> & { flock: string }): string {
   const { layout } = options;
-  const exec = ["flock", "--shared", layout.controllerLock, options.node, join(layout.controller, "tooling/full-check/service.ts"), "--count"];
+  const exec = [executable("flock", options.flock), "--shared", layout.controllerLock, executable("node", options.node), join(layout.controller, "tooling/full-check/service.ts"), "--count"];
   return [
     "[Unit]",
     "Description=nts full check: the hourly count of branches, worktrees and ~/.cache, after the pool's upkeep",
@@ -150,7 +156,7 @@ function run(command: string, args: string[], cwd: string): string {
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   try {
     const options = parseUnitOptions(process.argv.slice(2));
-    const layout = defaultLayout(), unitOptions = { node: process.execPath, layout, schedule: options.schedule, env: process.env };
+    const layout = defaultLayout(), unitOptions = { node: process.execPath, flock: hostTool("flock", process.env), layout, schedule: options.schedule, env: process.env };
     const files: [string, string][] = [
       [`${UNIT}.service`, unitText(unitOptions)], [`${COUNT_UNIT}.service`, countServiceText(unitOptions)], [`${COUNT_UNIT}.timer`, countTimerText()],
     ];

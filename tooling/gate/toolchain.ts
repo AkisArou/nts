@@ -5,6 +5,17 @@ import {readFileSync} from "node:fs";
 import {delimiter,dirname,isAbsolute,join,resolve} from "node:path";
 import {userInfo} from "node:os";
 import {ToolingInstrumentError} from "./step-result.ts";
+import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
+
+/** Installed unit files must retain an absolute executable, independent of
+ * systemd's search path. A relative PATH result supplies no such ownership. */
+export function hostTool(command:string,env:NodeJS.ProcessEnv,probe:InfrastructureProbe=infrastructureProbe):string {
+  const path=probe({purpose:'locate host tool '+command,command:'sh',
+    args:['-c','command -v "$1"','sh',command],env}).stdout.trim();
+  if(!isAbsolute(path)||path.includes('\n'))throw new ToolingInstrumentError('tooling-setup',
+    'host tool '+command+' must resolve to an absolute executable: '+JSON.stringify(path));
+  return path;
+}
 
 /** Read either rustup file format. The default is only for external fixtures. */
 export function rustToolchain(path:string|URL=new URL('../../rust-toolchain.toml',import.meta.url)):string {

@@ -379,6 +379,28 @@ test('typed unit execution properties preserve path and argument ownership',()=>
   assert.throws(()=>assertUnitTreeUnused([root],{...reading,workingDirectory:'!!/outside'}),/unresolved unit WorkingDirectory/);
 });
 
+test('unreadable typed unit properties name the unit, property and rejected value',()=>{
+  const unit='nts-full-check-count.service',properties=['ExecStartPre','ExecStart','ExecStartPost'] as const;
+  const command=(path:string)=>[path,[path,'--shared','/outside/controller.lock'],false,0,0,0,0,0,0,0];
+  for(const [index,property] of properties.entries()){
+    const rows:{type:string;data:unknown}[]=[{type:'s',data:'/outside'},{type:'s',data:''},...properties.map(()=>({type:'a(sasbttttuii)',data:[command('/usr/bin/flock'),command('/usr/bin/node')]}))];
+    const text=()=>rows.map(row=>JSON.stringify(row)).join('\n');
+    const reading=parseUnitTreeOwnership(unit,text());
+    assert.equal(reading.commands.length,6,'every command in every property is retained');
+    assert.doesNotThrow(()=>assertUnitTreeUnused(['/owned/tree'],reading));
+    for(const entry of [command('flock'),['/usr/bin/flock'],['/usr/bin/flock',[42],false,0,0,0,0,0,0,0]]){
+      rows[index+2]={type:'a(sasbttttuii)',data:[entry]};
+      assert.throws(()=>parseUnitTreeOwnership(unit,text()),error=>{
+        assert.ok(error instanceof Error);
+        for(const value of [unit,property,JSON.stringify(entry)])assert.ok(error.message.includes(value),error.message);
+        return true;
+      });
+    }
+    const lines=text().split('\n');lines[index+2]='{broken';
+    assert.throws(()=>parseUnitTreeOwnership(unit,lines.join('\n')),error=>error instanceof Error&&[unit,property,'{broken'].every(value=>error.message.includes(value)));
+  }
+});
+
 test('an activating start-pre unit owns its future executable before PID zero starts',async t=>{
   const f=fixture(t),tree=f.tree('1'),outside=join(f.s.dir,'outside');mkdirSync(outside);
   const entry=join(tree,'entry'),prelude=join(outside,'prelude.mjs'),ready=join(outside,'ready');

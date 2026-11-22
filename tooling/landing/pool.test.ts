@@ -126,9 +126,9 @@ test('attach, detach and take own worker presence while status stays read-only',
   assert.throws(()=>p.attach('884'),/unsupported future state version/);
 });
 
-test('the CLI attach/detach verbs and take --issue preserve the branch and status v2 bytes',t=>{
-  const {p,s,observe}=pool(t,1),tree=p.take('884');
-  const env={...s.env,...observe({freeBytes:1000*GB,freeInodes:1000})};
+test('the CLI attach/detach verbs and take --issue preserve the branch and status v2 bytes with the count active',t=>{
+  const f=pool(t,1),{p,s}=f,tree=p.take('884');
+  const {env,log}=poolCliEnvironment(f);
   const cli=(...args:string[])=>{
     const result=spawnTest(process.execPath,[fileURLToPath(new URL('./pool.ts',import.meta.url)),...args,'--pool',p.dir],{cwd:s.root,env,encoding:'utf8'});
     assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;
@@ -140,6 +140,12 @@ test('the CLI attach/detach verbs and take --issue preserve the branch and statu
   assert.match(cli('attach','884'),/task 884: attached/);
   cli('detach','884');cli('take','--issue','884');
   assert.equal(workerPresence(tree.path,'884').state,'attached');assert.equal(s.git(['branch','--show-current'],tree.path),'884');
+  assert.match(readFileSync(log,'utf8'),/busctl.*ExecStart/,'detach queried the supplied active count');
+  for(const command of ['systemctl','busctl']){
+    const unexpected=spawnTest(command,['unsupplied-observation'],{env,encoding:'utf8'});
+    assert.notEqual(unexpected.status,0);
+    assert.match(unexpected.stderr,new RegExp('unsupplied '+command+' request.*unsupplied-observation'));
+  }
 });
 
 for(const action of ['take','attach'] as const)test('reattachment cannot spend another cold task promise: '+action,t=>{
@@ -203,9 +209,34 @@ test('a landed hold still needs admission when taken again',t=>{
   assert.equal(p.take('884').state,'held');assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
 });
 
+/** The CLI owns its unit observations, including an active hourly count.
+ * Unknown queries fail by name; neither shim can reach the user's manager. */
+function poolCliEnvironment(f:ReturnType<typeof pool>){
+  const bin=join(f.s.dir,'unit-tools'),log=join(f.s.dir,'unit-queries.jsonl');mkdirSync(bin,{recursive:true});
+  const unit='nts-full-check-count.service',object='/org/freedesktop/systemd1/unit/nts_2dfull_2dcheck_2dcount_2eservice';
+  const properties=[{type:'s',data:'/outside/controller'},{type:'s',data:''},{type:'a(sasbttttuii)',data:[]},
+    {type:'a(sasbttttuii)',data:[['/usr/bin/flock',['/usr/bin/flock','--shared','/outside/controller.lock','/usr/bin/node','/outside/controller/tooling/full-check/service.ts','--count'],false,0,0,0,0,0,0,0]]},
+    {type:'a(sasbttttuii)',data:[]}].map(row=>JSON.stringify(row)).join('\n')+'\n';
+  const bus=['--user','--json=short'];
+  const replies={
+    systemctl:[{args:['--user','list-units','--all','--type=service','--output=json'],text:JSON.stringify([{unit,active:'active'}])}],
+    busctl:[{args:[...bus,'call','org.freedesktop.systemd1','/org/freedesktop/systemd1','org.freedesktop.systemd1.Manager','GetUnit','s',unit],text:JSON.stringify({type:'o',data:[object]})},
+      {args:[...bus,'get-property','org.freedesktop.systemd1',object,'org.freedesktop.systemd1.Service','WorkingDirectory','RootDirectory','ExecStartPre','ExecStart','ExecStartPost'],text:properties}],
+  };
+  for(const [command,observations] of Object.entries(replies))writeFileSync(join(bin,command),generatedJavaScript(`#!${process.execPath}
+import {appendFileSync} from 'node:fs';
+const args=process.argv.slice(2),command=${JSON.stringify(command)};
+appendFileSync(${JSON.stringify(log)},JSON.stringify({command,args})+'\\n');
+const reply=${JSON.stringify(observations)}.find(row=>JSON.stringify(row.args)===JSON.stringify(args));
+if(reply)process.stdout.write(reply.text);
+else {process.stderr.write('unsupplied '+command+' request: '+JSON.stringify(args)+'\\n');process.exitCode=1;}
+`),{mode:0o755});
+  return {env:{...f.s.env,...f.observe({freeBytes:1000*GB,freeInodes:1000}),PATH:bin+':'+f.s.env.PATH},log};
+}
+
 /** pool.ts's own CLI on the fixture's pool: its exit status and output, through main's exit mapping. */
 const poolCli=(f:ReturnType<typeof pool>,...args:string[])=>spawnTest(process.execPath,[fileURLToPath(new URL('./pool.ts',import.meta.url)),...args,'--pool',f.p.dir],
-  {cwd:f.s.root,env:{...f.s.env,...f.observe({freeBytes:1000*GB,freeInodes:1000})},encoding:'utf8'});
+  {cwd:f.s.root,env:poolCliEnvironment(f).env,encoding:'utf8'});
 const inUse=(tree:string)=>(error:unknown)=>error instanceof TreeInUse&&error instanceof PoolRetry&&poolExit(error)===75&&error.tree===tree
   &&error.message.includes('tree resource lock is held for '+tree);
 

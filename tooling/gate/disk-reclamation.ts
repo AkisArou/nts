@@ -68,15 +68,28 @@ export type UnitTreeOwnership={unit:string;workingDirectory:string;rootDirectory
   commands:{property:'ExecStartPre'|'ExecStart'|'ExecStartPost';path:string;args:string[]}[]};
 /** busctl preserves actual argument boundaries, including spaces and semicolons. */
 export function parseUnitTreeOwnership(unit:string,text:string):UnitTreeOwnership{
-  const rows=text.trim().split('\n').map(line=>JSON.parse(line) as {type:unknown;data:unknown});
-  if(rows.length!==5||rows.slice(0,2).some(row=>row.type!=='s'||typeof row.data!=='string'))throw Error('unreadable unit directories: '+unit);
-  const properties=['ExecStartPre','ExecStart','ExecStartPost'] as const;
-  const commands=properties.flatMap((property,index)=>{
+  function unreadable(property:string,value:unknown):never{throw Error('unreadable unit '+property+': '+unit+'; value='+JSON.stringify(value));}
+  const executions=['ExecStartPre','ExecStart','ExecStartPost'] as const;
+  const properties=['WorkingDirectory','RootDirectory',...executions] as const;
+  const lines=text.trim().split('\n');
+  if(lines.length!==properties.length)unreadable('directories/properties',text);
+  const rows=lines.map((line,index)=>{
+    const property=properties[index]!;
+    let row:unknown;
+    try{row=JSON.parse(line);}catch{unreadable(property,line);}
+    if(!row||typeof row!=='object'||!('type' in row)||!('data' in row))unreadable(property,row);
+    return row as {type:unknown;data:unknown};
+  });
+  for(const index of [0,1]){
+    const row=rows[index]!;
+    if(row.type!=='s'||typeof row.data!=='string')unreadable(properties[index]!,row);
+  }
+  const commands=executions.flatMap((property,index)=>{
     const row=rows[index+2]!;
-    if(row.type!=='a(sasbttttuii)'||!Array.isArray(row.data))throw Error('unreadable unit '+property+': '+unit);
-    return row.data.map((entry:unknown)=>{
+    if(row.type!=='a(sasbttttuii)'||!Array.isArray(row.data))unreadable(property,row);
+    return (row.data as unknown[]).map((entry:unknown)=>{
       if(!Array.isArray(entry)||entry.length!==10||typeof entry[0]!=='string'||!entry[0].startsWith('/')||
-        !Array.isArray(entry[1])||entry[1].some(arg=>typeof arg!=='string'))throw Error('unreadable unit execution ownership: '+unit);
+        !Array.isArray(entry[1])||entry[1].some(arg=>typeof arg!=='string'))unreadable(property,entry);
       return {property,path:entry[0],args:[...entry[1]] as string[]};
     });
   });
