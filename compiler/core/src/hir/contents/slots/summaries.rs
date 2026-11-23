@@ -143,22 +143,11 @@ fn return_contracts(
     returned
 }
 
-pub(in crate::hir) fn summarize(
+fn parameter_candidates(
     program: &Program,
     layouts: &[Layout],
-    harmless: &FxHashSet<String>,
-) -> Summaries {
-    let calls = Calls::of(program);
-    let aliases = program
-        .funcs
-        .iter()
-        .map(|func| (func.name.clone(), Aliases::of(func)))
-        .collect();
-    let mut result = Summaries {
-        returned: return_contracts(program, layouts, harmless, &calls, &aliases),
-        aliases,
-        parameters: FxHashMap::default(),
-    };
+) -> FxHashMap<String, FxHashSet<(u32, u32)>> {
+    let mut parameters = FxHashMap::default();
     let direct_only = invoked_only_directly(program, layouts);
     for func in &program.funcs {
         let mut fields = FxHashSet::default();
@@ -179,8 +168,27 @@ pub(in crate::hir) fn summarize(
                 );
             }
         }
-        result.parameters.insert(func.name.clone(), fields);
+        parameters.insert(func.name.clone(), fields);
     }
+    parameters
+}
+
+pub(in crate::hir) fn summarize(
+    program: &Program,
+    layouts: &[Layout],
+    harmless: &FxHashSet<String>,
+) -> Summaries {
+    let calls = Calls::of(program);
+    let aliases = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.clone(), Aliases::of(func)))
+        .collect();
+    let mut result = Summaries {
+        returned: return_contracts(program, layouts, harmless, &calls, &aliases),
+        aliases,
+        parameters: parameter_candidates(program, layouts),
+    };
     // Greatest fixpoint, top-down: at most one removal per parameter/field.
     // A changed callee contract requeues that callee (not all functions), so its
     // callers' accepted facts reach the next component and recursive forwarding
