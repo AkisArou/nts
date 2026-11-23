@@ -125,6 +125,146 @@ test("core promotes an outstanding change only beyond two hours; the ledger orde
   }
 });
 
+test("a stale core precedes owed daytime and nightly wide, which follows the new verified", async t => {
+  for (const nightly of [false, true]) {
+    const repo = repository(t), gate = fakeGate(repo), now = new Date(2026, 10, 6, 12);
+    const first = repo.commit({"a.txt": "verified"}, "verified");
+    const fx = harness(repo, gate, {now, idle: true});
+    assert.equal(await cycle(fx), "core");
+    const candidate = repo.commit({"a.txt": "new main"}, "catch up");
+    fx.landedTimes = () => new Map([[candidate, new Date(now.getTime() - 7_200_001).toISOString()]]);
+    if (nightly) {
+      const state = readState(repo.layout.state);
+      state.wide.last_run = {commit: first, at: new Date(2026, 10, 6, 2).toISOString(), run: "previous wide", verdict: "green", failed: []};
+      state.nightly = state.wide.last_run.at;
+      writeState(repo.layout.state, state);
+      // Even past the nightly idle deadline, the stale core goes first.
+      fx.memoryWaiter = () => "fixture agent waits";
+    }
+    const origin = readState(repo.layout.state).wide;
+    const run = gate.run;
+    gate.run = (...args) => {
+      if (args[2] === "core") {
+        const state = readState(repo.layout.state);
+        assert.equal(state.wide.waiting, `wide owed, waiting for core ${candidate} (stale-verified rank)`);
+        assert.equal(state.wide.postponed_for_verified, first);
+        assert.deepEqual(state.wide.last_run, origin.last_run, "postponement consumes no wide start");
+        assert.equal(state.wide.since, origin.since);
+      }
+      return run(...args);
+    };
+    assert.equal(await cycle(fx), "core");
+    assert.equal(verified(repo), candidate);
+    assert.equal(readState(repo.layout.state).wide.postponed_for_verified, undefined);
+    // A new harness reads the persisted schedule and original nightly deadline.
+    const restarted = harness(repo, gate, {now, idle: true, landedTimes: fx.landedTimes, memoryWaiter: fx.memoryWaiter});
+    assert.equal(await cycle(restarted), "wide");
+    assert.deepEqual(gate.measured.slice(-2).map(row => [row.label, row.commit, row.rank]),
+      [["core", candidate, "culprit-search"], ["wide", candidate, "full-check"]]);
+    if (nightly) assert.ok(restarted.lines.some(line => line.includes("nightly wide idle deadline passed")));
+  }
+});
+
+test("wide keeps its slot at the stale boundary and without usable advancing landing evidence", async t => {
+  for (const mode of ["fresh", "boundary", "missing", "invalid", "current", "unrelated"] as const) {
+    const repo = repository(t), gate = fakeGate(repo), now = new Date(2026, 10, 6, 12);
+    const first = repo.commit({"a.txt": "verified"}, "verified");
+    const fx = harness(repo, gate, {now, idle: true});
+    assert.equal(await cycle(fx), "core");
+    const candidate = repo.commit({"a.txt": "main"}, "main");
+    const landed = mode === "invalid" ? "not a time" : new Date(now.getTime() - (mode === "fresh" ? 1 : mode === "boundary" ? 7_200_000 : 7_200_001)).toISOString();
+    fx.landedTimes = () => mode === "missing" ? new Map() : new Map([[candidate, landed]]);
+    if (mode === "current") repo.git.run(["update-ref", "refs/heads/verified", candidate]);
+    if (mode === "unrelated") repo.git.run(["update-ref", "refs/heads/verified", repo.git.run(["commit-tree", `${first}^{tree}`, "-m", "unrelated"])]);
+    assert.equal(await cycle(fx), "wide", mode);
+    assert.equal(gate.measured.at(-1)!.rank, "full-check");
+    assert.equal(readState(repo.layout.state).wide.postponed_for_verified, undefined);
+  }
+});
+
+test("three red stale cores with moving main give the owed wide its turn after the first, across restart", async t => {
+  const repo = repository(t), gate = fakeGate(repo), now = new Date(2026, 10, 6, 12);
+  const first = repo.commit({"a.txt": "verified"}, "verified");
+  const fx = harness(repo, gate, {now, idle: true});
+  assert.equal(await cycle(fx), "core");
+  const bad = repo.commit({"RED/typescript-c": "red"}, "red core");
+  fx.landedTimes = () => new Map([[bad, new Date(now.getTime() - 10_800_000).toISOString()]]);
+  assert.equal(await cycle(fx), "core");
+  assert.equal(readState(repo.layout.state).core.last_run?.verdict, "red");
+  assert.equal(readState(repo.layout.state).wide.postponed_for_verified, first);
+  assert.ok(gate.measured.some(row => row.label === "core-probe" && row.rank === "culprit-search"));
+  repo.commit({"a.txt": "second red main"}, "second red main");
+  const restarted = harness(repo, gate, {now, idle: true, landedTimes: fx.landedTimes});
+  assert.equal(await cycle(restarted), "wide", "persisted displacement prevents another core taking this slot");
+  assert.equal(gate.measured.at(-1)!.commit, first);
+  assert.equal(readState(repo.layout.state).wide.postponed_for_verified, undefined);
+  assert.equal(await cycle(restarted), "core");
+  repo.commit({"a.txt": "third red main"}, "third red main");
+  assert.equal(await cycle(restarted), "core");
+  assert.deepEqual(gate.measured.filter(row => row.label === "core" || row.label === "wide").map(row => row.label),
+    ["core", "core", "wide", "core", "core"]);
+  assert.equal(verified(repo), first);
+});
+
+test("restart ignores a displacement for an older verified and runs wide on the new verified", async t => {
+  const repo = repository(t), gate = fakeGate(repo), now = new Date(2026, 10, 6, 12);
+  const first = repo.commit({"a.txt": "verified"}, "verified");
+  const fx = harness(repo, gate, {now, idle: true});
+  assert.equal(await cycle(fx), "core");
+  const next = repo.commit({"a.txt": "new verified"}, "new verified");
+  repo.git.run(["update-ref", "refs/heads/verified", next]);
+  const state = readState(repo.layout.state);
+  state.wide.postponed_for_verified = first;
+  writeState(repo.layout.state, state);
+  const run = gate.run;
+  gate.run = (...args) => {
+    assert.equal(readState(repo.layout.state).wide.postponed_for_verified, undefined);
+    return run(...args);
+  };
+  assert.equal(await cycle(harness(repo, gate, {now, idle: true})), "wide");
+  assert.equal(gate.measured.at(-1)!.commit, next);
+});
+
+test("a stale core already tried or held inside its retry interval leaves wide first", async t => {
+  for (const verdict of ["red", "held"] as const) {
+    const repo = repository(t), gate = fakeGate(repo), now = new Date(2026, 10, 6, 12);
+    const first = repo.commit({"a.txt": "verified"}, "verified");
+    repo.git.run(["update-ref", "refs/heads/verified", first]);
+    const candidate = repo.commit({"a.txt": "main"}, "main");
+    const state = readState(repo.layout.state);
+    state.core.last_run = {commit: candidate, at: now.toISOString(), run: "previous core", verdict, failed: []};
+    writeState(repo.layout.state, state);
+    const fx = harness(repo, gate, {now, idle: true, landedTimes: () => new Map([[candidate, new Date(now.getTime() - 10_800_000).toISOString()]])});
+    assert.equal(await cycle(fx), "wide");
+  }
+});
+
+test("an in-flight wide finishes when main becomes stale before the next core", async t => {
+  const repo = repository(t), gate = fakeGate(repo);
+  let now = new Date(2026, 10, 6, 12), candidate = "";
+  const first = repo.commit({"a.txt": "verified"}, "verified");
+  const fx = harness(repo, gate, {idle: true});
+  fx.now = () => now;
+  assert.equal(await cycle(fx), "core");
+  const run = gate.run;
+  gate.run = (...args) => {
+    if (args[2] === "wide") {
+      candidate = repo.commit({"a.txt": "new main"}, "main arrives during wide");
+      const landed = now.toISOString();
+      fx.landedTimes = () => new Map([[candidate, landed]]);
+      now = new Date(now.getTime() + 10_800_000);
+      assert.equal(readState(repo.layout.state).now?.doing, "wide");
+    }
+    return run(...args);
+  };
+  assert.equal(await cycle(fx), "wide");
+  assert.equal(readState(repo.layout.state).wide.last_run?.commit, first);
+  assert.equal(readState(repo.layout.state).wide.last_run?.verdict, "green");
+  assert.equal(await cycle(fx), "core");
+  assert.equal(gate.measured.at(-1)!.commit, candidate);
+  assert.equal(gate.measured.at(-1)!.rank, "culprit-search");
+});
+
 test("a green stale-verified catch-up returns the next fresh core and wide to full-check rank", async t => {
   const repo = repository(t), gate = fakeGate(repo);
   const first = commitAt(repo, "2026-01-01T00:00:00Z", "old verified");

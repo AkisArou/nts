@@ -177,7 +177,10 @@ export type PartState = { last_run?: RunRecord; last_green?: RunRecord; records?
 export type State = {
   version: 2;
   core: PartState;
-  wide: PartState;
+  wide: PartState & {
+    /** Full verified SHA whose owed wide has already yielded once to a stale core. */
+    postponed_for_verified?: string;
+  };
   culprits: Culprit[];
   probes: ProbeRecord[];
   /**

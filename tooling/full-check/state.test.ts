@@ -9,6 +9,19 @@ import {answerTask,emptyState,layout,newTask,readState,retainTaskHistory,writeSt
 
 const AT='2026-11-13T01:00:00.000Z';
 
+test('older state has no wide postponement and a full verified SHA survives restart', t => {
+  const file = join(testScratch(t, 'wide-postponement'), 'state-v2.json');
+  writeState(file, emptyState());
+  const state = readState(file);
+  assert.equal(state.wide.postponed_for_verified, undefined);
+  state.wide.postponed_for_verified = 'a'.repeat(40);
+  writeState(file, state);
+  assert.equal(readState(file).wide.postponed_for_verified, 'a'.repeat(40));
+  delete state.wide.postponed_for_verified;
+  writeState(file, state);
+  assert.equal(readState(file).wide.postponed_for_verified, undefined);
+});
+
 test('legacy task rows migrate once with stable distinct identities and no answers',t=>{
   const root=testScratch(t,'task-migration'),legacy=join(root,'state.json'),file=join(root,'state-v2.json');
   const rows=[{at:AT,line:'- one unhandled report'},{at:AT,line:'- one unhandled report'}];

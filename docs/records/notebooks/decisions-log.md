@@ -4430,3 +4430,30 @@ library with EveryExport roots is terminal. Tests name the product contract,
 and raw HIR with no contract cannot license an uncaught helper as region-safe.
 
 The contract is in [architecture](../../architecture.md#the-pipeline).
+## Stale core precedes wide with a bounded postponement (11-23)
+
+Approved by the coordinator for #983. The controller chose due wide before
+checking whether a due core could advance stale verified. The core's launch
+rank could not help until the controller finished wide. Among five retained
+wide starts, three blocked a newly due candidate already beyond the stale
+bound, for 383.10 minutes of wide execution in total. Including an overdue
+held-core retry makes four starts and 440.87 minutes. These candidates could
+advance verified if green; their success was not assumed. Follow-up culprit
+probes are excluded. The remaining start had a newly due candidate still
+inside the stale bound. The read-only measurement joins retained run starts
+and completion observations with landing answers; its script is
+`~/.cache/nts-scratch/983/measure.py`, and its output is
+`~/.cache/nts-scratch/983/measure.log`, SHA-256
+`b907ab7fd0630ff176b19e343a760e4dc2e9b9e4429154a45814c2ab88937d35`.
+
+One eligibility owner now serves cycle ordering and fresh launch ranking.
+A due stale core displaces owed wide once for its full verified SHA. The
+optional state field survives restart, preventing repeated red cores on
+moving main from starving wide. A different verified ignores and clears the
+field; verified advancement or a wide start clears it. Postponement changes
+no start time, gap or nightly idle deadline. Wide then uses the newest
+verified. An in-flight run finishes, and current verified keeps the usual
+wide slot. The controller runs verified's code, so the new ordering begins
+only after verified contains it.
+
+The contract is in [workflow](../../workflow.md#after-landing-the-full-check).

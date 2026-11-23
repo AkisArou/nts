@@ -508,7 +508,17 @@ they cannot poison the reusable baseline for unchanged artifacts.
   admission even while higher-priority work waits. Ledger priorities still
   put landings and agents first. That deadline never overrides the benchmark
   exclusion. Daytime runs remain idle-only.
-  A core already running finishes first. There are no daytime clock slots.
+  A due core eligible for the stale-verified rank goes before a due wide
+  run on the verified it would supersede. The owed wide yields once for that
+  verified; if the core stays red or held and verified does not advance, the
+  next eligible wide start goes first even when main moves again. The full
+  verified SHA of that postponement survives controller restart. A different
+  verified ignores and clears it; advancing verified or starting wide clears
+  it too. Postponement consumes no wide start, minimum gap or nightly idle
+  deadline. Status names the owed wide and the core it waits for. After a
+  green core, wide follows the new verified under the same schedule. With
+  verified current or no eligible stale core due, wide keeps its usual slot.
+  A run already in flight finishes first. There are no daytime clock slots.
 - **Records, the benchmarks and the count run beside the parts,** each in a
   unit of its own. The core continues beside them; wide work waits for benchmark
   measurement. A part's records run
@@ -1738,7 +1748,10 @@ the tooling strict checker owns the source's type checking.
   distinguish ordinary completion from stale-backlog recovery. A probe of a
   commit whose own `ranks.ts` predates the rank runs at the full check's, and
   its log says so. The controller runs `verified`'s code, so the rank orders
-  these runs only once `verified` contains the controller rule. A ledger entry at the
+  these runs only once `verified` contains the controller rule. The same
+  eligibility orders a due core before wide, with one postponement per verified
+  until the owed wide starts; launch rechecks the rank against fresh observations.
+  This cycle ordering also takes effect only once `verified` contains it. A ledger entry at the
   `culprit-search` rank is written at version 4, so a reader that predates
   the rank refuses it by its future version rather than ordering it wrongly;
   the reader's operator rebases onto `main`. The current reader's refusal
@@ -1797,6 +1810,13 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **A stale catch-up core precedes owed wide once per verified.** The cycle
+  uses the same eligibility as launch ranking. The postponed wide retains its
+  schedule and gets its next eligible turn if verified stays unchanged, across
+  restarts and new red main candidates. In-flight work finishes. Controllers
+  adopt this ordering through verified
+  ([log](records/notebooks/decisions-log.md#stale-core-precedes-wide-with-a-bounded-postponement-11-23)).
 
 - **Gate pin retention follows live ownership.** The pin owner serializes
   publication and per-run leases with pruning, stages executable bytes outside

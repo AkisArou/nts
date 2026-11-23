@@ -24,7 +24,9 @@
 //      submitted (seconds; followRecords); then the same for the benchmarks
 //      unit and the run record it kept (followBenchmarks). A unit still
 //      running benchmarks hold wide; core and records continue;
-//   1. the wide steps on changed `verified`, after their minimum gap, when no
+//   1. a due core advancing stale `verified`, before an owed wide run, once
+//      per verified until that wide starts; otherwise the wide steps on changed
+//      `verified`, after their minimum gap, when no
 //      landing is queued/running and no higher-priority memory request waits;
 //      the nightly run crosses the gap, before new benchmarks start;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
@@ -222,17 +224,30 @@ async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records
     state.wide.waiting = wide.waiting ?? undefined;
     writeState(fx.layout.state, state);
   }
-  if (wide.due && !wide.waiting && verified) {
+  const main = fx.git.commit("refs/heads/main");
+  if (!main) throw new Error("no main");
+  const last = state.core.last_run;
+  const coreDue = main !== last?.commit || (last.verdict === "held" && now.getTime() - Date.parse(last.at) >= HELD_RETRY_MS);
+  if (state.wide.postponed_for_verified && state.wide.postponed_for_verified !== verified) {
+    delete state.wide.postponed_for_verified;
+    writeState(fx.layout.state, state);
+  }
+  const coreFirst = coreDue && verified && wide.due && !wide.waiting
+    && state.wide.postponed_for_verified !== verified && coreRank(fx, main) === CULPRIT_SEARCH_RANK;
+  if (coreFirst) {
+    state.wide.postponed_for_verified = verified;
+    state.wide.waiting = `wide owed, waiting for core ${main} (stale-verified rank)`;
+    fx.log(state.wide.waiting);
+    writeState(fx.layout.state, state);
+  }
+  if (wide.due && !wide.waiting && verified && !coreFirst) {
     if (wide.due === "nightly" && busy) fx.log(`nightly wide idle deadline passed (${busy}); entering admission at full-check priority`);
     fx.log(`wide steps due (${wide.due === "nightly" ? "the nightly run" : "verified advanced and the machine is idle"}) on verified ${short(verified)}`);
     holds(state, `the wide steps on verified ${short(verified)} go first`);
     await runPart(fx, state, "wide", verified);
     return "wide";
   }
-  const main = fx.git.commit("refs/heads/main");
-  if (!main) throw new Error("no main");
-  const last = state.core.last_run;
-  if (main !== last?.commit || (last.verdict === "held" && now.getTime() - Date.parse(last.at) >= HELD_RETRY_MS)) {
+  if (coreDue) {
     holds(state, `the core on main ${short(main)} goes first`);
     await runPart(fx, state, "core", main);
     return "core";
@@ -272,6 +287,30 @@ export function partSteps(part: Part, lists: { all: string[]; wide: string[] }):
   return part === "core" ? lists.all.filter(step => !wide.has(step)) : lists.all.filter(step => wide.has(step));
 }
 
+/** The same eligibility orders the cycle and is observed afresh at launch. */
+function coreRank(fx: Effects, commit: string, log: Effects["log"] = () => {}): Priority {
+  let rank: Priority = FULL_CHECK_RANK;
+  const verified = fx.git.commit("refs/heads/verified");
+  if (verified && verified !== commit && fx.git.isAncestor(verified, commit)) {
+    const oldest = firstParents(fx.git, verified, commit)[0];
+    if (oldest) {
+      const landedAt = fx.landedTimes().get(oldest);
+      const landed = landedAt === undefined ? NaN : Date.parse(landedAt);
+      if (!Number.isFinite(landed)) {
+        const why = landedAt === undefined ? "no landing record" : `invalid landing time ${JSON.stringify(landedAt)}`;
+        log(`core at ${short(commit)} keeps ${rank} rank: ${why} for oldest unverified main commit ${oldest}`);
+      } else {
+        const age = fx.now().getTime() - landed;
+        if (age > STALE_VERIFIED_MS) {
+          rank = CULPRIT_SEARCH_RANK;
+          log(`core at ${short(commit)} takes ${rank} rank: verified ${short(verified)} leaves ${short(oldest)} unverified on main for ${Math.floor(age / 1000)} s since landing ${landedAt}, beyond ${STALE_VERIFIED_MS / 1000} s`);
+        }
+      }
+    }
+  }
+  return rank;
+}
+
 async function runPart(fx: Effects, state: State, part: Part, commit: string): Promise<void> {
   if(part==="wide")beforeWideMeasurement(fx,state);
   const at = fx.now().toISOString();
@@ -291,26 +330,10 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
     fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
     beforeRun(fx);
     if(part==="wide")beforeWideMeasurement(fx,state);
-    let rank: Priority = FULL_CHECK_RANK;
-    if (part === "core") {
-      const verified = fx.git.commit("refs/heads/verified");
-      if (verified && verified !== commit && fx.git.isAncestor(verified, commit)) {
-        const oldest = firstParents(fx.git, verified, commit)[0];
-        if (oldest) {
-          const landedAt = fx.landedTimes().get(oldest);
-          const landed = landedAt === undefined ? NaN : Date.parse(landedAt);
-          if (!Number.isFinite(landed)) {
-            const why = landedAt === undefined ? "no landing record" : `invalid landing time ${JSON.stringify(landedAt)}`;
-            fx.log(`core at ${short(commit)} keeps ${rank} rank: ${why} for oldest unverified main commit ${oldest}`);
-          } else {
-            const age = fx.now().getTime() - landed;
-            if (age > STALE_VERIFIED_MS) {
-              rank = CULPRIT_SEARCH_RANK;
-              fx.log(`core at ${short(commit)} takes ${rank} rank: verified ${short(verified)} leaves ${short(oldest)} unverified on main for ${Math.floor(age / 1000)} s since landing ${landedAt}, beyond ${STALE_VERIFIED_MS / 1000} s`);
-            }
-          }
-        }
-      }
+    const rank = part === "core" ? coreRank(fx, commit, fx.log) : FULL_CHECK_RANK;
+    if (part === "wide") {
+      delete state.wide.postponed_for_verified;
+      writeState(fx.layout.state, state);
     }
     return fx.gate.run(commit, steps, part, state[part].last_green, { reuseLanding: part === "core", rank });
   }, at);
@@ -355,6 +378,7 @@ function moveVerified(fx: Effects, state: State, commit: string): void {
       return;
     }
     fx.git.run(["update-ref", "-m", "full check: the core is green", "refs/heads/verified", commit, old ?? "0".repeat(40)]);
+    delete state.wide.postponed_for_verified;
     fx.log(`verified -> ${short(commit)}`);
   }
   pushVerified(fx, state);
