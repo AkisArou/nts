@@ -11,7 +11,7 @@ import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, 
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertNoProcessUsers, describeUsers, observeTreeProcesses, TreeOwnershipUnavailable, treeUsers } from "./tree-users.ts";
+import { assertNoProcessUsers, describeUsers, observedFailure, observeTreeProcesses, OwnershipObservationFailure, TreeOwnershipUnavailable, treeUsers } from "./tree-users.ts";
 import {treeProcessFixture} from './tree-users-fixture.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {pathToFileURL} from 'node:url';
@@ -116,6 +116,11 @@ for(const mutation of ['none','absent','corrupt','future','boot','start','device
         mkdirSync(join(other,'target'));writeFileSync(join(other,'target/gate-scope-owner.json'),JSON.stringify(r.receipt));r.options.runTrees.push(other);
       }
       const options=mutation==='missing-cgroups'?{...r.options,cgroups:undefined}:r.options;
+      if(mutation==='missing-cgroups'){
+        // A caller's missing capability is a defect: retrying never supplies it.
+        for(const root of [f.tree,other])assert.throws(()=>treeUsers(root,options),error=>!(error instanceof TreeOwnershipUnavailable)&&/^missing cgroup filesystem observation$/.test((error as Error).message));
+        return;
+      }
       if(mutation!=='none'){
         for(const root of [f.tree,other])assert.throws(()=>treeUsers(root,options),error=>error instanceof TreeOwnershipUnavailable&&/unreadable process 42/.test(error.message));
         return;
@@ -187,4 +192,21 @@ test('the ownership stat scan excludes self and other UIDs before parsing',t=>{
   assert.deepEqual(treeUsers(f.tree,{...f.options,self:42}),[]);
   writeFileSync(join(f.task,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()+1).join('\t')+'\n');
   assert.deepEqual(treeUsers(f.tree,f.options),[]);
+});
+
+test('only a failed process or cgroup observation is an observation failure',t=>{
+  const f=treeProcessFixture(t),cgroups=join(f.root,'cgroups');
+  const errno=(path:string)=>Object.assign(Error('EACCES: permission denied, open '+path),{code:'EACCES',syscall:'open',path});
+  for(const path of [join(f.proc,'42/fd'),join(cgroups,'user.slice')])assert.equal(observedFailure(errno(path),{proc:f.proc,cgroups}),true,path);
+  for(const path of [join(f.root,'pool'),join(f.tree,'.git/index'),f.proc+'-other/1'])assert.equal(observedFailure(errno(path),{proc:f.proc,cgroups}),false,path);
+  assert.equal(observedFailure(new OwnershipObservationFailure('unowned gate receipt'),{proc:f.proc}),true);
+  assert.equal(observedFailure(new TypeError('defect'),{proc:f.proc}),false);
+  assert.equal(observedFailure(Object.assign(new TypeError('bad argument'),{code:'ERR_INVALID_ARG_TYPE'}),{proc:f.proc}),false);
+});
+
+test('an unreadable process scan outside proc is a hard error, never a retry',t=>{
+  const f=treeProcessFixture(t),blocked=join(f.root,'blocked'),tree=join(blocked,'tree');mkdirSync(tree,{recursive:true});
+  chmodSync(blocked,0);
+  try{assert.throws(()=>treeUsers(tree,f.options),error=>!(error instanceof TreeOwnershipUnavailable)&&(error as NodeJS.ErrnoException).code==='EACCES');}
+  finally{chmodSync(blocked,0o700);}
 });

@@ -17,10 +17,22 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //   node tooling/landing/pool.ts init <n>               prewarm trees 1..n that are missing; never a cap
 //   node tooling/landing/pool.ts prune                  the hourly upkeep, by hand
 //
-// `take`, `attach` and `init` exit 75 (EX_TEMPFAIL) when the machine cannot host another
-// tree, naming why: a scheduler waits for a tree to be given back, or for disk,
-// and asks again. `take` and `attach` exit 75 too while a gate run or disk
-// reclamation holds the tree's resource lock (`PoolRetry`); nothing changed.
+// A refusal that changed nothing and can succeed when asked again exits 75
+// (EX_TEMPFAIL, `PoolRetry`), naming why; a scheduler waits and asks again:
+//   - `take`, `attach` and `init`: the machine cannot host another tree
+//     (`PoolFull`): wait for a tree to be given back, or for disk;
+//   - `take` and `attach`: a gate run or disk reclamation holds the tree's
+//     resource lock (`TreeInUse`);
+//   - `give` and `detach`: a live process's use of the tree could not be
+//     observed completely (`PoolOwnershipUnavailable`, tree-users.ts), so
+//     nothing certifies the tree idle.
+// Every other error exits 1, a defect or an unreadable pool or Git path among
+// them. `give` refuses, exit 1, a tree any live process uses -- the asking
+// agent's own shell or session with its working directory there included:
+// give a tree back from outside it. `status` reports a failed observation on
+// its tree's row and goes on. A landing's `release` and the upkeep's `prune`
+// never refuse for one tree: a tree in use, or one whose use could not be
+// observed, stays on its landed branch with why, and the next upkeep retries it.
 //
 // A tree's state is git's own: a tree with a task's branch checked out is held
 // by that task, a detached clean one is free, and how long a tree has been
@@ -41,7 +53,7 @@ import { TEMP_DISK_FLOOR_BYTES } from "../gate/run-temporary.ts";
 import { deleteBranch, revParse, sharedCheckout, worktrees, type BranchOutcome, type Git } from "./git.ts";
 import { linkTree } from "../inputs/linker.ts";
 import { issueBranch } from "../tasks/branch.ts";
-import { describeUsers, treeUsers, TreeOwnershipUnavailable, type TreeUser } from "./tree-users.ts";
+import { describeUsers, treeUsers, TreeOwnershipUnavailable, type TreeProcessOptions, type TreeUser } from "./tree-users.ts";
 import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from '../gate/disk-capacity.ts';
 import {completedBuild} from '../gate/build-completion.ts';
 import type {HostObservations} from '../gate/host-observations.ts';
@@ -67,14 +79,18 @@ export type PoolTree = {
   name: string; path: string; state: TreeState; branch: string | null; head: string; changes: string[]; ahead: number; behind: number;
   /** When the tree's HEAD last moved (ms since the epoch): a task taking it, committing in it, or giving it back. */
   movedAt: number | null;
-  /** What still uses a landed tree (tree-users.ts); read for landed trees only. */
-  users: TreeUser[];
-  /** Read-only status could not establish ownership. Never an idle verdict. */
-  ownershipError?: string;
   presence?:WorkerPresence;
 };
+/** A tree as status shows it: what still uses a landed tree (tree-users.ts),
+ * observed for display only; a decision observes in its own reset. */
+export type StatusTree = PoolTree & {
+  /** What still uses a landed tree; empty for every other state. */
+  users: TreeUser[];
+  /** The observation could not establish ownership. Never an idle verdict. */
+  ownershipError?: string;
+};
 /** A tree with its cargo target measured; null when it has none yet. */
-export type MeasuredTree = PoolTree & { targetBytes: number | null };
+export type MeasuredTree<T extends PoolTree = PoolTree> = T & { targetBytes: number | null };
 /**
  * Whether the disk can host another measured cold build above the hard floor
  * and the unconsumed promises of active leases. Display-only target sizes do
@@ -92,6 +108,10 @@ export type PoolOptions = {
   /** A fixture owns the complete disk and allocated-byte observations. */
   host?:HostObservations;
   forecast?:BuildForecast;
+  /** A fixture's owned process observation (tree-users.ts), read by the
+   * production users rule; the pool supplies its registered run trees. */
+  processes?:Omit<TreeProcessOptions,'runTrees'>;
+  /** Replaces the users rule entirely: failure injection in tests only. */
   users?:(tree:string)=>TreeUser[];
   reclamation?:NonNullable<ConstructorParameters<typeof DiskCapacity>[0]>['reclamation'];
   /** A tree's cargo target in bytes on disk, or null when it has none. */
@@ -154,20 +174,30 @@ export function duTarget(tree: string): number | null {
   return bytes;
 }
 
+/** The pool trees Git registers (numbered direct children of `dir`): the
+ * trees whose gate-run receipts may attribute an unreadable process. */
+export function registeredRunTrees(dir:string,registered:readonly {path:string}[]):string[]{
+  const root=resolve(dir);
+  return registered.map(row=>resolve(row.path)).filter(path=>path.startsWith(root+'/')&&/^[1-9][0-9]*$/.test(path.slice(root.length+1)));
+}
+
 export class Pool {
   readonly dir: string; readonly git: Git; readonly inputs: Inputs; readonly remote: string | null;
   readonly capacity:DiskCapacity;private readonly users:(tree:string)=>TreeUser[];private readonly target: (tree: string) => number | null;
   constructor(dir: string, git: Git, inputs: Inputs = () => {}, options: PoolOptions = {}) {
     this.dir = resolve(dir); this.git = git; this.inputs = inputs; this.remote = options.remote === undefined ? "origin" : options.remote;
     this.capacity=new DiskCapacity({env:git.env,host:options.host,forecast:options.forecast,pool:{dir:this.dir,git},reclamation:options.reclamation});
-    this.target = options.targetBytes ?? duTarget;this.users=tree=>{
-      try{return options.users?options.users(tree):treeUsers(tree,{runTrees:worktrees(this.git).map(row=>resolve(row.path)).filter(path=>path.startsWith(this.dir+'/')&&/^[1-9][0-9]*$/.test(path.slice(this.dir.length+1)))});}
+    this.target = options.targetBytes ?? duTarget;
+    const users=options.users??(tree=>treeUsers(tree,{...options.processes,runTrees:registeredRunTrees(this.dir,worktrees(this.git))}));
+    this.users=tree=>{
+      try{return users(tree);}
       catch(error){if(error instanceof TreeOwnershipUnavailable)throw new PoolOwnershipUnavailable(error);throw error;}
     };
   }
 
   private names(): string[] {
-    try { return readdirSync(this.dir).filter(name => /^[1-9][0-9]*$/.test(name)).sort((a, b) => Number(a) - Number(b)); } catch { return []; }
+    try { return readdirSync(this.dir).filter(name => /^[1-9][0-9]*$/.test(name)).sort((a, b) => Number(a) - Number(b)); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
   }
   /** When the tree's HEAD last moved: its reflog's newest entry, else its HEAD file's change. */
   private movedAt(path: string): number | null {
@@ -184,35 +214,40 @@ export class Pool {
   }
   private mark(branch: string, sha: string): void { checked(this.git, ["update-ref", `${LANDED_REFS}${branch}`, sha], this.git.root); }
   private forget(branch: string | null): void { if (branch) checked(this.git, ["update-ref", "-d", `${LANDED_REFS}${branch}`], this.git.root); }
-  /** Every tree of the pool, by number, with what holds it. */
-  trees(): PoolTree[] { return this.readTrees(false); }
-  /** An observation failure is display data only; decision callers use trees. */
-  statusTrees(): PoolTree[] { return this.readTrees(true); }
-  private readTrees(reportOwnershipError:boolean): PoolTree[] {
+  /** Every tree of the pool, by number, with what holds it: Git's state only. */
+  trees(): PoolTree[] {
     const registered = new Map(worktrees(this.git).map(t => [resolve(t.path), t]));
     const main = revParse(this.git, "refs/heads/main"), landed = this.landed();
     return this.names().map(name => {
       const path = join(this.dir, name), tree = registered.get(path);
-      if (!tree || !existsSync(join(path, ".git"))) return { name, path, state: "missing" as const, branch: null, head: "", changes: [], ahead: 0, behind: 0, movedAt: null, users: [] };
+      if (!tree || !existsSync(join(path, ".git"))) return { name, path, state: "missing" as const, branch: null, head: "", changes: [], ahead: 0, behind: 0, movedAt: null };
       const changes = checked(this.git, ["status", "--porcelain", "--untracked-files=normal"], path).split("\n").filter(Boolean);
       const [behind, ahead] = checked(this.git, ["rev-list", "--left-right", "--count", `${main}...HEAD`], path).split(/\s+/).map(Number);
       // A branch marked landed at the commit its tree is still on: the task is done there.
       const done = tree.branch !== null && landed.get(tree.branch) === tree.head;
       const state: TreeState = done ? "landed" : tree.branch ? "held" : changes.length ? "dirty" : "free";
-      let users:TreeUser[]=[],ownershipError:string|undefined;
-      if(done)try{users=this.users(path);}catch(error){
-        if(!reportOwnershipError)throw error;
-        ownershipError=error instanceof Error?error.message:String(error);
-      }
       return { name, path, state, branch: tree.branch, head: tree.head, changes, ahead: ahead ?? 0, behind: behind ?? 0, movedAt: this.movedAt(path),
-        users,...(ownershipError?{ownershipError}:{}),...(tree.branch?{presence:workerPresence(path,tree.branch)}:{}) };
+        ...(tree.branch?{presence:workerPresence(path,tree.branch)}:{}) };
     });
   }
-  /** Every tree, with its target measured. */
-  measured(trees:readonly PoolTree[]=this.trees()): MeasuredTree[] { return trees.map(t => ({ ...t, targetBytes: this.target(t.path) })); }
+  /**
+   * Every tree, with what uses each landed one, for display. A failed
+   * observation is that tree's `ownershipError`, and the others are still
+   * read; a defect is a hard error. Decisions never read this: each reset
+   * observes for itself (`resetTree`).
+   */
+  statusTrees(): StatusTree[] {
+    return this.trees().map(tree => {
+      if (tree.state !== "landed") return { ...tree, users: [] };
+      try { return { ...tree, users: this.users(tree.path) }; }
+      catch (error) { if (error instanceof PoolOwnershipUnavailable) return { ...tree, users: [], ownershipError: error.message }; throw error; }
+    });
+  }
+  /** Each tree, with its target measured. */
+  measured<T extends PoolTree>(trees: readonly T[]): MeasuredTree<T>[] { return trees.map(t => ({ ...t, targetBytes: this.target(t.path) })); }
 
   /** Whether the disk can host one more tree (`Room`). */
-  room(trees: readonly MeasuredTree[] = this.measured()): Room {
+  room(trees: readonly MeasuredTree[] = this.measured(this.trees())): Room {
     const snapshot=this.capacity.poolSnapshot(this.dir,this.leases(trees));
     return this.roomFor(snapshot.freeBytes,snapshot.reservedBytes,snapshot.leases.filter(lease=>lease.remainingBytes>0).length,this.capacity.forecast.bytes);
   }
@@ -397,7 +432,8 @@ export class Pool {
       const tree = this.find(asked);
       if (tree.state === "missing") throw new Error(`pool tree ${tree.name} is missing: ${tree.path}`);
       if (tree.changes.length && !discard) throw new Error(`pool tree ${tree.name} has uncommitted changes, kept: ${tree.changes.slice(0, 5).join("; ")}${tree.changes.length > 5 ? "; ..." : ""} (give it back with --discard to drop them)`);
-      this.resetTree(tree.path, discard);
+      const reset = this.resetTree(tree.path, discard);
+      if (reset.users.length) throw new Error(`cannot reset ${tree.path}: ${using(reset.users)} (a shell or editor with its working directory there counts too, the asking session's own included: give it back from outside the tree)`);
       const branch = discard && tree.branch ? deleteBranch(this.git, tree.branch, tree.head, this.remote) : [];
       // A person's give decides for a landed tree too.
       this.forget(tree.branch);
@@ -417,15 +453,15 @@ export class Pool {
       if (!tree) return { tree: null, state: "none" };
       // Committed on past what landed: its task goes on there.
       if (tree.head !== landed) return { tree, state: "kept", reason: `pool tree ${tree.name} has commits past the one that landed, so it stays its task's` };
-      const users = this.users(tree.path);
-      if (tree.changes.length || users.length) {
-        this.mark(branch, landed);
-        const held = this.trees().find(t => t.name === tree.name)!;
-        return { tree: held, state: "kept", reason: tree.changes.length
-          ? `pool tree ${tree.name} has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}; it stays on its branch, and the next upkeep resets it once they are gone and nothing uses it`
-          : `pool tree ${tree.name} stays on its branch while ${using(users)} (a shell or editor with its working directory there counts too); the next upkeep resets it once nothing does` };
+      const kept = (reason: string) => { this.mark(branch, landed); return { tree: this.trees().find(t => t.name === tree.name)!, state: "kept" as const, reason }; };
+      if (tree.changes.length) return kept(`pool tree ${tree.name} has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}; it stays on its branch, and the next upkeep resets it once they are gone and nothing uses it`);
+      let reset: { users: TreeUser[] };
+      try { reset = this.resetTree(tree.path, false); }
+      catch (error) {
+        if (!(error instanceof PoolOwnershipUnavailable)) throw error;
+        return kept(`pool tree ${tree.name} stays on its branch: ${error.message}; the next upkeep resets it once a complete observation finds nothing uses it`);
       }
-      this.resetTree(tree.path, false);
+      if (reset.users.length) return kept(`pool tree ${tree.name} stays on its branch while ${using(reset.users)} (a shell or editor with its working directory there counts too); the next upkeep resets it once nothing does`);
       this.forget(branch);
       return { tree: this.trees().find(t => t.name === tree.name)!, state: "reset" };
     });
@@ -440,17 +476,26 @@ export class Pool {
   private settle(tree: PoolTree, landed: string): { outcome: BranchOutcome[] } | { why: string } | null {
     if (tree.head !== landed) { this.forget(tree.branch); return null; }
     if (tree.changes.length) return { why: `it has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}` };
-    const users = this.users(tree.path);
-    if (users.length) return { why: `${using(users)} (a shell or editor with its working directory there counts too)` };
-    this.resetTree(tree.path, false);
+    let reset: { users: TreeUser[] };
+    try { reset = this.resetTree(tree.path, false); }
+    catch (error) { if (error instanceof PoolOwnershipUnavailable) return { why: `${error.message}; kept until a complete observation finds nothing uses it` }; throw error; }
+    if (reset.users.length) return { why: `${using(reset.users)} (a shell or editor with its working directory there counts too)` };
     const outcome = deleteBranch(this.git, tree.branch!, landed, null);
     this.forget(tree.branch);
     return { outcome };
   }
 
-  private resetTree(path: string, discard: boolean): void {
+  /**
+   * Detach a tree at main -- unless a live process uses it: its users then
+   * come back, and nothing changed. This is the one observation a reset
+   * reads; its callers (give, release, settle) decide from its answer. They
+   * hold the pool's lock throughout, so no take or attach hands the tree out
+   * between the observation and the reset. `PoolOwnershipUnavailable` when no
+   * complete observation certifies the tree idle.
+   */
+  private resetTree(path: string, discard: boolean): { users: TreeUser[] } {
     const users=this.users(path);
-    if(users.length)throw Error('cannot reset '+path+': '+using(users));
+    if(users.length)return {users};
     assertWorkerPresenceWritable(path);
     if (discard) {
       checked(this.git, ["checkout", "-q", "--detach", "--force", "refs/heads/main"], path);
@@ -460,6 +505,7 @@ export class Pool {
       checked(this.git, ["switch", "-q", "--detach", "refs/heads/main"], path);
       removeWorkerPresence(path);
     }
+    return {users:[]};
   }
 
   /**
@@ -519,14 +565,14 @@ export function idleFor(ms: number): string {
   return d ? `${d}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`;
 }
 
-export function describePool(trees: readonly (PoolTree | MeasuredTree)[], now = Date.now()): string {
+export function describePool(trees: readonly (PoolTree | StatusTree | MeasuredTree | MeasuredTree<StatusTree>)[], now = Date.now()): string {
   if (!trees.length) return "  no pool trees";
   return trees.map(t => {
     const task = t.state === "landed" ? `landed ${t.branch}` : t.branch ? `task ${t.branch}` : t.state;
     const where = t.state === "missing" ? "" : `${t.ahead ? `${t.ahead} ahead of main` : ""}${t.ahead && t.behind ? ", " : ""}${t.behind ? `${t.behind} behind` : ""}`;
     const changes = t.changes.length ? `, ${t.changes.length} uncommitted` : "";
-    const landed = t.ownershipError ? `, ownership observation failed; kept: ${t.ownershipError}`
-      : t.state !== "landed" ? "" : t.users.length ? `, kept while ${using(t.users)}` : t.changes.length ? "" : ", reset at the next upkeep";
+    const landed = !("users" in t) || t.state !== "landed" ? "" : t.ownershipError ? `, ownership observation failed; kept: ${t.ownershipError}`
+      : t.users.length ? `, kept while ${using(t.users)}` : t.changes.length ? "" : ", reset at the next upkeep";
     const idle = t.movedAt === null ? "" : `, idle ${idleFor(now - t.movedAt)}`;
     const target = "targetBytes" in t ? `, ${t.targetBytes === null ? "no target" : `target ${gb(t.targetBytes)}`}` : "";
     return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${landed}${idle}${target}`;
@@ -539,7 +585,7 @@ export function describeRoom(room: Room): string {
 }
 
 /** What the pool's status says, for a scheduler (`status --json`). */
-export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Room, now = Date.now(),trash:readonly TrashEntry[]=[]) {
+export function statusJson(dir: string, trees: readonly MeasuredTree<StatusTree>[], room: Room, now = Date.now(),trash:readonly TrashEntry[]=[]) {
   return {
     version: 2, pool: dir, trash, idle_limit_ms: IDLE_LIMIT_MS, warm_minimum: WARM_MINIMUM,
     room: { ok: room.ok, free_bytes: room.freeBytes, tree_bytes: room.treeBytes, unbuilt: room.unbuilt, reserved_bytes: room.reservedBytes, floor_bytes: room.floorBytes, why: room.why },
@@ -594,7 +640,7 @@ function main(argv: string[]): number {
       const given = pool.give(target, { discard: args.includes("--discard") });
       console.log(`pool tree ${given.tree.name} is free, at main ${given.tree.head.slice(0, 12)}`);
       for (const b of given.branch) console.log(`  branch ${b.where === "local" ? "here" : `on ${pool.remote}`}: ${b.state}${b.reason ? ` (${b.reason})` : ""}`);
-    } else if (command === "init" && target) console.log(describePool(pool.init(Number(target))));
+    } else if (command === "init" && target) { pool.init(Number(target)); console.log(describePool(pool.statusTrees())); }
     else if (command === "prune") { const lines = pruneLines(pool.prune()); console.log(lines.length ? lines.join("\n") : "pool: nothing to remove"); }
     else { console.error("usage: pool.ts status [--json] | take <branch> | take --issue <N> [--slug <words>] | attach <branch> | detach <branch> | give <branch|tree> [--discard] | init <n> | prune  [--pool <dir>]"); return 2; }
     return 0;

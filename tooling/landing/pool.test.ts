@@ -11,9 +11,9 @@ import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, PoolRetry, poolExit, pruneLines, TreeInUse, reportPoolStatus, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
+import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, PoolRetry, poolExit, pruneLines, registeredRunTrees, TreeInUse, reportPoolStatus, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
 import {treeProcessFixture} from './tree-users-fixture.ts';
-import {treeUsers} from "./tree-users.ts";
+import {treeUsers,TreeOwnershipUnavailable} from "./tree-users.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {ownMemory} from '../gate/test-memory.ts';
 import {hostObservations} from '../gate/host-observations.ts';
@@ -44,10 +44,10 @@ function pool(t: Parameters<typeof scratchRepo>[0], size = 2, options: PoolOptio
   const observationRoot=join(s.dir,'observations');
   const observations=ownMemory(observationRoot,{disk:{freeBytes:1000*GB,freeInodes:2**30}});
   const host=options.host??hostObservations({...s.env,...observations});
-  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, {users:()=>[],reclamation:{services:[],ownership:()=>{}},...options,host});
+  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, {processes:{pids:[]},reclamation:{services:[],ownership:()=>{}},...options,host});
   if (size) p.init(size);
   /** The same pool, `ago` ms before NOW. */
-  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, {users:()=>[],reclamation:{services:[],ownership:()=>{}},...options,host});
+  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, {processes:{pids:[]},reclamation:{services:[],ownership:()=>{}},...options,host});
   /** Free tree `name` was last given back `ago` ms before NOW: a task's branch on it, then main again. */
   const freedAt = (name: string, ago: number) => {
     const cwd = join(p.dir, name), env = clock(ago);
@@ -577,14 +577,14 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
     + "(a shell or editor with its working directory there counts too); the next upkeep resets it once nothing does");
   assert.deepEqual(names(p), ["1 landed fix/a", "2 free"]);
   assert.equal(p.landed().get("fix/a"), tip, "marked landed at the commit that landed");
-  assert.match(describePool(p.trees(), NOW), new RegExp(` 1 {2}\\S+ {2}landed fix/a \\(1 ahead of main, 1 behind\\), kept while pid ${shell.pid} cat \\(its working directory\\) still uses it, idle 0m`));
+  assert.match(describePool(p.statusTrees(), NOW), new RegExp(` 1 {2}\\S+ {2}landed fix/a \\(1 ahead of main, 1 behind\\), kept while pid ${shell.pid} cat \\(its working directory\\) still uses it, idle 0m`));
   assert.throws(() => s.git(["branch", "-D", "fix/a"]), /checked out|used by worktree/, "its branch stays with its tree");
   const waiting = p.prune({ now: NOW });
   assert.deepEqual(waiting.released, []);
   assert.deepEqual(pruneLines(waiting), [`pool: kept tree 1 on its landed branch fix/a: pid ${shell.pid} cat (its working directory) still uses it (a shell or editor with its working directory there counts too)`]);
   assert.equal(p.take("fix/b").name, "2", "a landed tree is not free");
   shell.stdin.end(); await once(shell, "exit");
-  assert.match(describePool(p.trees(), NOW), / 1 {2}\S+ {2}landed fix\/a \(1 ahead of main, 1 behind\), reset at the next upkeep, idle 0m/);
+  assert.match(describePool(p.statusTrees(), NOW), / 1 {2}\S+ {2}landed fix\/a \(1 ahead of main, 1 behind\), reset at the next upkeep, idle 0m/);
   const settled = p.prune({ now: NOW });
   assert.deepEqual(settled.released.map(r => `${r.tree.name} ${r.branch}: ${r.outcome.map(o => `${o.where} ${o.state}`).join(", ")}`), ["1 fix/a: local deleted"]);
   assert.match(pruneLines(settled)[0]!, /^pool: reset tree 1, whose task fix\/a landed, now that nothing uses it; its branch here deleted$/);
@@ -595,16 +595,16 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
 
 test('read-only pool status names a failed ownership observation while reset still refuses',t=>{
   let unreadable=false;
-  const failure=Error('EACCES: supplied unreadable tool process');
+  const failure=new TreeOwnershipUnavailable([Error('EACCES: supplied unreadable tool process')]);
   const {s,p}=pool(t,2,{users:()=>{if(unreadable)throw failure;return [{pid:42,command:'worker',where:'its working directory'}];}});
   const a=p.take('fix/status'),tip=s.git(['rev-parse','HEAD'],a.path);
   assert.equal(p.release('fix/status',tip).state,'kept');unreadable=true;
-  assert.throws(()=>p.trees(),error=>error===failure);
-  assert.throws(()=>p.prune({now:NOW}),error=>error===failure);
+  assert.deepEqual(names(p),['1 landed fix/status','2 free'],'Git state never reads tree users');
+  assert.match(p.prune({now:NOW}).waiting[0]!.why,/^tree ownership keeps root: EACCES/);
   const trees=p.statusTrees();assert.equal(trees[0]!.ownershipError,failure.message);
   assert.equal(trees[1]!.state,'free');
   const output:string[]=[];t.mock.method(console,'log',(...values:unknown[])=>output.push(values.map(String).join(' ')));
-  assert.equal(reportPoolStatus(p),0);assert.match(output.pop()!,/ownership observation failed; kept: EACCES/);
+  assert.equal(reportPoolStatus(p),0);assert.match(output.pop()!,/ownership observation failed; kept: tree ownership keeps root: EACCES/);
   assert.equal(reportPoolStatus(p,true),0);
   const model=JSON.parse(output.pop()!) as {trees:{path:string;ownership_error?:string}[]};
   assert.equal(model.trees[0]!.path,a.path);assert.equal(model.trees[0]!.ownership_error,failure.message);
@@ -677,7 +677,7 @@ test("the upkeep removes free trees idle past the limit, cold ones first, keeps 
 test("status shows each tree's state, task, idle time and target size, for a scheduler too", t => {
   const { p } = pool(t, 2, { targetBytes: tree => tree.endsWith("/1") ? 24 * GB : null });
   p.take("fix/a");
-  const trees = p.measured(), room = p.room(trees);
+  const trees = p.measured(p.statusTrees()), room = p.room(trees);
   const text = describePool(trees, NOW);
   assert.match(text, / 1 {2}\S+ {2}task fix\/a, idle 0m, target 24\.0 GB/);
   assert.match(text, / 2 {2}\S+ {2}free, idle 0m, no target/);
@@ -769,10 +769,11 @@ test('status names trash bytes and age in text and JSON without deleting it',t=>
   assert.equal(readFileSync(join(entry,'evidence'),'utf8'),'preserve unknown trash');
 });
 
-for(const known of [true,false])test('unreadable nts process '+(known?'owned by another tree':'without an owner')+' never hard-fails a take',t=>{
-  const f=treeProcessFixture(t);let enabled=false,runTrees:string[]=[];
-  const cgroups=join(f.root,'cgroups');
-  const {s,p}=pool(t,2,{users:tree=>enabled?treeUsers(tree,{...f.options,pids:[42],runTrees,cgroups}):[]});
+// The production users rule: the pool's own registered run trees attribute an
+// unreadable nts process through a supplied process observation, never a stub.
+for(const known of [true,false])test('unreadable nts process '+(known?'owned by a registered tree':'without an owner')+' never hard-fails a take or the upkeep',t=>{
+  const f=treeProcessFixture(t),cgroups=join(f.root,'cgroups');
+  const {s,p}=pool(t,2,{processes:{...f.options,pids:[42],cgroups}});
   const a=p.take('fix/owner'),tip=s.git(['rev-parse','HEAD'],a.path);
   s.git(['push','-q','origin','fix/owner'],a.path);
   writeFileSync(join(a.path,'left.txt'),'keep landed tree');assert.equal(p.release('fix/owner',tip).state,'kept');rmSync(join(a.path,'left.txt'));
@@ -782,22 +783,82 @@ for(const known of [true,false])test('unreadable nts process '+(known?'owned by 
   const runner=join(f.proc,'43');mkdirSync(runner);
   writeFileSync(join(runner,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()).join('\t')+'\n');
   writeFileSync(join(runner,'stat'),'43 (runner) '+['S',...Array<string>(18).fill('0'),'88'].join(' '));
-  mkdirSync(join(a.path,'target'),{recursive:true});
-  writeFileSync(join(a.path,'target/gate-scope-owner.json'),JSON.stringify({version:1,nonce:boot,boot,pid:43,start:'88',slice:'nts-r12345678.slice',scope:{group,device:String(info.dev),inode:String(info.ino)}}));
+  // Only a registered pool tree's receipt attributes the run.
+  if(known){
+    mkdirSync(join(a.path,'target'),{recursive:true});
+    writeFileSync(join(a.path,'target/gate-scope-owner.json'),JSON.stringify({version:1,nonce:boot,boot,pid:43,start:'88',slice:'nts-r12345678.slice',scope:{group,device:String(info.dev),inode:String(info.ino)}}));
+  }
   writeFileSync(join(f.task,'cgroup'),'0::'+group+'/nts-test-inner-compiler-private.service\n');
-  runTrees=known?[a.path]:[];enabled=true;chmodSync(join(f.task,'fd'),0);
+  chmodSync(join(f.task,'fd'),0);
   try{
     const retry=(error:unknown)=>error instanceof PoolRetry&&poolExit(error)===75&&/unreadable process 42/.test(error.message);
-    if(known){assert.equal(p.take('fix/other').name,'2');assert.deepEqual(p.prune({now:NOW}).released,[]);}
-    else{assert.throws(()=>p.take('fix/other'),retry);assert.throws(()=>p.prune({now:NOW}),retry);}
+    assert.equal(p.take('fix/other').name,'2','a landed tree is never a take candidate, so its users are never read');
+    const kept=p.prune({now:NOW});
+    assert.deepEqual(kept.released,[]);assert.deepEqual(kept.waiting.map(row=>row.tree.name),['1']);
+    assert.match(kept.waiting[0]!.why,known?/pid 42 worker \(its owned gate run in .*nts-test-inner-compiler-private/:/unreadable process 42.*complete observation/);
     const status=p.statusTrees()[0]!;
     if(known)assert.equal(status.users[0]!.pid,42);else assert.match(status.ownershipError!,/unreadable process 42/);
     for(const discard of [false,true]){
-      assert.throws(()=>p.give('fix/owner',{discard}),known?/cannot reset.*pid 42/:retry);
+      assert.throws(()=>p.give('fix/owner',{discard}),known?(error:unknown)=>error instanceof Error&&!(error instanceof PoolRetry)&&poolExit(error)===1&&/cannot reset.*pid 42/.test(error.message):retry);
       assert.equal(s.git(['rev-parse','HEAD'],a.path),tip,'refusal precedes checkout reset');
       assert.equal(s.git(['rev-parse','refs/heads/fix/owner']),tip,'refusal precedes local branch deletion');
       assert.equal(s.git(['rev-parse','refs/heads/fix/owner'],s.origin),tip,'refusal precedes remote branch deletion');
     }
-    enabled=false;assert.equal(p.prune({now:NOW}).released.length,1,'only a complete idle observation permits reset');
   }finally{chmodSync(join(f.task,'fd'),0o700);}
+  assert.equal(p.prune({now:NOW}).released.length,1,'only a complete idle observation permits reset');
+});
+
+test('registered run trees are the pool\'s own numbered trees Git lists',()=>{
+  assert.deepEqual(registeredRunTrees('/p/pool/',[{path:'/p/main'},{path:'/p/pool/1'},{path:'/p/pool/12/'},{path:'/p/pool/x'},{path:'/p/pool/0'},{path:'/p/pool/2/sub'},{path:'/p/pool-other/3'},{path:'/p/pool'}]),
+    ['/p/pool/1','/p/pool/12']);
+});
+
+test('one tree whose use cannot be observed, or that a process uses, is kept with why while the upkeep resets the rest',t=>{
+  const failing=new Set<string>(),used=new Set<string>();
+  const users=(tree:string)=>{
+    if(failing.has(tree))throw new TreeOwnershipUnavailable([Error('supplied unreadable process 42')]);
+    return used.has(tree)?[{pid:7,command:'zsh',where:'its working directory'}]:[];
+  };
+  const {s,p}=pool(t,3,{users});
+  const trees=['fix/a','fix/b','fix/c'].map(branch=>p.take(branch));
+  const [a,b,c]=trees.map(tree=>tree.path) as [string,string,string];
+  failing.add(a);used.add(b);
+  const landed=trees.map(tree=>s.git(['rev-parse','HEAD'],tree.path));
+  const failed=p.release('fix/a',landed[0]!),busy=p.release('fix/b',landed[1]!);
+  assert.deepEqual([failed.state,busy.state],['kept','kept'],'a kept tree is never counted as reset');
+  assert.match(failed.reason!,/^pool tree 1 stays on its branch: tree ownership keeps root: supplied unreadable process 42; the next upkeep resets it once a complete observation finds nothing uses it$/);
+  assert.match(busy.reason!,/^pool tree 2 stays on its branch while pid 7 zsh \(its working directory\) still uses it/);
+  assert.equal(p.release('fix/c',landed[2]!).state,'reset');
+  assert.deepEqual(names(p),['1 landed fix/a','2 landed fix/b','3 free'],'both kept trees are marked landed for the upkeep');
+  // A third landed tree, idle, beside the two the upkeep must keep.
+  const d=p.take('fix/d');writeFileSync(join(d.path,'left.txt'),'kept by release');
+  assert.equal(p.release('fix/d',s.git(['rev-parse','HEAD'],d.path)).state,'kept');rmSync(join(d.path,'left.txt'));
+  const pruned=p.prune({now:NOW});
+  assert.deepEqual(pruned.waiting.map(row=>`${row.tree.name}: ${row.why}`),[
+    '1: tree ownership keeps root: supplied unreadable process 42; kept until a complete observation finds nothing uses it',
+    '2: pid 7 zsh (its working directory) still uses it (a shell or editor with its working directory there counts too)']);
+  assert.deepEqual(pruned.released.map(row=>row.tree.name),['3'],'the upkeep goes on past the trees it keeps');
+  const status=p.statusTrees();
+  assert.match(status[0]!.ownershipError!,/supplied unreadable process 42/);assert.deepEqual(status[1]!.users.map(user=>user.pid),[7]);
+  assert.equal(statusJson(p.dir,p.measured(status),p.room(),NOW).trees[0]!.ownership_error,status[0]!.ownershipError);
+  failing.clear();used.clear();
+  assert.deepEqual(p.prune({now:NOW}).released.map(row=>row.tree.name),['1','2'],'kept now, reset once nothing uses it');
+  assert.equal(p.landed().size,0);assert.equal(c,join(p.dir,'3'));void b;
+});
+
+test('a defect in observing a tree, or an unreadable pool, is a hard error, never a retry',t=>{
+  let defect=false;
+  const {s,p}=pool(t,2,{users:()=>{if(defect)throw new TypeError('defect in the users rule');return [];}});
+  const a=p.take('fix/a');writeFileSync(join(a.path,'left.txt'),'kept');
+  assert.equal(p.release('fix/a',s.git(['rev-parse','HEAD'],a.path)).state,'kept');rmSync(join(a.path,'left.txt'));
+  defect=true;
+  const hard=(error:unknown)=>error instanceof TypeError&&poolExit(error)===1;
+  assert.throws(()=>p.statusTrees(),hard);assert.throws(()=>p.prune({now:NOW}),hard);assert.throws(()=>p.give('fix/a'),hard);
+  defect=false;
+  chmodSync(p.dir,0o300);
+  try{
+    const unreadable=(error:unknown)=>(error as NodeJS.ErrnoException).code==='EACCES'&&!(error instanceof PoolRetry)&&poolExit(error)===1;
+    assert.throws(()=>p.trees(),unreadable,'an unreadable pool directory is never an empty pool');
+    assert.throws(()=>p.prune({now:NOW}),unreadable);
+  }finally{chmodSync(p.dir,0o755);}
 });

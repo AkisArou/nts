@@ -3,7 +3,8 @@
 import {readdirSync,readFileSync,readlinkSync,realpathSync,lstatSync,statSync} from 'node:fs';
 import {join,relative,resolve,sep} from 'node:path';
 import {cgroupOwnershipIdentity} from '../gate/host-observations.ts';
-import {readProcessStat,readProcessStats} from '../gate/process-group.ts';
+import {HostObservationError} from '../gate/host-observation-error.ts';
+import {readProcessStats} from '../gate/process-group.ts';
 import {parseRunOwner} from '../gate/scopes/run-owner.ts';
 
 export type TreeUser={pid:number;command:string;where:string};
@@ -12,7 +13,6 @@ export type TreeProcessOptions={proc?:string;self?:number;/** A fixture's explic
 export type TreeProcessObservation={users:ObservedUser[];ignored:{pid:number;birth:string;command:string;group:string}[];unreadable:Error[]};
 const PROC='/proc';
 const procStat=(pid:number,proc:string)=>readFileSync(join(proc,String(pid),'stat'),'utf8');
-const statAt=(pid:number,proc:string)=>readProcessStat(pid,id=>procStat(id,proc));
 const missing=(error:unknown)=>(error as NodeJS.ErrnoException).code==='ENOENT';
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
 const under=(root:string,path:string)=>path===root||path.startsWith(root+sep);
@@ -23,6 +23,31 @@ export function processCgroup(pid:number,proc=PROC):string{return readFileSync(j
 export class TreeOwnershipUnavailable extends AggregateError {
   constructor(errors:readonly Error[]){super(errors,'tree ownership keeps root: '+errors.map(error=>error.message).join('; '));}
 }
+/** Observed process, cgroup or gate-receipt state that cannot certify an owner:
+ * protects the tree and is retryable, unlike a defect or a caller's mistake. */
+export class OwnershipObservationFailure extends Error { override name='OwnershipObservationFailure'; }
+/**
+ * Whether `error` is a failed observation of a process or its cgroup, which
+ * protects the tree and may succeed later. A system-call failure counts only
+ * when its path is inside the observed proc or cgroup filesystem; any other
+ * error -- a defect, a caller's missing capability, an unreadable pool or Git
+ * path -- is a hard error.
+ */
+export function observedFailure(error:unknown,{proc=PROC,cgroups}:Pick<TreeProcessOptions,'proc'|'cgroups'>={}):boolean{
+  if(error instanceof OwnershipObservationFailure||error instanceof HostObservationError)return true;
+  const failure=error as NodeJS.ErrnoException;
+  if(!(error instanceof Error)||typeof failure.syscall!=='string'||typeof failure.path!=='string')return false;
+  const path=resolve(failure.path);
+  return under(resolve(proc),path)||under(resolve(cgroups??'/sys/fs/cgroup'),path);
+}
+const observation=(error:unknown,options:Pick<TreeProcessOptions,'proc'|'cgroups'>):unknown=>{if(!observedFailure(error,options))throw error;return error;};
+/** readProcessStats reports only a failed read or a stat still malformed
+ * after its recheck: an observation, unless the read failed outside proc. */
+const statObservation=(error:Error,proc:string):OwnershipObservationFailure=>{
+  if(error.cause!==undefined)observation(error.cause,{proc});
+  return new OwnershipObservationFailure(error.message,{cause:error});
+};
+const statAt=(pid:number,proc:string)=>readProcessStats([pid],id=>procStat(id,proc),(_pid,error)=>{throw statObservation(error,proc);}).get(pid);
 
 /** Attribution is a read-only use of the run owner's receipt, never a drain grant.
  * A supplied proc filesystem must supply its cgroups too; neither reads the host. */
@@ -41,24 +66,29 @@ function ownedRun(group:string,{proc=PROC,runTrees=[],cgroups}:TreeProcessOption
     const file=join(tree,'target/gate-scope-owner.json');let bytes:string;
     try{
       const info=lstatSync(file);
-      if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.())throw Error('unowned gate receipt '+file);
+      if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.())throw new OwnershipObservationFailure('unowned gate receipt '+file);
       bytes=readFileSync(file,'utf8');
-    }catch(error){if(missing(error))continue;throw error;}
-    const owner=parseRunOwner(bytes,file),scope=owner.scope;
+    }catch(error){
+      if(missing(error))continue;if(error instanceof OwnershipObservationFailure)throw error;
+      throw new OwnershipObservationFailure('unreadable gate receipt '+file+': '+errorText(error),{cause:error});
+    }
+    let owner:ReturnType<typeof parseRunOwner>;
+    try{owner=parseRunOwner(bytes,file);}catch(error){throw new OwnershipObservationFailure('invalid gate receipt '+file+': '+errorText(error),{cause:error});}
+    const scope=owner.scope;
     if(!scope||!under(scope.group,group))continue;
     const identity=()=>{
       const info=cgroups?statSync(join(cgroups,scope.group),{bigint:true}):undefined;
       const current=info?{device:String(info.dev),inode:String(info.ino)}:cgroupOwnershipIdentity(scope.group);
       return current.device===scope.device&&current.inode===scope.inode;
     };
-    if(owner.boot!==boot()||!live(owner.pid,owner.start)||!identity())throw Error('unavailable gate owner identity '+file);
+    if(owner.boot!==boot()||!live(owner.pid,owner.start)||!identity())throw new OwnershipObservationFailure('unavailable gate owner identity '+file);
     const root=realpathSync(tree);
     owners.set(root,()=>{
       const info=lstatSync(file);
-      if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.()||readFileSync(file,'utf8')!==bytes||owner.boot!==boot()||!live(owner.pid,owner.start)||!identity())throw Error('gate owner changed during attribution '+file);
+      if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.()||readFileSync(file,'utf8')!==bytes||owner.boot!==boot()||!live(owner.pid,owner.start)||!identity())throw new OwnershipObservationFailure('gate owner changed during attribution '+file);
     });
   }
-  if(owners.size>1)throw Error('conflicting gate tree owners for '+group);
+  if(owners.size>1)throw new OwnershipObservationFailure('conflicting gate tree owners for '+group);
   for(const verify of owners.values())verify();
   return [...owners.keys()][0];
 }
@@ -74,14 +104,14 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,pid
     try{
       // Non-dumpable processes may have root-owned proc inodes. status owns UID.
       const status=readFileSync(join(dir,'status'),'utf8'),owner=/^Uid:\s+(\d+)\s+\d+\s+\d+\s+\d+$/m.exec(status);
-      if(!owner)throw Error('process has no UID observation');
+      if(!owner)throw new OwnershipObservationFailure('process has no UID observation');
       if(Number(owner[1])===uid)candidates.push(Number(pid));
-    }catch(error){if(missing(error))continue;reading.unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));}
+    }catch(error){if(missing(error))continue;reading.unreadable.push(Error('unreadable process ownership '+dir,{cause:observation(error,{proc,cgroups})}));}
   }
   // Retry malformed stats only after every same-uid candidate was observed.
   // Filtering UID first keeps unrelated users outside this ownership scan.
   const records=readProcessStats(candidates,pid=>procStat(pid,proc),(pid,error)=>{
-    reading.unreadable.push(Error('unreadable process ownership '+join(proc,String(pid)),{cause:error}));
+    reading.unreadable.push(Error('unreadable process ownership '+join(proc,String(pid)),{cause:statObservation(error,proc)}));
   });
   for(const [number,stat] of records){
     if(!stat.live)continue;
@@ -102,13 +132,14 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,pid
       if(inspect('cwd')||inspect('exe'))continue;
       for(const fd of readdirSync(join(dir,'fd')))if(inspect('fd/'+fd))break;
     }catch(error){
+      observation(error,{proc,cgroups});
       let current:string;
       try{const stat=statAt(Number(pid),proc);if(!stat?.live)continue;current=String(stat.started);}
-      catch(again){if(missing(again))continue;reading.unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));continue;}
+      catch(again){if(missing(again))continue;observation(again,{proc,cgroups});reading.unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));continue;}
       if(current!==birth)continue;
       try{
         const lines=processCgroup(Number(pid),proc).trim().split('\n'),group=lines.length===1&&/^0::(\/.*)$/.exec(lines[0]!)?.[1];
-        if(!group||group.split('/').some(part=>part==='.'||part==='..'))throw Error('invalid unified cgroup identity');
+        if(!group||group.split('/').some(part=>part==='.'||part==='..'))throw new OwnershipObservationFailure('invalid unified cgroup identity');
         const denied=['EACCES','EPERM'].includes((error as NodeJS.ErrnoException).code??'');
         if(denied&&!group.split('/').some(part=>/^nts(?:[.-]|$)/.test(part))){
           const command=readFileSync(join(dir,'comm'),'utf8').trim();
@@ -120,14 +151,14 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,pid
             // The process must still be the same actor in the same owned unit.
             const stat=statAt(Number(pid),proc);
             if(!stat?.live||String(stat.started)!==birth)continue;
-            if(processCgroup(Number(pid),proc).trim()!=='0::'+group)throw Error('process cgroup changed during attribution '+pid);
+            if(processCgroup(Number(pid),proc).trim()!=='0::'+group)throw new OwnershipObservationFailure('process cgroup changed during attribution '+pid);
             const root=normalized.find(root=>under(root,tree)||under(tree,root));
             if(root)reading.users.push({pid:Number(pid),command:readFileSync(join(dir,'comm'),'utf8').trim()||'?',where:'its owned gate run in '+tree+'; cgroup '+group,link:'cgroup',path:tree});
             continue;
           }
         }
-        throw Error('live unreadable tool process '+pid+'; cgroup '+group+': '+errorText(error));
-      }catch(reason){reading.unreadable.push(Error('tree ownership keeps unreadable process '+pid+': '+errorText(reason),{cause:error}));}
+        throw new OwnershipObservationFailure('live unreadable tool process '+pid+'; cgroup '+group+': '+errorText(error));
+      }catch(reason){observation(reason,{proc,cgroups});reading.unreadable.push(Error('tree ownership keeps unreadable process '+pid+': '+errorText(reason),{cause:error}));}
     }
   }
   reading.users.sort((a,b)=>a.pid-b.pid);return reading;

@@ -16,7 +16,8 @@ import { acquire } from "./lock.ts";
 import { Queue } from "./queue.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {landingStatus,reportLandingStatus} from './status.ts';
-import {describePool,Pool,type PoolOptions} from './pool.ts';
+import {describePool,Pool,PoolRetry,type PoolOptions} from './pool.ts';
+import {TreeOwnershipUnavailable} from './tree-users.ts';
 import {spawnTest} from "../gate/test-wait.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {hostObservations} from '../gate/host-observations.ts';
@@ -164,7 +165,7 @@ test('status --json reads the queue and main alone: no git process in any pool t
 });
 
 test('landing status reports an ownership failure on its tree line and returns success',t=>{
-  const c=cli(t),failure=Error('EACCES: supplied unreadable tool process');let unreadable=false;
+  const c=cli(t),failure=new TreeOwnershipUnavailable([Error('EACCES: supplied unreadable tool process')]);let unreadable=false;
   const {pool,tree}=heldTree(c,'787-status',()=>{if(unreadable)throw failure;return [{pid:42,command:'worker',where:'its working directory'}];});
   const tip=c.s.git(['rev-parse','HEAD'],tree.path);
   assert.equal(pool.release('787-status',tip).state,'kept');unreadable=true;
@@ -174,7 +175,8 @@ test('landing status reports an ownership failure on its tree line and returns s
   const text=output.pop()!;assert.ok(text.includes(tree.path));assert.ok(text.includes(failure.message));
   assert.equal(reportLandingStatus(model,{json:true}),0);
   const json=output.pop()!;assert.ok(!json.includes(tree.path),'the JSON form holds no trees');
-  assert.throws(()=>pool.trees(),error=>error===failure,'status diagnostics cannot certify ownership for reset');
+  assert.equal(pool.trees().find(row=>row.path===tree.path)!.state,'landed','Git state never reads tree users');
+  assert.throws(()=>pool.give('787-status'),error=>error instanceof PoolRetry&&error.cause===failure,'status diagnostics cannot certify ownership for reset');
 });
 
 
