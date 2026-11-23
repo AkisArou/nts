@@ -359,19 +359,34 @@ test("a known initial identity change confirms the original tip, preserves flake
   }
 });
 
-test("missing original identity keeps an old-range finding and a named note even as main moves again", () => {
+test("missing original identity keeps an old-range finding and a named note when main stays put", () => {
   const m = model(20, {2: ["tests"]}), input = m.input(["tests"]);
   input.candidates = m.candidates.slice(0, 8); delete input.failures;
-  let tip = m.candidates[15]!;
   const result = search(input, (...args) => {
     const p = m.measure(...args); delete p.failures;
-    if (p.base === m.candidates[2] && args[3]) tip = m.candidates[19]!;
     return p;
-  }, {commit: () => tip, reaches: () => true, range: () => { throw Error("no identity means no extension"); }});
+  }, {commit: () => m.candidates[15]!, reaches: () => true, range: () => { throw Error("no identity means no extension"); }});
   assert.equal(result.kind === "culprit" && result.commit, m.candidates[2]);
   assert.deepEqual("range" in result && result.range, {tip: m.candidates[7], candidates: 8});
   assert.equal("note" in result && result.note, "no failure identity for tests: range not extended");
 });
+
+for (const start of [7, 15]) {
+  test(`an affected decision tip without identity holds when main starts at c${start}`, () => {
+    const m = model(20, {2: ["tests"]}), input = m.input(["tests"]);
+    input.candidates = m.candidates.slice(0, 8); delete input.failures;
+    let tip = m.candidates[start]!;
+    const result = search(input, (...args) => {
+      const p = m.measure(...args); delete p.failures;
+      if (p.base === m.candidates[2] && args[3]) tip = m.candidates[19]!;
+      return p;
+    }, {commit: () => tip, reaches: () => true, range: () => { throw Error("no identity means no extension"); }});
+    assert.equal(result.kind, "held");
+    assert.equal(result.reason, "failure identity unavailable: no failure identity for tests: range not extended");
+    assert.ok(m.calls.some(p => p.base === 2 && p.fresh), "finish and confirm the historical bisection");
+    assert.ok(m.calls.some(p => p.base === 19 && p.fresh), "freshly measure the affected decision tip");
+  });
+}
 
 test("an initial narrowed failed-step set extends when its remaining identity is unchanged", () => {
   const m = model(16, {2: ["A"], 5: ["B"]}), input = m.input(["A", "B"]);
@@ -439,10 +454,10 @@ test("a known initial identity change cannot be masked by another step's missing
       if (p.failed.includes("B")) p.failures = {B: [p.base === m.candidates[15] ? "B: case-y" : "B: case-a"]};
       else p.failures = {};
       return p;
-  }, {commit: () => m.candidates[15]!, reaches: () => true, range: () => { throw Error("must not extend"); }});
-  assert.equal(result.kind, "held");
-  assert.match(result.kind === "held" ? result.reason : "", /identity for B: old .*case-a.*current .*case-y/);
-  reasons.push(result.reason);
+    }, {commit: () => m.candidates[15]!, reaches: () => true, range: () => { throw Error("must not extend"); }});
+    assert.equal(result.kind, "held");
+    assert.match(result.kind === "held" ? result.reason : "", /identity for B: old .*case-a.*current .*case-y/);
+    reasons.push(result.reason);
   }
   assert.equal(reasons[0], reasons[1], "step order does not change the verdict or explanation");
 });
@@ -458,10 +473,10 @@ test("a known decision identity change cannot be masked by the original-range mi
       p.failures = p.failed.includes("B") ? {B: [p.base === m.candidates[19] ? "B: case-y" : "B: case-a"]} : {};
       if (p.base === m.candidates[2] && args[3]) tip = m.candidates[19]!;
       return p;
-  }, {commit: () => tip, reaches: () => true, range: () => { throw Error("must keep the original range"); }});
-  assert.equal(result.kind, "held");
-  assert.match(result.kind === "held" ? result.reason : "", /identity for B: old .*case-a.*current .*case-y/);
-  reasons.push(result.reason);
+    }, {commit: () => tip, reaches: () => true, range: () => { throw Error("must keep the original range"); }});
+    assert.equal(result.kind, "held");
+    assert.match(result.kind === "held" ? result.reason : "", /identity for B: old .*case-a.*current .*case-y/);
+    reasons.push(result.reason);
   }
   assert.equal(reasons[0], reasons[1], "step order does not change the verdict or explanation");
 });

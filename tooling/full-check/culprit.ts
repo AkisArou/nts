@@ -212,8 +212,7 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
         if (!after.length) return held(`newest main ${deciding.base.slice(0, 12)} was red without naming a failed step`);
         if (current.verdict !== "red") return held("newest main added a failed step");
         const change = compare(before, current.failures, deciding);
-        if (change && !(originalRangeOnly && change.kind === "missing")) return held(change.kind === "missing" ? `failure identity unavailable: ${change.reason}` : change.reason);
-        if (change?.kind === "missing" && originalRangeOnly) note = change.reason;
+        if (change) return held(change.kind === "missing" ? `failure identity unavailable: ${change.reason}` : change.reason);
         const previousReverts = JSON.stringify([...range.reverted].sort());
         const error = originalRangeOnly ? undefined : extend(deciding.base);
         if (error) return held(error);
