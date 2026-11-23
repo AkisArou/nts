@@ -5,7 +5,8 @@ import {StringDecoder} from "node:string_decoder";
 import {CommandLiveness,validateCommandPolicy} from "./command-liveness.ts";
 import {hostObservations} from "./host-observations.ts";
 import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
-import {ownedProcessGroup,processStat,readProcessStat,readProcessStats,type ProcessStat} from './process-group.ts';
+import {ownedProcessGroup} from './process-group.ts';
+import {processStat,readProcessStat,readProcessStats,type ProcessStat} from '../differential/process-stat/main.ts';
 
 export {COMMAND_IDLE_GUARD_MS,COMMAND_CPU_BUDGET_SECONDS,COMMAND_STARTUP_BOUND_MS} from "./command-liveness.ts";
 export const COMMAND_ACTIVITY_POLL_MS=5000;
@@ -21,7 +22,8 @@ function clockTicks(){
   return ticksPerSecond=value;
 }
 
-const activityOf=({live:_live,...activity}:ProcessStat)=>activity;
+/** Activity's recorded shape: exactly these fields, whatever else a record carries. */
+const activityOf=({parent,group,session,cpu,own,started,busy}:ProcessStat)=>({parent,group,session,cpu,own,started,busy});
 export function processActivity(text:string){return activityOf(processStat(text));}
 /** Whether any thread of `pid` is busy: a process's own state is only its main thread's. */
 export function threadsBusy(pid:number):boolean {

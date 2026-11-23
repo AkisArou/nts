@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {assertProcessGroupIdentity,assertObservedGroupEmpty,processStat,readProcessStats,readProcessStat,type ProcessGroupObservations} from './process-group.ts';
+import {assertProcessGroupIdentity,assertObservedGroupEmpty,type ProcessGroupObservations} from './process-group.ts';
+import {processStat,readProcessStats,readProcessStat} from '../differential/process-stat/main.ts';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
@@ -115,9 +116,9 @@ test('unexpected stat read failures are named and never certify idle',()=>{
 });
 
 test('the shared parser preserves activity shape and owned-process failures',()=>{
-  const text=stat(72,{state:'R'}),{live,...activity}=processStat(text);
-  assert.equal(live,true);assert.deepEqual(processActivity(text),activity);
-  assert.deepEqual(activity,{parent:1,group:71,session:71,cpu:36,own:12,started:190,busy:true});
+  const text=stat(72,{state:'R'}),record=processStat(text);
+  assert.deepEqual(record,{parent:1,group:71,session:71,cpu:36,own:12,started:190,busy:true,live:true,state:'R',comm:'a name with ) in it'});
+  assert.deepEqual(processActivity(text),{parent:1,group:71,session:71,cpu:36,own:12,started:190,busy:true});
   for(const malformed of ['',stat(72).replace(' 190',' 1e3'),stat(72).replace(' S ',' ? ')]){
     assert.throws(()=>processStat(malformed),/invalid process activity/);
     assert.throws(()=>processActivity(malformed),/invalid process activity/);
@@ -130,9 +131,9 @@ test('the shared parser preserves activity shape and owned-process failures',()=
 test('lock and gate-root owners cannot reclaim a persistently malformed live pid',async t=>{
   const stage=testScratch(t,'shared-stat-owners');
   copyModuleClosure(['tooling/landing/lock.ts','tooling/gate/scopes/run-owner.ts','tooling/gate/disk-capacity.ts','tooling/gate/binary-pins.ts'],stage);
-  const file=join(stage,'tooling/gate/process-group.ts'),source=readFileSync(file,'utf8');
-  const anchor=source.split('\n').find(line=>line.startsWith('const liveStat:'));assert.ok(anchor);
-  writeFileSync(file,source.replace(anchor,`const liveStat:StatReader=pid=>{if(pid===72)return '72 (malformed live) S';if(pid===73)throw Object.assign(Error('gone'),{code:'ESRCH'});if(pid===74)throw Object.assign(Error('controlled denied stat'),{code:'EACCES'});return String(pid)+${JSON.stringify(stat(71).slice(2))};};`));
+  const file=join(stage,'tooling/differential/process-stat/main.ts'),source=readFileSync(file,'utf8');
+  const anchor=source.split('\n').find(line=>line.startsWith('export const liveProcessStat:'));assert.ok(anchor);
+  writeFileSync(file,source.replace(anchor,`export const liveProcessStat:StatReader=pid=>{if(pid===72)return '72 (malformed live) S';if(pid===73)throw Object.assign(Error('gone'),{code:'ESRCH'});if(pid===74)throw Object.assign(Error('controlled denied stat'),{code:'EACCES'});return String(pid)+${JSON.stringify(stat(71).slice(2))};};`));
   const runnerFile=join(stage,'tooling/gate/scopes/run-owner.ts'),runnerSource=readFileSync(runnerFile,'utf8');
   const runnerAnchor=runnerSource.split('\n').find(line=>line.startsWith('const boot ='));assert.ok(runnerAnchor);
   writeFileSync(runnerFile,runnerSource.replace(runnerAnchor,`const boot = () => ${JSON.stringify(boot)};`));

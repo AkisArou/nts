@@ -4,7 +4,7 @@ import {readdirSync,readFileSync,readlinkSync,realpathSync,lstatSync,statSync} f
 import {join,relative,resolve,sep} from 'node:path';
 import {cgroupOwnershipIdentity} from '../gate/host-observations.ts';
 import {HostObservationError} from '../gate/host-observation-error.ts';
-import {readProcessStats} from '../gate/process-group.ts';
+import {readProcessStats} from '../differential/process-stat/main.ts';
 import {parseRunOwner} from '../gate/scopes/run-owner.ts';
 
 export type TreeUser={pid:number;command:string;where:string};

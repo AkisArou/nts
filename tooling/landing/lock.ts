@@ -7,7 +7,7 @@ import {basename,dirname,join} from 'node:path';
 import {processCgroup} from './tree-users.ts';
 import {ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 import {infrastructureProbe} from '../gate/infrastructure-probe.ts';
-import {readProcessStat} from '../gate/process-group.ts';
+import {readProcessStat} from '../differential/process-stat/main.ts';
 import {HostStateError} from '../gate/host-state.ts';
 
 /** Null proves gone or not live; unavailable observations are machine faults. */

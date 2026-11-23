@@ -1,4 +1,4 @@
-import {readProcessStat} from '../process-group.ts';
+import {readProcessStat} from '../../differential/process-stat/main.ts';
 import {assertStateVersion} from '../state-version.ts';
 import {withStateWrite,withStateLock} from '../state-file.ts';
 // The warm gate tree has one runner under its existing tree lock. Its next
