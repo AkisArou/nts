@@ -18,133 +18,80 @@ use nts_diagnostics::Diagnostic;
 
 use super::{Platform, conversion, is_not_zero, refuse, text_constant, ty_of};
 
-/// The product support files' fixed ABI, independent of the canonical runtime.
-/// Declaration rendering, call checking and the source audit share these data.
-pub const SUPPORT_SIGNATURES: &[crate::signatures::Signature] = &[
-    crate::signatures::Signature {
-        name: "nts_gobject_register",
-        returns: "i64",
-        params: &["i64", "ptr", "ptr", "i64", "ptr", "ptr", "ptr"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gobject_new",
-        returns: "ptr",
-        params: &["i64"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gtk_class_children",
-        returns: "void",
-        params: &["ptr", "ptr", "i64"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gtk_init_template",
-        returns: "void",
-        params: &["ptr"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gtk_class_template",
-        returns: "void",
-        params: &["ptr", "ptr", "i64"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gtk_class_template_text",
-        returns: "void",
-        params: &["ptr", "ptr"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gtk_bind_callback",
-        returns: "void",
-        params: &["ptr", "ptr", "ptr"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gobject_add_signal",
-        returns: "i32",
-        params: &["i64", "ptr", "ptr"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gobject_set_properties",
-        returns: "void",
-        params: &["i64", "ptr", "i64"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gobject_add_interfaces",
-        returns: "void",
-        params: &["i64", "ptr", "i64"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gtk_template_child",
-        returns: "ptr",
-        params: &["ptr", "i64", "ptr"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gobject_property_spec",
-        returns: "ptr",
-        params: &["i64", "i32"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gobject_signal_id",
-        returns: "i32",
-        params: &["ptr", "ptr", "ptr"],
-        attributes: &[],
-    },
-    crate::signatures::Signature {
-        name: "nts_gobject_parent_slot",
-        returns: "ptr",
-        params: &["i64", "i64"],
-        attributes: &[],
-    },
-];
+/// Each product support function, with its fixed ABI from the support files
+/// (`nts_gobject.h`, `nts_gtk.h`), independent of the canonical runtime. One
+/// list makes the enum, its signatures and the exported table, so a helper and
+/// its declaration cannot be paired wrongly. Declaration rendering, call
+/// checking and the source audit share these data.
+macro_rules! support {
+    ($($helper:ident => $name:literal, $returns:literal, $params:expr;)*) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum Support {
+            $($helper,)*
+        }
 
-pub(super) fn signature(name: &str) -> Option<(usize, &'static crate::signatures::Signature)> {
-    type Index =
-        std::collections::HashMap<&'static str, (usize, &'static crate::signatures::Signature)>;
-    static INDEX: std::sync::OnceLock<Index> = std::sync::OnceLock::new();
+        impl Support {
+            const ALL: &[Self] = &[$(Self::$helper,)*];
+
+            const fn signature(self) -> &'static crate::signatures::Signature {
+                match self {
+                    $(Self::$helper => &crate::signatures::Signature {
+                        name: $name,
+                        returns: $returns,
+                        params: $params,
+                        attributes: &[],
+                    },)*
+                }
+            }
+        }
+
+        pub const SUPPORT_SIGNATURES: &[crate::signatures::Signature] = &[
+            $(*Support::$helper.signature(),)*
+        ];
+    };
+}
+
+support! {
+    Register => "nts_gobject_register", "i64", &["i64", "ptr", "ptr", "i64", "ptr", "ptr", "ptr"];
+    New => "nts_gobject_new", "ptr", &["i64"];
+    ClassChildren => "nts_gtk_class_children", "void", &["ptr", "ptr", "i64"];
+    InitTemplate => "nts_gtk_init_template", "void", &["ptr"];
+    ClassTemplate => "nts_gtk_class_template", "void", &["ptr", "ptr", "i64"];
+    ClassTemplateText => "nts_gtk_class_template_text", "void", &["ptr", "ptr"];
+    BindCallback => "nts_gtk_bind_callback", "void", &["ptr", "ptr", "ptr"];
+    AddSignal => "nts_gobject_add_signal", "i32", &["i64", "ptr", "ptr"];
+    SetProperties => "nts_gobject_set_properties", "void", &["i64", "ptr", "i64"];
+    AddInterfaces => "nts_gobject_add_interfaces", "void", &["i64", "ptr", "i64"];
+    TemplateChild => "nts_gtk_template_child", "ptr", &["ptr", "i64", "ptr"];
+    PropertySpec => "nts_gobject_property_spec", "ptr", &["i64", "i32"];
+    SignalId => "nts_gobject_signal_id", "i32", &["ptr", "ptr", "ptr"];
+    ParentSlot => "nts_gobject_parent_slot", "ptr", &["i64", "i64"];
+    WithBuilderAdd => "nts_gobject_with_builder_add", "void", &["ptr", "ptr", crate::signatures::VARIADIC_TAIL];
+}
+
+const _: () = assert!(
+    Support::ALL.len() <= Declarations::WIDTH,
+    "more GObject support helpers than `Declarations` has bits: widen its integer (u16 to u32) and `Declarations::WIDTH` follows"
+);
+
+/// The support helper `name` names, if any.
+fn support(name: &str) -> Option<Support> {
+    static INDEX: std::sync::OnceLock<std::collections::HashMap<&'static str, Support>> =
+        std::sync::OnceLock::new();
     INDEX
         .get_or_init(|| {
-            SUPPORT_SIGNATURES
+            Support::ALL
                 .iter()
-                .enumerate()
-                .map(|(at, known)| (known.name, (at, known)))
+                .map(|&helper| (helper.signature().name, helper))
                 .collect()
         })
         .get(name)
         .copied()
 }
 
-#[derive(Clone, Copy)]
-enum Support {
-    Register,
-    New,
-    ClassChildren,
-    InitTemplate,
-    ClassTemplate,
-    ClassTemplateText,
-    BindCallback,
-    AddSignal,
-    SetProperties,
-    AddInterfaces,
-    TemplateChild,
-    PropertySpec,
-    SignalId,
-    ParentSlot,
-}
-
-impl Support {
-    fn signature(self) -> &'static crate::signatures::Signature {
-        &SUPPORT_SIGNATURES[self as usize]
-    }
+/// The declaration of the support helper `name`, if it is one.
+pub(super) fn signature(name: &str) -> Option<&'static crate::signatures::Signature> {
+    support(name).map(Support::signature)
 }
 
 /// The declarations this emission actually writes. The same selection grants
@@ -153,19 +100,26 @@ impl Support {
 pub(super) struct Declarations(u16);
 
 impl Declarations {
+    /// How many support helpers one selection can hold.
+    const WIDTH: usize = u16::BITS as usize;
+
     fn insert(&mut self, helper: Support) {
         self.0 |= 1 << helper as usize;
     }
 
+    fn has(self, helper: Support) -> bool {
+        self.0 & (1 << helper as usize) != 0
+    }
+
     pub(super) fn contains(self, name: &str) -> bool {
-        signature(name).is_some_and(|(at, _)| self.0 & (1 << at) != 0)
+        support(name).is_some_and(|helper| self.has(helper))
     }
 
     fn declare(self, out: &mut String, helper: Support) -> bool {
-        let known = helper.signature();
-        if !self.contains(known.name) {
+        if !self.has(helper) {
             return false;
         }
+        let known = helper.signature();
         let _ = writeln!(
             out,
             "declare {} @{}({})",
@@ -220,17 +174,14 @@ impl Declarations {
         {
             match &target.thunk {
                 Some(GObjectThunk::Child { class, index })
-                    if program.foreign_classes.iter().any(|foreign| {
-                        foreign.family == Family::GObject
-                            && foreign.name.as_str() == class.as_str()
-                            && foreign
-                                .template
-                                .as_ref()
-                                .is_some_and(|template| template.children.get(*index).is_some())
-                    }) =>
+                    if template_child(program, class, *index).is_some() =>
                 {
                     selected.insert(Support::TemplateChild);
                 }
+                Some(GObjectThunk::Property {
+                    operation: PropertyOperation::Construct,
+                    ..
+                }) => selected.insert(Support::WithBuilderAdd),
                 Some(GObjectThunk::Notify { .. }) => selected.insert(Support::PropertySpec),
                 Some(GObjectThunk::Signal { .. }) => selected.insert(Support::SignalId),
                 Some(GObjectThunk::Chain { .. }) => selected.insert(Support::ParentSlot),
@@ -239,6 +190,19 @@ impl Declarations {
         }
         selected
     }
+}
+
+/// The id of child `index` in the template of the `GObject` class `class`,
+/// which a `Child` thunk is valid only with. Selecting the thunk's support
+/// declaration and emitting the thunk both ask this, so they cannot disagree.
+fn template_child<'a>(program: &'a Program, class: &str, index: usize) -> Option<&'a str> {
+    program
+        .foreign_classes
+        .iter()
+        .find(|foreign| foreign.family == Family::GObject && foreign.name.as_str() == class)
+        .and_then(|foreign| foreign.template.as_ref())
+        .and_then(|template| template.children.get(index))
+        .map(|id| id.as_str())
 }
 
 /// The function `new` of `class` calls, which this section defines.
@@ -272,7 +236,7 @@ pub(super) fn classes(
     let mut parents = std::collections::BTreeSet::new();
     let mut out = chains(program, platform, &mut parents, support)?;
     out.push_str(&emits(program, platform, support)?);
-    out.push_str(&set_by_name(program, platform)?);
+    out.push_str(&set_by_name(program, platform, support)?);
     out.push_str(&get_by_name(program, platform)?);
     out.push_str(&notifies(program, provenance_origin, platform, support)?);
     out.push_str(&children(program, provenance_origin, platform, support)?);
@@ -839,15 +803,7 @@ fn children(
         let Some(GObjectThunk::Child { class, index }) = &target.thunk else {
             continue;
         };
-        let Some(id) = program
-            .foreign_classes
-            .iter()
-            .find(|foreign| {
-                foreign.family == Family::GObject && foreign.name.as_str() == class.as_str()
-            })
-            .and_then(|foreign| foreign.template.as_ref())
-            .and_then(|template| template.children.get(*index))
-        else {
+        let Some(id) = template_child(program, class, *index) else {
             continue;
         };
         let type_symbol = program.class_gtype(class).ok_or_else(|| {
@@ -1189,19 +1145,19 @@ fn emits(
 /// -- signed as the target holds it, so a `char` is extended by its row's
 /// sign -- and a `float` to `double`, which is what the callee's `va_arg`
 /// reads.
-fn promoted(body: &mut String, at: usize, ty: &str, slot: &HirType) -> String {
+fn promoted(body: &mut String, at: usize, ty: &str, slot: &HirType) -> Operand<'static> {
     let signed = matches!(slot, HirType::Int { signed: true, .. });
     match ty {
         "i1" | "i8" | "i16" => {
             let widen = if signed { "sext" } else { "zext" };
             let _ = writeln!(body, "  %p{at} = {widen} {ty} %a{at} to i32");
-            format!("i32 %p{at}")
+            Operand::new("i32", format!("%p{at}"))
         }
         "float" => {
             let _ = writeln!(body, "  %p{at} = fpext float %a{at} to double");
-            format!("double %p{at}")
+            Operand::new("double", format!("%p{at}"))
         }
-        _ => format!("{ty} %a{at}"),
+        _ => Operand::new(ty.to_owned(), format!("%a{at}")),
     }
 }
 
@@ -1209,15 +1165,16 @@ fn promoted(body: &mut String, at: usize, ty: &str, slot: &HirType) -> String {
 /// property with no setter method -- defined as its prototype declares it:
 /// `g_object_set` by the property's name, the value promoted as C's varargs
 /// promote it.
-fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
+fn set_by_name(
+    program: &Program,
+    platform: Platform,
+    support: Declarations,
+) -> Result<String, Diagnostic> {
     let mut out = String::new();
     // A write of a property with no setter method, to `g_object_set`; a
     // construct-only property a construction gives, to the support file's
     // builder. Each thunk is `{prefix}{kind}__{name}`.
-    for (operation, callee) in [
-        (PropertyOperation::Set, "g_object_set"),
-        (PropertyOperation::Construct, "nts_gobject_with_builder_add"),
-    ] {
+    for operation in [PropertyOperation::Set, PropertyOperation::Construct] {
         let mut done = std::collections::BTreeSet::new();
         for (func, target) in program
             .native_funcs()
@@ -1236,14 +1193,22 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
                 continue;
             }
             let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else { continue; };
-            if target.parameters.len() != 2 {
+            let [object, value] = target.parameters.as_slice() else {
                 return Err(refuse(
                     func,
                     "a property thunk that does not take an object and a value",
                 ));
-            }
+            };
             if done.len() == 1 {
-                let _ = writeln!(out, "declare void @{callee}(ptr, ptr, ...)");
+                match operation {
+                    PropertyOperation::Set => {
+                        out.push_str("declare void @g_object_set(ptr, ptr, ...)\n");
+                    }
+                    PropertyOperation::Construct => {
+                        support.declare(&mut out, Support::WithBuilderAdd);
+                    }
+                    PropertyOperation::Get => unreachable!("the property setter's two operations"),
+                }
             }
             let thunk = program.native_name(target);
             bytes_constant(
@@ -1251,22 +1216,33 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
                 &format!("{thunk}.name"),
                 &property.clone(),
             );
-            let slot = target.parameters[1].abi(platform.abi);
-            let value = ty_of(&slot, func)?.to_owned();
+            let object = ty_of(&object.abi(platform.abi), func)?;
+            let slot = value.abi(platform.abi);
+            let value = ty_of(&slot, func)?;
             let mut body = String::new();
-            let passed = promoted(&mut body, 1, &value, &slot);
+            let operands = [
+                Operand::new(object, "%a0"),
+                Operand::new("ptr", format!("@{thunk}.name")),
+                promoted(&mut body, 1, value, &slot),
+                Operand::new("ptr", "null"),
+            ];
             let called = match operation {
-                PropertyOperation::Set => format!(
-                    "call void (ptr, ptr, ...) @g_object_set(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)"
+                PropertyOperation::Set => runtime_call::direct(
+                    "void (ptr, ptr, ...)",
+                    &DirectCallee::symbol(Site::function(func), platform, "g_object_set")?,
+                    runtime_call::operands_text(&operands),
                 ),
-                PropertyOperation::Construct => format!(
-                    "call void (ptr, ptr, ...) @nts_gobject_with_builder_add(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)"
-                ),
+                PropertyOperation::Construct => runtime_call::call(
+                    Site::function(func).with_gobject(support),
+                    platform,
+                    "nts_gobject_with_builder_add",
+                    &operands,
+                )?,
                 PropertyOperation::Get => unreachable!("the property setter's two operations"),
             };
             let _ = writeln!(
                 out,
-                "define void @{thunk}(ptr %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 {called}\n  ret void\n}}"
+                "define void @{thunk}({object} %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 {called}\n  ret void\n}}"
             );
         }
     }
@@ -1631,21 +1607,114 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_support_helper_is_exported_with_its_own_signature() {
+        assert_eq!(SUPPORT_SIGNATURES.len(), Support::ALL.len());
+        for (exported, &helper) in SUPPORT_SIGNATURES.iter().zip(Support::ALL) {
+            let known = helper.signature();
+            assert_eq!(exported.name, known.name);
+            assert_eq!(exported.returns, known.returns);
+            assert_eq!(exported.params, known.params);
+            assert_eq!(
+                signature(known.name).map(|found| found.name),
+                Some(known.name)
+            );
+        }
+    }
+
+    /// The builder's fixed operands are checked exactly; its tail is rendered
+    /// at the callee's function type, and only promoted types may fill it.
+    #[test]
+    fn a_variadic_support_call_checks_its_fixed_prefix_and_promoted_tail() {
+        let program = nts_core::hir::Program::default();
+        let mut selected = Declarations::default();
+        selected.insert(Support::WithBuilderAdd);
+        let site = Site::synthetic(&program, "builder").with_gobject(selected);
+        let fixed = [Operand::new("ptr", "%a0"), Operand::new("ptr", "@n")];
+        for platform in [
+            Platform::SYSV_X86_64,
+            Platform::WIN64_X86_64,
+            Platform::APPLE_ARM64,
+            Platform::LINUX_ARM64,
+            Platform::WINDOWS_ARM64,
+        ] {
+            let call = |operands: &[Operand<'_>]| {
+                runtime_call::call(site, platform, "nts_gobject_with_builder_add", operands)
+            };
+            let mut operands = fixed.to_vec();
+            operands.extend([Operand::new("i32", "%a1"), Operand::new("ptr", "null")]);
+            // Rendered calls are compared after `call `, so these expected
+            // texts are not themselves read as calls by the source audit.
+            let rendered = |operands: &[Operand<'_>]| {
+                call(operands)
+                    .expect("typed control")
+                    .strip_prefix("call ")
+                    .unwrap()
+                    .to_owned()
+            };
+            assert_eq!(
+                rendered(&operands),
+                "void (ptr, ptr, ...) @nts_gobject_with_builder_add(ptr %a0, ptr @n, i32 %a1, ptr null)"
+            );
+            assert_eq!(
+                rendered(&fixed),
+                "void (ptr, ptr, ...) @nts_gobject_with_builder_add(ptr %a0, ptr @n)"
+            );
+            let mut wrong = operands.clone();
+            wrong[0] = Operand::new("double", "%a0");
+            assert_eq!(
+                call(&wrong).expect_err("a mistyped fixed argument").message,
+                "runtime helper nts_gobject_with_builder_add parameter 1: expected ptr, found double (in `builder`)"
+            );
+            assert_eq!(
+                call(&fixed[..1])
+                    .expect_err("a missing fixed argument")
+                    .message,
+                "runtime helper nts_gobject_with_builder_add parameter 2: expected ptr, found <missing argument> (in `builder`)"
+            );
+            for unpromoted in ["i1", "i8", "i16", "half", "bfloat", "float"] {
+                let mut tail = operands.clone();
+                tail[2] = Operand::new(unpromoted, "%a1");
+                assert_eq!(
+                    call(&tail)
+                        .expect_err("an unpromoted tail argument")
+                        .message,
+                    format!(
+                        "runtime helper nts_gobject_with_builder_add variadic argument 3: {unpromoted} is not a type C's default argument promotions pass through `...` (in `builder`)"
+                    )
+                );
+            }
+            for promoted in ["i32", "i64", "double", "ptr"] {
+                let mut tail = operands.clone();
+                tail[2] = Operand::new(promoted, "%a1");
+                assert!(call(&tail).is_ok(), "{promoted}");
+            }
+        }
+    }
+
+    #[test]
     fn support_calls_require_their_declaration_and_check_each_argument() {
         let program = nts_core::hir::Program::default();
         let site = Site::synthetic(&program, "support-control");
-        for (at, known) in SUPPORT_SIGNATURES.iter().enumerate() {
-            let selected = Declarations(1 << at);
+        for (at, &helper) in Support::ALL.iter().enumerate() {
+            let known = helper.signature();
+            assert_eq!(support(known.name), Some(helper));
+            let mut selected = Declarations::default();
+            selected.insert(helper);
             let scoped = site.with_gobject(selected);
-            let unselected = &SUPPORT_SIGNATURES[(at + 1) % SUPPORT_SIGNATURES.len()];
+            let unselected = Support::ALL[(at + 1) % Support::ALL.len()].signature();
             let error = runtime_call::call(scoped, Platform::SYSV_X86_64, unselected.name, &[])
                 .expect_err("a different support declaration is not granted");
             assert!(error.message.contains("this program does not emit"));
             let operands: Vec<_> = known
-                .params
+                .fixed()
                 .iter()
                 .map(|ty| Operand::new(*ty, "%v"))
                 .collect();
+            let function_type = if known.variadic() {
+                format!("({}) ", known.params.join(", "))
+            } else {
+                String::new()
+            };
             for platform in [
                 Platform::SYSV_X86_64,
                 Platform::WIN64_X86_64,
@@ -1664,7 +1733,7 @@ mod tests {
                 assert_eq!(
                     control.strip_prefix("call ").unwrap(),
                     format!(
-                        "{} @{}({})",
+                        "{} {function_type}@{}({})",
                         known.returns,
                         known.name,
                         runtime_call::operands_text(&operands)
@@ -1691,7 +1760,7 @@ mod tests {
                             "runtime helper {} parameter {}: expected {}, found double (in `support-control`)",
                             known.name,
                             position + 1,
-                            known.params[position]
+                            known.fixed()[position]
                         )
                     );
                     assert!(

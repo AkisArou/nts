@@ -284,7 +284,7 @@ fn declaration(
     if let Some(known) = signatures::signature_on(helper, platform) {
         return Ok(Some(known));
     }
-    let known = crate::gobject::signature(helper).map(|(_, known)| known);
+    let known = crate::gobject::signature(helper);
     if known.is_some() && !site.gobject.contains(helper) {
         return Err(site.refuse(&format!(
             "a call to {helper}, whose GObject support declaration this program does not emit"
@@ -293,7 +293,17 @@ fn declaration(
     Ok(known)
 }
 
+/// Whether a value of LLVM type `ty` is one C's default argument promotions
+/// produce, and so what a callee's `va_arg` can read from a `...` tail: an
+/// integer narrower than `int` arrives as `int`, and a `float` as `double`.
+fn promoted(ty: &str) -> bool {
+    !matches!(ty, "i1" | "i8" | "i16" | "half" | "bfloat" | "float")
+}
+
 /// Construct one runtime call, or refuse at the site that tried to make it.
+/// Each fixed parameter takes exactly its declared type. A variadic helper's
+/// tail takes any number of operands, each of a type C's default argument
+/// promotions produce, and the call names the callee's function type.
 /// Declaration lookup uses indexes built once per process, so checking a call
 /// costs only its own arguments, independently of the number of helpers.
 pub(super) fn call(
@@ -307,8 +317,14 @@ pub(super) fn call(
             "a call to {helper}, which has no declared runtime signature"
         ))
     })?;
-    for at in 0..known.params.len().max(operands.len()) {
-        let expected = known.params.get(at).map(|spec| parameter_type(spec));
+    let fixed = known.fixed();
+    let checked = if known.variadic() {
+        fixed.len()
+    } else {
+        fixed.len().max(operands.len())
+    };
+    for at in 0..checked {
+        let expected = fixed.get(at).map(|spec| parameter_type(spec));
         let found = operands.get(at).map(|operand| operand.ty.as_ref());
         if expected != found {
             return Err(site.refuse(&format!(
@@ -319,8 +335,28 @@ pub(super) fn call(
             )));
         }
     }
+    for (at, operand) in operands.iter().enumerate().skip(fixed.len()) {
+        if !promoted(&operand.ty) {
+            return Err(site.refuse(&format!(
+                "runtime helper {helper} variadic argument {}: {} is not a type C's default argument promotions pass through `...`",
+                at + 1,
+                operand.ty,
+            )));
+        }
+    }
     let (attribute, returns) = declared_result(known.returns);
-    let mut text = format!("call {attribute}{returns} {}(", global(helper));
+    let mut text = format!("call {attribute}{returns} ");
+    if known.variadic() {
+        // A variadic callee is called at its own function type, which names
+        // the fixed parameters' types and the tail.
+        text.push('(');
+        for spec in fixed {
+            let _ = write!(text, "{}, ", parameter_type(spec));
+        }
+        text.push_str(signatures::VARIADIC_TAIL);
+        text.push_str(") ");
+    }
+    let _ = write!(text, "{}(", global(helper));
     for (at, operand) in operands.iter().enumerate() {
         if at != 0 {
             text.push_str(", ");

@@ -31,7 +31,7 @@
 
 /// A runtime function: its name, its result, its parameters, and what the
 /// runtime promises about it.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Signature {
     pub name: &'static str,
     pub returns: &'static str,
@@ -40,6 +40,27 @@ pub struct Signature {
     /// target and stack-protector settings belong to whoever links, not to a
     /// declaration.
     pub attributes: &'static [&'static str],
+}
+
+/// A C `...` tail, spelled as LLVM's parameter list and clang's declarations
+/// spell it: the last entry of `params`, after the fixed parameters.
+pub const VARIADIC_TAIL: &str = "...";
+
+impl Signature {
+    /// The parameters every call passes in order, before any variadic tail.
+    #[must_use]
+    pub fn fixed(&self) -> &'static [&'static str] {
+        match self.params.split_last() {
+            Some((&VARIADIC_TAIL, fixed)) => fixed,
+            _ => self.params,
+        }
+    }
+
+    /// Whether arguments after the fixed parameters go through a C `...`.
+    #[must_use]
+    pub fn variadic(&self) -> bool {
+        self.params.last() == Some(&VARIADIC_TAIL)
+    }
 }
 
 /// Sorted by name for stable generation and readable diffs.
@@ -3030,6 +3051,30 @@ mod tests {
             }
             assert!(super::signature_on("not_a_declared_helper", platform).is_none());
         }
+    }
+
+    /// A tail is only ever the last parameter, so `fixed` and `variadic` are
+    /// the whole reading of a parameter list, for every table a call checks.
+    #[test]
+    fn a_variadic_tail_is_only_ever_the_last_parameter() {
+        let mut variadic = 0;
+        for known in super::TABLES
+            .iter()
+            .flat_map(|table| table.iter())
+            .chain(crate::gobject::SUPPORT_SIGNATURES)
+        {
+            assert!(
+                !known.fixed().contains(&super::VARIADIC_TAIL),
+                "`{}` spells `...` before its last parameter",
+                known.name
+            );
+            assert_eq!(
+                known.fixed().len() + usize::from(known.variadic()),
+                known.params.len()
+            );
+            variadic += usize::from(known.variadic());
+        }
+        assert!(variadic > 0, "the control row exercises the tail");
     }
 
     #[test]

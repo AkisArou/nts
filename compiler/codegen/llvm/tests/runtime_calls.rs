@@ -495,6 +495,72 @@ export function subject(self: Ptr<void>): Ptr<void> { return child(self); }
     );
 }
 
+/// A construct-only property thunk passes its object, its property's name and
+/// its value to the support file's variadic builder. Its object's type is the
+/// one the HIR gives it; the twins differ only in that type.
+fn construct_thunk(object: &str) -> (ScratchDir, hir::Program) {
+    use hir::native::{GObjectThunk, PropertyOperation};
+    let (dir, mut program) = source_fixture(&format!(
+        r#"
+import type {{ Ptr }} from "c:types";
+import type {{ Float64 }} from "@nts/scalars";
+declare function give(self: {object}, value: Float64): void;
+export function subject(self: {object}, value: Float64): void {{ give(self, value); }}
+"#
+    ));
+    let func = program
+        .funcs
+        .iter_mut()
+        .find(|func| func.name == "subject")
+        .unwrap();
+    let target = func
+        .values
+        .iter_mut()
+        .find_map(|op| match &mut op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } => Some(target),
+            _ => None,
+        })
+        .expect("the property call");
+    let target = std::sync::Arc::make_mut(target);
+    target.name = "__nts_gobject_with_d__value_0".into();
+    target.thunk = Some(GObjectThunk::Property {
+        operation: PropertyOperation::Construct,
+        kind: 'd',
+        name: "value".into(),
+    });
+    (dir, program)
+}
+
+#[test]
+fn a_construct_thunk_calls_the_typed_builder_and_refuses_a_mistyped_object() {
+    let (_dir, control) = construct_thunk("Ptr<void>");
+    let emitted = nts_codegen_llvm::emit(&control, Platform::SYSV_X86_64);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    let declaration = "declare void @nts_gobject_with_builder_add(ptr, ptr, ...)";
+    assert_eq!(emitted.text.matches(declaration).count(), 1);
+    let call = "call void (ptr, ptr, ...) @nts_gobject_with_builder_add(ptr %a0, ptr @__nts_gobject_with_d__value_0.name, double %a1, ptr null)";
+    assert_eq!(emitted.text.matches(call).count(), 1, "{}", emitted.text);
+    assert!(emitted.text.find(declaration).unwrap() < emitted.text.find(call).unwrap());
+
+    let (_dir, mistyped) = construct_thunk("Float64");
+    let refused = nts_codegen_llvm::emit(&mistyped, Platform::SYSV_X86_64);
+    assert!(
+        refused.diagnostics.iter().any(|diagnostic| diagnostic.code == "NTS3001"
+            && diagnostic.message
+                == "runtime helper nts_gobject_with_builder_add parameter 1: expected ptr, found double (in `subject`)"),
+        "{:?}",
+        refused.diagnostics
+    );
+    assert!(
+        !refused
+            .text
+            .contains("@nts_gobject_with_builder_add(double")
+    );
+}
+
 fn runtime_names() -> std::collections::HashSet<&'static str> {
     [
         Platform::SYSV_X86_64,
@@ -719,6 +785,13 @@ fn the_source_audit_checks_support_calls_and_allows_callback_addresses() {
         );
         assert_eq!(unchecked_calls(&control, &declared), [] as [&str; 0]);
     }
+    // A variadic helper's call names its function type before the callee;
+    // spelled by hand, it is still a bypass.
+    let variadic = r#"format!("call void (ptr, ptr, ...) @nts_gobject_with_builder_add(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)")"#;
+    assert_eq!(
+        unchecked_calls(variadic, &declared),
+        ["nts_gobject_with_builder_add"]
+    );
     // Passing the callback's address is data, not a call. Its typed declaration
     // still belongs to the support set and a direct call is audited above.
     let address = r#"Operand::new("ptr", "@nts_gtk_init_template")"#;
