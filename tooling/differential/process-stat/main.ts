@@ -29,10 +29,10 @@ export type StatErrorPolicy<K=number>=(key:K,error:Error)=>void;
 export const liveProcessStat:StatReader=pid=>readText(`/proc/${pid}/stat`,'utf8');
 const liveTaskStat=(pid:number,tid:number)=>readText(`/proc/${pid}/task/${tid}/stat`,'utf8');
 const gone=(error:unknown)=>['ENOENT','ESRCH'].includes((error as NodeJS.ErrnoException).code??'');
-const throwing:StatErrorPolicy<never>=(_key,error)=>{throw error;};
+const throwing:StatErrorPolicy<unknown>=(_key,error)=>{throw error;};
 /** The explicit policy of a nullable or best-effort caller: an unreadable or
  * still-malformed record is absent, exactly as a gone process is. */
-export const unreadableIsAbsent:StatErrorPolicy<never>=()=>{};
+export const unreadableIsAbsent:StatErrorPolicy<unknown>=()=>{};
 
 /** A malformed stat is retried once after all first observations.
  * Only absence proves gone. Recovered records (including reused PIDs) still
