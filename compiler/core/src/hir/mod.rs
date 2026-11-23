@@ -9269,8 +9269,12 @@ mod tests {
             .snapshot(&config)
             .unwrap();
         assert!(!snapshot.has_errors());
-        let prepared = prepare(&snapshot, crate::hir::backend::Backend::C)
-            .expect("the promise guard verifies");
+        let prepared = prepare(
+            &snapshot,
+            crate::hir::backend::Backend::C,
+            crate::hir::EntryUnwind::Terminal,
+        )
+        .expect("the promise guard verifies");
         let mut caller = prepared
             .program
             .funcs
@@ -9353,8 +9357,12 @@ mod tests {
             .snapshot(&config)
             .unwrap();
         assert!(!snapshot.has_errors());
-        let prepared = prepare(&snapshot, crate::hir::backend::Backend::C)
-            .expect("the actual fully prepared program verifies");
+        let prepared = prepare(
+            &snapshot,
+            crate::hir::backend::Backend::C,
+            crate::hir::EntryUnwind::Terminal,
+        )
+        .expect("the actual fully prepared program verifies");
         let mut tested = 0;
         for func in &prepared.program.funcs {
             for (index, block) in func.blocks.iter().enumerate() {

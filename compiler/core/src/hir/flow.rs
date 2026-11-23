@@ -3642,8 +3642,12 @@ mod tests {
             .snapshot(&config)
             .expect("the stale-compare fixture snapshots");
         assert!(!snapshot.has_errors());
-        let prepared = super::super::prepare(&snapshot, crate::hir::backend::Backend::C)
-            .expect("the stale-compare fixture prepares");
+        let prepared = super::super::prepare(
+            &snapshot,
+            crate::hir::backend::Backend::C,
+            crate::hir::EntryUnwind::Terminal,
+        )
+        .expect("the stale-compare fixture prepares");
         let function = prepared
             .program
             .funcs

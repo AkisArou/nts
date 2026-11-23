@@ -176,6 +176,7 @@ fn move_metadata(program: &mut Program, entries: &FxHashMap<String, String>) {
         globals: _,
         provider: _,
         backend: _,
+        entry_unwind: _,
         targets: _,
         roots: _,
         callbacks_checkpoint: _,
