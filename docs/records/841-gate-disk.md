@@ -406,3 +406,11 @@ decision at the same workflow heading. The rebase onto
 whole-program rule and the temporary-lifetime rule. The range comparison keeps
 all later slice patches unchanged; the scoped-runner fixture also retains
 main's shared process-stat reader.
+
+The rebased tree passed all 359 focused tests across thirteen files, strict
+tooling types and the host audit. Raw output is
+`~/.cache/nts-scratch/841/b/rebase-proof-v1.log`, SHA-256
+`1179f05ecf1f302976f78b15a34942d82a3ac090b3d4c287609f71bdcbc37112`.
+Inner passed formatting, Clippy, build and backend tests (476 seconds for the
+tests). Raw output is `~/.cache/nts-scratch/841/b/rebase-inner-v1.log`, SHA-256
+`1095d0dea70799a57470fe4594451af067f0c28fac659e1884085591886b3a57`.
