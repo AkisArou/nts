@@ -214,3 +214,67 @@ fn block_storage_order_does_not_make_a_conditional_store_dominate_a_return() {
     );
     assert!(analysis.entering[1].known_zero(ValueId(5), Slot::Field(0)));
 }
+
+#[test]
+fn only_closed_roots_prune_a_new_borrowed_adapter_before_counting() {
+    use camino::Utf8Path;
+    use hir::reachable::OwnedRoots;
+    use nts_frontend_ts::Frontend;
+
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("the publication controls are checked in");
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .expect("the publication snapshot captures");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let base = hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(hir::backend::Backend::C, hir::EntryUnwind::Terminal),
+    )
+    .expect("the publication controls prepare before counting")
+    .program;
+    let entries = vec!["direct".to_owned(), "module#init".to_owned()];
+    for (label, roots) in [
+        ("unknown", None),
+        ("every-export", Some(OwnedRoots::EveryExport)),
+        ("open", Some(OwnedRoots::Declared(entries.clone()))),
+        ("entry", Some(OwnedRoots::Entry(entries))),
+    ] {
+        let mut program = base.clone();
+        program.roots = roots;
+        let provided = hir::provide(&mut program, hir::Memory::ReferenceCounting)
+            .expect("counting accepts the chosen root contract");
+        program.provider = hir::Memory::ReferenceCounting;
+        assert!(provided.entry_decisions.iter().any(|decision| {
+            decision.kind == hir::own::EntryDecisionKind::Implementation
+                && hir::own::source_name(&decision.function) == "publish"
+        }));
+        // --nocapture makes the real program bytes available for the committed
+        // prune-isolation control; ordinary test runs retain captured output.
+        println!("ROOT-PROOF-BEGIN {label}\n{program:#?}\nROOT-PROOF-END {label}");
+        let names: FxHashSet<_> = program
+            .funcs
+            .iter()
+            .map(|func| func.name.as_str())
+            .collect();
+        if label == "entry" {
+            assert!(names.contains("direct"));
+            assert!(names.contains("@consuming:publish"));
+            assert!(
+                !names.contains("publish"),
+                "a closed caller reaches only the private body"
+            );
+        } else {
+            for func in &base.funcs {
+                assert!(
+                    names.contains(func.name.as_str()),
+                    "{label} must retain source entry {}",
+                    func.name
+                );
+            }
+        }
+    }
+}

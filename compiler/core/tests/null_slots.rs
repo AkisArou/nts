@@ -65,6 +65,6 @@ fn only_a_slot_proved_null_at_every_call_loses_its_old_value_release() {
         .map_or(entry, |decision| find(&decision.function));
     assert!(
         old_field_releases(body, 1) > 0,
-        "an open borrowed entry passes unknown slot contents to its body"
+        "Published#install's node.next (parameter 1) must keep its release for an unknown published caller"
     );
 }
