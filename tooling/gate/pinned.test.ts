@@ -27,13 +27,12 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     let env:NodeJS.ProcessEnv = Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
     const observations=ownMemory(join(directory,'machine'));
     const owned={...observations,
+      GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+      GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+      GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_SYSTEM:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',
       NTS_GATE_TREE: tree, NTS_GATE_TARGET: join(directory, "target"), NTS_GATE_SETUP_ONLY: "1",
       NTS_GATE_RUN_DIR: join(directory, "run"),
     };
-    Object.assign(env, {
-      GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
-      GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-    });
     const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
     copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/inputs/linker.ts","tooling/gate/affinity/main.ts"], root);
