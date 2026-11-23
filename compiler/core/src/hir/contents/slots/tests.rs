@@ -230,12 +230,16 @@ fn only_closed_roots_prune_a_new_borrowed_adapter_before_counting() {
         .snapshot(&config)
         .expect("the publication snapshot captures");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let base = hir::prepare_with(
+    let mut base = hir::prepare_with(
         &snapshot,
         &hir::Options::new(hir::backend::Backend::C, hir::EntryUnwind::Terminal),
     )
     .expect("the publication controls prepare before counting")
     .program;
+    // Entry materialization runs before native dispatch planning. The NoGC
+    // preparation supplies its producer graph; discard that later cache before
+    // exercising the pre-count root boundary directly.
+    base.native_dispatch = None;
     let entries = vec!["direct".to_owned(), "module#init".to_owned()];
     for (label, roots) in [
         ("unknown", None),
