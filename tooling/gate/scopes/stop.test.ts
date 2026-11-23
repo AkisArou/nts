@@ -101,7 +101,7 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
     }
     removable(own);rmSync(own, { recursive: true, force: true });
   });
-  const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = control.nested?join(home,'.cache/outer/tmp/inner'):join(own, "gate-run");
+  const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = control.nested?join(home,'.cache/outer/tmp/enclosing/tmp/inner'):join(own, "gate-run");
   mkdirSync(gate, { recursive: true });
   mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("../", import.meta.url));
@@ -192,7 +192,9 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
     }
     commit = spawnTest("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).stdout.trim();
   }
-  const enclosing=control.nested?gateEnvironment(launcher,{run:join(home,'.cache/outer'),owned:gateFixtureMemory(join(own,'outer-memory'),root)}):undefined;
+  const outer=control.nested?gateEnvironment(launcher,{run:join(home,'.cache/outer'),owned:gateFixtureMemory(join(own,'outer-memory'),root)}):undefined;
+  const enclosing=outer?gateEnvironment(outer.env,{run:join(outer.temporary.path,'enclosing'),owned:gateFixtureMemory(join(own,'enclosing-memory'),root)}):undefined;
+  if(outer)writeFileSync(join(outer.temporary.path,'sentinel'),'outermost fixture lifetime');
   if(enclosing){launcher=enclosing.env;writeFileSync(join(enclosing.temporary.path,'sentinel'),'outer lifetime');}
   planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
     NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2",
@@ -206,11 +208,16 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   assert.equal(summary.temporary.state,'removed after red',JSON.stringify(summary.temporary));
   assert.equal(summary.temporary.path,planned.temporary.path);
   assert.equal(summary.temporary.enclosing,planned.temporary.enclosing?.path);
-  assert.equal(planned.temporary.enclosing?.path,enclosing?.temporary.path);
+  if(outer&&enclosing){
+    const owner=outer.temporary.enclosing??outer.temporary;
+    assert.equal(enclosing.temporary.enclosing?.path,owner.path,'nested handoffs retain the outermost owner');
+    assert.equal(planned.temporary.enclosing?.path,owner.path);
+  }
   assert.equal(existsSync(planned.temporary.path),false);
   assert.ok(summary.temporary.diagnostics,'a red run publishes its bounded diagnostics');
   assert.equal(existsSync(join(summary.temporary.diagnostics.path,'manifest.json')),true);
   if(enclosing)assert.equal(readFileSync(join(enclosing.temporary.path,'sentinel'),'utf8'),'outer lifetime');
+  if(outer)assert.equal(readFileSync(join(outer.temporary.path,'sentinel'),'utf8'),'outermost fixture lifetime');
   // This owner never adds an ended run to the legacy eviction registry.
   const registry = join(home, ".cache/nts-gate/closed-temporaries");
   const closed = existsSync(registry) ? readdirSync(registry).map(name => (JSON.parse(readFileSync(join(registry, name), "utf8")) as { owned: { path: string } }).owned.path) : [];
@@ -220,6 +227,7 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   assert.deepEqual(pruneRunTemporaries(neighbor, { minimumFreeBytes: 0, maxBytes: 0, write: () => {} }).removed, [other.path]);
   assert.equal(existsSync(summary.temporary.diagnostics.path),true,'a neighbouring registry prune cannot evict retained diagnostics');
   if(enclosing)assert.equal(readFileSync(join(enclosing.temporary.path,'sentinel'),'utf8'),'outer lifetime');
+  if(outer)assert.equal(readFileSync(join(outer.temporary.path,'sentinel'),'utf8'),'outermost fixture lifetime');
   return { summary,
     admitted: existsSync(join(own, "records-started")), descendantAlive: descendantAlive(), commit,
     normalDrains: control.oracleCancellation ? readFileSync(join(own,"normal-drains.jsonl"),"utf8").trim().split("\n").map(line=>(JSON.parse(line) as {slice:string}).slice) : [],
