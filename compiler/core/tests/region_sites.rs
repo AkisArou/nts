@@ -154,8 +154,12 @@ fn case_conversion_of_an_outside_input_is_refused_inside_a_region() {
     let refused = verdict(&report, "lowersAnArgument", "lowerOfArgument")
         .expect_err("an outside input is refused");
     assert!(refused.contains("may retain"), "{refused:?}");
-    // Made inside the candidate call (control): a site.
-    assert_eq!(verdict(&report, "lowersMadeText", "lowerOfMade"), Ok(()));
+    // Made inside the candidate call, but dynamic repeat can throw an uncaught
+    // RangeError. That value escapes the region through the runtime handover.
+    assert_eq!(
+        verdict(&report, "lowersMadeText", "lowerOfMade"),
+        Err("may raise a value it made".to_owned())
+    );
     // An immortal literal (control): a site.
     assert_eq!(verdict(&report, "lowersALiteral", "lowerOfLiteral"), Ok(()));
     // Made inside an outer call is still outside the inner candidate call.

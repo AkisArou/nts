@@ -352,7 +352,24 @@ fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
                 "unused metadata changes no executed operand domain: {:?}",
                 report.failure
             );
-            assert_eq!(report.sites.len(), 4);
+            // Four source objects, plus the opaque storage effect of the
+            // runtime handover in ordinary:%2. Unused view metadata adds none.
+            let mut sites: Vec<_> = report
+                .sites
+                .iter()
+                .map(|site| (site.id.function.as_str(), site.id.value, site.id.storage))
+                .collect();
+            sites.sort_unstable();
+            assert_eq!(
+                sites,
+                vec![
+                    ("ordinary", 2, memory::Storage::CallStorage),
+                    ("root#init", 0, memory::Storage::Object),
+                    ("root#init", 1, memory::Storage::Object),
+                    ("root#init", 3, memory::Storage::Object),
+                    ("root#init", 5, memory::Storage::Object),
+                ]
+            );
             assert!(
                 report
                     .sites
