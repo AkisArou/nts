@@ -20,11 +20,16 @@ mod tests;
 /// by stores and call results. An explicit fact applies only at this point:
 /// another possibly aliasing write or an open call kills it. Foreign retain
 /// and release hooks may re-enter compiled code. This includes implicit retain
-/// before a store and cleanup of its old value after it: both consume unknown
-/// call effects here. Managed releases run no user code synchronously; their
-/// finalization jobs run later.
+/// before a store, copied value definitions, operand cleanup and delayed exit
+/// releases: all consume unknown call effects here. Fixed before effects run
+/// before initialization queries and caller vouching; returned facts precede
+/// after effects. A may-have-foreign-cleanup bit survives edges and writers,
+/// joins with OR and invalidates at block exits before return summaries.
+/// Managed releases run no user code synchronously; their finalization jobs
+/// run later.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(in crate::hir) struct Fresh {
+    foreign_cleanup: bool,
     sharing: Sharing,
     /// Explicit slot facts do not assert freshness or a closed writer set.
     zero: Written,
@@ -100,6 +105,7 @@ pub(in crate::hir) fn freshness(
                 inputs,
             );
         }
+        after.end_block(inputs);
         after.canonicalize();
         if outgoing[from].as_ref() == Some(&after) {
             continue;
@@ -275,6 +281,7 @@ impl Fresh {
     /// argument hands its facts to the parameter that receives it.
     fn across(&self, params: &[ValueId], args: &[ValueId], aliases: &Aliases) -> Self {
         let mut carried = Self {
+            foreign_cleanup: self.foreign_cleanup,
             sharing: self.sharing.across(params, args, &self.bases, aliases),
             zero: self.zero.clone(),
             bases: self.bases.clone(),
@@ -313,6 +320,7 @@ impl Fresh {
     /// yes only when the slot is a zero however the block was reached.
     fn both(&self, other: &Self) -> Self {
         Self {
+            foreign_cleanup: self.foreign_cleanup || other.foreign_cleanup,
             sharing: self.sharing.union(&other.sharing),
             zero: self.zero.intersection(&other.zero),
             bases: self.bases.intersection(&other.bases).copied().collect(),
@@ -348,7 +356,8 @@ impl Fresh {
         inputs: &Inputs,
     ) {
         let aliases = &inputs.aliases;
-        self.before_store(value, inputs);
+        self.before(value, inputs);
+        self.foreign_cleanup |= inputs.foreign(value);
         let cleanup = inputs.cleanup(value) && !self.initializing(func, kind);
         // A call that only initializes leaves its argument as fresh as it
         // arrived. See `initializing_only`.
@@ -358,6 +367,9 @@ impl Fresh {
         } = kind
             && harmless.contains(name)
         {
+            if inputs.after(value) {
+                self.unknown_call(aliases);
+            }
             return;
         }
         match effect(kind) {
@@ -395,7 +407,7 @@ impl Fresh {
                     self.mark_written(aliases, object, Slot::Field(field));
                 }
             }
-            Effect::ElementWrite { array, index } => {
+            Effect::ElementWrite { array, index, .. } => {
                 // Unknown array aliases may name the same indexed slot.
                 self.zero.0.retain(|_, slots| {
                     slots.retain(|slot| matches!(slot, Slot::Field(_)));
@@ -422,8 +434,16 @@ impl Fresh {
             // Neither the address nor the slot is attributable here. Distinct
             // SSA names do not establish distinct storage. A release can also
             // run foreign cleanup; retaining a foreign handle can run callbacks.
-            Effect::UnknownWrite => *self = Self::default(),
-            Effect::NoWrite => {}
+            Effect::UnknownWrite => {
+                // A writer cannot undo an earlier native value's delayed
+                // cleanup, even though it destroys every current slot fact.
+                let foreign_cleanup = self.foreign_cleanup;
+                *self = Self {
+                    foreign_cleanup,
+                    ..Self::default()
+                };
+            }
+            Effect::GlobalWrite { .. } | Effect::NoWrite => {}
         }
         for value in hir::own::escaping_operands(kind) {
             // A store keeps the base and only marks it reachable. Everything
@@ -442,9 +462,6 @@ impl Fresh {
                 self.give_up(aliases, value);
             }
         }
-        if cleanup {
-            self.unknown_call(aliases);
-        }
         if let OpKind::Call {
             callee: hir::Callee::Direct(name),
             ..
@@ -455,12 +472,21 @@ impl Fresh {
                 self.zero.insert(value, Slot::Field(*field));
             }
         }
+        if cleanup || inputs.after(value) {
+            self.unknown_call(aliases);
+        }
     }
 
-    /// A native retain happens before rc reads the old slot. Its callbacks
-    /// must have invalidated the proof before `initializing` is consulted too.
-    pub(in crate::hir) fn before_store(&mut self, value: ValueId, inputs: &Inputs) {
-        if inputs.retain(value) {
+    pub(in crate::hir) fn end_block(&mut self, inputs: &Inputs) {
+        if self.foreign_cleanup {
+            self.unknown_call(&inputs.aliases);
+        }
+    }
+
+    /// Potential native counts precede old-slot reads and callee entry. Their
+    /// callbacks invalidate authority before initialization or caller vouching.
+    pub(in crate::hir) fn before(&mut self, value: ValueId, inputs: &Inputs) {
+        if inputs.before(value) {
             self.unknown_call(&inputs.aliases);
         }
     }
@@ -519,6 +545,11 @@ enum Effect {
     ElementWrite {
         array: ValueId,
         index: ValueId,
+        stored: ValueId,
+    },
+    GlobalWrite {
+        global: u32,
+        stored: ValueId,
     },
     Read,
     Call,
@@ -538,9 +569,19 @@ fn effect(kind: &OpKind) -> Effect {
             field: *field,
             stored: *value,
         },
-        OpKind::ArraySet { array, index, .. } => Effect::ElementWrite {
+        OpKind::ArraySet {
+            array,
+            index,
+            value,
+            ..
+        } => Effect::ElementWrite {
             array: *array,
             index: *index,
+            stored: *value,
+        },
+        OpKind::GlobalSet { global, value } => Effect::GlobalWrite {
+            global: *global,
+            stored: *value,
         },
         OpKind::FieldGet { .. }
         | OpKind::OpenFieldGet { .. }
@@ -599,7 +640,6 @@ fn effect(kind: &OpKind) -> Effect {
         | OpKind::Return(_)
         | OpKind::Length(_)
         | OpKind::StringUnitAt { .. }
-        | OpKind::GlobalSet { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::CellReady { .. }

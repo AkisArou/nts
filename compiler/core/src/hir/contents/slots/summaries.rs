@@ -177,18 +177,9 @@ pub(in crate::hir) fn summarize(
     program: &Program,
     layouts: &[Layout],
     harmless: &FxHashSet<String>,
+    inputs: FxHashMap<String, Inputs>,
 ) -> Summaries {
     let calls = Calls::of(program);
-    let inputs = program
-        .funcs
-        .iter()
-        .map(|func| {
-            (
-                func.name.clone(),
-                Inputs::of(func, layouts, &program.globals),
-            )
-        })
-        .collect();
     let mut result = Summaries {
         returned: return_contracts(program, layouts, harmless, &calls, &inputs),
         inputs,
@@ -231,6 +222,7 @@ pub(in crate::hir) fn summarize(
                 let mut state = entering;
                 for id in &block.ops {
                     let kind = &func.value(*id).kind;
+                    state.before(*id, &result.inputs[&func.name]);
                     if let OpKind::Call {
                         callee: hir::Callee::Direct(name),
                         args,

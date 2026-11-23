@@ -608,7 +608,7 @@ fn a_foreign_retain_before_store_invalidates_its_old_null_proof() {
     let mut state = Fresh::default();
     observe(&mut state, &func, 3);
     assert!(state.initializing(&func, &func.values[4].kind));
-    state.before_store(ValueId(4), &Inputs::of(&func, &[], &[]));
+    state.before(ValueId(4), &Inputs::of(&func, &[], &[]));
     assert!(!state.initializing(&func, &func.values[4].kind));
 }
 
@@ -640,7 +640,7 @@ fn an_erased_globals_old_type_can_reenter_when_the_new_value_is_managed() {
         origin: func.origin.clone(),
     }];
     let inputs = Inputs::of(&func, &[], &globals);
-    assert!(!inputs.retain(ValueId(8)));
+    assert!(!inputs.before(ValueId(8)));
     assert!(inputs.cleanup(ValueId(8)));
     let mut state = Fresh::default();
     observe(&mut state, &func, 3);
@@ -669,4 +669,115 @@ fn an_identity_preserving_view_cannot_leave_original_freshness_authoritative() {
         !state.initializing(&func, &field_write(0)),
         "a store through Convert's identity must keep the original field's release"
     );
+}
+
+#[test]
+fn post_call_foreign_cleanup_invalidates_the_new_return_fact() {
+    for foreign in [false, true] {
+        let mut func = fixture();
+        func.values[1].ty = if foreign {
+            foreign_type()
+        } else {
+            func.values[0].ty.clone()
+        };
+        func.values[7].kind = OpKind::Call {
+            callee: Callee::Direct("clear".into()),
+            args: vec![ValueId(1)],
+            frame: None,
+        };
+        func.values[7].ty = func.values[0].ty.clone();
+        let inputs = Inputs::of(&func, &[], &[]);
+        let returned = FxHashMap::from_iter([("clear".into(), FxHashSet::from_iter([0]))]);
+        let mut state = Fresh::default();
+        state.observe(
+            &func,
+            ValueId(7),
+            &func.values[7].kind,
+            &FxHashSet::default(),
+            &returned,
+            &inputs,
+        );
+        assert_eq!(
+            state.known_zero(ValueId(7), Slot::Field(0)),
+            !foreign,
+            "returned field 0 must lose its promise after caller-side native argument cleanup"
+        );
+    }
+}
+
+#[test]
+fn delayed_foreign_cleanup_survives_a_writer_and_a_cfg_join() {
+    for foreign in [false, true] {
+        let mut func = fixture();
+        func.values.push(Op {
+            kind: OpKind::Call {
+                callee: Callee::External("make".into()),
+                args: Vec::new(),
+                frame: None,
+            },
+            ty: if foreign {
+                foreign_type()
+            } else {
+                func.values[0].ty.clone()
+            },
+            origin: func.origin.clone(),
+        });
+        func.values.push(Op {
+            kind: OpKind::NativeCopy {
+                destination: ValueId(0),
+                source: ValueId(1),
+            },
+            ty: HirType::Void,
+            origin: func.origin.clone(),
+        });
+        func.blocks = vec![
+            Block {
+                params: vec![],
+                ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(6)],
+                terminator: Terminator::Branch {
+                    cond: ValueId(6),
+                    then_target: hir::BlockId(1),
+                    then_args: vec![],
+                    else_target: hir::BlockId(2),
+                    else_args: vec![],
+                },
+            },
+            Block {
+                params: vec![],
+                ops: vec![ValueId(8), ValueId(9)],
+                terminator: Terminator::Jump {
+                    target: hir::BlockId(3),
+                    args: vec![],
+                },
+            },
+            Block {
+                params: vec![],
+                ops: vec![],
+                terminator: Terminator::Jump {
+                    target: hir::BlockId(3),
+                    args: vec![],
+                },
+            },
+            Block {
+                params: vec![],
+                ops: vec![ValueId(3)],
+                terminator: Terminator::Return(Some(ValueId(0))),
+            },
+        ];
+        let inputs = Inputs::of(&func, &[], &[]);
+        let analysis = freshness(
+            &func,
+            &[],
+            &FxHashSet::default(),
+            &FxHashSet::default(),
+            &Returned::default(),
+            &inputs,
+        );
+        let after = analysis.leaving[3].as_ref().expect("reachable return");
+        assert_eq!(
+            after.known_zero(ValueId(0), Slot::Field(0)),
+            !foreign,
+            "returned field 0 must consume native exit cleanup from either predecessor, including across a writer"
+        );
+    }
 }

@@ -245,7 +245,17 @@ pub(super) fn settled_globals(program: &Program) -> rustc_hash::FxHashSet<u32> {
 /// Read every function once, before any of them is counted.
 #[must_use]
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
-    let harmless = initializing_only(program, layouts);
+    let inputs: rustc_hash::FxHashMap<_, _> = program
+        .funcs
+        .iter()
+        .map(|func| {
+            (
+                func.name.clone(),
+                slots::Inputs::of(func, layouts, &program.globals),
+            )
+        })
+        .collect();
+    let harmless = initializing_only(program, layouts, &inputs);
     // **Every function some caller cannot see the target of.** Lifted out of
     // `consumes` below, where it was computed and explained, because a *second*
     // ownership fact needs the same set and the two must not derive it twice: a
@@ -289,7 +299,7 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             .filter(|(_, global)| global.initial == 0.0 && global.ty.may_hold_a_reference())
             .filter_map(|(at, _)| u32::try_from(at).ok())
             .collect(),
-        slots: slots::summarize(program, layouts, &harmless),
+        slots: slots::summarize(program, layouts, &harmless, inputs),
         mutating_slots,
         mutates,
         harmless,
@@ -1990,8 +2000,8 @@ fn initializing_stores(
         let mut fresh = entering.get(at).cloned().unwrap_or_default();
         for value in &block.ops {
             let kind = func.values[value.0 as usize].kind.clone();
-            fresh.before_store(*value, inputs);
-            if at == 0 && inputs.retain(*value) {
+            fresh.before(*value, inputs);
+            if at == 0 && inputs.before(*value) {
                 untouched.clear();
             }
             if matches!(kind, OpKind::FieldSet { .. } | OpKind::ArraySet { .. })
@@ -2019,11 +2029,14 @@ fn initializing_stores(
                     _ => {}
                 }
             }
-            if at == 0 && inputs.cleanup(*value) && !settled.contains(value) {
+            if at == 0
+                && (inputs.after(*value) || (inputs.cleanup(*value) && !settled.contains(value)))
+            {
                 untouched.clear();
             }
             fresh.observe(func, *value, &kind, harmless, returned, inputs);
         }
+        fresh.end_block(inputs);
         // What is still a zero where the block ends, which is where a frame
         // object's fields are given back. A field the program cleared on its
         // way out holds nothing, and walking it is a load and a release to
@@ -2807,39 +2820,47 @@ fn quiet(kind: &OpKind) -> bool {
 /// A least fixpoint, so a recursive constructor never qualifies. That is the
 /// safe direction and costs nothing real: a constructor that calls itself is
 /// not the shape this exists for.
-fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHashSet<String> {
+fn initializing_only(
+    program: &Program,
+    layouts: &[Layout],
+    inputs: &rustc_hash::FxHashMap<String, slots::Inputs>,
+) -> rustc_hash::FxHashSet<String> {
     fn qualifies(
         func: &Func,
         layouts: &[Layout],
         harmless: &rustc_hash::FxHashSet<String>,
+        inputs: &slots::Inputs,
     ) -> bool {
         // Returning a *number* hands out no reference, so it says nothing about
         // what the function did to what it was given. Refusing it left every
         // accessor and every closure body outside the set -- `Closure0__call`
         // reads one field and returns a double, and its being excluded was the
         // whole of `closure-capture`'s seventeen operations.
-        func.blocks.iter().all(|block| match block.terminator {
-            super::Terminator::Return(Some(value)) => !counted(func, layouts, value),
-            _ => true,
-        }) && func.values.iter().all(|op| match &op.kind {
-            OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } => {
-                !counted(func, layouts, *stored)
-                    && !slots::Inputs::store_reenters(func, layouts, &op.kind)
-            }
-            OpKind::GlobalSet { .. } => false,
-            OpKind::Call {
-                callee: super::Callee::Direct(name),
-                ..
-            } => harmless.contains(name),
-            other => quiet(other),
-        })
+        !inputs.reenters()
+            && func.blocks.iter().all(|block| match block.terminator {
+                super::Terminator::Return(Some(value)) => !counted(func, layouts, value),
+                _ => true,
+            })
+            && func.values.iter().all(|op| match &op.kind {
+                OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } => {
+                    !counted(func, layouts, *stored)
+                }
+                OpKind::GlobalSet { .. } => false,
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => harmless.contains(name),
+                other => quiet(other),
+            })
     }
 
     let mut harmless = rustc_hash::FxHashSet::default();
     loop {
         let mut grew = false;
         for func in &program.funcs {
-            if !harmless.contains(&func.name) && qualifies(func, layouts, &harmless) {
+            if !harmless.contains(&func.name)
+                && qualifies(func, layouts, &harmless, &inputs[&func.name])
+            {
                 harmless.insert(func.name.clone());
                 grew = true;
             }

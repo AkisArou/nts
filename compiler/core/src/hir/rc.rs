@@ -2662,7 +2662,22 @@ mod tests {
 
     #[test]
     fn copying_a_foreign_field_cannot_preserve_another_fields_null_fact() {
+        copied_field_null_fact(true);
+    }
+
+    #[test]
+    fn copying_a_managed_field_preserves_another_fields_null_fact() {
+        copied_field_null_fact(false);
+    }
+
+    fn copied_field_null_fact(foreign: bool) {
         let mut program = foreign_slot_program();
+        let held_type = if foreign {
+            objc_handle("Element")
+        } else {
+            string()
+        };
+        program.layouts[0].fields[1].ty = held_type.clone();
         let func = &mut program.funcs[0];
         func.return_type = HirType::Void;
         func.values = vec![
@@ -2681,7 +2696,7 @@ mod tests {
                     object: ValueId(0),
                     field: 1,
                 },
-                objc_handle("Element"),
+                held_type,
             ),
             op(OpKind::ConstString("replacement".into()), string()),
             op(
@@ -2710,7 +2725,7 @@ mod tests {
                 .any(|id| matches!(func.value(*id).kind, OpKind::Retain(ValueId(3)))),
             "the foreign field is actually copied before the second store"
         );
-        assert!(
+        assert_eq!(
             ops[at(2) + 1..at(5)].iter().any(|id| matches!(
                 func.value(*id).kind,
                 OpKind::FieldGet {
@@ -2718,20 +2733,35 @@ mod tests {
                     field: 0
                 }
             )),
+            foreign,
             "field 0 must load and release its old value after the native retain can re-enter"
         );
     }
 
     #[test]
     fn a_native_exit_release_cannot_publish_a_returned_null_field_promise() {
+        exit_cleanup_null_fact(true);
+    }
+
+    #[test]
+    fn a_managed_exit_release_preserves_a_returned_null_field_promise() {
+        exit_cleanup_null_fact(false);
+    }
+
+    fn exit_cleanup_null_fact(foreign: bool) {
         let mut program = foreign_slot_program();
+        let held_type = if foreign {
+            objc_handle("Element")
+        } else {
+            string()
+        };
         let func = &mut program.funcs[0];
         let cell = func.params[0].ty.clone();
         func.name = "clear".into();
         func.return_type = cell.clone();
         func.values = vec![
             op(OpKind::Param(0), cell.clone()),
-            call("objc_make", Vec::new(), objc_handle("Element")),
+            call("make", Vec::new(), held_type),
             op(OpKind::ConstNull, string()),
             op(
                 OpKind::FieldSet {
@@ -2777,13 +2807,13 @@ mod tests {
         let ops = &clear.blocks[0].ops;
         let store = ops.iter().position(|id| *id == ValueId(3)).unwrap();
         assert!(
-            ops[store + 1..]
+            ops[if foreign { store + 1 } else { 0 }..]
                 .iter()
                 .any(|id| matches!(clear.value(*id).kind, OpKind::Release(ValueId(1)))),
             "the native local is actually released after the last null store"
         );
         let refill = &program.funcs[1];
-        assert!(
+        assert_eq!(
             refill.blocks[0].ops.iter().any(|id| matches!(
                 refill.value(*id).kind,
                 OpKind::FieldGet {
@@ -2791,6 +2821,7 @@ mod tests {
                     field: 0
                 }
             )),
+            foreign,
             "refill must keep its old-value release after clear's native exit cleanup can re-enter"
         );
     }
