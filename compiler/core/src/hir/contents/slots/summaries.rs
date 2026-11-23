@@ -1,5 +1,7 @@
-use super::*;
+use super::{Analysis, Returned, Slot, freshness};
+use crate::hir::{self, Func, Layout, OpKind, own::reference_fields};
 use crate::hir::{Program, Terminator};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// One snapshot of the interprocedural slot contracts, consumed before counts
 /// are inserted. Return guarantees are unconditional on incoming slot facts;
@@ -90,13 +92,13 @@ impl<'a> Calls<'a> {
     }
 }
 
-pub(in crate::hir) fn summarize(
+fn return_contracts(
     program: &Program,
     layouts: &[Layout],
     harmless: &FxHashSet<String>,
-) -> Summaries {
-    let calls = Calls::of(program);
-    let mut result = Summaries::default();
+    calls: &Calls<'_>,
+) -> Returned {
+    let mut returned = Returned::default();
     let empty = FxHashSet::default();
     // Least fixpoint, bottom-up: at most one insertion per function/return
     // field. A recursive return alone cannot manufacture a null guarantee.
@@ -113,9 +115,9 @@ pub(in crate::hir) fn summarize(
             ) {
                 continue;
             }
-            let fields = freshness(func, layouts, harmless, &empty, &result.returned)
+            let fields = freshness(func, layouts, harmless, &empty, &returned)
                 .returned_fields(func, layouts);
-            let previous = result.returned.entry(func.name.clone()).or_default();
+            let previous = returned.entry(func.name.clone()).or_default();
             if fields == *previous {
                 continue;
             }
@@ -129,6 +131,19 @@ pub(in crate::hir) fn summarize(
         }
     }
 
+    returned
+}
+
+pub(in crate::hir) fn summarize(
+    program: &Program,
+    layouts: &[Layout],
+    harmless: &FxHashSet<String>,
+) -> Summaries {
+    let calls = Calls::of(program);
+    let mut result = Summaries {
+        returned: return_contracts(program, layouts, harmless, &calls),
+        parameters: FxHashMap::default(),
+    };
     let direct_only = invoked_only_directly(program, layouts);
     for func in &program.funcs {
         let mut fields = FxHashSet::default();
@@ -192,22 +207,19 @@ pub(in crate::hir) fn summarize(
                         args,
                         ..
                     } = kind
+                        && let Some(fields) = result.parameters.get_mut(name)
                     {
-                        if let Some(fields) = result.parameters.get_mut(name) {
-                            let old_len = fields.len();
-                            fields.retain(|(slot, field)| {
-                                args.get(*slot as usize).is_some_and(|value| {
-                                    state.known_zero(*value, Slot::Field(*field))
-                                })
-                            });
-                            if fields.len() != old_len {
-                                if let Some(&callee) = calls.by_name.get(name.as_str()) {
-                                    if calls.component[callee] == component && queued.insert(callee)
-                                    {
-                                        pending.push_back(callee);
-                                    }
-                                }
-                            }
+                        let old_len = fields.len();
+                        fields.retain(|(slot, field)| {
+                            args.get(*slot as usize)
+                                .is_some_and(|value| state.known_zero(*value, Slot::Field(*field)))
+                        });
+                        if fields.len() != old_len
+                            && let Some(&callee) = calls.by_name.get(name.as_str())
+                            && calls.component[callee] == component
+                            && queued.insert(callee)
+                        {
+                            pending.push_back(callee);
                         }
                     }
                     state.observe(func, *id, kind, harmless, &result.returned);

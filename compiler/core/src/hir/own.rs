@@ -4382,16 +4382,28 @@ mod tests {
                 .collect();
             let harmless = rustc_hash::FxHashSet::default();
             let zeroed = rustc_hash::FxHashSet::default();
-            let facts =
-                super::freshness(func, &layouts, &harmless, &zeroed, &Default::default()).entering;
+            let facts = super::freshness(
+                func,
+                &layouts,
+                &harmless,
+                &zeroed,
+                &super::slots::Returned::default(),
+            )
+            .entering;
             assert!(
                 !facts[1].initializing(func, &func.values[4].kind),
                 "late written path, {count} blocks"
             );
             // One difference: the long path no longer writes the slot.
             func.blocks[count].ops.clear();
-            let facts =
-                super::freshness(func, &layouts, &harmless, &zeroed, &Default::default()).entering;
+            let facts = super::freshness(
+                func,
+                &layouts,
+                &harmless,
+                &zeroed,
+                &super::slots::Returned::default(),
+            )
+            .entering;
             assert!(
                 facts[1].initializing(func, &func.values[4].kind),
                 "untouched control, {count} blocks"

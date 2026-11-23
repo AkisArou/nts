@@ -21,7 +21,7 @@ pub(in crate::hir) struct Fresh {
     /// Objects and arrays whose slots this block still knows about.
     pub(in crate::hir) bases: rustc_hash::FxHashSet<ValueId>,
     /// Slots already written, so the second store to one is not initializing.
-    pub(in crate::hir) written: Written,
+    written: Written,
     /// Bases that have been stored somewhere, and so can be read back out.
     ///
     /// Storing `x` into `y.f` writes *`y`*'s slot and leaves `x`'s alone, so `x`
@@ -138,7 +138,7 @@ pub(in crate::hir) fn freshness(
 /// Holds no empty set of slots, so two that hold the same slots are equal, as
 /// the fixpoint that compares them needs.
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(in crate::hir) struct Written(rustc_hash::FxHashMap<ValueId, rustc_hash::FxHashSet<Slot>>);
+struct Written(rustc_hash::FxHashMap<ValueId, rustc_hash::FxHashSet<Slot>>);
 
 /// Fields and indexed elements never share a slot merely because their
 /// numeric indices happen to agree.
@@ -156,7 +156,7 @@ pub(in crate::hir) struct Analysis {
 }
 
 impl Written {
-    pub(in crate::hir) fn contains(&self, base: ValueId, slot: Slot) -> bool {
+    fn contains(&self, base: ValueId, slot: Slot) -> bool {
         self.0.get(&base).is_some_and(|slots| slots.contains(&slot))
     }
 
@@ -399,7 +399,10 @@ impl Fresh {
         }
         // A call that is not `harmless` can do both: store through what it is
         // given, and read back what somebody else stored.
-        if matches!(kind, OpKind::Call { .. } | OpKind::Suspend { .. }) {
+        if matches!(
+            kind,
+            OpKind::Call { .. } | OpKind::Suspend { .. } | OpKind::Await { .. }
+        ) {
             self.zero = Written::default();
             for value in std::mem::take(&mut self.escaped) {
                 self.bases.remove(&value);
@@ -424,11 +427,10 @@ impl Fresh {
             callee: hir::Callee::Direct(name),
             ..
         } = kind
+            && let Some(fields) = returned.get(name)
         {
-            if let Some(fields) = returned.get(name) {
-                for field in fields {
-                    self.zero.insert(value, Slot::Field(*field));
-                }
+            for field in fields {
+                self.zero.insert(value, Slot::Field(*field));
             }
         }
     }

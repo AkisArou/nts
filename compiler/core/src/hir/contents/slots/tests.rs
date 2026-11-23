@@ -1,7 +1,9 @@
-use super::*;
+use super::{Fresh, Returned, Slot, freshness};
+use crate::hir::{self, Func, OpKind, ValueId};
 use crate::hir::{Absent, Block, Callee, HirType, Op, Param, Terminator};
 use nts_diagnostics::{Location, SourceId, Span};
 use nts_semantic_schema::{Origin, TypeId};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 fn fixture() -> Func {
     let origin = Origin::source(Location {
