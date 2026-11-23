@@ -152,12 +152,14 @@ test('canonical children retain the owned bundle, while a launcher override cann
   assert.throws(()=>assertLandingEnvironment({...hostEnvironment(process.env),...memory}),/NTS_HOST_OBSERVATIONS/);
 });
 
-test('temporary admission obeys the same owned disk even when the path cannot be read on the host',t=>{
+test('temporary admission obeys the same owned disk even when the path cannot be read on the host',async t=>{
   const root=testScratch(t,'host-observations-disk'),env=ownMemory(root,{disk:{freeBytes:0,freeInodes:0}});
   const host=hostObservations(env),admission=new TemporaryAdmission({path:'/unreadable/missing',context:{kind:'standalone'},reservedBytes:1024,host,env});
-  assert.equal(admission.tryAcquire().lease,null);
+  const stop=new AbortController();let refused:boolean|undefined;
+  await assert.rejects(admission.acquire({what:'owned disk',signal:stop.signal,report:(_,snapshot)=>{refused=!snapshot.admitted;stop.abort();}}));
+  assert.equal(refused,true);
   ownMemory(root,{disk:{freeBytes:2**40,freeInodes:2**30}});
-  const attempt=admission.tryAcquire();assert.equal(attempt.snapshot.admitted,true);assert.ok(attempt.lease);attempt.lease.release();
+  const attempt=await admission.acquire({what:'owned disk',report:()=>assert.fail('free disk admits without a report')});assert.equal(attempt.snapshot.admitted,true);attempt.lease.release();
 });
 
 

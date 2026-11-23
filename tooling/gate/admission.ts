@@ -9,7 +9,7 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
 import {releaseToken,type TokenRelease} from './case-context.ts';
-import {DiskCapacity,type TemporaryDiskLease} from './disk-capacity.ts';
+import {DiskCapacity,describeDiskWait,diskHolders,type CapacitySnapshot,type DiskWaitRecord,type TemporaryDiskLease} from './disk-capacity.ts';
 
 /** The source-owned caller chooses the policy; launcher variables never do. */
 export type TemporaryAdmissionContext = { kind: "gate"; temporary: RunTemporary } | { kind: "standalone" };
@@ -17,6 +17,9 @@ export type TemporaryAdmissionSnapshot = {
   context: TemporaryAdmissionContext["kind"]; freeBytes: number;
   diskFloorBytes: number; reservedBytes: number; buildPromisesBytes:number; temporaryPromisesBytes:number; requiredFreeBytes: number; admitted: boolean;
 };
+/** How an admission waits: the request in words, its abort, and where its two
+ * reports go (first refusal and admission; by default stderr). */
+export type TemporaryWait = { what: string; signal?: AbortSignal; report?: (line: string, snapshot: TemporaryAdmissionSnapshot) => void; everyMs?: number };
 type TemporaryAdmissionOptions = {
   path: string; context: TemporaryAdmissionContext; reservedBytes: number; host?:HostObservations;capacity?:DiskCapacity;env?:NodeJS.ProcessEnv;
 };
@@ -53,14 +56,46 @@ export class TemporaryAdmission {
     }
   }
 
-  tryAcquire():{snapshot:TemporaryAdmissionSnapshot;lease:TemporaryDiskLease|null} {
+  /**
+   * **The one owner of a temporary's disk wait.** Tries until the bytes are
+   * admitted, or `signal` aborts. A refused request is recorded in the
+   * capacity's waits (DiskCapacity.beginWait) for as long as it waits, with the
+   * holders of the disk it needs, so an observer outside the process (the full
+   * check's run bound) names the wait; the record ends in every exit path. It
+   * reports once when first refused and once when admitted. Free disk admits
+   * at once, with no record and no report. A disk wait is never excused as
+   * progress: what holds the disk may never end on its own.
+   */
+  async acquire({ what, signal, report = line => process.stderr.write(line + "\n"), everyMs = 1000 }: TemporaryWait): Promise<{ snapshot: TemporaryAdmissionSnapshot; lease: TemporaryDiskLease }> {
+    signal?.throwIfAborted();
+    const host = this.#capacity.host, began = host.now();
+    let waiting: DiskWaitRecord | undefined, described = "";
+    try {
+      for (;;) {
+        const { snapshot, lease, capacity } = this.#attempt();
+        if (lease) {
+          if (waiting) report(`disk: ${what} admitted after ${Math.round((host.now() - began) / 1000)} s`, snapshot);
+          return { snapshot, lease };
+        }
+        const line = describeDiskWait({ what, bytes: this.#options.reservedBytes, freeBytes: capacity.freeBytes, floorBytes: capacity.floorBytes, holders: diskHolders(capacity) });
+        if (!waiting) {
+          waiting = this.#capacity.beginWait(what, this.#options.path, this.#options.reservedBytes, capacity, new Date(host.wallNow()).toISOString());
+          report(`disk: ${line}`, snapshot);
+        } else if (line !== described) waiting.update(capacity);
+        described = line;
+        await pause(everyMs, undefined, { signal });
+      }
+    } finally { waiting?.end(); }
+  }
+
+  #attempt():{snapshot:TemporaryAdmissionSnapshot;lease:TemporaryDiskLease|null;capacity:CapacitySnapshot} {
     this.#validate();
     const { path, context, reservedBytes } = this.#options;
     const {snapshot,lease}=this.#capacity.tryTemporary(path,reservedBytes),freeBytes=snapshot.freeBytes;
     const diskFloorBytes = TEMP_DISK_FLOOR_BYTES;
     const buildPromisesBytes=snapshot.buildReservedBytes,temporaryPromisesBytes=snapshot.temporaryReservedBytes;
     const requiredFreeBytes = diskFloorBytes + reservedBytes + buildPromisesBytes+temporaryPromisesBytes;
-    return {lease,snapshot:{context:context.kind,freeBytes,diskFloorBytes,reservedBytes,buildPromisesBytes,temporaryPromisesBytes,requiredFreeBytes,admitted:lease!==null}};
+    return {lease,capacity:snapshot,snapshot:{context:context.kind,freeBytes,diskFloorBytes,reservedBytes,buildPromisesBytes,temporaryPromisesBytes,requiredFreeBytes,admitted:lease!==null}};
   }
 }
 

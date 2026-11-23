@@ -10,6 +10,7 @@ import {homedir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {worktrees,type Git} from '../landing/git.ts';
+import {processCgroup} from '../landing/tree-users.ts';
 import {workerPresence} from '../landing/pool-presence.ts';
 import {withLock,processIdentity,LockWaitError} from '../landing/lock.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
@@ -40,6 +41,17 @@ type BuildClaims={version:1;claims:BuildClaim[]};
 export type TemporaryDiskClaim={id:string;pid:number;identity:string;path:string;bytes:number};
 type TemporaryDiskClaims={version:1;claims:TemporaryDiskClaim[]};
 export type TemporaryDiskLease=Readonly<TemporaryDiskClaim>&{release():void};
+/** What holds the disk a waiting request needs: a build's remaining promise,
+ * by its tree's root, or another temporary claim, by its path. */
+export type DiskHolder={kind:'build'|'temporary';path:string;bytes:number};
+/** A temporary request that waits for its bytes (TemporaryAdmission.acquire):
+ * its owner by birth identity and cgroup, what it is, since when, and the
+ * capacity it last saw. A record whose owner is gone has expired. */
+export type TemporaryDiskWait={id:string;pid:number;identity:string;cgroup:string;path:string;bytes:number;what:string;since:string;
+  freeBytes:number;floorBytes:number;holders:DiskHolder[]};
+type TemporaryDiskWaits={version:1;waits:TemporaryDiskWait[]};
+/** The live record of one waiting request; `end` removes it, once. */
+export type DiskWaitRecord={readonly id:string;update(snapshot:CapacitySnapshot):void;end():void};
 export type CapacitySnapshot={freeBytes:number;floorBytes:number;reservedBytes:number;buildReservedBytes:number;temporaryReservedBytes:number;availableBytes:number;
   temporaries:TemporaryDiskClaim[];
   leases:{root:string;remainingBytes:number;outputs:{name:BuildOutputName;allocatedBytes:number;remainingBytes:number;complete:boolean}[]}[]};
@@ -68,8 +80,23 @@ function poolSource(env:NodeJS.ProcessEnv):PoolCapacitySource|null {
   return {dir:join(homedir(),'.cache/nts-pool'),git:{root:fileURLToPath(new URL('../..',import.meta.url)),env}};
 }
 
+const gib=(bytes:number)=>(bytes/2**30).toFixed(1)+' GiB';
+/** What holds the disk in a snapshot, largest first. */
+export function diskHolders(snapshot:CapacitySnapshot):DiskHolder[]{
+  return [...snapshot.leases.filter(row=>row.remainingBytes>0).map(row=>({kind:'build' as const,path:row.root,bytes:row.remainingBytes})),
+    ...snapshot.temporaries.map(claim=>({kind:'temporary' as const,path:claim.path,bytes:claim.bytes}))].sort((a,b)=>b.bytes-a.bytes||a.path.localeCompare(b.path));
+}
+/** A waiting request in words: what it needs, what is free, and who holds the rest. */
+export function describeDiskWait(wait:Pick<TemporaryDiskWait,'what'|'bytes'|'freeBytes'|'floorBytes'|'holders'>):string{
+  const of=(kind:DiskHolder['kind'])=>wait.holders.filter(holder=>holder.kind===kind);
+  const listed=(kind:DiskHolder['kind'],label:string)=>{const rows=of(kind),sum=rows.reduce((total,row)=>total+row.bytes,0);
+    return gib(sum)+' '+label+(rows.length?' ('+rows.map(row=>row.path+' '+gib(row.bytes)).join(', ')+')':'');};
+  return `${wait.what} waits for ${gib(wait.bytes)} of disk above the ${gib(wait.floorBytes)} floor: ${gib(wait.freeBytes)} free, `
+    +`${listed('build','promised to builds')}, ${listed('temporary','to temporaries')}`;
+}
+
 export class DiskCapacity {
-  readonly host:HostObservations;readonly forecast:BuildForecast;readonly pool:PoolCapacitySource|null;readonly stateFile:string;readonly temporaryStateFile:string;
+  readonly host:HostObservations;readonly forecast:BuildForecast;readonly pool:PoolCapacitySource|null;readonly stateFile:string;readonly temporaryStateFile:string;readonly waitStateFile:string;
   private readonly reclamation:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};
   private readonly handed:string|undefined;
   private readonly lockWaitMs:number;
@@ -90,6 +117,8 @@ export class DiskCapacity {
     // Older build owners retain their own schema and cannot overwrite a
     // temporary claim. Both files are governed by the same capacity lock.
     this.temporaryStateFile=this.stateFile+'.temporaries.json';
+    // Waiting requests hold no bytes, so no claim reader ever sees them.
+    this.waitStateFile=this.stateFile+'.waits.json';
   }
   /** A wake hint only. Readiness always re-runs the complete capacity equation. */
   get changesFile():string{return this.stateFile+'.changed.json';}
@@ -129,6 +158,44 @@ export class DiskCapacity {
   }
   private recordTemporaries(claims:TemporaryDiskClaim[]):void{
     assertWritableState(this.temporaryStateFile,1);durableRecord(this.temporaryStateFile,{version:1,claims});
+  }
+  /** The live waiting temporary requests. The file is published whole, so a
+   * reader needs no lock; a record whose owner is proven gone has expired,
+   * and an owner that cannot be observed is a host fault (processIdentity). */
+  diskWaits():TemporaryDiskWait[]{
+    if(!existsSync(this.waitStateFile))return [];
+    const row=JSON.parse(readFileSync(this.waitStateFile,'utf8')) as TemporaryDiskWaits;
+    assertStateVersion(row,1,this.waitStateFile);
+    if(row.version!==1||!Array.isArray(row.waits))throw Error('invalid temporary disk waits: '+this.waitStateFile);
+    const bytes=(value:unknown)=>Number.isSafeInteger(value)&&(value as number)>=0;
+    for(const wait of row.waits){
+      if(!wait||typeof wait.id!=='string'||!wait.id||!Number.isSafeInteger(wait.pid)||wait.pid<=0||typeof wait.identity!=='string'||!wait.identity
+        ||typeof wait.cgroup!=='string'||!wait.cgroup.startsWith('/')||typeof wait.path!=='string'||resolve(wait.path)!==wait.path||!bytes(wait.bytes)||wait.bytes===0
+        ||typeof wait.what!=='string'||!wait.what||!Number.isFinite(Date.parse(wait.since))||!bytes(wait.freeBytes)||!bytes(wait.floorBytes)||!Array.isArray(wait.holders)
+        ||wait.holders.some(holder=>!holder||(holder.kind!=='build'&&holder.kind!=='temporary')||typeof holder.path!=='string'||!bytes(holder.bytes)))
+        throw Error('invalid temporary disk wait: '+this.waitStateFile);
+    }
+    return row.waits.filter(wait=>wait.identity===processIdentity(wait.pid));
+  }
+  /** Records that this process's temporary request of `bytes` at `path` waits,
+   * as `snapshot` refused it. Writes share the capacity lock, so concurrent
+   * waiters never lose each other's records. */
+  beginWait(what:string,path:string,bytes:number,snapshot:CapacitySnapshot,since:string):DiskWaitRecord{
+    const pid=process.pid,identity=processIdentity(pid),id=randomUUID();
+    if(!identity)throw Error('temporary disk waiter has no process birth identity');
+    const cgroup=processCgroup(pid).split('\n').find(line=>line.startsWith('0::'))?.slice(3);
+    if(!cgroup)throw Error('temporary disk waiter has no unified cgroup');
+    const of=(seen:CapacitySnapshot):TemporaryDiskWait=>({id,pid,identity,cgroup,path:resolve(path),bytes,what,since,freeBytes:seen.freeBytes,floorBytes:seen.floorBytes,holders:diskHolders(seen)});
+    // Expired records are dropped with every write.
+    const store=(next:TemporaryDiskWait|null)=>{
+      const waits=this.diskWaits().filter(wait=>wait.id!==id);
+      assertWritableState(this.waitStateFile,1);durableRecord(this.waitStateFile,{version:1,waits:next?[...waits,next]:waits});
+    };
+    this.locked(()=>store(of(snapshot)));
+    let ended=false;
+    return {id,
+      update:seen=>{if(!ended)this.locked(()=>store(of(seen)));},
+      end:()=>{if(ended)return;ended=true;this.releaseClaim(()=>store(null));}};
   }
   activeLeases():BuildLease[]{
     if(!this.pool||!existsSync(this.pool.dir))return [];

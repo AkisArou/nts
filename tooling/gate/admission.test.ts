@@ -8,11 +8,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, renameSync, symlinkSync } from "node:fs";
+import { mkdirSync, renameSync, statSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { createFeed, TemporaryAdmission } from "./admission.ts";
+import { createFeed, TemporaryAdmission, type TemporaryAdmissionSnapshot } from "./admission.ts";
 import { captureRunTemporary } from "./run-temporary.ts";
 import { createTokenPool } from "./token-pool.ts";
 import { tokenClient } from "./tokens.mjs";
@@ -21,7 +21,7 @@ import { waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 import {ownMemory} from './test-memory.ts';
 import {hostObservations} from './host-observations.ts';
-import {DiskCapacity} from './disk-capacity.ts';
+import {DiskCapacity,type TemporaryDiskLease} from './disk-capacity.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -36,7 +36,7 @@ function temporaryFixture(t: { after(fn: () => void): void }) {
   return { run, temporary, path: join(temporary.path, "capture") };
 }
 
-test("both capture contexts reserve above the temporary floor, and memory is not theirs to admit", t => {
+test("both capture contexts reserve above the temporary floor, and memory is not theirs to admit", async t => {
   const { temporary, path } = temporaryFixture(t);
   const observations=join(temporary.path,'observations');
   const setFree=(freeBytes:number)=>ownMemory(observations,{disk:{freeBytes,freeInodes:100}});
@@ -47,7 +47,7 @@ test("both capture contexts reserve above the temporary floor, and memory is not
   for(const free of [60,40.5,41]){
     setFree(free*2**30);
     for(const admission of [gate,standalone]){
-      const attempt=admission.tryAcquire();
+      const attempt=await firstAnswer(admission);
       try{
         assert.equal(attempt.snapshot.admitted,free>=41);
         assert.equal(attempt.lease!==null,free>=41);
@@ -59,7 +59,68 @@ test("both capture contexts reserve above the temporary floor, and memory is not
   }
 });
 
-test("gate policy rejects a replaced registration and outside or escaping capture roots", t => {
+/** The admission's first answer: its lease at once, or its first refusal, at which the wait is aborted. */
+async function firstAnswer(admission: TemporaryAdmission) {
+  const stop = new AbortController();
+  let refused: TemporaryAdmissionSnapshot | undefined;
+  try {
+    const admitted = await admission.acquire({ what: "test capture", signal: stop.signal, report: (_, snapshot) => { refused = snapshot; stop.abort(); } });
+    return { snapshot: admitted.snapshot, lease: admitted.lease as TemporaryDiskLease | null };
+  } catch (error) {
+    if (!refused) throw error;
+    return { snapshot: refused, lease: null };
+  }
+}
+
+test("a refused temporary waits in one recorded wait that names its holders, reports once, and ends when admitted", async t => {
+  const { temporary, path } = temporaryFixture(t);
+  const observations = join(temporary.path, "observations");
+  const setFree = (freeBytes: number) => ownMemory(observations, { disk: { freeBytes, freeInodes: 100 } });
+  const env = setFree(41 * 2 ** 30), host = hostObservations(env), capacity = new DiskCapacity({ env, host });
+  const holder = capacity.tryTemporary(join(temporary.path, "holder"), 2 ** 30);
+  assert.ok(holder.lease);
+  const admission = new TemporaryAdmission({ path, reservedBytes: 2 ** 30, host, capacity, context: { kind: "gate", temporary } });
+  const lines: string[] = [];
+  const waited = admission.acquire({ what: "test capture", everyMs: 10, report: line => lines.push(line) });
+  await waitFor("the refused request's wait record", () => capacity.diskWaits().length === 1);
+  const [wait] = capacity.diskWaits();
+  assert.equal(wait!.pid, process.pid);
+  assert.equal(wait!.what, "test capture");
+  assert.deepEqual(wait!.holders, [{ kind: "temporary", path: join(temporary.path, "holder"), bytes: 2 ** 30 }]);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0]!, /^disk: test capture waits for 1\.0 GiB of disk above the 40\.0 GiB floor: 41\.0 GiB free, 0\.0 GiB promised to builds, 1\.0 GiB to temporaries \(.*holder 1\.0 GiB\)$/);
+  holder.lease.release();
+  const admitted = await waited;
+  try {
+    assert.equal(admitted.snapshot.admitted, true);
+    assert.deepEqual(capacity.diskWaits(), [], "admission ends the wait record");
+    assert.equal(lines.length, 2);
+    assert.match(lines[1]!, /^disk: test capture admitted after \d+ s$/);
+  } finally { admitted.lease.release(); }
+});
+
+test("an aborted wait removes its record, and free disk admits with no record and no report", async t => {
+  const { temporary, path } = temporaryFixture(t);
+  const observations = join(temporary.path, "observations");
+  const setFree = (freeBytes: number) => ownMemory(observations, { disk: { freeBytes, freeInodes: 100 } });
+  const env = setFree(40.5 * 2 ** 30), host = hostObservations(env), capacity = new DiskCapacity({ env, host });
+  const admission = new TemporaryAdmission({ path, reservedBytes: 2 ** 30, host, capacity, context: { kind: "gate", temporary } });
+  const stop = new AbortController(), lines: string[] = [];
+  const waited = admission.acquire({ what: "aborted capture", signal: stop.signal, everyMs: 10, report: line => lines.push(line) });
+  await waitFor("the waiting record", () => capacity.diskWaits().length === 1);
+  stop.abort();
+  await assert.rejects(waited);
+  assert.deepEqual(capacity.diskWaits(), [], "an abort mid-wait removes the record");
+  assert.equal(lines.length, 1, "an aborted wait reports only its refusal");
+  // Control: with room for it, the request is admitted at once.
+  setFree(60 * 2 ** 30);
+  const before = statSync(capacity.waitStateFile).ino;
+  const admitted = await admission.acquire({ what: "free capture", report: line => assert.fail(`free disk reported ${line}`) });
+  try { assert.equal(admitted.snapshot.admitted, true); assert.equal(statSync(capacity.waitStateFile).ino, before, "free disk writes no wait"); }
+  finally { admitted.lease.release(); }
+});
+
+test("gate policy rejects a replaced registration and outside or escaping capture roots", async t => {
   const { run, temporary, path } = temporaryFixture(t);
   const env=ownMemory(join(run,'observations'),{disk:{freeBytes:60*2**30,freeInodes:100}}),host=hostObservations(env);
   const options = { context: { kind: "gate" as const, temporary }, reservedBytes: 2 ** 30, host,capacity:new DiskCapacity({env,host}) };
@@ -68,9 +129,9 @@ test("gate policy rejects a replaced registration and outside or escaping captur
   symlinkSync(join(run, "outside"), join(temporary.path, "link"));
   assert.throws(() => new TemporaryAdmission({ ...options, path: join(temporary.path, "link", "capture") }), /ancestor escapes/);
   const admitted = new TemporaryAdmission({ ...options, path });
-  const attempt=admitted.tryAcquire();assert.ok(attempt.lease);t.after(()=>attempt.lease?.release());
+  const attempt=await admitted.acquire({what:"test capture"});t.after(()=>attempt.lease.release());
   renameSync(temporary.path, join(run, "previous-tmp"));mkdirSync(temporary.path);
-  assert.throws(() => admitted.tryAcquire(), /temporary directory was replaced/);
+  await assert.rejects(admitted.acquire({what:"test capture"}), /temporary directory was replaced/);
   assert.throws(() => new TemporaryAdmission({ ...options, path }), /temporary directory was replaced/);
 });
 

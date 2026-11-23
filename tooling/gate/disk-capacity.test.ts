@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {existsSync,mkdirSync,readdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {join,relative} from 'node:path';
 import {DiskCapacity,coldBuildForecast,DISK_CAPACITY,DISK_BUILD_ADMISSION} from './disk-capacity.ts';
 import {completeBuild,completedBuild} from './build-completion.ts';
 import {hostObservations} from './host-observations.ts';
@@ -41,16 +41,45 @@ test('free trees promise zero; partial declared output consumes a promise; compl
   assert.ok(capacity.snapshot(root,[{root,target}]).reservedBytes>0);
 });
 
-test('temporary admission sees the same outstanding build promises',t=>{
+test('temporary admission sees the same outstanding build promises, and its wait names their holders',async t=>{
   const root=testScratch(t,'disk-admission'),target=join(root,'target');
   const env=ownMemory(join(root,'observations'),{disk:{freeBytes:47*GiB,freeInodes:100}});
   const capacity=new DiskCapacity({env,pool:null});
   capacity.activeLeases=()=>[{root,target}];
   const admission=new TemporaryAdmission({path:root,context:{kind:'standalone'},reservedBytes:GiB,host:capacity.host,capacity});
-  const {snapshot:result,lease}=admission.tryAcquire();assert.equal(lease,null);
+  const stop=new AbortController();let result:import('./admission.ts').TemporaryAdmissionSnapshot|undefined,line='';
+  await assert.rejects(admission.acquire({what:'test capture',signal:stop.signal,report:(text,snapshot)=>{result=snapshot;line=text;
+    assert.deepEqual(capacity.diskWaits().map(wait=>wait.holders),[[{kind:'build',path:root,bytes:7*GiB}]]);stop.abort();}}));
+  assert.ok(result);
   assert.equal(result.buildPromisesBytes,7*GiB);
   assert.equal(result.requiredFreeBytes,48*GiB);
   assert.equal(result.admitted,false);
+  assert.equal(line,`disk: test capture waits for 1.0 GiB of disk above the 40.0 GiB floor: 47.0 GiB free, 7.0 GiB promised to builds (${root} 7.0 GiB), 0.0 GiB to temporaries`);
+  assert.deepEqual(capacity.diskWaits(),[]);
+});
+
+test('a wait record whose owner is gone expires, a live one stays, and an unobservable owner is a host fault',t=>{
+  const root=testScratch(t,'disk-wait-owners'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:41*GiB,freeInodes:100}}),capacity=new DiskCapacity({env,pool:null});
+  const row=(id:string,pid:number,identity:string)=>({id,pid,identity,cgroup:'/fixture',path:join(root,id),bytes:GiB,what:id,since:new Date(0).toISOString(),freeBytes:41*GiB,floorBytes:40*GiB,holders:[]});
+  const live=row('live',process.pid,processIdentity(process.pid)!),reused=row('reused',process.pid,processIdentity(process.pid)+'-wrong-birth');
+  writeFileSync(capacity.waitStateFile,JSON.stringify({version:1,waits:[live,reused]}));
+  assert.deepEqual(capacity.diskWaits().map(wait=>wait.id),['live']);
+  writeFileSync(capacity.waitStateFile,JSON.stringify({version:1,waits:[{...live,holders:[{kind:'other',path:root,bytes:1}]}]}));
+  assert.throws(()=>capacity.diskWaits(),/invalid temporary disk wait/);
+  writeFileSync(capacity.waitStateFile,'{"version":2,"future":"keep"}\n');
+  assert.throws(()=>capacity.diskWaits(),/version/);
+});
+
+test('only TemporaryAdmission.acquire waits on a temporary claim: no other production module asks tryTemporary',()=>{
+  const tooling=new URL('..',import.meta.url).pathname,callers:string[]=[];
+  const walk=(dir:string)=>{for(const entry of readdirSync(dir,{withFileTypes:true})){
+    const path=join(dir,entry.name);
+    if(entry.isDirectory()){if(entry.name!=='node_modules')walk(path);continue;}
+    if(!/\.(ts|mjs|cjs|js)$/.test(entry.name)||/\.test\.|test-|fixture/.test(entry.name))continue;
+    if(/\.tryTemporary\(/.test(readFileSync(path,'utf8')))callers.push(relative(tooling,path));
+  }};
+  walk(tooling);
+  assert.deepEqual(callers,['gate/admission.ts']);
 });
 
 test('two temporary requests cannot spend the same bytes and release only their own claims',t=>{

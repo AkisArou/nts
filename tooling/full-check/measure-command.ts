@@ -19,6 +19,13 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // every wait it excuses ends when the admitted work it waits on ends, and
 // that work has its own bound.
 //
+// **A disk wait is named, never excused.** A temporary request of the run's
+// that waits for disk (admission.ts's TemporaryAdmission.acquire) is recorded
+// in the disk capacity's waits; the bound reads the record whose owner runs in
+// the run's slice, keeps it in the receipt, and a held reason says how much of
+// the stall it took and who holds the disk. What holds it, a pool tree's build
+// promise, may never end on its own, so the wait spends the stall bound.
+//
 // **The bound starts when the run's command is in its slice.** The run's
 // scope says so with a byte on READY_FD, written just before it execs the
 // command; the measurement's own setup (its slice, and the scope it asks the
@@ -48,6 +55,7 @@ import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { LEDGER_DIR, LEDGER_ENV, ledgerWait, placeForOom, PRIORITIES, processIdentity, type LedgerWait, type Priority, type ProcessIdentity } from "../gate/memory-ledger.ts";
 import { ProgressBound, progressSummary, type CpuSample, type ProgressState, type StepLifecycle } from "../gate/step-bound.ts";
 import { readRunLifecycle } from "../gate/run-lifecycle.ts";
+import { DiskCapacity, describeDiskWait, type TemporaryDiskWait } from "../gate/disk-capacity.ts";
 
 
 export const MEASUREMENT_HOLD = "measurement-hold.txt";
@@ -73,6 +81,9 @@ export type MeasurementProgress = Omit<ProgressState, "expired"> & {
   group: string;
   /** The run's ledger wait: its own request and what is queued ahead of it, or the request it yields to; and since when this observer has seen it. */
   waiting: (LedgerWait & { observed_since: string }) | null;
+  /** The run's disk wait (disk-capacity.ts) and since when this observer has seen it, and the stall it has taken; absent from an older receipt. */
+  disk?: (TemporaryDiskWait & { observed_since: string }) | null;
+  disk_stalled_s?: number;
   held: string | null;
 };
 
@@ -95,12 +106,13 @@ export function measuring(progress: MeasurementProgress): boolean {
   return now !== null && now.boot === progress.writer.boot && now.start === progress.writer.start;
 }
 
-/** The reason a run stopped at a bound records. */
-export function runBoundReason(state: ProgressState, bounds: RunBounds): string {
+/** The reason a run stopped at a bound records; with the disk wait that took `disk.stalled_s` of its stall, the holders that disk wait named. */
+export function runBoundReason(state: ProgressState, bounds: RunBounds, disk?: { wait: TemporaryDiskWait; stalled_s: number }): string {
   const why = state.expired === "cpu_s" ? `used its CPU bound of ${bounds.cpu_s} cpu-s`
     : state.expired === "lifecycle_s" ? `made no step progress for its lifecycle bound of ${bounds.lifecycle_s} s: no step ran, started or finished for ${Math.round(state.outside_s)} s of its own time`
     : `made no progress outside waits for its stall bound of ${bounds.stall_s} s`;
-  return `full check run ${why}: ${progressSummary(state)}`;
+  const named = disk && disk.stalled_s > 0 ? `; ${Math.round(disk.stalled_s)} s of its stall waiting for disk: ${describeDiskWait(disk.wait)}` : "";
+  return `full check run ${why}: ${progressSummary(state)}${named}`;
 }
 
 const positive = (value: number) => Number.isFinite(value) && value > 0;
@@ -111,7 +123,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
     throw new Error("a full-check measurement needs a run, its own slice, positive bounds and a rank");
   }
   const unit = `nts-full-check-measure-${randomUUID()}`;
-  const host = hostObservations(process.env), ledger = process.env[LEDGER_ENV] ?? LEDGER_DIR;
+  const env = process.env, host = hostObservations(env), ledger = env[LEDGER_ENV] ?? LEDGER_DIR;
   const writer = processIdentity(process.pid)!;
   const hold = (reason: string) => {
     console.error(reason);
@@ -127,6 +139,8 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
     catch (error) { console.error("full check run bound could not stop its slice:", error); }
   };
   let group = "", state: ProgressState | undefined, waiting: MeasurementProgress["waiting"] = null, written = -Infinity;
+  // The run's disk wait now, the last one seen, and the stall taken while one was seen.
+  let disk: NonNullable<MeasurementProgress["disk"]> | null = null, lastDisk: TemporaryDiskWait | null = null, diskStalled = 0;
   const limits = { stall_s: bounds.stall_s, ...(bounds.lifecycle_s === null ? {} : { lifecycle_s: bounds.lifecycle_s }),
     ...(bounds.cpu_s === null ? {} : { cpu_s: bounds.cpu_s }) };
   // Made when the run's command is in its slice: until then nothing of the run exists to measure.
@@ -135,7 +149,7 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
     if (!state) return;
     const { wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s } = state;
     const progress: MeasurementProgress = { version: 1, writer, live, updated_at: new Date(host.wallNow()).toISOString(), bounds, rank, group,
-      wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s, waiting, held };
+      wall_s, used_s, stalled_s, cpu_s, cpu_lost_s, outside_s, waited_s, waiting, disk, disk_stalled_s: diskStalled, held };
     try {
       const file = join(run, MEASUREMENT_PROGRESS);
       writeFileSync(`${file}.next`, JSON.stringify(progress) + "\n");
@@ -147,11 +161,26 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
   // The wait named now holds until the next sample. A ledger that cannot be
   // read excuses nothing.
   const wait = (): LedgerWait | null => {
-    try { const found = ledgerWait(ledger, group, rank, process.env); ledgerFailure = undefined; return found; }
+    try { const found = ledgerWait(ledger, group, rank, env); ledgerFailure = undefined; return found; }
     catch (error) {
       const failure = `full check run bound cannot read the memory ledger: ${String(error)}`;
       if (failure !== ledgerFailure) console.error(failure);
       ledgerFailure = failure;
+      return null;
+    }
+  };
+  let capacity: DiskCapacity | undefined, diskFailure: string | undefined;
+  // The waiting disk request whose owner runs in the run's slice. Unreadable
+  // waits name nothing, and excuse nothing either way.
+  const diskWait = (): TemporaryDiskWait | null => {
+    try {
+      capacity ??= new DiskCapacity({ env, host });
+      const found = capacity.diskWaits().find(row => row.cgroup === group || row.cgroup.startsWith(`${group}/`)) ?? null;
+      diskFailure = undefined; return found;
+    } catch (error) {
+      const failure = `full check run bound cannot read the disk waits: ${String(error)}`;
+      if (failure !== diskFailure) console.error(failure);
+      diskFailure = failure;
       return null;
     }
   };
@@ -163,11 +192,16 @@ async function measure(bounds: RunBounds, run: string, slice: string, rank: Prio
   };
   const sample = () => {
     if (!bound) return;
-    const now = host.now(), found = wait();
+    const now = host.now(), found = wait(), stalledBefore = state?.stalled_s ?? 0;
     state = bound.observe(now, found?.kind, cpu(), steps());
+    // Like a ledger wait, the interval belongs to the disk wait seen at its start.
+    if (disk) diskStalled += state.stalled_s - stalledBefore;
     waiting = found === null ? null
       : waiting?.kind === found.kind && waiting.id === found.id && waiting.behind?.id === found.behind?.id ? waiting : { ...found, observed_since: new Date(host.wallNow()).toISOString() };
-    if (state.expired) expire(runBoundReason(state, bounds));
+    const short = diskWait();
+    disk = short === null ? null : { ...short, observed_since: disk?.id === short.id ? disk.observed_since : new Date(host.wallNow()).toISOString() };
+    if (short) lastDisk = short;
+    if (state.expired) expire(runBoundReason(state, bounds, lastDisk ? { wait: lastDisk, stalled_s: diskStalled } : undefined));
     if (expired || now - written >= RECEIPT_MS) { receipt(!expired); written = now; }
   };
   let timer:NodeJS.Timeout|undefined,acquired=false;

@@ -77,13 +77,14 @@ const GiB=2**30;
 // `advance` moves it, so no time before the fixture's own readiness events
 // spends a bound, however slowly the machine brings the run up.
 // `path` goes ahead of the measurement's PATH, for a stubbed tool.
-function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{stall:number;lifecycle?:number},command:(run:string)=>string[],options:{slice?:string;availableKiB?:number;rank?:Priority;oomScore?:number;ownedClock?:boolean;path?:string}={}){
+function measured(t:{after(fn:()=>void|Promise<void>):void},name:string,bounds:{stall:number;lifecycle?:number},command:(run:string)=>string[],options:{slice?:string;availableKiB?:number;rank?:Priority;oomScore?:number;ownedClock?:boolean;path?:string;freeDiskBytes?:number}={}){
   const dir=newTestScratch(name),runs=join(dir,"runs"),run=join(runs,`core-${COMMIT.slice(0,12)}-${randomUUID()}`);
   mkdirSync(run,{recursive:true});
   const clockFile=join(dir,"clock");let clockMs=0;
   const setClock=()=>{writeFileSync(`${clockFile}.next`,String(clockMs));renameSync(`${clockFile}.next`,clockFile);};
   if(options.ownedClock)setClock();
   const memory=ownMemory(join(dir,"machine"),{cpu:{kind:"live"},pressure:{kind:"live"},wallClock:{kind:"live"},...(options.ownedClock?{clock:{kind:"file",file:clockFile}}:{}),
+    ...(options.freeDiskBytes===undefined?{}:{disk:{freeBytes:options.freeDiskBytes,freeInodes:100}}),
     ...(options.availableKiB===undefined?{}:{availableKiB:options.availableKiB,resident:{kind:"live"}})});
   mkdirSync(join(memory.NTS_MEMORY_LEDGER,"waiting"),{recursive:true});
   const slice=options.slice??newToolingSlice(true),unit=`nts-test-full-check-${name}-${randomUUID()}`;
@@ -138,6 +139,38 @@ test("a run of sleeping processes is held at its stall bound, with the bound and
   const progress=m.progress()!;
   assert.deepEqual([progress.live,progress.held===read.reasons["program-oracles"]],[false,true]);
   assert.ok(progress.stalled_s>=2&&progress.wall_s<20,JSON.stringify(progress));
+});
+
+// A run whose one command asks for a 1 GiB temporary through the one disk
+// wait owner, on a fixture disk of `freeGiB`; the floor is 40 GiB.
+function diskWaiter(t:{after(fn:()=>void|Promise<void>):void},name:string,freeGiB:number){
+  return measured(t,name,{stall:2},run=>[process.execPath,"--input-type=module","-e",`import {TemporaryAdmission} from ${JSON.stringify(new URL("../gate/admission.ts",import.meta.url).href)};
+const admission=new TemporaryAdmission({path:${JSON.stringify(join(run,"capture"))},context:{kind:"standalone"},reservedBytes:2**30});
+const {lease}=await admission.acquire({what:"fixture capture"});lease.release();`],{freeDiskBytes:freeGiB*GiB});
+}
+
+test("a run whose temporary waits for disk is held at its stall bound, and its reason names the wait and what holds the disk",t=>{
+  const m=diskWaiter(t,"disk-wait",40.5);
+  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
+  assert.equal(result.status,124,result.stdout+result.stderr);
+  assert.match(result.stdout+result.stderr,/disk: fixture capture waits for 1\.0 GiB of disk above the 40\.0 GiB floor: 40\.5 GiB free/,"the waiter reports its wait");
+  const held=readFileSync(join(m.run,MEASUREMENT_HOLD),"utf8").trim();
+  assert.match(held,/^full check run made no progress outside waits for its stall bound of 2 s: in \d+ s it ran [\d.]+ cpu-s, lost \d+ s to higher-ranked CPU work and stalled \d+ s; \d+ s of its stall waiting for disk: fixture capture waits for 1\.0 GiB of disk above the 40\.0 GiB floor: 40\.5 GiB free, 0\.0 GiB promised to builds, 0\.0 GiB to temporaries$/,"a disk wait is named, never excused");
+  const progress=m.progress()!;
+  assert.equal(progress.held,held);
+  assert.ok((progress.disk_stalled_s??0)>0,JSON.stringify(progress));
+  assert.equal(progress.disk?.what,"fixture capture");
+  assert.equal(progress.waited_s.memory??0,0,"a disk wait spends the stall bound");
+});
+
+test("a run whose temporary has its disk is admitted at once, with no disk wait and no hold",t=>{
+  const m=diskWaiter(t,"disk-free",60);
+  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.doesNotMatch(result.stdout+result.stderr,/disk: /,"free disk reports nothing");
+  assert.equal(existsSync(join(m.run,MEASUREMENT_HOLD)),false);
+  const progress=m.progress()!;
+  assert.deepEqual([progress.disk,progress.disk_stalled_s,progress.held],[null,0,null]);
 });
 
 test("a run outranked for CPU by a weighted spinner, but progressing, is never held, however long past its stall and lifecycle bounds it runs",t=>{

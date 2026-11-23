@@ -4338,3 +4338,32 @@ measurements are in
 The contract is in [native](../../targets/native.md#decisions),
 [node-addon](../../targets/node-addon.md#decisions) and
 [nts-config](../../reference/nts-config.md#what-every-native-library-carries).
+## A temporary's disk wait is named, never excused (11-23)
+
+Approved by the coordinator for #942. On 2026-11-21 four culprit-search probes
+of ca63c805525a were held at their stall bound, while the hold reason said
+only "made no progress outside waits". None of them started test262-llvm. The
+run-level oracle dependency capture sat in its own retry loop over a refused
+temporary disk admission. That loop was silent and was not a ledger wait.
+Records in the runs' folders show it: the probes published no step lifecycle
+event and the token pool never admitted a case. One capture call lasted the
+whole gate wall and ended held, and the last probe failed inside the disk
+capacity's worktree scan. The measurement is in kept scratch
+(`~/.cache/nts-scratch/942/cadence.txt`, SHA-256
+`0a255cbb131476d7245754cca3cc3fb9e4ad828959679501f3a7ad83d56fd2d4`). It also
+shows that when test262-llvm runs, its stall stays far below the bound, so
+per-case progress events would move no bound.
+
+`TemporaryAdmission.acquire` is now the only loop that waits for a temporary's
+disk, and its single attempt is private. While refused, it records the request
+in the disk capacity's waits file. The record holds the owner's birth identity
+and cgroup, what is asked, since when, and the holders of the disk: build
+promises by tree root and temporary claims by path, with their bytes. The
+record is published atomically under the capacity lock, expires once its owner
+is proven gone, and is removed on admission or abort. The full check's run
+bound reads the wait owned in the run's slice, keeps it in the progress
+receipt, and names it with its share of the stall in a held reason. The wait
+is not excused, because a build promise held by an idle tree is not bounded
+by any other work. Who may hold disk promises and at which rank is #981's.
+
+The contract is in [workflow](../../workflow.md#landing-the-landing-check).

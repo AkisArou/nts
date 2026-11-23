@@ -90,6 +90,7 @@ import {owedReach} from '../landing/selection.ts';
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { FULL_CHECK_RANK, pinnedGate, type Gate } from "./measure.ts";
 import { measuring, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
+import { describeDiskWait } from "../gate/disk-capacity.ts";
 import { landedTimes, landingQueue, submitTo, type LandingAnswer, type LandingQueue } from "./queue.ts";
 import { applyAt, applyRecords, recordAt, recordsMessage, runPin, type Applier, type Recorder } from "./records.ts";
 import { appliedIn, countsText, DELTA_FILE, parseDelta } from "../records/delta.ts";
@@ -1574,7 +1575,8 @@ export function measurementText(m: NonNullable<FullCheckStatus["measurement"]>):
     + `, lost ${Math.round(m.cpu_lost_s)} s to higher-ranked CPU work${waits.length ? `, waited ${waits.join(", ")}` : ""}`
     + `${!m.waiting ? "" : m.waiting.kind === "priority" ? `; it yields to ${m.waiting.what} (${m.waiting.priority}, ${m.waiting.id}), which waits on other work's memory`
       : `; its request ${m.waiting.what} (${m.waiting.id}) waits ${m.waiting.behind ? `behind ${m.waiting.behind.what} (${m.waiting.behind.priority}, ${m.waiting.behind.id})` : "for room"}`}`
-    + `${m.waiting ? ` since ${m.waiting.observed_since}${m.waited_now_s === null ? "" : `, ${minutes(m.waited_now_s)}`}` : ""}`;
+    + `${m.waiting ? ` since ${m.waiting.observed_since}${m.waited_now_s === null ? "" : `, ${minutes(m.waited_now_s)}`}` : ""}`
+    + `${m.disk ? `; ${describeDiskWait(m.disk)}, since ${m.disk.observed_since}` : ""}`;
 }
 
 /**

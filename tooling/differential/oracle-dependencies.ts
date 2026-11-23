@@ -230,12 +230,9 @@ export async function captureDependencies(capability:DependencyCapability,signal
     publish(started,{capability,started:new Date().toISOString()});
     let diskLease:TemporaryDiskLease|null=null,captureFailure:{error:unknown}|undefined;
     try{
-      let attempt=admission.tryAcquire();
-      while(!attempt.lease){
-        if(signal?.aborted)throw new ToolingInstrumentError('tooling-setup','oracle dependency capture canceled during admission');
-        await pause(1000,undefined,{signal});
-        attempt=admission.tryAcquire();
-      }
+      let attempt:Awaited<ReturnType<typeof admission.acquire>>;
+      try{attempt=await admission.acquire({what:'oracle dependency capture',...(signal?{signal}:{})});}
+      catch(error){if(signal?.aborted)throw new ToolingInstrumentError('tooling-setup','oracle dependency capture canceled during admission');throw error;}
       diskLease=attempt.lease;
       writeFileSync(join(capability.directory,'admission.json'),JSON.stringify({at:new Date().toISOString(),...attempt.snapshot,claim:{id:diskLease.id,pid:diskLease.pid,identity:diskLease.identity,path:diskLease.path,bytes:diskLease.bytes}})+'\n');
       const before=performance.now();

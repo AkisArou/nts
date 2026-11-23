@@ -360,8 +360,15 @@ were the run's reservations and requests to end, because they wait on other
 work's memory (a small request queued behind a blocked head included). A yield to a request that
 waits on the run's own memory is no wait: a hung holder would excuse itself
 for ever. Nor is a request that could never fit, which waits for memory nobody
-reserved. IO and memory pressure are not progress. The run is held when any of
-these is reached:
+reserved. IO and memory pressure are not progress. A temporary's disk wait is
+named, never excused: [`TemporaryAdmission.acquire`](../tooling/gate/admission.ts)
+is its one waiting loop. It records the request in the disk capacity's waits
+for as long as it waits, with the build promises and temporary claims that
+hold the disk, and reports its refusal and its admission once each. The bound
+reads the wait whose owner runs in the run's slice. A held reason says how
+much of the stall it took and names those holders. What holds the disk, an
+idle task tree's build promise among them, may never end on its own, so the
+wait spends the stall bound. The run is held when any of these is reached:
 
 - **Stall bound.** It has *stalled* (neither run, been runnable nor waited) for
   three times its last canonical green run's wall, at least fifteen minutes;
@@ -2854,6 +2861,13 @@ death; an absent timestamp remains explicit after forced termination.
   No wall bound remains; the live progress receipt makes an endless wait
   visible in the status
   ([log](records/notebooks/decisions-log.md#the-full-checks-run-bound-measures-progress-11-19)).
+
+- **A temporary's disk wait is named, never excused.** One owner waits
+  (`TemporaryAdmission.acquire`) and records the waiting request with the
+  holders of the disk it needs. The run bound, its receipt and its held reason
+  name it; the wait spends the stall bound, because a build promise held by an
+  idle tree never ends on its own
+  ([log](records/notebooks/decisions-log.md#a-temporarys-disk-wait-is-named-never-excused-11-23)).
 
 - **A culprit search outranks agents' work.** Its probes run at a rank of
   their own, below a landing and above agents' work, chosen by the
