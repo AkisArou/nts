@@ -1,0 +1,23 @@
+ideal 34
+allocated 18
+candidates 8
+because What the case is for is the leak check beside these numbers, and the
+because candidates: two cycles through the runtime's own promise and reaction
+because objects that only the collector can free. A frame of `plusOne`
+because suspended on `waiting` holds it in `awaited` while `waiting`'s reaction
+because holds the frame; the `then` reaction on `held` holds the closure that
+because captured `held`. Neither promise ever settles, so no reaction runs and
+because nothing cuts either cycle. Before `hir::cycles` led a promise to its
+because reactions' state, the frame and both closures were emitted acyclic,
+because nothing buffered them, and ten objects leaked a call.
+because
+because Candidates: eight, from four before the frame of `plusOne`, the `then`
+because reactions and the closures they hold became cyclic. Every one of them is
+because on a real cycle here: the waits on the settled promises are the same
+because types as the waits on the pending ones.
+because
+because Operations, thirty-four, and allocations, eighteen: **a measurement,
+because not an argument**, recorded so that a change that adds counting or
+because allocation here is seen rather than absorbed. Making a type cyclic
+because changes which releases buffer, not how many are emitted: the counts are
+because the same on the compiler before the fix.

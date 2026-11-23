@@ -1,0 +1,17 @@
+ideal 50
+allocated 16
+because The control for `a-reaction-that-holds-its-own-promise`: the same
+because waiters on promises that all settle, so every reaction runs and is
+because dropped, which cuts each cycle, and counting alone frees everything. It
+because leaks nothing on the compiler before the fix and after it.
+because
+because Its candidates are not asserted, so it agrees on both compilers. They
+because rise with the fix: the frame of `plusOne`, the `then` reactions and the
+because closures they hold are cyclic types now, since the same types do form
+because cycles while a promise is pending, so releasing one above zero buffers
+because it. That is the fix's cost where no cycle ever forms. Narrowing it
+because needs what `hir::cycles` names: a typed `awaited` slot and a model of
+because the runtime's adoption and combinator moves.
+because
+because Operations, fifty, and allocations, sixteen: **a measurement, not an
+because argument**, the same on the compiler before the fix.
