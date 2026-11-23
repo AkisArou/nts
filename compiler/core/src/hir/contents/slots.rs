@@ -1,7 +1,6 @@
 //! Slot contents at a program point. This is the shared initialization owner
 //! for fields and array elements; ownership and read initialization consume it.
 
-use crate::hir::own::reference_fields;
 use crate::hir::{self, BlockId, Func, Layout, OpKind, ValueId};
 use rustc_hash::{FxHashMap, FxHashSet};
 

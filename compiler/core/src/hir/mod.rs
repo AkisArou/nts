@@ -8467,9 +8467,9 @@ fn provide(
             if entry_decisions
                 .iter()
                 .any(|decision| decision.kind == own::EntryDecisionKind::Implementation)
-                && let Some(roots) = program.roots.clone()
+                && let Some(reachable::OwnedRoots::Entry(entries)) = program.roots.clone()
             {
-                reachable::prune(program, roots.as_roots());
+                reachable::prune(program, reachable::Roots::Entry(&entries));
             }
             let old_lengths: Vec<_> = program.funcs.iter().map(|func| func.values.len()).collect();
             let mut counted = rc::insert(program)?;

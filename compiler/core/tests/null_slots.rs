@@ -6,7 +6,7 @@ use camino::Utf8Path;
 use nts_core::hir::{self, Func, OpKind};
 use nts_frontend_ts::Frontend;
 
-fn old_field_releases(func: &Func) -> usize {
+fn old_field_releases(func: &Func, parameter: u32) -> usize {
     func.blocks
         .iter()
         .flat_map(|block| &block.ops)
@@ -14,7 +14,8 @@ fn old_field_releases(func: &Func) -> usize {
             let OpKind::Release(value) = func.value(**id).kind else {
                 return false;
             };
-            matches!(func.value(value).kind, OpKind::FieldGet { .. })
+            matches!(func.value(value).kind, OpKind::FieldGet { object, .. }
+                if matches!(func.value(object).kind, OpKind::Param(slot) if slot == parameter))
         })
         .count()
 }
@@ -46,16 +47,24 @@ fn only_a_slot_proved_null_at_every_call_loses_its_old_value_release() {
             .find(|func| func.name == name)
             .unwrap_or_else(|| panic!("{name} must remain a compiled control"))
     };
-    assert_eq!(old_field_releases(find("installClear")), 0);
+    assert_eq!(old_field_releases(find("installClear"), 0), 0);
     for name in ["installMaybe", "installAliased", "aliasParameters"] {
         assert!(
-            old_field_releases(find(name)) > 0,
+            old_field_releases(find(name), 0) > 0,
             "{name} must give the possibly occupied slot back"
         );
     }
-    let body = find("@consuming:Published#install");
+    let entry = find("Published#install");
+    let body = prepared
+        .entry_decisions
+        .iter()
+        .find(|decision| {
+            decision.kind == hir::own::EntryDecisionKind::Implementation
+                && hir::own::source_name(&decision.function) == entry.name
+        })
+        .map_or(entry, |decision| find(&decision.function));
     assert!(
-        old_field_releases(body) > 0,
+        old_field_releases(body, 1) > 0,
         "an open borrowed entry passes unknown slot contents to its body"
     );
 }
