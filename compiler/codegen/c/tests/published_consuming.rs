@@ -88,6 +88,15 @@ fn an_internal_numeric_specialization_emits_no_borrowed_adapter() {
 
 #[test]
 fn closed_towers_hands_over_every_push_at_the_memory_minimum() {
+    towers_at_the_memory_minimum(true);
+}
+
+#[test]
+fn open_towers_keeps_the_old_field_release_for_unknown_published_callers() {
+    towers_at_the_memory_minimum(false);
+}
+
+fn towers_at_the_memory_minimum(closed: bool) {
     use camino::Utf8Path;
     use nts_core::hir::{self, reachable::Roots};
     use nts_frontend_ts::Frontend;
@@ -108,7 +117,11 @@ fn closed_towers_hands_over_every_push_at_the_memory_minimum() {
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
-            roots: Roots::Entry(&entries),
+            roots: if closed {
+                Roots::Entry(&entries)
+            } else {
+                Roots::EveryExport
+            },
             provider: hir::Memory::ReferenceCounting,
             callbacks_checkpoint: false,
             ..hir::Options::new(
@@ -181,13 +194,21 @@ fn closed_towers_hands_over_every_push_at_the_memory_minimum() {
             })
             .unwrap()
     };
-    // #916: the shared body still attempts a release of old disk.next on each
-    // of 8,205 pushes. These are null stores, not the moved argument's cleanup.
-    assert_eq!(value("retains="), 3, "{output}");
-    assert_eq!(value("releases="), 8224, "{output}");
+    // Closed roots prove disk.next null at all 8,205 calls. The identical
+    // source with open roots retains its borrowed entry and cannot promise
+    // that an unknown external caller supplied an empty disk.next.
+    if closed {
+        assert_eq!(value("retains="), 3, "{output}");
+        assert_eq!(value("releases="), 19, "{output}");
+        assert_eq!(value("null-releases="), 4, "{output}");
+    } else {
+        assert!(value("releases=") >= 8224, "{output}");
+        assert_eq!(value("null-releases="), 8209, "{output}");
+    }
     assert_eq!(value("null-retains="), 3, "{output}");
-    assert_eq!(value("null-releases="), 8209, "{output}");
-    assert_eq!(value("effective-releases="), 15, "{output}");
+    if closed {
+        assert_eq!(value("effective-releases="), 15, "{output}");
+    }
     assert_eq!(value("allocated="), 15, "{output}");
     assert_eq!(value("leaked="), 0, "{output}");
     assert_eq!(value("answer="), 1, "{output}");

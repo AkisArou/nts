@@ -1,11 +1,11 @@
-ideal 8227
+ideal 22
 allocated 15
-because All 8,205 effective caller releases and their balancing retains are gone.
-because The current attempted floor is three null retains from array fill,
-because nineteen common releases, and 8,205 releases of null old disk.next
-because values when Towers#pushDisk stores top there (#916). Those old-value
-because releases are not releases of the handed-over argument. The common
-because releases are three null array-fill slots, the null initial piles slot,
-because work's root release, two array references, and twelve disk-next edges.
+because Every direct push receives a disk with next proved null: a fresh disk
+because or popDiskFrom's normal result. No old next load or release remains.
+because The attempted floor is three null retains from array fill and nineteen
+because common releases: three null array-fill slots, the null initial piles
+because slot, work's root release, two array references and twelve disk-next edges.
 because Exactly fifteen releases decrement a count, matching the array and
-because fourteen disk allocations; nothing leaks. The target after #916 is 22.
+because fourteen disk allocations. Poison and forced collection leave no leaks.
+because Open roots retain the borrowed entry and its unknown callers, so the
+because identical source keeps the 8,205 old-field null release attempts there.
