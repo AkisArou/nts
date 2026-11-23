@@ -4,7 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, OpKind, UnOp};
+use nts_core::hir::{self, EntryUnwind, OpKind, UnOp, backend::Backend};
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 
@@ -215,10 +215,7 @@ fn proved_operands_remove_executed_conversions_on_both_native_emitters() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(
-                    hir::backend::Backend::Llvm,
-                    nts_core::hir::EntryUnwind::Terminal,
-                )
+                ..hir::Options::new(hir::backend::Backend::Llvm, EntryUnwind::Terminal)
             },
         )
         .expect("prepared");

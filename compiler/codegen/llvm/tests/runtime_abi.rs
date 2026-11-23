@@ -26,7 +26,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir;
+use nts_core::hir::{self, EntryUnwind, backend::Backend};
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 
@@ -106,12 +106,7 @@ fn every_runtime_call_agrees_with_its_declaration() {
         .snapshot(&tsconfig)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(
-        &snapshot,
-        nts_core::hir::backend::Backend::Llvm,
-        nts_core::hir::EntryUnwind::Terminal,
-    )
-    .unwrap();
+    let prepared = hir::prepare(&snapshot, Backend::Llvm, EntryUnwind::Terminal).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -124,10 +119,7 @@ fn every_runtime_call_agrees_with_its_declaration() {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::new(
-                nts_core::hir::backend::Backend::Llvm,
-                nts_core::hir::EntryUnwind::Terminal,
-            )
+            ..hir::Options::new(Backend::Llvm, EntryUnwind::Terminal)
         },
     )
     .unwrap();
@@ -223,10 +215,7 @@ fn arm64_passes_an_erased_value_as_two_words() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(
-                    nts_core::hir::backend::Backend::Llvm,
-                    nts_core::hir::EntryUnwind::Terminal,
-                )
+                ..hir::Options::new(Backend::Llvm, EntryUnwind::Terminal)
             },
         )
         .unwrap();
@@ -300,12 +289,7 @@ fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
         .snapshot(&tsconfig)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(
-        &snapshot,
-        nts_core::hir::backend::Backend::Llvm,
-        nts_core::hir::EntryUnwind::Terminal,
-    )
-    .unwrap();
+    let prepared = hir::prepare(&snapshot, Backend::Llvm, EntryUnwind::Terminal).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -365,12 +349,7 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
         .snapshot(&tsconfig)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(
-        &snapshot,
-        nts_core::hir::backend::Backend::Llvm,
-        nts_core::hir::EntryUnwind::Terminal,
-    )
-    .unwrap();
+    let prepared = hir::prepare(&snapshot, Backend::Llvm, EntryUnwind::Terminal).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

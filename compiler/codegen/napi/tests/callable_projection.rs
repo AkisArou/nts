@@ -4,7 +4,7 @@
 use crate::scratch;
 
 use camino::Utf8Path;
-use nts_core::hir::{self, HirType, ManagedType};
+use nts_core::hir::{self, EntryUnwind, HirType, ManagedType, backend::Backend};
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 
@@ -51,10 +51,7 @@ fn callable_source_transport_does_not_publish_function_value_storage() {
         &snapshot,
         &hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::new(
-                nts_core::hir::backend::Backend::C,
-                nts_core::hir::EntryUnwind::Resuming,
-            )
+            ..hir::Options::new(Backend::C, EntryUnwind::Resuming)
         },
     )
     .unwrap();
