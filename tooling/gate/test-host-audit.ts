@@ -18,6 +18,7 @@ import {inspectRecordPublications,type RecordPublication} from './test-readiness
 import {auditModuleAsync,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
 import {inspectCgroupReads,cgroupReadProblems,type CgroupRead,type CgroupReadAllowance} from './cgroup-read-audit.ts';
+import {inspectProcessStatPaths,processStatPathProblems,type ProcessStatPath} from './process-stat-audit.ts';
 import {acceptedRevision,acceptedRevisionData} from './accepted-revision-data.ts';
 const CGROUP_ALLOWANCES=new URL('./cgroup-read-allowlist.json',import.meta.url);
 const ACCEPTED_CGROUP_ALLOWANCES=acceptedRevisionData(new URL('./cgroup-read-allowlist.json',import.meta.url));
@@ -94,18 +95,19 @@ export function acceptedRevisionDataProblems(facts:SourceFacts):string[]{
 /** Resolve aliases before classifying calls, including require/destructuring.
  * Embedded scripts are parsed as code too, with interpolation holes retained.
  * A path literal is conservatively a kernel read even when it is only data. */
-export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:SourceFacts,generated:GeneratedSourceFacts)=>void,rootFacts?:SourceFacts,inspectGenerated?:(facts:SourceFacts,offset:number,argv?:readonly string[])=>void):{reads:HostRead[];references:string[];cgroupReads:CgroupRead[]} {
+export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:SourceFacts,generated:GeneratedSourceFacts)=>void,rootFacts?:SourceFacts,inspectGenerated?:(facts:SourceFacts,offset:number,argv?:readonly string[])=>void):{reads:HostRead[];references:string[];cgroupReads:CgroupRead[];processStatPaths:ProcessStatPath[]} {
   const require=createRequire(import.meta.url);
   const {API}=require('typescript/sync') as typeof import('typescript/sync');
   const ast=sourceSyntax();
   const api=shared??new API(),generatedSources=new GeneratedSourceFacts(api,file),reads:HostRead[]=[],references=new Set<string>();
-  const cgroupReads:CgroupRead[]=[];
+  const cgroupReads:CgroupRead[]=[],processStatPaths:ProcessStatPath[]=[];
   function parse(text:string,offset=0,generated=false,depth=0,borrowed?:SourceFacts):void {
     const lease=!borrowed&&!generated?api.createSourceFile(file,text):undefined;
     const facts=borrowed??(generated?generatedSources.get(text):new SourceFacts(file,text,lease!.sourceFile));
     const code=(node:Node)=>facts.code(node),name=(node:Node)=>facts.ambientName(node);
     // This audit's mutation inputs are inspected source data, never launched.
     if(!(generated&&file==='tooling/gate/test-host-audit.test.ts'))cgroupReads.push(...inspectCgroupReads(facts).map(row=>({...row,line:row.line+offset})));
+    processStatPaths.push(...inspectProcessStatPaths(facts).map(row=>({...row,line:row.line+offset})));
     for(const declaration of facts.imports)if(ast.isStringLiteralLikeNode(declaration.moduleSpecifier))references.add(declaration.moduleSpecifier.text);
     const add=(kind:HostReadKind,node:Node)=>reads.push({file,line:offset+facts.line(node.pos),kind,source:code(node).replace(/\s+/g,' ').slice(0,240),generated});
     const literal=(value:string,node:Node):void=>{
@@ -154,7 +156,7 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       // Rust test fixtures must ask the TypeScript fixture owner for the packet.
       for(const [index,line] of source.split('\n').entries())if(/\.env\s*\(\s*"NTS_(?:MEMINFO|VMSTAT|HOST_OBSERVATIONS)"/.test(line))reads.push({file,line:index+1,kind:'fixture-constructor',source:line.trim(),generated:false});
     } else parse(source,0,false,0,rootFacts);
-    return {reads,references:[...references],cgroupReads};
+    return {reads,references:[...references],cgroupReads,processStatPaths};
   } finally {generatedSources.close();if(!shared)api.close();}
 }
 
@@ -257,6 +259,7 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
     }
   }
   signals.push(...cgroupReadProblems(cgroupReads,allowances,accepted));
+  signals.push(...processStatPathProblems([...sources.values()].flatMap(row=>row.processStatPaths)));
   const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
   const gitCeiling=gitDebt??(debt?EMPTY_GIT_DEBT:parseGitDebt(JSON.parse(readFileSync(join(root,GIT_DEBT_FILE),'utf8'))));
   return {files:sources.size,closures,reads,publications,gitInvocations,problems:[...signals,...testProfiles,...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditModuleAsync(root,moduleFacts,declarations).problems,...fixtureCopyProblems(root,copies),...gitInvocationProblems(gitInvocations,gitCeiling)]};

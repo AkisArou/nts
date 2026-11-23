@@ -14,7 +14,7 @@
     "environment": 3
   },
   "tooling/bench/layouts-admission.ts": {
-    "kernel": 7
+    "kernel": 6
   },
   "tooling/bench/layouts-link.ts": {
     "disk": 1
@@ -65,7 +65,7 @@
   },
   "tooling/census/worker-memory.ts": {
     "kernel": 5,
-    "clock": 3
+    "clock": 1
   },
   "tooling/census/worker-pool.ts": {
     "kernel": 2,
@@ -115,7 +115,7 @@
     "clock": 4
   },
   "tooling/conformance/jvm-failure-retention.ts": {
-    "kernel": 6
+    "kernel": 5
   },
   "tooling/conformance/jvm-verifies.ts": {
     "clock": 5,
@@ -138,7 +138,7 @@
     "environment": 1
   },
   "tooling/conformance/run.mjs": {
-    "kernel": 7
+    "kernel": 6
   },
   "tooling/conformance/types-check.mjs": {
     "environment": 1,
@@ -176,15 +176,12 @@
     "kernel": 1,
     "environment": 2
   },
-  "tooling/differential/oracle-resolution.test.ts": {
-    "kernel": 1
-  },
   "tooling/differential/oracle-resolution.ts": {
     "kernel": 3,
     "clock": 6
   },
   "tooling/differential/oracle-runtime.ts": {
-    "kernel": 2,
+    "kernel": 1,
     "clock": 2
   },
   "tooling/differential/program-oracles.ts": {
@@ -213,7 +210,7 @@
     "environment": 1
   },
   "tooling/gate/active-command.test.ts": {
-    "kernel": 4
+    "kernel": 2
   },
   "tooling/gate/admission.test.ts": {
     "clock": 2
@@ -243,7 +240,6 @@
     "environment": 1
   },
   "tooling/gate/cputime.mjs": {
-    "kernel": 1,
     "environment": 1
   },
   "tooling/gate/gate-resource.ts": {
@@ -265,14 +261,14 @@
     "kernel": 3
   },
   "tooling/gate/memory-ledger.ts": {
-    "kernel": 5,
+    "kernel": 4,
     "clock": 1
   },
   "tooling/gate/owed-range.test.ts": {
-    "kernel": 3
+    "kernel": 2
   },
   "tooling/gate/owed-range.ts": {
-    "kernel": 2,
+    "kernel": 1,
     "clock": 1
   },
   "tooling/gate/owed.mjs": {
@@ -296,10 +292,10 @@
     "kernel": 8
   },
   "tooling/gate/scopes/run-owner.test.ts": {
-    "kernel": 5
+    "kernel": 4
   },
   "tooling/gate/scopes/run-owner.ts": {
-    "kernel": 2
+    "kernel": 1
   },
   "tooling/gate/scopes/step-entry.ts": {
     "kernel": 1
@@ -307,9 +303,6 @@
   "tooling/gate/scopes/step-scope.ts": {
     "kernel": 1,
     "clock": 3
-  },
-  "tooling/gate/scopes/stop.test.ts": {
-    "kernel": 2
   },
   "tooling/gate/step-scheduling.test.ts": {
     "kernel": 4
@@ -348,7 +341,7 @@
     "environment": 1
   },
   "tooling/landing/lock.ts": {
-    "kernel": 2,
+    "kernel": 1,
     "clock": 2
   },
   "tooling/landing/pool.ts": {

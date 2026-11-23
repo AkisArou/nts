@@ -23,5 +23,6 @@ export const HOST_READ_OWNERS: Readonly<Record<string,{reason:string;kinds:reado
   'tooling/gate/cache-environment.ts':{reason:'Production account cache locations; fixture nesting copies declared names only.',kinds:[]},
   'tooling/gate/cargo.ts':{reason:'Cargo configuration discovery and before/after refusal; the declared complete cache remains shared.',kinds:['environment']},
   'tooling/gate/test-wait.ts':{reason:'Readiness barrier hang guards report an unfinished measurement, never an assertion result.',kinds:['clock']},
+  'tooling/gate/process-stat-audit.test.ts':{reason:'Process stat path strings are mutation inputs to the audit, never executed.',kinds:[],generatedKinds:['kernel']},
   'tooling/gate/test-host-audit.test.ts':{reason:'Unsafe source strings are mutation inputs to the audit, never executed.',kinds:[],generatedKinds:['disk','machine','kernel','clock','environment']},
 };
