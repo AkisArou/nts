@@ -1,11 +1,11 @@
 // A run's scratch has one authenticated lifetime, including after SIGKILL.
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {appendFileSync,closeSync,constants,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,mkdtempSync,openSync,readFileSync,readdirSync,readSync,realpathSync,renameSync,writeFileSync,writeSync} from 'node:fs';
-import {basename,dirname,join} from 'node:path';
+import {basename,dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {StringDecoder} from 'node:string_decoder';
 import {durableRecord} from './durable-record.ts';
-import {assertRunTemporary,discardRunTemporary,removable,runTemporaryImageRoots,type RunTemporary} from './run-temporary.ts';
+import {assertRunTemporary,assertRunTemporaryOpen,discardRunTemporary,removable,runTemporaryImageRoots,type RunTemporary} from './run-temporary.ts';
 import {hostObservations,HOST_OBSERVATIONS,type HostObservations} from './host-observations.ts';
 import {hostEnvironment} from './host-environment.ts';
 import {infrastructureProbe,type InfrastructureProbe} from './infrastructure-probe.ts';
@@ -42,6 +42,25 @@ const identity=(path:string):Identity=>{
 };
 function sameParent(receipt:Receipt):void{
   if(JSON.stringify(identity(receipt.parent.path))!==JSON.stringify(receipt.parent))throw Error('run temporary parent identity changed: '+receipt.run);
+}
+/** The running gate may acquire its launcher's prepared root. Older landing
+ * services mkdir tmp before entering the candidate, without creation metadata.
+ * This is an explicit handoff for this run, never historical discovery. Only
+ * the empty canonical resolution directory may precede lifetime acquisition. */
+export function adoptPreparedRunTemporary(temporary:RunTemporary,run:string,home:string):RunTemporary{
+  assertRunTemporaryOpen(run,home);assertRunTemporary(temporary,home);
+  if(temporary.creation)throw Error('run temporary already has creation authority: '+temporary.path);
+  if(temporary.path!==join(resolve(run),'tmp')||temporary.parent!==resolve(run))throw Error('prepared run temporary path differs from its run: '+temporary.path);
+  const parent=identity(temporary.parent);
+  for(const name of readdirSync(temporary.path,{encoding:'buffer'})){
+    const path=join(temporary.path,name.toString());
+    if(!name.equals(Buffer.from('oracle-resolution')))throw Error('prepared run temporary has unowned contents: '+path);
+    identity(path);
+    if(readdirSync(path).length)throw Error('prepared run temporary resolution directory is not empty: '+path);
+  }
+  assertRunTemporary(temporary,home);
+  if(JSON.stringify(identity(temporary.parent))!==JSON.stringify(parent))throw Error('prepared run temporary parent identity changed: '+run);
+  return {...temporary,creation:{token:randomUUID(),parentDev:parent.dev,parentIno:parent.ino}};
 }
 const diagnosticPath=(r:Receipt)=>join(r.run,'diagnostics-'+r.token);
 const diagnosticStagePrefix=(r:Receipt)=>'.nts-diagnostics-'+r.token+'-';

@@ -5,7 +5,10 @@ import {chmodSync,closeSync,constants,existsSync,lstatSync,mkdirSync,openSync,re
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {captureRunTemporary,createRunOracleImage} from './run-temporary.ts';
-import {closeRunTemporary,ownRunTemporary} from './run-temporary-lifetime.ts';
+import {adoptPreparedRunTemporary,closeRunTemporary,ownRunTemporary} from './run-temporary-lifetime.ts';
+import {gateEnvironment} from './canonical-environment.ts';
+import {copyModuleClosure} from './module-closure-fixture.ts';
+import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
 import {treeProcessFixture} from '../landing/tree-users-fixture.ts';
 import {hostObservations} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
@@ -25,6 +28,55 @@ function fixture(t:Parameters<typeof testScratch>[0]){
   const close=(green=false,options:Parameters<typeof closeRunTemporary>[5]={})=>closeRunTemporary(file,token,home,green,host,{log:line=>log.push(line),...options});
   return {home,run,temporary,token,file,r,env,host,log,close};
 }
+test('explicit adoption binds an empty prepared root and its canonical setup to this run',t=>{
+  for(const setup of [false,true]){
+    const home=testScratch(t,'prepared-temporary'),run=join(home,'.cache/run'),path=join(run,'tmp');
+    mkdirSync(path,{recursive:true});if(setup)mkdirSync(join(path,'oracle-resolution'));
+    const prior=captureRunTemporary(run,undefined,home);assert.equal(prior.creation,undefined);
+    const adopted=adoptPreparedRunTemporary(prior,run,home),parent=lstatSync(run);
+    assert.equal(adopted.dev,prior.dev);assert.equal(adopted.ino,prior.ino);
+    assert.equal(adopted.creation!.parentDev,parent.dev);assert.equal(adopted.creation!.parentIno,parent.ino);
+    assert.match(adopted.creation!.token,/^[a-f0-9-]{36}$/);
+  }
+});
+test('prepared adoption refuses unknown contents, resolution aliases, occupied setup and replaced identities',t=>{
+  for(const change of ['contents','alias','occupied','wrong-run','replaced'] as const){
+    const home=testScratch(t,'invalid-prepared-temporary'),run=join(home,'.cache/run'),path=join(run,'tmp');
+    mkdirSync(path,{recursive:true});const prior=captureRunTemporary(run,undefined,home);
+    if(change==='contents')writeFileSync(join(path,'historical-input.ts'),'keep');
+    if(change==='alias')symlinkSync(home,join(path,'oracle-resolution'));
+    if(change==='occupied'){mkdirSync(join(path,'oracle-resolution'));writeFileSync(join(path,'oracle-resolution/keep'),'keep');}
+    if(change==='replaced'){renameSync(path,path+'-original');mkdirSync(path);}
+    assert.throws(()=>adoptPreparedRunTemporary(prior,change==='wrong-run'?run+'-other':run,home),/unowned contents|physical directory|not empty|differs from its run|replaced/);
+    assert.equal(existsSync(path),true);
+  }
+});
+test('a candidate runner adopts the current service prepared tmp, runs a step and closes its lifetime',t=>{
+  const home=testScratch(t,'queued-temporary'),root=join(home,'repo'),gate=join(root,'tooling/gate'),run=join(home,'.cache/runs/queued');
+  copyModuleClosure(['tooling/gate/run.mjs'],root);
+  const source=fileURLToPath(new URL('./',import.meta.url));
+  const listed=spawnTest('sh',[join(source,'all.sh'),'--list'],{encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
+  writeGateFixtureScript(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  printf ran > "$NTS_GATE_RUN_DIR/step-ran"\n  printf '%s' "$NTS_GATE_ENV_CONTEXT" > "$NTS_GATE_RUN_DIR/observed-context.json"\nfi\n`);
+  // Main's pre-lifetime creator makes tmp before candidate environment setup.
+  // Keep that actual on-disk preparation: no creation record or lifetime token.
+  mkdirSync(join(run,'tmp'),{recursive:true});
+  const planned=gateEnvironment({...fixtureEnvironment(t),HOME:home},{run,owned:{NTS_GATE_STEPS:'rustfmt',CARGO_TARGET_DIR:join(root,'target'),...gateFixtureMemory(join(home,'observations'),root)}});
+  assert.equal(planned.temporary.creation,undefined);
+  assert.deepEqual(Object.keys(JSON.parse(planned.env.NTS_GATE_ENV_CONTEXT!).temporary).sort(),['dev','ino','parent','path','uid']);
+  durableRecord(join(home,'environment.json'),planned.env);
+  const unit=`nts-841-prepared-${randomUUID()}.service`;
+  t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
+  const actual=spawnTest('systemd-run',['--user','--collect','--wait','--pipe',`--unit=${unit}`,'-p','Nice=19','-p','CPUWeight=20','-p','LimitCORE=0','-p','RuntimeMaxSec=240',...systemdEnvironment(),
+    'taskset','-c','0-3,6-31',process.execPath,fileURLToPath(new URL('./run-temporary-lifetime-fixture.ts',import.meta.url)),home,'prepared-runner',join(home,'unused-ready')],{encoding:'utf8'});
+  assert.equal(actual.status,0,actual.stdout+actual.stderr);assert.equal(readFileSync(join(run,'step-ran'),'utf8'),'ran');
+  const summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8'));
+  assert.equal(summary.verdict,'green');assert.equal(summary.steps[0].verdict,'PASS');assert.equal(summary.temporary.state,'removed after green');
+  assert.equal(existsSync(join(run,'tmp')),false);assert.match(readFileSync(join(run,'temporary.log'),'utf8'),/adopted pre-lifetime launcher temporary/);
+  const observed=JSON.parse(readFileSync(join(run,'observed-context.json'),'utf8'));
+  assert.ok(observed.temporary.creation,'steps receive the adopted lifetime authority');
+  const receipt=JSON.parse(readFileSync(join(run,'temporary-owner-'+observed.temporary.creation.token+'.json'),'utf8'));
+  assert.ok(receipt.closed);assert.deepEqual(receipt.temporary.creation,observed.temporary.creation);
+});
 test('a drained green removes tmp and logs run id and allocated bytes once',t=>{
   const f=fixture(t);writeFileSync(join(f.temporary.path,'input.ts'),'input');
   const result=f.close(true);assert.equal(result.state,'removed after green');assert.equal(result.bytes,8192);assert.equal(existsSync(f.temporary.path),false);

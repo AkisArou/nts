@@ -1,5 +1,6 @@
 import {chmodSync,mkdirSync,openSync,readFileSync,readSync,watch,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {spawnSync} from 'node:child_process';
 import {captureRunTemporary,createRunOracleImage} from './run-temporary.ts';
 import {closeRunTemporary,ownRunTemporary} from './run-temporary-lifetime.ts';
 import {hostObservations} from './host-observations.ts';
@@ -10,6 +11,11 @@ runAsCommand(import.meta.url,async()=>{
   const [home,mode,ready]=process.argv.slice(2);
   if(!home||!mode||!ready)throw Error('lifetime fixture needs home, mode and readiness path');
   const env=JSON.parse(readFileSync(join(home,'environment.json'),'utf8')) as NodeJS.ProcessEnv,run=join(home,'.cache/runs',mode);
+  if(mode==='prepared-runner'){
+    const root=join(home,'repo'),child=spawnSync(process.execPath,[join(root,'tooling/gate/run.mjs')],{cwd:root,env,stdio:'inherit'});
+    if(child.error)throw child.error;
+    process.exitCode=child.status??1;return;
+  }
   const temporary=captureRunTemporary(run,undefined,home);
   const owner=ownRunTemporary(temporary,{...env,HOME:home},hostObservations(env));
   let green=false;

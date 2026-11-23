@@ -125,7 +125,7 @@ import {defaultSlots, frontendBudget} from "./budget.ts";
 import {fixedReservation} from "./reservation.ts";
 import {STEPS, stepTableProblem} from "./step-table.mjs";
 import {programOracleConsumers} from "./program-oracle-consumers.ts";
-import {ownRunTemporary} from "./run-temporary-lifetime.ts";
+import {adoptPreparedRunTemporary,ownRunTemporary} from "./run-temporary-lifetime.ts";
 import {closeNodeResolutionSession} from "../differential/oracle-resolution.ts";
 import {gateEnvironment,sealOracleRun,oracleStepEnvironment,reportEnvironment,nodeHeapOomReason} from './canonical-environment.ts';
 import {assignOwnedValues} from './environment-values.ts';
@@ -1832,7 +1832,18 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
   },
 });
 mkdirSync(RUN_DIR, { recursive: true });
+const adoptedTemporary=!normalized.temporary.creation;
+if(adoptedTemporary){
+  normalized.temporary=adoptPreparedRunTemporary(normalized.temporary,RUN_DIR,env.HOME);
+  // Creation authority is a launcher handoff, separate from oracle identity.
+  // Every child must borrow this token instead of adopting the root again.
+  env[ENVIRONMENT_CONTEXT]=JSON.stringify({...JSON.parse(env[ENVIRONMENT_CONTEXT]),temporary:normalized.temporary});
+}
 temporaryLifetime=ownRunTemporary(normalized.temporary,env,host);
+if(adoptedTemporary){
+  const line=`gate tmp: adopted pre-lifetime launcher temporary: run=${RUN_DIR} path=${normalized.temporary.path} dev=${normalized.temporary.dev} ino=${normalized.temporary.ino} parent_dev=${normalized.temporary.creation.parentDev} parent_ino=${normalized.temporary.creation.parentIno}\n`;
+  appendFileSync(join(RUN_DIR,'temporary.log'),line);process.stderr.write(line);
+}
 lifecycle = new RunLifecycleFeed(RUN_DIR);
 try{
   diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,startedAt:host.wallNow(),
