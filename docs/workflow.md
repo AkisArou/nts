@@ -1488,6 +1488,13 @@ the tooling strict checker owns the source's type checking.
   both parent directories;
   the backstop resumes an interrupted copy or publication without retaining
   partial evidence. Replaced publications refuse removal.
+  A runner handed a prepared root by a launcher without lifetime metadata
+  explicitly adopts it before arming its owner. The root must be the owned
+  physical `tmp` directly under this run, empty except for an owned, empty
+  canonical `oracle-resolution` directory. Adoption logs the run and directory
+  identities and forwards the new creation token through the canonical handoff.
+  Unknown contents, aliases and changed identities refuse adoption; no historical
+  temporary population is discovered.
   Links and sockets are never followed. Core dumps
   remain disabled. The normal owner requests backstop shutdown without waiting
   behind its own unit's stop; a closed receipt makes that later callback inert.

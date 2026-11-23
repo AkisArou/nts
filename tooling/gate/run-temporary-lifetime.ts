@@ -47,7 +47,7 @@ function sameParent(receipt:Receipt):void{
  * services mkdir tmp before entering the candidate, without creation metadata.
  * This is an explicit handoff for this run, never historical discovery. Only
  * the empty canonical resolution directory may precede lifetime acquisition. */
-export function adoptPreparedRunTemporary(temporary:RunTemporary,run:string,home:string):RunTemporary{
+export function adoptPreparedRunTemporary(temporary:RunTemporary,run:string,home:string):RunTemporary&{creation:NonNullable<RunTemporary['creation']>}{
   assertRunTemporaryOpen(run,home);assertRunTemporary(temporary,home);
   if(temporary.creation)throw Error('run temporary already has creation authority: '+temporary.path);
   if(temporary.path!==join(resolve(run),'tmp')||temporary.parent!==resolve(run))throw Error('prepared run temporary path differs from its run: '+temporary.path);

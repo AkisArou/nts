@@ -1832,16 +1832,19 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
   },
 });
 mkdirSync(RUN_DIR, { recursive: true });
-const adoptedTemporary=!normalized.temporary.creation;
+const temporaryHome=env.HOME,temporaryContext=env[ENVIRONMENT_CONTEXT];
+if(!temporaryHome)throw Error('gate temporary handoff is missing HOME');
+if(!temporaryContext)throw Error('gate temporary handoff is missing '+ENVIRONMENT_CONTEXT);
+const adoptedTemporary=normalized.temporary.creation?undefined:adoptPreparedRunTemporary(normalized.temporary,RUN_DIR,temporaryHome);
 if(adoptedTemporary){
-  normalized.temporary=adoptPreparedRunTemporary(normalized.temporary,RUN_DIR,env.HOME);
+  normalized.temporary=adoptedTemporary;
   // Creation authority is a launcher handoff, separate from oracle identity.
   // Every child must borrow this token instead of adopting the root again.
-  env[ENVIRONMENT_CONTEXT]=JSON.stringify({...JSON.parse(env[ENVIRONMENT_CONTEXT]),temporary:normalized.temporary});
+  env[ENVIRONMENT_CONTEXT]=JSON.stringify({...JSON.parse(temporaryContext),temporary:adoptedTemporary});
 }
 temporaryLifetime=ownRunTemporary(normalized.temporary,env,host);
 if(adoptedTemporary){
-  const line=`gate tmp: adopted pre-lifetime launcher temporary: run=${RUN_DIR} path=${normalized.temporary.path} dev=${normalized.temporary.dev} ino=${normalized.temporary.ino} parent_dev=${normalized.temporary.creation.parentDev} parent_ino=${normalized.temporary.creation.parentIno}\n`;
+  const line=`gate tmp: adopted pre-lifetime launcher temporary: run=${RUN_DIR} path=${adoptedTemporary.path} dev=${adoptedTemporary.dev} ino=${adoptedTemporary.ino} parent_dev=${adoptedTemporary.creation.parentDev} parent_ino=${adoptedTemporary.creation.parentIno}\n`;
   appendFileSync(join(RUN_DIR,'temporary.log'),line);process.stderr.write(line);
 }
 lifecycle = new RunLifecycleFeed(RUN_DIR);
