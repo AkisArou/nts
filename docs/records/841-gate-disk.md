@@ -362,3 +362,40 @@ Raw outputs are `~/.cache/nts-scratch/841/b/review-handoffs-v1.log`, SHA-256
 `~/.cache/nts-scratch/841/b/review-pinned-v2.log`, SHA-256
 `d690f88e6669e79fbccbf3b9b7a296b0bfa51dc959cc767ce2b688cbe6b8e8ca`
 (eight passed).
+
+The next local proof, `5d2e3859763a1a4f75e70d640d1b8c1d2addc52d`, passed
+every step except tooling in 1,048 seconds. All six repaired candidate handoffs
+passed inside the gate. A startup-priority control hit its existing 120-second
+unit bound; its assertion then hid the captured output by reading a missing
+step log. That diagnostic now preserves the output even without the log. The
+bound is unchanged. Cleanup completed and removed 511,791,104 allocated bytes,
+leaving no temporary and retaining capped red diagnostics.
+
+The coordinator requested three isolated measurements per revision before any
+bound change. Each ran in its own named, admitted unit. Command wall time
+starts after admission and includes the single selected test's setup. Main's
+source was read-only from a clean free pool tree; both sources' HEADs remained
+unchanged throughout every sample. Runs alternated, with round two reversed.
+
+| Revision | Run 1 wall, s | Run 2 wall, s | Run 3 wall, s | Result |
+| --- | ---: | ---: | ---: | --- |
+| Main `e6162a71245e04e1381d57b9a8f3443b1234fd1c` | 16.868 | 13.571 | 10.507 | All pass |
+| Slice (b) `8bc23683e3e01bac8c4a968631f25e23e77487c1` | 11.677 | 10.217 | 9.947 | All pass |
+
+Every sampled gate child used its fixture's private observation descriptor and
+ledger. All six traces captured both the dependency capture and synthetic
+priority control waiting in that private ledger. The parent pressure request
+also supplies that packet explicitly; the run's reservation and priority
+reading retain its private ledger directory. No real-queue leak was found in
+these paths, and these samples show no isolated slowdown. The coordinator
+filed the enclosing-run delay separately under #694; this slice keeps the
+120-second guard.
+
+Raw results, outputs, ledger traces and their per-file hashes are in
+`~/.cache/nts-scratch/841/b/startup-comparison-live/summary.json`, SHA-256
+`295f26302db473484870bb709cb32950b291a820e2cf1d2736ab0225155d870e`.
+The full proof's copied controls are
+`~/.cache/nts-scratch/841/b/review-here-v4-summary.json`, SHA-256
+`b135b0a1543b3fd8130181f6d288b5d46d2dc581a03aeab3d28f4d666bfcfc05`,
+and `~/.cache/nts-scratch/841/b/review-here-v4-tooling.raw.log`, SHA-256
+`01cba1814662eb15f1519651fbe72761c3bf8baca1960775d0cada2a46da4a28`.
