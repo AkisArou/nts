@@ -16,6 +16,9 @@ mod entry_abi;
 #[path = "erased_bigint.rs"]
 mod erased_bigint;
 
+#[path = "libc_named_exports.rs"]
+mod libc_named_exports;
+
 #[path = "llvm_class_exports.rs"]
 mod llvm_class_exports;
 

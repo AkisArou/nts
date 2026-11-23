@@ -253,6 +253,22 @@ int main(void) {
   visibility would require explicit export annotations in the runtime headers
   and generated public declarations
   ([log](../records/notebooks/decisions-log.md#native-pic-interposition-11-21)).
+  This governs the runtime and `program.c`; an addon's own translation unit
+  declares the program symbols it references hidden
+  ([node-addon](node-addon.md#decisions)).
+- A shared library's ELF exports are defined under one named version node,
+  its file name or soname. Unversioned, an export named like a libc function
+  (`error`) lost the library's own calls to glibc's when a host loaded libc
+  first, and took glibc's place for other objects' `error@GLIBC_2.2.5` when a
+  host linked the library first. Named, the library's references require its
+  own version and other objects' versioned references skip it; exported names
+  are unchanged. Protected visibility was rejected: it fixed the first
+  direction only, and breaks a non-PIE host taking an export's address
+  (pointer inequality under ld.bfd, `cannot preempt symbol` under lld).
+  Build flags (`-fvisibility=hidden`, `-Bsymbolic`) were rejected because
+  binding must not depend on each builder remembering them. musl's loader,
+  and bionic's before API 23, ignore version names
+  ([log](../records/notebooks/decisions-log.md#exports-named-like-libc-functions-11-23)).
 - Bundled native archives have content identity across extraction roots.
   One invocation owner supplies and verifies the source prefix maps, and
   records the virtual bundle location rather than an extraction directory.

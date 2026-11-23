@@ -7625,7 +7625,8 @@ fn link_c(
                     command.arg(format!("-Wl,--out-implib={name}.lib"));
                 }
                 if !addon {
-                    hide_all_but_the_exports(&mut command, out, wrote, format)?;
+                    let artifact = artifact_name(name, product, target);
+                    hide_all_but_the_exports(&mut command, out, wrote, format, &artifact)?;
                 }
                 name_the_library(&mut command, name, product, target, format);
             }
@@ -8749,6 +8750,7 @@ fn hide_all_but_the_exports(
     out: &Utf8Path,
     wrote: &Wrote,
     format: ObjectFormat,
+    artifact: &str,
 ) -> Result<()> {
     if format == ObjectFormat::Coff {
         // **A COFF link accepts a version script and ignores it.** Measured:
@@ -8786,8 +8788,11 @@ fn hide_all_but_the_exports(
         ));
     } else {
         let script = out.join("exports.map");
-        std::fs::write(&script, version_script(&wrote.published))
-            .with_context(|| format!("writing {script}"))?;
+        std::fs::write(
+            &script,
+            version_script(Some(&version_node(artifact)), &wrote.published),
+        )
+        .with_context(|| format!("writing {script}"))?;
         command.arg(format!(
             "-Wl,--version-script={}",
             native_paths::relative(&script, out)?
@@ -8823,17 +8828,64 @@ fn hide_all_but_the_exports(
     Ok(())
 }
 
-/// A version script naming exactly what crosses the ABI.
-fn version_script(published: &[String]) -> String {
+/// The version node a shared library's exports are defined under: the file
+/// name hosts record it by, the soname where one is given.
+///
+/// **An anonymous script leaves the exports unversioned, and an unversioned
+/// definition answers anyone's reference** (#972). A library exporting `error`
+/// lost its own calls to glibc's `error` when a host `dlopen`ed it, because
+/// libc came first in the global scope; and linked into a host it took glibc's
+/// place for every other object, since glibc's loader accepts an unversioned
+/// definition for another object's `error@GLIBC_2.2.5`. Under a named node
+/// the library's own references require `error@<node>`, which libc's
+/// definition does not satisfy, and other objects' versioned references skip
+/// the library's: both directions close, on either backend, measured with
+/// ld.bfd and lld. The names hosts link against are unchanged.
+///
+/// **That is glibc's loader.** musl's ignores version names, and so does
+/// bionic's before API 23: a library loaded there still binds its own call to
+/// an export named like a libc function by scope order, where only the C
+/// header lists rename the name, and they cover the headers the generated C
+/// includes rather than everything libc defines.
+///
+/// Spelled in the characters `ld.bfd`'s script lexer accepts in a name:
+/// `libacme-sdk.so` is a syntax error there (lld takes it). Every other
+/// character becomes `_`. That is not injective, and need not be: a reference
+/// records the file it binds to beside the version, so a node is only ever
+/// compared within its own library.
+fn version_node(artifact: &str) -> String {
+    let mut node: String = artifact
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if !node.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+        node.insert(0, '_');
+    }
+    node
+}
+
+/// A version script naming exactly what crosses the ABI, under `node`.
+///
+/// A library's surface takes its [`version_node`]. An entry point found only
+/// by name (an addon's Node-API registration, an executable's `main`) has no
+/// host linking against it, and stays anonymous.
+fn version_script(node: Option<&str>, published: &[String]) -> String {
+    let node = node.map_or_else(String::new, |node| format!("{node} "));
     // **An empty `global:` is a syntax error, not an empty set.** `ld` reads
     // `global:` immediately followed by `local:` as a malformed script and says
     // `syntax error in VERSION script` naming the `local:` line, which is not
     // where the problem is. A program whose every export lowering refused has
     // nothing to publish and still has to link.
     if published.is_empty() {
-        return String::from("{\n  local:\n    *;\n};\n");
+        return format!("{node}{{\n  local:\n    *;\n}};\n");
     }
-    let mut text = String::from("{\n  global:\n");
+    let mut text = format!("{node}{{\n  global:\n");
     for symbol in published {
         text.push_str("    ");
         text.push_str(symbol);

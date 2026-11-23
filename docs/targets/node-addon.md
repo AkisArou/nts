@@ -149,3 +149,12 @@ a parameter with workers ([Decisions](#decisions)); the refusal is not built.
 - Addons reach npm as prebuilt binaries per platform, as esbuild and swc
   ship (S-3; 10-28,
   [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- The program symbols an addon reaches are hidden by their references:
+  `addon.c` declares them inside a `#pragma GCC visibility push(hidden)`
+  region after its headers, closed before `NAPI_MODULE_INIT`. The linker takes
+  the most constraining visibility of a symbol's declarations, so the
+  program's definitions are local to the addon from either backend and every
+  call binds inside it, with no build flag. Default visibility let an export
+  named `error` call glibc's from its own wrapper. The program's names leave
+  the dynamic table; node reads only the Node-API entry points
+  ([log](../records/notebooks/decisions-log.md#exports-named-like-libc-functions-11-23)).

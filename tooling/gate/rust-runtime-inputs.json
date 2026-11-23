@@ -6089,6 +6089,66 @@
       }
     },
     {
+      "source": "compiler/codegen/napi/tests/libc_named_exports.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
       "source": "compiler/codegen/napi/tests/llvm_class_exports.rs",
       "declarations": {
         "imports": [],

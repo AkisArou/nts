@@ -139,7 +139,7 @@ pub(super) fn link(
         vec!["main".to_owned()]
     };
     let map = out.join("node-deps-exports.map");
-    std::fs::write(&map, super::version_script(&public))?;
+    std::fs::write(&map, super::version_script(None, &public))?;
     command.arg(format!(
         "-Wl,--version-script={}",
         super::native_paths::relative(&map, out)?

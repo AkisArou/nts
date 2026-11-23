@@ -2440,8 +2440,36 @@ fn preamble(program: &hir::Program) -> String {
     out.push_str(&error_class_table(program));
     out.push_str(SUPPORT);
     out.push('\n');
+    out.push_str(PROGRAM_SYMBOLS_ARE_THE_ADDONS);
     out
 }
+
+/// Everything below declares a symbol `program.c` (or `program.ll`) defines:
+/// the wrapped functions, constructors and factories, `module#init` and the
+/// value exports' globals. **They are the addon's own, and hidden says so.**
+///
+/// Declared with default visibility, each was an exported, preemptible ELF
+/// symbol, so the dynamic linker bound the addon's calls against the global
+/// scope -- where node had already loaded libc. A TypeScript export named
+/// `error` called glibc's `error(status, errnum, format, ...)` from its own
+/// wrapper, printed `node: ` and exited the process; the same function named
+/// `throwError` answered (#972). The program's own recursive calls went the
+/// same way, and LTO hid it only where it inlined them.
+///
+/// A hidden *reference* is enough: the linker gives a symbol the most
+/// constraining visibility of every declaration it merges, so the definition
+/// becomes local to the addon and every call to it binds inside, from either
+/// backend's object, with no build flag for a builder to forget. The names
+/// also leave the dynamic table, where node never looked for them: it reads
+/// only the `NAPI_MODULE_EXPORT` entry points, whose explicit default
+/// visibility the pragma does not override. COFF has no preemption (a DLL
+/// imports by module) and no use for the pragma.
+const PROGRAM_SYMBOLS_ARE_THE_ADDONS: &str =
+    "#if defined(__ELF__) || defined(__APPLE__)\n#pragma GCC visibility push(hidden)\n#endif\n";
+
+/// The entry point node looks up by name, which ends
+/// [`PROGRAM_SYMBOLS_ARE_THE_ADDONS`]'s region.
+const ENTRY_POINT: &str = "#if defined(__ELF__) || defined(__APPLE__)\n#pragma GCC visibility pop\n#endif\nNAPI_MODULE_INIT() {\n";
 
 /// Every layout that is a class, by name.
 ///
@@ -4461,7 +4489,7 @@ fn emit_with_plan<'a, 'p>(
     let (value_declarations, value_publishing) = value_export_text(program, refused, &mut manifest);
     out.push_str(&value_declarations);
 
-    out.push_str("NAPI_MODULE_INIT() {\n");
+    out.push_str(ENTRY_POINT);
     // Run the module's own top-level code before anything can call into it.
     //
     // Without this every module-scope value stays at its static initializer,

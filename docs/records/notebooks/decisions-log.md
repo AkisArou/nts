@@ -4311,3 +4311,30 @@ Rust view keeps committed bytes. Rendering and running the selection follow
 the source fence and cleanup. Independent endpoints retain separate lifetimes.
 
 The contract is in [workflow](../../workflow.md#landing-the-landing-check).
+
+## Exports named like libc functions (11-23)
+
+#972: an addon exporting `error` called glibc's `error(status, errnum, format,
+...)` from its own wrapper and recursion, and exited node. The emitted program's
+ABI-public definitions had default visibility, so on ELF each was an exported,
+preemptible symbol bound by scope order, where libc came first. A library a
+host `dlopen`ed lost its own calls the same way, and one a host linked first
+took glibc's place for every other object's `error@GLIBC_2.2.5`, because
+glibc's loader accepts an unversioned definition for a versioned reference.
+
+`addon.c` now declares the program symbols it reaches inside a hidden
+visibility region, so the linker makes them local to the addon from either
+backend. A shared library's version script names a version node, the soname
+or file name, so its own references require its own version and others'
+versioned references skip it; exported names are unchanged. Protected
+visibility was measured and rejected: it does not stop the library preempting
+others, and a non-PIE host taking an export's address gets pointer inequality
+from ld.bfd and `cannot preempt symbol` from lld. Build flags were rejected
+because the CLI's addon build was the one that lacked them. musl's loader, and
+bionic's before API 23, ignore version names; that case remains open. The
+measurements are in
+[libc-named-exports-972](../libc-named-exports-972.md).
+
+The contract is in [native](../../targets/native.md#decisions),
+[node-addon](../../targets/node-addon.md#decisions) and
+[nts-config](../../reference/nts-config.md#what-every-native-library-carries).

@@ -157,10 +157,12 @@ fn build(project: &Path, extra: &[&str]) -> Run {
     }
 }
 
-/// Function symbols the dynamic table publishes.
+/// Function symbols the dynamic table publishes, by the names hosts link
+/// against. A library's are defined under its version node (#972), which
+/// `versioned` reads.
 fn exported(artifact: &Path) -> BTreeSet<String> {
     let output = Command::new("nm")
-        .args(["-D", "--defined-only"])
+        .args(["-D", "--defined-only", "--without-symbol-versions"])
         .arg(artifact)
         .output()
         .expect("running nm");
@@ -402,6 +404,289 @@ fn a_shared_library_publishes_its_entry_and_nothing_else() {
         "the runtime's internals are public; there is no version script: {} symbols",
         symbols.len(),
     );
+}
+
+/// The corpus program whose exports are named like libc functions (#972):
+/// `error` and `exit` beside the controls `throwError` and `leave`.
+const LIBC_NAMED: &str =
+    include_str!("../../../tests/programs/an-addon-export-named-like-a-libc-function/src/main.ts");
+
+const LIBC_NAMED_PRODUCTS: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    named: library.node({ entry: "./src/main.ts", apiVersion: 8 }),
+    namedc: library.native({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
+    namedllvm: library.native({ targets: [target.linux({ backend: "llvm" })], entry: "./src/main.ts" }),
+  },
+});
+"#;
+
+/// Loads a library the way a plugin host does, after libc, and calls each
+/// export on a fraction, which takes the generic body rather than a
+/// whole-number clone.
+const DLOPEN_HOST: &str = r#"
+#include <dlfcn.h>
+#include <stdio.h>
+int main(int argc, char **argv) {
+    void *library = dlopen(argv[1], RTLD_NOW);
+    if (library == NULL) { printf("dlopen: %s\n", dlerror()); return 1; }
+    for (int at = 2; at < argc; at++) {
+        double (*call)(double) = (double (*)(double))dlsym(library, argv[at]);
+        if (call == NULL) { printf("dlsym %s: %s\n", argv[at], dlerror()); return 1; }
+        printf("%s=%g\n", argv[at], call(4.5));
+    }
+    return 0;
+}
+"#;
+
+/// Another object, built against libc, that calls glibc's `error()`.
+const OTHER_LIBRARY: &str = r#"
+#include <error.h>
+void other_reports(void) { error(0, 0, "glibc error() reached from another library"); }
+"#;
+
+/// A host linking both, the library first, as a host that names it does.
+const LINKED_HOST: &str = r#"
+#include <stdio.h>
+double throwError(double);
+void other_reports(void);
+int main(void) {
+    printf("throwError=%g\n", throwError(4.5));
+    other_reports();
+    return 0;
+}
+"#;
+
+/// #972: a product exporting `error` calls its own function, and a library
+/// exporting it does not take glibc's place for another object.
+///
+/// Before, the addon's `error` reached glibc's `error()`, which printed
+/// `node: ` and exited; a `dlopen`ed library's call did the same; and a host
+/// linking the library and another object saw that object's
+/// `error@GLIBC_2.2.5` bound to the library's unversioned `error`, so glibc's
+/// message never printed. The controls answered throughout.
+#[test]
+fn products_exporting_libc_names_call_their_own_and_leave_libcs_alone() {
+    if !cfg!(all(target_os = "linux", target_env = "gnu")) || !available() {
+        skip("Linux with glibc, node, clang and nm");
+        return;
+    }
+    let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
+    if !headers.join("node_api.h").exists() {
+        skip("node_api.h to build an addon against");
+        return;
+    }
+    let project = fixture("build-libc-named", LIBC_NAMED_PRODUCTS);
+    std::fs::remove_file(project.join("src/internal.ts")).expect("sibling");
+    std::fs::write(project.join("src/main.ts"), LIBC_NAMED).expect("entry");
+    let output = output_of(
+        Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(project.join("tsconfig.json"))
+            .env("NTS_NAPI_INCLUDE", &headers),
+    )
+    .expect("running nts build");
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    an_addon_answers_as_node_does(&project);
+
+    let hosts = project.join("hosts");
+    std::fs::create_dir_all(&hosts).expect("hosts");
+    let dlopen_host = hosts.join("dlopen-host");
+    compile_host(
+        &hosts,
+        "dlopen-host",
+        DLOPEN_HOST,
+        &["-o".as_ref(), dlopen_host.as_os_str(), "-ldl".as_ref()],
+    );
+    compile_host(
+        &hosts,
+        "other",
+        OTHER_LIBRARY,
+        &[
+            "-shared".as_ref(),
+            "-fPIC".as_ref(),
+            "-o".as_ref(),
+            hosts.join("libother.so").as_os_str(),
+        ],
+    );
+    for product in ["namedc", "namedllvm"] {
+        a_library_keeps_its_own_and_libcs_error(&project, &hosts, &dlopen_host, product);
+    }
+}
+
+fn an_addon_answers_as_node_does(project: &Path) {
+    let addon = project.join(".nts/build/named/node-api-8-x86_64/named.node");
+    let observe = "const names=['error','throwError','exit','leave'];\
+        const answer=a=>JSON.stringify(names.map(name=>[0,4,4.5,6].map(n=>a[name](n))));";
+    let loaded = Command::new("node")
+        .arg("-e")
+        .arg(format!(
+            "{observe}console.log(answer(require(process.argv[1])));"
+        ))
+        .arg(&addon)
+        .output()
+        .expect("running node");
+    let oracle = Command::new("node")
+        .args(["--no-warnings", "-e"])
+        .arg(format!(
+            "{observe}import(require('node:url').pathToFileURL(process.argv[1]).href).then(a=>console.log(answer(a)));"
+        ))
+        .arg(project.join("src/main.ts"))
+        .output()
+        .expect("running node");
+    assert!(
+        oracle.status.success(),
+        "{}",
+        String::from_utf8_lossy(&oracle.stderr)
+    );
+    assert!(
+        loaded.status.success(),
+        "the addon: {}{}",
+        String::from_utf8_lossy(&loaded.stdout),
+        String::from_utf8_lossy(&loaded.stderr),
+    );
+    assert_eq!(
+        loaded.stdout, oracle.stdout,
+        "the addon answered other than node"
+    );
+    let published = exported(&addon);
+    assert!(
+        ["error", "throwError", "exit_", "leave"]
+            .iter()
+            .all(|name| !published.contains(*name)),
+        "the addon publishes program symbols: {published:?}"
+    );
+}
+
+/// Function symbols the dynamic table publishes, with their versions.
+fn versioned(artifact: &Path) -> BTreeSet<String> {
+    let output = Command::new("nm")
+        .args(["-D", "--defined-only", "--with-symbol-versions"])
+        .arg(artifact)
+        .output()
+        .expect("running nm");
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            (fields.nth(1)? == "T").then(|| fields.next().map(str::to_owned))?
+        })
+        .collect()
+}
+
+fn compile_host(hosts: &Path, name: &str, text: &str, args: &[&std::ffi::OsStr]) {
+    let source = hosts.join(format!("{name}.c"));
+    std::fs::write(&source, text).expect("host source");
+    let built = Command::new("clang")
+        .arg(&source)
+        .args(args)
+        .output()
+        .expect("running clang");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+}
+
+/// Every check runs and every failure is reported together, so removing one
+/// mechanism shows which observations depend on it: the version node alone
+/// fails the two binding checks as well as the version check.
+fn a_library_keeps_its_own_and_libcs_error(
+    project: &Path,
+    hosts: &Path,
+    dlopen_host: &Path,
+    product: &str,
+) {
+    let directory = project.join(format!(".nts/build/{product}/linux-gnu-x86_64"));
+    let library = directory.join(format!("lib{product}.so"));
+    let mut failures = Vec::new();
+
+    // The library's own calls, from a host that loaded libc first. One host
+    // run per export, since one that reaches glibc's `error()` ends there.
+    let call = |name: &str| {
+        let ran = Command::new(dlopen_host)
+            .arg(&library)
+            .arg(name)
+            .output()
+            .expect("running the dlopen host");
+        let text = String::from_utf8_lossy(&ran.stdout).into_owned();
+        let answer = text
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{name}=")))
+            .map(str::to_owned);
+        match answer {
+            Some(answer) if ran.status.success() => Ok(answer),
+            _ => Err(format!(
+                "{name} did not answer ({}): {text}{}",
+                ran.status,
+                String::from_utf8_lossy(&ran.stderr)
+            )),
+        }
+    };
+    for (subject, control) in [("error", "throwError"), ("exit_", "leave")] {
+        match (call(subject), call(control)) {
+            (Ok(subject_answer), Ok(control_answer)) if subject_answer == control_answer => {}
+            (subject_answer, control_answer) => failures.push(format!(
+                "the dlopen host's {subject} is not its control {control}: {subject_answer:?} against {control_answer:?}"
+            )),
+        }
+    }
+
+    // Another object's call to glibc's `error()`, in a host linking both.
+    let linked_host = hosts.join(format!("linked-{product}"));
+    let search = |path: &Path| format!("-L{}", path.display());
+    compile_host(
+        hosts,
+        &format!("linked-{product}"),
+        LINKED_HOST,
+        &[
+            "-o".as_ref(),
+            linked_host.as_os_str(),
+            search(&directory).as_ref(),
+            search(hosts).as_ref(),
+            format!("-l{product}").as_ref(),
+            "-lother".as_ref(),
+            format!("-Wl,-rpath,{}:{}", directory.display(), hosts.display()).as_ref(),
+        ],
+    );
+    let ran = Command::new(&linked_host)
+        .output()
+        .expect("running the linked host");
+    if !ran.status.success()
+        || !String::from_utf8_lossy(&ran.stderr)
+            .contains("glibc error() reached from another library")
+    {
+        failures.push(format!(
+            "another object's `error` bound to the library's: {ran:?}"
+        ));
+    }
+
+    // The surface hosts link against is the names, unchanged, each defined
+    // under the library's own version node.
+    let names = ["error", "exit_", "leave", "throwError"];
+    let published = exported(&library);
+    if published != names.into_iter().map(str::to_owned).collect() {
+        failures.push(format!("the published names changed: {published:?}"));
+    }
+    let versions = versioned(&library);
+    if versions
+        != names
+            .into_iter()
+            .map(|name| format!("{name}@@lib{product}.so"))
+            .collect()
+    {
+        failures.push(format!(
+            "the exports are not under the version node: {versions:?}"
+        ));
+    }
+    assert!(failures.is_empty(), "{product}:\n{}", failures.join("\n"));
 }
 
 /// #918: GCC accepts `-c program.ll` without producing program.ll.o.
@@ -1690,7 +1975,7 @@ fn a_published_class_is_named_as_crossing_no_symbol() {
         .join(".nts/build/acme/linux-gnu-x86_64")
         .join("libacme.so");
     let listed = std::process::Command::new("nm")
-        .args(["-D", "--defined-only"])
+        .args(["-D", "--defined-only", "--without-symbol-versions"])
         .arg(&artifact)
         .output()
         .expect("nm");
@@ -5024,7 +5309,7 @@ fn assert_linux_cross_shared_exports(project: &Path, libc: &str) {
             ".nts/build/{product}/linux-{libc}-aarch64/lib{product}.so"
         ));
         let symbols = Command::new("nm")
-            .args(["-D", "--defined-only"])
+            .args(["-D", "--defined-only", "--without-symbol-versions"])
             .arg(&binary)
             .output()
             .expect("shared symbols");
@@ -5034,8 +5319,10 @@ fn assert_linux_cross_shared_exports(project: &Path, libc: &str) {
             binary.display(),
             String::from_utf8_lossy(&symbols.stderr)
         );
+        // `A` is the version node's own definition, not an export.
         let names: BTreeSet<_> = String::from_utf8_lossy(&symbols.stdout)
             .lines()
+            .filter(|line| line.split_whitespace().nth(1) != Some("A"))
             .filter_map(|line| line.split_whitespace().last().map(str::to_owned))
             .collect();
         assert_eq!(

@@ -124,6 +124,15 @@ is refused before anything is written, naming the backend it belongs to.
   Mach-O, a module-definition file on Windows. An exported class has no C
   symbol, since the boundary hands out no way to obtain one; the build names
   each such export.
+- **On ELF, one version node for the exports,** named after the library's
+  file: its `soname`, else `lib<name>.so`, with each character outside
+  `[A-Za-z0-9_.]` spelled `_`. Every export is defined as `name@@<node>`, and
+  a host linked against the library records that version as a need, so
+  renaming the file or the soname renames the node and is an ABI change, as a
+  soname change already is. Under glibc's loader the node binds the library's
+  own calls to its own definitions, and lets other objects' calls to a libc
+  function of the same name reach libc
+  ([native](../targets/native.md#decisions)).
 - **Self-initialization:** a shared or static library evaluates its module
   when it is loaded, through a constructor appended to the program itself (so
   an archive cannot drop it); an executable's `main` does it instead.
