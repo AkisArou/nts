@@ -8,6 +8,8 @@ mod summaries;
 pub(in crate::hir) use summaries::{Summaries, summarize};
 mod aliases;
 pub(in crate::hir) use aliases::Aliases;
+mod sharing;
+use sharing::Sharing;
 
 #[cfg(test)]
 mod tests;
@@ -17,6 +19,7 @@ mod tests;
 /// another possibly aliasing write or an open call kills it.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(in crate::hir) struct Fresh {
+    sharing: Sharing,
     /// Explicit slot facts do not assert freshness or a closed writer set.
     zero: Written,
     /// Objects and arrays whose slots this block still knows about.
@@ -107,7 +110,7 @@ pub(in crate::hir) fn freshness(
                 let Some(after) = &outgoing[predecessor.0 as usize] else {
                     continue;
                 };
-                let carried = after.across(&func.blocks[at].params, args);
+                let carried = after.across(&func.blocks[at].params, args, aliases);
                 merged = Some(match merged {
                     None => carried,
                     Some(other) => other.both(&carried),
@@ -227,6 +230,7 @@ impl Fresh {
         let bases = &self.bases;
         self.written.retain_bases(|base| bases.contains(base));
         self.escaped.retain(|base| self.bases.contains(base));
+        self.sharing.canonicalize(&self.bases);
     }
 
     /// What is known on entry to a block.
@@ -263,8 +267,14 @@ impl Fresh {
     /// A value the predecessor knew about is still that value in the successor
     /// -- SSA, so a name means one thing everywhere -- and on top of that, each
     /// argument hands its facts to the parameter that receives it.
-    fn across(&self, params: &[ValueId], args: &[ValueId]) -> Self {
-        let mut carried = self.clone();
+    fn across(&self, params: &[ValueId], args: &[ValueId], aliases: &Aliases) -> Self {
+        let mut carried = Self {
+            sharing: self.sharing.across(params, args, &self.bases, aliases),
+            zero: self.zero.clone(),
+            bases: self.bases.clone(),
+            written: self.written.clone(),
+            escaped: self.escaped.clone(),
+        };
         // A block parameter is re-bound on arrival, so nothing known about what
         // it held last time survives the edge. Around a back edge those facts
         // are stale by exactly one iteration, and the one that matters is
@@ -297,6 +307,7 @@ impl Fresh {
     /// yes only when the slot is a zero however the block was reached.
     fn both(&self, other: &Self) -> Self {
         Self {
+            sharing: self.sharing.union(&other.sharing),
             zero: self.zero.intersection(&other.zero),
             bases: self.bases.intersection(&other.bases).copied().collect(),
             written: self.written.union(&other.written),
@@ -342,6 +353,7 @@ impl Fresh {
         }
         match effect(kind) {
             Effect::Allocate => {
+                self.sharing.forget(value);
                 self.bases.insert(value);
                 self.escaped.remove(&value);
                 // Every slot of it is zero again. This is only observable now
@@ -412,9 +424,10 @@ impl Fresh {
                 kind,
                 OpKind::FieldSet { .. } | OpKind::ArraySet { .. } | OpKind::GlobalSet { .. }
             ) {
-                for member in aliases.members(value) {
-                    if self.bases.contains(member) {
-                        self.escaped.insert(*member);
+                for member in self.sharing.members(value) {
+                    debug_assert!(aliases.may_share(value, member));
+                    if self.bases.contains(&member) {
+                        self.escaped.insert(member);
                     }
                 }
             } else {
@@ -436,17 +449,21 @@ impl Fresh {
     fn mark_written(&mut self, aliases: &Aliases, base: ValueId, slot: Slot) {
         // A phi can still name the original allocation. This relation only
         // invalidates: a null store establishes a fact for its exact name.
-        for member in aliases.members(base) {
-            if self.bases.contains(member) {
-                self.written.insert(*member, slot);
+        for member in self.sharing.members(base) {
+            debug_assert!(aliases.may_share(base, member));
+            if self.bases.contains(&member) {
+                self.written.insert(member, slot);
             }
         }
     }
 
     fn give_up(&mut self, aliases: &Aliases, base: ValueId) {
-        for member in aliases.members(base) {
-            self.bases.remove(member);
-            self.escaped.remove(member);
+        let members = self.sharing.take(base);
+        let single = members.is_none().then_some(base);
+        for member in members.into_iter().flatten().chain(single) {
+            debug_assert!(aliases.may_share(base, member));
+            self.bases.remove(&member);
+            self.escaped.remove(&member);
         }
     }
 
@@ -454,9 +471,12 @@ impl Fresh {
         let mut escaped = std::mem::take(&mut self.escaped);
         while let Some(base) = escaped.iter().next().copied() {
             // Visit a published component once even if it has many SSA views.
-            for member in aliases.members(base) {
-                self.bases.remove(member);
-                escaped.remove(member);
+            let members = self.sharing.take(base);
+            let single = members.is_none().then_some(base);
+            for member in members.into_iter().flatten().chain(single) {
+                debug_assert!(aliases.may_share(base, member));
+                self.bases.remove(&member);
+                escaped.remove(&member);
             }
         }
     }

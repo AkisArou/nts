@@ -1,0 +1,12 @@
+ideal 6
+allocated 1
+candidates 1
+because One difference from the phi case: alias is other, so original.next is
+because still null at its store and must not release an old reference.
+because
+because First is the only heap allocation. The original, other and replacement
+because Cells belong in the frame. First has two owners, the global and the
+because other frame Cell, so there is one retain. There are five releases:
+because two global replacements and the three frame Cells' reference fields.
+because The shared first becomes one collection candidate before its final
+because owner releases it. The poisoned, forced-collection run leaks nothing.

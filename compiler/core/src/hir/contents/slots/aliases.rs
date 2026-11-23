@@ -6,7 +6,6 @@ use crate::hir::{self, Func, ValueId};
 #[derive(Debug)]
 pub(in crate::hir) struct Aliases {
     component: Vec<usize>,
-    members: Vec<Vec<ValueId>>,
 }
 
 impl Aliases {
@@ -29,18 +28,10 @@ impl Aliases {
             }
         }
         let component = hir::strongly_connected(&edges);
-        let mut members = vec![Vec::new(); component.iter().max().map_or(0, |at| at + 1)];
-        for (at, group) in component.iter().enumerate() {
-            // HIR identities are u32; an index outside that space cannot be an
-            // operand, allocation or tracked fresh base.
-            if let Ok(id) = u32::try_from(at) {
-                members[*group].push(ValueId(id));
-            }
-        }
-        Self { component, members }
+        Self { component }
     }
 
-    pub(super) fn members(&self, value: ValueId) -> &[ValueId] {
-        &self.members[self.component[value.0 as usize]]
+    pub(super) fn may_share(&self, a: ValueId, b: ValueId) -> bool {
+        self.component[a.0 as usize] == self.component[b.0 as usize]
     }
 }

@@ -133,9 +133,9 @@ fn a_phi_rebinds_the_fact_and_drops_the_previous_iterations_value() {
     let func = fixture();
     let mut state = Fresh::default();
     observe(&mut state, &func, 3);
-    let carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    let carried = state.across(&[ValueId(5)], &[ValueId(0)], &Aliases::of(&func));
     assert!(carried.known_zero(ValueId(5), Slot::Field(0)));
-    let rebound = carried.across(&[ValueId(5)], &[ValueId(1)]);
+    let rebound = carried.across(&[ValueId(5)], &[ValueId(1)], &Aliases::of(&func));
     assert!(!rebound.known_zero(ValueId(5), Slot::Field(0)));
 }
 
@@ -170,7 +170,7 @@ fn a_store_through_a_forwarded_fresh_base_invalidates_its_original_name() {
     let func = forwarded_fresh_fixture();
     let mut state = Fresh::default();
     observe(&mut state, &func, 0);
-    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)], &Aliases::of(&func));
     assert!(carried.known_zero(ValueId(0), Slot::Field(0)));
     assert!(carried.known_zero(ValueId(5), Slot::Field(0)));
     observe(&mut carried, &func, 4);
@@ -185,7 +185,7 @@ fn allocating_again_separates_the_new_value_from_the_previous_phi_identity() {
     let func = forwarded_fresh_fixture();
     let mut state = Fresh::default();
     observe(&mut state, &func, 0);
-    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)], &Aliases::of(&func));
     // The allocation executes again in the next loop iteration. The phi still
     // names the previous object; it cannot name the object just allocated.
     observe(&mut carried, &func, 0);
@@ -193,6 +193,122 @@ fn allocating_again_separates_the_new_value_from_the_previous_phi_identity() {
     assert!(
         carried.known_zero(ValueId(0), Slot::Field(0)),
         "a write to the previous iteration's object cannot populate the new allocation"
+    );
+}
+
+fn two_phi_fixture() -> Func {
+    let mut func = forwarded_fresh_fixture();
+    func.values.push(Op {
+        kind: OpKind::BlockParam(1),
+        ty: func.value(ValueId(0)).ty.clone(),
+        origin: func.origin.clone(),
+    });
+    func.blocks[0].terminator = Terminator::Jump {
+        target: hir::BlockId(1),
+        args: vec![ValueId(0), ValueId(1)],
+    };
+    func.blocks[1].params = vec![ValueId(5), ValueId(8)];
+    func.blocks[1].terminator = Terminator::Jump {
+        target: hir::BlockId(1),
+        args: vec![ValueId(8), ValueId(5)],
+    };
+    func
+}
+
+fn field_write(object: u32) -> OpKind {
+    OpKind::FieldSet {
+        object: ValueId(object),
+        field: 0,
+        value: ValueId(1),
+    }
+}
+
+#[test]
+fn simultaneous_phi_swap_carries_the_old_identities_before_rebinding() {
+    let mut func = two_phi_fixture();
+    func.values[1].kind = OpKind::ObjectNew { frame: false };
+    let ceiling = Aliases::of(&func);
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 0);
+    observe(&mut state, &func, 1);
+    let state = state.across(
+        &[ValueId(5), ValueId(8)],
+        &[ValueId(0), ValueId(1)],
+        &ceiling,
+    );
+    let mut swapped = state.across(
+        &[ValueId(5), ValueId(8)],
+        &[ValueId(8), ValueId(5)],
+        &ceiling,
+    );
+    observe(&mut swapped, &func, 4);
+    assert!(
+        swapped.initializing(&func, &field_write(0)),
+        "the other allocation's slot stays null"
+    );
+    assert!(
+        !swapped.initializing(&func, &field_write(1)),
+        "the written original must release its old value"
+    );
+}
+
+#[test]
+fn reallocating_one_view_preserves_the_other_views_old_identity() {
+    let mut func = two_phi_fixture();
+    if let Terminator::Jump { args, .. } = &mut func.blocks[0].terminator {
+        *args = vec![ValueId(0), ValueId(0)];
+    }
+    let ceiling = Aliases::of(&func);
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 0);
+    let mut state = state.across(
+        &[ValueId(5), ValueId(8)],
+        &[ValueId(0), ValueId(0)],
+        &ceiling,
+    );
+    observe(&mut state, &func, 0);
+    observe(&mut state, &func, 4);
+    assert!(
+        state.initializing(&func, &field_write(0)),
+        "the allocation creates a new null slot"
+    );
+    assert!(
+        !state.initializing(&func, &field_write(8)),
+        "the surviving old view keeps its release"
+    );
+}
+
+#[test]
+fn a_branch_allocation_meeting_an_occupied_older_alias_keeps_its_release() {
+    let mut func = two_phi_fixture();
+    func.values[1].kind = OpKind::ObjectNew { frame: false };
+    // The join's first parameter can be either allocation.
+    func.blocks[0].terminator = Terminator::Branch {
+        cond: ValueId(6),
+        then_target: hir::BlockId(1),
+        then_args: vec![ValueId(0), ValueId(1)],
+        else_target: hir::BlockId(1),
+        else_args: vec![ValueId(1), ValueId(0)],
+    };
+    let ceiling = Aliases::of(&func);
+    let mut older = Fresh::default();
+    observe(&mut older, &func, 0);
+    older.observe(
+        &func,
+        ValueId(4),
+        &field_write(0),
+        &FxHashSet::default(),
+        &Returned::default(),
+        &ceiling,
+    );
+    let mut allocated = older.clone();
+    observe(&mut allocated, &func, 1);
+    let new_path = allocated.across(&[ValueId(5)], &[ValueId(1)], &ceiling);
+    let old_path = older.across(&[ValueId(5)], &[ValueId(0)], &ceiling);
+    let joined = new_path.both(&old_path);
+    assert!(
+        !joined.initializing(&func, &field_write(5)),
+        "the older occupied path must keep its old-value release"
     );
 }
 
@@ -206,7 +322,7 @@ fn escaping_a_forwarded_fresh_base_gives_up_its_whole_component() {
     };
     let mut state = Fresh::default();
     observe(&mut state, &func, 0);
-    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)], &Aliases::of(&func));
     observe(&mut carried, &func, 7);
     assert!(!carried.known_zero(ValueId(0), Slot::Field(0)));
 }
@@ -223,7 +339,7 @@ fn an_indexed_write_invalidates_forwarded_fresh_slots_too() {
     };
     let mut state = Fresh::default();
     observe(&mut state, &func, 0);
-    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)], &Aliases::of(&func));
     assert!(carried.known_zero(ValueId(0), Slot::Element(0)));
     observe(&mut carried, &func, 4);
     assert!(!carried.known_zero(ValueId(0), Slot::Element(0)));
