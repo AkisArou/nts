@@ -2,7 +2,7 @@
   "version": 1,
   "check": {
     "version": 1,
-    "status": "agrees",
+    "status": "disagrees",
     "counts": {
       "functions": 5,
       "expected": 5,
@@ -11,7 +11,7 @@
       "runtime_declined": 0,
       "timeouts": 0,
       "approximated": 0,
-      "disagreements": 0,
+      "disagreements": 2,
       "aborts": 0
     },
     "oracle": {
@@ -20,14 +20,23 @@
       "complete": true
     },
     "refusals": [],
-    "disagreements": [],
+    "disagreements": [
+      {
+        "compiled": "throughBaseAsAValue 0 nts: uncaught 27",
+        "node": "throughBaseAsAValue 0 bff0000000000000"
+      },
+      {
+        "compiled": "throughABaseThatCanThrowAsAValue 0 nts: uncaught 27",
+        "node": "throughABaseThatCanThrowAsAValue 0 bff0000000000000"
+      }
+    ],
     "aborts": [],
     "error": null
   },
   "run": "check",
-  "category": "agrees",
-  "nts": "agrees: 5 compared, 5 expected, 0 disagreements",
+  "category": "wrong-answer",
+  "nts": "disagrees: 5 compared, 5 expected, 2 disagreements",
   "node": null,
-  "measured_with": "f886d8f024608e70",
+  "measured_with": "bee35ab3febd5f1c",
   "source": "measured"
 }

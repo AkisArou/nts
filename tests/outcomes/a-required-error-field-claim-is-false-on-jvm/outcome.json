@@ -2,17 +2,17 @@
   "version": 1,
   "check": {
     "version": 1,
-    "status": "aborted",
+    "status": "disagrees",
     "counts": {
       "functions": 1,
       "expected": 29,
-      "compared": 16,
+      "compared": 29,
       "unavailable": 0,
-      "runtime_declined": 13,
+      "runtime_declined": 0,
       "timeouts": 0,
       "approximated": 0,
-      "disagreements": 0,
-      "aborts": 13
+      "disagreements": 13,
+      "aborts": 0
     },
     "oracle": {
       "expected": 29,
@@ -26,28 +26,67 @@
         "message": "a function returning the type parameter `T` is not supported by this lowering yet"
       }
     ],
-    "disagreements": [],
-    "aborts": [
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
-      "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null"
+    "disagreements": [
+      {
+        "compiled": "probe 12 nts: uncaught 7",
+        "node": "probe 12 4056c00000000000"
+      },
+      {
+        "compiled": "probe 13 nts: uncaught 27",
+        "node": "probe 13 4056c00000000000"
+      },
+      {
+        "compiled": "probe 14 nts: uncaught 100",
+        "node": "probe 14 4056c00000000000"
+      },
+      {
+        "compiled": "probe 15 nts: uncaught 255",
+        "node": "probe 15 4056c00000000000"
+      },
+      {
+        "compiled": "probe 16 nts: uncaught 256",
+        "node": "probe 16 4056c00000000000"
+      },
+      {
+        "compiled": "probe 17 nts: uncaught 1000",
+        "node": "probe 17 4056c00000000000"
+      },
+      {
+        "compiled": "probe 18 nts: uncaught 4096",
+        "node": "probe 18 4056c00000000000"
+      },
+      {
+        "compiled": "probe 19 nts: uncaught 65535",
+        "node": "probe 19 4056c00000000000"
+      },
+      {
+        "compiled": "probe 20 nts: uncaught 2147483647",
+        "node": "probe 20 4056c00000000000"
+      },
+      {
+        "compiled": "probe 22 nts: uncaught 2147483648",
+        "node": "probe 22 4056c00000000000"
+      },
+      {
+        "compiled": "probe 23 nts: uncaught 4294967295",
+        "node": "probe 23 4056c00000000000"
+      },
+      {
+        "compiled": "probe 24 nts: uncaught 9007199254740991",
+        "node": "probe 24 4056c00000000000"
+      },
+      {
+        "compiled": "probe 27 nts: uncaught 12345",
+        "node": "probe 27 4056c00000000000"
+      }
     ],
+    "aborts": [],
     "error": null
   },
   "run": "check",
-  "category": "aborted",
-  "nts": "the program threw rather than refusing: java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"<local1>\" is null",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 13 disagreements",
   "node": null,
-  "measured_with": "f886d8f024608e70",
+  "measured_with": "bee35ab3febd5f1c",
   "source": "measured"
 }

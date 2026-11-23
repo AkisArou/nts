@@ -2,7 +2,7 @@
   "version": 1,
   "check": {
     "version": 1,
-    "status": "agrees",
+    "status": "disagrees",
     "counts": {
       "functions": 1,
       "expected": 29,
@@ -11,7 +11,7 @@
       "runtime_declined": 0,
       "timeouts": 0,
       "approximated": 0,
-      "disagreements": 0,
+      "disagreements": 13,
       "aborts": 0
     },
     "oracle": {
@@ -20,14 +20,67 @@
       "complete": true
     },
     "refusals": [],
-    "disagreements": [],
+    "disagreements": [
+      {
+        "compiled": "probe 3 nts: uncaught RangeError: big",
+        "node": "probe 3 bff0000000000000"
+      },
+      {
+        "compiled": "probe 5 nts: uncaught RangeError: big",
+        "node": "probe 5 bff0000000000000"
+      },
+      {
+        "compiled": "probe 9 nts: uncaught RangeError: big",
+        "node": "probe 9 bff0000000000000"
+      },
+      {
+        "compiled": "probe 10 nts: uncaught RangeError: big",
+        "node": "probe 10 bff0000000000000"
+      },
+      {
+        "compiled": "probe 11 nts: uncaught RangeError: big",
+        "node": "probe 11 bff0000000000000"
+      },
+      {
+        "compiled": "probe 12 nts: uncaught RangeError: big",
+        "node": "probe 12 bff0000000000000"
+      },
+      {
+        "compiled": "probe 13 nts: uncaught RangeError: big",
+        "node": "probe 13 bff0000000000000"
+      },
+      {
+        "compiled": "probe 14 nts: uncaught RangeError: big",
+        "node": "probe 14 bff0000000000000"
+      },
+      {
+        "compiled": "probe 15 nts: uncaught RangeError: big",
+        "node": "probe 15 bff0000000000000"
+      },
+      {
+        "compiled": "probe 19 nts: uncaught RangeError: big",
+        "node": "probe 19 bff0000000000000"
+      },
+      {
+        "compiled": "probe 20 nts: uncaught RangeError: big",
+        "node": "probe 20 bff0000000000000"
+      },
+      {
+        "compiled": "probe 23 nts: uncaught RangeError: big",
+        "node": "probe 23 bff0000000000000"
+      },
+      {
+        "compiled": "probe 24 nts: uncaught RangeError: big",
+        "node": "probe 24 bff0000000000000"
+      }
+    ],
     "aborts": [],
     "error": null
   },
   "run": "check",
-  "category": "agrees",
-  "nts": "agrees: 29 compared, 29 expected, 0 disagreements",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 13 disagreements",
   "node": null,
-  "measured_with": "f886d8f024608e70",
+  "measured_with": "bee35ab3febd5f1c",
   "source": "measured"
 }
