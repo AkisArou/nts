@@ -181,6 +181,22 @@ fn a_store_through_a_forwarded_fresh_base_invalidates_its_original_name() {
 }
 
 #[test]
+fn allocating_again_separates_the_new_value_from_the_previous_phi_identity() {
+    let func = forwarded_fresh_fixture();
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 0);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    // The allocation executes again in the next loop iteration. The phi still
+    // names the previous object; it cannot name the object just allocated.
+    observe(&mut carried, &func, 0);
+    observe(&mut carried, &func, 4);
+    assert!(
+        carried.known_zero(ValueId(0), Slot::Field(0)),
+        "a write to the previous iteration's object cannot populate the new allocation"
+    );
+}
+
+#[test]
 fn escaping_a_forwarded_fresh_base_gives_up_its_whole_component() {
     let mut func = forwarded_fresh_fixture();
     func.values[7].kind = OpKind::Call {
