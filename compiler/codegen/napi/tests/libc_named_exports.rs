@@ -59,7 +59,7 @@ fn an_addon_calls_its_own_libc_named_exports_on_both_backends() {
         &snapshot,
         &hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::default()
+            ..hir::Options::new(hir::backend::Backend::C, hir::EntryUnwind::Resuming)
         },
     )
     .unwrap();
