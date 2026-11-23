@@ -1,4 +1,4 @@
-use super::{Aliases, Fresh, Returned, Slot, freshness};
+use super::{Aliases, Fresh, Inputs, Returned, Slot, freshness};
 use crate::hir::{self, Func, OpKind, ValueId};
 use crate::hir::{Absent, Block, Callee, HirType, Op, Param, Terminator};
 use nts_diagnostics::{Location, SourceId, Span};
@@ -97,7 +97,7 @@ fn observe(state: &mut Fresh, func: &Func, id: u32) {
         &func.value(id).kind,
         &FxHashSet::default(),
         &Returned::default(),
-        &Aliases::of(func),
+        &Inputs::of(func, &[], &[]),
     );
 }
 
@@ -299,7 +299,7 @@ fn a_branch_allocation_meeting_an_occupied_older_alias_keeps_its_release() {
         &field_write(0),
         &FxHashSet::default(),
         &Returned::default(),
-        &ceiling,
+        &Inputs::of(&func, &[], &[]),
     );
     let mut allocated = older.clone();
     observe(&mut allocated, &func, 1);
@@ -404,7 +404,7 @@ fn block_storage_order_does_not_make_a_conditional_store_dominate_a_return() {
         &FxHashSet::default(),
         &FxHashSet::default(),
         &Returned::default(),
-        &Aliases::of(&func),
+        &Inputs::of(&func, &[], &[]),
     );
     assert!(!analysis.entering[1].known_zero(ValueId(5), Slot::Field(0)));
     // One difference: both paths run the clear before joining.
@@ -423,7 +423,7 @@ fn block_storage_order_does_not_make_a_conditional_store_dominate_a_return() {
         &FxHashSet::default(),
         &FxHashSet::default(),
         &Returned::default(),
-        &Aliases::of(&func),
+        &Inputs::of(&func, &[], &[]),
     );
     assert!(analysis.entering[1].known_zero(ValueId(5), Slot::Field(0)));
 }
@@ -513,7 +513,7 @@ fn an_unattributable_writer_kills_the_null(kind: OpKind) {
         &func.value(id).kind,
         &FxHashSet::default(),
         &Returned::default(),
-        &Aliases::of(&func),
+        &Inputs::of(&func, &[], &[]),
     );
     assert!(!state.known_zero(ValueId(0), Slot::Field(0)));
 }
@@ -554,4 +554,103 @@ fn a_native_copy_kills_the_null() {
         destination: ValueId(1),
         source: ValueId(0),
     });
+}
+
+fn foreign_type() -> HirType {
+    HirType::NativePointer(hir::native::Pointee::Opaque(hir::native::Handle {
+        tag: "ReentrantObject".into(),
+        ancestors: Vec::new(),
+        family: hir::native::Family::GObject,
+        interface: false,
+        spelling: hir::native::Spelling::Tag,
+    }))
+}
+
+#[test]
+fn foreign_field_cleanup_keeps_a_later_old_value_release() {
+    for foreign in [false, true] {
+        let mut func = fixture();
+        let mut null = func.values[2].clone();
+        if foreign {
+            null.ty = foreign_type();
+        }
+        func.values.push(null);
+        func.values.push(Op {
+            kind: OpKind::FieldSet {
+                object: ValueId(1),
+                field: 1,
+                value: ValueId(8),
+            },
+            ty: HirType::Void,
+            origin: func.origin.clone(),
+        });
+        let mut state = Fresh::default();
+        observe(&mut state, &func, 3);
+        assert!(state.initializing(&func, &func.values[3].kind));
+        observe(&mut state, &func, 9);
+        assert_eq!(
+            state.initializing(&func, &func.values[3].kind),
+            !foreign,
+            "field 0's later store must release its old value after foreign field 1 cleanup can re-enter"
+        );
+    }
+}
+
+#[test]
+fn a_foreign_retain_before_store_invalidates_its_old_null_proof() {
+    let mut func = fixture();
+    func.values[1].ty = foreign_type();
+    func.values[4].kind = OpKind::FieldSet {
+        object: ValueId(0),
+        field: 0,
+        value: ValueId(1),
+    };
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 3);
+    assert!(state.initializing(&func, &func.values[4].kind));
+    state.before_store(ValueId(4), &Inputs::of(&func, &[], &[]));
+    assert!(!state.initializing(&func, &func.values[4].kind));
+}
+
+#[test]
+fn explicit_native_counts_destroy_null_authority() {
+    an_unattributable_writer_kills_the_null(OpKind::Retain(ValueId(1)));
+    an_unattributable_writer_kills_the_null(OpKind::Release(ValueId(1)));
+}
+
+#[test]
+fn an_erased_globals_old_type_can_reenter_when_the_new_value_is_managed() {
+    let mut func = fixture();
+    func.values.push(Op {
+        kind: OpKind::GlobalSet {
+            global: 0,
+            value: ValueId(1),
+        },
+        ty: HirType::Void,
+        origin: func.origin.clone(),
+    });
+    let globals = [hir::Global {
+        name: "hostValue".into(),
+        ty: HirType::Erased,
+        written: None,
+        constant: false,
+        initial: 0.0,
+        exported: false,
+        deferred: true,
+        origin: func.origin.clone(),
+    }];
+    let inputs = Inputs::of(&func, &[], &globals);
+    assert!(!inputs.retain(ValueId(8)));
+    assert!(inputs.cleanup(ValueId(8)));
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 3);
+    state.observe(
+        &func,
+        ValueId(8),
+        &func.values[8].kind,
+        &FxHashSet::default(),
+        &Returned::default(),
+        &inputs,
+    );
+    assert!(!state.initializing(&func, &func.values[3].kind));
 }

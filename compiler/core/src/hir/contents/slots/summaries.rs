@@ -1,4 +1,4 @@
-use super::{Aliases, Analysis, Returned, Slot, freshness};
+use super::{Analysis, Inputs, Returned, Slot, freshness};
 use crate::hir::{self, Func, Layout, OpKind, own::reference_fields};
 use crate::hir::{Program, Terminator};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -8,7 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// parameter guarantees require every reachable direct caller to vouch for them.
 #[derive(Debug, Default)]
 pub(in crate::hir) struct Summaries {
-    pub(in crate::hir) aliases: FxHashMap<String, Aliases>,
+    pub(in crate::hir) inputs: FxHashMap<String, Inputs>,
     pub(in crate::hir) returned: Returned,
     pub(in crate::hir) parameters: FxHashMap<String, FxHashSet<(u32, u32)>>,
 }
@@ -98,7 +98,7 @@ fn return_contracts(
     layouts: &[Layout],
     harmless: &FxHashSet<String>,
     calls: &Calls<'_>,
-    aliases: &FxHashMap<String, Aliases>,
+    inputs: &FxHashMap<String, Inputs>,
 ) -> Returned {
     let mut returned = Returned::default();
     let empty = FxHashSet::default();
@@ -123,7 +123,7 @@ fn return_contracts(
                 harmless,
                 &empty,
                 &returned,
-                &aliases[&func.name],
+                &inputs[&func.name],
             )
             .returned_fields(func, layouts);
             let previous = returned.entry(func.name.clone()).or_default();
@@ -179,14 +179,19 @@ pub(in crate::hir) fn summarize(
     harmless: &FxHashSet<String>,
 ) -> Summaries {
     let calls = Calls::of(program);
-    let aliases = program
+    let inputs = program
         .funcs
         .iter()
-        .map(|func| (func.name.clone(), Aliases::of(func)))
+        .map(|func| {
+            (
+                func.name.clone(),
+                Inputs::of(func, layouts, &program.globals),
+            )
+        })
         .collect();
     let mut result = Summaries {
-        returned: return_contracts(program, layouts, harmless, &calls, &aliases),
-        aliases,
+        returned: return_contracts(program, layouts, harmless, &calls, &inputs),
+        inputs,
         parameters: parameter_candidates(program, layouts),
     };
     // Greatest fixpoint, top-down: at most one removal per parameter/field.
@@ -212,7 +217,7 @@ pub(in crate::hir) fn summarize(
                 harmless,
                 &result.parameters[&func.name],
                 &result.returned,
-                &result.aliases[&func.name],
+                &result.inputs[&func.name],
             );
             for ((block, entering), reachable) in func
                 .blocks
@@ -252,7 +257,7 @@ pub(in crate::hir) fn summarize(
                         kind,
                         harmless,
                         &result.returned,
-                        &result.aliases[&func.name],
+                        &result.inputs[&func.name],
                     );
                 }
             }

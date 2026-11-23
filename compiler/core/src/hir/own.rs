@@ -737,14 +737,14 @@ pub fn analyze(
         .get(&func.name)
         .cloned()
         .unwrap_or_default();
-    let aliases = &summaries.slots.aliases[&func.name];
+    let inputs = &summaries.slots.inputs[&func.name];
     let entering = freshness(
         func,
         layouts,
         &summaries.harmless,
         &vouched,
         &summaries.slots.returned,
-        aliases,
+        inputs,
     )
     .entering;
     let (initializing, still_zero) = initializing_stores(
@@ -754,7 +754,7 @@ pub fn analyze(
         &summaries.harmless,
         &summaries.starts_zero,
         &summaries.slots.returned,
-        aliases,
+        inputs,
     );
     // A foreign counted handle a name still holds, which is an anchor for a
     // reason *no* analysis here can see. See `held_to_the_end`. Stretched
@@ -1962,7 +1962,7 @@ fn initializing_stores(
     harmless: &rustc_hash::FxHashSet<String>,
     starts_zero: &rustc_hash::FxHashSet<u32>,
     returned: &slots::Returned,
-    aliases: &slots::Aliases,
+    inputs: &slots::Inputs,
 ) -> (
     rustc_hash::FxHashSet<ValueId>,
     Vec<rustc_hash::FxHashSet<(ValueId, u32)>>,
@@ -1990,6 +1990,10 @@ fn initializing_stores(
         let mut fresh = entering.get(at).cloned().unwrap_or_default();
         for value in &block.ops {
             let kind = func.values[value.0 as usize].kind.clone();
+            fresh.before_store(*value, inputs);
+            if at == 0 && inputs.retain(*value) {
+                untouched.clear();
+            }
             if matches!(kind, OpKind::FieldSet { .. } | OpKind::ArraySet { .. })
                 && fresh.initializing(func, &kind)
             {
@@ -2009,11 +2013,16 @@ fn initializing_stores(
                         callee: super::Callee::Direct(name),
                         ..
                     } if harmless.contains(name) => {}
-                    OpKind::Call { .. } => untouched.clear(),
+                    OpKind::Call { .. } | OpKind::Retain(_) | OpKind::Release(_) => {
+                        untouched.clear()
+                    }
                     _ => {}
                 }
             }
-            fresh.observe(func, *value, &kind, harmless, returned, aliases);
+            if at == 0 && inputs.cleanup(*value) && !settled.contains(value) {
+                untouched.clear();
+            }
+            fresh.observe(func, *value, &kind, harmless, returned, inputs);
         }
         // What is still a zero where the block ends, which is where a frame
         // object's fields are given back. A field the program cleared on its
@@ -2815,6 +2824,7 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
         }) && func.values.iter().all(|op| match &op.kind {
             OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } => {
                 !counted(func, layouts, *stored)
+                    && !slots::Inputs::store_reenters(func, layouts, &op.kind)
             }
             OpKind::GlobalSet { .. } => false,
             OpKind::Call {
@@ -4310,6 +4320,18 @@ mod tests {
         }
     }
 
+    fn entry_slot_facts(func: &super::Func, layouts: &[super::Layout]) -> Vec<super::Fresh> {
+        super::freshness(
+            func,
+            layouts,
+            &rustc_hash::FxHashSet::default(),
+            &rustc_hash::FxHashSet::default(),
+            &super::slots::Returned::default(),
+            &super::slots::Inputs::of(func, layouts, &[]),
+        )
+        .entering
+    }
+
     #[test]
     fn freshness_waits_for_a_written_predecessor_beyond_1024_blocks() {
         use crate::hir::{Block, HirType, Op, OpKind, Param, Terminator, ValueId};
@@ -4384,32 +4406,14 @@ mod tests {
                     },
                 })
                 .collect();
-            let harmless = rustc_hash::FxHashSet::default();
-            let zeroed = rustc_hash::FxHashSet::default();
-            let facts = super::freshness(
-                func,
-                &layouts,
-                &harmless,
-                &zeroed,
-                &super::slots::Returned::default(),
-                &super::slots::Aliases::of(func),
-            )
-            .entering;
+            let facts = entry_slot_facts(func, &layouts);
             assert!(
                 !facts[1].initializing(func, &func.values[4].kind),
                 "late written path, {count} blocks"
             );
             // One difference: the long path no longer writes the slot.
             func.blocks[count].ops.clear();
-            let facts = super::freshness(
-                func,
-                &layouts,
-                &harmless,
-                &zeroed,
-                &super::slots::Returned::default(),
-                &super::slots::Aliases::of(func),
-            )
-            .entering;
+            let facts = entry_slot_facts(func, &layouts);
             assert!(
                 facts[1].initializing(func, &func.values[4].kind),
                 "untouched control, {count} blocks"

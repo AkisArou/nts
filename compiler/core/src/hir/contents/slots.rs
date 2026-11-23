@@ -8,6 +8,8 @@ mod summaries;
 pub(in crate::hir) use summaries::{Summaries, summarize};
 mod aliases;
 pub(in crate::hir) use aliases::Aliases;
+mod effects;
+pub(in crate::hir) use effects::Inputs;
 mod sharing;
 use sharing::Sharing;
 
@@ -16,7 +18,11 @@ mod tests;
 
 /// Zero slots of confined allocations, plus explicit null facts established
 /// by stores and call results. An explicit fact applies only at this point:
-/// another possibly aliasing write or an open call kills it.
+/// another possibly aliasing write or an open call kills it. Foreign retain
+/// and release hooks may re-enter compiled code. This includes implicit retain
+/// before a store and cleanup of its old value after it: both consume unknown
+/// call effects here. Managed releases run no user code synchronously; their
+/// finalization jobs run later.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(in crate::hir) struct Fresh {
     sharing: Sharing,
@@ -61,7 +67,7 @@ pub(in crate::hir) fn freshness(
     harmless: &rustc_hash::FxHashSet<String>,
     zeroed: &rustc_hash::FxHashSet<(u32, u32)>,
     returned: &Returned,
-    aliases: &Aliases,
+    inputs: &Inputs,
 ) -> Analysis {
     let count = func.blocks.len();
     let incoming = hir::loops::predecessors(func);
@@ -91,7 +97,7 @@ pub(in crate::hir) fn freshness(
                 &func.values[value.0 as usize].kind,
                 harmless,
                 returned,
-                aliases,
+                inputs,
             );
         }
         after.canonicalize();
@@ -110,7 +116,7 @@ pub(in crate::hir) fn freshness(
                 let Some(after) = &outgoing[predecessor.0 as usize] else {
                     continue;
                 };
-                let carried = after.across(&func.blocks[at].params, args, aliases);
+                let carried = after.across(&func.blocks[at].params, args, &inputs.aliases);
                 merged = Some(match merged {
                     None => carried,
                     Some(other) => other.both(&carried),
@@ -339,8 +345,11 @@ impl Fresh {
         kind: &OpKind,
         harmless: &rustc_hash::FxHashSet<String>,
         returned: &Returned,
-        aliases: &Aliases,
+        inputs: &Inputs,
     ) {
+        let aliases = &inputs.aliases;
+        self.before_store(value, inputs);
+        let cleanup = inputs.cleanup(value) && !self.initializing(func, kind);
         // A call that only initializes leaves its argument as fresh as it
         // arrived. See `initializing_only`.
         if let OpKind::Call {
@@ -408,8 +417,7 @@ impl Fresh {
                 self.forget_escaped(aliases);
             }
             Effect::Call => {
-                self.zero = Written::default();
-                self.forget_escaped(aliases);
+                self.unknown_call(aliases);
             }
             // Neither the address nor the slot is attributable here. Distinct
             // SSA names do not establish distinct storage. A release can also
@@ -434,6 +442,9 @@ impl Fresh {
                 self.give_up(aliases, value);
             }
         }
+        if cleanup {
+            self.unknown_call(aliases);
+        }
         if let OpKind::Call {
             callee: hir::Callee::Direct(name),
             ..
@@ -444,6 +455,19 @@ impl Fresh {
                 self.zero.insert(value, Slot::Field(*field));
             }
         }
+    }
+
+    /// A native retain happens before rc reads the old slot. Its callbacks
+    /// must have invalidated the proof before `initializing` is consulted too.
+    pub(in crate::hir) fn before_store(&mut self, value: ValueId, inputs: &Inputs) {
+        if inputs.retain(value) {
+            self.unknown_call(&inputs.aliases);
+        }
+    }
+
+    fn unknown_call(&mut self, aliases: &Aliases) {
+        self.zero = Written::default();
+        self.forget_escaped(aliases);
     }
 
     fn mark_written(&mut self, aliases: &Aliases, base: ValueId, slot: Slot) {
