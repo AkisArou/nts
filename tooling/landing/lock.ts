@@ -7,14 +7,16 @@ import {basename,dirname,join} from 'node:path';
 import {processCgroup} from './tree-users.ts';
 import {ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 import {infrastructureProbe} from '../gate/infrastructure-probe.ts';
+import {readProcessStat} from '../gate/process-group.ts';
+import {HostStateError} from '../gate/host-state.ts';
 
+/** Null proves gone or not live; unavailable observations are machine faults. */
 export function processIdentity(pid: number): string | null {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    if (fields[0] === "Z" || fields[0] === "X") return null;
-    return `${readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim()} ${pid} ${fields[19]}`;
-  } catch { return null; }
+  try{
+    const stat=readProcessStat(pid);
+    if(!stat?.live)return null;
+    return `${readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim()} ${pid} ${stat.started}`;
+  }catch(cause){throw new HostStateError('tooling-setup',`cannot observe process identity ${pid}: ${String(cause)}`,{cause});}
 }
 
 export type Lock = { path: string; owner: string; release: () => void };

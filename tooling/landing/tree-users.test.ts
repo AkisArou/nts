@@ -4,15 +4,17 @@ import {testEnvironment} from "../gate/test-environment.ts";
 // outside the tree.
 //
 //   node --test tooling/landing/tree-users.test.ts
-import { test } from "node:test";
+import { test,type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertNoProcessUsers, describeUsers, observeTreeProcesses, TreeOwnershipUnavailable, treeUsers } from "./tree-users.ts";
 import {treeProcessFixture} from './tree-users-fixture.ts';
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {pathToFileURL} from 'node:url';
 
 for(const link of ['cwd','exe'])test('an exiting task with absent '+link+' has no owner at that link',t=>{
   const f=treeProcessFixture(t);rmSync(join(f.task,link));
@@ -128,3 +130,61 @@ for(const mutation of ['none','absent','corrupt','future','boot','start','device
     }finally{chmodSync(join(f.task,'fd'),0o700);}
   });
 }
+
+
+test('a malformed live process stat protects tree ownership while absent stat proves gone',t=>{
+  const f=treeProcessFixture(t);
+  for(const text of ['', '42 (short) R', '42 (bad counters) '+['S',...Array<string>(18).fill('0'),'bad'].join(' ')]){
+    writeFileSync(join(f.task,'stat'),text);
+    const reading=observeTreeProcesses([f.tree],f.options);
+    assert.equal(reading.unreadable.length,1);
+    assert.match(String(reading.unreadable[0]!.cause),/invalid process 42 stat after recheck/);
+    assert.throws(()=>treeUsers(f.tree,f.options),TreeOwnershipUnavailable);
+  }
+  rmSync(join(f.task,'stat'));
+  assert.deepEqual(treeUsers(f.tree,f.options),[]);
+});
+
+
+async function deferredStatFixture(t:TestContext,outcome:'gone'|'live'|'malformed',first:string){
+  const f=treeProcessFixture(t),other=join(f.proc,'43'),stage=join(f.root,'staged');
+  const valid=readFileSync(join(f.task,'stat'),'utf8');
+  mkdirSync(join(other,'fd'),{recursive:true});mkdirSync(stage);
+  writeFileSync(join(other,'status'),readFileSync(join(f.task,'status')));
+  writeFileSync(join(other,'stat'),valid.replace(/^42/,'43'));
+  writeFileSync(join(other,'comm'),'other');symlinkSync('/outside',join(other,'cwd'));symlinkSync('/outside/program',join(other,'exe'));
+  rmSync(join(f.task,'cwd'));symlinkSync(f.tree,join(f.task,'cwd'));
+  writeFileSync(join(f.task,'stat'),first);
+  copyModuleClosure(['tooling/landing/tree-users.ts'],stage);
+  const file=join(stage,'tooling/landing/tree-users.ts'),source=readFileSync(file,'utf8');
+  const anchor=source.split('\n').find(line=>line.startsWith('const procStat='));assert.ok(anchor);
+  const second=outcome==='live'?valid:'42 (still malformed) S';
+  const change=outcome==='gone'?"removeSuppliedStat(join(proc,'42','stat'),{force:true});":`replaceSuppliedStat(join(proc,'42','stat'),${JSON.stringify(second)});`;
+  writeFileSync(file,source.replace(anchor,`${anchor.replace('const procStat=','const suppliedProcStat=')}
+import {rmSync as removeSuppliedStat,writeFileSync as replaceSuppliedStat} from 'node:fs';
+export const statReadLog:number[]=[];
+const procStat=(pid:number,proc:string)=>{statReadLog.push(pid);if(pid===43){${change}}return suppliedProcStat(pid,proc);};`));
+  const reader:typeof import('./tree-users.ts')&{statReadLog:number[]}=await import(pathToFileURL(file).href);
+  return {...f,reader,second,options:{...f.options,pids:[42,43]}};
+}
+
+for(const first of ['', '42 (exiting) R'])for(const outcome of ['gone','live','malformed'] as const){
+  test(`ownership stat recheck follows the complete scan: ${JSON.stringify(first)} then ${outcome}`,async t=>{
+    const f=await deferredStatFixture(t,outcome,first);
+    if(outcome==='malformed'){
+      assert.throws(()=>f.reader.treeUsers(f.tree,f.options),error=>{
+        assert.ok(error instanceof f.reader.TreeOwnershipUnavailable);
+        const cause=String(error.errors[0].cause);assert.match(cause,/invalid process 42 stat after recheck/);
+        assert.ok(cause.includes(JSON.stringify(first)));assert.ok(cause.includes(JSON.stringify(f.second)));return true;
+      });
+    }else assert.deepEqual(f.reader.treeUsers(f.tree,f.options).map(row=>row.pid),outcome==='live'?[42]:[]);
+    assert.deepEqual(f.reader.statReadLog,[42,43,42],'pid 43 must be observed before retrying pid 42');
+  });
+}
+
+test('the ownership stat scan excludes self and other UIDs before parsing',t=>{
+  const f=treeProcessFixture(t);writeFileSync(join(f.task,'stat'),'42 (malformed) R');
+  assert.deepEqual(treeUsers(f.tree,{...f.options,self:42}),[]);
+  writeFileSync(join(f.task,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()+1).join('\t')+'\n');
+  assert.deepEqual(treeUsers(f.tree,f.options),[]);
+});

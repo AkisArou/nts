@@ -5,7 +5,7 @@ import {StringDecoder} from "node:string_decoder";
 import {CommandLiveness,validateCommandPolicy} from "./command-liveness.ts";
 import {hostObservations} from "./host-observations.ts";
 import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
-import {ownedProcessGroup} from './process-group.ts';
+import {ownedProcessGroup,processStat,readProcessStat,readProcessStats,type ProcessStat} from './process-group.ts';
 
 export {COMMAND_IDLE_GUARD_MS,COMMAND_CPU_BUDGET_SECONDS,COMMAND_STARTUP_BOUND_MS} from "./command-liveness.ts";
 export const COMMAND_ACTIVITY_POLL_MS=5000;
@@ -21,22 +21,8 @@ function clockTicks(){
   return ticksPerSecond=value;
 }
 
-export function processActivity(text:string) {
-  const end=text.lastIndexOf(")");
-  if(end<0)throw new Error("invalid process activity record");
-  const fields=text.slice(end+2).trim().split(/\s+/);
-  const values=[2,3,11,12,13,14,19].map(at=>Number(fields[at]));
-  if(values.some(value=>!Number.isSafeInteger(value)||value<0))throw new Error("invalid process activity counters");
-  const parent=Number(fields[1]);
-  if(!Number.isSafeInteger(parent)||parent<0)throw new Error('invalid process parent');
-  return {parent,group:values[0]!,session:values[1]!,cpu:values.slice(2,6).reduce((sum,n)=>sum+n,0),own:values[2]!+values[3]!,started:values[6]!,busy:busyState(fields[0]!)};
-}
-/**
- * A thread running or waiting for a CPU (R), or waiting on the kernel's I/O
- * (D): a loaded machine can keep it there with no CPU progress, and it is not
- * idle. A thread asleep (S) waits for an event, which is what a hang does.
- */
-const busyState=(state:string)=>state==="R"||state==="D";
+const activityOf=({live:_live,...activity}:ProcessStat)=>activity;
+export function processActivity(text:string){return activityOf(processStat(text));}
 /** Whether any thread of `pid` is busy: a process's own state is only its main thread's. */
 export function threadsBusy(pid:number):boolean {
   let tids:string[];
@@ -44,41 +30,31 @@ export function threadsBusy(pid:number):boolean {
   for(const tid of tids){
     let text:string;
     try{text=readFileSync(`/proc/${pid}/task/${tid}/stat`,"utf8");}catch{continue;}
-    const end=text.lastIndexOf(")");
-    if(end>=0&&busyState(text.slice(end+2,end+3)))return true;
+    try{if(processStat(text).busy)return true;}catch{continue;}
   }
   return false;
 }
 function processAt(pid:number) {
-  try{return processActivity(readFileSync(`/proc/${pid}/stat`,"utf8"));}
-  catch(error){if(error instanceof Error&&"code" in error&&(error.code==="ENOENT"||error.code==="ESRCH"))return;throw error;}
+  const record=readProcessStat(pid);return record&&activityOf(record);
 }
 /** Read-only identity and counters; a rooted observer gains no signal owner. */
 export function commandProcessIdentity(pid:number){return processAt(pid);}
 export function commandCpuFrequency():number{return clockTicks();}
 type ProcessActivity=ReturnType<typeof processActivity>;
 function activitySnapshot(owned:ReadonlySet<number>,roots:ReadonlySet<number>=new Set()):ReadonlyMap<number,ProcessActivity> {
-  const records=new Map<number,ProcessActivity>();
-  for(const name of readdirSync("/proc")){
-    if(!/^\d+$/.test(name))continue;
-    let record;
-    // A disappearing unrelated /proc entry cannot invalidate this command's
-    // observer. An unreadable directly owned leader is an instrument failure.
-    const pid=Number(name);
-    try{record=processAt(pid);}catch(error){if(owned.has(pid)||roots.has(pid))throw error;continue;}
-    // Rust's owned child groups remain in this directly spawned session.
-    // Counting the session forwards nested CPU without trusting a heartbeat
-    // or treating a waiting compiler as idle. Signals still use only spawn's
-    // directly owned group; the nested supervisor owns its children's groups.
-    if(record)records.set(pid,record);
-  }
+  const pids=readdirSync('/proc').filter(name=>/^\d+$/.test(name)).map(Number);
+  const records=readProcessStats(pids,undefined,(pid,error)=>{
+    // Unrelated unreadable processes cannot invalidate this command's
+    // observer. A missing directly owned observation remains a failure.
+    if(owned.has(pid)||roots.has(pid))throw error;
+  });
   const selected=new Map<number,ProcessActivity>();
   for(const [pid,record] of records){
     let ancestor=pid;const visited=new Set<number>();
     while(!roots.has(ancestor)&&records.has(ancestor)&&!visited.has(ancestor)){
       visited.add(ancestor);ancestor=records.get(ancestor)!.parent;
     }
-    if(owned.has(record.session)||roots.has(ancestor))selected.set(pid,{...record,busy:record.busy||threadsBusy(pid)});
+    if(owned.has(record.session)||roots.has(ancestor))selected.set(pid,{...activityOf(record),busy:record.busy||threadsBusy(pid)});
   }
   return selected;
 }

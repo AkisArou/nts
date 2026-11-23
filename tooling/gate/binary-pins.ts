@@ -23,8 +23,9 @@ type Corruption={version:1;member:string;expected:string;actual:string};
 export type BinaryPinDiagnostics={warnings:string[];notices:string[]};
 const missing=(error:unknown)=>(error as NodeJS.ErrnoException).code==='ENOENT';
 
-/** null from the shared identity reader alone is not evidence of death: it
- * includes unreadable proc state. Only ESRCH proves an absent process. */
+/** The identity reader returns null for gone or non-live processes and throws
+ * a named host-state error for unavailable observations. A null observation
+ * is confirmed with ESRCH here; a still-present PID remains unknown. */
 export const observePinOwner:PinOwnerObservation=(pid,identity)=>{
   const current=processIdentity(pid);
   if(current!==null)return current===identity?'live':'gone';

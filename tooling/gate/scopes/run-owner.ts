@@ -1,3 +1,4 @@
+import {readProcessStat} from '../process-group.ts';
 import {assertStateVersion} from '../state-version.ts';
 import {withStateWrite,withStateLock} from '../state-file.ts';
 // The warm gate tree has one runner under its existing tree lock. Its next
@@ -13,11 +14,8 @@ export type RunOwner = { version: 1; nonce: string; pid: number; start: string; 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const boot = () => readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
 function processIdentity(pid: number): { start: string; live: boolean } | undefined {
-  try {
-    const raw = readFileSync(`/proc/${pid}/stat`, "utf8"), fields = raw.slice(raw.lastIndexOf(")") + 2).split(" ");
-    if (!/^\d+$/.test(fields[19] ?? "")) throw new Error("gate owner has an invalid process identity");
-    return { start: fields[19]!, live: fields[0] !== "Z" && fields[0] !== "X" };
-  } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  const stat=readProcessStat(pid);
+  return stat&&{start:String(stat.started),live:stat.live};
 }
 function readOwner(text: string,file="gate root receipt"): RunOwner {
   const value = JSON.parse(text) as RunOwner;
