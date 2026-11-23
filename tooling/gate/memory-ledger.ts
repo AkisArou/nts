@@ -147,6 +147,7 @@ import {hostInfrastructure} from "./host-infrastructure.ts";
 import {peakWatcherScope} from "./memory-watch-scope.ts";
 import {toolingSliceArgs,toolingSlice} from "./tooling-slice.ts";
 import {ToolingInstrumentError} from "./step-result.ts";
+import {readProcessStat,readProcessStats} from "../differential/process-stat/main.ts";
 import {CPU_WEIGHT,OOM_SCORE,PRIORITIES,PRIORITY_ENV,priorityOf,type Priority} from "./ranks.ts";
 import { historyFile, KEY, TOOLING_ROOT, peakReservation, bindJobBasis, jobReservation, writeCostHistory, CASE_KEYS, caseKeyRefusal, dropCaseKeyJobRow, caseHistoryFile, caseMemoryKey, caseReservation, readCaseHistory, writeCaseHistory, type JobBasis, type MemorySizing } from "./step-scheduling.ts";
 import {caseIdentity} from "./case-memory.ts";
@@ -242,22 +243,7 @@ export function neverFits(bytes: number, totalBytes: number, asks: string): stri
 export const processCharge = parseProcessCharge;
 export const cgroupCharge = parseCgroupCharge;
 
-type Stat = { state: string; ppid: number; start: string };
-
-/** /proc/<pid>/stat: the fields after the command name, which may itself hold spaces and parentheses. */
-function parseStat(text: string): Stat {
-  const fields = text.slice(text.lastIndexOf(")") + 2).split(" ");
-  const state = fields[0], ppid = fields[1], start = fields[19];
-  if (!state || ppid === undefined || !/^\d+$/.test(ppid) || start === undefined || !/^\d+$/.test(start)) throw new Error(`unreadable process stat: ${text.slice(0, 80)}`);
-  return { state, ppid: Number(ppid), start };
-}
-
 const gone = (error: unknown) => ["ENOENT", "ESRCH"].includes((error as NodeJS.ErrnoException).code ?? "");
-
-function readStat(pid: number): Stat | null {
-  try { return parseStat(readFileSync(`/proc/${pid}/stat`, "utf8")); }
-  catch (error) { if (gone(error)) return null; throw error; }
-}
 
 // ---------------------------------------------------------------------------
 // Processes and cgroups.
@@ -271,21 +257,18 @@ const bootId = () => boot ??= readFileSync("/proc/sys/kernel/random/boot_id", "u
 
 /** A running process's identity; null once it has exited, which a zombie has. */
 export function processIdentity(pid: number): ProcessIdentity | null {
-  const stat = readStat(pid);
-  return stat === null || stat.state === "Z" || stat.state === "X" ? null : { boot: bootId(), pid, start: stat.start };
+  const stat = readProcessStat(pid);
+  return stat === undefined || !stat.live ? null : { boot: bootId(), pid, start: String(stat.started) };
 }
 
 const alive = (who: ProcessIdentity) => who.boot === bootId() && processIdentity(who.pid)?.start === who.start;
 
 type Table = ReadonlyMap<number, { ppid: number }>;
 
-function processTable(): Map<number, Stat> {
-  const table = new Map<number, Stat>();
-  for (const name of readdirSync("/proc")) {
-    if (!/^\d+$/.test(name)) continue;
-    const stat = readStat(Number(name));
-    if (stat !== null && stat.state !== "Z" && stat.state !== "X") table.set(Number(name), stat);
-  }
+function processTable(): Map<number, { ppid: number }> {
+  const table = new Map<number, { ppid: number }>();
+  for (const [pid, stat] of readProcessStats(readdirSync("/proc").filter((name) => /^\d+$/.test(name)).map(Number)))
+    if (stat.live) table.set(pid, { ppid: stat.parent });
   return table;
 }
 
@@ -390,7 +373,7 @@ function counts(entry: LedgerEntry, pid: number): boolean {
   if (entry.measure.tree) {
     for (let at: number | undefined = pid, hops = 0; at !== undefined && at > 0 && hops < 65536; hops++) {
       if (at === entry.owner.pid) return true;
-      at = readStat(at)?.ppid;
+      at = readProcessStat(at)?.parent;
     }
   }
   const group = entry.measure.cgroup, own = group === null ? null : cgroupOf(pid);
@@ -932,7 +915,7 @@ function ancestorReservation(dir: string, pid: number, except: string | undefine
     if (other === undefined || other.since < entry.since) held.set(entry.owner.pid, entry);
   }
   if (!held.size) return undefined;
-  for (let at = readStat(pid)?.ppid, hops = 0; at !== undefined && at > 1 && hops < 65536; at = readStat(at)?.ppid, hops++) {
+  for (let at = readProcessStat(pid)?.parent, hops = 0; at !== undefined && at > 1 && hops < 65536; at = readProcessStat(at)?.parent, hops++) {
     const entry = held.get(at);
     if (entry !== undefined) return entry.id;
   }
