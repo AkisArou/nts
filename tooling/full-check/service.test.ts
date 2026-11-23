@@ -499,7 +499,7 @@ test("a partial fix during bisection reverts and reopens only the remaining culp
   gate.run = (commit, steps, label, ...rest) => {
     const result = run(commit, steps, label, ...rest);
     if (commit === first && label === "core-probe" && !fixed) fixed = repo.commit({ "RED/tests": null }, "fix tests forward");
-    return result;
+    return { ...result, failures: Object.fromEntries(Object.entries(result.steps).filter(([, verdict]) => verdict === "FAIL").map(([step]) => [step, [step + ": same case"]])) };
   };
   await cycle(fx);
   const state = readState(repo.layout.state), culprit = state.culprits[0]!;
@@ -2159,4 +2159,49 @@ runAsCommand(import.meta.url,async()=>{
       spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});await closed;
     }
   }
+});
+
+
+test("a decision-probe hold keeps persisted observations for the next cycle", async t => {
+  const repo = repository(t), gate = fakeGate(repo, { all: ["build", "tests"], wide: [] }), fx = harness(repo, gate);
+  let clock = new Date(2026, 10, 6, 12, 0); fx.now = () => clock;
+  repo.commit({ "src.txt": "base" }, "good"); await cycle(fx);
+  const candidates: string[] = [];
+  const details = ["  against results/fixture.tsv:", "         1  REGRESSED",
+    "              test/split/separator-undef.js: pass -> no-verdict (crash)",
+    "         0  CHANGED", "         0  MISSING",
+    "  NOT RECONCILED: the recorded outcomes changed; see above, then re-record with --record if intended"].join("\n");
+  for (let index = 0; index < 8; index++) candidates.push(repo.commit({
+    ...(index === 2 ? { "RED/tests": "", "LOG/tests": details } : { "src.txt": String(index) }),
+  }, index === 2 ? "breaks tests\n\nFixes #101" : `candidate ${index}`));
+  const run = gate.run.bind(gate); let moves = 0, decisionTip = "";
+  gate.run = (commit, steps, label, ...rest) => {
+    const m = run(commit, steps, label, ...rest);
+    writeFileSync(join(m.run, "summary.json"), JSON.stringify({ identities: { commit }, environment: { canonical: true },
+      steps: Object.entries(m.steps).map(([name, verdict]) => ({ name, verdict, reason: m.reasons[name] })) }));
+    const observed = { ...m, ...readSummary(m.run, commit, steps) };
+    if (label === "core-probe" && moves < 4 && (commit !== candidates.at(-1) || moves > 0)) {
+      if (moves < 3 || commit === decisionTip) {
+        moves++; decisionTip = repo.commit({ "src.txt": `move ${moves}` }, `move ${moves}`);
+      }
+    }
+    return observed;
+  };
+  await cycle(fx);
+  const held = readState(repo.layout.state);
+  assert.equal(moves, 4);
+  assert.match(held.core.last_run?.search?.result ?? "", /main changed during decision probe; identity at current tip unmeasured/);
+  assert.equal(fx.submitted.length, 0);
+  const observations = held.probes.filter(p => p.verdict !== "skip");
+  assert.ok(observations.length > 3, "the held search durably retains its measured history");
+  const before = gate.measured.length;
+  clock = new Date(clock.getTime() + 31 * 60_000);
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  assert.equal(state.culprits[0]?.commit, candidates[2]);
+  assert.equal(fx.submitted.length, 1);
+  assert.equal(gate.measured.slice(before).filter(p => p.label === "core-probe" && p.commit === candidates[2]).length, 1,
+    "the ordinary red observation is reused; only its fresh confirmation executes");
+  assert.ok(observations.some(old => state.probes.some(p => p.key === old.key && p.step === old.step && p.run === old.run)),
+    "observations retain their original run provenance across the held attempt");
 });

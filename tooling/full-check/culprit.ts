@@ -35,6 +35,8 @@ export type Probe = {
   failed: string[];
   run: string;
   reason?: string;
+  /** The step-owned canonical regression detail; absence is unknown. */
+  failures?: Record<string, string[]>;
 };
 
 export type Measure = (base: string, reverts: string[], steps: string[], fresh: boolean) => Probe;
@@ -67,11 +69,9 @@ export type Main = {
   commit(): string;
   /** The endpoint-union owed rules, including wide reach. Unknown reach throws. */
   reaches(base: string, tip: string, steps: string[]): boolean;
+  /** The complete first-parent range and its reverted culprits at this immutable tip. */
+  range(good: string, tip: string): Pick<SearchInput, "candidates" | "reverted">;
 };
-
-// A busy history must not keep the controller probing forever. Two changed-
-// input re-probes beyond the initial observation defer the decision instead.
-const MAIN_REPROBES = 2;
 
 /**
  * The first red index of `n` candidates, where index -1 (the last green run)
@@ -114,16 +114,14 @@ export function takenOut(input: SearchInput, index: number): string[] {
 export function search(input: SearchInput, measure: Measure, main: Main): SearchResult {
   const probes: Probe[] = [];
   if (!input.candidates.length) return { kind: "held", reason: "no commit since the last green run: the red is not a commit's", probes };
-  const history = new Map<string, HistoryResult>();
-  const established = new Map<string, Extract<HistoryResult, { kind: "culprit" }>>();
-  const observations = new Map<string, Map<string, { verdict: "red" | "green"; fresh: boolean }>>();
+  const observations = new Map<string, Map<string, { verdict: "red" | "green"; fresh: boolean; failure?: string[] }>>();
   const observationKey = (base: string, reverts: string[]) => JSON.stringify([base, [...reverts].sort()]);
   const remember = (p: Probe, fresh: boolean) => {
     const key = observationKey(p.base, p.reverts), entries = observations.get(key) ?? new Map();
     for (const step of p.steps) {
       // A red union may also contain held steps. Only an explicitly failed
       // step, or a wholly green probe, establishes an individual verdict.
-      if (p.failed.includes(step)) entries.set(step, { verdict: "red", fresh });
+      if (p.failed.includes(step)) entries.set(step, { verdict: "red", fresh, failure: p.failures?.[step] });
       else if (p.verdict === "green") entries.set(step, { verdict: "green", fresh });
     }
     observations.set(key, entries);
@@ -134,65 +132,85 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
       const failed = steps.filter((_, index) => known[index]!.verdict === "red");
       // The original measured probes below retain all provenance. This is an
       // in-process decision assembled from them, never a new run receipt.
-      return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, run: "" };
+      return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, run: "", failures: Object.fromEntries(steps.flatMap((step, index) => known[index]?.failure ? [[step, known[index]!.failure!]] : [])) };
     }
     const p = measure(base, reverts, steps, fresh);
     probes.push(p); remember(p, fresh);
     return p;
   };
-  let attempts = 0;
-  for (;;) {
-    const commit = main.commit();
-    const current = measure(commit, [], input.steps, true);
-    probes.push(current); remember(current, true);
-    const held = (reason: string): SearchResult => ({ kind: "held", reason, probes });
-    if (current.verdict === "skip") return held(`newest main ${commit.slice(0, 12)} could not be measured: ${current.reason ?? "no verdict"}`);
-    const advanced = (): { through: string } | { again: true } | { held: SearchResult } => {
-      const tip = main.commit();
-      if (tip === commit) return { through: tip };
-      try {
-        if (!main.reaches(commit, tip, input.steps)) return { through: tip };
-      } catch (error) {
-        return { held: held(`could not establish owed reach after main probe ${commit.slice(0, 12)}: ${String(error)}`) };
+  const held = (reason: string): SearchResult => ({ kind: "held", reason, probes });
+  let range = input;
+  const extend = (tip: string): string | undefined => {
+    if (tip === range.candidates.at(-1)) return;
+    try {
+      const next = main.range(input.good, tip);
+      if (next.candidates.at(-1) !== tip || next.candidates.length <= range.candidates.length ||
+          !range.candidates.every((commit, index) => next.candidates[index] === commit)) {
+        return `newest main ${tip.slice(0, 12)} does not extend the first-parent candidate range`;
       }
-      if (attempts++ < MAIN_REPROBES) return { again: true };
-      return { held: held(`main changed inputs to ${input.steps.join(", ")} after ${MAIN_REPROBES} fix-forward re-probes; no revert decision`) };
-    };
-    let validity = advanced();
-    if ("held" in validity) return validity.held;
-    if ("again" in validity) continue;
-    if (current.verdict === "green") {
-      // A false green costs another core run; a false revert removes a good
-      // change. Prefer that cheaper error, and retain the deciding probe.
-      return commit === input.candidates.at(-1)
-        ? { kind: "flaky", probes, main: { commit, through: validity.through, run: current.run } }
-        : { kind: "fixed-forward", commit, through: validity.through, probes, main: { commit, through: validity.through, run: current.run } };
-    }
+      range = { ...range, ...next };
+    } catch (error) { return `could not extend the first-parent candidate range: ${String(error)}`; }
+    return undefined;
+  };
+  const newest = main.commit();
+  const current = measure(newest, [], input.steps, true);
+  probes.push(current); remember(current, true);
+  if (current.verdict === "skip") return held(`newest main ${newest.slice(0, 12)} could not be measured: ${current.reason ?? "no verdict"}`);
+  const green = (p: Probe, through: string): SearchResult => p.base === input.candidates.at(-1)
+    ? { kind: "flaky", probes, main: { commit: p.base, through, run: p.run } }
+    : { kind: "fixed-forward", commit: p.base, through, probes, main: { commit: p.base, through, run: p.run } };
+  let result: HistoryResult;
+  if (current.verdict === "green") result = { kind: "flaky", probes: [] };
+  else {
     const steps = input.steps.filter(step => current.failed.includes(step));
-    if (!steps.length) return held(`newest main ${commit.slice(0, 12)} was red without naming a failed step`);
-    const key = JSON.stringify([...steps].sort());
-    let result = history.get(key);
-    if (!result && steps.every(step => established.has(step))) {
-      const first = steps.map(step => established.get(step)!).reduce((a, b) => a.index <= b.index ? a : b);
-      result = { ...first, failed: steps.filter(step => established.get(step)!.index === first.index), flaky: [] };
-    }
-    if (!result) {
-      result = searchHistory({ ...input, steps }, historical, current);
-      history.set(key, result);
-      if (result.kind === "culprit") {
-        const commit = result.commit;
-        const confirmed = result.probes.filter(p => p.base === commit).flatMap(p => p.failed);
-        for (const step of steps.filter(step => confirmed.includes(step))) established.set(step, { ...result, failed: [step], flaky: [] });
+    if (!steps.length) return held(`newest main ${newest.slice(0, 12)} was red without naming a failed step`);
+    const error = extend(newest);
+    if (error) return held(error);
+    // Finish the historical decision before observing any intervening moves.
+    result = searchHistory({ ...range, steps }, historical, current);
+    if (result.kind === "culprit") result.flaky = [...new Set([...result.flaky, ...input.steps.filter(step => !steps.includes(step))])];
+  }
+  let deciding = current;
+  let through = main.commit();
+  if (through !== newest) {
+    let affected: boolean;
+    try { affected = main.reaches(newest, through, input.steps); }
+    catch (error) { return held(`could not establish owed reach after main probe ${newest.slice(0, 12)}: ${String(error)}`); }
+    if (affected) {
+      // One newest-tip measurement per historical decision. If affected main
+      // moves during it, hold with all observations retained for the next cycle.
+      deciding = measure(through, [], input.steps, true);
+      probes.push(deciding); remember(deciding, true);
+      if (deciding.verdict === "skip") return held(`newest main ${through.slice(0, 12)} could not be measured: ${deciding.reason ?? "no verdict"}`);
+      if (deciding.verdict === "red") {
+        const before = [...current.failed].sort(), after = [...deciding.failed].sort();
+        if (!after.length) return held(`newest main ${deciding.base.slice(0, 12)} was red without naming a failed step`);
+        if (current.verdict !== "red" || after.some(step => !before.includes(step))) return held("newest main added a failed step");
+        for (const step of after) {
+          const was = current.failures?.[step], now = deciding.failures?.[step];
+          if (!was?.length || !now?.length) return held(`failure identity unavailable for ${step} at the decision tips`);
+          if (JSON.stringify([...new Set(was)].sort()) !== JSON.stringify([...new Set(now)].sort())) return held(`newest main changed the failure identity for ${step}`);
+        }
+        const previousReverts = JSON.stringify([...range.reverted].sort());
+        const error = extend(deciding.base);
+        if (error) return held(error);
+        const changedCompositions = previousReverts !== JSON.stringify([...range.reverted].sort());
+        if (changedCompositions || after.length < before.length) {
+          if (!changedCompositions && result.kind === "culprit" && result.failed.some(step => after.includes(step))) {
+            result = { ...result, failed: result.failed.filter(step => after.includes(step)) };
+          } else result = searchHistory({ ...range, steps: after }, historical, deciding);
+        }
+      }
+      through = main.commit();
+      if (through !== deciding.base) {
+        try {
+          if (main.reaches(deciding.base, through, input.steps)) return held("main changed during decision probe; identity at current tip unmeasured");
+        } catch (error) { return held(`main changed during decision probe; identity at current tip unmeasured: ${String(error)}`); }
       }
     }
-    if (result.kind === "culprit" && commit === input.candidates.at(-1)) {
-      result.flaky = [...new Set([...result.flaky, ...input.steps.filter(step => !current.failed.includes(step))])];
-    }
-    validity = advanced();
-    if ("held" in validity) return validity.held;
-    if ("again" in validity) continue;
-    return { ...result, probes, main: { commit, through: validity.through, run: current.run } };
   }
+  if (deciding.verdict === "green") return green(deciding, through);
+  return { ...result, probes, main: { commit: deciding.base, through, run: deciding.run } };
 }
 
 /** Bisection only sees steps that still fail on main with culprits left in. */
@@ -225,12 +243,14 @@ function searchHistory(input: SearchInput, measure: Measure, current: Probe): Hi
     return { kind: "ambiguous", commits: input.candidates.slice(found.range[0], found.range[1] + 1), failed, probes };
   }
   const commit = input.candidates[found.culprit]!;
+  let culpritFailed = failed;
   if (found.culprit !== n - 1) {
     const again = measure(commit, takenOut(input, found.culprit), failed, true);
     probes.push(again);
-    if (again.verdict !== "red") {
+    culpritFailed = failed.filter(step => again.failed.includes(step));
+    if (again.verdict !== "red" || !culpritFailed.length) {
       return { kind: "held", reason: `${commit.slice(0, 12)} was red once and ${again.verdict === "green" ? "green" : "unmeasurable"} when measured again`, probes };
     }
   }
-  return { kind: "culprit", commit, index: found.culprit, failed, flaky, probes };
+  return { kind: "culprit", commit, index: found.culprit, failed: culpritFailed, flaky, probes };
 }

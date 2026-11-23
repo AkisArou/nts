@@ -1,6 +1,7 @@
 // A measurement: gate steps at one commit, run the way the full run runs them
 // -- pinned.sh in the full check's own tree and target, in the gate's
 // canonical environment -- and read back from the run's summary.json.
+import { stripVTControlCharacters } from "node:util";
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -38,6 +39,8 @@ export type Measurement = {
   reasons: Record<string, string>;
   verdict: "green" | "red" | "held";
   reused?: string[];
+  /** Complete canonical census regression details, absent when unavailable. */
+  failures?: Record<string, string[]>;
 };
 
 export function verdictOf(steps: Record<string, StepResult>): Measurement["verdict"] {
@@ -57,8 +60,58 @@ type Summary = {
 const PLATFORM_STEPS = new Set(Object.values(PLATFORM_PROGRAMS).map(programs => programs.step));
 const logOf = (run: string, step: string) => { try { return readFileSync(join(run, `${step}.log`), "utf8"); } catch { return ""; } };
 
+/** Complete census verdict detail only; an exit status or truncated list proves no identity. */
+export function censusFailureIdentity(text: string): string[] | undefined {
+  const lines = stripVTControlCharacters(text).split(/\r?\n/);
+  const failures: string[] = [];
+  let sections = 0, active = false, pendingSection = false, kind = "", expected = 0, rows: string[] = [];
+  let categories = new Set<string>();
+  const finish = () => {
+    if (["REGRESSED", "CHANGED", "MISSING"].includes(kind)) {
+      if (rows.length !== expected || rows.some(row => row.startsWith("... "))) return false;
+      failures.push(...rows.map(row => JSON.stringify([kind, row])));
+    }
+    return true;
+  };
+  for (const line of lines) {
+    if (/^  against .+:$/.test(line)) {
+      if (!finish() || pendingSection) return;
+      pendingSection = true; categories = new Set();
+      sections++; active = true; kind = ""; rows = []; expected = 0;
+    } else if (active) {
+      const header = /^    +([0-9]+)  ([A-Z][A-Z ,]*|pending)$/.exec(line);
+      if (header) {
+        if (!finish()) return;
+        expected = Number(header[1]); kind = header[2]!; rows = [];
+        if (!Number.isSafeInteger(expected) || categories.has(kind)) return;
+        categories.add(kind);
+      } else if (/^              \S/.test(line)) rows.push(line.slice(14));
+      else if (line.trim()) {
+        if (!finish()) return;
+        active = false; kind = ""; rows = [];
+      }
+    }
+    if (pendingSection && (/^  NOT RECONCILED:/.test(line) || line === "  reconciled")) {
+      if (!categories.has("REGRESSED") || !categories.has("CHANGED")) return;
+      pendingSection = false;
+    }
+    if (line.includes("NOT RECONCILED:") && line.trim() !== "NOT RECONCILED: the recorded outcomes changed; see above, then re-record with --record if intended") return;
+  }
+  if (!finish() || pendingSection || !sections || !failures.length) return;
+  return [...new Set(failures)].sort();
+}
+
+export function readFailureIdentities(run: string, steps: readonly string[]): Record<string, string[]> {
+  const failures: Record<string, string[]> = {};
+  for (const step of steps) {
+    const identity = censusFailureIdentity(logOf(run, step));
+    if (identity) failures[step] = identity;
+  }
+  return failures;
+}
+
 /** What a run's summary says of each requested step; anything it cannot vouch for is held. */
-export function readSummary(run: string, commit: string, requested: readonly string[], unrun: UnrunPolicy = PLATFORMS_UNRUN_OK): Pick<Measurement, "steps" | "reasons"> {
+export function readSummary(run: string, commit: string, requested: readonly string[], unrun: UnrunPolicy = PLATFORMS_UNRUN_OK): Pick<Measurement, "steps" | "reasons" | "failures"> {
   const steps: Record<string, StepResult> = {}, reasons: Record<string, string> = {};
   const hold = (why: string) => { for (const name of requested) { steps[name] = "HELD"; reasons[name] = why; } return { steps, reasons }; };
   const ceiling = join(run, MEASUREMENT_HOLD);
@@ -87,7 +140,8 @@ export function readSummary(run: string, commit: string, requested: readonly str
       }
     }
   }
-  return { steps, reasons };
+  const failures = readFailureIdentities(run, requested.filter(name => steps[name] === "FAIL"));
+  return { steps, reasons, ...(Object.keys(failures).length ? { failures } : {}) };
 }
 
 export type Gate = {

@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import {spawn} from "node:child_process";
-import { fullCheckBound, pinnedGate, readSummary, RUN_BOUND_FLOOR_S, verdictOf } from "./measure.ts";
+import { censusFailureIdentity, fullCheckBound, pinnedGate, readSummary, RUN_BOUND_FLOOR_S, verdictOf } from "./measure.ts";
 import { MEASUREMENT_HOLD, MEASUREMENT_PROGRESS, MEASUREMENT_SETUP_HANG_MS, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
 import { fullCheckStatus, liveMeasurement, statusText } from "./service.ts";
 import { readState } from "./state.ts";
@@ -572,4 +572,42 @@ runAsCommand(import.meta.url,async()=>{
   }finally{
     spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});if(slice)stopToolingSlice(slice);await closed;
   }
+});
+
+
+const censusDetails = (rows: string[], kind = "REGRESSED") => [
+  "  against results/fixture.tsv:",
+  `         ${rows.length}  ${kind}`,
+  ...rows.map(row => `              ${row}`),
+  ...(kind === "REGRESSED" ? ["         0  CHANGED"] : ["         0  REGRESSED"]),
+  "         0  MISSING",
+  "  NOT RECONCILED: the recorded outcomes changed; see above, then re-record with --record if intended",
+].join("\n");
+
+test("census failure identity retains complete verdict detail, independent of order and progress", () => {
+  const a = "test/split/separator-undef.js: pass -> no-verdict (crash)", b = "test/other.js: pass -> refused";
+  const expected = [JSON.stringify(["REGRESSED", a]), JSON.stringify(["REGRESSED", b])].sort();
+  assert.deepEqual(censusFailureIdentity(censusDetails([a, b])), expected);
+  assert.deepEqual(censusFailureIdentity("progress 40/40\n" + censusDetails([b, a]) + "\nworker time 200 s"), expected);
+  assert.notDeepEqual(censusFailureIdentity(censusDetails([a], "CHANGED")), censusFailureIdentity(censusDetails([a])));
+  assert.notDeepEqual(censusFailureIdentity(censusDetails([a.replace("crash", "refused")])) , censusFailureIdentity(censusDetails([a])));
+});
+
+test("census failure identity refuses truncated, missing and unrelated failure detail", () => {
+  const complete = censusDetails(["test/a.js: pass -> no-verdict (crash)"]);
+  for (const text of ["exit 1", "", complete.replace("1  REGRESSED", "21  REGRESSED"),
+    complete.replace("test/a.js: pass -> no-verdict (crash)", "... 1 more"),
+    complete.slice(0, complete.indexOf("  NOT RECONCILED:")),
+    complete.replace("         0  CHANGED\n", ""),
+    complete + "\n  NOT RECONCILED: the exclusion audit failed"]) {
+    assert.equal(censusFailureIdentity(text), undefined, text);
+  }
+});
+
+test("failed measurement summaries expose case identity to the production probe adapter", t => {
+  const run = summary(t, { identities: { commit: COMMIT }, environment: { canonical: true },
+    steps: [{ name: "test262-llvm", verdict: "FAIL", reason: "exit 1" }] });
+  const log = censusDetails(["test/split/separator-undef.js: pass -> no-verdict (crash)"]);
+  writeFileSync(join(run, "test262-llvm.log"), log);
+  assert.deepEqual(readSummary(run, COMMIT, ["test262-llvm"]).failures, { "test262-llvm": censusFailureIdentity(log) });
 });

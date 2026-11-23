@@ -8,11 +8,14 @@ import { test } from "node:test";
 import { bisect, search as searchAtMain, takenOut, type Main, type Measure, type Probe, type SearchInput } from "./culprit.ts";
 
 /** Existing histories keep main at their tip unless a control moves it. */
-function search(input: SearchInput, measure: Measure, main: Main = {
+function search(input: SearchInput, measure: Measure, main: Omit<Main, "range"> & Partial<Pick<Main, "range">> = {
   commit: () => input.candidates.at(-1) ?? input.good,
   reaches: () => true,
 }) {
-  return searchAtMain(input, measure, main);
+  return searchAtMain(input, measure, {
+    range: (_good, tip) => ({ candidates: input.candidates.includes(tip) ? input.candidates.slice(0, input.candidates.indexOf(tip) + 1) : [...input.candidates, tip], reverted: input.reverted }),
+    ...main,
+  });
 }
 
 test("bisection finds the first red commit of every history, in logarithmic probes", () => {
@@ -40,7 +43,8 @@ test("a candidate that cannot be measured is skipped, and a culprit hidden among
  * red on a step when a breaker at or before its base is not taken out.
  */
 function model(n: number, breakers: Record<number, string[]>, options: { flakyOnce?: string; unrepeatable?: number } = {}) {
-  const candidates = Array.from({ length: n }, (_, i) => `c${i}`.padEnd(40, "0"));
+  const candidates = Array.from({ length: n }, (_, i) => `c${i}`.padEnd(40, "f"));
+  assert.equal(new Set(candidates).size, n, "every synthetic commit has a distinct identity");
   const index = (sha: string) => candidates.indexOf(sha);
   const calls: { base: number; reverts: number[]; fresh: boolean }[] = [];
   let flaky = options.flakyOnce;
@@ -50,7 +54,7 @@ function model(n: number, breakers: Record<number, string[]>, options: { flakyOn
     const failed = steps.filter(step => Object.entries(breakers).some(([at, broken]) => Number(at) <= i && !out.includes(Number(at)) && broken.includes(step)));
     if (flaky && fresh && failed.includes(flaky)) { failed.splice(failed.indexOf(flaky), 1); flaky = undefined; }
     if (options.unrepeatable === i && fresh) failed.length = 0;
-    return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, run: `run-${calls.length}` };
+    return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, failures: Object.fromEntries(failed.map(step => [step, [`${step}: case-a`]])), run: `run-${calls.length}` };
   };
   const input = (steps: string[], pending: number[] = [], reverted: [number, number][] = []): SearchInput => ({
     good: "g".repeat(40), candidates, steps,
@@ -183,18 +187,15 @@ test("unrelated main changes carry the probe while affected changes require anot
   }
 });
 
-test("two changed-input re-probes bound a busy history, and unknown reach holds closed", () => {
-  for (const unknown of [false, true]) {
-    const m = model(4, { 1: ["tests"] });
-    let tip = "main-0", count = 0;
-    const result = search(m.input(["tests"]), (base, reverts, steps) => {
-      tip = "main-" + ++count;
-      return { base, reverts, steps, verdict: "red", failed: steps, run: "probe-" + count };
-    }, { commit: () => tip, reaches: () => { if (unknown) throw Error("selector unavailable"); return true; } });
-    assert.equal(result.kind, "held");
-    assert.equal(count, unknown ? 1 : 3);
-    assert.match(result.kind === "held" ? result.reason : "", unknown ? /could not establish owed reach.*selector unavailable/ : /after 2 fix-forward re-probes; no revert/);
-  }
+test("unknown reach holds closed after completing the historical decision", () => {
+  const m = model(4, { 1: ["tests"] });
+  let tip = m.candidates.at(-1)!;
+  const result = search(m.input(["tests"]), (...args) => {
+    const p = m.measure(...args); tip = "latest"; return p;
+  }, { commit: () => tip, reaches: () => { throw Error("selector unavailable"); } });
+  assert.equal(result.kind, "held");
+  assert.match(result.kind === "held" ? result.reason : "", /could not establish owed reach.*selector unavailable/);
+  assert.ok(m.calls.some(call => call.base === 1 && call.fresh));
 });
 
 
@@ -204,7 +205,7 @@ test("a changed-input main probe reuses the complete immutable history for the s
   const result = search(m.input(["tests"]), (base, reverts, steps, fresh) => {
     if (base === latest) {
       mainProbes++;
-      return { base, reverts, steps, verdict: "red", failed: steps, run: "main-again" };
+      return { base, reverts, steps, verdict: "red", failed: steps, failures: { tests: ["tests: case-a"] }, run: "main-again" };
     }
     const p = m.measure(base, reverts, steps, fresh);
     if (base === m.candidates[2] && fresh) { tip = latest; historyAtChange = m.calls.length; }
@@ -216,19 +217,138 @@ test("a changed-input main probe reuses the complete immutable history for the s
   assert.equal(m.calls.length, historyAtChange, "the second pass makes no history probes");
 });
 
-test("fixing c2/A during bisection searches the unattributed B and finds c5 only", () => {
+test("a partial fix during bisection searches the remaining unchanged failure", () => {
   const m = model(8, { 2: ["A"], 5: ["B"] }), latest = "f".repeat(40);
   let tip = m.candidates.at(-1)!, changedAt = -1;
   const requests: { base: string; steps: string[] }[] = [];
   const result = search(m.input(["A","B"]), (base, reverts, steps, fresh) => {
     requests.push({ base, steps });
-    if (base === latest) return { base, reverts, steps, verdict: "red", failed: ["B"], run: "fix-A" };
+    if (base === latest) return { base, reverts, steps, verdict: "red", failed: ["B"], failures: { B: ["B: case-a"] }, run: "fix-A" };
     const p = m.measure(base, reverts, steps, fresh);
     if (base === m.candidates[2] && fresh) { tip = latest; changedAt = requests.length; }
     return p;
   }, { commit: () => tip, reaches: () => true });
   assert.equal(result.kind === "culprit" && result.commit, m.candidates[5]);
   assert.deepEqual(result.kind === "culprit" && result.failed, ["B"]);
+  assert.ok(changedAt > 0);
   assert.ok(requests.slice(changedAt).filter(p => p.base !== latest).every(p => p.steps.join() === "B"));
-  assert.equal(requests.filter(p => p.base === m.input([]).good).length, 1, "the per-step green control is retained");
+  assert.equal(requests.filter(p => p.base === m.input([]).good).length, 1, "the per-step green control is reused");
+});
+
+
+test("three main moves during history extend the range without discarding observations", () => {
+  const m = model(32, { 9: ["tests"] });
+  const initial = m.input(["tests"]); initial.candidates = m.candidates.slice(0, 16);
+  let tip = initial.candidates.at(-1)!, moves = 0;
+  const requests: string[] = [], ranges: string[] = [];
+  const result = search(initial, (base, reverts, steps, fresh) => {
+    requests.push(base);
+    const p = m.measure(base, reverts, steps, fresh);
+    if (base !== initial.candidates.at(-1) && moves < 3) tip = m.candidates[16 + moves++]!;
+    return p;
+  }, { commit: () => tip, reaches: () => true, range: (_good, tip) => {
+    ranges.push(tip); return { candidates: m.candidates.slice(0, m.candidates.indexOf(tip) + 1), reverted: new Map() };
+  } });
+  assert.equal(moves, 3);
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[9]);
+  assert.deepEqual(ranges, [m.candidates[18]]);
+  assert.equal(requests.filter(base => base === initial.good).length, 1, "one fresh green control survives all moves");
+  assert.equal(requests.filter(base => base === m.candidates[9]).length, 2, "one ordinary observation and one fresh confirmation");
+  assert.equal(requests.at(-1), m.candidates[18], "only the newest decision tip is probed");
+  assert.ok(requests.length <= Math.ceil(Math.log2(16)) + 4);
+  assert.equal(result.main?.through, tip);
+});
+
+test("decision tips require the same complete per-step failure identity", () => {
+  for (const identity of [["tests: case-a"], ["tests: case-b"], undefined]) {
+    const m = model(8, { 2: ["tests"] }), latest = "latest";
+    let tip = m.candidates.at(-1)!;
+    const result = search(m.input(["tests"]), (base, reverts, steps, fresh) => {
+      if (base === latest) return { base, reverts, steps, verdict: "red", failed: steps, failures: identity ? { tests: identity } : {}, run: "decision" };
+      const p = m.measure(base, reverts, steps, fresh);
+      if (base === m.candidates[2] && fresh) tip = latest;
+      return p;
+    }, { commit: () => tip, reaches: () => true });
+    assert.equal(result.kind, identity?.[0] === "tests: case-a" ? "culprit" : "held");
+    if (result.kind === "held") assert.match(result.reason, identity ? /changed the failure identity/ : /identity unavailable/);
+  }
+});
+
+test("decision probe movement is finite and carries only proven unaffected inputs", () => {
+  for (const movement of ["none", "unrelated", "affected", "unknown"] as const) {
+    const m = model(16, { 4: ["tests"] });
+    let tip = m.candidates.at(-1)!, probes = 0;
+    const result = search(m.input(["tests"]), (base, reverts, steps, fresh) => {
+      probes++;
+      const p = base.startsWith("main-")
+        ? { base, reverts, steps, verdict: "red" as const, failed: steps, failures: { tests: ["tests: case-a"] }, run: "decision" }
+        : m.measure(base, reverts, steps, fresh);
+      // Even an adversary moving main after EVERY probe cannot restart history.
+      if (movement !== "none") tip = `main-${probes}`;
+      return p;
+    }, { commit: () => tip, reaches: (base) => {
+      if (!base.startsWith("main-")) return true;
+      if (movement === "unknown") throw Error("unknown reach");
+      return movement === "affected";
+    } });
+    assert.equal(result.kind, movement === "affected" || movement === "unknown" ? "held" : "culprit");
+    if (result.kind === "held") assert.match(result.reason, /main changed during decision probe; identity at current tip unmeasured/);
+    assert.ok(probes <= Math.ceil(Math.log2(16)) + 4, `${movement}: ${probes}`);
+    assert.equal(result.probes.length, probes, "all original measurement receipts survive");
+  }
+});
+
+test("a non-extension of first-parent history holds instead of naming an old culprit", () => {
+  const m = model(8, { 2: ["tests"] });
+  const result = search(m.input(["tests"]), m.measure, {
+    commit: () => m.candidates.at(-1)!, reaches: () => true,
+    range: () => { throw Error("must not refresh an unchanged range"); },
+  });
+  assert.equal(result.kind, "culprit");
+  let tip = m.candidates.at(-1)!;
+  const held = search(m.input(["tests"]), (base, reverts, steps, fresh) => {
+    const p = base === "rewrite" ? { base, reverts, steps, verdict: "red" as const, failed: steps, failures: { tests: ["tests: case-a"] }, run: "rewrite" } : m.measure(base, reverts, steps, fresh);
+    tip = "rewrite"; return p;
+  }, { commit: () => tip, reaches: () => true, range: () => ({ candidates: ["rewrite"], reverted: new Map() }) });
+  assert.equal(held.kind, "held");
+  assert.match(held.kind === "held" ? held.reason : "", /does not extend the first-parent/);
+});
+
+
+test("a newly failed step at the decision tip holds", () => {
+  const m = model(8, { 2: ["A"] }); let tip = m.candidates.at(-1)!;
+  const result = search(m.input(["A", "B"]), (base, reverts, steps, fresh) => {
+    if (base === "latest") return { base, reverts, steps, verdict: "red", failed: steps, failures: { A: ["A: case-a"], B: ["B: case-a"] }, run: "decision" };
+    const p = m.measure(base, reverts, steps, fresh); tip = "latest"; return p;
+  }, { commit: () => tip, reaches: () => true });
+  assert.equal(result.kind, "held");
+  assert.match(result.kind === "held" ? result.reason : "", /added a failed step/);
+});
+
+test("an initial main ahead of the failed run can find a culprit in the extended range", () => {
+  const m = model(16, { 12: ["tests"] }), input = m.input(["tests"]);
+  input.candidates = m.candidates.slice(0, 8);
+  const result = search(input, m.measure, { commit: () => m.candidates.at(-1)!, reaches: () => true,
+    range: () => ({ candidates: m.candidates, reverted: new Map() }) });
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[12]);
+});
+
+
+test("a newly landed revert refreshes historical compositions before retaining a culprit", () => {
+  const m = model(10, { 2: ["tests"], 6: ["tests"] }), input = m.input(["tests"]);
+  input.candidates = m.candidates.slice(0, 8);
+  let tip = input.candidates.at(-1)!, extendedAt = -1;
+  const result = search(input, (base, reverts, steps, fresh) => {
+    const index = m.candidates.indexOf(base);
+    const p = m.measure(base, index >= 8 ? [...reverts, m.candidates[2]!] : reverts, steps, fresh);
+    if (base === m.candidates[2] && fresh && tip === input.candidates.at(-1)) tip = m.candidates[9]!;
+    return p;
+  }, { commit: () => tip, reaches: () => true, range: () => {
+    extendedAt = m.calls.length;
+    return { candidates: m.candidates, reverted: new Map([[m.candidates[2]!, m.candidates[8]!]]) };
+  } });
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[6]);
+  assert.ok(extendedAt > 0);
+  assert.ok(m.calls.slice(extendedAt).filter(call => call.base >= 2 && call.base < 8).every(call => call.reverts.includes(2)),
+    "newly known culprit removal changes the composition key, so old red observations cannot be reused");
 });

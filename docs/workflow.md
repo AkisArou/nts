@@ -574,13 +574,28 @@ What follows from a run:
   run. Before any automatic or hand-revert decision, its main probe must
   still cover the current inputs: both endpoint owed rules over subsequent
   changes, including wide reach, decide this. Unrelated commits keep the
-  probe valid. Within one search, historical observations are retained per
-  step. The same red-step set reuses its search, while a remaining step
-  without an established culprit gets its own search. This memo ends with
-  the search; newest-main probes always execute freshly.
-  Changed inputs get at most two re-probes, then a named hold;
-  unknown reach also holds. A false green defers a defect to the next core,
-  a cheaper error than reverting a change already fixed forward.
+  probe valid. Historical observations are keyed by base commit, sorted revert
+  composition and step, with their original run provenance. A main move never
+  discards these observations; ordinary historical probes can reuse them in the
+  next cycle, while fresh confirmations still execute.
+  The search finishes its historical bisection before checking main again.
+  When changed inputs reach the failed steps, it measures the newest decision
+  tip once. The range extends through that tip only if no new step fails and
+  every remaining step's canonical failure identity equals the previous tip's.
+  A partial fix narrows the search to those remaining steps. Identity is
+  the sorted complete REGRESSED, CHANGED and MISSING verdict-detail rows from
+  census comparison sections, including case names and verdict changes. Progress,
+  timing and run paths outside those rows are not identity. Truncated or missing
+  detail proves nothing; two missing identities never compare equal.
+  A green decision tip records a fix forward and reverts nothing; a changed
+  failure, unavailable identity, unknown reach or a non-extending first-parent
+  history holds by name. If main moves during the decision probe, unrelated
+  inputs carry the observation through the new tip; affected or unknown reach
+  holds with the current tip's identity unmeasured. Thus one attempt is finite
+  even when main moves after every probe. A revert names only a commit in the
+  original or extended first-parent range, with identity proven through current
+  main. A false green defers a defect to the next core, a cheaper error than
+  reverting a change already fixed forward.
   The full check reverts a still-red culprit (the
   revert passes the landing check like any change), and re-landing it with a
   fix is a task again: the issue the commit names is reopened, with a comment

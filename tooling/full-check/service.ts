@@ -88,7 +88,7 @@ import { search, type Measure, type Probe } from "./culprit.ts";
 import {selectRange,type RangeSelection} from '../gate/owed-range.ts';
 import {owedReach} from '../landing/selection.ts';
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
-import { FULL_CHECK_RANK, pinnedGate, type Gate } from "./measure.ts";
+import { FULL_CHECK_RANK, pinnedGate, readFailureIdentities, type Gate } from "./measure.ts";
 import { measuring, readMeasurementProgress, type MeasurementProgress } from "./measure-command.ts";
 import { describeDiskWait } from "../gate/disk-capacity.ts";
 import { landedTimes, landingQueue, submitTo, type LandingAnswer, type LandingQueue } from "./queue.ts";
@@ -420,6 +420,10 @@ async function searchAndRevert(fx: Effects, state: State, part: Part, red: RunRe
       return main;
     },
     reaches: fx.reaches,
+    range: (good, tip) => {
+      const candidates = firstParents(fx.git, good, tip);
+      return { candidates, reverted: revertsIn(fx.git, candidates) };
+    },
   });
   const evidence = result.main;
   if (evidence) fx.log(`fix-forward decision: main ${short(evidence.commit)}, valid through ${short(evidence.through)}; probe ${evidence.run}`);
@@ -499,7 +503,7 @@ function probe(fx: Effects, state: State, part: Part): Measure {
       const cached = steps.map(step => state.probes.find(p => p.key === key && p.step === step));
       if (cached.every(Boolean)) {
         const failed = steps.filter((_, k) => cached[k]!.verdict === "red");
-        return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, run: cached[0]!.run };
+        return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, run: cached[0]!.run, failures: Object.assign({}, ...cached.map(p => readFailureIdentities(p!.run, [p!.step]))) };
       }
     }
     const result = (verdict: Probe["verdict"], run: string, failed: string[] = [], reason?: string): Probe =>
@@ -546,7 +550,7 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     }
     writeState(fx.layout.state, state);
     const failed = present.filter(step => m.steps[step] === "FAIL");
-    if (failed.length) return result("red", m.run, failed);
+    if (failed.length) return { ...result("red", m.run, failed), failures: m.failures };
     if (present.every(step => m.steps[step] === "PASS")) return result("green", m.run);
     return result("skip", m.run, [], present.filter(step => m.steps[step] === "HELD").map(step => `${step}: ${m.reasons[step]}`).join("; "));
   };
