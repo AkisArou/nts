@@ -48,7 +48,7 @@ function fixture(t: { after(fn: () => void): void },runner=false) {
   // These controls exercise the real sealed worktree setup, without a build
   // or dependence on delegated cpusets (affinity has its own kernel tests).
   writeFileSync(join(root,'tooling/gate/affinity/main.ts'),'');
-  writeFileSync(join(root, "tooling/inputs/link.sh"), 'mkdir -p "$NTS_GATE_TREE/results"\nprintf CANDIDATE > "$NTS_GATE_TREE/results/setup-marker"\n');
+  writeFileSync(join(root, "tooling/inputs/link.sh"), 'mkdir -p "$NTS_GATE_TREE/results"\nprintf CANDIDATE > "$NTS_GATE_TREE/results/setup-marker"\nprintf "%s" "$NTS_HOST_OBSERVATIONS" > "$NTS_GATE_TREE/results/setup-observations"\n');
   git("init", "-q", "-b", "main"); git("add", "."); git("commit", "-qm", "main");
   git("checkout", "-qb", "candidate");
   writeFileSync(join(root, "candidate"), "candidate input\n");
@@ -115,10 +115,12 @@ test("candidate setup consumes a sealed sha and cannot write main's records or f
   const env = fullEnvironment(plan, ["corpus"], { ...f.env, NTS_GATE_RECORD_TIMES: "1", NTS_GATE_TREE: f.root, NTS_GATE_SETUP_ONLY: "1" });
   assert.equal(env.NTS_GATE_RECORD_TIMES, "0");
   assert.equal(env.NTS_GATE_RUN_DIR, plan.run);
-  const result = spawnTest("sh", [join(f.root, "tooling/gate/pinned.sh"), plan.commit], { cwd: f.root, env, encoding: "utf8",});
+  const admitted=gateEnvironment(env,{run:plan.run,owned:gateFixtureMemory(join(f.directory,'setup-memory'),f.root)}).env;
+  const result = spawnTest("sh", [join(f.root, "tooling/gate/pinned.sh"), plan.commit], { cwd: f.root, env:admitted, encoding: "utf8",});
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(execFileSync("git", gitArguments(["rev-parse", "HEAD"]), {env:fixtureEnvironment(t), cwd: plan.tree, encoding: "utf8" }).trim(), f.candidate);
   assert.equal(readFileSync(join(plan.tree, "results/setup-marker"), "utf8"), "CANDIDATE");
+  assert.equal(readFileSync(join(plan.tree,'results/setup-observations'),'utf8'),admitted.NTS_HOST_OBSERVATIONS);
   assert.equal(readFileSync(join(f.root, "results/marker"), "utf8"), "main record\n");
   assert.equal(readFileSync(join(f.home, "runs/latest"), "utf8"), "main's last full run\n");
   assert.equal(existsSync(join(f.home, "tree")), false);

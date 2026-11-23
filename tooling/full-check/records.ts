@@ -119,7 +119,7 @@ export function applyAt(git: Git, main: string, checkout: (commit: string) => vo
  * runs (service.ts's recordPending). Its output goes to `log`, whose folder
  * also holds its run's temporary folder while it runs.
  */
-export function applyRecords(tree: string, delta: string, log: string, options: { nodeInstallations?: string; env?: NodeJS.ProcessEnv } = {}): { status: number; output: string } {
+export function applyRecords(tree: string, delta: string, log: string, options: { nodeInstallations?: string; env?: NodeJS.ProcessEnv; owned?:Readonly<Record<string,string>> } = {}): { status: number; output: string } {
   const script = join(tree, "tooling/records/record-pending.ts");
   if (!existsSync(script)) return { status: 2, output: "no tooling/records/record-pending.ts at main" };
   const selected = nodeToolchain(nodePin(tree), launcherEnvironment(options.env ?? process.env), options.nodeInstallations);
@@ -127,7 +127,7 @@ export function applyRecords(tree: string, delta: string, log: string, options: 
   let r: ReturnType<typeof candidateCommand>;
   try {
     r = candidateCommand(selected.node, {
-      tree, run: join(dirname(log), "records-apply"), owned: {}, command: [selected.node, script, "--apply", delta], discardTemporary: true,
+      tree, run: join(dirname(log), "records-apply"), owned: {...options.owned}, command: [selected.node, script, "--apply", delta], discardTemporary: true,
     }, selected.env, { output: out });
   } finally { closeSync(out); }
   if (r.error) appendFileSync(log, `\n${r.error.message}\n`);

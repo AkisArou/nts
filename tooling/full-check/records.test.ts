@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {hostEnvironment} from '../gate/host-environment.ts';
+import {ownMemory} from '../gate/test-memory.ts';
 import { appliedIn, DELTA_FILE } from "../records/delta.ts";
 import { applyAt, applyRecords, recordAt, recordsMessage } from "./records.ts";
 import { checkoutIn, repository } from "./repository-fixture.ts";
@@ -70,19 +71,19 @@ test("an apply that fails commits nothing, and one that applies nothing has noth
 });
 
 test("main's own --apply runs in the gate's canonical environment, with main's Node, in a temporary folder of its own", t => {
-  const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run");
+  const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run"),owned=ownMemory(join(repo.root,'observations'));
   mkdirSync(join(tree, "tooling/records"), { recursive: true });
   mkdirSync(run);
   candidateEnvironmentFixture(tree);
   // The fake --apply reports what it was given, then ends as the real one does.
   writeFileSync(join(tree, "tooling/records/record-pending.ts"), `import {existsSync} from "node:fs";
-console.log(JSON.stringify({ canonical: !!process.env.NTS_GATE_ENV_CONTEXT, tmp: process.env.TMPDIR, there: existsSync(process.env.TMPDIR ?? ""), argv: process.argv.slice(2) }));
+console.log(JSON.stringify({ canonical: !!process.env.NTS_GATE_ENV_CONTEXT, tmp: process.env.TMPDIR, there: existsSync(process.env.TMPDIR ?? ""), argv: process.argv.slice(2),observations:process.env.NTS_HOST_OBSERVATIONS }));
 console.log("record-pending --apply: 2 row(s) applied, 1 already recorded, 0 skipped; nothing is committed");
 `);
   const delta = join(run, DELTA_FILE), log = join(run, "record-pending.apply-1.log");
-  const result = applyRecords(tree, delta, log, { env: { ...hostEnvironment(process.env), HOME: repo.root } });
+  const result = applyRecords(tree, delta, log, { env: { ...hostEnvironment(process.env), HOME: repo.root },owned });
   assert.equal(result.status, 0, result.output);
-  assert.deepEqual(JSON.parse(result.output.split("\n")[0]!), { canonical: true, tmp: join(run, "records-apply", "tmp"), there: true, argv: ["--apply", delta] });
+  assert.deepEqual(JSON.parse(result.output.split("\n")[0]!), { canonical: true, tmp: join(run, "records-apply", "tmp"), there: true, argv: ["--apply", delta],observations:owned.NTS_HOST_OBSERVATIONS });
   assert.equal(readFileSync(log, "utf8"), result.output, "its output is its log");
   assert.deepEqual(appliedIn(result.output), { applied: 2, already: 1, skipped: 0 });
   assert.equal(existsSync(join(run, "records-apply", "tmp")), false, "its temporary folder goes after it");

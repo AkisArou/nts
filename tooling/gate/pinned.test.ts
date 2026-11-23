@@ -24,12 +24,15 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     const tree = join(directory, "gate-tree");
     mkdirSync(join(root, "tooling/gate"), { recursive: true });
     mkdirSync(join(root, "tooling/inputs"), { recursive: true });
-    const env = Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
+    let env:NodeJS.ProcessEnv = Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
+    const observations=ownMemory(join(directory,'machine'));
+    const owned={...observations,
+      NTS_GATE_TREE: tree, NTS_GATE_TARGET: join(directory, "target"), NTS_GATE_SETUP_ONLY: "1",
+      NTS_GATE_RUN_DIR: join(directory, "run"),
+    };
     Object.assign(env, {
       GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
       GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-      NTS_GATE_TREE: tree, NTS_GATE_TARGET: join(directory, "target"), NTS_GATE_SETUP_ONLY: "1",
-      NTS_GATE_RUN_DIR: join(directory, "run"),
     });
     const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
@@ -37,6 +40,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     // Affinity is independently tested; this fixture isolates which commit
     // supplies preparation without depending on delegated host cpusets.
     writeFileSync(join(root, "tooling/gate/affinity/main.ts"), "");
+    env=gateEnvironment(env,{run:join(directory,'launcher'),oracleRoot:root,owned}).env;
     writeFileSync(join(root, "tooling/inputs/link.sh"), 'printf owner > "' + join(directory, "marker") + '"\n');
     git("init", "-q");
     git("add", ".");
@@ -44,7 +48,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     const owner = git("rev-parse", "HEAD");
     writeFileSync(join(root, "tooling/inputs/link.sh"), 'test -z "${NTS_GATE_LOCK_FD:-}" || { echo "lock marker leaked into candidate tools" >&2; exit 24; }\n' + (refuses
       ? 'echo "candidate input is missing" >&2\nexit 23\n'
-      : 'printf candidate > "' + join(directory, "marker") + '"\n'));
+      : 'printf "%s" "$NTS_HOST_OBSERVATIONS" > "'+join(directory,'observations')+'"\nprintf candidate > "' + join(directory, "marker") + '"\n'));
     git("add", ".");
     git("commit", "-qm", "candidate");
     const candidate = git("rev-parse", "HEAD");
@@ -59,6 +63,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     } else {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(readFileSync(join(directory, "marker"), "utf8"), "candidate");
+      assert.equal(readFileSync(join(directory,'observations'),'utf8'),observations.NTS_HOST_OBSERVATIONS);
     }
   });
 }

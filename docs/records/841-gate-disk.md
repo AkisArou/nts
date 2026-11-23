@@ -325,3 +325,28 @@ runner tests passed after this correction at
 `c73379d3e1898bf711175d3680526b08bf662e1a`. Raw output is
 `~/.cache/nts-scratch/841/b/review-nesting-v1.log`, SHA-256
 `f590ac96a890926ef9855cba443124813611292049aa97f1f11318eaae022108`.
+
+The `71158a02820c146bfa75bd1e798ff7edb1fb266e` local proof completed
+in 557 seconds. Tests and doctests refused the unchanged 40 GiB disk floor.
+Tooling exposed two more fixtures with missing observation handoffs: pinned
+setup had stripped every `NTS_*` field, and record application supplied only
+the host environment. The former observed a disappearing ambient process
+(`#996`); the latter saw a sibling ranks unit through the live argument
+parser (`#990`). The nested control passed inside this real enclosing gate.
+Cleanup completed, removed 390,569,984 allocated bytes and left no temporary;
+red diagnostics hit the logged 64 MiB cap.
+
+Raw controls are retained in issue scratch:
+
+| Raw output | SHA-256 |
+| --- | --- |
+| `~/.cache/nts-scratch/841/b/review-here-v3-summary.json` | `e2cac0b9af93cdc14cb9a643f5cee235511221d3283480bd8adfeb941e81e3ec` |
+| `~/.cache/nts-scratch/841/b/review-here-v3-tooling.raw.log` | `87304cddc36e9751ce173f86b6b79543fc3cfd8ac9583d29a25606c4439a7cb9` |
+
+Pinned setup now receives its ownMemory packet through a canonical owned
+handoff. Record application forwards an optional owned packet through the
+existing candidate-command owner, and its fixture supplies ownMemory. The
+census setup-only fixture uses the same owned gateFixtureMemory handoff as its
+real-runner controls. Each asserts the descriptor observed by the candidate.
+The host audit passed despite all six missing fixture handoffs; enforcing that
+boundary is a separate task, outside this slice.
