@@ -844,7 +844,9 @@ fn a_promise_leads_to_the_state_of_its_reactions() {
                     field("held", object(3)),
                 ],
             ),
-            layout(2, vec![field("p", promise(HirType::NUMBER))]),
+            // Not named as `L3`'s field, so not a structural prefix of it
+            // that an `L3` slot could hold.
+            layout(2, vec![field("q", promise(HirType::NUMBER))]),
             layout(3, vec![field("p", promise(HirType::NUMBER))]),
             layout(4, vec![field("n", HirType::NUMBER)]),
         ],
