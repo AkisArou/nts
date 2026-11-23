@@ -251,6 +251,7 @@ export function closeRunTemporary(file:string,token:string,home:string,green:boo
     assertUnused();
     removable(r.temporary.path);
     const bytes=host.allocatedBytes(r.temporary.path);if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('invalid run temporary bytes: '+r.run);
+    sameTemporary(r,home);assertUnused();
     log(`gate tmp: removing run=${r.run} path=${r.temporary.path} bytes=${bytes}`);
     discardRunTemporary(r.temporary,home,host);
     const closed:TemporaryDisposition={path:r.temporary.path,state:green?'removed after green':'removed after red',bytes,run:r.run,...(r.temporary.enclosing?{enclosing:r.temporary.enclosing.path}:{}),...(diagnostics?{diagnostics}:{})};

@@ -137,6 +137,13 @@ test('a live unit holder and a substituted backstop cannot authorize removal',t=
   assert.throws(()=>closeRunTemporary(f.file,randomUUID(),f.home,false,f.host,{units:[]}),/token/);
   assert.equal(readFileSync(join(f.run,'peer/keep'),'utf8'),'untouched');
 });
+test('a holder appearing during byte measurement still refuses removal',t=>{
+  const f=fixture(t);let appeared=false;
+  const host={...f.host,allocatedBytes:()=>{appeared=true;return 8192;},unitUsers:()=>appeared?
+    {kind:'fixed' as const,units:[{unit:'late-holder.service',workingDirectory:f.temporary.path,rootDirectory:'',commands:[]}]}:f.host.unitUsers()};
+  assert.throws(()=>closeRunTemporary(f.file,f.token,f.home,true,host,{log:line=>f.log.push(line)}),/late-holder.service owns/);
+  assert.equal(existsSync(f.temporary.path),true);assert.deepEqual(f.log,[]);
+});
 test('the closer consumes its owned unit observation and refuses a missing view',t=>{
   const f=fixture(t);
   ownMemory(join(f.home,'observations'),{unitUsers:{kind:'fixed',units:[{unit:'owned.service',workingDirectory:f.temporary.path,rootDirectory:'',commands:[]}]}});
