@@ -6,7 +6,7 @@
 mod scratch;
 
 use camino::Utf8Path;
-use nts_core::hir;
+use nts_core::hir::{self, EntryUnwind, backend::Backend};
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{PropertyKey, TypeKind};
 
@@ -49,19 +49,15 @@ fn an_optional_interface_method_uses_the_declared_dispatch_contract() {
         .find(|func| func.name == "Cursor#return")
         .expect("concrete no-argument return method before inlining");
     assert_eq!(body.params.len(), 1);
-    let prepared = hir::prepare(
-        &snapshot,
-        nts_core::hir::backend::Backend::C,
-        nts_core::hir::EntryUnwind::Terminal,
-    )
-    .unwrap_or_else(|error| {
-        let dir = scratch::ScratchDir::in_target("optional-interface-arguments");
-        let path = dir.join("snapshot.txt");
-        if std::env::var_os("NTS_KEEP_TEST_SCRATCH").is_some_and(|value| value == "1") {
-            std::fs::write(&path, format!("{snapshot:#?}")).unwrap();
-        }
-        panic!("invalid iterator dispatch: {error:?}; snapshot: {path}");
-    });
+    let prepared =
+        hir::prepare(&snapshot, Backend::C, EntryUnwind::Terminal).unwrap_or_else(|error| {
+            let dir = scratch::ScratchDir::in_target("optional-interface-arguments");
+            let path = dir.join("snapshot.txt");
+            if std::env::var_os("NTS_KEEP_TEST_SCRATCH").is_some_and(|value| value == "1") {
+                std::fs::write(&path, format!("{snapshot:#?}")).unwrap();
+            }
+            panic!("invalid iterator dispatch: {error:?}; snapshot: {path}");
+        });
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -128,12 +124,8 @@ fn an_exact_receiver_without_the_optional_member_keeps_its_named_refusal() {
         .snapshot(&config)
         .expect("capture the missing-member neighbor");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(
-        &snapshot,
-        nts_core::hir::backend::Backend::C,
-        nts_core::hir::EntryUnwind::Terminal,
-    )
-    .expect("the refused neighbor has valid HIR");
+    let prepared = hir::prepare(&snapshot, Backend::C, EntryUnwind::Terminal)
+        .expect("the refused neighbor has valid HIR");
     assert!(
         prepared
             .diagnostics
