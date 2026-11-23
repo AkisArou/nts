@@ -609,7 +609,7 @@ test("a priority recheck during oracle capture leaves the run live for its first
   assert.equal(earlySummary,false,"the gate summarized before sealing and left no reservation for its oracle step");
   assert.equal(before.admitted.filter(row=>row.what.startsWith("gate run ")).length,1);
   await waitFor("the oracle run to finish",()=>!!f.terminal());
-  assert.equal(f.terminal()!.code,0,f.output()+readFileSync(log,"utf8"));
+  assert.equal(f.terminal()!.code,0,f.output()+(existsSync(log)?readFileSync(log,"utf8"):'\nprogram-oracles.log was not created'));
   assert.deepEqual(pinLeases(f.pins),[],"successful gate drained its pin lease");
   assert.match(readFileSync(log,"utf8"),/oracle case entered/);
   assert.doesNotMatch(readFileSync(log,"utf8"),/reservation .* has ended/);
