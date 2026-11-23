@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readProcessStat } from "../differential/process-stat/main.ts";
 
 const OWNER = "owner.json";
 const WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -20,12 +21,8 @@ function present(path: string): boolean {
 }
 
 function processStart(pid: number): string | null {
-  try {
-    const text = readFileSync(`/proc/${pid}/stat`, "utf8");
-    const fields = text.slice(text.lastIndexOf(")") + 2).split(" ");
-    if (!/^\d+$/.test(fields[19])) throw new Error(`invalid process identity: ${pid}`);
-    return fields[0] === "Z" || fields[0] === "X" ? null : fields[19];
-  } catch (error) { if (absent(error)) return null; throw error; }
+  const stat = readProcessStat(pid);
+  return stat?.live ? String(stat.started) : null;
 }
 
 function owner(): Owner {

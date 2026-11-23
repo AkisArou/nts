@@ -84,6 +84,10 @@ pub(super) const EXECUTION_FILES: &[(&str, &[u8])] = &[
         "runtime-paths/main.ts",
         include_bytes!("../runtime-paths/main.ts"),
     ),
+    (
+        "process-stat/main.ts",
+        include_bytes!("../process-stat/main.ts"),
+    ),
 ];
 
 pub(super) fn execution_identity() -> Result<String> {

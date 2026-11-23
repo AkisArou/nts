@@ -5,22 +5,32 @@ import {closeSync,mkdirSync,openSync,readFileSync,readdirSync,writeFileSync} fro
 import {dirname,join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {coreTicks} from '../gate/measurement.ts';
+import {processStat,readTaskStats,type ProcessStat} from '../differential/process-stat/main.ts';
 
-export function taskStat(pid:number,tid:number,text:string){
-  const end=text.lastIndexOf(')'),begin=text.indexOf('('),fields=text.slice(end+2).trim().split(/\s+/);
-  const numbers=[Number(fields[11]),Number(fields[12]),Number(fields[19]),Number(fields[36])];
-  if(begin<0||end<=begin||numbers.some(n=>!Number.isSafeInteger(n)||n<0))throw Error('invalid task stat');
-  return {pid,tid,comm:text.slice(begin+1,end),ticks:numbers[0]+numbers[1],birth:numbers[2],cpu:numbers[3]};
+/** An offender row names the CPU its task last ran on, so its record must be a full one. */
+function offender(pid:number,tid:number,stat:ProcessStat){
+  if(stat.processor===undefined)throw Error('invalid task stat');
+  return {pid,tid,comm:stat.comm,ticks:stat.own,birth:stat.started,cpu:stat.processor};
 }
+export function taskStat(pid:number,tid:number,text:string){
+  let stat:ProcessStat;
+  try{stat=processStat(text);}catch(error){throw Error('invalid task stat',{cause:error});}
+  return offender(pid,tid,stat);
+}
+const unreadableCode=(error:unknown)=>['ENOENT','ESRCH','EACCES'].includes((error as NodeJS.ErrnoException).code??'');
 
 function snapshot(){
   const tasks=new Map<string,ReturnType<typeof taskStat>>();let unreadable=0;
   for(const pid of readdirSync('/proc'))if(/^\d+$/.test(pid)){
-    try {for(const tid of readdirSync(`/proc/${pid}/task`)){
+    let tids:number[];
+    try{tids=readdirSync(`/proc/${pid}/task`).map(Number);}catch(e){if(unreadableCode(e)){unreadable++;continue;}throw e;}
+    // A task gone since the listing, or one denied, is unreadable; any other failure stops the snapshot.
+    const records=readTaskStats(Number(pid),tids,(_tid,error)=>{if(!unreadableCode(error.cause))throw error;});
+    for(const tid of tids){
       if(tasks.size>=100000)throw Error('offender snapshot task bound exceeded');
-      try {tasks.set(pid+':'+tid,taskStat(Number(pid),Number(tid),readFileSync(`/proc/${pid}/task/${tid}/stat`,'utf8')));}
-      catch(e){if(e.code==='ENOENT'||e.code==='ESRCH'||e.code==='EACCES')unreadable++;else throw e;}
-    }}catch(e){if(e.code==='ENOENT'||e.code==='ESRCH'||e.code==='EACCES')unreadable++;else throw e;}
+      const stat=records.get(tid);
+      if(stat)tasks.set(pid+':'+tid,offender(Number(pid),tid,stat));else unreadable++;
+    }
   }
   return {utc:new Date().toISOString(),tasks,unreadable,cpus:Object.fromEntries(coreTicks(readFileSync('/proc/stat','utf8'))),
     interrupts:interrupts(readFileSync('/proc/interrupts','utf8')),softirqs:interrupts(readFileSync('/proc/softirqs','utf8'))};

@@ -14,7 +14,7 @@ import {hostEnvironment} from '../host-environment.ts';
 import {captureRunTemporary, finishRunTemporary, pruneRunTemporaries, removable} from "../run-temporary.ts";
 import {instrumentPolicy} from "../step-result.ts";
 import {spawnTest, waitFor} from "../test-wait.ts";
-import {processActivity} from "../active-command.ts";
+import {readProcessStat} from "../../differential/process-stat/main.ts";
 import {newTestScratch} from "../test-scratch.ts";
 
 type Row = { name: string; verdict: string; reason?: string; started_at?: string;
@@ -89,10 +89,8 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
   const descendantAlive = () => {
     if (!existsSync(escaped)) return false;
     const row = JSON.parse(readFileSync(escaped, "utf8")) as { pid: number; started: number };
-    try {
-      const stat = readFileSync(`/proc/${row.pid}/stat`, "utf8"), state = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0];
-      return state !== "Z" && processActivity(stat).started === row.started;
-    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+    const stat = readProcessStat(row.pid);
+    return stat !== undefined && stat.live && stat.started === row.started;
   };
   t.after(async () => {
     writeFileSync(join(own, "escape-release"), "finish the owned control");
@@ -113,11 +111,12 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   writeFileSync(join(own, "descendant.mjs"), `
-import {readFileSync, existsSync, watch} from 'node:fs';
+import {existsSync, watch} from 'node:fs';
 import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
-const own=${JSON.stringify(own)},stat=readFileSync('/proc/self/stat','utf8');
+import {readProcessStat} from ${JSON.stringify(new URL('../../differential/process-stat/main.ts',import.meta.url).href)};
+const own=${JSON.stringify(own)};
 process.on('SIGTERM',()=>{});
-durableRecord(own+'/escape-ready',{pid:process.pid,started:Number(stat.slice(stat.lastIndexOf(')')+2).split(/\\s+/)[19])});
+durableRecord(own+'/escape-ready',{pid:process.pid,started:readProcessStat(process.pid).started});
 const finish=()=>{if(existsSync(own+'/escape-release'))process.exit(0);};
 watch(own,finish);finish();
 `);

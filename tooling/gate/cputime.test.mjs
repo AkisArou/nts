@@ -3,7 +3,7 @@
 //   node --test tooling/gate/cputime.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PERF_ARGS, countedLaunch, parsePerf, parseMeasurement, parseUserEvents } from "./cputime.mjs";
+import { PERF_ARGS, countedLaunch, cpuOf, parsePerf, parseMeasurement, parseUserEvents } from "./cputime.mjs";
 
 // `nts hir --prepared runtime/node/events`, twice, each counted by two perfs
 // attached to the same process: one with PERF_ARGS (raw), one as the first
@@ -115,4 +115,19 @@ test("human extra events retain real perf rusage and implicit full running time"
   for(const suffix of ["(n/a%)","(98.00%) trailing","(99.00%"])
     assert.throws(()=>parseUserEvents(raw.replace("74890938 cpu_core/cycles/u","74890938 cpu_core/cycles/u "+suffix),["cycles"]));
   assert.equal(parseUserEvents("7 cpu_core/branch-misses/u # 0.12% of all branches",["branch-misses"])["branch-misses"].running_percent,100);
+});
+
+test("a CPU sample is its process's own user plus system time, or null when the record cannot say", () => {
+  /** @param {number} utime @param {number} stime */
+  const record = (utime, stime) => {
+    const fields = Array(52).fill("0"); fields[0] = "R"; fields[11] = String(utime); fields[12] = String(stime); fields[13] = "1000"; fields[19] = "9";
+    return `41 (a name with ) in it) ${fields.join(" ")}`;
+  };
+  const one = cpuOf(41, () => record(5, 10)), two = cpuOf(41, () => record(10, 20));
+  assert.ok(one !== null && one > 0); assert.equal(two, 2 * one, "reaped children's time is not the process's own");
+  assert.ok((cpuOf(process.pid) ?? -1) >= 0);
+  assert.equal(cpuOf(2 ** 22 + 1), null, "a gone process");
+  // A short read during exit is no sample, never NaN.
+  assert.equal(cpuOf(41, () => "41 (exiting) R"), null);
+  assert.equal(cpuOf(41, () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); }), null);
 });

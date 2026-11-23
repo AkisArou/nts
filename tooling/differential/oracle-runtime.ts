@@ -4,6 +4,7 @@ import {openSync,closeSync,readSync,fstatSync,lstatSync,statSync,readFileSync,co
 import {dirname,isAbsolute,join,parse,relative,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import type {OracleIdentity,EmitGroup,OwnerImportRoute} from './oracle-emit.ts';
+import {readProcessStat} from './process-stat/main.ts';
 
 // Recipe identity is shared with result-only consumers. It reads pinned source
 // bytes and records, never the preparation graph or a compiler API.
@@ -17,6 +18,7 @@ const EXECUTION_INPUTS=[
   new URL('./command-entry/instrument.ts',import.meta.url),
   new URL('./oracle-seal/main.ts',import.meta.url),
   new URL('./runtime-paths/main.ts',import.meta.url),
+  new URL('./process-stat/main.ts',import.meta.url),
 ] as const;
 const RECIPE_INPUTS={
   emitter:new URL('./oracle-emit.ts',import.meta.url),
@@ -202,9 +204,10 @@ export function readOracleSnapshotIndex(directory:string,root:OracleSnapshotRefe
 export type NodeResolutionOptions={flags:string[];nodeOptions:string};
 export type NodeExecutableIdentity={dev:string;ino:string};
 export type NodeResolutionSession={version:1;directory:string;token:string;nodeVersion:string;nodeSha256:string;executable:NodeExecutableIdentity;holder:{pid:number;birth:string};owner:{pid:number;birth:string};options:NodeResolutionOptions;conditions:{esm:string[];cjs:string[]};helperSha256:string};
-const executableStat=statSync,processIdentityRead=readFileSync;
+const executableStat=statSync;
 export const nodeExecutableIdentity=(pid:number):NodeExecutableIdentity=>{const info=executableStat('/proc/'+pid+'/exe',{bigint:true});return {dev:String(info.dev),ino:String(info.ino)};};
-export const nodeProcessBirth=(pid:number)=>{const text=processIdentityRead('/proc/'+pid+'/stat','utf8'),end=text.lastIndexOf(')');if(end<0)throw Error('invalid process identity');const fields=text.slice(end+2).split(' ');if(fields[0]==='Z'||!fields[19])throw Error('process is not alive');return fields[19];};
+/** The process stat owner captures its reader at load, before governed code replaces builtins. */
+export const nodeProcessBirth=(pid:number)=>{const stat=readProcessStat(pid);if(!stat?.live)throw Error('process is not alive');return String(stat.started);};
 export const nodeProcessAlive=(owner:{pid:number;birth:string})=>{try{return nodeProcessBirth(owner.pid)===owner.birth;}catch{return false;}};
 /** Mutable resolver state belongs to one run, independently of its reusable image. */
 export type NodeResolutionRun={pid:number;birth:string;root:{path:string;dev:number;ino:number;uid:number}};

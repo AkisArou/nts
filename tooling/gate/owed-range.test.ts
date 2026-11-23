@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { readProcessStat } from "../differential/process-stat/main.ts";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
@@ -225,7 +226,7 @@ export const allSteps=()=>['tooling'];\n`;
   assert.deepEqual(selectRange(repo,`${base}..${healthy}`).checks.steps,["tooling"],"healthy source control");
   writeFileSync(report,"");
   const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
-  const stat=readFileSync(`/proc/${process.pid}/stat`,"utf8"),start=stat.slice(stat.lastIndexOf(")")+2).split(" ")[19];
+  const start=String(readProcessStat(process.pid)!.started);
   const stale=`refs/nts-selector/${process.pid}-0-${boot}-expired/base`,live=`refs/nts-selector/${process.pid}-${start}-${boot}-control/base`;
   git("update-ref",stale,base);git("update-ref",live,base);
   // A different process may have created gitdir before commondir. Keep that

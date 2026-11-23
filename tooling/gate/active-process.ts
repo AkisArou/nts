@@ -1,12 +1,12 @@
 // A command's exit decides its result. Silence can only leave it unmeasured.
 import {execFileSync,spawn} from "node:child_process";
-import {readFileSync,readdirSync} from "node:fs";
+import {readdirSync} from "node:fs";
 import {StringDecoder} from "node:string_decoder";
 import {CommandLiveness,validateCommandPolicy} from "./command-liveness.ts";
 import {hostObservations} from "./host-observations.ts";
 import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 import {ownedProcessGroup} from './process-group.ts';
-import {processStat,readProcessStat,readProcessStats,type ProcessStat} from '../differential/process-stat/main.ts';
+import {processStat,readProcessStat,readProcessStats,readTaskStats,unreadableIsAbsent,type ProcessStat} from '../differential/process-stat/main.ts';
 
 export {COMMAND_IDLE_GUARD_MS,COMMAND_CPU_BUDGET_SECONDS,COMMAND_STARTUP_BOUND_MS} from "./command-liveness.ts";
 export const COMMAND_ACTIVITY_POLL_MS=5000;
@@ -23,21 +23,18 @@ function clockTicks(){
 }
 
 /** Activity's recorded shape: exactly these fields, whatever else a record carries. */
-const activityOf=({parent,group,session,cpu,own,started,busy}:ProcessStat)=>({parent,group,session,cpu,own,started,busy});
-export function processActivity(text:string){return activityOf(processStat(text));}
+export const processActivityOf=({parent,group,session,cpu,own,started,busy}:ProcessStat)=>({parent,group,session,cpu,own,started,busy});
+export function processActivity(text:string){return processActivityOf(processStat(text));}
 /** Whether any thread of `pid` is busy: a process's own state is only its main thread's. */
 export function threadsBusy(pid:number):boolean {
-  let tids:string[];
-  try{tids=readdirSync(`/proc/${pid}/task`);}catch{return false;}
-  for(const tid of tids){
-    let text:string;
-    try{text=readFileSync(`/proc/${pid}/task/${tid}/stat`,"utf8");}catch{continue;}
-    try{if(processStat(text).busy)return true;}catch{continue;}
-  }
+  let tids:number[];
+  try{tids=readdirSync(`/proc/${pid}/task`).map(Number);}catch{return false;}
+  // Best effort: an unreadable or malformed thread says nothing about busyness.
+  for(const stat of readTaskStats(pid,tids,unreadableIsAbsent).values())if(stat.busy)return true;
   return false;
 }
 function processAt(pid:number) {
-  const record=readProcessStat(pid);return record&&activityOf(record);
+  const record=readProcessStat(pid);return record&&processActivityOf(record);
 }
 /** Read-only identity and counters; a rooted observer gains no signal owner. */
 export function commandProcessIdentity(pid:number){return processAt(pid);}
@@ -56,7 +53,7 @@ function activitySnapshot(owned:ReadonlySet<number>,roots:ReadonlySet<number>=ne
     while(!roots.has(ancestor)&&records.has(ancestor)&&!visited.has(ancestor)){
       visited.add(ancestor);ancestor=records.get(ancestor)!.parent;
     }
-    if(owned.has(record.session)||roots.has(ancestor))selected.set(pid,{...activityOf(record),busy:record.busy||threadsBusy(pid)});
+    if(owned.has(record.session)||roots.has(ancestor))selected.set(pid,{...processActivityOf(record),busy:record.busy||threadsBusy(pid)});
   }
   return selected;
 }

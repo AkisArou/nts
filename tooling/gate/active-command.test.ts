@@ -3,6 +3,7 @@ import {testEnvironment,testEnvironmentHandoff,fixtureEnvironment} from "./test-
 import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
 import {existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
+import {readProcessStat,type StatReader} from "../differential/process-stat/main.ts";
 import {randomUUID} from "node:crypto";
 import {join} from "node:path";
 import {test} from "node:test";
@@ -17,9 +18,9 @@ function fixture(t) {
   return {root,env:{...fixtureEnvironment(t),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"active-control",NTS_GATE_STEP_RESULT:join(root,"result.json")}};
 }
 
-function processHasExited(pid:number,readStat=()=>readFileSync(`/proc/${pid}/stat`,"utf8")):boolean {
-  try{return /^\d+ \(.+\) Z /.test(readStat());}
-  catch(error){if(error.code==="ENOENT"||error.code==="ESRCH")return true;throw error;}
+/** Gone or a zombie; any other read failure is the failure itself. */
+function processHasExited(pid:number,readStat?:StatReader):boolean {
+  return !readProcessStat(pid,readStat,(_pid,error)=>{throw error.cause??error;})?.live;
 }
 
 test("the exit probe reads a reaped child and preserves other read errors",t=>{
@@ -168,7 +169,7 @@ test("a live memory.high and busy-state observation releases its kernel control"
     try{
       const group=control('show',`${unit}.scope`,'--property=ControlGroup','--value');if(!group)return;
       const pid=readFileSync(`/sys/fs/cgroup${group}/cgroup.procs`,'utf8').trim().split('\n')[0];if(!pid)return;
-      const stat=readFileSync(`/proc/${pid}/stat`,'utf8'),state=stat.slice(stat.lastIndexOf(')')+2).split(' ')[0];
+      const state=readProcessStat(Number(pid))?.state;if(state===undefined)return;
       high=Number(/^high (\d+)$/m.exec(readFileSync(`/sys/fs/cgroup${group}/memory.events`,'utf8'))?.[1]);
       if(high>0&&state==='D'&&busy){control('set-property','--runtime',`${unit}.scope`,'MemoryHigh=infinity');lifted=true;}
     }catch(error){if(!String(error).includes('No such file'))throw error;}

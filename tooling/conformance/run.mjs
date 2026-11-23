@@ -32,7 +32,8 @@ import {fileURLToPath} from "node:url";
 import { readdirSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
-import { activeCommand, CommandNotMeasuredError, processActivity } from "../gate/active-command.ts";
+import { activeCommand, CommandNotMeasuredError, processActivityOf } from "../gate/active-command.ts";
+import { readProcessStat } from "../differential/process-stat/main.ts";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { checkFailurePolicy, reportCheckFailure } from "../differential/check-report.ts";
 import {nodePreloadPlan} from './node-preloads.ts';
@@ -453,7 +454,9 @@ function processesAfterFile() {
       const memberGroup = readFileSync(`/proc/${pid}/cgroup`, "utf8").trim().replace(/^0::/, "");
       if (memberGroup !== group && !memberGroup.startsWith(`${group}/`)) continue;
       const status = readFileSync(`/proc/${pid}/status`, "utf8");
-      remaining.push({ pid, ...processActivity(readFileSync(`/proc/${pid}/stat`, "utf8")),
+      const stat = readProcessStat(pid);
+      if (stat === undefined) continue;
+      remaining.push({ pid, ...processActivityOf(stat),
         state: /^State:\s+(\S+)/m.exec(status)?.[1],
         command: readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter(Boolean) });
     } catch (error) {if(isCommandExit(error))throw error;

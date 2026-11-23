@@ -1,5 +1,6 @@
 import {gitArguments} from "./git-arguments/main.ts";
 import {registerCommandCloser,runAsCommand} from "../differential/command-entry/main.ts";
+import {readProcessStat} from "../differential/process-stat/main.ts";
 // Evaluate each endpoint's own rules and derived inputs in immutable trees.
 // The caller's working files and the other endpoint cannot narrow that view.
 import { createHash } from "node:crypto";
@@ -55,12 +56,8 @@ function git(repo: string, ...args: string[]): string {
 }
 
 function processIdentity(pid:number):{start:string;live:boolean}|null {
-  try {
-    const stat=readFileSync(`/proc/${pid}/stat`,"utf8");
-    const fields=stat.slice(stat.lastIndexOf(")")+2).split(" ");
-    if(!/^\d+$/.test(fields[19]))throw new Error(`invalid process identity for ${pid}`);
-    return {start:fields[19],live:fields[0]!=="Z"&&fields[0]!=="X"};
-  }catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}
+  const stat=readProcessStat(pid);
+  return stat?{start:String(stat.started),live:stat.live}:null;
 }
 
 /** A selector owner's boot, PID and process start. A terminated selector may

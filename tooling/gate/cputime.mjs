@@ -14,21 +14,21 @@ import { readFileSync, mkdirSync } from "node:fs";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { dirname } from "node:path";
 import { COUNTER_SCOPE, counterProblem } from "./compile-counter.ts";
+import { readProcessStat, unreadableIsAbsent } from "../differential/process-stat/main.ts";
 
 let TICK = 100;
 try { TICK = Number(execFileSync("getconf", ["CLK_TCK"], { encoding: "utf8" }).trim()) || 100; } catch {}
 export const SAMPLE_MS = 200;
 
-/** Seconds of CPU `pid` has used so far, or null when /proc cannot say. */
-export function cpuOf(pid) {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    const f = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    // After the name: state(0) ... utime is field 14 overall, index 11 here.
-    return (Number(f[11]) + Number(f[12])) / TICK;
-  } catch {
-    return null;
-  }
+/**
+ * Seconds of CPU `pid` has used so far, or null when /proc cannot say.
+ * @param {number} pid
+ * @param {import("../differential/process-stat/main.ts").StatReader} [readStat]
+ */
+export function cpuOf(pid, readStat) {
+  // A sample is optional: a gone, unreadable or malformed record says nothing.
+  const stat = readProcessStat(pid, readStat, unreadableIsAbsent);
+  return stat === undefined ? null : stat.own / TICK;
 }
 
 /**

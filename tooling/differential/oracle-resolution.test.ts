@@ -1,4 +1,5 @@
 import {nodeProcessAlive} from './oracle-runtime.ts';
+import {readProcessStat,type StatReader} from './process-stat/main.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {copyFileSync,chmodSync,constants,mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,statSync,writeFileSync,openSync,closeSync} from 'node:fs';
@@ -12,13 +13,13 @@ import {startNodeResolutionSession,queryNodeResolutions,checkNodeResolutionSessi
 
 const here=dirname(fileURLToPath(import.meta.url));
 function fixture(t:TestContext){const root=mkdtempSync(join(tmpdir(),'nts-resolution-service-'));t.after(()=>rmSync(root,{recursive:true,force:true}));return root;}
-function holderGone(read:()=>unknown):boolean {
-  try{read();return false;}
-  catch(error){if(['ENOENT','ESRCH'].includes((error as NodeJS.ErrnoException).code??''))return true;throw error;}
+/** Only absence proves the holder gone; any other read failure is the failure itself. */
+function holderGone(pid:number,read?:StatReader):boolean {
+  return readProcessStat(pid,read,(_pid,error)=>{throw error.cause??error;})===undefined;
 }
 async function close(session:NodeResolutionSession){
   await closeNodeResolutionSession(session);
-  await waitFor('the oracle Node resolution holder to exit',()=>holderGone(()=>readFileSync('/proc/'+session.holder.pid+'/stat')));
+  await waitFor('the oracle Node resolution holder to exit',()=>holderGone(session.holder.pid));
 }
 test('a heap bound resolves nothing, so a nested child without the oracle child\'s heap flags keeps its resolution identity',()=>{
   const env={NODE_OPTIONS:'--max-old-space-size=8192'};
@@ -29,14 +30,14 @@ test('a heap bound resolves nothing, so a nested child without the oracle child\
   // The control differs in one thing: a resolver flag, which still changes the identity.
   assert.notDeepEqual(nodeResolutionOptions(['--preserve-symlinks-main'],env),oracle);
 });
-test('holder disappearance keeps a live stat provisional',()=>assert.equal(holderGone(()=>Buffer.from('live stat')),false));
+test('holder disappearance keeps a live stat provisional',()=>assert.equal(holderGone(process.pid),false));
 for(const code of ['ENOENT','ESRCH'])test('holder disappearance recognizes '+code,()=>{
   const error=Object.assign(new Error('controlled process disappearance'),{code});
-  assert.equal(holderGone(()=>{throw error;}),true);
+  assert.equal(holderGone(2**22+1,()=>{throw error;}),true);
 });
 test('holder disappearance propagates other read failures',()=>{
   for(const error of [Object.assign(new Error('denied'),{code:'EACCES'}),Object.assign(new Error('read failed'),{code:'EIO'}),new Error('uncategorized read')])
-    assert.throws(()=>holderGone(()=>{throw error;}),observed=>observed===error);
+    assert.throws(()=>holderGone(2**22+1,()=>{throw error;}),observed=>observed===error);
 });
 test('resolution sessions report the actual launch and isolate canonical conditions from an ambient launcher',t=>{
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}

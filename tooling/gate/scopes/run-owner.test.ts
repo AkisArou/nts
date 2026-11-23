@@ -2,6 +2,7 @@ import {testEnvironmentHandoff,fixtureEnvironment} from "../test-environment.ts"
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readProcessStat } from "../../differential/process-stat/main.ts";
 import { join } from "node:path";
 import { test } from "node:test";
 import { waitFor } from "../test-wait.ts";
@@ -11,7 +12,7 @@ import { newTestScratch } from "../test-scratch.ts";
 
 test("a malformed owner start identity cannot make a live process appear dead", () => {
   const own = newTestScratch("run-owner-invalid"), path = join(own, "owner.json");
-  const stat = readFileSync("/proc/self/stat", "utf8"), start = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]!;
+  const start = String(readProcessStat(process.pid)!.started);
   let reaped = 0;
   try {
     for (const malformed of [Number(start), `0${start}`]) {
