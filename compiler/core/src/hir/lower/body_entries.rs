@@ -1,11 +1,11 @@
 //! Build plain function and member bodies and dispatch each statement or expression to its owner.
 
 use super::{
-    AsyncResult, Copy, Diagnostic, Facts, Func, FuncBuilder, HirType, ImportPhase, LayoutCollector,
-    Lowered, LoweringSnapshot, ManagedType, NodeId, OpKind, Over, Param, ParamShape, Shared,
-    Substitution, Terminator, TypeId, ValueId, assertions, instance_type_of, is_static_member,
-    member_copy, member_name_of, members_of, note_member, raising_method, receiving_function_name,
-    spell, syntax,
+    AsyncResult, ClassCopy, Copy, Diagnostic, Facts, Func, FuncBuilder, HirType, ImportPhase,
+    LayoutCollector, Lowered, LoweringSnapshot, ManagedType, NodeId, OpKind, Over, Param,
+    ParamShape, Shared, Substitution, Terminator, TypeId, ValueId, assertions, instance_type_of,
+    is_static_member, member_copy, member_name_of, members_of, note_member, raising_method,
+    receiving_function_name, spell, syntax,
 };
 
 pub(super) fn lower_object_literal_members(
@@ -18,11 +18,206 @@ pub(super) fn lower_object_literal_members(
     wanted: &mut std::collections::BTreeSet<usize>,
 ) {
     let mut owner = shared.builder(snapshot, foreign, Copy::default());
-    let Some(instance) = owner.literal_member_owner(literal) else {
+    let Some(form) = owner.literal_member_owner(literal) else {
         return;
     };
-    for member in members_of(snapshot, foreign, literal) {
+    // A literal with no method, getter or setter has nothing to lower here: its
+    // properties are written where it is built.
+    if members_of(snapshot, foreign, literal).is_empty() {
+        return;
+    }
+    let as_written = || LiteralCopy {
+        instance: form,
+        ordinary: Copy::default(),
+        raising: member_copy(
+            snapshot,
+            Some(form),
+            &Substitution::default(),
+            &crate::hir::generics::Sources::default(),
+            false,
+        ),
+    };
+    let Some(per_copy) = per_copy_literals(snapshot, shared, &owner, literal, form) else {
+        let at = as_written();
+        lower_literal_members_at(
+            layout_collector,
+            snapshot,
+            foreign,
+            literal,
+            shared,
+            lowered,
+            wanted,
+            &at,
+        );
+        return;
+    };
+    // A copy that could not instantiate the record builds the literal at the
+    // form, as every copy did before, and calls the form's members.
+    if per_copy.form_still_built {
+        let at = as_written();
+        lower_literal_members_at(
+            layout_collector,
+            snapshot,
+            foreign,
+            literal,
+            shared,
+            lowered,
+            wanted,
+            &at,
+        );
+    }
+    for at in &per_copy.copies {
+        lower_literal_members_at(
+            layout_collector,
+            snapshot,
+            foreign,
+            literal,
+            shared,
+            lowered,
+            wanted,
+            at,
+        );
+    }
+    // Two copies building one record under different bindings would make its
+    // members two functions with one name. Refused by name: the record
+    // mentions only what both copies agree on, so a body that differs between
+    // them reads something its record does not say.
+    for instance in per_copy.conflicting {
         let mut builder = shared.builder(snapshot, foreign, Copy::default());
+        let diagnostic = builder.unsupported(
+            literal,
+            "an object literal two copies of its generic build at one record under different \
+             bindings, so its members would be two functions with one name",
+        );
+        for member in members_of(snapshot, foreign, literal) {
+            note_member(
+                &mut builder,
+                lowered,
+                literal,
+                member,
+                Some(instance),
+                &diagnostic,
+            );
+        }
+        lowered.diagnostics.push(diagnostic);
+    }
+}
+
+/// Where an object literal's members are lowered: the record they belong to,
+/// and the copy descriptions their ordinary and raising bodies are built in.
+pub(super) struct LiteralCopy {
+    pub(super) instance: TypeId,
+    ordinary: Copy,
+    raising: Copy,
+}
+
+/// The copies of an enclosing generic that build a literal at records of their
+/// own, where its record is a form of that generic (`instantiate`'s
+/// `object_forms`).
+pub(super) struct PerCopy {
+    /// One per distinct record, under the first copy that builds it.
+    pub(super) copies: Vec<LiteralCopy>,
+    /// Whether some copy builds the literal at the form itself.
+    pub(super) form_still_built: bool,
+    /// Records two copies build under different bindings.
+    pub(super) conflicting: Vec<TypeId>,
+}
+
+/// **A literal's members are lowered once per copy of the generic around it**,
+/// as that generic's own body is, where the copies build it at records of their
+/// own: `{ value, get() { .. } }` inside `hold<T>` is `{ value: number, get():
+/// number }` in `hold<f64>` and `{ value: string, .. }` in `hold<str>`, and each
+/// copy's call names its own record's member -- `Type13#get`, `Type14#get`.
+/// Each member is lowered under that copy's substitution, sources and suffix,
+/// so a closure in it is the copy's variant and a generic call in it names the
+/// copy's callee, exactly as a closure written there is lowered.
+///
+/// `None` where the record is not a form -- a literal outside any generic, or
+/// one whose record no copy instantiates, keeps its one lowering. Only an
+/// anonymous record: a literal built at a *named* template -- `{ value, map()
+/// {..} }` written where `Res<T>` is wanted -- has members a call reaches
+/// through the interface's slot, and that has compiled all along.
+pub(super) fn per_copy_literals(
+    snapshot: &LoweringSnapshot<'_>,
+    shared: &Shared,
+    probe: &FuncBuilder<'_>,
+    literal: NodeId,
+    form: TypeId,
+) -> Option<PerCopy> {
+    if !crate::hir::instantiate::is_an_anonymous_record(snapshot, form) {
+        return None;
+    }
+    let mut by_record: std::collections::BTreeMap<TypeId, Vec<&ClassCopy>> =
+        std::collections::BTreeMap::new();
+    let mut form_still_built = false;
+    for copy in shared
+        .class_copies
+        .iter()
+        .filter(|copy| probe.is_within(literal, copy.declaration))
+    {
+        match copy.substitution.instance_of(form) {
+            Some(instance) => by_record.entry(instance).or_default().push(copy),
+            None => form_still_built = true,
+        }
+    }
+    if by_record.is_empty() {
+        return None;
+    }
+    let mut copies = Vec::new();
+    let mut conflicting = Vec::new();
+    for (instance, builders) in by_record {
+        let first = builders[0];
+        if builders
+            .iter()
+            .any(|other| other.substitution != first.substitution)
+        {
+            conflicting.push(instance);
+            continue;
+        }
+        let copy = Copy {
+            substitution: first.substitution.clone(),
+            sources: first.sources.clone(),
+            // The suffix the closures written inside this copy are keyed by.
+            suffix: first.suffix.clone(),
+            // The record is the member's owner, as for every literal; the
+            // calls it makes name what the enclosing copy's do -- a class
+            // copy's through `calls_in`, a function copy's through its
+            // declaration and suffix.
+            instance: Some(instance),
+            calls_in: first.instance,
+            declaration: first.function(),
+            ..Copy::default()
+        };
+        copies.push(LiteralCopy {
+            instance,
+            ordinary: copy.clone(),
+            raising: copy,
+        });
+    }
+    Some(PerCopy {
+        copies,
+        form_still_built,
+        conflicting,
+    })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit layout owner during collection"
+)]
+fn lower_literal_members_at(
+    layout_collector: &mut LayoutCollector,
+    snapshot: &LoweringSnapshot<'_>,
+    foreign: &crate::hir::runtime::ForeignTable,
+    literal: NodeId,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    wanted: &mut std::collections::BTreeSet<usize>,
+    at: &LiteralCopy,
+) {
+    let instance = at.instance;
+    for member in members_of(snapshot, foreign, literal) {
+        let mut builder = shared.builder(snapshot, foreign, at.ordinary.clone());
         // **A literal's accessor gets a raising copy too**, and the omission showed up
         // as a cascade with no root: `Closure0#call@raises` blaming `Type1#set y@raises`
         // in the conformance lane's `blockers/a-setter-throwing-inside-a-function-value`,
@@ -42,13 +237,7 @@ pub(super) fn lower_object_literal_members(
             lowered,
             literal,
             member,
-            member_copy(
-                snapshot,
-                Some(instance),
-                &Substitution::default(),
-                &crate::hir::generics::Sources::default(),
-                false,
-            ),
+            at.raising.clone(),
             wanted,
         );
         // A member the type lays out as storage is a closure, emitted through

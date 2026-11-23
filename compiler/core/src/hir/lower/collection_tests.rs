@@ -327,6 +327,7 @@ fn shared(n: u32) -> super::Shared {
         thenables: std::rc::Rc::default(),
         target_copies: rustc_hash::FxHashMap::default(),
         sort_helpers: super::array_sort::Registry::default(),
+        class_copies: Vec::new(),
     }
 }
 
@@ -474,5 +475,129 @@ fn raw_ownership_transfer_rebuilds_after_all_mutations() {
     assert_eq!(
         collector.unique_name("java/After", Some(TypeId(9))),
         "java/After9"
+    );
+}
+
+/// One node of a conflict test's tree: a kind and its parent.
+fn test_node(kind: u16, parent: Option<NodeId>) -> nts_semantic_schema::NodeRecord {
+    use nts_diagnostics::{Location, SourceId, Span};
+    nts_semantic_schema::NodeRecord {
+        kind: nts_semantic_schema::NodeKind::Syntax(kind),
+        parent,
+        children: Vec::new(),
+        symbol: None,
+        flags: 0,
+        origin: nts_semantic_schema::Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 0),
+        }),
+        modifiers: nts_semantic_schema::DeclarationModifiers::default(),
+        native: None,
+        data: nts_semantic_schema::NodeData::Flags { small: 0 },
+        text: None,
+    }
+}
+
+/// An anonymous record `{ value: ty }`.
+fn value_record(ty: TypeId) -> nts_semantic_schema::TypeRecord {
+    nts_semantic_schema::TypeRecord {
+        kind: nts_semantic_schema::TypeKind::Object {
+            properties: vec![nts_semantic_schema::PropertyRecord {
+                name: "value".into(),
+                ty,
+                readonly: false,
+                optional: false,
+                declaration: None,
+                kind: nts_semantic_schema::MemberKind::Field,
+                own: true,
+            }],
+        },
+        symbol: None,
+    }
+}
+
+/// `function f<T>() { ({ value }) }`: the function at node 0, the literal at
+/// node 1, `T` and `number` at types 0 and 1, and the literal's form
+/// `{ value: T }` and its instance `{ value: number }` at 2 and 3.
+fn literal_in_a_generic() -> nts_semantic_schema::SemanticSnapshot {
+    use nts_semantic_schema::{TypeKind, TypeRecord, syntax};
+    nts_semantic_schema::SemanticSnapshot {
+        nodes: vec![
+            test_node(syntax::FUNCTION_DECLARATION, None),
+            test_node(syntax::OBJECT_LITERAL_EXPRESSION, Some(NodeId(0))),
+        ],
+        types: vec![
+            TypeRecord {
+                kind: TypeKind::TypeParameter {
+                    name: "T".into(),
+                    is_this: false,
+                    constraint: None,
+                },
+                symbol: None,
+            },
+            TypeRecord {
+                kind: TypeKind::Number,
+                symbol: None,
+            },
+            value_record(TypeId(0)),
+            value_record(TypeId(1)),
+        ],
+        ..nts_semantic_schema::SemanticSnapshot::default()
+    }
+}
+
+/// Two copies of one generic building a literal at one record under different
+/// bindings: its members would be two functions with one name, so the record
+/// is set aside to be refused by name. The control differs in one thing -- the
+/// two copies agree -- and lowers the members once, at that record.
+#[test]
+fn two_copies_building_one_literal_record_under_different_bindings_conflict() {
+    let semantic = literal_in_a_generic();
+    let (form, instance) = (TypeId(2), TypeId(3));
+    let snapshot = super::LoweringSnapshot::new(&semantic);
+    let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
+    let copy = |bound: HirType, suffix: &str| {
+        let mut substitution = super::Substitution::default();
+        substitution.insert(TypeId(0), bound);
+        substitution.test_instance(form, instance);
+        super::ClassCopy {
+            declaration: NodeId(0),
+            suffix: suffix.to_owned(),
+            instance: None,
+            substitution,
+            sources: crate::hir::generics::Sources::default(),
+        }
+    };
+    let per_copy = |copies: Vec<super::ClassCopy>| {
+        let mut shared = shared(0);
+        shared.class_copies = copies;
+        let probe = shared.builder(&snapshot, foreign, super::Copy::default());
+        super::body_entries::per_copy_literals(&snapshot, &shared, &probe, NodeId(1), form).map(
+            |found| {
+                (
+                    found
+                        .copies
+                        .iter()
+                        .map(|at| at.instance)
+                        .collect::<Vec<_>>(),
+                    found.conflicting,
+                    found.form_still_built,
+                )
+            },
+        )
+    };
+    assert_eq!(
+        per_copy(vec![
+            copy(HirType::NUMBER, "<f64>"),
+            copy(HirType::Managed(super::super::ManagedType::String), "<str>"),
+        ]),
+        Some((Vec::new(), vec![instance], false))
+    );
+    assert_eq!(
+        per_copy(vec![
+            copy(HirType::NUMBER, "<f64>"),
+            copy(HirType::NUMBER, "<f64>")
+        ]),
+        Some((vec![instance], Vec::new(), false))
     );
 }

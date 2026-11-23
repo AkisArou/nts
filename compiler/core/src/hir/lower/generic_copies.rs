@@ -207,6 +207,7 @@ pub(super) fn function_copies(
                     // A copy of a generic *function*: its own parameters are
                     // bound, and there is no enclosing class copy to answer for.
                     instance: None,
+                    calls_in: None,
                     declaration: Some(id),
                     raises: false,
                     constructs: None,
@@ -265,6 +266,12 @@ pub(super) struct Copy {
     /// in each copy of the class around it, and that is the key those answers
     /// are held under. See `generics::GenericFunctions::at_call_in`.
     pub(super) instance: Option<TypeId>,
+    /// The generic class instantiation whose calls this body's calls name,
+    /// where that is not [`Self::instance`]: a member of an object literal
+    /// written inside a class's copy is owned by the literal's record, while a
+    /// call it makes binds its callee to the class's parameters exactly as the
+    /// enclosing method's own calls do. See `body_entries::per_copy_literals`.
+    pub(super) calls_in: Option<TypeId>,
     /// And the declaration this is a copy of, where it is a generic
     /// *function*'s -- which with [`Self::suffix`] is what identifies the copy,
     /// since a function instantiation is not a type and has no id of its own.
