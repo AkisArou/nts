@@ -86,3 +86,16 @@ export function directPublished(n: number): number {
   const target = new Published();
   return target.install(detach(new Link(n)), new Link(n + 20), n);
 }
+
+// The memory harness runs every control, then forces collection and checks the
+// live count. A missed old-value release computes the same answer but leaks.
+export function work(n: number): number {
+  let answer = 0;
+  for (let i = 0; i < 8; i++) {
+    const k = n + i;
+    answer += cleared(k) + onePathKeepsTheOldReference(k);
+    answer += anAliasingCallInvalidatesTheFact(k) + twoParametersCanAlias(k);
+    answer += directPublished(k);
+  }
+  return answer;
+}
