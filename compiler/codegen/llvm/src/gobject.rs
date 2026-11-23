@@ -202,7 +202,7 @@ fn template_child<'a>(program: &'a Program, class: &str, index: usize) -> Option
         .find(|foreign| foreign.family == Family::GObject && foreign.name.as_str() == class)
         .and_then(|foreign| foreign.template.as_ref())
         .and_then(|template| template.children.get(index))
-        .map(|id| id.as_str())
+        .map(String::as_str)
 }
 
 /// The function `new` of `class` calls, which this section defines.
