@@ -414,3 +414,38 @@ tooling types and the host audit. Raw output is
 Inner passed formatting, Clippy, build and backend tests (476 seconds for the
 tests). Raw output is `~/.cache/nts-scratch/841/b/rebase-inner-v1.log`, SHA-256
 `1095d0dea70799a57470fe4594451af067f0c28fac659e1884085591886b3a57`.
+
+Review found that flushing each retained file separately made red disposal
+pay thousands of journal commits. The copy now closes every payload descriptor
+and makes one `sync -f -- <stage>` infrastructure probe before flushing the
+manifest and receipt. Publication still flushes both parent directories after
+the rename. A failed filesystem barrier leaves the original temporary and an
+unregistered disposable stage; retry publishes a fresh, complete copy.
+
+The same 4,096-file referenced-artifact control ran once before and once after
+in separate named, admitted units, on CPUs 16–31. Both revisions were committed
+and verified before measurement. These are the selected test's wall times,
+including fixture creation and cleanup, excluding admission wait.
+
+| Revision | Selected test wall, s | Result |
+| --- | ---: | --- |
+| Before `362bb46a03899e7873fded4b7fd94d0868d26332` | 35.998406 | Pass; referenced artifact resolves ahead of scratch at the cap |
+| After `d88d653857346ecbed2a4de37055f0a4aebbd750` | 0.781179 | Same control passes |
+
+This paired sample reduces the control's time by about 46 times. Raw output is
+`~/.cache/nts-scratch/841/b/stage-sync-before.log`, SHA-256
+`e785cb966506d5d4c31fefd0241151bb8d9598d9babd13763a7b52a6e750fc1a`,
+and `~/.cache/nts-scratch/841/b/stage-sync-after.log`, SHA-256
+`59071ec84293d9283a1f5c3c7d9b40b82223f56871d2c33577cd3f0e23dd81f2`.
+
+All 361 focused tests across thirteen files passed, along with strict tooling
+types and the host audit. New controls verify that the single barrier sees
+complete copied payloads before either manifest or receipt publication, and
+that a failed barrier preserves the original and allows a complete retry.
+The mode-000, referenced-path, interruption, holder, identity and real-unit
+exit controls remain green. Raw output is
+`~/.cache/nts-scratch/841/b/stage-sync-proof-v1.log`, SHA-256
+`fb46aea33093aa942b3158b6ea7626e4bbb7aecab02afe8ceca11b6a0d29e27e`.
+Inner passed formatting, Clippy, build and backend tests (430 seconds for the
+tests). Raw output is `~/.cache/nts-scratch/841/b/stage-sync-inner-v1.log`, SHA-256
+`51c87604c8c0f261d955f153c3ce8e106e645ece37a4610d6486ce6b6b6858c1`.
