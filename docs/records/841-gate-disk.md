@@ -316,3 +316,12 @@ seconds for the tests). Raw output is
 The delegated affinity scope's missing creator binding remains a separate
 defect, #994. The workflow distinguishes it from this slice's bound step
 hierarchy and preserves the backstop's live-holder refusal on that path.
+
+The nested control also constructs two enclosing fixture levels, so it checks
+the existing outermost-owner contract even outside a gate. Under an inherited
+canonical context that owner may be the enclosing gate; the assertion compares
+its exact registered path and preserves both fixture sentinels. All 13 scoped
+runner tests passed after this correction at
+`c73379d3e1898bf711175d3680526b08bf662e1a`. Raw output is
+`~/.cache/nts-scratch/841/b/review-nesting-v1.log`, SHA-256
+`f590ac96a890926ef9855cba443124813611292049aa97f1f11318eaae022108`.
