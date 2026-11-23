@@ -2410,6 +2410,56 @@
           {
             "kind": "file",
             "path": "../../../../tooling/memory/harness.c"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/programs/a-field-cleared-before-a-call-keeps-no-old-reference/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/memory/a-fresh-phi-alias-writes-the-original/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/memory/a-fresh-phi-alias-writes-the-original-control/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/memory/a-phi-swap-keeps-the-overwritten-release/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/memory/a-new-allocation-leaves-the-old-alias-occupied/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../tests/memory/a-branch-allocation-meets-an-older-alias/tsconfig.json"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tests/memory/a-fresh-phi-alias-writes-the-original/expected"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tests/memory/a-fresh-phi-alias-writes-the-original-control/expected"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tests/memory/a-phi-swap-keeps-the-overwritten-release/expected"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tests/memory/a-new-allocation-leaves-the-old-alias-occupied/expected"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tests/memory/a-branch-allocation-meets-an-older-alias/expected"
           }
         ]
       }
@@ -18203,6 +18253,82 @@
       "declarations": {
         "imports": [],
         "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/contents/slots.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/contents/slots/aliases.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/contents/slots/effects.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/contents/slots/sharing.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/contents/slots/summaries.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/contents/slots/tests.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "compiler/core/tests/null_slots.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-field-cleared-before-a-call-keeps-no-old-reference/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/memory/a-phi-swap-keeps-the-overwritten-release/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/memory/a-new-allocation-leaves-the-old-alias-occupied/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/memory/a-branch-allocation-meets-an-older-alias/tsconfig.json"
+          }
+        ]
       }
     }
   ]

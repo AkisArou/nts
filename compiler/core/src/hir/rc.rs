@@ -2630,4 +2630,168 @@ mod tests {
         assert_eq!(report.move_budget_exhaustions, 1);
         assert!(moved.is_empty());
     }
+    fn foreign_slot_program() -> Program {
+        let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
+        let cell = HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(1)));
+        program.layouts = vec![Layout {
+            types: vec![nts_semantic_schema::TypeId(1)],
+            name: "ForeignCell".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![
+                crate::hir::Field {
+                    name: "next".to_owned().into(),
+                    ty: string(),
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                },
+                crate::hir::Field {
+                    name: "foreign".to_owned().into(),
+                    ty: objc_handle("Element"),
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                },
+            ],
+            methods: Vec::new(),
+            base: None,
+        }];
+        program.funcs[0].params[0].ty = cell;
+        program
+    }
+
+    #[test]
+    fn copying_a_foreign_field_cannot_preserve_another_fields_null_fact() {
+        let mut program = foreign_slot_program();
+        let func = &mut program.funcs[0];
+        func.return_type = HirType::Void;
+        func.values = vec![
+            op(OpKind::Param(0), func.params[0].ty.clone()),
+            op(OpKind::ConstNull, string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(1),
+                },
+                HirType::Void,
+            ),
+            op(
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 1,
+                },
+                objc_handle("Element"),
+            ),
+            op(OpKind::ConstString("replacement".into()), string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(4),
+                },
+                HirType::Void,
+            ),
+            call("clobber", vec![ValueId(0)], HirType::Void),
+            call("read_native", vec![ValueId(3)], HirType::Void),
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: (0..8).map(ValueId).collect(),
+            terminator: Terminator::Return(None),
+        }];
+        insert(&mut program).expect("complete RC analysis");
+        let func = &program.funcs[0];
+        let ops = &func.blocks[0].ops;
+        let at = |id| ops.iter().position(|value| *value == ValueId(id)).unwrap();
+        assert!(
+            ops[at(3) + 1..at(5)]
+                .iter()
+                .any(|id| matches!(func.value(*id).kind, OpKind::Retain(ValueId(3)))),
+            "the foreign field is actually copied before the second store"
+        );
+        assert!(
+            ops[at(2) + 1..at(5)].iter().any(|id| matches!(
+                func.value(*id).kind,
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0
+                }
+            )),
+            "field 0 must load and release its old value after the native retain can re-enter"
+        );
+    }
+
+    #[test]
+    fn a_native_exit_release_cannot_publish_a_returned_null_field_promise() {
+        let mut program = foreign_slot_program();
+        let func = &mut program.funcs[0];
+        let cell = func.params[0].ty.clone();
+        func.name = "clear".into();
+        func.return_type = cell.clone();
+        func.values = vec![
+            op(OpKind::Param(0), cell.clone()),
+            call("objc_make", Vec::new(), objc_handle("Element")),
+            op(OpKind::ConstNull, string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(2),
+                },
+                HirType::Void,
+            ),
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: (0..4).map(ValueId).collect(),
+            terminator: Terminator::Return(Some(ValueId(0))),
+        }];
+        let mut caller = func.clone();
+        caller.name = "refill".into();
+        caller.return_type = HirType::Void;
+        caller.values = vec![
+            op(OpKind::Param(0), cell.clone()),
+            op(OpKind::ConstString("replacement".into()), string()),
+            op(
+                OpKind::Call {
+                    callee: Callee::Direct("clear".into()),
+                    args: vec![ValueId(0)],
+                    frame: None,
+                },
+                cell,
+            ),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(2),
+                    field: 0,
+                    value: ValueId(1),
+                },
+                HirType::Void,
+            ),
+        ];
+        caller.blocks[0].terminator = Terminator::Return(None);
+        program.funcs.push(caller);
+        insert(&mut program).expect("complete RC analysis");
+        let clear = &program.funcs[0];
+        let ops = &clear.blocks[0].ops;
+        let store = ops.iter().position(|id| *id == ValueId(3)).unwrap();
+        assert!(
+            ops[store + 1..]
+                .iter()
+                .any(|id| matches!(clear.value(*id).kind, OpKind::Release(ValueId(1)))),
+            "the native local is actually released after the last null store"
+        );
+        let refill = &program.funcs[1];
+        assert!(
+            refill.blocks[0].ops.iter().any(|id| matches!(
+                refill.value(*id).kind,
+                OpKind::FieldGet {
+                    object: ValueId(2),
+                    field: 0
+                }
+            )),
+            "refill must keep its old-value release after clear's native exit cleanup can re-enter"
+        );
+    }
 }
