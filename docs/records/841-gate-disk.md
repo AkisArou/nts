@@ -350,3 +350,15 @@ census setup-only fixture uses the same owned gateFixtureMemory handoff as its
 real-runner controls. Each asserts the descriptor observed by the candidate.
 The host audit passed despite all six missing fixture handoffs; enforcing that
 boundary is a separate task, outside this slice.
+
+The handoff proof passed strict types, host audit, record application, census
+setup and all 124 owed controls. It caught the canonical pinned-fixture
+launcher dropping its private Git author fields before fixture commits; those
+fields and private Git configuration now travel as owned values too. All eight
+pinned controls then passed, including the exact observation-descriptor checks.
+Raw outputs are `~/.cache/nts-scratch/841/b/review-handoffs-v1.log`, SHA-256
+`df821f7664cc33353fd1b9f0cb67927dfc771aa4b7b588aad46b68c078fe229f`
+(137 passed, four Git-identity failures), and
+`~/.cache/nts-scratch/841/b/review-pinned-v2.log`, SHA-256
+`d690f88e6669e79fbccbf3b9b7a296b0bfa51dc959cc767ce2b688cbe6b8e8ca`
+(eight passed).
