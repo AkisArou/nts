@@ -264,6 +264,111 @@ fn erased_runtime_arguments_match_each_targets_abi() {
 }
 
 #[test]
+fn bigint_shifts_use_the_checked_runtime_call_on_windows_arm64() {
+    let (dir, program) = source_fixture(
+        r"
+        export function subject(seed: number): boolean {
+            return (BigInt(seed) << 80n) > 0n;
+        }
+    ",
+    );
+    for (platform, target, returned, argument) in [
+        (
+            Platform::WINDOWS_ARM64,
+            "aarch64-pc-windows-msvc",
+            "i128",
+            "i128 ",
+        ),
+        (Platform::LINUX_ARM64, "aarch64-linux-gnu", "i128", "i128 "),
+        (
+            Platform::WIN64_X86_64,
+            "x86_64-pc-windows-msvc",
+            "<2 x i64>",
+            "ptr ",
+        ),
+    ] {
+        let emitted = nts_codegen_llvm::emit(&program, platform);
+        assert!(
+            emitted.diagnostics.is_empty(),
+            "{platform:?}: {:?}",
+            emitted.diagnostics
+        );
+        assert!(
+            emitted
+                .text
+                .contains(&format!("call {returned} @nts_bigint_shl({argument}")),
+            "{platform:?}: {}",
+            emitted.text
+        );
+        let input = dir.join("shift.ll");
+        std::fs::write(&input, emitted.text).unwrap();
+        let compiled = Command::new("clang")
+            .args(["-target", target, "-Werror", "-Wno-override-module", "-c"])
+            .arg(input)
+            .arg("-o")
+            .arg(dir.join("shift.o"))
+            .output()
+            .unwrap();
+        assert!(
+            compiled.status.success(),
+            "{platform:?}: {}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+    }
+}
+
+#[test]
+fn foreign_erased_returns_name_the_windows_abi_they_refuse() {
+    let (_dir, mut program) = source_fixture(
+        r"
+        declare function foreign_value(): boolean;
+        export function subject(): void { foreign_value(); }
+    ",
+    );
+    // Lowering refuses a source-level foreign `unknown` result. Mutate a
+    // valid prepared call so these controls exercise the backend's own ABI
+    // refusal, including the System V erased-result control.
+    let mut changed = 0;
+    for func in &mut program.funcs {
+        for op in &mut func.values {
+            if let OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } = &mut op.kind
+                && target.name == "foreign_value"
+            {
+                std::sync::Arc::make_mut(target).result = hir::native::Type::Erased;
+                op.ty = hir::HirType::Erased;
+                changed += 1;
+            }
+        }
+    }
+    assert_eq!(changed, 1, "the native call must survive preparation");
+    let control = nts_codegen_llvm::emit(&program, Platform::SYSV_X86_64);
+    assert!(control.diagnostics.is_empty(), "{:?}", control.diagnostics);
+    for (platform, message) in [
+        (
+            Platform::WIN64_X86_64,
+            "a C function returning an erased value under Win64, which returns it through a hidden pointer this backend does not pass; the C backend builds it (in `subject`)",
+        ),
+        (
+            Platform::WINDOWS_ARM64,
+            "a C record passed or returned by value, or an erased value, crossing a call on arm64 Windows, whose calling convention this backend does not implement; the C backend builds it (in `subject`)",
+        ),
+    ] {
+        let refused = nts_codegen_llvm::emit(&program, platform);
+        assert_eq!(
+            refused.diagnostics.len(),
+            1,
+            "{platform:?}: {:?}",
+            refused.diagnostics
+        );
+        assert_eq!(refused.diagnostics[0].code, "NTS3001");
+        assert_eq!(refused.diagnostics[0].message, message);
+    }
+}
+
+#[test]
 fn windows_arm_public_erased_and_bigint_exports_remain_refused() {
     let (_dir, program) = source_fixture(
         r"

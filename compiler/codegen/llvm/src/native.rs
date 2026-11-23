@@ -8,6 +8,7 @@ use nts_diagnostics::Diagnostic;
 
 use super::aggregate::{self, Crossing, Plan};
 use super::runtime_call::{self, Called, DirectCallee, Operand, Site};
+use super::target_abi::RuntimeAbi;
 use super::{Platform, name, refuse, signatures, ty_of};
 
 /// How this call's arguments and result cross, or the refusal that names why
@@ -20,11 +21,17 @@ pub(super) fn plan(
     leading: usize,
     platform: Platform,
 ) -> Result<Plan, Diagnostic> {
-    // Win64 returns sixteen bytes through a hidden pointer, where System V
-    // uses two registers; this backend spells only the second.
-    if platform.abi.convention == nts_core::hir::native::PlatformConvention::Win64
-        && target.result.representation() == HirType::Erased
-    {
+    // Only x86_64 Windows returns sixteen bytes through a hidden pointer.
+    // Windows ARM64 returns them in x0/x1, but aggregate::plan refuses its
+    // unsupported foreign erased-value convention below.
+    let hidden_erased_result = match RuntimeAbi::of(platform) {
+        RuntimeAbi::WindowsX86_64 => true,
+        RuntimeAbi::SysVX86_64
+        | RuntimeAbi::AppleArm64
+        | RuntimeAbi::LinuxArm64
+        | RuntimeAbi::WindowsArm64 => false,
+    };
+    if hidden_erased_result && target.result.representation() == HirType::Erased {
         return Err(refuse(
             func,
             "a C function returning an erased value under Win64, which returns it through a hidden pointer this backend does not pass; the C backend builds it",

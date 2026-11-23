@@ -49,8 +49,9 @@
 //! - a record whose eightbytes do not all fit in the registers left goes to
 //!   memory whole, as an erased value does.
 
+use crate::Platform;
 use crate::runtime_call::Operand;
-use crate::{Arch, Platform};
+use crate::target_abi::RuntimeAbi;
 use nts_core::hir::HirType;
 use nts_core::hir::layout::{native_place, native_shape};
 use nts_core::hir::native::{Pointee, Record, RecordKind, Scalar, Type};
@@ -207,13 +208,11 @@ enum Convention {
 
 /// `None` on arm64 Windows, whose convention this backend does not implement.
 fn convention(platform: Platform) -> Option<Convention> {
-    match (platform.abi.convention, platform.arch) {
-        (nts_core::hir::native::PlatformConvention::SysV, Arch::X86_64) => Some(Convention::SysV),
-        (nts_core::hir::native::PlatformConvention::Win64, Arch::X86_64) => Some(Convention::Win64),
-        (nts_core::hir::native::PlatformConvention::SysV, Arch::Aarch64) => {
-            Some(Convention::Aapcs64)
-        }
-        (nts_core::hir::native::PlatformConvention::Win64, Arch::Aarch64) => None,
+    match RuntimeAbi::of(platform) {
+        RuntimeAbi::SysVX86_64 => Some(Convention::SysV),
+        RuntimeAbi::WindowsX86_64 => Some(Convention::Win64),
+        RuntimeAbi::AppleArm64 | RuntimeAbi::LinuxArm64 => Some(Convention::Aapcs64),
+        RuntimeAbi::WindowsArm64 => None,
     }
 }
 

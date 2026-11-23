@@ -77,13 +77,14 @@ use std::fmt::Write as _;
 use nts_codegen_common::publication::{
     ConstructionEntry, claim_construction_entries, construction_entries,
 };
-use nts_core::hir::native::{NativeAbi, PlatformConvention};
+use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, FunctionName, HirType, OpKind, Printed, Program, Terminator,
     UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 use runtime_call::{Called, DirectCallee, Operand, Site};
+use target_abi::RuntimeAbi;
 
 /// What the backend produced, and what it declined to.
 #[derive(Debug)]
@@ -165,10 +166,10 @@ impl Platform {
     /// result's -- and LLVM may read them.
     #[must_use]
     pub const fn extension(self, ty: &HirType) -> &'static str {
-        let (integers, booleans) = match (self.arch, self.abi.convention) {
-            (Arch::X86_64, PlatformConvention::SysV) => (true, true),
-            (Arch::X86_64, PlatformConvention::Win64) => (false, true),
-            (Arch::Aarch64, _) => (self.darwin, self.darwin),
+        let (integers, booleans) = match RuntimeAbi::of(self) {
+            RuntimeAbi::SysVX86_64 | RuntimeAbi::AppleArm64 => (true, true),
+            RuntimeAbi::WindowsX86_64 => (false, true),
+            RuntimeAbi::LinuxArm64 | RuntimeAbi::WindowsArm64 => (false, false),
         };
         match ty {
             HirType::Int {

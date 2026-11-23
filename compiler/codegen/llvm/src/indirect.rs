@@ -30,7 +30,13 @@ pub const SLOTS: usize = 2;
 
 /// Whether calls into the C runtime pass sixteen-byte values through memory.
 pub(crate) fn applies(platform: Platform) -> bool {
-    RuntimeAbi::of(platform) == RuntimeAbi::WindowsX86_64
+    match RuntimeAbi::of(platform) {
+        RuntimeAbi::WindowsX86_64 => true,
+        RuntimeAbi::SysVX86_64
+        | RuntimeAbi::AppleArm64
+        | RuntimeAbi::LinuxArm64
+        | RuntimeAbi::WindowsArm64 => false,
+    }
 }
 
 /// The entry-block slots of a function emitted for `platform`.
@@ -133,9 +139,15 @@ pub(crate) fn behind_entry(
 pub(crate) fn unexportable(func: &Func, platform: Platform, public: bool) -> Option<&'static str> {
     let crosses =
         func.params.iter().any(|param| is_indirect(&param.ty)) || is_indirect(&func.return_type);
-    (public && RuntimeAbi::of(platform) == RuntimeAbi::WindowsArm64 && crosses).then_some(
-        "an exported function taking or returning an erased value or a bigint on arm64 Windows, whose convention this backend does not implement; the C backend builds it",
-    )
+    match RuntimeAbi::of(platform) {
+        RuntimeAbi::WindowsArm64 => (public && crosses).then_some(
+            "an exported function taking or returning an erased value or a bigint on arm64 Windows, whose convention this backend does not implement; the C backend builds it",
+        ),
+        RuntimeAbi::SysVX86_64
+        | RuntimeAbi::WindowsX86_64
+        | RuntimeAbi::AppleArm64
+        | RuntimeAbi::LinuxArm64 => None,
+    }
 }
 
 /// The internal name the body of a function [`behind_entry`] is defined

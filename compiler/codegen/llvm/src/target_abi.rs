@@ -13,7 +13,7 @@ pub(crate) enum RuntimeAbi {
 }
 
 impl RuntimeAbi {
-    pub(crate) fn of(platform: Platform) -> Self {
+    pub(crate) const fn of(platform: Platform) -> Self {
         use PlatformConvention::{SysV, Win64};
         match (platform.arch, platform.abi.convention, platform.darwin) {
             (Arch::X86_64, SysV, false | true) => Self::SysVX86_64,
