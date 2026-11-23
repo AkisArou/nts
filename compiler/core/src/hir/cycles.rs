@@ -5,9 +5,34 @@
 //! produce) and then the held layout. Keeping these two steps separate
 //! matters: an empty layout cannot start a cycle, but an empty typed view can
 //! hold an object that can.
+//!
+//! # A promise leads to its reactions
+//!
+//! A promise holds its payload and, while it is pending, a list of reactions,
+//! each holding its state: the frame of an `async` function suspended on it,
+//! or the closure passed to `then`, `catch` or `finally`. A frame awaiting a
+//! promise keeps it in its `awaited` slot, and a reaction that reads the
+//! settled value captures its promise, so both are cycles through the
+//! runtime's own objects that only the collector can free. Every promise
+//! therefore reaches one node, the program's **reactions**, which reaches the
+//! slot of each layout a `Suspend` or `PromiseSubscribe` subscribes
+//! ([`super::SlotSources::reactions`]). Only those: a type holding a promise is
+//! cyclic only when one of the program's own reactions leads back to it.
+//!
+//! One node rather than one per promise element type, because the element type
+//! is not a fact about which promise a slot holds. Every frame's `awaited`
+//! slot is a `Promise<void>` storing whatever it awaits, and the runtime moves
+//! reactions across promise types: an adoption (`return g()` in an `async`
+//! function, a resolve with a promise) hangs the outer promise on the inner's
+//! list, and `Promise.all` hangs its `Promise<T[]>` on each `Promise<T>`. Those
+//! internal reactions lead only to promises -- this node again -- and to
+//! payloads the source promise reaches already, so they add no edge here. What
+//! would narrow the node is a typed `awaited` slot (one per element type the
+//! frame awaits) and a model of those moves; with both, a promise could reach
+//! only the reactions subscribed to promises of its own type.
 
 use super::{
-    CastSources, Cycles, Field, HirType, ManagedType, Program, is_closure_type, native,
+    Cycles, Field, HirType, ManagedType, Program, SlotSources, is_closure_type, native,
     strongly_connected,
 };
 use nts_semantic_schema::{PropertyKey, TypeId};
@@ -65,6 +90,8 @@ struct Graph<'a> {
     layout_of: FxHashMap<TypeId, usize>,
     edges: Vec<Vec<usize>>,
     all_layouts: Option<usize>,
+    /// What every promise reaches: the slots of the program's reactions.
+    reactions: Option<usize>,
 }
 
 impl<'a> Graph<'a> {
@@ -75,6 +102,7 @@ impl<'a> Graph<'a> {
             layout_of: FxHashMap::default(),
             edges: vec![Vec::new(); 2 * count],
             all_layouts: None,
+            reactions: None,
         };
         for (at, layout) in program.layouts.iter().enumerate() {
             for ty in &layout.types {
@@ -91,9 +119,18 @@ impl<'a> Graph<'a> {
                 graph.reference(at, &field.ty);
             }
         }
-        let casts = program.explicit_cast_sources();
+        let casts = program.slot_sources();
         for &(target, source) in &casts.pairs {
             graph.edges[count + target].push(count + source);
+        }
+        if let Some(reactions) = graph.reactions {
+            for &state in &casts.reactions {
+                let slot = match state {
+                    Some(at) => count + at,
+                    None => graph.any_layout(),
+                };
+                graph.edges[reactions].push(slot);
+            }
         }
         graph.structural_prefixes();
         // Last: what an erased value can hold is read from the slot edges
@@ -123,6 +160,17 @@ impl<'a> Graph<'a> {
         at
     }
 
+    /// The program's reactions, as one node every promise reaches; its edges
+    /// are added once the subscriptions are read.
+    fn reactions(&mut self) -> usize {
+        if let Some(at) = self.reactions {
+            return at;
+        }
+        let at = self.node();
+        self.reactions = Some(at);
+        at
+    }
+
     /// The old `reaches` relation, with shared unknown targets and a first-wins
     /// type index. Exhaustive so a new HIR type must decide its reference edges.
     fn reference(&mut self, from: usize, ty: &HirType) {
@@ -135,11 +183,15 @@ impl<'a> Graph<'a> {
                 Some(at) => self.program.layouts.len() + at,
                 None => self.any_layout(),
             },
+            // A promise holds its payload and its reactions' state.
+            HirType::Managed(ManagedType::Promise(payload)) => {
+                self.reference(from, payload);
+                self.reactions()
+            }
             HirType::Managed(
                 ManagedType::Array(element)
                 | ManagedType::View(element)
-                | ManagedType::Set(element)
-                | ManagedType::Promise(element),
+                | ManagedType::Set(element),
             ) => {
                 self.reference(from, element);
                 return;
@@ -246,7 +298,7 @@ impl<'a> Graph<'a> {
     /// produce the cyclic `Link` erased beside it, which holds no `n`, and a
     /// `Leaf[]` stays acyclic. A `Knot { next; w }` narrowed to `Weighted { w }`
     /// by a type guard is held there, though `w` is not its first field.
-    fn unerasures(&mut self, casts: &CastSources) {
+    fn unerasures(&mut self, casts: &SlotSources) {
         let program = self.program;
         let count = program.layouts.len();
         let targets: Vec<usize> = casts.unerased.iter().flatten().copied().collect();

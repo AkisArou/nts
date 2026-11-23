@@ -85,6 +85,10 @@ impl Program {
             }
         }
 
+        // The layouts a promise's reactions can hold: each frame suspended on
+        // one and each closure subscribed to one, read off the operations.
+        let reactions = self.reactions_by_scan();
+
         // Edges: which layouts a layout's reference fields can lead to, and
         // everything derived from those.
         //
@@ -99,7 +103,7 @@ impl Program {
             .map(|layout| {
                 let mut reached = Vec::new();
                 for field in &layout.fields {
-                    self.reaches(&field.ty, &mut reached);
+                    self.reaches(&field.ty, &reactions, &mut reached);
                 }
                 let mut targets = Vec::new();
                 for at in reached {
@@ -163,6 +167,39 @@ impl Program {
             layout_of,
             reaches_a_cycle,
         }
+    }
+
+    /// The layouts of every reaction's state the program subscribes to a
+    /// promise, with every layout for state that has none here.
+    fn reactions_by_scan(&self) -> Vec<usize> {
+        let mut reactions = Vec::new();
+        for func in &self.funcs {
+            for op in &func.values {
+                let (OpKind::Suspend {
+                    promise: Some(_),
+                    frame: state,
+                    ..
+                }
+                | OpKind::PromiseSubscribe {
+                    reaction: state, ..
+                }) = &op.kind
+                else {
+                    continue;
+                };
+                match &func.values[state.0 as usize].ty {
+                    HirType::Managed(ManagedType::Object(id)) => {
+                        match self.layouts.iter().position(|l| l.types.contains(id)) {
+                            Some(at) => reactions.push(at),
+                            None => reactions.extend(0..self.layouts.len()),
+                        }
+                    }
+                    _ => reactions.extend(0..self.layouts.len()),
+                }
+            }
+        }
+        reactions.sort_unstable();
+        reactions.dedup();
+        reactions
     }
 
     /// The explicit and structural cast pairs, and the layouts of the object
@@ -540,6 +577,11 @@ fn mixed_graphs_keep_every_old_layout_and_array_answer() {
             }
             program.layouts.push(entry);
         }
+        // Reactions: a frame, a closure, or state with no layout here.
+        if seed % 2 == 1 {
+            let state = if seed % 16 == 7 { 99 } else { seed % 15 + 1 };
+            program.funcs.push(subscribe(object(state), seed % 4 == 1));
+        }
         equivalent(&program);
     }
 }
@@ -604,11 +646,47 @@ fn cast(from: HirType, to: HirType, erasure: bool) -> Func {
             origin: origin(),
         });
     }
+    func("cast", values)
+}
+
+/// One exported function subscribing a `state` to a promise: as the frame a
+/// `Suspend` hands it when `frame`, else as a `then` reaction.
+fn subscribe(state: HirType, frame: bool) -> Func {
+    let promise = HirType::Managed(ManagedType::Promise(Box::new(HirType::NUMBER)));
+    let subscription = if frame {
+        OpKind::Suspend {
+            promise: Some(ValueId(0)),
+            frame: ValueId(1),
+            resume: "resume".into(),
+        }
+    } else {
+        OpKind::PromiseSubscribe {
+            promise: ValueId(0),
+            reaction: ValueId(1),
+            slot: 0,
+        }
+    };
+    let values = [
+        (OpKind::ConstNull, promise),
+        (OpKind::ObjectNew { frame: false }, state),
+        (subscription, HirType::Void),
+    ]
+    .into_iter()
+    .map(|(kind, ty)| Op {
+        kind,
+        ty,
+        origin: origin(),
+    })
+    .collect();
+    func("subscribe", values)
+}
+
+fn func(name: &str, values: Vec<Op>) -> Func {
     let ops = (0..values.len())
         .map(|at| ValueId(u32::try_from(at).expect("small fixture value id")))
         .collect();
     Func {
-        name: "cast".into(),
+        name: name.into(),
         params: Vec::new(),
         return_type: HirType::Void,
         values,
@@ -746,4 +824,51 @@ fn unerasures_follow_what_an_erased_slot_holds_and_what_reads_as_the_type() {
         assert_eq!(answer.cyclic, [false, true]);
         assert_eq!(answer.array(&object(1)), family, "family owner: {family}");
     }
+}
+
+/// A promise holds its reactions, each holding its state: the frame suspended
+/// on it or the closure subscribed to it. `L1` holds a promise and is
+/// subscribed, so it is in a cycle through the runtime's promise; `L3`, which
+/// it holds, holds a promise too and is in the same one. `L2` holds a promise
+/// no reaction leads back to, and stays acyclic. The one-change controls: no
+/// subscription at all, and subscribing state that holds nothing.
+#[test]
+fn a_promise_leads_to_the_state_of_its_reactions() {
+    let promise = |ty| HirType::Managed(ManagedType::Promise(Box::new(ty)));
+    let program = |subscribed: Option<u32>, frame: bool| Program {
+        layouts: vec![
+            layout(
+                1,
+                vec![
+                    field("awaited", promise(HirType::Void)),
+                    field("held", object(3)),
+                ],
+            ),
+            layout(2, vec![field("p", promise(HirType::NUMBER))]),
+            layout(3, vec![field("p", promise(HirType::NUMBER))]),
+            layout(4, vec![field("n", HirType::NUMBER)]),
+        ],
+        funcs: subscribed
+            .map(|state| subscribe(object(state), frame))
+            .into_iter()
+            .collect(),
+        ..Program::default()
+    };
+    for frame in [false, true] {
+        let answer = equivalent(&program(Some(1), frame));
+        assert_eq!(answer.cyclic, [true, false, true, false], "frame {frame}");
+        assert!(
+            answer.array(&object(2)),
+            "L2 reaches the cycle it is not in"
+        );
+        assert!(!answer.array(&object(4)));
+        let answer = equivalent(&program(Some(4), frame));
+        assert_eq!(answer.cyclic, [false; 4], "frame {frame}");
+        // State with no layout here could be anything, and every promise
+        // holder can lead back to itself through it.
+        let answer = equivalent(&program(Some(99), frame));
+        assert_eq!(answer.cyclic, [true, true, true, false], "frame {frame}");
+    }
+    let answer = equivalent(&program(None, false));
+    assert_eq!(answer.cyclic, [false; 4]);
 }

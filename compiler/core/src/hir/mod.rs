@@ -4286,15 +4286,16 @@ impl Program {
         self.cycles().cyclic
     }
 
-    /// The layouts a type's references can lead to.
+    /// The layouts a type's references can lead to, where a promise leads to
+    /// the layouts of the program's `reactions` as well as its payload.
     ///
     /// An unknown target is recorded as an edge to every layout, so the
     /// conservative answer falls out of the same search rather than needing a
     /// rule of its own: whoever holds it can reach itself, and is cyclic.
     #[cfg(test)]
-    fn reaches(&self, ty: &HirType, into: &mut Vec<usize>) {
+    fn reaches(&self, ty: &HirType, reactions: &[usize], into: &mut Vec<usize>) {
         match ty {
-            HirType::PossiblyUndefined(payload) => self.reaches(payload, into),
+            HirType::PossiblyUndefined(payload) => self.reaches(payload, reactions, into),
             HirType::Managed(ManagedType::Object(id)) => {
                 match self.layouts.iter().position(|l| l.types.contains(id)) {
                     Some(at) => into.push(at),
@@ -4312,12 +4313,16 @@ impl Program {
             HirType::Managed(
                 ManagedType::Array(element)
                 | ManagedType::View(element)
-                | ManagedType::Set(element)
-                | ManagedType::Promise(element),
-            ) => self.reaches(element, into),
+                | ManagedType::Set(element),
+            ) => self.reaches(element, reactions, into),
+            // A pending promise holds its reactions, and each its state.
+            HirType::Managed(ManagedType::Promise(payload)) => {
+                self.reaches(payload, reactions, into);
+                into.extend_from_slice(reactions);
+            }
             HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
-                self.reaches(key, into);
-                self.reaches(value, into);
+                self.reaches(key, reactions, into);
+                self.reaches(value, reactions, into);
             }
             // An erased value can be any object at all, so -- as for a type
             // with no layout here -- every layout. `class Box { data: unknown }`
@@ -4382,13 +4387,29 @@ impl Program {
     /// All of it is read from the operations themselves rather than predicted
     /// from which layouts *could* be cast, because a cast nobody performs
     /// stores nothing.
-    fn explicit_cast_sources(&self) -> CastSources {
-        let mut casts = CastSources::default();
+    ///
+    /// The same walk reads which layouts a promise can hold as reactions
+    /// (`SlotSources::reactions`): a promise's reaction list holds the state of
+    /// every reaction subscribed to it, and only a `Suspend` and a
+    /// `PromiseSubscribe` subscribe compiled state.
+    fn slot_sources(&self) -> SlotSources {
+        let mut casts = SlotSources::default();
         let mut erased: Vec<&HirType> = Vec::new();
         let mut unerased: Vec<&HirType> = Vec::new();
+        let mut reactions: rustc_hash::FxHashSet<&HirType> = rustc_hash::FxHashSet::default();
         for func in &self.funcs {
             for op in &func.values {
                 match &op.kind {
+                    OpKind::Suspend {
+                        promise: Some(_),
+                        frame: state,
+                        ..
+                    }
+                    | OpKind::PromiseSubscribe {
+                        reaction: state, ..
+                    } => {
+                        reactions.insert(&func.values[state.0 as usize].ty);
+                    }
                     OpKind::Convert(from) | OpKind::FieldView { value: from, .. } => {
                         self.cast_pairs(&func.values[from.0 as usize].ty, &op.ty, &mut casts.pairs);
                     }
@@ -4413,7 +4434,26 @@ impl Program {
         casts.erased.dedup();
         casts.unerased.sort_unstable();
         casts.unerased.dedup();
+        casts.reactions = reactions
+            .into_iter()
+            .map(|ty| self.reaction_layout(ty))
+            .collect();
+        casts.reactions.sort_unstable();
+        casts.reactions.dedup();
         casts
+    }
+
+    /// The layout of a reaction's state: the frame a `Suspend` subscribes, or
+    /// the closure a `PromiseSubscribe` does. `None` for state with no layout
+    /// here, which could be anything; verification already requires a
+    /// subscribed closure to have one, and a frame always has its own.
+    fn reaction_layout(&self, ty: &HirType) -> Option<usize> {
+        match ty {
+            HirType::Managed(ManagedType::Object(id)) => {
+                self.layouts.iter().position(|l| l.types.contains(id))
+            }
+            _ => None,
+        }
     }
 
     /// The object types an erased or unerased value of `ty` carries, by layout,
@@ -4998,10 +5038,12 @@ fn strongly_connected(edges: &[Vec<usize>]) -> Vec<usize> {
     component
 }
 
-/// What the program's casts say about which layouts a slot can hold, as
-/// [`Program::explicit_cast_sources`] reads them for [`Program::cycles`].
+/// What the program's operations say about which layouts a slot can hold, as
+/// [`Program::slot_sources`] reads them for [`Program::cycles`]: casts store
+/// their sources where their targets are wanted, and subscriptions hang their
+/// reactions' state behind a promise.
 #[derive(Debug, Default)]
-struct CastSources {
+struct SlotSources {
     /// `(target, source)` layout pairs for every explicit `Convert` and
     /// `FieldView`.
     pairs: Vec<(usize, usize)>,
@@ -5011,6 +5053,11 @@ struct CastSources {
     /// The layouts of the object types unerased anywhere, sorted; `None` as
     /// above, for a target that already reaches everything.
     unerased: Vec<Option<usize>>,
+    /// The layouts of every reaction's state the program subscribes to a
+    /// promise, sorted: each frame that suspends on one and each closure
+    /// passed to `then`, `catch` or `finally`. `None` for state with no layout,
+    /// which could be anything.
+    reactions: Vec<Option<usize>>,
 }
 
 /// What [`Program::cycles`] decided: which layouts can be in a reference cycle,
@@ -10244,6 +10291,7 @@ mod tests {
         let mut scalar_targets = Vec::new();
         program.reaches(
             &HirType::Managed(ManagedType::BoxedBigInt),
+            &[],
             &mut scalar_targets,
         );
         assert!(
