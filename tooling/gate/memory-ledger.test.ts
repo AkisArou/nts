@@ -1265,7 +1265,7 @@ test("admit.ts --key reserves what its key held, and its watcher has the command
   assert.ok(peakReservation(kept.observations.map(row=>Math.ceil(row.peak/row.width))) > 160 * MiB, "its next run reserves by it");
   const refused = admit(f, ["--bytes", "1G", "--workers", "2", "--", "true"]);
   assert.equal(refused.status, 125);
-  assert.match(refused.stderr, /--workers and --at-most size a --key/);
+  assert.match(refused.stderr, /--workers, --case and --at-most size a --key/);
   assert.match(admit(f, ["--key", "admitted-job", "--bytes", "1G", "--", "true"]).stderr, /one of --key and --bytes says what to reserve/);
 });
 

@@ -1474,7 +1474,8 @@ the tooling strict checker owns the source's type checking.
   A bounded acquisition failure names the failure and leaves the entry for
   dead-owner reclamation.
 - **A job key keeps one measurement basis.** First use binds whole-job or
-  worker sizing under the history's flock before admission. `--workers`, even
+  worker sizing under the history's flock before admission, except for a
+  case-sized key, whose basis code declares (below). `--workers`, even
   a width of one, declares worker sizing; omission declares a whole job.
   A mismatch refuses by name, and publication rechecks the basis under the
   same lock. Samples retain the whole peak and measured width; worker
@@ -1483,6 +1484,23 @@ the tooling strict checker owns the source's type checking.
   without a recoverable basis and width are rejected with a named count and
   measured again through live accounting. Historical writers retain their
   old namespace.
+- **A case-sized job key reserves one case at a time.** `CASE_KEYS` in
+  `tooling/gate/step-scheduling.ts` declares the keys whose work is a list
+  of independent cases (`hir-compare`: one project's prepared HIR and
+  refusals under both compilers), each with the shared tool that runs them.
+  The declaration is code, never a first caller's. Every admission under
+  such a key names one case, `admit.ts --key <key> --case <path>`, a path
+  inside the tree the tools are in. It reserves that case's own peaks from
+  `cases-v2/<key>.json`, keyed by step, backend and path as the gate's case
+  leases are, or its live use and margin when the case was never measured.
+  Its watcher adds the case's peak there. A run of many cases therefore holds
+  only its running cases' forecasts, never its heaviest moment throughout.
+  A call without `--case`, with `--workers`, or with a path outside the tree
+  refuses by name before reserving, and the refusal names the per-case route.
+  `--case` on any other key refuses too. A key moved to case sizing has
+  its old whole-job row dropped under the history's flock, with a named
+  count; those samples never size a case and are never reinterpreted. Two first
+  callers serialize on that lock, and one reports the drop.
 - **Step CPU includes its complete retained cgroup.** After its processes exit
   and before its scope is deleted, the runner reads `cpu.stat` through
   `HostObservations`. A missing counter fails the instrument. The authoritative
@@ -2651,9 +2669,17 @@ death; an absent timestamp remains explicit after forced termination.
   counts and five test262 records. Issue numbers belong in labels and logs,
   so a fresh task can use the warm tree's observations
   ([log](records/notebooks/decisions-log.md#unmeasured-jobs-use-live-accounting-11-10)).
+  `hir-compare` is sized per project (11-23):
+  `tooling/conformance/refusal-diff.ts` admits each project as its own case,
+  and a hand-written comparison wraps each project in
+  `admit.ts --key hir-compare --case <project>`
+  ([log](records/notebooks/decisions-log.md#the-corpus-comparison-is-sized-per-project-11-23)).
 - **Job history keys bind their sizing basis.** A key's first caller declares
   whole-job or worker meaning before admission, and every writer preserves
-  it. Each observation keeps its whole peak and measured width. The versioned
+  it. A case-sized key (`CASE_KEYS`) is the exception: code declares its
+  basis, every admission names one case, and its old whole-job samples are
+  dropped by name, never reinterpreted
+  ([log](records/notebooks/decisions-log.md#the-corpus-comparison-is-sized-per-project-11-23)). Each observation keeps its whole peak and measured width. The versioned
   history path retains compatible step observations and names discarded
   ambiguous job observations, without exposing new state to older writers
   ([log](records/notebooks/decisions-log.md#job-keys-keep-their-measurement-basis-11-12)).

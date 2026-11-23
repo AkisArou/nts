@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
-import {bindJobBasis,COST_HISTORY_VERSION,historyFile,jobReservation,readCostHistory,writeCostHistory} from './step-scheduling.ts';
+import {bindJobBasis,caseHistoryFile,caseMemoryKey,COST_HISTORY_VERSION,historyFile,jobReservation,readCostHistory,writeCaseHistory,writeCostHistory} from './step-scheduling.ts';
 import {jobSizing,readLedger} from './memory-ledger.ts';
 import {STEP_CPU_MEASURE} from './step-time.ts';
 import {ownMemory} from './test-memory.ts';
@@ -97,4 +97,34 @@ process.stdin.once('data',()=>{
  const basis=readCostHistory(f.file).jobs.get('concurrent-key')!.basis;
  assert.match(children.map(run=>run.output()).join('\n'),new RegExp('bound '+basis));
  assert.match(children.map(run=>run.output()).join('\n'),/concurrent-key is bound to .* sizing; .* sizing disagrees/);
+});
+
+test('a case-sized key names its per-case route, and a case outside the tree or on another key is refused, before reserving or executing',t=>{
+ const f=fixture(t),admit=new URL('./admit.ts',import.meta.url).pathname;
+ const cases:[string[],RegExp][]=[
+  [['--key','hir-compare'],/job key hir-compare is sized per case, so --case is required; wrap each project: admit\.ts --key hir-compare --case <project> -- <your per-project command>, or run node tooling\/conformance\/refusal-diff\.ts/],
+  [['--key','hir-compare','--workers','2','--case','runtime/node/os'],/hir-compare is sized per case, so --workers does not apply/],
+  [['--key','perf-count','--case','runtime/node/os'],/job key perf-count is not sized per case; --case applies to hir-compare/],
+  [['--key','hir-compare','--case',f.root],/hir-compare case is outside its source tree/],
+  [['--case','runtime/node/os','--bytes','1G'],/--workers, --case and --at-most size a --key/],
+ ];
+ for(const [args,refusal] of cases){
+  const result=spawnTest(process.execPath,[admit,...args,'--',process.execPath,'-e',"console.log('command entered')"],{env:fixtureEnvironment(t,f.env),encoding:'utf8'});
+  assert.equal(result.status,125,args.join(' ')+': '+result.stdout+result.stderr);assert.match(result.stderr,refusal);
+  assert.doesNotMatch(result.stdout,/command entered/);
+  assert.deepEqual(readLedger(f.env.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]});
+  assert.equal(readCostHistory(f.file).jobs.size,0,'a refused case binds nothing');
+ }
+ assert.throws(()=>bindJobBasis(f.file,'hir-compare','job'),/hir-compare is sized per case/);
+ assert.match(writeCostHistory(f.file,{jobs:[{key:'hir-compare',basis:'job',peak:GiB,width:1}]})??'',/hir-compare is sized per case/,'no writer can add a whole-job sample to a case key');
+});
+
+test('a case key sizes by its own case peaks, capped by --at-most, and live without them',t=>{
+ const f=fixture(t);mkdirSync(f.env.NTS_GATE_COSTS_DIR,{recursive:true});
+ const file=caseHistoryFile('hir-compare',f.env),key=caseMemoryKey({step:'hir-compare',backend:'',path:'runtime/node/zlib'});
+ assert.equal(writeCaseHistory(file,[{key,peak:GiB}]),undefined);
+ const sized=jobSizing({key:'hir-compare',case:'runtime/node/zlib'},f.env);
+ assert.deepEqual([sized.bytes,sized.basis,sized.sampleBasis,sized.case],[1.25*GiB,'measured','case',{path:'runtime/node/zlib',history:file,key}]);
+ assert.equal(jobSizing({key:'hir-compare',case:'runtime/node/zlib',atMostBytes:GiB},f.env).bytes,GiB);
+ assert.equal(jobSizing({key:'hir-compare',case:'runtime/node/fs'},f.env).basis,'live');
 });

@@ -148,7 +148,8 @@ import {peakWatcherScope} from "./memory-watch-scope.ts";
 import {toolingSliceArgs,toolingSlice} from "./tooling-slice.ts";
 import {ToolingInstrumentError} from "./step-result.ts";
 import {CPU_WEIGHT,OOM_SCORE,PRIORITIES,PRIORITY_ENV,priorityOf,type Priority} from "./ranks.ts";
-import { historyFile, KEY, peakReservation, bindJobBasis, jobReservation, writeCostHistory, type JobBasis, type MemorySizing } from "./step-scheduling.ts";
+import { historyFile, KEY, TOOLING_ROOT, peakReservation, bindJobBasis, jobReservation, writeCostHistory, CASE_KEYS, caseKeyRefusal, dropCaseKeyJobRow, caseHistoryFile, caseMemoryKey, caseReservation, readCaseHistory, writeCaseHistory, type JobBasis, type MemorySizing } from "./step-scheduling.ts";
+import {caseIdentity} from "./case-memory.ts";
 import {describeHolders,memoryHolders,type HeldPart,type MemoryHolders} from "./memory-holders.ts";
 export type {HeldPart} from "./memory-holders.ts";
 
@@ -1483,10 +1484,27 @@ export type JobRequest = {
   atMostBytes?: number;
   /** An admitted reservation of the same job this one takes over (`ReserveRequest.replaces`): nothing is admitted between the two. */
   replaces?: string;
+  /**
+   * The one case this admission runs, for a case-sized key (CASE_KEYS): a
+   * path inside the tree these tools are in, absolute or relative to it. It reserves that
+   * case's own peaks, and its peak goes to the case history.
+   */
+  case?: string;
 };
 
 /** What a job reserves, why, and the history its peak goes to. */
-export type JobSizing = { bytes: number; basis: MemorySizing["basis"]; history: string; units: number; sampleBasis:JobBasis };
+export type JobSizing = { bytes: number; basis: MemorySizing["basis"]; history: string; units: number; sampleBasis:JobBasis|"case";
+  /** A case-sized key's case: its history file and its key there. */
+  case?: { readonly path: string; readonly history: string; readonly key: string } };
+
+/** Adds a job's observed peak to the history its sizing names; a warning when it could not. */
+export function recordJobPeak(sizing: Pick<JobSizing, "history" | "units" | "sampleBasis"> & { case?: { readonly history: string; readonly key: string } }, key: string, peak: number): string | undefined {
+  if (sizing.sampleBasis === "case") {
+    if (!sizing.case) throw new Error(`memory: ${key}'s case peak has no case`);
+    return writeCaseHistory(sizing.case.history, [{ key: sizing.case.key, peak }]);
+  }
+  return writeCostHistory(sizing.history, { jobs: [{ key, peak, basis: sizing.sampleBasis, width: sizing.units }] });
+}
 
 /**
  * What a job reserves in the environment `env`: per worker, what its own
@@ -1500,7 +1518,10 @@ export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.Process
   if (!KEY.test(request.key)) throw new TypeError(`memory: a job's key is lower-case words joined by hyphens, not ${JSON.stringify(request.key)}`);
   if (!Number.isSafeInteger(units) || units < 1) throw new RangeError(`memory: ${request.key} runs a positive whole number of workers, not ${units}`);
   if (request.atMostBytes !== undefined) amount(request.atMostBytes, request.key, "holds at most");
-  const history = historyFile(env),sampleBasis:JobBasis=request.units===undefined?"job":"worker";
+  const history = historyFile(env);
+  if (CASE_KEYS.has(request.key)) return caseSizing(request, history, env);
+  if (request.case !== undefined) throw new TypeError(`memory: job key ${request.key} is not sized per case; --case applies to ${[...CASE_KEYS.keys()].join(", ")}`);
+  const sampleBasis:JobBasis=request.units===undefined?"job":"worker";
   const owned=bindJobBasis(history,request.key,sampleBasis);
   const { totalBytes } = machineMemory(env);
   const capacity = totalBytes - SYSTEM_FLOOR_BYTES;
@@ -1508,6 +1529,21 @@ export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.Process
   if (unit.basis === "live") return { bytes: 0, basis: "live", history, units, sampleBasis };
   const bytes = Math.max(1, Math.min(unit.bytes * units, capacity, request.atMostBytes ?? Infinity));
   return { bytes, basis: unit.basis, history, units, sampleBasis };
+}
+
+/** A case-sized key's admission: that case's own peaks, else live use and margin. */
+function caseSizing(request: Omit<JobRequest, "what">, history: string, env: NodeJS.ProcessEnv): JobSizing {
+  if (request.case === undefined) throw new TypeError(caseKeyRefusal(request.key, "--case is required"));
+  if (request.units !== undefined) throw new TypeError(caseKeyRefusal(request.key, "--workers does not apply"));
+  const identity = caseIdentity(request.key, { project: request.case }, TOOLING_ROOT);
+  dropCaseKeyJobRow(history, request.key);
+  const file = caseHistoryFile(request.key, env), key = caseMemoryKey(identity);
+  const own = { path: identity.path, history: file, key };
+  const forecast = caseReservation(readCaseHistory(file), key);
+  if (forecast === undefined) return { bytes: 0, basis: "live", history, units: 1, sampleBasis: "case", case: own };
+  const { totalBytes } = machineMemory(env);
+  const bytes = Math.max(1, Math.min(forecast, totalBytes - SYSTEM_FLOOR_BYTES, request.atMostBytes ?? Infinity));
+  return { bytes, basis: "measured", history, units: 1, sampleBasis: "case", case: own };
 }
 
 const WATCHER = new URL("./memory-watch.ts", import.meta.url);
@@ -1530,12 +1566,13 @@ export const WATCH_MS = POLL_MS;
  * write. After the command ends, only its flush has a bounded lifetime.
  * A scope that cannot start refuses before the command executes.
  */
-export function watchPeak(reservation: Pick<Reservation, "id" | "ledger" | "env">, job: Pick<JobSizing, "history" | "units" | "sampleBasis"> & { key: string },
+export function watchPeak(reservation: Pick<Reservation, "id" | "ledger" | "env">, job: Pick<JobSizing, "history" | "units" | "sampleBasis"> & { key: string; case?: { readonly history: string; readonly key: string } },
   env:NodeJS.ProcessEnv=process.env): void {
   const scope=peakWatcherScope(reservation.id),slice=toolingSlice(env);
   const started = spawnSync("systemd-run", ["--user","--scope","--quiet","--collect",`--unit=${scope}`,
     ...toolingSliceArgs(env, priorityOf(reservation.env)),`--description=memory peak watcher for ${job.key}`,"--","setsid","-f",process.execPath,
-    fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, job.sampleBasis, String(job.units),scope],
+    fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.case?.history ?? job.history, job.key, job.sampleBasis, String(job.units),scope,
+    ...(job.case ? [job.case.key] : [])],
     { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: env.PATH ?? "/usr/bin:/bin",...hostInfrastructure(env),...hostObservationEnvironment(env),...(slice?{NTS_TOOLING_SLICE:slice}:{}) } });
   if (started.error||started.status !== 0) throw new ToolingInstrumentError('tooling-setup',
     `memory: ${job.key}'s peak watcher scope ${scope} could not start: ${started.error?.message??`systemd-run ended ${started.status??started.signal}`}`);
@@ -1629,7 +1666,7 @@ export async function reserveJob(request: JobRequest,
       } finally {releaseComplete();}
     }
     if (peak <= 0) return;
-    const warning = writeCostHistory(sizing.history, { jobs: [{key:request.key,peak,basis:sizing.sampleBasis,width:sizing.units}] });
+    const warning = recordJobPeak(sizing, request.key, peak);
     if (warning) report(`memory: ${request.key}'s peak is not in its history: ${warning}`);
   };
   // held.closed is assigned by release(). A failed sampler must neither

@@ -1,7 +1,7 @@
 // Run a command once the machine's memory ledger admits it, or say what the
 // ledger holds:
 //
-//   node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority <rank>] [--what <label>] -- <command> [args...]
+//   node tooling/gate/admit.ts --key <name> [--workers <N> | --case <path>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority <rank>] [--what <label>] -- <command> [args...]
 //   node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority <rank>] [--what <label>] -- <command> [args...]
 //   node tooling/gate/admit.ts --status [--json]
 //
@@ -13,6 +13,11 @@
 // A key binds whole-job sizing when --workers is absent, or worker sizing
 // when it is supplied. Its meaning cannot change. Every sample keeps the
 // whole peak and its measured width; worker forecasts use that width.
+// A key sized per case (step-scheduling.ts's CASE_KEYS: `hir-compare`)
+// takes `--case <path>` instead, one case of the work per admission: it
+// reserves that case's own peaks, and its peak joins that case's history,
+// so a run of many cases holds only what its running cases need. Such a
+// key refuses a call without `--case`, naming the per-case route.
 // Without an observation of its own, the job has no forecast: admission asks
 // for its live margin and the ledger follows its use until that first peak.
 // With `--bytes`, it reserves that much, and nothing is measured.
@@ -64,7 +69,7 @@ import { describeHolderRows } from "./memory-holders.ts";
 const RANKS = PRIORITIES.join("|");
 /** The status's rank column: as wide as the longest rank's name. */
 const RANK_WIDTH = Math.max(...PRIORITIES.map(rank => rank.length));
-const USAGE = `usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority ${RANKS}] [--what <label>] -- <command> [args...]\n`
+const USAGE = `usage: node tooling/gate/admit.ts --key <name> [--workers <N> | --case <path>] [--at-most <N|8G>] [--memory-max <N|8G>] [--priority ${RANKS}] [--what <label>] -- <command> [args...]\n`
   + `       node tooling/gate/admit.ts --bytes <N|8G> [--memory-max <N|8G>] [--priority ${RANKS}] [--what <label>] -- <command> [args...]\n`
   + "       node tooling/gate/admit.ts --status [--json]";
 
@@ -88,7 +93,7 @@ type Options = { bytes: number; job: (JobSizing & { key: string }) | null; prior
   measurement?: { lock: string; wait: boolean; quiet: boolean } };
 
 function parse(argv: readonly string[]): Options {
-  let bytes: number | undefined, what: string | undefined, key: string | undefined, workers: number | undefined, atMost: number | undefined, memoryMax: number | undefined;
+  let bytes: number | undefined, what: string | undefined, key: string | undefined, workers: number | undefined, atMost: number | undefined, memoryMax: number | undefined, unit: string | undefined;
   let priority: Priority | undefined;
   let measurementLock: string | undefined, measurementWait = false, measurementQuiet = true;
   let at = 0;
@@ -110,6 +115,7 @@ function parse(argv: readonly string[]): Options {
     else if (flag === "--measurement-wait") measurementWait = true;
     else if (flag === "--measurement-no-quiet") measurementQuiet = false;
     else if (flag === "--key") key = value();
+    else if (flag === "--case") unit = value();
     else if (flag === "--workers") {
       const given = value();
       if (!/^[1-9]\d*$/.test(given) || !Number.isSafeInteger(Number(given))) throw new Refusal(`--workers is a positive whole number, not ${given}`, 125, true);
@@ -123,12 +129,12 @@ function parse(argv: readonly string[]): Options {
   }
   const [command, ...args] = argv.slice(at + 1);
   if ((bytes === undefined) === (key === undefined)) throw new Refusal("one of --key and --bytes says what to reserve", 125, true);
-  if (key === undefined && (workers !== undefined || atMost !== undefined)) throw new Refusal("--workers and --at-most size a --key", 125, true);
+  if (key === undefined && (workers !== undefined || atMost !== undefined || unit !== undefined)) throw new Refusal("--workers, --case and --at-most size a --key", 125, true);
   if (command === undefined || command === "") throw new Refusal("no command after --", 125, true);
   try { priority ??= priorityOf(process.env); } catch (error) { throw new Refusal((error as Error).message, 125); }
   let job: Options["job"] = null;
   if (key !== undefined) {
-    try { job = { key, ...jobSizing({ key, units: workers, atMostBytes: atMost }) }; }
+    try { job = { key, ...jobSizing({ key, units: workers, atMostBytes: atMost, ...(unit === undefined ? {} : { case: resolve(unit) }) }) }; }
     catch (error) { throw new Refusal((error as Error).message, 125, error instanceof TypeError); }
   }
   return { bytes: job?.bytes ?? bytes!, job, priority, what: what ?? [command, ...args].join(" "), command, args, ...(memoryMax === undefined ? {} : { memoryMax }),

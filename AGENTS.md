@@ -365,12 +365,16 @@ An oracle test's supplied canonical environment is already sealed with
   A job with no peak in its history is charged its live use and a margin,
   rather than another job's peak or a share of the machine; its observed
   peak sizes its next run. Standard proof commands use stable keys across
-  tasks: `hir-compare` for the corpus prepared-HIR comparison,
+  tasks: `hir-compare` for the corpus prepared-HIR comparison, sized per
+  project (`node tooling/conformance/refusal-diff.ts`, or wrap each project:
+  `admit.ts --key hir-compare --case <project> -- <your per-project
+  command>`; a whole-run call is refused),
   `test262-records` for the five test262 records (through `admit.ts`), and
   `perf-count` for instruction counts (through `with-lock.sh`). Put the
   issue and experiment in `--what` or the log name, never in these keys.
   A key binds whole-job sizing without `--workers`, or worker sizing with it;
-  keep that declaration consistent. Samples retain their whole peak and measured
+  keep that declaration consistent. A case-sized key (`hir-compare`) is
+  declared in code and takes `--case` instead. Samples retain their whole peak and measured
   width in `steps-v5.json`. On 2026-11-12 a whole-build sample was recorded as
   one worker and inflated the next build's reservation. Admission now refuses
   a changed basis by name instead of reinterpreting the same key.

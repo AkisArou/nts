@@ -5,6 +5,14 @@
 //                                         (default: runtime/node/*, runtime/web-platform)
 //   node tooling/conformance/refusal-diff.ts --self-test
 //
+// Each project is one case of the machine's memory ledger: the run starts
+// `admit.ts --key hir-compare --case <project>` for it, which reserves what
+// that project was measured to hold (or its live use and a margin, never
+// measured) and records its peak for the next run, so the run holds only
+// what its running projects need, never its heaviest moment throughout.
+// The case runs both arms (`--arms`) and hands their states back as JSON;
+// this process, which holds only those states, compares and prints them.
+//
 // # Why
 //
 // A refusal count cannot tell a function that stopped compiling from one that
@@ -83,11 +91,15 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "./pin.ts";
-import { exitAfterOutput } from "../differential/command-entry/main.ts";
+import { runAsCommand } from "../differential/command-entry/main.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const WORKERS = Number(process.env.NTS_REFUSAL_DIFF_JOBS ?? 4);
+const ADMIT = join(ROOT, "tooling/gate/admit.ts");
+const SELF = fileURLToPath(import.meta.url);
+/** The ledger key each project is admitted under, one case per project (step-scheduling.ts's CASE_KEYS). */
+export const CASE_KEY = "hir-compare";
 
 /** A name with the compiler's numbering taken out. */
 export const stable = (name) => name.replace(/<\d+>/g, "<N>").replace(/Closure\d+/g, "ClosureN").replace(/obj\d+/g, "objN");
@@ -162,10 +174,10 @@ export function moves(beforeArm, afterArm) {
   }
   return kinds;
 }
-const LOSSES = new Set(["STOPPED COMPILING", "DROPPED SILENTLY", "ROOT LOST", "PHANTOM APPEARED"]);
+export const LOSSES = new Set(["STOPPED COMPILING", "DROPPED SILENTLY", "ROOT LOST", "PHANTOM APPEARED"]);
 
 // **Seen to classify every move before it is trusted.**
-function selfTest() {
+export function selfTest() {
   const before = states(
     "func kept(x: f64) -> f64 {\nfunc goesQuiet(x: f64) -> f64 {\nfunc starts(x: f64) -> f64 {\nfunc R<3054>#m(this: managed<obj#1>) -> f64 {\nfunc lying(x: f64) -> f64 {\n",
     "stringChunkAt\tsomething\nforgotten\tsomething\nstarts2\tx\nlying\tx\n",
@@ -203,38 +215,14 @@ function selfTest() {
   if (!wantedAfter.has("ROOT LOST")) return "a function a cascade still cites, gone with no reason, was not a loss";
   return null;
 }
-const broken = selfTest();
-if (broken) {
-  console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
-}
-if (process.argv.includes("--self-test")) {
-  console.log("  self-test: every move classified; a renumbered instance and a standing phantom are not moves");
-  process.exit(0);
-}
+type Arm = { arm: ReturnType<typeof states>; refusals: number };
+type CaseResult = { arms: (Arm | null)[]; unmeasured: string[] };
 
-const [beforeBin, afterBin, ...named] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-if (!beforeBin || !afterBin || !existsSync(beforeBin) || !existsSync(afterBin)) {
-  console.log("  usage: refusal-diff.ts <before-nts> <after-nts> [project ...] [--one-change]  (both binaries must exist)");
-  process.exit(2);
-}
-const env = { ...process.env, NTS_CHECKERS: "1", NTS_CHECKERS: "1" };
-const projects = named.length > 0 ? named : [
-  ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
-    .map((e) => `runtime/node/${e.name}`),
-  "runtime/web-platform",
-].sort();
+/** One arm as JSON: Map and Set entries in their insertion order, which the moves' order follows. */
+const armJson = (arm: Arm | null) => arm && { states: [...arm.arm.states], wanted: [...arm.arm.wanted], refusals: arm.refusals };
+const armFromJson = (value) => value && { arm: { states: new Map(value.states), wanted: new Set(value.wanted) }, refusals: value.refusals };
 
-if (process.argv.includes("--one-change")) {
-  const why = oneChange(beforeBin, afterBin);
-  if (why) {
-    console.log(`  NOT MEASURED: --one-change, and ${why}`);
-    process.exit(2);
-  }
-}
-
-const run = (bin, args) => new Promise((done) => {
+const run = (bin, args, env) => new Promise<{ status: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }>((done) => {
   const c = spawn(bin, args, { cwd: ROOT, env });
   let stdout = "";
   let stderr = "";
@@ -243,52 +231,123 @@ const run = (bin, args) => new Promise((done) => {
   c.on("close", (status, signal) => done({ status, signal, stdout, stderr }));
 });
 
-const results = [];
-const unmeasured = [];
-let next = 0;
-await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, async () => {
-  while (next < projects.length) {
-    const project = projects[next++];
-    const arms = [];
-    for (const bin of [beforeBin, afterBin]) {
-      const [hir, ref] = await Promise.all([run(bin, ["hir", "--prepared", project]), run(bin, ["refusals", project])]);
-      const listing = `${hir.stdout}${hir.stderr}`;
-      if (hir.signal || ref.signal || !/^\d+ function\(s\)/m.test(listing)) {
-        unmeasured.push(`${project}: ${bin} printed no prepared listing`);
-        arms.push(null);
-        continue;
-      }
-      arms.push({ arm: states(hir.stdout, ref.stdout), refusals: ref.stdout.split("\n").filter(Boolean).length });
+/** Both arms of one project, the compilers run in `environment`: what one admitted case runs. */
+export async function caseArms(beforeBin: string, afterBin: string, project: string, environment: NodeJS.ProcessEnv): Promise<CaseResult> {
+  const env = { ...environment, NTS_CHECKERS: "1" };
+  const arms: (Arm | null)[] = [];
+  const unmeasured: string[] = [];
+  for (const bin of [beforeBin, afterBin]) {
+    const [hir, ref] = await Promise.all([run(bin, ["hir", "--prepared", project], env), run(bin, ["refusals", project], env)]);
+    const listing = `${hir.stdout}${hir.stderr}`;
+    if (hir.signal || ref.signal || !/^\d+ function\(s\)/m.test(listing)) {
+      unmeasured.push(`${project}: ${bin} printed no prepared listing`);
+      arms.push(null);
+      continue;
     }
-    if (arms.every(Boolean)) results.push({ project, moved: moves(arms[0].arm, arms[1].arm), refusals: [arms[0].refusals, arms[1].refusals] });
+    arms.push({ arm: states(hir.stdout, ref.stdout), refusals: ref.stdout.split("\n").filter(Boolean).length });
   }
-}));
+  return { arms, unmeasured };
+}
 
-console.log(`  before ${beforeBin}\n  after  ${afterBin}`);
-for (const line of armLines(beforeBin, afterBin)) console.log(`  ${line}`);
-// One function moving in every program that imports it is one fact, not N:
-// a summary per name first, then the per-project detail.
-const byName = new Map();
-for (const { project, moved } of results) {
-  for (const [kind, list] of moved) for (const { name } of list) {
-    const key = `${kind}\t${name}`;
-    byName.set(key, [...(byName.get(key) ?? []), project]);
+/** One project as its own ledger case: admit.ts reserves and measures it, and the case prints its arms. */
+async function leasedCase(beforeBin: string, afterBin: string, project: string, env: NodeJS.ProcessEnv): Promise<CaseResult> {
+  const child = await run(process.execPath, [ADMIT, "--key", CASE_KEY, "--case", project, "--what", `${CASE_KEY} ${project}`, "--",
+    process.execPath, SELF, "--arms", beforeBin, afterBin, project], env);
+  if (child.stderr) process.stderr.write(child.stderr);
+  const last = child.stdout.trimEnd().split("\n").at(-1) ?? "";
+  if (child.status === 0 && last.startsWith("{")) {
+    const value = JSON.parse(last);
+    return { arms: value.arms.map(armFromJson), unmeasured: value.unmeasured };
   }
+  const why = child.signal ? `ended by ${child.signal}` : `ended ${child.status}`;
+  return { arms: [null], unmeasured: [`${project}: its ${CASE_KEY} case ${why}`] };
 }
-if (byName.size > 0) console.log("  by function:");
-for (const [key, where] of [...byName].sort(([a], [b]) => a.localeCompare(b))) {
-  const [kind, name] = key.split("\t");
-  console.log(`    ${kind.padEnd(26)} ${name} -- in ${where.length} project(s)`);
-}
-let losses = 0;
-for (const { project, moved, refusals } of results.sort((a, b) => a.project.localeCompare(b.project))) {
-  if (moved.size === 0 && refusals[0] === refusals[1]) continue;
-  console.log(`  ${project}: refusal rows ${refusals[0]} -> ${refusals[1]}`);
-  for (const [kind, list] of [...moved].sort(([a], [b]) => a.localeCompare(b))) {
-    if (LOSSES.has(kind)) losses += list.length;
-    console.log(`    ${kind.padEnd(18)} ${list.length}: ${list.slice(0, 6).map((x) => x.name).join(", ")}${list.length > 6 ? ", ..." : ""}`);
+
+/** The report: what moved, by function and then by project; its exit status. */
+export function report(beforeBin: string, afterBin: string, projects: readonly string[], results, unmeasured: readonly string[], print: (line: string) => void): number {
+  print(`  before ${beforeBin}\n  after  ${afterBin}`);
+  for (const line of armLines(beforeBin, afterBin)) print(`  ${line}`);
+  // One function moving in every program that imports it is one fact, not N:
+  // a summary per name first, then the per-project detail.
+  const byName = new Map();
+  for (const { project, moved } of results) {
+    for (const [kind, list] of moved) for (const { name } of list) {
+      const key = `${kind}\t${name}`;
+      byName.set(key, [...(byName.get(key) ?? []), project]);
+    }
   }
+  if (byName.size > 0) print("  by function:");
+  for (const [key, where] of [...byName].sort(([a], [b]) => a.localeCompare(b))) {
+    const [kind, name] = key.split("\t");
+    print(`    ${kind.padEnd(26)} ${name} -- in ${where.length} project(s)`);
+  }
+  let losses = 0;
+  for (const { project, moved, refusals } of [...results].sort((a, b) => a.project.localeCompare(b.project))) {
+    if (moved.size === 0 && refusals[0] === refusals[1]) continue;
+    print(`  ${project}: refusal rows ${refusals[0]} -> ${refusals[1]}`);
+    for (const [kind, list] of [...moved].sort(([a], [b]) => a.localeCompare(b))) {
+      if (LOSSES.has(kind)) losses += list.length;
+      print(`    ${kind.padEnd(18)} ${list.length}: ${list.slice(0, 6).map((x) => x.name).join(", ")}${list.length > 6 ? ", ..." : ""}`);
+    }
+  }
+  for (const u of unmeasured) print(`  NOT MEASURED  ${u}`);
+  print(`  ${results.length} of ${projects.length} project(s) compared; ${losses} move(s) to a loss`);
+  return unmeasured.length > 0 ? 2 : losses > 0 ? 1 : 0;
 }
-for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
-console.log(`  ${results.length} of ${projects.length} project(s) compared; ${losses} move(s) to a loss`);
-exitAfterOutput(unmeasured.length > 0 ? 2 : losses > 0 ? 1 : 0);
+
+/** Every project, each through `runCase`, at most WORKERS at a time. */
+export async function compare(projects: readonly string[], runCase: (project: string) => Promise<CaseResult>) {
+  const results = [];
+  const unmeasured: string[] = [];
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, async () => {
+    while (next < projects.length) {
+      const project = projects[next++];
+      const { arms, unmeasured: lost } = await runCase(project);
+      unmeasured.push(...lost);
+      if (arms.length === 2 && arms.every(Boolean)) results.push({ project, moved: moves(arms[0].arm, arms[1].arm), refusals: [arms[0].refusals, arms[1].refusals] });
+    }
+  }));
+  return { results, unmeasured };
+}
+
+async function main(): Promise<number> {
+  const broken = selfTest();
+  if (broken) {
+    console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
+    return 2;
+  }
+  if (process.argv.includes("--self-test")) {
+    console.log("  self-test: every move classified; a renumbered instance and a standing phantom are not moves");
+    return 0;
+  }
+  const [beforeBin, afterBin, ...named] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  if (!beforeBin || !afterBin || !existsSync(beforeBin) || !existsSync(afterBin)) {
+    console.log("  usage: refusal-diff.ts <before-nts> <after-nts> [project ...] [--one-change]  (both binaries must exist)");
+    return 2;
+  }
+  if (process.argv.includes("--arms")) {
+    // One admitted case: exactly one project, its arms as one JSON line.
+    if (named.length !== 1) throw new Error("refusal-diff.ts --arms runs exactly one project");
+    const result = await caseArms(beforeBin, afterBin, named[0], process.env);
+    process.stdout.write(`${JSON.stringify({ arms: result.arms.map(armJson), unmeasured: result.unmeasured })}\n`);
+    return 0;
+  }
+  const projects = named.length > 0 ? named : [
+    ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
+      .map((e) => `runtime/node/${e.name}`),
+    "runtime/web-platform",
+  ].sort();
+  if (process.argv.includes("--one-change")) {
+    const why = oneChange(beforeBin, afterBin);
+    if (why) {
+      console.log(`  NOT MEASURED: --one-change, and ${why}`);
+      return 2;
+    }
+  }
+  const { results, unmeasured } = await compare(projects, (project) => leasedCase(beforeBin, afterBin, project, process.env));
+  return report(beforeBin, afterBin, projects, results, unmeasured, (line) => console.log(line));
+}
+
+runAsCommand(import.meta.url, main);

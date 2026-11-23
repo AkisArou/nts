@@ -4457,3 +4457,39 @@ wide slot. The controller runs verified's code, so the new ordering begins
 only after verified contains it.
 
 The contract is in [workflow](../../workflow.md#after-landing-the-full-check).
+
+## The corpus comparison is sized per project (11-23)
+
+Approved by the coordinator for #937. On 11-21 one `hir-compare` run held
+8.1 GiB for over an hour while using about 300 MiB between corpora, and two
+landing proofs waited behind it. There were two causes. A whole-job key reserves its
+heaviest moment for the whole run. The one key was also shared by
+hand-written scripts of very different size, so the largest of them sized
+every run: this tree's history reserved 16.8 GiB from a 13.4 GB sample. One
+refusal-diff run over the 29 runtime projects (4 at a time) peaked at
+3.24 GB, while one project held 50 MiB to 1.19 GiB (median 597 MiB).
+
+`hir-compare` is now a case-sized key declared in code. Each admission names
+one project and reserves that project's own peaks from the case history.
+refusal-diff admits each project as its own case. The basis change is a
+declaration, so the key's whole-job samples are dropped by name and never
+reinterpreted. No file format changed.
+
+On the leased tool's second run (pins 126ef371 to 7a8d566), all 118 case
+entries in 76 ledger samples sat at their own forecast. Reservations
+averaged 1.53 GiB, where whole-job sizing of the same job holds 3.77 GiB
+throughout. The most held at once was 4.55 GiB, when the four largest
+projects overlapped, each with its own margin. Cases also queue between
+projects: on a busy machine nine of them waited 2,436 s in total, and the run
+took 18.8 minutes, against 11.5 for the first. The unwrapped parent's own
+high-water mark was 99.5 MiB, under the least live margin of 128 MiB.
+Output was byte-identical to the previous tool on both runs, 3,152 lines.
+The evidence is in `~/.cache/nts-scratch/937/`: `old.out`, `new1.out` and
+`new2.out` (each SHA-256
+`98e11c326d0a7a8452800c5ee5791477d2105b25bd4a614439b77dfd6c0b9e02`),
+`ledger-samples-run2.jsonl`
+(`35fd186655e9d9aad556622fb5ea6f141fc6b9a7679ca5fc589dafa6e01533bc`) and
+`measure-per-project.jsonl`
+(`7c00e890938439d281dec0b431d0acd69ba6879a52751d0960cc7b95677a7829`).
+
+The contract is in [workflow](../../workflow.md#the-machine).

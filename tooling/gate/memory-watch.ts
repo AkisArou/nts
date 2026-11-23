@@ -15,17 +15,20 @@
 //     when it releases the reservation.
 //   - As a process of its own, for a job that `admit.ts` has become:
 //
-//       node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <job|worker> <workers> <scope>
+//       node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <job|worker|case> <workers> <scope> [<case key>]
+//
+//     A case-sized key's watcher (`case`, one worker) is handed its case
+//     history and the case's key there, and adds the peak to that case.
 //
 //     It does not count itself, and once the reservation has ended (released,
 //     dropped, or its owner gone) it adds the most it saw, per worker, to the
 //     scheduling history under the job's key (step-scheduling.ts) and exits.
 import { setTimeout as pause } from "node:timers/promises";
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
-import { admittedEntry, entryUsage, noteOver, noteSampledPeak, WATCH_MS } from "./memory-ledger.ts";
+import { admittedEntry, entryUsage, noteOver, noteSampledPeak, recordJobPeak, WATCH_MS } from "./memory-ledger.ts";
 import {HostObservationError,hostObservations} from "./host-observations.ts";
 import {recordWorkerTerminal} from './worker-lifecycle.ts';
-import { KEY, writeCostHistory } from "./step-scheduling.ts";
+import { KEY } from "./step-scheduling.ts";
 import {enterWatcherFlush} from "./memory-watch-scope.ts";
 import {ToolingInstrumentError} from "./step-result.ts";
 import {registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
@@ -76,9 +79,10 @@ function startThread():void {
   });
 }
 async function main():Promise<void> {
-  const [ledger,id,history,key,basis,workers,scope]=process.argv.slice(2),units=Number(workers);
-  if(!ledger||!id||!history||!scope||!key||!KEY.test(key)||(basis!=="job"&&basis!=="worker")||!Number.isSafeInteger(units)||units<1||(basis==="job"&&units!==1))
-    throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <job|worker> <workers> <scope>');
+  const [ledger,id,history,key,basis,workers,scope,caseKey,...extra]=process.argv.slice(2),units=Number(workers);
+  if(!ledger||!id||!history||!scope||!key||!KEY.test(key)||(basis!=="job"&&basis!=="worker"&&basis!=="case")||!Number.isSafeInteger(units)||units<1
+    ||(basis!=="worker"&&units!==1)||(basis==="case")!==(caseKey!==undefined)||extra.length)
+    throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <job|worker|case> <workers> <scope> [<case key>]');
   const ending=new AbortController();
   const watch=watchReservation(ledger,id,key,{exclude:process.pid,signal:ending.signal});
   const unregister=registerCommandCloser('memory watcher '+key,{cancel:()=>ending.abort(),close:()=>ending.abort(),closed:async()=>{await watch;}});
@@ -86,7 +90,7 @@ async function main():Promise<void> {
   const most=await watch;
   if(most>0)try{
     enterWatcherFlush(scope,process.env);
-    const warning=writeCostHistory(history,{jobs:[{key,peak:most,basis,width:units}]});
+    const warning=recordJobPeak({history,units,sampleBasis:basis,...(caseKey===undefined?{}:{case:{history,key:caseKey}})},key,most);
     if(warning)throw Error(warning);
   }catch(error){throw new ToolingInstrumentError('tooling-setup',`memory: ${key}'s peak is not in its history: ${String(error)}`,{cause:error});}
   }finally{unregister();}

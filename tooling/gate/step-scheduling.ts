@@ -68,7 +68,8 @@ const record = (value: unknown): value is Record<string, unknown> => Boolean(val
 const keys = (value: Record<string, unknown>, allowed: readonly string[]) => Object.keys(value).every(key => allowed.includes(key));
 /** A step's name, and a job's key: lower-case words joined by hyphens. */
 export const KEY = /^[a-z][a-z0-9-]*$/;
-const TOOLING_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+/** The tree these tools are in: the default root of every history, and of a case-sized key's cases. */
+export const TOOLING_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 /** A removed step's checks, moved to the steps that now run them (owed.mjs). */
 export type StepSuccessors = Readonly<Record<string, { readonly steps: readonly string[] }>>;
@@ -140,7 +141,51 @@ export function readCostHistory(file: string,report:(line:string)=>void=console.
   return { steps, jobs };
 }
 
+/**
+ * Job keys sized per case, each with the shared tool that runs its cases.
+ * Every admission under one names a single case (`admit.ts --case <path>`)
+ * and reserves that case's own peaks from `cases-v2/<key>.json`, keyed by
+ * step, backend and path as the gate's case leases are. The meaning is
+ * declared here, never by a first caller: no whole-job or worker sample
+ * can size such a key, and a caller that gives none is refused by name.
+ * A key that moved here from whole-job sizing has its old samples dropped,
+ * never reinterpreted (`dropCaseKeyJobRow`).
+ */
+export const CASE_KEYS:ReadonlyMap<string,{readonly tool:string}>=new Map([
+  ['hir-compare',{tool:'node tooling/conformance/refusal-diff.ts <before> <after> [project ...]'}],
+]);
+
+/** What a whole-job or worker caller of a case key is told: the per-case route, in one line. */
+export function caseKeyRefusal(key:string,why:string):string{
+  const declared=CASE_KEYS.get(key);if(!declared)throw new Error(`memory: ${key} is not a case-sized key`);
+  return `memory: job key ${key} is sized per case, so ${why}; wrap each project: admit.ts --key ${key} --case <project> -- <your per-project command>, or run ${declared.tool}`;
+}
+
+/**
+ * Drops a case key's whole-job row, under the history's lock, saying how
+ * many samples went. Two first callers serialize on the lock: one drops and
+ * reports, the other finds nothing. Returns the history as it now stands.
+ */
+export function dropCaseKeyJobRow(file:string,key:string,report:(line:string)=>void=console.error):CostHistory{
+  if(!CASE_KEYS.has(key))throw new Error(`memory: ${key} is not a case-sized key`);
+  const view=readCostHistory(file,()=>{});
+  if(view.unsupportedVersion)throw view.unsupportedVersion;
+  if(!view.jobs.has(key))return view;
+  const unlock=lockHistory(file);if(!unlock)throw new Error(`memory: cannot drop ${key}'s whole-job samples; ${file} stayed locked for ${LOCK_WAIT_SECONDS} s`);
+  try{
+    assertWritableState(file,COST_HISTORY_VERSION);
+    const current=readCostHistory(file,()=>{});if(current.unsupportedVersion)throw current.unsupportedVersion;
+    const row=current.jobs.get(key);
+    if(!row)return current;
+    const jobs=new Map(current.jobs);jobs.delete(key);
+    const next={steps:current.steps,jobs};publishCostHistory(file,next);
+    report(`memory history: ${key} is sized per case (cases-v2/${key}.json); dropped its ${row.observations.length} ${row.basis} sample(s) from ${file}`);
+    return next;
+  }finally{unlock();}
+}
+
 export function assertJobBasis(key:string,basis:JobBasis,previous:JobPeaks|undefined):void{
+  if(CASE_KEYS.has(key))throw new Error(caseKeyRefusal(key,basis==='worker'?'--workers does not apply':'--case is required'));
   if(previous&&previous.basis!==basis)throw new Error(`memory: job key ${key} is bound to ${previous.basis} sizing; ${basis} sizing disagrees (${basis==="worker"?"--workers supplied":"no --workers supplied"})`);
 }
 
