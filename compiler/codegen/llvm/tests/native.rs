@@ -110,7 +110,8 @@ fn snapshot_of(
 /// same HIR. Backend identity itself must still name the requested branch.
 #[test]
 fn c_and_llvm_preparation_agree_for_native_abi_and_addon_sources() {
-    let cases: &[(&str, &str, &[(&str, &str)])] = &[
+    type Case<'a> = (&'a str, &'a str, &'a [(&'a str, &'a str)]);
+    let cases: &[Case<'_>] = &[
         (
             "pointer-constants",
             constants::SOURCE,
