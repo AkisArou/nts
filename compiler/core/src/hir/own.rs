@@ -737,12 +737,14 @@ pub fn analyze(
         .get(&func.name)
         .cloned()
         .unwrap_or_default();
+    let aliases = &summaries.slots.aliases[&func.name];
     let entering = freshness(
         func,
         layouts,
         &summaries.harmless,
         &vouched,
         &summaries.slots.returned,
+        aliases,
     )
     .entering;
     let (initializing, still_zero) = initializing_stores(
@@ -752,6 +754,7 @@ pub fn analyze(
         &summaries.harmless,
         &summaries.starts_zero,
         &summaries.slots.returned,
+        aliases,
     );
     // A foreign counted handle a name still holds, which is an anchor for a
     // reason *no* analysis here can see. See `held_to_the_end`. Stretched
@@ -1959,6 +1962,7 @@ fn initializing_stores(
     harmless: &rustc_hash::FxHashSet<String>,
     starts_zero: &rustc_hash::FxHashSet<u32>,
     returned: &slots::Returned,
+    aliases: &slots::Aliases,
 ) -> (
     rustc_hash::FxHashSet<ValueId>,
     Vec<rustc_hash::FxHashSet<(ValueId, u32)>>,
@@ -2009,7 +2013,7 @@ fn initializing_stores(
                     _ => {}
                 }
             }
-            fresh.observe(func, *value, &kind, harmless, returned);
+            fresh.observe(func, *value, &kind, harmless, returned, aliases);
         }
         // What is still a zero where the block ends, which is where a frame
         // object's fields are given back. A field the program cleared on its
@@ -4388,6 +4392,7 @@ mod tests {
                 &harmless,
                 &zeroed,
                 &super::slots::Returned::default(),
+                &super::slots::Aliases::of(func),
             )
             .entering;
             assert!(
@@ -4402,6 +4407,7 @@ mod tests {
                 &harmless,
                 &zeroed,
                 &super::slots::Returned::default(),
+                &super::slots::Aliases::of(func),
             )
             .entering;
             assert!(

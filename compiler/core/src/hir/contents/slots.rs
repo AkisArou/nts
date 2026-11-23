@@ -6,6 +6,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 mod summaries;
 pub(in crate::hir) use summaries::{Summaries, summarize};
+mod aliases;
+pub(in crate::hir) use aliases::Aliases;
 
 #[cfg(test)]
 mod tests;
@@ -56,6 +58,7 @@ pub(in crate::hir) fn freshness(
     harmless: &rustc_hash::FxHashSet<String>,
     zeroed: &rustc_hash::FxHashSet<(u32, u32)>,
     returned: &Returned,
+    aliases: &Aliases,
 ) -> Analysis {
     let count = func.blocks.len();
     let incoming = hir::loops::predecessors(func);
@@ -85,6 +88,7 @@ pub(in crate::hir) fn freshness(
                 &func.values[value.0 as usize].kind,
                 harmless,
                 returned,
+                aliases,
             );
         }
         after.canonicalize();
@@ -324,6 +328,7 @@ impl Fresh {
         kind: &OpKind,
         harmless: &rustc_hash::FxHashSet<String>,
         returned: &Returned,
+        aliases: &Aliases,
     ) {
         // A call that only initializes leaves its argument as fresh as it
         // arrived. See `initializing_only`.
@@ -366,7 +371,7 @@ impl Fresh {
                     self.zero.insert(object, Slot::Field(field));
                     self.written.remove(object, Slot::Field(field));
                 } else {
-                    self.written.insert(object, Slot::Field(field));
+                    self.mark_written(aliases, object, Slot::Field(field));
                 }
             }
             Effect::ElementWrite { array, index } => {
@@ -376,12 +381,11 @@ impl Fresh {
                     !slots.is_empty()
                 });
                 if let Some(slot) = slot_of(func, index) {
-                    self.written.insert(array, Slot::Element(slot));
+                    self.mark_written(aliases, array, Slot::Element(slot));
                 } else {
                     // An index this pass cannot name could be any of them, so
                     // the whole array stops being something it knows about.
-                    self.bases.remove(&array);
-                    self.escaped.remove(&array);
+                    self.give_up(aliases, array);
                 }
             }
             // A load can hand back something that was stored, under a name this
@@ -389,15 +393,11 @@ impl Fresh {
             // would be a write attributed to the wrong value. So the first load
             // gives up everything that has been stored anywhere.
             Effect::Read => {
-                for value in std::mem::take(&mut self.escaped) {
-                    self.bases.remove(&value);
-                }
+                self.forget_escaped(aliases);
             }
             Effect::Call => {
                 self.zero = Written::default();
-                for base in std::mem::take(&mut self.escaped) {
-                    self.bases.remove(&base);
-                }
+                self.forget_escaped(aliases);
             }
             // Neither the address nor the slot is attributable here. Distinct
             // SSA names do not establish distinct storage. A release can also
@@ -412,12 +412,13 @@ impl Fresh {
                 kind,
                 OpKind::FieldSet { .. } | OpKind::ArraySet { .. } | OpKind::GlobalSet { .. }
             ) {
-                if self.bases.contains(&value) {
-                    self.escaped.insert(value);
+                for member in aliases.members(value) {
+                    if self.bases.contains(member) {
+                        self.escaped.insert(*member);
+                    }
                 }
             } else {
-                self.bases.remove(&value);
-                self.escaped.remove(&value);
+                self.give_up(aliases, value);
             }
         }
         if let OpKind::Call {
@@ -428,6 +429,34 @@ impl Fresh {
         {
             for field in fields {
                 self.zero.insert(value, Slot::Field(*field));
+            }
+        }
+    }
+
+    fn mark_written(&mut self, aliases: &Aliases, base: ValueId, slot: Slot) {
+        // A phi can still name the original allocation. This relation only
+        // invalidates: a null store establishes a fact for its exact name.
+        for member in aliases.members(base) {
+            if self.bases.contains(member) {
+                self.written.insert(*member, slot);
+            }
+        }
+    }
+
+    fn give_up(&mut self, aliases: &Aliases, base: ValueId) {
+        for member in aliases.members(base) {
+            self.bases.remove(member);
+            self.escaped.remove(member);
+        }
+    }
+
+    fn forget_escaped(&mut self, aliases: &Aliases) {
+        let mut escaped = std::mem::take(&mut self.escaped);
+        while let Some(base) = escaped.iter().next().copied() {
+            // Visit a published component once even if it has many SSA views.
+            for member in aliases.members(base) {
+                self.bases.remove(member);
+                escaped.remove(member);
             }
         }
     }

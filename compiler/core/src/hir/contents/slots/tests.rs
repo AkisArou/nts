@@ -1,4 +1,4 @@
-use super::{Fresh, Returned, Slot, freshness};
+use super::{Aliases, Fresh, Returned, Slot, freshness};
 use crate::hir::{self, Func, OpKind, ValueId};
 use crate::hir::{Absent, Block, Callee, HirType, Op, Param, Terminator};
 use nts_diagnostics::{Location, SourceId, Span};
@@ -97,6 +97,7 @@ fn observe(state: &mut Fresh, func: &Func, id: u32) {
         &func.value(id).kind,
         &FxHashSet::default(),
         &Returned::default(),
+        &Aliases::of(func),
     );
 }
 
@@ -138,8 +139,7 @@ fn a_phi_rebinds_the_fact_and_drops_the_previous_iterations_value() {
     assert!(!rebound.known_zero(ValueId(5), Slot::Field(0)));
 }
 
-#[test]
-fn a_store_through_a_forwarded_fresh_base_invalidates_its_original_name() {
+fn forwarded_fresh_fixture() -> Func {
     let mut func = fixture();
     func.values[0].kind = OpKind::ObjectNew { frame: false };
     func.values[4].kind = OpKind::FieldSet {
@@ -147,6 +147,27 @@ fn a_store_through_a_forwarded_fresh_base_invalidates_its_original_name() {
         field: 0,
         value: ValueId(1),
     };
+    func.blocks = vec![
+        Block {
+            params: Vec::new(),
+            ops: vec![ValueId(0), ValueId(1)],
+            terminator: Terminator::Jump {
+                target: hir::BlockId(1),
+                args: vec![ValueId(0)],
+            },
+        },
+        Block {
+            params: vec![ValueId(5)],
+            ops: vec![ValueId(5), ValueId(4)],
+            terminator: Terminator::Return(Some(ValueId(0))),
+        },
+    ];
+    func
+}
+
+#[test]
+fn a_store_through_a_forwarded_fresh_base_invalidates_its_original_name() {
+    let func = forwarded_fresh_fixture();
     let mut state = Fresh::default();
     observe(&mut state, &func, 0);
     let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
@@ -157,6 +178,43 @@ fn a_store_through_a_forwarded_fresh_base_invalidates_its_original_name() {
         !carried.known_zero(ValueId(0), Slot::Field(0)),
         "the original allocation and its phi name can alias"
     );
+}
+
+#[test]
+fn escaping_a_forwarded_fresh_base_gives_up_its_whole_component() {
+    let mut func = forwarded_fresh_fixture();
+    func.values[7].kind = OpKind::Call {
+        callee: Callee::External("unknown".into()),
+        args: vec![ValueId(5)],
+        frame: None,
+    };
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 0);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    observe(&mut carried, &func, 7);
+    assert!(!carried.known_zero(ValueId(0), Slot::Field(0)));
+}
+
+#[test]
+fn an_indexed_write_invalidates_forwarded_fresh_slots_too() {
+    let mut func = forwarded_fresh_fixture();
+    func.values[6].kind = OpKind::ConstInt(0);
+    func.values[4].kind = OpKind::ArraySet {
+        array: ValueId(5),
+        index: ValueId(6),
+        value: ValueId(1),
+        checked: true,
+    };
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 0);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    assert!(carried.known_zero(ValueId(0), Slot::Element(0)));
+    observe(&mut carried, &func, 4);
+    assert!(!carried.known_zero(ValueId(0), Slot::Element(0)));
+    // One difference: an unnameable index destroys authority for every slot.
+    func.values[6].kind = OpKind::Param(2);
+    observe(&mut carried, &func, 4);
+    assert!(!carried.known_zero(ValueId(0), Slot::Element(1)));
 }
 
 #[test]
@@ -214,6 +272,7 @@ fn block_storage_order_does_not_make_a_conditional_store_dominate_a_return() {
         &FxHashSet::default(),
         &FxHashSet::default(),
         &Returned::default(),
+        &Aliases::of(&func),
     );
     assert!(!analysis.entering[1].known_zero(ValueId(5), Slot::Field(0)));
     // One difference: both paths run the clear before joining.
@@ -232,6 +291,7 @@ fn block_storage_order_does_not_make_a_conditional_store_dominate_a_return() {
         &FxHashSet::default(),
         &FxHashSet::default(),
         &Returned::default(),
+        &Aliases::of(&func),
     );
     assert!(analysis.entering[1].known_zero(ValueId(5), Slot::Field(0)));
 }
@@ -321,6 +381,7 @@ fn an_unattributable_writer_kills_the_null(kind: OpKind) {
         &func.value(id).kind,
         &FxHashSet::default(),
         &Returned::default(),
+        &Aliases::of(&func),
     );
     assert!(!state.known_zero(ValueId(0), Slot::Field(0)));
 }
@@ -359,6 +420,6 @@ fn a_native_bit_store_kills_the_null() {
 fn a_native_copy_kills_the_null() {
     an_unattributable_writer_kills_the_null(OpKind::NativeCopy {
         destination: ValueId(1),
-        source: ValueId(1),
+        source: ValueId(0),
     });
 }

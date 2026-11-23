@@ -1,4 +1,4 @@
-use super::{Analysis, Returned, Slot, freshness};
+use super::{Aliases, Analysis, Returned, Slot, freshness};
 use crate::hir::{self, Func, Layout, OpKind, own::reference_fields};
 use crate::hir::{Program, Terminator};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// parameter guarantees require every reachable direct caller to vouch for them.
 #[derive(Debug, Default)]
 pub(in crate::hir) struct Summaries {
+    pub(in crate::hir) aliases: FxHashMap<String, Aliases>,
     pub(in crate::hir) returned: Returned,
     pub(in crate::hir) parameters: FxHashMap<String, FxHashSet<(u32, u32)>>,
 }
@@ -97,6 +98,7 @@ fn return_contracts(
     layouts: &[Layout],
     harmless: &FxHashSet<String>,
     calls: &Calls<'_>,
+    aliases: &FxHashMap<String, Aliases>,
 ) -> Returned {
     let mut returned = Returned::default();
     let empty = FxHashSet::default();
@@ -115,8 +117,15 @@ fn return_contracts(
             ) {
                 continue;
             }
-            let fields = freshness(func, layouts, harmless, &empty, &returned)
-                .returned_fields(func, layouts);
+            let fields = freshness(
+                func,
+                layouts,
+                harmless,
+                &empty,
+                &returned,
+                &aliases[&func.name],
+            )
+            .returned_fields(func, layouts);
             let previous = returned.entry(func.name.clone()).or_default();
             if fields == *previous {
                 continue;
@@ -140,8 +149,14 @@ pub(in crate::hir) fn summarize(
     harmless: &FxHashSet<String>,
 ) -> Summaries {
     let calls = Calls::of(program);
+    let aliases = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.clone(), Aliases::of(func)))
+        .collect();
     let mut result = Summaries {
-        returned: return_contracts(program, layouts, harmless, &calls),
+        returned: return_contracts(program, layouts, harmless, &calls, &aliases),
+        aliases,
         parameters: FxHashMap::default(),
     };
     let direct_only = invoked_only_directly(program, layouts);
@@ -189,6 +204,7 @@ pub(in crate::hir) fn summarize(
                 harmless,
                 &result.parameters[&func.name],
                 &result.returned,
+                &result.aliases[&func.name],
             );
             for ((block, entering), reachable) in func
                 .blocks
@@ -222,7 +238,14 @@ pub(in crate::hir) fn summarize(
                             pending.push_back(callee);
                         }
                     }
-                    state.observe(func, *id, kind, harmless, &result.returned);
+                    state.observe(
+                        func,
+                        *id,
+                        kind,
+                        harmless,
+                        &result.returned,
+                        &result.aliases[&func.name],
+                    );
                 }
             }
         }
