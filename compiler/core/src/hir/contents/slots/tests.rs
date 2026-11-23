@@ -654,3 +654,19 @@ fn an_erased_globals_old_type_can_reenter_when_the_new_value_is_managed() {
     );
     assert!(!state.initializing(&func, &func.values[3].kind));
 }
+
+#[test]
+fn a_write_through_an_identity_preserving_view_invalidates_the_original() {
+    let mut func = fixture();
+    func.values[0].kind = OpKind::ObjectNew { frame: false };
+    func.values[5].kind = OpKind::Convert(ValueId(0));
+    func.values[4].kind = field_write(5);
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 0);
+    observe(&mut state, &func, 5);
+    observe(&mut state, &func, 4);
+    assert!(
+        !state.initializing(&func, &field_write(0)),
+        "a store through Convert's identity must keep the original field's release"
+    );
+}
