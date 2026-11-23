@@ -113,7 +113,10 @@ function processOwner():ProcessOwner{
   // An unsettled body can own unref'd resources. Drain those too, but only
   // the actual exit decides its exit13; another beforeExit listener may
   // still settle main, whose eventual nonzero status remains authoritative.
-  const beforeExit=()=>{void state.finish(Number(process.exitCode??0));};
+  // A final synchronous phase may leave a signal pending in libuv's pipe.
+  // Poll once before draining and detaching, even with no ref'd handles left.
+  // Signals arriving after detach retain their default process action.
+  const beforeExit=()=>{setImmediate(()=>{void state.finish(Number(process.exitCode??0));});};
   const detach=()=>{
     process.off('beforeExit',beforeExit);process.off('uncaughtException',failed);process.off('unhandledRejection',failed);
     for(const signal of Object.keys(signals) as CommandSignal[])process.off(signal,signals[signal]);

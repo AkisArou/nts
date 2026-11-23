@@ -194,6 +194,48 @@ runAsCommand(import.meta.url,async()=>{
  }
 });
 
+for(const keepalive of [false,true])for(const [signal,status] of [['SIGTERM',143],['SIGINT',130],['SIGHUP',129],[undefined,0]] as const){
+ if(keepalive&&!signal)continue;
+ test(`a final synchronous phase preserves ${signal??'completion'} with keepalive ${keepalive}`,async t=>{
+  const root=testScratch(t,'command-final-sync'),file=join(root,'subject.mjs');
+  const barrier="const {readSync,writeSync}=require('node:fs');writeSync(1,'blocked\\n');readSync(0,Buffer.alloc(1),0,1,null);";
+  writeFileSync(file,`import {spawnSync} from 'node:child_process';import {writeSync} from 'node:fs';
+import {registerCommandCloser} from ${JSON.stringify(helper)};
+const timer=${keepalive?'setInterval(()=>{},200)':'undefined'};
+registerCommandCloser('final phase',{close:()=>{clearInterval(timer);writeSync(1,'closed\\n');}});
+const result=spawnSync(process.execPath,['-e',${JSON.stringify(barrier)}],{stdio:'inherit'});
+if(result.status!==0)throw Error('synchronous barrier failed: '+result.status);
+`);
+  const env=testEnvironment(),unit='nts-command-final-sync-'+randomUUID();
+  const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--unit='+unit,'-p','LimitCORE=0','--',
+   'taskset','-c','0-3,6-31',process.execPath,file],{env,stdio:['pipe','pipe','pipe']});
+  let output='',errors='',ended=false;
+  child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>errors+=bytes);
+  const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',error=>{ended=true;reject(error);});child.once('close',code=>{ended=true;resolve(code);});});
+  try{
+   await waitFor('the final spawnSync barrier',()=>output.includes('blocked\n'),{stopped:()=>ended?'subject ended: '+errors:undefined});
+   if(signal){
+    const sent=spawnSync('systemctl',['--user','kill','--kill-whom=main','--signal='+signal,unit],{env,encoding:'utf8'});
+    assert.equal(sent.status,0,sent.stderr);
+   }
+   child.stdin.end('release\n');
+   await waitFor('the final synchronous command to exit',()=>ended);
+   const code=await closed;
+   assert.equal(output,'blocked\nclosed\n','the closer runs exactly once');
+   assert.equal(code,status,errors);
+  }finally{
+   child.stdin.end();spawnSync('systemctl',['--user','stop',unit],{env,stdio:'ignore'});await closed;
+  }
+ });
+}
+
+test('loop-drain completion preserves a command-owned exitCode',t=>{
+ const root=testScratch(t,'command-drain-status'),file=join(root,'subject.mjs');
+ writeFileSync(file,`import {writeSync} from 'node:fs';import {registerCommandCloser} from ${JSON.stringify(helper)};
+registerCommandCloser('owned status',{close:()=>writeSync(1,'closed')});process.exitCode=3;`);
+ const result=run(file);assert.equal(result.stdout,'closed');assert.equal(result.status,3,result.stderr);assert.equal(result.stderr,'');
+});
+
 test('explicit output completion drains reports and keeps its status while main remains pending',t=>{
  const root=testScratch(t,'command-explicit-completion');
  for(const status of [0,7]){
