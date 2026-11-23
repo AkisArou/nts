@@ -4493,3 +4493,21 @@ The evidence is in `~/.cache/nts-scratch/937/`: `old.out`, `new1.out` and
 (`7c00e890938439d281dec0b431d0acd69ba6879a52751d0960cc7b95677a7829`).
 
 The contract is in [workflow](../../workflow.md#the-machine).
+
+## A pending whole program declines at its own landing (11-23)
+
+Approved by the coordinator for #980. The full check's core run at 0543c12dd787
+red-flagged launch-agree for size-flight-planner and size-json on C, LLVM and
+the JVM: "lowering changed what its module evaluation runs". Neither program
+regressed. Both have been refused since b1acfe0bc2 added them
+([record](../980-launch-rows-born-refused.md)). Their rows
+were pending until the records commit 83f0bc8e42 wrote node's answers, and a
+pending row used to answer before the whole-program check read its cuts. So
+the first red was that records commit's, and the culprit search reverted it.
+
+A whole program's compile-time declines now come before its pending answer,
+through one owner used whether or not its row exists. A whole-program row
+added with a cut is red at its own landing unless it is listed. size-json is
+listed under #886, like startup-builtins, and size-flight-planner under #991.
+
+The contract is in [workflow](../../workflow.md#records).

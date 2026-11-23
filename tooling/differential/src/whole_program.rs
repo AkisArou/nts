@@ -139,6 +139,40 @@ pub(super) fn host_dependence(program: &hir::Program) -> Option<String> {
     ))
 }
 
+/// Why lowering keeps this whole program from being compared, decided from
+/// the compiled program alone, or `None` when it can be. Its record plays no
+/// part: a pending program declines here exactly as it will once its row is
+/// recorded, so the landing that adds it sees the verdict, not the records
+/// commit after it.
+///
+/// Only a refusal that changed what module evaluation runs keeps the program
+/// from being its source. A refused function evaluation calls cascades into
+/// one of those cuts (`drop_callers_of_refused`); one no evaluation reaches
+/// cannot change what it prints. A refusal the program makes at run time -- a
+/// `!` that does not hold -- stops it with its own `nts: refused` line, which
+/// declines when it runs. Then a program the deterministic host cannot run as
+/// the shipped one would ([`host_dependence`]) declines.
+pub(super) fn compile_time_decline(
+    program: &hir::Program,
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Option<String> {
+    let cuts = &program.module_evaluation_cuts;
+    if !cuts.is_empty() {
+        let mut places = nts_diagnostics::SourceLocations::new(&snapshot.sources);
+        let named = cuts
+            .iter()
+            .map(|cut| places.where_it_is(cut))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Some(format!(
+            "a whole program is compared whole, and lowering changed what its module \
+             evaluation runs at {named}, refused as listed above; nothing can be compared \
+             until those refusals are removed or supported"
+        ));
+    }
+    host_dependence(program)
+}
+
 /// Compare a whole program: one run on the backend, one under node.
 pub(super) fn check(
     check: &PreparedCheck,
@@ -153,38 +187,27 @@ pub(super) fn check(
         .map(|manifest| oracle_emit::read_prepared(manifest, &check.entry, tsconfig))
         .transpose()
         .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
-    // Only a refusal that changed what module evaluation runs keeps the
-    // program from being its source. A refused function evaluation calls
-    // cascades into one of those cuts (`drop_callers_of_refused`); one no
-    // evaluation reaches cannot change what it prints. A refusal the program
-    // makes at run time -- a `!` that does not hold -- stops it with its own
-    // `nts: refused` line, which declines below.
-    let cuts = &check.prepared.program.module_evaluation_cuts;
-    if !cuts.is_empty() {
-        let mut places = nts_diagnostics::SourceLocations::new(&check.snapshot.sources);
-        let named = cuts
-            .iter()
-            .map(|cut| places.where_it_is(cut))
-            .collect::<Vec<_>>()
-            .join(", ");
+    if let Some(declined) = compile_time_decline(&check.prepared.program, &check.snapshot) {
         return Err(with_failure(
-            anyhow::anyhow!(
-                "a whole program is compared whole, and lowering changed what its module \
-                 evaluation runs at {named}, refused as listed above; nothing can be compared \
-                 until those refusals are removed or supported"
-            ),
+            anyhow::anyhow!(declined),
             FailureKind::BackendDeclined,
             refusals,
             None,
         ));
     }
-    if let Some(reason) = host_dependence(&check.prepared.program) {
-        return Err(with_failure(
-            anyhow::anyhow!(reason),
-            FailureKind::BackendDeclined,
+    // A program no row names yet compares nothing until the full check
+    // records node's answer; only after its compile-time declines, which no
+    // row can change.
+    if let oracle_coverage::ProgramRecord::Pending(pending) = &coverage.record {
+        if let Some(prepared) = &supplied {
+            oracle_emit::finish_snapshot(prepared)
+                .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+        }
+        return Ok(Report {
             refusals,
-            None,
-        ));
+            pending: Some(pending.clone()),
+            ..Report::default()
+        });
     }
     let scratch = super::Scratch::for_check()?;
     let dir = &scratch.path;
@@ -203,10 +226,8 @@ pub(super) fn check(
             },
         )
         .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
-    if let Some(recorded) = coverage
-        .recorded
-        .as_ref()
-        .filter(|recorded| !node.matches(recorded))
+    if let oracle_coverage::ProgramRecord::Answer(recorded) = &coverage.record
+        && !node.matches(recorded)
     {
         return Err(with_failure(
             anyhow::anyhow!(

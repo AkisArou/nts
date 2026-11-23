@@ -21,6 +21,8 @@ export type LaunchDecline = { readonly code: string; readonly refusal: string; r
  * one that agrees is red until its entry goes.
  */
 export const LAUNCH_DECLINES: Readonly<Record<string, LaunchDecline>> = Object.freeze({
+  "size-flight-planner": Object.freeze({ code: "NTS1001", refusal: "a constructor returning an object, which replaces the instance `new` would have answered", task: 991 }),
+  "size-json": Object.freeze({ code: "NTS1001", refusal: "`JSON.stringify` of an erased value", task: 886 }),
   "startup-builtins": Object.freeze({ code: "NTS1001", refusal: "`JSON.stringify` of an erased value", task: 886 }),
 });
 

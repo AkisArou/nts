@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {existsSync} from "node:fs";
 import {test} from "node:test";
 import {declineText,launchColumns,launchesAccounted,launchFailure} from "./launch-agree.ts";
 import {Outcome} from "./check-report.ts";
@@ -39,6 +40,8 @@ test("the allowlist names launch rows, the refusal each declines with, and the t
     assert.ok(decline.refusal.length > 0, `${name} names its refusal`);
     assert.ok(Number.isSafeInteger(decline.task) && decline.task > 0, `${name} names its task`);
     assert.match(declineText(decline), /^NTS\d{4} .+ \(#\d+\)$/);
+    // A name that is no launch row would excuse nothing and never go stale.
+    assert.ok(existsSync(new URL(`../../benchmarks/cases/${name}/launch.json`, import.meta.url)), `${name} is a launch row`);
   }
 });
 

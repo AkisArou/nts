@@ -710,6 +710,18 @@ Budget revision separately schedules refreshes.
 Missing fixture records appear in the shared pending format, so the controller
 starts the core recorder even when no other suite requests those fixtures.
 
+A whole program (a source with no case to call, such as a launch row's
+`case.ts`) is pending only after its compile-time declines. A module-scope
+statement lowering cut, or a host the deterministic harness cannot run it on,
+is decided by the compiled program alone, and no row can change it. So the
+check declines it in the same words before and after its `program` row is
+recorded (`whole_program::compile_time_decline` in
+`tooling/differential/src/whole_program.rs`). A newly added whole-program row
+with a cut is therefore red at its own landing, unless it is listed with its
+refusal and owning task (a launch row in `LAUNCH_DECLINES`,
+`tooling/gate/verdict-policy.ts`). Otherwise the first red would be the records
+commit after it, and the culprit search would blame that commit.
+
 The landing tree check `benchmark-identities` uses the compile recorder's
 `--check-identities` mode. It computes each benchmark's resolved options,
 roots, sources and local data, plus the existing compile-driver key, and holds
@@ -1828,6 +1840,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **A pending whole program still declines at compile time.** Its module
+  evaluation cuts and host dependence are checked before its pending answer,
+  so a cut program is red, or listed, at the landing that adds it, not first
+  at the records commit
+  ([log](records/notebooks/decisions-log.md#a-pending-whole-program-declines-at-its-own-landing-11-23)).
 
 - **A stale catch-up core precedes owed wide once per verified.** The cycle
   uses the same eligibility as launch ranking. The postponed wide retains its

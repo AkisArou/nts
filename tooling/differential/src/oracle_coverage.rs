@@ -8,8 +8,12 @@
 //!
 //! A source no row names yet is pending: not measured at landing and not a
 //! failure, because the full check records it after landing
-//! (`tooling/records/record-pending.ts`). A source whose rows exist but do not
-//! match is a recorded case that changed, and stays an error.
+//! (`tooling/records/record-pending.ts`). A pending whole program is still a
+//! [`Resolution::Program`]: what lowering decides about it -- a module-scope
+//! statement it cut, a host it cannot run on -- is a compile-time fact no row
+//! can change, so it declines at the landing that adds it, as it will once
+//! recorded. A source whose rows exist but do not match is a recorded case
+//! that changed, and stays an error.
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_codegen_common::Backend;
@@ -31,17 +35,30 @@ pub(super) enum Resolution {
     /// An empty one is a `no-oracle` row's explicit exception.
     Recorded(Coverage),
     /// A population of no cases: the source is a whole program, compared
-    /// whole (`whole_program`) and held to its `program` row's answer.
+    /// whole (`whole_program`) and held to its `program` row's answer, or
+    /// pending when no row names it yet.
     Program(ProgramCoverage),
-    /// No row names the source yet.
+    /// No row names the source, which has cases to call, yet.
     Pending(Pending),
 }
 
 /// What a whole program's records promise: node's answer, or the budget a
 /// run stopped at, which the check retries; neither outside the corpora.
 pub(super) struct ProgramCoverage {
-    pub(super) recorded: Option<super::whole_program::Recorded>,
+    pub(super) record: ProgramRecord,
     pub(super) budget: Option<Value>,
+}
+
+/// What a whole program's row says node answers.
+pub(super) enum ProgramRecord {
+    /// Its `program` row's answer, which node's run is held to.
+    Answer(super::whole_program::Recorded),
+    /// No row names it yet: its compile-time declines still apply, and then
+    /// it compares nothing until the full check records it.
+    Pending(Pending),
+    /// No answer to hold node to: a source outside the corpora, or one whose
+    /// row is a budget.
+    Unrecorded,
 }
 
 pub(super) fn source_digest(entry: &Utf8Path) -> Result<String> {
@@ -85,11 +102,19 @@ pub(super) fn resolve(
             count,
             &source_digest(entry)?,
         )? {
-            return Ok(Resolution::Pending(Pending {
+            let pending = Pending {
                 record: super::oracle_records::record_path(&source)?,
                 source,
                 command,
-            }));
+            };
+            return Ok(if count == 0 {
+                Resolution::Program(ProgramCoverage {
+                    record: ProgramRecord::Pending(pending),
+                    budget: None,
+                })
+            } else {
+                Resolution::Pending(pending)
+            });
         }
         if count == 0 {
             let table = table.as_ref().context("oracle records vanished")?;
@@ -116,7 +141,7 @@ pub(super) fn resolve(
             eprintln!("ORACLE BUDGET (recorded, retrying): {entry}: {budget}");
         }
         return Ok(Resolution::Program(ProgramCoverage {
-            recorded: program,
+            record: program.map_or(ProgramRecord::Unrecorded, ProgramRecord::Answer),
             budget,
         }));
     }

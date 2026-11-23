@@ -212,3 +212,90 @@ fn only_a_refusal_the_run_reaches_keeps_a_whole_program_from_agreeing() {
     assert_eq!(report["counts"]["runtime_declined"], 1, "{report}");
     assert_eq!(report["counts"]["disagreements"], 0, "{report}");
 }
+
+/// A corpus root of its own: the two markers `oracle_coverage` finds a
+/// repository by, and the oracle generator header its records are read under.
+/// Its `tests/programs` holds the fixtures; it has no record until one is
+/// written.
+fn corpus(root: &Path) -> PathBuf {
+    std::fs::create_dir_all(root.join("tooling/differential")).unwrap();
+    std::fs::write(root.join("tooling/differential/Cargo.toml"), "").unwrap();
+    std::fs::write(root.join("tsconfig.fixtures.json"), "{}").unwrap();
+    std::fs::create_dir_all(root.join("results/oracle-counts/tests/programs")).unwrap();
+    std::fs::copy(
+        repository().join("results/oracle-counts/_generator.json"),
+        root.join("results/oracle-counts/_generator.json"),
+    )
+    .unwrap();
+    root.join("tests/programs")
+}
+
+/// Record `name`'s `program` row in its corpus root, as the full check would:
+/// a whole program's population keys and signature, which every program with
+/// no case to call shares, taken from the repository's own recorded one.
+fn record_program(root: &Path, name: &str) {
+    let template: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            repository()
+                .join("results/oracle-counts/tests/programs/a-whole-program-prints-its-lines.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let source = format!("tests/programs/{name}/src/main.ts");
+    let bytes = std::fs::read(root.join(&source)).unwrap();
+    let mut row = template["rows"][0].clone();
+    row["source"] = source.into();
+    row["source_digest"] = format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&bytes)).into();
+    let shard =
+        serde_json::json!({"version":1,"fixture":format!("tests/programs/{name}"),"rows":[row]});
+    std::fs::write(
+        root.join(format!("results/oracle-counts/tests/programs/{name}.json")),
+        shard.to_string(),
+    )
+    .unwrap();
+}
+
+/// A module-scope statement lowering cut is a compile-time fact no record can
+/// change, so a pending whole program declines with it at the landing that
+/// adds it, in the very words it declines with once its row is recorded. It
+/// used to answer pending, and the first red was the records commit's (#980).
+/// The control differs in one thing, the cut initializer: it stays pending.
+#[test]
+fn a_pending_whole_program_declines_as_it_will_once_recorded() {
+    let root = scratch("nts-whole-program-pending");
+    let programs = corpus(&root);
+    let cut = project(
+        &programs,
+        "cut",
+        "function log(s: string): number { console.log(s); return 1; }\n\
+         const unused = log(\"init\") + new Function(\"return 1\")();\n\
+         console.log(\"end\");\n",
+        false,
+    );
+    let control = project(
+        &programs,
+        "control",
+        "function log(s: string): number { console.log(s); return 1; }\n\
+         const unused = log(\"init\");\n\
+         console.log(\"end\");\n",
+        false,
+    );
+    let (report, succeeded) = check(&control, "c");
+    assert!(succeeded && report["status"] == "pending", "{report}");
+    let (pending, succeeded) = check(&cut, "c");
+    assert!(!succeeded, "{pending}");
+    assert_eq!(pending["error"]["kind"], "backend_declined", "{pending}");
+    assert!(
+        pending["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("lowering changed what its module evaluation runs at"),
+        "{pending}"
+    );
+    record_program(&root, "cut");
+    let (recorded, succeeded) = check(&cut, "c");
+    assert!(!succeeded, "{recorded}");
+    assert_eq!(recorded["error"], pending["error"], "{recorded}");
+    assert_eq!(recorded["refusals"], pending["refusals"], "{recorded}");
+}

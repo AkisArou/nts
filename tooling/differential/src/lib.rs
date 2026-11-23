@@ -534,9 +534,11 @@ enum Population {
 
 /// The recorded oracle population a check measures, or the report of one that
 /// measures nothing: a source whose `no-oracle` row is its exception, or one
-/// whose fixture has no oracle record yet. That one is pending, not measured
-/// at landing; the full check records its population, and checks it from then
-/// on.
+/// with cases whose fixture has no oracle record yet. That one is pending, not
+/// measured at landing; the full check records its population, and checks it
+/// from then on. A pending whole program is a [`Population::Program`]:
+/// `whole_program::check` applies its compile-time declines before it
+/// answers pending.
 fn population(
     entry: &Utf8Path,
     backend: Backend,
