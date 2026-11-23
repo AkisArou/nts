@@ -3167,24 +3167,38 @@ fn refine(op: BinOp, a: Facts, b: Facts, clear_nan: bool) -> Facts {
     }
 
     match op {
-        BinOp::Lt => meet(
-            a,
-            f64::NEG_INFINITY,
-            if a.whole { b.hi.ceil() - 1.0 } else { b.hi },
-            clear_nan,
-        ),
+        BinOp::Lt => {
+            // A taken strict comparison excludes +Infinity on the smaller
+            // side, even when the other side's upper bound is +Infinity.
+            // Without this, an unbounded whole loop counter's remainder
+            // still admits Infinity % k, hence NaN. A failed comparison
+            // cannot exclude it: NaN on either side also takes that edge.
+            let hi = if clear_nan { b.hi.min(f64::MAX) } else { b.hi };
+            meet(
+                a,
+                f64::NEG_INFINITY,
+                if a.whole { hi.ceil() - 1.0 } else { hi },
+                clear_nan,
+            )
+        }
         BinOp::Le => meet(
             a,
             f64::NEG_INFINITY,
             if a.whole { b.hi.floor() } else { b.hi },
             clear_nan,
         ),
-        BinOp::Gt => meet(
-            a,
-            if a.whole { b.lo.floor() + 1.0 } else { b.lo },
-            f64::INFINITY,
-            clear_nan,
-        ),
+        BinOp::Gt => {
+            // The larger side of a taken strict comparison cannot be
+            // -Infinity. refine_edge also applies this to the right operand
+            // by flipping the comparison.
+            let lo = if clear_nan { b.lo.max(f64::MIN) } else { b.lo };
+            meet(
+                a,
+                if a.whole { lo.floor() + 1.0 } else { lo },
+                f64::INFINITY,
+                clear_nan,
+            )
+        }
         BinOp::Ge => meet(
             a,
             if a.whole { b.lo.ceil() } else { b.lo },
@@ -5373,6 +5387,108 @@ mod tests {
         // may be 9.5.
         let fractional = Facts::new(0.0, 100.0, false, false, false);
         assert_eq!(refine(BinOp::Lt, fractional, limit, true).hi, 10.0);
+    }
+
+    #[test]
+    fn strict_comparison_excludes_the_impossible_infinity_on_each_operand() {
+        for comparison in [BinOp::Lt, BinOp::Gt, BinOp::Le, BinOp::Ge] {
+            let body = func(
+                vec![
+                    op(OpKind::Param(0)),
+                    op(OpKind::Param(1)),
+                    op(OpKind::Binary {
+                        op: comparison,
+                        lhs: ValueId(0),
+                        rhs: ValueId(1),
+                    }),
+                ],
+                vec![block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1), ValueId(2)],
+                    Terminator::Return(Some(ValueId(2))),
+                )],
+                2,
+            );
+            for whole in [false, true] {
+                let unknown = Facts::new(f64::NEG_INFINITY, f64::INFINITY, whole, true, true);
+                let values = [unknown, unknown, Facts::TOP];
+                for taken in [false, true] {
+                    let mut dependencies = TransferResult::default();
+                    let path = refine_edge(
+                        &body,
+                        &FxHashMap::default(),
+                        &PathFacts::default(),
+                        ValueId(2),
+                        taken,
+                        &mut FactView::new(&values, &mut dependencies),
+                    );
+                    for (side, operation) in [(0, comparison), (1, flip(comparison))] {
+                        let actual = test_path_fact(&path, &values, ValueId(side));
+                        let expected = if taken {
+                            Facts::new(
+                                if operation == BinOp::Gt {
+                                    f64::MIN
+                                } else {
+                                    f64::NEG_INFINITY
+                                },
+                                if operation == BinOp::Lt {
+                                    f64::MAX
+                                } else {
+                                    f64::INFINITY
+                                },
+                                whole,
+                                false,
+                                true,
+                            )
+                        } else {
+                            unknown
+                        };
+                        assert_eq!(
+                            actual, expected,
+                            "{comparison:?}, side {side}, taken {taken}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_finite_whole_counter_proves_its_remainder_but_not_fraction_or_zero_divisor() {
+        let counter = Facts::new(0.0, f64::INFINITY, true, false, false);
+        let taken = refine(BinOp::Lt, counter, Facts::TOP, true);
+        assert_eq!(taken, Facts::new(0.0, f64::MAX, true, false, false));
+        let divisor = Facts::constant(1000.0);
+        let remainder = facts::rem(taken, divisor);
+        assert_eq!(remainder, Facts::new(0.0, 999.0, true, false, false));
+        assert_eq!(
+            facts::add(Facts::constant(100.0), remainder),
+            Facts::new(100.0, 1099.0, true, false, false)
+        );
+        assert!(facts::rem(taken, Facts::constant(0.0)).maybe_nan);
+        let fractional = refine(
+            BinOp::Lt,
+            Facts {
+                whole: false,
+                ..counter
+            },
+            Facts::TOP,
+            true,
+        );
+        assert!(!facts::rem(fractional, divisor).whole);
+        // The else edge still admits Infinity (and the unknown bound's NaN).
+        let untaken = refine(BinOp::Ge, counter, Facts::TOP, false);
+        assert_eq!(untaken, counter);
+        assert!(facts::rem(untaken, divisor).maybe_nan);
+        // Negating >= yields <, but its false edge can still mean NaN on
+        // the left even when the right operand is known not to be NaN.
+        let numeric_bound = Facts {
+            maybe_nan: false,
+            ..Facts::TOP
+        };
+        assert_eq!(refine(BinOp::Lt, counter, numeric_bound, false), counter);
+        let negative = Facts::new(f64::NEG_INFINITY, 0.0, true, true, true);
+        assert_eq!(refine(BinOp::Gt, negative, numeric_bound, false), negative);
     }
 
     #[test]

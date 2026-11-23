@@ -1898,6 +1898,65 @@ fn refusals(name: &str, source: &str) -> Vec<(String, String)> {
 }
 
 #[test]
+fn loop_index_remainders_fit_c_int_only_with_finite_whole_dividends() {
+    for (name, loop_body, refused) in [
+        (
+            "ascending",
+            "for (let i = 0; i < n; i++) total += accept(100 + (i % 1000));",
+            false,
+        ),
+        (
+            "ascending-swapped",
+            "for (let i = 0; n > i; i++) total += accept(100 + (i % 1000));",
+            false,
+        ),
+        (
+            "descending",
+            "for (let i = 0; i > n; i--) total += accept(100 + (i % 1000));",
+            false,
+        ),
+        (
+            "descending-swapped",
+            "for (let i = 0; n < i; i--) total += accept(100 + (i % 1000));",
+            false,
+        ),
+        (
+            "fractional",
+            "for (let i = 0.5; i < n; i++) total += accept(100 + (i % 1000));",
+            true,
+        ),
+        (
+            "reassigned",
+            "for (let i = 0; i < n; i++) { i = n; total += accept(100 + (i % 1000)); }",
+            true,
+        ),
+        (
+            "zero-divisor",
+            "for (let i = 0; i < n; i++) total += accept(100 + (i % 0));",
+            true,
+        ),
+        (
+            "non-strict",
+            "for (let i = 0; i <= n; i++) total += accept(100 + (i % 1000));",
+            true,
+        ),
+    ] {
+        let errors = refusals(
+            &format!("loop-remainder-{name}"),
+            &format!(
+                "function accept(value: c_int): number {{ return value; }}\n\
+                 export function counted(n: number): number {{ let total = 0; {loop_body} return total; }}"
+            ),
+        );
+        assert_eq!(!errors.is_empty(), refused, "{name}: {errors:?}");
+        assert!(
+            errors.iter().all(|(code, _)| code == "NTS5001"),
+            "{name}: {errors:?}"
+        );
+    }
+}
+
+#[test]
 fn enum_parameters_keep_their_written_c_kind_and_oblige_each_caller() {
     for (label, kind, signature, operation) in [
         (
