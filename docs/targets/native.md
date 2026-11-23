@@ -248,14 +248,28 @@ int main(void) {
   ([log](../records/notebooks/decisions-log.md#llvm-build-driver-11-22)).
 - PIC products use one compile-time interposition policy for nts-owned code:
   GCC receives `-fno-semantic-interposition`, including through compiler wrappers;
-  clang's arguments stay unchanged. Visibility remains the linker's published
-  surface, preserving the runtime declarations and ABI. Compile-time hidden
-  visibility would require explicit export annotations in the runtime headers
-  and generated public declarations
+  clang's arguments stay unchanged
   ([log](../records/notebooks/decisions-log.md#native-pic-interposition-11-21)).
-  This governs the runtime and `program.c`; an addon's own translation unit
-  declares the program symbols it references hidden
-  ([node-addon](node-addon.md#decisions)).
+- The runtime's symbols are hidden at compile time, so each product keeps its
+  own runtime. `nts_runtime.h` defines `NTS_RUNTIME_SYMBOLS_BEGIN` and `_END`
+  once. They are `#pragma GCC visibility push(hidden)` and `pop` on ELF and
+  Mach-O under GCC and clang, and nothing elsewhere, because a COFF DLL exports
+  only what its definition file names. The header brackets its declarations,
+  and every runtime source brackets what it defines after its system includes,
+  including vendored code. The one exception is zmij's source, which re-includes
+  `<assert.h>`: it stays outside, and its functions take hidden from its API
+  header, which is inside. No header declaring an external symbol is included
+  inside a region. On ELF that is a link error (`undefined hidden symbol`),
+  never a misbinding; Mach-O has no such net. The linker merges a symbol at the
+  strictest visibility of its declarations, so the LLVM backend's `declare`s
+  resolve inside the product too, with no build flag. No runtime symbol is
+  exported: a host reaches a product through the program's published names,
+  and an addon through the Node-API entry points `node_api.h` declares. A
+  static archive's hidden symbols still resolve in a static link, so its host
+  keeps calling the embedding API. Hidden, one product's references cannot bind
+  to another's runtime, even with both loaded `RTLD_GLOBAL`. An addon's own
+  translation unit declares the program symbols it references hidden ([node-addon](node-addon.md#decisions);
+  [log](../records/notebooks/decisions-log.md#runtime-symbols-are-their-products-own-11-23)).
 - A shared library's ELF exports are defined under one named version node,
   its file name or soname. Unversioned, an export named like a libc function
   (`error`) lost the library's own calls to glibc's when a host loaded libc

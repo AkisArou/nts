@@ -13,9 +13,13 @@
 
 /* libobjc exports these and no public header declares them; they are the
  * calls clang's `@autoreleasepool` makes. The CF host is only linked into a
- * program that sends Objective-C messages, which already links libobjc. */
+ * program that sends Objective-C messages, which already links libobjc.
+ * Declared before the symbol region, since they are libobjc's, not ours. */
 void *objc_autoreleasePoolPush(void);
 void objc_autoreleasePoolPop(void *pool);
+
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
 
 static CFFileDescriptorRef nts_cf_descriptor;
 static CFRunLoopSourceRef nts_cf_source;
@@ -647,3 +651,5 @@ void nts_objc_adopt(const char *name, const char *protocol) {
     class_addProtocol(made, adopted);
   }
 }
+
+NTS_RUNTIME_SYMBOLS_END

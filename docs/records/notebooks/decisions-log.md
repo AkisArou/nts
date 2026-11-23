@@ -4511,3 +4511,29 @@ added with a cut is red at its own landing unless it is listed. size-json is
 listed under #886, like startup-builtins, and size-flight-planner under #991.
 
 The contract is in [workflow](../../workflow.md#records).
+
+## Runtime symbols are their product's own (11-23)
+
+Approved by the coordinator for #977. Every nts product links its own copy of
+the C runtime, and its definitions had default visibility. An `nts build`
+addon, which has no version script, published about 500 runtime symbols beside
+its Node-API entry points. With two addons loaded `RTLD_GLOBAL` in one node, 57
+of the second one's references bound to the first one's runtime: `nts_alloc`,
+`nts_release`, `nts_promise_subscribe` and `nts_desc_string1` among them. A
+static archive's runtime entered the dynamic table of any shared object that
+linked it in the same way.
+
+`nts_runtime.h` now defines the runtime's visibility once, as
+`NTS_RUNTIME_SYMBOLS_BEGIN` and `_END`: hidden on ELF and Mach-O, nothing on
+COFF. The header and every runtime source bracket their own declarations and
+definitions with it. zmij's source re-includes `<assert.h>`, so it stays
+outside the region and takes hidden from its API header inside. No runtime
+symbol needed exporting. Hosts reach a product through its published names,
+and an addon through the Node-API entry points. A shared library's embedding
+API is not exported, and if it ever is, it will carry per-library names
+(#978). This replaces the 11-21 position that visibility remains the linker's
+published surface. The measurements are in
+[runtime-visibility-977](../runtime-visibility-977.md).
+
+The contract is in [native](../../targets/native.md#decisions) and
+[node-addon](../../targets/node-addon.md#decisions).

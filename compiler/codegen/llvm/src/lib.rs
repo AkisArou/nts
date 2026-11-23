@@ -398,7 +398,19 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         dispatch_location(program),
     ) {
         Ok(slot) => {
-            let _ = writeln!(text, "@nts_closure_call_slot = constant i32 {slot}");
+            // Declared inside the runtime header's symbol region and defined
+            // here, so this definition is the one that states it: at default
+            // visibility an addon published it beside its Node-API entry
+            // points (#977). The region is empty on COFF.
+            let visibility = if platform.abi == NativeAbi::LLP64 {
+                ""
+            } else {
+                "hidden "
+            };
+            let _ = writeln!(
+                text,
+                "@nts_closure_call_slot = {visibility}constant i32 {slot}"
+            );
         }
         Err(diagnostic) => diagnostics.push(diagnostic),
     }

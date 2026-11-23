@@ -28,6 +28,9 @@ mod physical_names;
 #[path = "published_consuming.rs"]
 mod published_consuming;
 
+#[path = "two_addons.rs"]
+mod two_addons;
+
 #[path = "landing_payload.rs"]
 mod landing_payload;
 

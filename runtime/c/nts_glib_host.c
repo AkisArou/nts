@@ -13,6 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* The source, and the poll record for libuv's descriptor inside it. */
 typedef struct {
   GSource source;
@@ -152,3 +155,5 @@ void nts_glib_host_detach(void) {
   g_source_unref(&nts_glib_source->source);
   nts_glib_source = NULL;
 }
+
+NTS_RUNTIME_SYMBOLS_END

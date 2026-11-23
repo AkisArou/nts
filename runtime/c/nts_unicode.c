@@ -57,6 +57,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* The compiler emits each direction's Latin-1 table from the same UCD model.
  * Uppercase excludes the three inputs whose result leaves one byte before
  * reading this table. No runtime initialization or mutable table is needed. */
@@ -773,3 +776,5 @@ NtsString *nts_str_to_upper_case(const NtsString *s) {
   return nts_str_case_convert(s, &__nts_case_upper_tables, 0);
 }
 #endif
+
+NTS_RUNTIME_SYMBOLS_END

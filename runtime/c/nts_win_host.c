@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <windows.h>
 
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* The message the watcher posts, and the completion key of its own wake-up
  * packet, which it must not hand back to libuv. A nudge the watcher never
  * dequeues -- posted just after it woke for a real packet -- is found by
@@ -162,3 +165,5 @@ void nts_win_host_detach(void) {
   nts_win_host_window = NULL;
   nts_win_host_thread = NULL;
 }
+
+NTS_RUNTIME_SYMBOLS_END

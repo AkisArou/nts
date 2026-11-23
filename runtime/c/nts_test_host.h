@@ -14,6 +14,8 @@
 
 #include "nts_runtime.h"
 
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* Install it, and reset every queue and the clock. */
 void nts_test_host_install(void);
 
@@ -55,5 +57,7 @@ uint32_t nts_test_host_dropped(void);
  * explaining that it was not a leak. A note is not a separation. Draining first
  * makes the number mean what it claims, so anything left is the program's. */
 void nts_test_host_drain(void);
+
+NTS_RUNTIME_SYMBOLS_END
 
 #endif /* NTS_TEST_HOST_H */

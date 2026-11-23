@@ -36,6 +36,18 @@
 #if defined(__AVX2__) || defined(__SSE2__)
 #include <immintrin.h>
 #endif
+/* `_aligned_malloc` for element blocks on Windows; glibc's `mallopt`, which
+ * keeps the top of its heap (`NTS_HEAP_TOP_KEPT`). */
+#if defined(_WIN32) || defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
+/* Everything below is the product's own (`NTS_RUNTIME_SYMBOLS_BEGIN` in
+ * nts_runtime.h): the runtime's definitions, its undeclared helpers and the
+ * vendored zmij and ffc. A header declaring an external symbol is included
+ * above this line, never below it. Windows' own headers further down are the
+ * exception the macro allows: it is empty there. */
+NTS_RUNTIME_SYMBOLS_BEGIN
 
 void nts_hresult_clear(int32_t status, void *slot, size_t size) {
   if (status < 0) {
@@ -101,11 +113,21 @@ nts_require_the_cpu_it_was_built_for(void) {
  *
  * clang-tidy flags including a `.c`, and it is right to: it usually means
  * somebody meant the header. Here it is the point, so the check is suppressed
- * at the line with the reason above it rather than turned off. */
+ * at the line with the reason above it rather than turned off.
+ *
+ * **Its source is the one include outside the symbol region.** zmij.c takes
+ * <assert.h>, which declares again on every inclusion, so inside the region
+ * glibc's `__assert_fail` became hidden and the link failed (`hidden symbol
+ * '__assert_fail' isn't defined`). Its API header is declared inside instead,
+ * and a definition takes the visibility of its earlier declaration, so its
+ * exported functions are still the product's own. */
+#include "zmij/zmij-c.h"
+NTS_RUNTIME_SYMBOLS_END
 #define asm __asm__
 /* NOLINTNEXTLINE(bugprone-suspicious-include) */
 #include "zmij/zmij.c"
 #undef asm
+NTS_RUNTIME_SYMBOLS_BEGIN
 /* Decimal text to the nearest double (`nts_decimal_value`): ffc.h, a C99 port
  * of fast_float, vendored unedited (`ffc/README.md`). Exact -- Eisel-Lemire,
  * with fast_float's own slow path for what that cannot decide -- and blind to
@@ -1076,7 +1098,6 @@ static unsigned char *nts_array_inline_elements(const NtsArray *array) {
  * `_aligned_free`. `bytes` is a multiple of the alignment, as `aligned_alloc`
  * requires. */
 #if defined(_WIN32)
-#include <malloc.h>
 static void *nts_elements_alloc_heap(size_t bytes) {
   return _aligned_malloc(bytes, NTS_ELEMENT_ALIGN);
 }
@@ -11861,7 +11882,6 @@ static void nts_process_ticks_and_rejections(void) {
  * glibc only: the other allocators nts runs on do not give the top of the
  * heap back eagerly, so there is nothing there to keep. */
 #if defined(__GLIBC__)
-#include <malloc.h>
 #define NTS_HEAP_TOP_KEPT (16 * 1024 * 1024)
 #define NTS_HEAP_BLOCK_LIMIT (32 * 1024 * 1024)
 #endif
@@ -12926,3 +12946,5 @@ void nts_clear_timeout(double id) {
    * specifies. */
   nts_cancel_delayed((NtsTimerId)id);
 }
+
+NTS_RUNTIME_SYMBOLS_END

@@ -39,6 +39,8 @@
 
 #include "nts_runtime.h"
 
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* Install the host on `loop`, and take the calling thread as the owner.
  *
  * `loop` outlives the host and is not owned by it: an embedder with its own
@@ -110,5 +112,7 @@ void nts_uv_host_shutdown(void);
  * still queued at shutdown. The same accounting the test host keeps, so a
  * program can assert nothing was silently discarded. */
 uint32_t nts_uv_host_dropped(void);
+
+NTS_RUNTIME_SYMBOLS_END
 
 #endif /* NTS_UV_HOST_H */

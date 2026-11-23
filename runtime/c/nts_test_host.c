@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* Tasks posted for "after the current task", in order. */
 #define NTS_TEST_CAPACITY 4096u
 
@@ -174,3 +177,5 @@ uint32_t nts_test_host_run(uint32_t budget) {
   }
   return ran;
 }
+
+NTS_RUNTIME_SYMBOLS_END

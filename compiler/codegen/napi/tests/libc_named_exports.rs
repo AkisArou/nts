@@ -106,7 +106,7 @@ fn an_addon_calls_its_own_libc_named_exports_on_both_backends() {
     }
 }
 
-fn build(
+pub(crate) fn build(
     root: &Utf8Path,
     out: &Utf8Path,
     body: &str,
@@ -166,7 +166,7 @@ fn load(binary: &Utf8Path) -> Output {
 }
 
 /// Defined symbols in the dynamic table, by name.
-fn dynamic_symbols(binary: &Utf8Path) -> BTreeSet<String> {
+pub(crate) fn dynamic_symbols(binary: &Utf8Path) -> BTreeSet<String> {
     let listed = Command::new("nm")
         .args(["-D", "--defined-only"])
         .arg(binary)
@@ -190,7 +190,7 @@ fn node_oracle(source: &Utf8Path) -> Output {
         .unwrap()
 }
 
-fn text(output: &Output) -> String {
+pub(crate) fn text(output: &Output) -> String {
     format!(
         "status={}; stdout={}; stderr={}",
         output.status,

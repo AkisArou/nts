@@ -159,6 +159,9 @@ struct Declared {
     returns: String,
     params: Vec<String>,
     attributes: Vec<String>,
+    /// Declared at hidden visibility: inside the header's
+    /// `NTS_RUNTIME_SYMBOLS_BEGIN` region on ELF and Mach-O (#977).
+    hidden: bool,
 }
 
 /// Split an attribute list on whitespace, except inside parentheses:
@@ -364,6 +367,10 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
         let Some(rest) = line.strip_prefix("declare ") else {
             continue;
         };
+        // Visibility is the header's region, not part of the signature.
+        let (hidden, rest) = rest
+            .strip_prefix("hidden ")
+            .map_or((false, rest), |rest| (true, rest));
         let Some(at) = rest.find('@') else { continue };
         let returns = tidy(&rest[..at]);
         let after = &rest[at + 1..];
@@ -392,6 +399,7 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
             returns,
             params,
             attributes,
+            hidden,
         });
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
@@ -542,8 +550,18 @@ fn check(table: &Table, flags: &[String]) {
         regenerate(&root, &fresh, table);
         return;
     }
+    // A COFF DLL exports only what its definition file names, so the region
+    // is empty there; everywhere else every helper is the product's own.
+    let coff = flags.iter().any(|flag| flag.contains("windows"));
     for declared in &fresh {
         let name = &declared.name;
+        // The C library's functions the table carries (`fmod`) are not the
+        // runtime's, and stay at their own visibility.
+        assert!(
+            !name.starts_with("nts_") || declared.hidden != coff,
+            "`{name}` is declared outside the runtime's symbol region \
+             (`NTS_RUNTIME_SYMBOLS_BEGIN` in nts_runtime.h), so a product would export it"
+        );
         // **Every helper the header declares is the table's**, not only those
         // the backend reaches for today. A helper reached for and missing is
         // a call emitted with no declaration and no argument conversion -- an

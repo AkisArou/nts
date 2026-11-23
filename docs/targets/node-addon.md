@@ -166,3 +166,8 @@ a parameter with workers ([Decisions](#decisions)); the refusal is not built.
   named `error` call glibc's from its own wrapper. The program's names leave
   the dynamic table; node reads only the Node-API entry points
   ([log](../records/notebooks/decisions-log.md#exports-named-like-libc-functions-11-23)).
+- An addon's dynamic table is exactly the Node-API entry points. The runtime
+  hides its own symbols ([native](native.md#decisions)), and `addon.c`'s weak
+  `nts_napi_set_env` default is inside the same region. So two nts addons
+  loaded `RTLD_GLOBAL` in one node each bind to their own runtime
+  ([log](../records/notebooks/decisions-log.md#runtime-symbols-are-their-products-own-11-23)).

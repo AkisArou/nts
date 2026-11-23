@@ -13,6 +13,9 @@
 #include <string.h>
 #include <winstring.h>
 
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* A `string` as an HSTRING for one call: a fast-pass reference
  * (`WindowsCreateStringReference`), which copies nothing and, once the pool
  * below holds a frame, allocates nothing -- over the string's own units when
@@ -1723,3 +1726,5 @@ char *nts_hresult_message(int32_t hr) {
   }
   return message;
 }
+
+NTS_RUNTIME_SYMBOLS_END

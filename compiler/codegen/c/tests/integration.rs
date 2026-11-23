@@ -91,6 +91,9 @@ mod runtime_effects;
 #[path = "runtime_sabotage.rs"]
 mod runtime_sabotage;
 
+#[path = "runtime_visibility.rs"]
+mod runtime_visibility;
+
 #[path = "tag_range.rs"]
 mod tag_range;
 

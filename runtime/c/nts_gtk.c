@@ -5,8 +5,13 @@
  * GObject without GTK keeps linking none of it. */
 #include "nts_gtk.h"
 
+#include "nts_runtime.h"
+
 #include <stddef.h>
 #include <string.h>
+
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
 
 /* A template, as GJS's `Template` takes one: `resource:///` names a
  * resource, `file:///` a file, and anything else is the XML. `copy` for text
@@ -93,3 +98,5 @@ GtkExpression *nts_gtk_cclosure_expression_new(GType value_type,
   return gtk_cclosure_expression_new(value_type, NULL, 0, NULL, callback, data,
                                      notify);
 }
+
+NTS_RUNTIME_SYMBOLS_END

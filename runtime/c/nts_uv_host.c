@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* --- State -----------------------------------------------------------------
  *
  * One host, in file statics rather than behind `NtsHost::state`. The seam
@@ -659,3 +662,5 @@ void nts_uv_host_shutdown(void) {
 }
 
 uint32_t nts_uv_host_dropped(void) { return nts_uv_dropped; }
+
+NTS_RUNTIME_SYMBOLS_END

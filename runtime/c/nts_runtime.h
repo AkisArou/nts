@@ -27,8 +27,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "nts_string_view.h"
-
 /* Every managed object references an immutable descriptor, which
  * describes the shape rather than the contents -- so there is one per element
  * type, not one per object. */
@@ -74,6 +72,62 @@
 #define NTS_READS_ONLY
 #define NTS_OBJECT_STRUCT
 #endif
+
+/* # The runtime's symbols are its product's own
+ *
+ * Every product carries its own copy of this runtime, so nothing it declares or
+ * defines may be found, or be replaced, by name from outside that product.
+ * `NTS_RUNTIME_SYMBOLS_BEGIN` and `_END` bracket this header's declarations and
+ * everything each runtime source defines after its system includes; inside,
+ * every declaration and definition is hidden. On ELF and Mach-O that is
+ * `#pragma GCC visibility push(hidden)`; elsewhere they expand to nothing,
+ * since a COFF DLL exports only what its definition file names, and a symbol
+ * there is imported by module rather than by name.
+ *
+ * At default visibility an `nts build` addon published the whole runtime,
+ * about 500 symbols, in its dynamic table. With two addons loaded `RTLD_GLOBAL`
+ * in one node, 57 of the second one's references bound to the first one's
+ * runtime: `nts_alloc`, `nts_release`, `nts_promise_subscribe` and
+ * `nts_desc_string1` among them. So one addon allocated, released and queued
+ * reactions through another's runtime, while its own inlined paths used its
+ * own (#977). A static archive's runtime entered the dynamic table of any
+ * shared object that linked it in the same way.
+ *
+ * **Declared once, and no flag does it.** `-fvisibility=hidden` would have to
+ * be remembered by every builder. A hidden declaration is enough: the linker
+ * gives a symbol the strictest visibility among the declarations it merges, so
+ * the LLVM backend's default-visibility `declare`s and a binding's own
+ * prototypes resolve inside the product as well. Hidden symbols still resolve
+ * in a static link, so a host linking a static archive keeps calling the
+ * embedding API (`nts_checkpoint`, `nts_release`, ...).
+ *
+ * **Nothing in the runtime is exported.** A host reaches a product through its
+ * published names (`program.c`, outside the region) or, for an addon, the
+ * Node-API entry points `node_api.h` declares with explicit default
+ * visibility. A shared library's embedding API would collide in exactly the way
+ * described above if it were exported by these names (#978).
+ *
+ * **No header declaring an external symbol may be included inside a region.**
+ * Its declarations would be hidden too, and a hidden reference to a libc
+ * function is a link error on ELF (`undefined hidden symbol`), never a silent
+ * misbinding. That is why each runtime source takes its system headers before
+ * it opens the region. An include guard does not make a header safe here:
+ * <assert.h> has none and declares again each time (nts_runtime.c's zmij). */
+#if (defined(__ELF__) || defined(__APPLE__)) &&                                \
+    (defined(__GNUC__) || defined(__clang__))
+#define NTS_RUNTIME_SYMBOLS_BEGIN _Pragma("GCC visibility push(hidden)")
+#define NTS_RUNTIME_SYMBOLS_END _Pragma("GCC visibility pop")
+#else
+#define NTS_RUNTIME_SYMBOLS_BEGIN
+#define NTS_RUNTIME_SYMBOLS_END
+#endif
+
+NTS_RUNTIME_SYMBOLS_BEGIN
+
+/* Inside the region: `nts_string_view` is the runtime's too. The header stays
+ * standalone for C that never includes this one, and takes only <stdint.h>,
+ * which is already here. */
+#include "nts_string_view.h"
 
 /* # A new helper below owes a row to four tables, in four crates
  *
@@ -4696,5 +4750,7 @@ void nts_clear_timeout(double id);
  * here because nothing can reach it: it is a Node global, absent from the
  * default library, so no program this compiler accepts today can call it. It
  * belongs with the profile that declares it. */
+
+NTS_RUNTIME_SYMBOLS_END
 
 #endif /* NTS_RUNTIME_H */

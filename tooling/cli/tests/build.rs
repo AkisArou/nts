@@ -399,11 +399,112 @@ fn a_shared_library_publishes_its_entry_and_nothing_else() {
         !symbols.contains("notPublished") && !symbols.contains("helper"),
         "a name the entry does not export crossed the ABI: {symbols:?}",
     );
-    assert!(
-        symbols.len() < 5,
-        "the runtime's internals are public; there is no version script: {} symbols",
-        symbols.len(),
+    // Exactly the entry's exports, functions and data alike, beside the
+    // version node's own absolute symbol: the runtime defines everything
+    // hidden (#977), and the version script narrows what is left.
+    let defined = defined_dynamic(&artifact);
+    let expected: BTreeSet<String> = ["label", "libacme.so", "published"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        defined, expected,
+        "the library's dynamic table holds more than its exports"
     );
+}
+
+const STATIC: &str = r#"
+import { defineConfig, library, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    acme: library.staticNative({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
+  },
+});
+"#;
+
+/// A plugin built from a static archive: its own entry calls an export and
+/// the runtime's embedding API, and it is linked with no version script, as
+/// a host's own build would.
+const PLUGIN: &str = r"
+double published(double);
+void nts_checkpoint(void);
+double plugin_entry(double n) {
+    nts_checkpoint();
+    return published(n);
+}
+";
+
+/// #977: a static archive's runtime stays inside whatever links it.
+///
+/// Before, a plugin linking `libacme.a` published the archive's whole runtime
+/// in its own dynamic table (504 symbols for a small program), where another
+/// nts product's references could bind to it. Hidden symbols still resolve in
+/// a static link, so the plugin keeps calling the embedding API.
+#[test]
+fn a_static_archive_linked_into_a_plugin_keeps_its_runtime_inside() {
+    if !cfg!(target_os = "linux") || !available() {
+        skip("Linux, node, clang and nm");
+        return;
+    }
+    let project = fixture("build-static-plugin", STATIC);
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    let archive = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.a");
+    assert!(archive.exists(), "no archive at {}", archive.display());
+
+    let hosts = project.join("hosts");
+    std::fs::create_dir_all(&hosts).expect("hosts");
+    let plugin = hosts.join("libplugin.so");
+    compile_host(
+        &hosts,
+        "plugin",
+        PLUGIN,
+        &[
+            "-shared".as_ref(),
+            "-fPIC".as_ref(),
+            archive.as_os_str(),
+            "-lm".as_ref(),
+            "-o".as_ref(),
+            plugin.as_os_str(),
+        ],
+    );
+    // The plugin's own entry and the program's public symbols (the entry's
+    // exports, `helper`, which `internal.ts` exports to it, and the
+    // initializer the header declares), which a static link carries at the
+    // visibility the program gave them; nothing of the runtime.
+    let defined = defined_dynamic(&plugin);
+    let expected: BTreeSet<String> = [
+        "helper",
+        "label",
+        "module__init",
+        "plugin_entry",
+        "published",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    assert_eq!(
+        defined, expected,
+        "the plugin publishes the archive's runtime"
+    );
+}
+
+/// Every defined dynamic symbol, of any kind, by name without its version.
+fn defined_dynamic(artifact: &Path) -> BTreeSet<String> {
+    let output = Command::new("nm")
+        .args(["-D", "--defined-only", "--without-symbol-versions"])
+        .arg(artifact)
+        .output()
+        .expect("running nm");
+    assert!(
+        output.status.success(),
+        "nm failed on {}",
+        artifact.display()
+    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(2).map(str::to_owned))
+        .collect()
 }
 
 /// The corpus program whose exports are named like libc functions (#972):

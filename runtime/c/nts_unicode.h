@@ -16,7 +16,11 @@
 
 #include "nts_runtime.h"
 
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 NtsString *nts_str_to_lower_case(const NtsString *s);
 NtsString *nts_str_to_upper_case(const NtsString *s);
+
+NTS_RUNTIME_SYMBOLS_END
 
 #endif

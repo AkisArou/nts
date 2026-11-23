@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The product's own from here on (nts_runtime.h's symbol region). */
+NTS_RUNTIME_SYMBOLS_BEGIN
+
 /* One connection: the closure the program lent, and the notify the program
  * gave with it, which runs when the connection ends -- unless the collector
  * ended it (`severed`), in which case the closure is already garbage and the
@@ -767,3 +770,5 @@ GObject *nts_gobject_with_builder_build(void *builder) {
   g_free(self);
   return made;
 }
+
+NTS_RUNTIME_SYMBOLS_END

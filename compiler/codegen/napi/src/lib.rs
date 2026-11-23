@@ -1475,10 +1475,15 @@ static napi_status nts_to_napi_booleans(napi_env env, const NtsArray *array,
  * Guarded because `__attribute__((weak))` is a GNU extension. Where it is
  * unavailable the addon is exactly as it was, which is to say it needs
  * `process.c` -- no worse than before, and no silent change of behaviour. */
+/* Hidden as well as weak, by the runtime's own policy: it is this addon's, and
+ * exported, a second addon loaded RTLD_GLOBAL bound its call to the first one's
+ * definition (#977). */
+NTS_RUNTIME_SYMBOLS_BEGIN
 void nts_napi_set_env(void *env);
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((weak)) void nts_napi_set_env(void *env) { (void)env; }
 #endif
+NTS_RUNTIME_SYMBOLS_END
 
 static void nts_napi_throw(napi_env env, NtsValue thrown, const NtsString *detail);
 static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
