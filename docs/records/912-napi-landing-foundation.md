@@ -319,3 +319,151 @@ checks the review revision against the rebased foundation.
 | `review-inner3.log` | `2935909df14eff9c4f2aafed1a410c297e12a7c2f9f84321d546c32a088d0a2f` |
 | `review-postproof.log` | `745bdbb10165d254709544504363a3a201870f7f9fb8b8b579a8755acd8de126` |
 | `scripts/review_postproof.sh` | `f56947e0caefca95d8f2faadfc889f8b54d8e3f4211149251f871190431f6a40` |
+
+## Product unwind correction
+
+The earlier unconditional `nts_uncaught` region classification was rejected at
+sign-off. A terminal executable or native library has no surviving landing;
+passing a made value to its process-ending uncaught path does not escape a
+region. This section supersedes the two region-site changes accepted in the
+previous review section. The earlier captures and raw diffs remain immutable.
+
+Preparation now requires `EntryUnwind::{Terminal, Resuming}` beside `Backend`.
+Neither input has a default. `Options::new`, `PreparationOptions::new` and
+`hir::prepare` require both; compile-fail doctests cover omitted inputs and an
+attempt to default the product fact. `Program` records the fact when prepared.
+Raw lowering has no product contract; its `None` is not a third product mode,
+and an uncaught helper with no contract is refused by name.
+
+The CLI's single `Shape::entry_unwind` maps addons to `Resuming` and libraries
+and executables to `Terminal`. Build, prepared HIR and emit commands use that
+owner. Tests name their scenarios. The process oracle and benchmark name their
+terminal executable products. There are no preparation callers without a
+product. The branch was rebased onto main's landed #972
+`e02a24aa9a9f624984473a2432504037df46ac51` before this proof. Its
+`libc_named_exports.rs` caller names C/Resuming. Its CLI build tests prepare
+through the production product owner, rather than directly.
+
+The LLVM typed-release driver's landings surround direct C runtime calls;
+its compiled entries execute outside those landings, so their product remains
+Terminal.
+
+`nts_uncaught` is `Helper::Raises` only in a resuming product, and remains
+`Helper::Reads` in a terminal product. `nts_raise` is `Raises` in both;
+`nts_raising` is quiet in both. The runtime ownership convention stays the same
+in every product: uncaught receives an owned whole value.
+
+The six-cell helper control verifies both product modes and retains the
+independent allocation-profitability verdict on the quiet arms. The region
+fixture's terminal site is admitted with its region clone; the resuming site
+is refused because it may raise a value it made. The memory-graph control
+keeps the exact four terminal Object sites (`root#init` values `%0`, `%1`,
+`%3`, `%5`) and adds only `ordinary:%2` CallStorage in the resuming mode.
+Every MissingOutcome and invalid-unused-operand check remains.
+
+The C/LLVM agreement control covers four native ABI/addon sources, two memory
+providers, three root modes and both product modes: 48 pairs. Only backend
+identity is normalized; whole prepared HIR, refusals and analysis answers
+must agree. The landing-payload test still prepares separately for each
+backend. Raw lowering is shared without being mutated by either preparation.
+
+### Strict terminal comparison
+
+Clean unpatched pins compare foundation `80f1f7131825593700038b8e46cc7ca486416437`
+with correction `b6a10bff34a8a31aef163f98358dbb637eb755bb`. The exact checker uses
+the same commands on both pins. Its open library mode omits `--napi` and has
+EveryExport roots; its closed executable mode uses `--main --entry`. It
+compares exit status, stdout and stderr with no normalization or allowances.
+
+All 2,262 prepared views are byte-identical, covering 106,707 function views
+on each pin. All 30 runtime views are exact. The remaining two views of
+`tests/programs/invalid` have the same pre-lowering decline, exit status,
+stdout and stderr. A known-identical pin pair also passes unchanged.
+
+In both library-open and executable Entry views,
+`lowersMadeText:b0:%2` calls `lowerOfMade#region`; the region clone is restored.
+Both listings have SHA-256
+`778f1eb419e806f092e732086026ecc833936f6abc6d306924a7b4570e801456`.
+Contents visits are 493 and accumulator visits 843 on both pins. Facts,
+budgets, reads, cleanup elisions and all operations are exact. The program's
+explanatory comment is restored; its input code and case record are unchanged.
+
+The separate product-mode control runs the same HIR and region-report commands
+on both clean pins:
+
+| Product | Foundation | Correction |
+|---|---|---|
+| Open C library, EveryExport | Site admitted; clone present | Byte-identical; clone present |
+| Closed C executable, Entry | Site admitted; clone present | Byte-identical; clone present |
+| Node addon, `--napi` | Site admitted; clone present | Refused: `may raise a value it made (in lowerOfMade)`; clone absent |
+
+The addon refusal names `lowersMadeText -> lowerOfMade`. The terminal
+expectations from the earlier region and memory-graph commit have therefore
+been reverted for terminal products and retained only in the resuming
+controls.
+
+### Payload and output verification
+
+The clean corrected pin repeats all twelve C/LLVM payload arms under poison
+with forced collection. Each finishes at zero live bytes and zero foreign
+references. The unchanged authored source is sensitive on the old
+`2fb3e0ce9675` compiler: fresh strings leak 4,800 bytes, RangeErrors leak
+11,200 bytes, and both foreign-handle arms keep 100 references after 100 calls.
+The failure shim reaches the production converter's failing return before the
+wrapper releases the payload.
+
+All 30 uncaught-text observations match that old compiler: source Error
+subclass, provided RangeError, thrown string, non-error object with a fixed
+message field, and its one-field-name control. C, LLVM and the JVM each retain
+the same exit status, empty stdout and exact stderr, including the JVM's
+`NtsThrownMessage` path.
+
+The required-input migration also has a literal audit over immutable Git
+blobs: all 148 ordinary test callers retain identical string-literal
+sequences. The four explicit native-equivalence, region and memory-graph
+controls are reported separately. The payload source SHA-256 remains
+`a6bb28ca852e785574e3a4570df6a4d4e575cef1092e9b4bf7db2d79018d60ca`.
+
+The full `inner.ts --no-agree` run is green in `unwind-inner6.log`,
+including the required-input doctests, native equality, both region modes,
+exact memory inventories, per-backend payload preparation and #972's exports.
+Earlier failed build/test attempts remain in their original numbered logs;
+the last failing attempt had only the new quiet-arm control's independent
+profitability expectation wrong. Commit `b6a10bff34a8` corrects that assertion,
+without changing production code or the raising-arm expectations.
+
+All five C test262 records reconcile with zero REGRESSED, CHANGED, MISSING,
+FIXED, NEW PASS, NEW FAIL, ACCEPTED DIFFERENTLY or UNSTABLE rows. The complete
+focused proof unit ends with `product reproof complete` and success. The final
+landing check is reported separately against the evidence commit.
+
+This is still the foundation slice. Published raising-entry seeding, shared
+raising bodies and #900 guard narrowing are not activated here. The original
+9,600-byte nested-frame leak remains the activation slice's obligation.
+
+All paths below are relative to `~/.cache/nts-scratch/912/`. The manifest also
+records the individual control scripts and completed proof logs. The old
+`review/` and original ownership captures have not been modified.
+
+| File | SHA-256 |
+|---|---|
+| `unwind-inner6.log` | `834ff8d533027fead4bdea1f79e5a887d4a8e9e6cbfaa28b4d5155f1bca1bd65` |
+| `unwind/pins.json` | `5858ff874b754309ec818fc3cdd5b9bf3ac0ec08284e5444916d9d1700bca96f` |
+| `scripts/revision_terminal_hir.py` | `fb99908f53a67ee8a26271a8655141059bc5c28654334141b5a8e2e765f5f4c6` |
+| `unwind/hir/summary.json` | `b2227f9c23202799d53db8e1f3e97bf9b8310b6cc63884c1ee2699278122dc9a` |
+| `unwind/hir/results.jsonl` | `c53bbbccbf973bc5796091efdb77259ae200f0c0c7d0370ec4460cdd24640155` |
+| `unwind/hir-identical-control/summary.json` | `4aec187fd59be45e41d03141f633c132be0722e841d4814b6b1dffb85ec7c5f8` |
+| `unwind/terminal-region-site.json` | `3bce562023121c0f3923d29e16fbd8e7a121a1483c7b21219fa04ce1bf45763a` |
+| `scripts/revision_modes.py` | `79d8a7790b3d54da316544c166216b0f53b558f4ab714c90f6690523b1ad8681` |
+| `unwind/product-modes/summary.json` | `c8b2c08f6e5652f8f03fa741788ed961abd7371b86cf27421847a7a0285903e6` |
+| `unwind-caller-literals-final.json` | `7a824f5f791ca2870b5b0f71d2c05d52197491313e4f18a413ffb155617e45f7` |
+| `unwind/payload/before/summary.json` | `aa12bdab8e109438452273a793fa672948cb327a61c7400d1108d552f21de1a0` |
+| `unwind/payload/after/summary.json` | `bb3c4e23372ec994fac467651053ad23295ae1988b3c1ff233e93e247360eee4` |
+| `unwind/uncaught-text/summary.json` | `b9e8afcd698de5bb2cfe86c67b56416b82e6e0bb5b08f0584296fc3a4e18d6cc` |
+| `unwind/test262-language.log` | `756e4347b9a930d2046a9ec792ddbf67ec08c2c4c8a4615d898e0389887ed816` |
+| `unwind/test262-builtins.log` | `93e38b31155d42bb529a7147a45c8c241bad2c34998fc57fe3fecda1d2e88a8e` |
+| `unwind/test262-annexb.log` | `11bf6bed0a38649445ad46b85c79cdaf2bb6924518f2cf45c1e099959af092e3` |
+| `unwind/test262-staging.log` | `3f19485ccb0ed4bcf6a7baa4fe52f42a2192940353b8d3a8fe05e9e609b3f36f` |
+| `unwind/test262-harness.log` | `e1011def92e1e404956248ed9d544dd4c9ed98effc495041decc5b83c4cfaced` |
+| `unwind-proofs1.log` | `0f0a09a173a47e3cd4302392ef1cef51bae8ea906971588506742bcc7b7e75ef` |
+| `unwind/evidence-manifest.json` | `70b58cb0e1ea3a53ae7a3de6f851507cf9394f252d23d7e49c111c9aba5db1b1` |
