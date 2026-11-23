@@ -304,7 +304,7 @@ fn actual_writers_and_executed_cleanup_agree_on_both_native_emitters() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..Default::default()
+                ..hir::Options::new(hir::backend::Backend::Llvm)
             },
         )
         .expect("prepared");

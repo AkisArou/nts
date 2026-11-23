@@ -1735,8 +1735,8 @@ mod tests {
             assert_eq!(facts.raises[0], raises, "{callee}");
             if raises {
                 assert_eq!(
-                    facts.body_verdict(0).unwrap_err().reason,
-                    "may raise a value it made"
+                    facts.body_verdict(0).map_err(|refusal| refusal.reason),
+                    Err("may raise a value it made".to_owned())
                 );
             }
         }
