@@ -1449,15 +1449,6 @@ fn reference_fields(
     (tag, managed, erased): (&str, &[u32], &[u32]),
     action: nts_codegen_common::release::Action,
 ) -> Result<String, Diagnostic> {
-    use nts_core::hir::tags;
-    if managed.is_empty() && erased.is_empty() {
-        return Ok("ptr null".to_owned());
-    }
-    let callback = format!("{}_{tag}", action.symbol_prefix());
-    let parameters = match action {
-        nts_codegen_common::release::Action::Release => "ptr %object",
-        nts_codegen_common::release::Action::Trace => "ptr %object, ptr %visit",
-    };
     // Release calls the runtime's checked `nts_release`; trace calls the
     // collector's visitor, an SSA value.
     let visit = |field: String| match action {
@@ -1473,6 +1464,26 @@ fn reference_fields(
             Operand::new("ptr", field),
         )),
     };
+    render_reference_fields(out, (tag, managed, erased), action, visit)
+}
+
+/// Commit a descriptor function only after every field's call was accepted.
+fn render_reference_fields(
+    output: &mut String,
+    (tag, managed, erased): (&str, &[u32], &[u32]),
+    action: nts_codegen_common::release::Action,
+    mut visit: impl FnMut(String) -> Result<String, Diagnostic>,
+) -> Result<String, Diagnostic> {
+    use nts_core::hir::tags;
+    if managed.is_empty() && erased.is_empty() {
+        return Ok("ptr null".to_owned());
+    }
+    let callback = format!("{}_{tag}", action.symbol_prefix());
+    let parameters = match action {
+        nts_codegen_common::release::Action::Release => "ptr %object",
+        nts_codegen_common::release::Action::Trace => "ptr %object, ptr %visit",
+    };
+    let mut out = String::new();
     let _ = writeln!(
         out,
         "define internal void @{callback}({parameters}) {{\nentry:"
@@ -1515,6 +1526,7 @@ fn reference_fields(
         let _ = writeln!(out, "  br label %next{at}\nnext{at}:");
     }
     let _ = writeln!(out, "  ret void\n}}");
+    output.push_str(&out);
     Ok(format!("ptr @{callback}"))
 }
 
@@ -7646,6 +7658,64 @@ fn counting_declarations(program: &Emission<'_>, platform: Platform) -> Result<S
 
 #[cfg(test)]
 mod emitted_name_guards {
+    #[test]
+    fn a_refused_descriptor_function_leaves_no_partial_definition() {
+        use nts_codegen_common::release::Action;
+        for action in [Action::Release, Action::Trace] {
+            // Fail in each walk, after at least one field was rendered.
+            for (managed, erased) in [(&[24, 32][..], &[][..]), (&[24][..], &[32][..])] {
+                for refuse in [false, true] {
+                    let mut output = "existing module\n".to_owned();
+                    let mut visits = Vec::new();
+                    let result = super::render_reference_fields(
+                        &mut output,
+                        ("control", managed, erased),
+                        action,
+                        |field| {
+                            visits.push(field.clone());
+                            if refuse && visits.len() == 2 {
+                                return Err(nts_diagnostics::Diagnostic::error(
+                                    "NTS3001",
+                                    "manufactured second-field refusal",
+                                    nts_diagnostics::Location {
+                                        file: nts_diagnostics::SourceId(0),
+                                        span: nts_diagnostics::Span::new(0, 0),
+                                    },
+                                ));
+                            }
+                            Ok(super::runtime_call::direct(
+                                "void",
+                                &super::DirectCallee::value("%visit"),
+                                super::Operand::new("ptr", field),
+                            ))
+                        },
+                    );
+                    assert_eq!(
+                        visits,
+                        ["%m0", if erased.is_empty() { "%m1" } else { "%p0" }]
+                    );
+                    if refuse {
+                        assert_eq!(
+                            result.expect_err("the second field refuses").message,
+                            "manufactured second-field refusal"
+                        );
+                        assert_eq!(output, "existing module\n");
+                    } else {
+                        let callback = format!("{}_control", action.symbol_prefix());
+                        assert_eq!(
+                            result.expect("every field's call was accepted"),
+                            format!("ptr @{callback}")
+                        );
+                        assert_eq!(output.matches("define internal void").count(), 1);
+                        assert!(output.contains(&format!("define internal void @{callback}(")));
+                        assert!(output.ends_with("  ret void\n}\n"));
+                        assert_eq!(output.matches("call void %visit(").count(), 2);
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn quoted_names_allow_escaped_display_characters_but_never_raw_delimiters() {
         for name in ["normal", "anonymous class", "a\"b", "сложить", "a\\b"] {

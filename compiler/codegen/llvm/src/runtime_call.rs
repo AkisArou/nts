@@ -132,7 +132,10 @@ impl<'a> DirectCallee<'a> {
     /// An SSA value holding the address to call.
     pub(super) fn value(value: impl Into<Cow<'a, str>>) -> Self {
         let value = value.into();
-        debug_assert!(value.starts_with('%'), "{value} is not an SSA value");
+        assert!(
+            value.as_bytes().first() == Some(&b'%'),
+            "{value} is not an SSA value"
+        );
         Self(value)
     }
 }
@@ -480,6 +483,12 @@ mod tests {
                 .expect_err("arity mismatch");
             assert!(error.message.contains(message), "{}", error.message);
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "@nts_release is not an SSA value")]
+    fn an_ssa_callee_cannot_spell_a_global() {
+        let _ = DirectCallee::value("@nts_release");
     }
 
     #[test]

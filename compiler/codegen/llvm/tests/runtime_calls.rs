@@ -583,9 +583,37 @@ fn literals(source: &str) -> Vec<&str> {
     found
 }
 
-/// Inspect every IR call template in the sources' string literals. Its callee
-/// is the token written directly before the argument list (a function type,
-/// written with a space before its parenthesis, is skipped). A callee may stay
+fn callee_token(token: &str) -> bool {
+    token.starts_with('@') || token.starts_with('%') || token.starts_with('{')
+}
+
+/// A function type's parameter group is followed by the callee and its own
+/// argument group. No call-site attribute has an SSA/global name, and an
+/// unknown format field there will itself be inspected as the callee.
+fn function_type_group(rest: &str, open: usize) -> bool {
+    let mut depth = 0;
+    for (at, character) in rest[open..].char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            _ => continue,
+        }
+        if depth == 0 {
+            let tail = rest[open + at + 1..].trim_start();
+            let Some(next) = tail.find('(') else {
+                return false;
+            };
+            let token = tail[..next].trim();
+            return callee_token(token) && !token.contains(char::is_whitespace);
+        }
+    }
+    false
+}
+
+/// Inspect every IR call/invoke template in the sources' string literals. Its
+/// callee precedes the argument list, with or without whitespace. Function
+/// types and parameter attributes may have their own parenthesized groups.
+/// A callee may stay
 /// outside the checked constructor only when the audit can prove it is not a
 /// helper: an SSA value, or a global template disjoint from every
 /// declaration. A format field as callee proves nothing; it is reported, as
@@ -596,7 +624,10 @@ fn unchecked_calls<'a>(
 ) -> Vec<&'a str> {
     let mut found = Vec::new();
     for literal in literals(source) {
-        for (start, _) in literal.match_indices("call ") {
+        for (start, instruction) in literal
+            .match_indices("call ")
+            .chain(literal.match_indices("invoke "))
+        {
             let before = &literal[..start];
             if !(before.is_empty()
                 || before.ends_with("\\n")
@@ -605,19 +636,19 @@ fn unchecked_calls<'a>(
             {
                 continue;
             }
-            let rest = &literal[start + "call ".len()..];
-            let mut tokens = rest.split_ascii_whitespace();
-            let callee = tokens
-                .by_ref()
-                .find_map(|token| token.find('(').filter(|&at| at > 0).map(|at| &token[..at]));
-            let callee = match callee {
-                Some(callee) => callee,
-                // No argument list: a template ending in a field may hold the
-                // callee and its arguments together.
-                None => match rest.split_ascii_whitespace().last() {
-                    Some(last) if last.starts_with('{') && last.ends_with('}') => last,
-                    _ => continue,
-                },
+            let rest = &literal[start + instruction.len()..];
+            let callee = rest.match_indices('(').find_map(|(open, _)| {
+                let token = rest[..open].split_ascii_whitespace().last()?;
+                (callee_token(token) && !function_type_group(rest, open)).then_some(token)
+            });
+            // No argument list: a template ending in a field may hold the
+            // callee and its arguments together.
+            let Some(callee) = callee.or_else(|| {
+                rest.split_ascii_whitespace()
+                    .last()
+                    .filter(|last| last.starts_with('{') && last.ends_with('}'))
+            }) else {
+                continue;
             };
             if callee.starts_with('{') {
                 found.push(callee);
@@ -737,6 +768,10 @@ fn the_source_audit_catches_a_bypass_and_follows_declared_membership() {
         ),
         (r#"format!("%r = call {returns} {call}")"#, "{call}"),
         (
+            r#"format!("%r = call dereferenceable(8) ptr {call}")"#,
+            "{call}",
+        ),
+        (
             r##"format!(r#"call ptr @nts_str_split(ptr %s)"#)"##,
             "nts_str_split",
         ),
@@ -758,6 +793,32 @@ fn the_source_audit_catches_a_bypass_and_follows_declared_membership() {
             [] as [&str; 0],
             "{proved}"
         );
+    }
+}
+
+#[test]
+fn the_source_audit_checks_spaced_callees_in_every_call_shape() {
+    let declared = runtime_names();
+    for instruction in [
+        "call void",
+        "tail call void",
+        "invoke void",
+        "call zeroext i32",
+        "tail call fastcc zeroext i32",
+        "invoke cc 10 zeroext i32",
+        "call fastcc void (ptr)",
+        "call %Result (ptr)",
+        "call {result} ({})",
+        "call dereferenceable(8) ptr",
+    ] {
+        for separator in ["", " ", "\t"] {
+            for (callee, expected) in [("@nts_release", "nts_release"), ("{callee}", "{callee}")] {
+                let source = format!(r#"format!("{instruction} {callee}{separator}(ptr %x)")"#);
+                assert_eq!(unchecked_calls(&source, &declared), [expected], "{source}");
+            }
+            let control = format!(r#"format!("{instruction} %callback{separator}(ptr %x)")"#);
+            assert!(unchecked_calls(&control, &declared).is_empty(), "{control}");
+        }
     }
 }
 
