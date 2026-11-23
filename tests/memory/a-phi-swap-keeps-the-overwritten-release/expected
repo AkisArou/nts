@@ -1,0 +1,10 @@
+ideal 6
+allocated 1
+candidates 0
+because The one swap in work(1) makes right alias a. Publishing first and
+because placing it in right.next creates two owners: one retain. Clearing
+because a.next must release that old reference despite its different SSA name.
+because Five releases: the two global replacements, the old a.next, and the
+because two frame Boxes' reference fields. Payload is the sole heap allocation;
+because both Boxes are in the frame. The object graph is acyclic.
+because The nullable reader deliberately avoids the separate folding bug #998.

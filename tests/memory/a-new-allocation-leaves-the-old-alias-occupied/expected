@@ -1,0 +1,16 @@
+ideal 25
+allocated 6
+candidates 0
+because This preserves the existing two-owned-parameter loop contract. The
+because initial frame Box supplies previous and witness (two retain attempts).
+because Each of two iterations retains first for the two field owners and
+because retains the fresh Box for the second loop parameter: six more retains.
+because
+because Seventeen releases: four global replacements, two old witness.next
+because values, two old previous.next values, four old loop-parameter roots,
+because the original frame Box's field, two final parameter roots, and two
+because references visited as heap Boxes die. The overwriting previous.next
+because store keeps one release; fresh.next must have no old-value release.
+because Each iteration allocates one fresh Box and two Payloads: six total.
+because The initial Box is in the frame. The graph is acyclic, and the poison
+because and forced-collection guard leaves zero live allocations behind.

@@ -1,0 +1,14 @@
+ideal 13
+allocated 3
+candidates 0
+because Work runs both predecessors: one keeps original, the other allocates
+because chosen. The two published Payloads need two retains; the older path
+because copies the frame Box into the owned chosen parameter (one more).
+because
+because Ten releases: four global replacements, two old chosen.next values,
+because two chosen roots, and the two original frame Boxes' reference fields.
+because The fresh branch adds one heap Box to the two Payload allocations.
+because Only one predecessor has a newly empty slot, so the joined store keeps
+because its old-value release. The graph is acyclic and nothing leaks under
+because poison and forced collection. The nullable reader avoids #998's
+because independent narrowed-field folding rather than relying on that bug.
