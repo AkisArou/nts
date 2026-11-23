@@ -34,7 +34,7 @@ fn prepared(provided: Provided) -> hir::Program {
     let options = Options {
         provider: Memory::ReferenceCounting,
         provided,
-        ..Options::default()
+        ..Options::new(nts_core::hir::backend::Backend::C)
     };
     hir::prepare_with(&snapshot, &options)
         .expect("prepared HIR verifies")

@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use nts_core::hir::{self, HirType, Op, OpKind, ValueId};
 use nts_frontend_ts::Frontend;
 
-pub(super) fn refused_body() -> hir::Program {
+pub(super) fn refused_body(backend: hir::backend::Backend) -> hir::Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json")
         .canonicalize_utf8().unwrap();
@@ -18,7 +18,7 @@ pub(super) fn refused_body() -> hir::Program {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(backend)
         },
     )
     .unwrap()

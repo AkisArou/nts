@@ -19,7 +19,7 @@ fn prepared(provider: hir::Memory) -> hir::Prepared {
         &hir::Options {
             provider,
             roots: hir::reachable::Roots::EveryExport,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
 }

@@ -91,7 +91,7 @@ fn execute(case: &str, source: &str) -> Vec<String> {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
         },
     )
     .unwrap();

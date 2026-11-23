@@ -32,10 +32,8 @@ impl Backend {
     /// backend says so over its provider's answer, `None` to take the
     /// provider's. The JVM's tables do not, which is a host heap's answer;
     /// C's and LLVM's are the C
-    /// runtime's, which do. Every driver that prepares for a backend --
-    /// the CLI, the differential, the benchmarks, the tests -- sets
-    /// `hir::Options::table_entries` from here, so none prepares one
-    /// backend's program as another's.
+    /// runtime's, which do. Preparation resolves this with its provider in
+    /// `PreparationOptions::table_entries`; callers supply only the backend.
     #[must_use]
     pub const fn table_entries(self) -> Option<bool> {
         match self {

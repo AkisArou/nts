@@ -34,7 +34,7 @@ fn source_fixture(source: &str) -> (ScratchDir, hir::Program) {
         &snapshot,
         &hir::Options {
             specialize_numbers: false,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
         },
     )
     .unwrap();
@@ -173,7 +173,7 @@ fn erased_runtime_arguments_match_each_targets_abi() {
         .snapshot(&input)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot).unwrap();
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

@@ -24,7 +24,7 @@ fn prepared(fixture: &str) -> hir::Prepared {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare(&snapshot).expect("prepared HIR should verify")
+    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR should verify")
 }
 
 /// The declared storage of a global, by the name it was written with.
@@ -290,7 +290,7 @@ fn a_program_records_the_provider_it_was_lowered_under() {
     for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let options = hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
         assert_eq!(

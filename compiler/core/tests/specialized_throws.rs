@@ -17,7 +17,8 @@ fn every_generic_exception_subject_is_compiled_and_verified() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("the snapshot succeeds");
-    let prepared = hir::prepare(&snapshot).expect("the prepared HIR verifies");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("the prepared HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "every subject must compile: {:?}",

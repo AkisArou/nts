@@ -14,7 +14,8 @@ fn lexical_writes_share_readiness_and_proven_writes_carry_no_ready_field() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("the unchecked write matrix snapshots");
-    let prepared = hir::prepare(&snapshot).expect("the write matrix verifies");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("the write matrix verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -89,7 +90,8 @@ fn module_initialization_preserves_subjects_and_leaves_safe_readers_unguarded() 
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
-    let prepared = hir::prepare(&snapshot).expect("HIR verifies");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -176,7 +178,8 @@ fn a_folded_module_initializer_retains_its_exception() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
-    let prepared = hir::prepare(&snapshot).expect("HIR verifies");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -223,7 +226,8 @@ fn captured_initialization_throws_and_proven_late_readers_need_no_flag() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
-    let prepared = hir::prepare(&snapshot).expect("HIR verifies");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -314,7 +318,8 @@ fn captured_var_typeof_observes_assignment_without_loading_an_unwritten_value() 
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot succeeds");
-    let prepared = hir::prepare(&snapshot).expect("HIR verifies");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -364,7 +369,8 @@ fn once_entered_module_blocks_share_readiness_without_flagging_loop_locals() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("the module block matrix snapshots");
-    let prepared = hir::prepare(&snapshot).expect("the module block matrix verifies");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("the module block matrix verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

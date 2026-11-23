@@ -4397,3 +4397,21 @@ The descriptor's fixed string field remains the only message authority: no
 getter, conversion, or storage-layout message projection. Slice 1 of #912
 includes this ownership change and checks uncaught output on all three
 backends as well as the Node-API payload's releases.
+
+## Preparation has no implicit backend (11-23)
+
+Review of #912's foundation found that a default C identity could silently put
+JVM preparations on the native path once activation reads it. Both preparation
+option constructors and the convenience preparation call require a backend;
+neither options type implements `Default`. Table-entry capability is derived
+from that backend and the memory provider rather than supplied independently.
+
+Older native ABI fixtures may share prepared C and LLVM bodies while an equality
+test over their representative sources and the addon payload source proves every
+operation and analysis answer equal, apart from the requested backend identity.
+The control covers native providers and open and closed roots. A future native
+backend distinction fails this control and requires the fixtures to split.
+JVM fixtures prepare their own branches now. The payload fixture prepares once
+per emitted backend.
+
+The contract is in [architecture](../../architecture.md#the-pipeline).

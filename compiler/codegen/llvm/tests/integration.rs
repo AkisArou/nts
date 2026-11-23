@@ -96,3 +96,6 @@ mod typed_release;
 
 #[path = "view_constants.rs"]
 mod view_constants;
+
+#[path = "../../../test-support/landing_payload.rs"]
+mod landing_payload_source;

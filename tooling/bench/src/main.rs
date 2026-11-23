@@ -2604,7 +2604,7 @@ fn prepare_snapshot(
             // callback returns to.
             callbacks_checkpoint: false,
             targets: nts_core::hir::native::Targets::only(hir::HOST),
-            table_entries: backend.table_entries(),
+
             // What the backend provides, for a `typeof` of an intrinsic
             // (`hir::features`): C's and LLVM's runtime header, each other
             // backend's own table.

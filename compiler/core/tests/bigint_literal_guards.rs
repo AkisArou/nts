@@ -106,7 +106,8 @@ fn safe_literals_avoid_guards_and_raising_copies_but_controls_keep_them() {
 #[test]
 fn a_discarded_unsigned_mask_drops_storage_but_keeps_its_width_throw() {
     let snapshot = snapshot();
-    let prepared = hir::prepare(&snapshot).expect("valid prepared HIR");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid prepared HIR");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

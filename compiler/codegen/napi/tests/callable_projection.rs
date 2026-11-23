@@ -51,7 +51,7 @@ fn callable_source_transport_does_not_publish_function_value_storage() {
         &snapshot,
         &hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap();

@@ -43,7 +43,10 @@ fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepare
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    (dir, hir::prepare(&snapshot).unwrap())
+    (
+        dir,
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap(),
+    )
 }
 
 const GEOMETRY: &str = r#"

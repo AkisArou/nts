@@ -45,7 +45,7 @@ fn a_refused_nested_function_leaves_no_unread_immortal_name() {
             &snapshot,
             &hir::Options {
                 provider: hir::Memory::ReferenceCounting,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         )
         .unwrap();

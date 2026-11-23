@@ -37,7 +37,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepare
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     (
         dir,
-        hir::prepare(&snapshot)
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
     )
 }

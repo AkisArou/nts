@@ -26,7 +26,9 @@ fn prepared_config(relative: &str) -> hir::Program {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "the candidate relations typecheck");
-    hir::prepare(&snapshot).expect("valid HIR").program
+    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("valid HIR")
+        .program
 }
 
 /// How many interfaces the class laid out as `name` implements.

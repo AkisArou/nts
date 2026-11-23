@@ -60,9 +60,8 @@ fn the_real_stream_constructor_prepares_with_both_ambient_contracts() {
             let prepared = hir::prepare_with(
                 &snapshot,
                 &hir::Options {
-                    backend,
                     provider,
-                    ..hir::Options::default()
+                    ..hir::Options::new(backend)
                 },
             )
             .unwrap_or_else(|failure| panic!("{ambient}/{mode}: {failure:?}"));

@@ -50,7 +50,10 @@ fn prepared(name: &str) -> hir::Prepared {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare_unverified(&snapshot, &hir::Options::default())
+    hir::prepare_unverified(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
 }
 
 fn lowered(name: &str) -> hir::lower::Lowered {

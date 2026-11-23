@@ -975,9 +975,7 @@ fn corpus_source(entry: &Utf8Path) -> Option<String> {
 
 fn pool_options(backend: Backend, provider: hir::Memory) -> hir::Options<'static> {
     hir::Options {
-        backend,
         provider,
-        table_entries: backend.table_entries(),
         // What the backend provides, for a `typeof` of an intrinsic
         // (`hir::features`): C's and LLVM's runtime header, each other
         // backend's own table.
@@ -985,7 +983,7 @@ fn pool_options(backend: Backend, provider: hir::Memory) -> hir::Options<'static
             Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
             Backend::Jvm => nts_codegen_jvm::provides,
         }),
-        ..hir::Options::default()
+        ..hir::Options::new(backend)
     }
 }
 

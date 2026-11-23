@@ -32,7 +32,11 @@ fn execute(name: &str, source: &str, caller: &str, reference_result: bool, table
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    let prepared = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

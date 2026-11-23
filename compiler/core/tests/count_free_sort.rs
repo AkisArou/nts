@@ -102,7 +102,8 @@ fn managed_sorts_merge_uint32_indices_but_numeric_sorts_keep_values() {
         .expect("snapshot");
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
-    let prepared = hir::prepare(&snapshot).expect("prepared HIR verifies");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -145,7 +146,8 @@ fn identical_comparators_share_helpers_and_keep_unsigned_addressing() {
         .expect("adaptive snapshot");
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
-    let prepared = hir::prepare(&snapshot).expect("adaptive prepared HIR");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("adaptive prepared HIR");
     for program in [&lowered.program, &prepared.program] {
         let shared = program
             .funcs

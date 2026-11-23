@@ -1613,7 +1613,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::default()
+        ..hir::Options::new(hir_preparation()?.0)
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     let program = &prepared.program;
@@ -1742,7 +1742,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::default()
+        ..hir::Options::new(hir_preparation()?.0)
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     for (name, why) in prepared
@@ -1897,7 +1897,7 @@ fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     }
 
     let program = if prepared {
-        hir::prepare(&snapshot)
+        hir::prepare(&snapshot, hir_preparation()?.0)
             .map_err(|unprepared| refused(&snapshot, &unprepared))?
             .program
     } else {
@@ -2862,7 +2862,6 @@ fn prepare_as(
     let options = hir::Options {
         provider,
         foreign: &foreign,
-        backend,
         entry_files: &entry_files,
         targets,
         // Through `selected_roots`, so this prints the program a backend
@@ -2877,9 +2876,8 @@ fn prepare_as(
         // `product_roots`, the emitters' own, so an addon's `--entry` is open
         // here as it is there.
         roots: emission::product_roots(emission.shape, entry.as_deref(), configured),
-        table_entries: backend.table_entries(),
         provided: emission::provided(backend),
-        ..hir::Options::default()
+        ..hir::Options::new(backend)
     };
     // An invalid program is exactly the one worth reading, so the
     // complaints are returned beside the program rather than in its place.
@@ -3264,7 +3262,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // reachability pruning drops the functions with missing callees and `dce`
     // drops the dead blocks, so what matters is what survives the passes.
     if !want_passes {
-        match hir::prepare(&snapshot) {
+        match hir::prepare(&snapshot, hir_preparation()?.0) {
             // The count is what *reachability pruning* left, which is a
             // different question from how much lowered -- so it is labelled as
             // one rather than offered as a second headline.

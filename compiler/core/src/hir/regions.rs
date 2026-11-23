@@ -103,8 +103,8 @@ pub(super) enum Helper {
     /// Takes an element out of argument `from`, which it writes, and answers
     /// the element: as fresh as that array's elements are.
     Takes { from: usize },
-    /// `nts_raise`: hands its argument to the runtime's raise slot. A value
-    /// made inside the call must be moved to the heap before the reset.
+    /// Hands its argument to the runtime's raise slot or a surviving host's
+    /// landing. A value made inside the call must escape the region reset.
     Raises,
 }
 
@@ -146,7 +146,6 @@ pub(super) fn helper(name: &str) -> Option<Helper> {
         | "nts_value_of_number"
         | "nts_value_of_boolean"
         | "nts_raising"
-        | "nts_uncaught"
         | "nts_refused"
         | "nts_assertion_failed"
         | "nts_is_finite" => Helper::Reads,
@@ -191,7 +190,7 @@ pub(super) fn helper(name: &str) -> Option<Helper> {
         "nts_array_pop" | "nts_array_shift" | "nts_array_shift_ref" | "nts_array_shift_value" => {
             Helper::Takes { from: 0 }
         }
-        "nts_raise" => Helper::Raises,
+        "nts_raise" | "nts_uncaught" => Helper::Raises,
         _ => return None,
     })
 }
@@ -1685,6 +1684,61 @@ mod tests {
             result_absent: super::super::Absent::Impossible,
             validation: None,
             written_return_elements: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn thrown_values_escape_a_region_through_either_runtime_handover() {
+        for (callee, raises) in [
+            ("nts_raise", true),
+            ("nts_uncaught", true),
+            ("nts_raising", false),
+        ] {
+            let values = vec![
+                op(OpKind::Param(0), object()),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::Erase {
+                        value: ValueId(1),
+                        absent: super::super::Absent::Impossible,
+                        slots: super::super::Absent::Impossible,
+                    },
+                    HirType::Erased,
+                ),
+                op(OpKind::ConstNull, HirType::Managed(ManagedType::String)),
+                op(
+                    OpKind::Call {
+                        callee: Callee::External(callee.to_owned()),
+                        args: match callee {
+                            "nts_uncaught" => vec![ValueId(2), ValueId(3)],
+                            "nts_raise" => vec![ValueId(2)],
+                            _ => vec![],
+                        },
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ];
+            let program = Program {
+                funcs: vec![func("root", values, ValueId(1))],
+                ..Program::default()
+            };
+            let shared = Shared::new(&program);
+            let mut facts = Facts::new(
+                &shared,
+                Scope::Region {
+                    root: 0,
+                    members: &[0],
+                },
+            );
+            facts.settle();
+            assert_eq!(facts.raises[0], raises, "{callee}");
+            if raises {
+                assert_eq!(
+                    facts.body_verdict(0).unwrap_err().reason,
+                    "may raise a value it made"
+                );
+            }
         }
     }
 

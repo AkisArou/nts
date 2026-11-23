@@ -34,7 +34,7 @@ fn prepared() -> hir::Program {
         .expect("snapshot should succeed");
     let options = Options {
         provider: Memory::ReferenceCounting,
-        ..Options::default()
+        ..Options::new(nts_core::hir::backend::Backend::C)
     };
     hir::prepare_with(&snapshot, &options)
         .expect("prepared HIR verifies")

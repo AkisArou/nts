@@ -15,7 +15,8 @@ fn pattern_parameters_keep_narrowing_guards_and_ownership_on_actual_inputs() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let result = hir::prepare(&snapshot).expect("valid parameter ABI");
+    let result =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid parameter ABI");
     assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
     let program = result.program;
     let combine = program

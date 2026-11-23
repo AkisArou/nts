@@ -45,7 +45,7 @@ fn exported_aliases_share_the_completed_wrapper_signature() {
             &snapshot,
             &hir::Options {
                 roots: hir::reachable::Roots::EntrySurface,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         )
         .unwrap();

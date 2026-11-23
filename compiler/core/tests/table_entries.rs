@@ -5,7 +5,7 @@
 //! here: the update idioms do, one read feeds a write on either arm, and a call
 //! between, another key or another table does not. A program prepared for a
 //! host's heap keeps the plain calls unless its backend's tables answer an
-//! entry (`Options::table_entries`): the JVM's do not, Wasm's do.
+//! entry (`PreparationOptions::table_entries`), resolved from the backend.
 //!
 //! Uses the linked in-process TypeScript frontend with one checker.
 
@@ -18,10 +18,6 @@ use nts_frontend_ts::Frontend;
 const PROGRAM: &str = "a-table-key-updated-in-place";
 
 fn prepared(provider: Memory) -> hir::Program {
-    prepared_with(provider, None)
-}
-
-fn prepared_with(provider: Memory, table_entries: Option<bool>) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
@@ -34,8 +30,11 @@ fn prepared_with(provider: Memory, table_entries: Option<bool>) -> hir::Program 
         .expect("snapshot should succeed");
     let options = Options {
         provider,
-        table_entries,
-        ..Options::default()
+        ..Options::new(if provider == Memory::HostGc {
+            hir::backend::Backend::Jvm
+        } else {
+            hir::backend::Backend::C
+        })
     };
     hir::prepare_with(&snapshot, &options)
         .expect("prepared HIR verifies")
@@ -109,14 +108,13 @@ fn a_write_that_might_not_be_the_read_keeps_its_own_lookup() {
     }
 }
 
-/// A host's heap answers no entry unless its backend says its tables do: the
-/// JVM keeps the plain calls, and every optimization it makes of them, with
-/// the flag unset -- the default does not inherit native's answer -- and Wasm,
-/// which sets it, shares exactly the lookups native preparation shares.
+/// JVM preparation keeps plain table calls. Exercise the sharing pass directly
+/// as the control, without inventing a preparation capability no backend owns.
 #[test]
 fn a_host_heap_shares_only_where_its_backend_says_so() {
     let plain = prepared(Memory::HostGc);
-    let shared = prepared_with(Memory::HostGc, Some(true));
+    let mut shared = plain.clone();
+    hir::entries::share(&mut shared, true);
     let native = prepared(Memory::NoGc);
     for name in ["recordCounts", "mapCounts", "eitherArm"] {
         assert_eq!(calls(&plain, name, hir::entries::ENTRY), 0, "`{name}`");

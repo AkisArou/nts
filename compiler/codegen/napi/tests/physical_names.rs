@@ -42,7 +42,7 @@ fn physical_type_names_keep_keyword_constructors_distinct() {
         assert!(!snapshot.has_errors());
         let options = hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         };
         let prepared = hir::prepare_with(&snapshot, &options).unwrap();
         let program = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);

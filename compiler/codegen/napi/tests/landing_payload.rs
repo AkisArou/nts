@@ -10,12 +10,7 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 
-const SOURCE: &str = r"
-export function fresh(n:number):number { throw 'thrown '+n; }
-export function borrowed(value:string):number { throw value; }
-export function throwError(n:number):number { throw new RangeError('error '+n); }
-export function control(value:string):string { return value; }
-";
+use crate::landing_payload_source::SOURCE;
 
 #[test]
 fn the_landing_releases_moved_and_borrowed_payloads_once() {
@@ -36,39 +31,48 @@ fn the_landing_releases_moved_and_borrowed_payloads_once() {
         .snapshot(&config)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options {
-            provider: hir::Memory::ReferenceCounting,
-            roots: hir::reachable::Roots::EntrySurface,
-            entry_files: &nts_frontend_ts::entry_uris(&config, &snapshot),
-            ..hir::Options::default()
-        },
-    )
-    .unwrap();
-    assert!(
-        prepared.diagnostics.is_empty(),
-        "{:?}",
-        prepared.diagnostics
-    );
-    let c = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
-    assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
-    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    let addon = nts_codegen_napi::emit(&prepared.program);
-    assert!(addon.skipped.is_empty(), "{:?}", addon.skipped);
-    // Interpose only the fallible Node-API operation. The production converter
-    // and its early return still run, as does the landing's final release.
-    let observed = addon
-        .source
-        .replacen("static void nts_napi_throw(", FAILURE, 1)
-        .replacen("NAPI_MODULE_INIT() {", LIVE, 1);
-    assert_ne!(observed, addon.source);
-    for (backend, name, source) in [
-        ("c", "program.c", c.writer.text()),
-        ("llvm", "program.ll", llvm.text.as_str()),
-    ] {
-        execute(&root, &dir, &c, &observed, backend, name, source);
+    let entries = nts_frontend_ts::entry_uris(&config, &snapshot);
+    let raw = hir::RawProgram::lower(&snapshot, &entries, &hir::runtime::ForeignTable::default());
+    for backend in [hir::backend::Backend::C, hir::backend::Backend::Llvm] {
+        let prepared = raw
+            .prepare(&hir::PreparationOptions {
+                provider: hir::Memory::ReferenceCounting,
+                roots: hir::reachable::Roots::EntrySurface,
+                ..hir::PreparationOptions::new(backend)
+            })
+            .unwrap();
+        assert_eq!(prepared.program.backend, Some(backend));
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
+        // Native preparation is equal across C and LLVM (the shared native
+        // preparation control asserts this); C also owns the support files.
+        let c = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let addon = nts_codegen_napi::emit(&prepared.program);
+        assert!(addon.skipped.is_empty(), "{:?}", addon.skipped);
+        // Interpose only the fallible Node-API operation. The production converter
+        // and its early return still run, as does the landing's final release.
+        let observed = addon
+            .source
+            .replacen("static void nts_napi_throw(", FAILURE, 1)
+            .replacen("NAPI_MODULE_INIT() {", LIVE, 1);
+        assert_ne!(observed, addon.source);
+        let (name, source) = match backend {
+            hir::backend::Backend::C => ("program.c", c.writer.text().to_owned()),
+            hir::backend::Backend::Llvm => {
+                let llvm = nts_codegen_llvm::emit(
+                    &prepared.program,
+                    nts_codegen_llvm::Platform::SYSV_X86_64,
+                );
+                assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+                ("program.ll", llvm.text)
+            }
+            hir::backend::Backend::Jvm => unreachable!("only native addon backends"),
+        };
+        execute(&root, &dir, &c, &observed, backend.name(), name, &source);
     }
 }
 

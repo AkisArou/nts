@@ -32,7 +32,7 @@ fn prepared(provided: Provided) -> hir::Program {
         .expect("snapshot should succeed");
     let options = Options {
         provided,
-        ..Options::default()
+        ..Options::new(nts_core::hir::backend::Backend::C)
     };
     hir::prepare_with(&snapshot, &options)
         .expect("prepared HIR verifies")

@@ -19,7 +19,9 @@ fn prepared(program: &str) -> hir::Program {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    hir::prepare(&snapshot).expect("prepared HIR").program
+    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("prepared HIR")
+        .program
 }
 
 fn checked_accesses(program: &hir::Program, name: &str) -> usize {

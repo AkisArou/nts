@@ -21,7 +21,7 @@ fn report(name: &str) -> hir::regions::Report {
     let options = hir::Options {
         provider: hir::Memory::ReferenceCounting,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::default()
+        ..hir::Options::new(nts_core::hir::backend::Backend::C)
     };
     hir::prepare_unverified(&snapshot, &options).regions
 }
@@ -40,7 +40,7 @@ fn prepared(name: &str) -> hir::Program {
     let options = hir::Options {
         provider: hir::Memory::ReferenceCounting,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::default()
+        ..hir::Options::new(nts_core::hir::backend::Backend::C)
     };
     hir::prepare_unverified(&snapshot, &options).program
 }

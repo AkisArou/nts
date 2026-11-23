@@ -44,7 +44,7 @@ fn prepared_at(relative: &str) -> hir::Prepared {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare(&snapshot).expect("prepared HIR should verify")
+    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR should verify")
 }
 
 fn has(prepared: &hir::Prepared, name: &str) -> bool {

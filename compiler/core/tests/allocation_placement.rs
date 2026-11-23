@@ -34,12 +34,12 @@ fn prepared(name: &str) -> hir::Program {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     // The options `nts hir --prepared` uses, which is the program a backend is
-    // handed. `Options::default()` is a different pipeline and the placements
+    // handed. `Options::new(nts_core::hir::backend::Backend::C)` is a different pipeline and the placements
     // it produces are not the ones anything compiles.
     let options = hir::Options {
         provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::default()
+        ..hir::Options::new(nts_core::hir::backend::Backend::C)
     };
     hir::prepare_unverified(&snapshot, &options).program
 }

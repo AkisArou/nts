@@ -57,7 +57,11 @@ fn a_remainder_answered_from_its_integers_compiles_warning_free() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    let prepared = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .unwrap();
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();

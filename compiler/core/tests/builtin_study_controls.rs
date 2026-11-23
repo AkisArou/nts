@@ -32,7 +32,7 @@ fn every_builtin_study_control_survives_beside_its_subject() {
         );
         let options = hir::Options {
             roots: hir::reachable::Roots::EveryExport,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid prepared HIR");
         let mut codes: Vec<_> = prepared

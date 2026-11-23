@@ -1026,7 +1026,7 @@ impl FuncBuilder<'_> {
             string,
             origin.clone(),
         );
-        let (error, _) = self.provided_error_named(site, "Error", message, name)?;
+        let error = self.provided_error_named(site, "Error", message, name)?;
         self.runtime_call(
             "nts_promise_reject",
             vec![promise, error],

@@ -58,7 +58,11 @@ fn an_or_of_two_booleans_converts_neither() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    let prepared = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .unwrap();
     // The program does have the `or`: the test is vacuous otherwise.
     let ors = prepared
         .program

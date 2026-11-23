@@ -3,7 +3,8 @@
 //! The direct C suite separately observes abort before allocation/detachment.
 use super::{Command, clang, hir, prepare_with_provider};
 
-const SOURCE: &str = include_str!("../../../common/test-support/buffer-untransferable/main.ts");
+pub(super) const SOURCE: &str =
+    include_str!("../../../common/test-support/buffer-untransferable/main.ts");
 const CALLER: &str = include_str!("../../../common/test-support/buffer-untransferable/caller.c");
 
 #[test]

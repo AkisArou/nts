@@ -6068,8 +6068,11 @@ pub fn described_classes(op: &Op) -> impl Iterator<Item = TypeId> + '_ {
         .chain(arms.iter().map(|arm| arm.ty))
 }
 
-pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Unprepared> {
-    prepare_with(snapshot, &Options::default())
+pub fn prepare(
+    snapshot: &SemanticSnapshot,
+    backend: backend::Backend,
+) -> Result<Prepared, Unprepared> {
+    prepare_with(snapshot, &Options::new(backend))
 }
 
 /// Why [`prepare_with`] produced no program.
@@ -6178,28 +6181,22 @@ pub struct Options<'a> {
     /// scalar kind must fit it on every one ([`native::Scalar::range_on`]):
     /// C's `long` is 32 bits on Windows and 64 elsewhere.
     pub targets: native::Targets,
-    /// Whether the backend's tables answer a key's entry, so a key read and
-    /// then written is looked up once ([`entries::share`]). A capability of
-    /// the backend's table rather than of the memory discipline: Wasm's do,
-    /// the JVM's do not, and both are a host's heap.
-    ///
-    /// `None` is "as the provider answers": the C runtime's tables, behind
-    /// every native provider, answer it; a host's heap does not unless its
-    /// backend says so (`nts_codegen_common::Backend::table_entries`).
-    /// Resolved where it is used ([`PreparationOptions::table_entries`]),
-    /// because a default computed here would be the *default* provider's:
-    /// `Options { provider: HostGc, ..default() }` would inherit native's
-    /// answer.
-    pub table_entries: Option<bool>,
     /// Which runtime helpers the backend provides, for a `typeof` of an
     /// intrinsic ([`features::Provided`]). Nothing, unless the driver says.
     pub provided: features::Provided,
 }
 
-impl Default for Options<'_> {
-    fn default() -> Self {
+impl Options<'_> {
+    /// Start a preparation for the named backend. There is deliberately no
+    /// default backend: a caller must not prepare JVM code as native code.
+    ///
+    /// ```compile_fail
+    /// let options = nts_core::hir::Options::default();
+    /// ```
+    #[must_use]
+    pub fn new(backend: backend::Backend) -> Self {
         Self {
-            backend: backend::Backend::C,
+            backend,
             provider: Memory::NoGc,
             // No loop is known to checkpoint after a callback until a build
             // says whose loop the program runs.
@@ -6220,8 +6217,6 @@ impl Default for Options<'_> {
             },
             // The host, until a build names its targets.
             targets: native::Targets::only(HOST),
-            // As the provider answers, resolved with it.
-            table_entries: None,
             provided: features::Provided::Nothing,
         }
     }
@@ -6253,21 +6248,29 @@ pub struct PreparationOptions<'a> {
     pub specialize_numbers: bool,
     pub roots: reachable::Roots<'a>,
     pub targets: native::Targets,
-    /// [`Options::table_entries`]: `None` until [`Self::table_entries`]
-    /// resolves it against the provider, so a caller building these directly
-    /// with `..default()` inherits no other provider's answer.
-    pub table_entries: Option<bool>,
     /// [`Options::provided`].
     pub provided: features::Provided,
 }
 
 impl PreparationOptions<'_> {
+    /// Start a branch for the named backend, with the ordinary preparation
+    /// choices. Like [`Options::new`], this has no implicit backend.
+    ///
+    /// ```compile_fail
+    /// let options = nts_core::hir::PreparationOptions::default();
+    /// ```
+    #[must_use]
+    pub fn new(backend: backend::Backend) -> Self {
+        Self::from(&Options::new(backend))
+    }
+
     /// Whether the backend's tables answer a key's entry: as the backend said,
     /// or else as the provider answers -- the C runtime's tables do, a host's
     /// heap's do not.
     #[must_use]
     pub fn table_entries(&self) -> bool {
-        self.table_entries
+        self.backend
+            .table_entries()
             .unwrap_or(self.provider != Memory::HostGc)
     }
 }
@@ -6281,15 +6284,8 @@ impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
             specialize_numbers: options.specialize_numbers,
             roots: options.roots,
             targets: options.targets,
-            table_entries: options.table_entries,
             provided: options.provided,
         }
-    }
-}
-
-impl Default for PreparationOptions<'_> {
-    fn default() -> Self {
-        Self::from(&Options::default())
     }
 }
 
@@ -9186,7 +9182,10 @@ mod tests {
     #[test]
     #[allow(clippy::unwrap_used)]
     fn preparation_check_keeps_the_program_and_rejection_precedence() {
-        let mut prepared = prepare_unverified(&SemanticSnapshot::default(), &Options::default());
+        let mut prepared = prepare_unverified(
+            &SemanticSnapshot::default(),
+            &Options::new(crate::hir::backend::Backend::C),
+        );
         prepared.check().unwrap();
         prepared
             .program
@@ -9229,7 +9228,8 @@ mod tests {
             .snapshot(&config)
             .unwrap();
         assert!(!snapshot.has_errors());
-        let prepared = prepare(&snapshot).expect("the promise guard verifies");
+        let prepared = prepare(&snapshot, crate::hir::backend::Backend::C)
+            .expect("the promise guard verifies");
         let mut caller = prepared
             .program
             .funcs
@@ -9312,7 +9312,8 @@ mod tests {
             .snapshot(&config)
             .unwrap();
         assert!(!snapshot.has_errors());
-        let prepared = prepare(&snapshot).expect("the actual fully prepared program verifies");
+        let prepared = prepare(&snapshot, crate::hir::backend::Backend::C)
+            .expect("the actual fully prepared program verifies");
         let mut tested = 0;
         for func in &prepared.program.funcs {
             for (index, block) in func.blocks.iter().enumerate() {

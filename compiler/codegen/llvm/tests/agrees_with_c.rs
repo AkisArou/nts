@@ -99,7 +99,8 @@ fn both_backends_ran(
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "the fixture should typecheck");
-    let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm)
+        .expect("prepared HIR should verify");
 
     // LLVM.
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);

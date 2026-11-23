@@ -25,7 +25,9 @@ fn programs(example: &str) -> (hir::Program, hir::Program) {
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let lowered = hir::lower::lower(&snapshot).program;
-    let prepared = hir::prepare(&snapshot).expect("valid HIR").program;
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("valid HIR")
+        .program;
     (lowered, prepared)
 }
 

@@ -62,7 +62,7 @@ fn a_static_number_round_trip_reaches_no_backend() {
     let snapshot = snapshot();
     let options = hir::Options {
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::default()
+        ..hir::Options::new(nts_core::hir::backend::Backend::C)
     };
     let prepared = hir::prepare_with(&snapshot, &options).expect("valid prepared HIR");
     for name in ["nativeNumber", "numericRoundTrip"] {
@@ -161,7 +161,7 @@ fn fixed_digit_domains_remove_only_the_impossible_raise_edges() {
     let snapshot = snapshot();
     let options = hir::Options {
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::default()
+        ..hir::Options::new(nts_core::hir::backend::Backend::C)
     };
     let prepared = hir::prepare_with(&snapshot, &options).expect("valid prepared HIR");
     for (name, raises) in [

@@ -30,3 +30,6 @@ mod published_consuming;
 
 #[path = "landing_payload.rs"]
 mod landing_payload;
+
+#[path = "../../../test-support/landing_payload.rs"]
+mod landing_payload_source;

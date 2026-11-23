@@ -16,7 +16,7 @@ fn prepared(fixture: &str) -> hir::Prepared {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
-    hir::prepare(&snapshot).expect("prepared HIR verifies")
+    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR verifies")
 }
 
 #[test]

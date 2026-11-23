@@ -59,7 +59,11 @@ fn recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

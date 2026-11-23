@@ -43,7 +43,7 @@ fn a_refused_override_uses_its_nearest_ancestors_slot_contract() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         );
         let program = &prepared.program;
@@ -103,7 +103,7 @@ fn a_synthetic_stop_does_not_publish_a_class_with_no_surviving_source_member() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         );
         assert_eq!(published(&prepared.program), original, "{provider:?}");
@@ -132,7 +132,7 @@ fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         );
         let program = &prepared.program;

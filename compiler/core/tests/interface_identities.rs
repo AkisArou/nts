@@ -16,9 +16,12 @@ fn prepared() -> Program {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
-    hir::prepare_with(&snapshot, &hir::Options::default())
-        .expect("valid prepared HIR")
-        .program
+    hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .expect("valid prepared HIR")
+    .program
 }
 
 fn returns(program: &Program, name: &str) -> TypeId {

@@ -221,7 +221,7 @@ impl FuncBuilder<'_> {
         class: &str,
         message: ValueId,
     ) -> Result<(), Diagnostic> {
-        let (error, _) = self.provided_error(id, class, message)?;
+        let error = self.provided_error(id, class, message)?;
         let origin = self.origin(id);
         let erased = self.push(
             OpKind::Erase {
@@ -235,8 +235,8 @@ impl FuncBuilder<'_> {
         self.throw_erased(id, erased)
     }
 
-    /// One of the provided error classes, built with `message`: the value, and
-    /// its type. Thrown by [`Self::throw_provided_error_text`]; a rejection that
+    /// One of the provided error classes, built with `message`.
+    /// Thrown by [`Self::throw_provided_error_text`]; a rejection that
     /// is not a throw -- an `import()` of a module this program does not contain
     /// -- takes the value itself.
     pub(super) fn provided_error(
@@ -244,7 +244,7 @@ impl FuncBuilder<'_> {
         id: NodeId,
         class: &str,
         message: ValueId,
-    ) -> Result<(ValueId, HirType), Diagnostic> {
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let name = self.push(
             OpKind::ConstString(class.to_owned().into()),
@@ -262,7 +262,7 @@ impl FuncBuilder<'_> {
         class: &str,
         message: ValueId,
         name: ValueId,
-    ) -> Result<(ValueId, HirType), Diagnostic> {
+    ) -> Result<ValueId, Diagnostic> {
         // The snapshot's type where the program named the class, and a
         // synthetic one where it did not.
         //
@@ -296,18 +296,14 @@ impl FuncBuilder<'_> {
         let origin = self.origin(id);
         let object = HirType::Managed(ManagedType::Object(ty));
         self.materialize(id, &object)?;
-        let error = self.push(
-            OpKind::ObjectNew { frame: false },
-            object.clone(),
-            origin.clone(),
-        );
+        let error = self.push(OpKind::ObjectNew { frame: false }, object, origin.clone());
         for (field, value) in [("message", message), ("name", name)] {
             let Some(at) = layout.index_of(field) else {
                 continue;
             };
             self.field_set(error, at, value, &origin);
         }
-        Ok((error, object))
+        Ok(error)
     }
 
     /// The layout of a class this compiler provides, if `ty` names one.

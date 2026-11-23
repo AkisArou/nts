@@ -68,7 +68,7 @@ fn prepare_with_files(
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
         },
     );
     (
@@ -106,6 +106,67 @@ fn snapshot_of(
     (dir, snapshot)
 }
 
+/// Native ABI fixtures share one preparation only while C and LLVM have the
+/// same HIR. Backend identity itself must still name the requested branch.
+#[test]
+fn c_and_llvm_preparation_agree_for_native_abi_and_addon_sources() {
+    let cases: &[(&str, &str, &[(&str, &str)])] = &[
+        (
+            "pointer-constants",
+            constants::SOURCE,
+            &[("constants.d.ts", constants::DECLARATIONS)],
+        ),
+        (
+            "bigint-constants",
+            bigint_constants::SOURCE,
+            &[("constants.d.ts", bigint_constants::DECLARATIONS)],
+        ),
+        ("buffer-untransferable", buffer_untransferable::SOURCE, &[]),
+        (
+            "landing-payload",
+            crate::landing_payload_source::SOURCE,
+            &[],
+        ),
+    ];
+    for &(name, source, declarations) in cases {
+        let (dir, snapshot) = snapshot_of(name, source, declarations);
+        let entries = nts_frontend_ts::entry_uris(&dir.join("tsconfig.json"), &snapshot);
+        let raw =
+            hir::RawProgram::lower(&snapshot, &entries, &hir::runtime::ForeignTable::default());
+        let closed = [hir::lower::MODULE_INIT.to_owned()];
+        for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+            for roots in [
+                hir::reachable::Roots::EveryExport,
+                hir::reachable::Roots::EntrySurface,
+                hir::reachable::Roots::Entry(&closed),
+            ] {
+                let options = hir::PreparationOptions {
+                    provider,
+                    roots,
+                    ..hir::PreparationOptions::new(hir::backend::Backend::C)
+                };
+                let c = raw.prepare(&options).unwrap();
+                let mut llvm = raw
+                    .prepare(&hir::PreparationOptions {
+                        backend: hir::backend::Backend::Llvm,
+                        ..options
+                    })
+                    .unwrap();
+                assert_eq!(c.program.backend, Some(hir::backend::Backend::C));
+                assert_eq!(llvm.program.backend, Some(hir::backend::Backend::Llvm));
+                // Compare every operation, refusal and analysis answer; only
+                // the requested backend's identity is necessarily different.
+                llvm.program.backend = c.program.backend;
+                assert_eq!(
+                    format!("{c:?}"),
+                    format!("{llvm:?}"),
+                    "{name}/{provider:?}/{roots:?}"
+                );
+            }
+        }
+    }
+}
+
 /// An `async` callback is bridged only where the program's loop checkpoints
 /// after a callback (`Options::callbacks_checkpoint`, a `GLib`-hosted
 /// program's): there its continuation runs when the callback returns to the
@@ -141,7 +202,7 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
             &snapshot,
             &hir::Options {
                 callbacks_checkpoint,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
             },
         )
         .unwrap();
@@ -1667,7 +1728,7 @@ export function roundTrip(n: number): number { return echo(high()) + n; }
         &snapshot,
         &hir::Options {
             targets: hir::native::Targets::only(unsigned),
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
         },
     )
     .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
@@ -5750,7 +5811,7 @@ export function probe(seed: number): number {
         &snapshot,
         &hir::Options {
             targets: hir::native::Targets::of(&[sysv, win64]),
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
         },
     )
     .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
@@ -5956,7 +6017,7 @@ export function wide(): void { take_long(2147483648n as c_long); }
                 &snapshot,
                 &hir::Options {
                     targets: hir::native::Targets::of(targets),
-                    ..hir::Options::default()
+                    ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
                 },
             ) {
                 Err(hir::Unprepared::Rejected(errors)) => errors
@@ -6760,7 +6821,9 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     // A fraction into C's `int` is refused where it is passed.
     let fraction = source.replace("add(2, 3.5)", "add(2.9, 3.5)");
     let (_, snapshot) = snapshot_of("cnumber-fraction", &fraction, &[]);
-    let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(&snapshot) else {
+    let Err(hir::Unprepared::Rejected(errors)) =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm)
+    else {
         panic!("`add(2.9, …)` must be refused");
     };
     assert!(

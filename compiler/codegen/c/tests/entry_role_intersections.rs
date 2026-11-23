@@ -60,7 +60,7 @@ fn execute(selector: &str) {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot).unwrap();
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
     let readers = prepared
         .program
         .funcs

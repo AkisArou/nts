@@ -6,7 +6,7 @@ mod fixture;
 #[test]
 fn a_materialized_bodys_refusal_names_the_original_function() {
     let emitted = nts_codegen_c::emit(
-        &fixture::refused_body(),
+        &fixture::refused_body(nts_core::hir::backend::Backend::C),
         nts_core::hir::native::NativeAbi::LP64,
     );
     fixture::assert_source_name(&emitted.diagnostics);
@@ -33,7 +33,7 @@ fn an_internal_numeric_specialization_emits_no_borrowed_adapter() {
         &snapshot,
         &nts_core::hir::Options {
             provider: nts_core::hir::Memory::ReferenceCounting,
-            ..nts_core::hir::Options::default()
+            ..nts_core::hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap();
@@ -108,7 +108,7 @@ fn closed_towers_hands_over_every_push_at_the_memory_minimum() {
             roots: Roots::Entry(&entries),
             provider: hir::Memory::ReferenceCounting,
             callbacks_checkpoint: false,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap();

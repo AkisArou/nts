@@ -12,7 +12,7 @@ fn argument_semantics_retain_every_subject() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
-    let prepared = hir::prepare(&snapshot).expect("valid HIR");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -62,7 +62,8 @@ fn invalid_cooked_entries_and_writable_casts_remain_named_boundaries() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
-    let prepared = hir::prepare(&snapshot).expect("refused subjects leave valid HIR");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("refused subjects leave valid HIR");
     let missing = prepared
         .program
         .funcs

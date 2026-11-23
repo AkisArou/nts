@@ -695,7 +695,8 @@ mod read_contract_tests {
             raw_contracts.is_empty(),
             "raw lowering emitted contracts: {raw_contracts:?}"
         );
-        let prepared = crate::hir::prepare(&snapshot).expect("single normal preparation");
+        let prepared = crate::hir::prepare(&snapshot, crate::hir::backend::Backend::C)
+            .expect("single normal preparation");
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -784,7 +785,8 @@ mod read_contract_tests {
             .snapshot(&config)
             .expect("capture producer input");
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-        let prepared = crate::hir::prepare(&snapshot).expect("normal single preparation");
+        let prepared = crate::hir::prepare(&snapshot, crate::hir::backend::Backend::C)
+            .expect("normal single preparation");
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",

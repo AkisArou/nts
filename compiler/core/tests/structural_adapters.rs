@@ -30,7 +30,7 @@ fn snapshot(relative: &str) -> SemanticSnapshot {
 }
 
 fn prepared(relative: &str) -> hir::Program {
-    hir::prepare(&snapshot(relative))
+    hir::prepare(&snapshot(relative), hir::backend::Backend::C)
         .expect("valid prepared HIR")
         .program
 }

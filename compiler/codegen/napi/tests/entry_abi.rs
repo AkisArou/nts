@@ -33,7 +33,7 @@ export function go(n:number):number { const values:Base[]=[new Base(n),new Child
         &snapshot,
         &hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap();

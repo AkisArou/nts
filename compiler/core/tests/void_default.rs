@@ -14,7 +14,7 @@ fn void_arguments_preserve_default_roots_and_verify() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot).expect("valid HIR");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

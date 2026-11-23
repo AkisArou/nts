@@ -129,7 +129,7 @@ fn a_binding_bigint_constant_still_obeys_the_c_stores_domain() {
                  export function run(): void {{ accept(VALUE); }}\n"
                 ),
             );
-            let diagnostics = match hir::prepare(&read) {
+            let diagnostics = match hir::prepare(&read, nts_core::hir::backend::Backend::C) {
                 Ok(prepared) => prepared.diagnostics,
                 Err(hir::Unprepared::Rejected(errors)) => errors,
                 Err(invalid) => panic!("{}", invalid.render(&read.sources)),

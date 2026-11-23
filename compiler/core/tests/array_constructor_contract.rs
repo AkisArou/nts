@@ -21,7 +21,7 @@ fn the_constructor_contract_prepares_for_every_provider() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         )
         .expect("every provider must receive valid constructor HIR");

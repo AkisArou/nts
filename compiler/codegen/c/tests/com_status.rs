@@ -64,7 +64,7 @@ declare module "c:StatusFixture" {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         )
         .unwrap();

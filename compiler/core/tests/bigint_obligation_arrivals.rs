@@ -25,7 +25,7 @@ fn a_shifted_bigint_beyond_the_old_round_limit_must_not_fit_a_written_kind() {
                 &snapshot,
                 &hir::Options {
                     provider,
-                    ..hir::Options::default()
+                    ..hir::Options::new(nts_core::hir::backend::Backend::C)
                 },
             ) {
                 Ok(prepared) => {

@@ -74,7 +74,7 @@ fn abandoned_callback_cycles_leave_no_live_storage() {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
         },
     )
     .expect("prepared HIR");

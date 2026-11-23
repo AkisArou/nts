@@ -51,7 +51,7 @@ fn closed_erased_calls_keep_every_root_and_independent_parameter_positions() {
         .expect("the second-position copy");
     assert_eq!(other.params[0].ty, HirType::Erased);
     assert_eq!(other.params[1].ty, HirType::NUMBER);
-    let prepared = hir::prepare(&snapshot).expect("valid HIR");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR");
     for name in [
         "aNumber",
         "aString",
@@ -193,7 +193,7 @@ fn a_recovered_array_reads_past_its_end_as_nan() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot).expect("valid HIR");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR");
     let copy = prepared
         .program
         .funcs

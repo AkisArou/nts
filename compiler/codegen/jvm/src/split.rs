@@ -270,7 +270,7 @@ fn helper(func: &Func, name: String, run: &[ValueId], boundary: &Cut) -> Func {
         }],
         origin: func.origin.clone(),
         exported: false,
-        raises: false,
+        raises: func.raises,
         initializes_receiver: false,
         abstract_declaration: false,
         async_result: None,
@@ -452,6 +452,20 @@ mod tests {
             values.push(add(k - 1, 1));
         }
         func(values, ValueId(length - 1))
+    }
+
+    #[test]
+    fn split_helpers_preserve_the_parents_raising_mode() {
+        for raises in [false, true] {
+            let mut original = chain(42);
+            original.raises = raises;
+            let (rewritten, helpers) =
+                split_for_method_limit(&original, 16, &mut FxHashSet::default())
+                    .expect("the chain splits");
+            assert_eq!(rewritten.raises, raises);
+            assert!(!helpers.is_empty());
+            assert!(helpers.iter().all(|helper| helper.raises == raises));
+        }
     }
 
     #[test]

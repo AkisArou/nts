@@ -177,7 +177,7 @@ fn prepare_with_binding(name: &str, binding: &str, source: &str) -> (ScratchDir,
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     (
         dir,
-        hir::prepare(&snapshot)
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
     )
 }
@@ -190,7 +190,7 @@ fn prepare_with_types(
     let (dir, snapshot) = snapshot_with_types(name, source, include_types);
     (
         dir,
-        hir::prepare(&snapshot)
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
     )
 }
@@ -1183,7 +1183,7 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
     // A host handle needs the counting provider; a never-free program refuses it.
     let options = hir::Options {
         provider: hir::Memory::ReferenceCounting,
-        ..hir::Options::default()
+        ..hir::Options::new(nts_core::hir::backend::Backend::C)
     };
     let prepared = hir::prepare_with(&snapshot, &options).unwrap();
     for name in ["related", "unrelatedOrder", "sameType"] {
@@ -1238,7 +1238,9 @@ declare function seen_u16(v: Uint16): Float64;
          export function store(p: Ptr<c_int>, x: number): void {{ p[0] = x; }}\n"
     );
     let (_, snapshot) = snapshot_with_types("unproven-integer", &unproven, false);
-    let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(&snapshot) else {
+    let Err(hir::Unprepared::Rejected(errors)) =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+    else {
         panic!("an unproven number into a C integer must be refused");
     };
     let said: Vec<&str> = errors.iter().map(|error| error.message.as_str()).collect();
@@ -1361,7 +1363,7 @@ fn a_count_narrower_than_an_array_is_bounded_before_the_call() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         )
         .expect("valid HIR");
@@ -1432,7 +1434,7 @@ export function counted(n: Int32): number {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         )
         .expect("valid HIR");
@@ -1532,7 +1534,7 @@ declare function node_value(n: Node): c_int;
         let (_, snapshot) = snapshot_with_types(name, &format!("{prelude}{body}"), false);
         let options = hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         };
         hir::prepare_with(&snapshot, &options)
     };
@@ -1681,7 +1683,7 @@ void handler_clear(void) {
         let (dir, snapshot) = snapshot_with_types(&name, source, false);
         let options = hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
         assert!(
@@ -1822,7 +1824,7 @@ export function handedOn(n: number): number {
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
         let options = hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
         assert!(
@@ -1973,7 +1975,7 @@ export function size(): number {
         // A host handle needs the counting provider.
         let options = hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         };
         let prepared = hir::prepare_with(&snapshot, &options)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));

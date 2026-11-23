@@ -35,7 +35,10 @@ fn lower_at(relative: &str) -> Prepared {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    hir::prepare_unverified(&snapshot, &hir::Options::default())
+    hir::prepare_unverified(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
 }
 
 fn held(lowered: &Prepared) -> Vec<&str> {

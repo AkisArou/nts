@@ -36,7 +36,7 @@ fn counted_at(corpus: &str, case: &str) -> hir::Prepared {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .expect("prepared HIR should verify")

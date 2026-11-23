@@ -298,7 +298,7 @@ fn every_published_member_has_a_surviving_lowering_witness() {
         &snapshot,
         &hir::Options {
             roots: hir::reachable::Roots::EveryExport,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .expect("valid prepared provider witnesses");

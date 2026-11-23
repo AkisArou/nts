@@ -29,7 +29,7 @@ fn check(fixture: &str, public: bool) {
             &hir::Options {
                 provider,
                 roots: Roots::EntrySurface,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
             },
         )
         .unwrap();

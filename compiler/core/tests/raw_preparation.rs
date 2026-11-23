@@ -32,18 +32,17 @@ fn independent_preparations_match_fresh_lowering_and_leave_the_raw_program_uncha
         ] {
             for abi in [native::NativeAbi::LP64, native::NativeAbi::LLP64] {
                 let options = Options {
-                    backend: match provider {
-                        Memory::NoGc => hir::backend::Backend::Llvm,
-                        Memory::ReferenceCounting => hir::backend::Backend::C,
-                        Memory::HostGc => hir::backend::Backend::Jvm,
-                    },
                     provider,
                     roots,
                     entry_files: &entry,
                     foreign: &foreign,
                     targets: native::Targets::only(abi),
                     callbacks_checkpoint: true,
-                    ..Options::default()
+                    ..Options::new(match provider {
+                        Memory::NoGc => hir::backend::Backend::Llvm,
+                        Memory::ReferenceCounting => hir::backend::Backend::C,
+                        Memory::HostGc => hir::backend::Backend::Jvm,
+                    })
                 };
                 let fresh = hir::prepare_with(&snapshot, &options).unwrap();
                 let branch = raw.prepare(&PreparationOptions::from(&options)).unwrap();

@@ -12607,6 +12607,13 @@
       }
     },
     {
+      "source": "compiler/test-support/landing_payload.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/test-support/uncaught_text.rs",
       "declarations": {
         "imports": [],

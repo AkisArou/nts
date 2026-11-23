@@ -19,7 +19,7 @@ fn prepared(fixture: &str, provider: Memory) -> Program {
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .expect("valid prepared HIR")

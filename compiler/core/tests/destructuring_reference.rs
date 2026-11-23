@@ -12,7 +12,7 @@ fn missing_and_present_reference_elements_retain_their_subjects() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
-    let prepared = hir::prepare(&snapshot).expect("valid HIR");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

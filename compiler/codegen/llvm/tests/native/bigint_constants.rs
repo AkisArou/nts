@@ -1,9 +1,9 @@
 //! Witness the declarations, then execute the same integer-value fixture on C/LLVM.
 use super::{Command, clang, hir, prepare_with_files};
 
-const SOURCE: &str =
+pub(super) const SOURCE: &str =
     include_str!("../../../../../tests/interop/native-bigint-constants/src/main.ts");
-const DECLARATIONS: &str =
+pub(super) const DECLARATIONS: &str =
     include_str!("../../../../../tests/interop/native-bigint-constants/types/constants.d.ts");
 const HEADER: &str =
     include_str!("../../../../../tests/interop/native-bigint-constants/native/constants.h");

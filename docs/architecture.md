@@ -23,6 +23,11 @@ C (→ clang) · LLVM IR · JVM class files (→ DEX) · WasmGC (via Binaryen IR
 what preparation decided and decide nothing a sibling backend would decide
 differently.
 
+Preparation requires the selected backend explicitly; it has no default.
+The same input supplies backend capabilities, so drivers cannot independently
+set a table capability that disagrees with the backend. Raw lowering is shared;
+each prepared branch retains its backend identity beside its product roots.
+
 **Memory is chosen per build, not per backend.** `hir::Memory` has three:
 
 - `NoGc` allocates and never frees: for testing, never shipped.
@@ -88,6 +93,10 @@ beside the responsibilities they exercise.
 
 ## Decisions
 
+- Preparation requires a backend, including in tests and inspection commands.
+  Native fixtures may share C and LLVM HIR only while their equality control
+  passes; JVM branches prepare independently
+  ([log](records/notebooks/decisions-log.md#preparation-has-no-implicit-backend-11-23)).
 - The frontend is tsrs, called in process; tsgo and every transport to it are gone, with no intermediate steps ([log](records/notebooks/decisions-log.md#frontend-tsrs)).
 - A local patch to the vendored tsrs is allowed only for the two checker crashes it was made for, and goes when an upstream release fixes both.
 - Shipped native programs count references; `NoGc` is for testing only ([log](records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)).

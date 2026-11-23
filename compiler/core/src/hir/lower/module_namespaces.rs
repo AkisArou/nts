@@ -702,7 +702,7 @@ impl FuncBuilder<'_> {
         // Through `reject_with`, the one rejection path, which hands the runtime a
         // reference: a reason erased here first answered `typeof` "function" on
         // the JVM where C and node answer "object".
-        let (error, _) = self.provided_error(id, class, message)?;
+        let error = self.provided_error(id, class, message)?;
         self.reject_with(id, promise, Some(error))?;
         Ok(promise)
     }

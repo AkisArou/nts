@@ -39,7 +39,7 @@ export function via(n:number):number {
 export function own(n:number):number { const value=new Child(); value.value=n; return value.read(); }
 ",
     );
-    let prepared = hir::prepare(&snapshot).unwrap();
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
     let program = &prepared.program;
     let plan = nts_codegen_c::EntryAbi::new(program);
     let c = nts_codegen_c::emit_planned(&plan, hir::native::NativeAbi::LP64);
@@ -102,7 +102,7 @@ fn repeated_readers_and_deep_or_wide_families_have_linear_index_work() {
     for deep in [false, true] {
         for size in [16, 64, 256] {
             let (_dir, snapshot) = fixture(&families(size, deep));
-            let prepared = hir::prepare(&snapshot).unwrap();
+            let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
             let plan =
                 nts_codegen_common::entry_parameters::EntryParameters::new(&prepared.program);
             let work = plan.work();
@@ -148,7 +148,7 @@ export function via(n:number):number {
 export function own():number { return new Child().read(); }
 ",
     );
-    let prepared = hir::prepare(&snapshot).unwrap();
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     let text = llvm.text;
@@ -180,7 +180,7 @@ fn no_virtual_calls_do_no_family_or_tail_work() {
     let (_dir, snapshot) = fixture(
         "class Cell { read():number { return 17; } } export function run():number { return new Cell().read(); }",
     );
-    let prepared = hir::prepare(&snapshot).unwrap();
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
     let plan = nts_codegen_common::entry_parameters::EntryParameters::new(&prepared.program);
     let work = plan.work();
     assert_eq!(work.declarations, 0);

@@ -86,7 +86,8 @@ fn a_call_that_passes_the_guard_calls_the_whole_copy() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("prepared HIR should verify");
     let program = &prepared.program;
     assert!(
         program.funcs.iter().any(|func| func.name == "scan#whole"),

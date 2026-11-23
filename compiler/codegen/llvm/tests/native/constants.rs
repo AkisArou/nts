@@ -1,9 +1,9 @@
 //! The same gated C-oracle fixture on both backends and both memory providers.
 use super::{Command, clang, hir, prepare_with_files};
 
-const SOURCE: &str =
+pub(super) const SOURCE: &str =
     include_str!("../../../../../tests/interop/native-pointer-constants/src/main.ts");
-const DECLARATIONS: &str =
+pub(super) const DECLARATIONS: &str =
     include_str!("../../../../../tests/interop/native-pointer-constants/types/constants.d.ts");
 const HEADER: &str =
     include_str!("../../../../../tests/interop/native-pointer-constants/native/constants.h");

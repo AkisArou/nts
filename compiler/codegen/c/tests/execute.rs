@@ -322,7 +322,7 @@ fn build_and_run_transformed(
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .expect("prepared HIR should verify");

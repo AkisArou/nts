@@ -724,7 +724,8 @@ mod tests {
                 .with_checkers(std::num::NonZeroU16::MIN)
                 .snapshot(&tsconfig)
                 .unwrap_or_else(|error| panic!("{fixture}: {error}"));
-            let prepared = hir::prepare(&snapshot).unwrap_or_else(|_| panic!("{fixture} prepares"));
+            let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+                .unwrap_or_else(|_| panic!("{fixture} prepares"));
             for func in &prepared.program.funcs {
                 for (id, op) in ops(func) {
                     let printed = super::super::render_op(id.0 as usize, op);

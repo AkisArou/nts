@@ -33,7 +33,11 @@ fn prepared(name: &str) -> hir::Program {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare_unverified(&snapshot, &hir::Options::default()).program
+    hir::prepare_unverified(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .program
 }
 
 /// A known generator result must reach the store as a typed call. An erased
@@ -49,7 +53,11 @@ fn known_reference_results_remain_typed_at_the_store() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    let program = hir::prepare_unverified(&snapshot, &hir::Options::default()).program;
+    let program = hir::prepare_unverified(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .program;
     let iter = program
         .globals
         .iter()

@@ -22,7 +22,9 @@ fn prepared_fixture(fixture: &str) -> hir::Program {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare(&snapshot).expect("valid HIR").program
+    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("valid HIR")
+        .program
 }
 
 /// Whether the function `name` reads a family's field by its receiver's class
@@ -343,7 +345,7 @@ fn optional_storage_reads_dispatch_through_their_family() {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::HostGc,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap()
@@ -366,7 +368,7 @@ fn stored_field_dispatch_is_independent_of_the_memory_provider() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(nts_core::hir::backend::Backend::C)
             },
         )
         .unwrap()
@@ -460,7 +462,7 @@ fn a_field_view_outlives_its_replaced_owner_under_reference_counting() {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .expect("the view's alias and ownership remain valid after RC insertion");

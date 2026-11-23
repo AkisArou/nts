@@ -67,7 +67,10 @@ fn project_semantics_reach_lowering_and_preparation_without_partial_emission() {
             );
             assert!(
                 matches!(
-                    hir::prepare_with(&snapshot, &hir::Options::default()),
+                    hir::prepare_with(
+                        &snapshot,
+                        &hir::Options::new(nts_core::hir::backend::Backend::C)
+                    ),
                     Err(Unprepared::Rejected(_))
                 ),
                 "preparation must preserve the program rejection"

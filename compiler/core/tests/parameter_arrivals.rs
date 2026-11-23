@@ -38,7 +38,8 @@ fn exported_literal_claims_are_unknown_but_actual_literal_callers_still_fold() {
             "{name}: unchecked arrival"
         );
     }
-    let prepared = hir::prepare(&snapshot).expect("prepare arrival fixture");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("prepare arrival fixture");
     let function = prepared
         .program
         .funcs
@@ -79,7 +80,8 @@ fn literal_union_indices_need_actual_arrival_proofs() {
             .snapshot(&config)
             .expect("capture bounds arrival fixture");
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-        let prepared = hir::prepare(&snapshot).expect("prepare bounds arrival fixture");
+        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+            .expect("prepare bounds arrival fixture");
         assert_eq!(prepared.program.uncompiled, []);
         let pick = prepared
             .program
@@ -156,7 +158,8 @@ fn typed_local_literal_assertions_are_not_value_proofs() {
         }
         assert_eq!(returns, 1);
     }
-    let prepared = hir::prepare(&snapshot).expect("prepare typed literal assertions");
+    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("prepare typed literal assertions");
     for func in &prepared.program.funcs {
         for block in &func.blocks {
             if let Terminator::Return(Some(value)) = block.terminator {

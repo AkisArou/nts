@@ -24,7 +24,8 @@ fn a_signature_call_is_typed_only_where_every_arriving_closure_agrees() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    let prepared = hir::prepare(&snapshot).expect("prepared HIR");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR");
     let program = &prepared.program;
     assert!(program.uncompiled.is_empty(), "{:?}", program.uncompiled);
     let erased = program.erased_call_slot.expect("the program has closures");
@@ -89,7 +90,8 @@ fn a_typed_signature_over_whole_numbers_is_narrowed_with_its_closures() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    let prepared = hir::prepare(&snapshot).expect("prepared HIR");
+    let prepared =
+        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR");
     let program = &prepared.program;
     let [signature] = program.typed_signatures.iter().collect::<Vec<_>>()[..] else {
         panic!("one typed signature: {:?}", program.typed_signatures);

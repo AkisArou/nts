@@ -22,7 +22,9 @@ fn prepared() -> hir::Program {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare(&snapshot).expect("valid HIR").program
+    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
+        .expect("valid HIR")
+        .program
 }
 
 #[test]

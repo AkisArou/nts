@@ -31,7 +31,11 @@ export function run(n:number):number { privateValue+=n; return callback(n)+priva
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors());
-    let prepared = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(nts_core::hir::backend::Backend::C),
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

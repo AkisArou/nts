@@ -19,7 +19,7 @@ fn prepared(provider: hir::Memory) -> hir::Prepared {
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap()
@@ -238,7 +238,7 @@ fn only_a_resumable_product_withholds_an_unsafe_consuming_answer() {
         &hir::Options {
             provider: hir::Memory::NoGc,
             roots: Roots::EntrySurface,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap();

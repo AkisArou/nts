@@ -108,7 +108,7 @@ fn check_arm(shared_alias: bool) {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(nts_core::hir::backend::Backend::C)
         },
     )
     .unwrap_or_else(|why| panic!("{label}: {}", why.render(&snapshot.sources)));
