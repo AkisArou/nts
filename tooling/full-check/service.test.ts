@@ -1,3 +1,4 @@
+import {censusReport, recordedCensus} from "./census-log-fixture.ts";
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/service.test.ts
@@ -35,7 +36,7 @@ import {removable as makeRemovable} from '../gate/run-temporary.ts';
 import {ToolingInstrumentError,DiskBuildAdmissionError,publishToolingFailure,readStepInstrument} from '../gate/step-result.ts';
 import {DiskCapacity} from '../gate/disk-capacity.ts';
 import {ownMemory} from '../gate/test-memory.ts';
-import {readSummary,verdictOf} from './measure.ts';
+import {readFailureIdentities,readSummary,verdictOf} from './measure.ts';
 import {durableRecord} from '../gate/durable-record.ts';
 import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
 import { recordLandingFixture } from "../landing/verdict-fixture.ts";
@@ -2204,4 +2205,56 @@ test("a decision-probe hold keeps persisted observations for the next cycle", as
     "the ordinary red observation is reused; only its fresh confirmation executes");
   assert.ok(observations.some(old => state.probes.some(p => p.key === old.key && p.step === old.step && p.run === old.run)),
     "observations retain their original run provenance across the held attempt");
+});
+
+
+test("initial range findings keep the actual searched tip, count, run and missing-identity explanation together", async t => {
+  for (const identified of [true, false]) {
+    const repo = repository(t), gate = fakeGate(repo, {all: ["build", "tests"], wide: []}), fx = harness(repo, gate);
+    repo.commit({"src.txt": "good"}, "good"); await cycle(fx);
+    const filtered = recordedCensus(t, censusReport(["test/case-x.js: pass -> no-verdict (crash)"]));
+    assert.equal(filtered.status, 1);
+    const bad = repo.commit({"RED/tests": "", "LOG/tests": identified ? filtered.stdout : "no case detail\n"}, "breaks tests\n\nFixes #101");
+    let latest = "", originalRun = "", latestRun = "";
+    const run = gate.run.bind(gate);
+    gate.run = (commit, steps, label, ...rest) => {
+      const m = run(commit, steps, label, ...rest);
+      if (label === "core" && commit === bad && !latest) {
+        originalRun = m.run; latest = repo.commit({"other.txt": "main advanced"}, "advance");
+      }
+      if (label === "core-probe" && commit === latest) latestRun = m.run;
+      return {...m, failures: readFailureIdentities(m.run, Object.keys(m.steps).filter(step => m.steps[step] === "FAIL"))};
+    };
+    await cycle(fx);
+    const culprit = readState(repo.layout.state).culprits[0]!;
+    assert.equal(culprit.commit, bad); assert.ok(culprit.revert);
+    assert.equal(culprit.run, identified ? latestRun : originalRun);
+    const body = repo.git.run(["log", "-1", "--format=%B", culprit.revert]);
+    assert.ok(body.includes(`run was red at ${(identified ? latest : bad).slice(0, 12)}`), body);
+    assert.ok(body.includes(`Among the ${identified ? 2 : 1}\ncommit(s)`), body);
+    const note = "no failure identity for tests: range not extended";
+    if (!identified) {
+      assert.ok(fx.lines.some(line => line.includes(note)));
+      assert.ok(body.includes(note)); assert.ok(fx.told[0]!.comment.includes(note));
+    } else assert.ok(!body.includes(note));
+  }
+});
+
+test("a newer main on another case confirms the original red and holds without reverting it", async t => {
+  const repo = repository(t), gate = fakeGate(repo, {all: ["build", "tests"], wide: []}), fx = harness(repo, gate);
+  repo.commit({"src.txt": "good"}, "good"); await cycle(fx);
+  const x = recordedCensus(t, censusReport(["test/case-x.js: pass -> no-verdict (crash)"])).stdout;
+  const y = recordedCensus(t, censusReport(["test/case-y.js: pass -> no-verdict (crash)"])).stdout;
+  const bad = repo.commit({"RED/tests": "", "LOG/tests": x}, "break X\n\nFixes #101");
+  const run = gate.run.bind(gate); let advanced = false;
+  gate.run = (commit, steps, label, ...rest) => {
+    const m = run(commit, steps, label, ...rest);
+    if (label === "core" && commit === bad && !advanced) { advanced = true; repo.commit({"LOG/tests": y}, "different case"); }
+    return {...m, failures: readFailureIdentities(m.run, Object.keys(m.steps).filter(step => m.steps[step] === "FAIL"))};
+  };
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  assert.equal(state.culprits.length, 0); assert.equal(fx.submitted.length, 0);
+  assert.ok(gate.measured.some(p => p.label === "core-probe" && p.commit === bad));
+  assert.match(state.core.last_run?.search?.result ?? "", /old .*case-x.*current .*case-y/);
 });

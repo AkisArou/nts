@@ -48,6 +48,8 @@ export type SearchInput = {
   candidates: string[];
   /** The steps the tip's run failed. */
   steps: string[];
+  /** The original red run's step-owned identities; absent detail cannot extend its range. */
+  failures?: Record<string, string[]>;
   /** Culprits already found whose reverts have not landed (the service's record). */
   pending: string[];
   /** Culprits the range itself reverts: culprit -> its first revert in the range. */
@@ -61,7 +63,7 @@ type HistoryResult =
   | { kind: "explained"; probes: Probe[] }
   | { kind: "flaky"; probes: Probe[] }
   | { kind: "held"; reason: string; probes: Probe[] };
-export type SearchResult = (HistoryResult & { main?: MainProbe })
+export type SearchResult = (HistoryResult & { main?: MainProbe; range?: { tip: string; candidates: number }; note?: string })
   | { kind: "fixed-forward"; commit: string; through: string; probes: Probe[]; main: MainProbe };
 
 /** Main is observed at each decision, not frozen when an older run began. */
@@ -152,6 +154,21 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
     } catch (error) { return `could not extend the first-parent candidate range: ${String(error)}`; }
     return undefined;
   };
+  const compare = (before: string[], failures: Record<string, string[]> | undefined, after: Probe): { kind: "missing" | "changed"; reason: string } | undefined => {
+    const changed: string[] = [], missing: string[] = [];
+    for (const step of [...new Set(after.failed)].sort()) {
+      if (!before.includes(step)) { changed.push(`newest main added a failed step ${step}`); continue; }
+      const was = failures?.[step], now = after.failures?.[step];
+      if (!was?.length || !now?.length) { missing.push(step); continue; }
+      const oldIdentity = JSON.stringify([...new Set(was)].sort()), currentIdentity = JSON.stringify([...new Set(now)].sort());
+      if (oldIdentity !== currentIdentity) changed.push(`newest main changed the failure identity for ${step}: old ${oldIdentity}, current ${currentIdentity}`);
+    }
+    if (changed.length) return { kind: "changed", reason: changed.join("; ") };
+    if (missing.length) return { kind: "missing", reason: `no failure identity for ${missing.join(", ")}: range not extended` };
+    return undefined;
+  };
+  let note: string | undefined;
+  let originalRangeOnly = false;
   const newest = main.commit();
   const current = measure(newest, [], input.steps, true);
   probes.push(current); remember(current, true);
@@ -164,10 +181,18 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
   else {
     const steps = input.steps.filter(step => current.failed.includes(step));
     if (!steps.length) return held(`newest main ${newest.slice(0, 12)} was red without naming a failed step`);
-    const error = extend(newest);
-    if (error) return held(error);
-    // Finish the historical decision before observing any intervening moves.
-    result = searchHistory({ ...range, steps }, historical, current);
+    const initialChange = newest === input.candidates.at(-1) ? undefined : compare(input.steps, input.failures, current);
+    if (!initialChange) {
+      const error = extend(newest);
+      if (error) return held(error);
+    } else {
+      originalRangeOnly = true;
+      if (initialChange.kind === "missing") note = initialChange.reason;
+    }
+    // A different or unknown initial identity cannot move the historical tip.
+    // Confirm that original tip freshly: a flake must stay a flake.
+    result = searchHistory({ ...range, steps }, historical, current, initialChange?.kind === "changed" ? initialChange.reason : undefined);
+    if (initialChange?.kind === "changed" && result.kind === "held") return { ...result, probes };
     if (result.kind === "culprit") result.flaky = [...new Set([...result.flaky, ...input.steps.filter(step => !steps.includes(step))])];
   }
   let deciding = current;
@@ -185,14 +210,12 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
       if (deciding.verdict === "red") {
         const before = [...current.failed].sort(), after = [...deciding.failed].sort();
         if (!after.length) return held(`newest main ${deciding.base.slice(0, 12)} was red without naming a failed step`);
-        if (current.verdict !== "red" || after.some(step => !before.includes(step))) return held("newest main added a failed step");
-        for (const step of after) {
-          const was = current.failures?.[step], now = deciding.failures?.[step];
-          if (!was?.length || !now?.length) return held(`failure identity unavailable for ${step} at the decision tips`);
-          if (JSON.stringify([...new Set(was)].sort()) !== JSON.stringify([...new Set(now)].sort())) return held(`newest main changed the failure identity for ${step}`);
-        }
+        if (current.verdict !== "red") return held("newest main added a failed step");
+        const change = compare(before, current.failures, deciding);
+        if (change && !(originalRangeOnly && change.kind === "missing")) return held(change.kind === "missing" ? `failure identity unavailable: ${change.reason}` : change.reason);
+        if (change?.kind === "missing" && originalRangeOnly) note = change.reason;
         const previousReverts = JSON.stringify([...range.reverted].sort());
-        const error = extend(deciding.base);
+        const error = originalRangeOnly ? undefined : extend(deciding.base);
         if (error) return held(error);
         const changedCompositions = previousReverts !== JSON.stringify([...range.reverted].sort());
         if (changedCompositions || after.length < before.length) {
@@ -210,11 +233,12 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
     }
   }
   if (deciding.verdict === "green") return green(deciding, through);
-  return { ...result, probes, main: { commit: deciding.base, through, run: deciding.run } };
+  return { ...result, probes, main: { commit: deciding.base, through, run: deciding.run },
+    range: { tip: range.candidates.at(-1)!, candidates: range.candidates.length }, ...(note ? { note } : {}) };
 }
 
 /** Bisection only sees steps that still fail on main with culprits left in. */
-function searchHistory(input: SearchInput, measure: Measure, current: Probe): HistoryResult {
+function searchHistory(input: SearchInput, measure: Measure, current: Probe, changedIdentity?: string): HistoryResult {
   const probes: Probe[] = [];
   const n = input.candidates.length;
   const tip = input.candidates[n - 1];
@@ -224,6 +248,7 @@ function searchHistory(input: SearchInput, measure: Measure, current: Probe): Hi
   probes.push(confirm);
   if (confirm.verdict === "skip") return { kind: "held", reason: `the tip could not be measured again: ${confirm.reason ?? "no verdict"}`, probes };
   if (confirm.verdict === "green") return { kind: outAtTip.length ? "explained" : "flaky", probes };
+  if (changedIdentity) return { kind: "held", reason: changedIdentity, probes };
   const failed = input.steps.filter(step => confirm.failed.includes(step));
   const flaky = input.steps.filter(step => !confirm.failed.includes(step));
   const control = measure(input.good, [], failed, true);

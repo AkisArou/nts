@@ -3,6 +3,8 @@
 // The culprit search over synthetic histories: bisection finds the first red
 // commit wherever it is, a known culprit is taken out of the commits before
 // its revert, and a red that does not repeat reverts nothing.
+import {censusReport, recordedCensus} from "./census-log-fixture.ts";
+import {censusFailureIdentity} from "./measure.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bisect, search as searchAtMain, takenOut, type Main, type Measure, type Probe, type SearchInput } from "./culprit.ts";
@@ -57,7 +59,7 @@ function model(n: number, breakers: Record<number, string[]>, options: { flakyOn
     return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, failures: Object.fromEntries(failed.map(step => [step, [`${step}: case-a`]])), run: `run-${calls.length}` };
   };
   const input = (steps: string[], pending: number[] = [], reverted: [number, number][] = []): SearchInput => ({
-    good: "g".repeat(40), candidates, steps,
+    good: "g".repeat(40), candidates, steps, failures: Object.fromEntries(steps.map(step => [step, [`${step}: case-a`]])),
     pending: pending.map(i => candidates[i]!),
     reverted: new Map(reverted.map(([culprit, revert]) => [candidates[culprit]!, candidates[revert]!])),
   });
@@ -325,13 +327,67 @@ test("a newly failed step at the decision tip holds", () => {
   assert.match(result.kind === "held" ? result.reason : "", /added a failed step/);
 });
 
-test("an initial main ahead of the failed run can find a culprit in the extended range", () => {
-  const m = model(16, { 12: ["tests"] }), input = m.input(["tests"]);
+test("an initial newer main extends only the original run's matching identities", () => {
+  const m = model(16, { 2: ["tests"] }), input = m.input(["tests"]);
   input.candidates = m.candidates.slice(0, 8);
   const result = search(input, m.measure, { commit: () => m.candidates.at(-1)!, reaches: () => true,
     range: () => ({ candidates: m.candidates, reverted: new Map() }) });
-  assert.equal(result.kind === "culprit" && result.commit, m.candidates[12]);
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[2]);
+  assert.deepEqual("range" in result && result.range, {tip: m.candidates[15], candidates: 16});
 });
+
+test("an initial newer main cannot turn an original flake into a later culprit", () => {
+  const m = model(16, { 12: ["tests"] }), input = m.input(["tests"]);
+  input.candidates = m.candidates.slice(0, 8); delete input.failures;
+  const result = search(input, m.measure, {commit: () => m.candidates[15]!, reaches: () => true,
+    range: () => { throw Error("an unknown identity cannot extend the range"); }});
+  assert.equal(result.kind, "flaky");
+  assert.ok(m.calls.some(p => p.base === 7 && p.fresh), "confirm the original tip, not the later defect's tip");
+});
+
+test("a known initial identity change confirms the original tip, preserves flakes and otherwise holds with both identities", () => {
+  for (const originalRed of [false, true]) {
+    const m = model(16, originalRed ? {2: ["tests"]} : {}), input = m.input(["tests"]);
+    input.candidates = m.candidates.slice(0, 8);
+    const result = search(input, (base, reverts, steps, fresh) => base === m.candidates[15]
+      ? {base, reverts, steps, verdict: "red", failed: steps, failures: {tests: ["tests: case-y"]}, run: "newest-y"}
+      : m.measure(base, reverts, steps, fresh),
+    {commit: () => m.candidates[15]!, reaches: () => true, range: () => { throw Error("changed identity cannot extend"); }});
+    assert.equal(result.kind, originalRed ? "held" : "flaky");
+    assert.ok(m.calls.some(p => p.base === 7 && p.fresh));
+    if (result.kind === "held") assert.match(result.reason, /old .*case-a.*current .*case-y/);
+  }
+});
+
+test("missing original identity keeps an old-range finding and a named note even as main moves again", () => {
+  const m = model(20, {2: ["tests"]}), input = m.input(["tests"]);
+  input.candidates = m.candidates.slice(0, 8); delete input.failures;
+  let tip = m.candidates[15]!;
+  const result = search(input, (...args) => {
+    const p = m.measure(...args); delete p.failures;
+    if (p.base === m.candidates[2] && args[3]) tip = m.candidates[19]!;
+    return p;
+  }, {commit: () => tip, reaches: () => true, range: () => { throw Error("no identity means no extension"); }});
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[2]);
+  assert.deepEqual("range" in result && result.range, {tip: m.candidates[7], candidates: 8});
+  assert.equal("note" in result && result.note, "no failure identity for tests: range not extended");
+});
+
+test("an initial narrowed failed-step set extends when its remaining identity is unchanged", () => {
+  const m = model(16, {2: ["A"], 5: ["B"]}), input = m.input(["A", "B"]);
+  input.candidates = m.candidates.slice(0, 8);
+  const requests: {base: string; steps: string[]}[] = [];
+  const result = search(input, (base, reverts, steps, fresh) => {
+    requests.push({base, steps});
+    if (base === m.candidates[15]) return {base, reverts, steps, verdict: "red", failed: ["B"], failures: {B: ["B: case-a"]}, run: "narrowed"};
+    return m.measure(base, reverts, steps, fresh);
+  }, {commit: () => m.candidates[15]!, reaches: () => true, range: () => ({candidates: m.candidates, reverted: new Map()})});
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[5]);
+  assert.deepEqual(result.kind === "culprit" && result.failed, ["B"]);
+  assert.deepEqual("range" in result && result.range, {tip: m.candidates[15], candidates: 16});
+  assert.ok(requests.slice(1).every(p => p.steps.join() === "B"));
+});
+
 
 
 test("a newly landed revert refreshes historical compositions before retaining a culprit", () => {
@@ -351,4 +407,61 @@ test("a newly landed revert refreshes historical compositions before retaining a
   assert.ok(extendedAt > 0);
   assert.ok(m.calls.slice(extendedAt).filter(call => call.base >= 2 && call.base < 8).every(call => call.reverts.includes(2)),
     "newly known culprit removal changes the composition key, so old red observations cannot be reused");
+});
+
+
+test("initial range extension uses identities carried by the real C census filter", t => {
+  const step = "test262-cases", raw = censusReport(["test/split/separator-undef.js: pass -> no-verdict (crash)"]);
+  const filtered = recordedCensus(t, raw); assert.equal(filtered.status, 1);
+  const identity = censusFailureIdentity(filtered.stdout); assert.ok(identity, "C step output must retain its identity");
+  const m = model(16, {2: [step]}), input = m.input([step]);
+  input.candidates = m.candidates.slice(0, 8); input.failures = {[step]: identity};
+  let extensions = 0;
+  const result = search(input, (...args) => {
+    const p = m.measure(...args);
+    if (p.failed.length) p.failures = {[step]: identity};
+    return p;
+  }, {commit: () => m.candidates[15]!, reaches: () => true, range: () => {
+    extensions++; return {candidates: m.candidates, reverted: new Map()};
+  }});
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[2]);
+  assert.equal(extensions, 1, "the C record's preserved original identity authorizes the extension");
+  assert.deepEqual("range" in result && result.range, {tip: m.candidates[15], candidates: 16});
+});
+
+test("a known initial identity change cannot be masked by another step's missing detail", () => {
+  const reasons: string[] = [];
+  for (const steps of [["A", "B"], ["B", "A"]]) {
+    const m = model(16, {2: ["A"], 5: ["B"]}), input = m.input(steps);
+    input.candidates = m.candidates.slice(0, 8); input.failures = {B: ["B: case-a"]};
+    const result = search(input, (...args) => {
+      const p = m.measure(...args);
+      if (p.failed.includes("B")) p.failures = {B: [p.base === m.candidates[15] ? "B: case-y" : "B: case-a"]};
+      else p.failures = {};
+      return p;
+  }, {commit: () => m.candidates[15]!, reaches: () => true, range: () => { throw Error("must not extend"); }});
+  assert.equal(result.kind, "held");
+  assert.match(result.kind === "held" ? result.reason : "", /identity for B: old .*case-a.*current .*case-y/);
+  reasons.push(result.reason);
+  }
+  assert.equal(reasons[0], reasons[1], "step order does not change the verdict or explanation");
+});
+
+test("a known decision identity change cannot be masked by the original-range missing-detail fallback", () => {
+  const reasons: string[] = [];
+  for (const steps of [["A", "B"], ["B", "A"]]) {
+    const m = model(20, {2: ["A"], 5: ["B"]}), input = m.input(steps);
+    input.candidates = m.candidates.slice(0, 8); input.failures = {B: ["B: case-a"]};
+    let tip = m.candidates[15]!;
+    const result = search(input, (...args) => {
+      const p = m.measure(...args);
+      p.failures = p.failed.includes("B") ? {B: [p.base === m.candidates[19] ? "B: case-y" : "B: case-a"]} : {};
+      if (p.base === m.candidates[2] && args[3]) tip = m.candidates[19]!;
+      return p;
+  }, {commit: () => tip, reaches: () => true, range: () => { throw Error("must keep the original range"); }});
+  assert.equal(result.kind, "held");
+  assert.match(result.kind === "held" ? result.reason : "", /identity for B: old .*case-a.*current .*case-y/);
+  reasons.push(result.reason);
+  }
+  assert.equal(reasons[0], reasons[1], "step order does not change the verdict or explanation");
 });

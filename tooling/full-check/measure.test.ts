@@ -1,3 +1,4 @@
+import {censusReport, recordedCensus} from "./census-log-fixture.ts";
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
 // node --test tooling/full-check/measure.test.ts
 //
@@ -575,14 +576,7 @@ runAsCommand(import.meta.url,async()=>{
 });
 
 
-const censusDetails = (rows: string[], kind = "REGRESSED") => [
-  "  against results/fixture.tsv:",
-  `         ${rows.length}  ${kind}`,
-  ...rows.map(row => `              ${row}`),
-  ...(kind === "REGRESSED" ? ["         0  CHANGED"] : ["         0  REGRESSED"]),
-  "         0  MISSING",
-  "  NOT RECONCILED: the recorded outcomes changed; see above, then re-record with --record if intended",
-].join("\n");
+const censusDetails = censusReport;
 
 test("census failure identity retains complete verdict detail, independent of order and progress", () => {
   const a = "test/split/separator-undef.js: pass -> no-verdict (crash)", b = "test/other.js: pass -> refused";
@@ -610,4 +604,22 @@ test("failed measurement summaries expose case identity to the production probe 
   const log = censusDetails(["test/split/separator-undef.js: pass -> no-verdict (crash)"]);
   writeFileSync(join(run, "test262-llvm.log"), log);
   assert.deepEqual(readSummary(run, COMMIT, ["test262-llvm"]).failures, { "test262-llvm": censusFailureIdentity(log) });
+});
+
+
+test("the real recorded-C census filter preserves failure identities, failure status and the measurement count guard", t => {
+  for (const category of ["REGRESSED", "CHANGED", "MISSING"]) {
+    const raw = censusReport(["test/split/separator-undef.js: pass -> no-verdict (crash)"], category);
+    const filtered = recordedCensus(t, raw);
+    assert.equal(filtered.status, 1, filtered.stdout + filtered.stderr);
+    assert.match(filtered.stdout, /^  against results\/fixture.tsv:$/m);
+    assert.doesNotMatch(filtered.stdout, /census start:/);
+    const identity = censusFailureIdentity(raw); assert.ok(identity);
+    assert.deepEqual(censusFailureIdentity(filtered.stdout), identity, `${category}: raw and actual filtered identities agree`);
+  }
+  const green = "  pass-count: 1\n  negatives-accepted: 0\n  reconciled\n";
+  assert.equal(recordedCensus(t, green, 0).status, 0, "measured passing control");
+  const missing = recordedCensus(t, green.replace("  pass-count: 1\n", ""), 0);
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, /no pass-count line: the run measured nothing/);
 });

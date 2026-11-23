@@ -16,13 +16,15 @@ export type Finding = {
   culprit: string;
   subject: string;
   steps: string[];
-  /** The red run the search started from, and the commit it measured. */
+  /** The red run at the actual searched tip, and the commit it measured. */
   run: string;
   tip: string;
   /** The part's last green commit. */
   good: string;
   /** How many commits the search had to choose from, and the runs it measured. */
   candidates: number;
+  /** Search-owned explanation of a deliberately unextended range. */
+  note?: string;
   probes: string[];
   /** A fresh as-is main observation, carried only across unrelated inputs. */
   main: MainProbe;
@@ -41,6 +43,7 @@ export function revertMessage(finding: Finding): string {
     `${finding.steps.join(", ")} (run ${finding.run}). Among the ${finding.candidates}`,
     `commit(s) since the last green ${finding.part} run at ${short(finding.good)}, the culprit`,
     `search found ${short(finding.culprit)} to be the first red one.${runs}`,
+    ...(finding.note ? [finding.note] : []),
     `Newest main remained red at ${short(finding.main.commit)} (probe ${finding.main.run}),`,
     `valid through ${short(finding.main.through)} by the owed rules.`,
     "",
@@ -65,6 +68,7 @@ export function issueComment(finding: Finding, revert: string | null, why?: stri
     "",
     `- The logs: ${logs}.`,
     `- The culprit search chose it among the ${finding.candidates} commit(s) since the last green ${finding.part} run at ${short(finding.good)}${probes}.`,
+    ...(finding.note ? [`- ${finding.note}`] : []),
     `- Newest main was still red at ${short(finding.main.commit)} (probe \`${finding.main.run}\`), valid through ${short(finding.main.through)} by the owed rules.`,
     revert ? `- Its revert, ${short(revert)}, is queued first in the landing check.` : `- It could not be reverted automatically (${why ?? "no revert"}): revert it by hand.`,
     "",

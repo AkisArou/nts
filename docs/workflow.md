@@ -578,6 +578,14 @@ What follows from a run:
   composition and step, with their original run provenance. A main move never
   discards these observations; ordinary historical probes can reuse them in the
   next cycle, while fresh confirmations still execute.
+  The first newest-main probe extends the original red run's range only when
+  its remaining failed steps keep the identities read from that red run's log.
+  A partial fix may narrow that set; a newly failed step never extends it.
+  Otherwise the original red commit is confirmed freshly. A flake stays flaky;
+  a known identity change holds, naming the old and current identities. Missing
+  original detail keeps the original range's search, with a named explanation
+  in the search log and Finding. An extended Finding uses its actual tip,
+  candidate count and that tip's measured run together.
   The search finishes its historical bisection before checking main again.
   When changed inputs reach the failed steps, it measures the newest decision
   tip once. The range extends through that tip only if no new step fails and
@@ -586,7 +594,8 @@ What follows from a run:
   the sorted complete REGRESSED, CHANGED and MISSING verdict-detail rows from
   census comparison sections, including case names and verdict changes. Progress,
   timing and run paths outside those rows are not identity. Truncated or missing
-  detail proves nothing; two missing identities never compare equal.
+  detail proves nothing; two missing identities never compare equal. A known
+  identity change on any step takes precedence over missing detail on another.
   A green decision tip records a fix forward and reverts nothing; a changed
   failure, unavailable identity, unknown reach or a non-extending first-parent
   history holds by name. If main moves during the decision probe, unrelated

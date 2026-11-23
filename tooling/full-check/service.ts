@@ -413,7 +413,7 @@ async function searchAndRevert(fx: Effects, state: State, part: Part, red: RunRe
   // be made included: taken out where it applies, so it hides no other.
   const pending = state.culprits.filter(c => !landed.has(c.commit)).map(c => c.commit);
   fx.log(`culprit search over ${candidates.length} commit(s) since ${short(good)} for ${red.failed.join(", ")}${pending.length ? `, taking out the pending reverts of ${pending.map(short).join(", ")}` : ""}`);
-  const result = search({ good, candidates, steps: red.failed, pending, reverted }, probe(fx, state, part), {
+  const result = search({ good, candidates, steps: red.failed, failures: readFailureIdentities(red.run, red.failed), pending, reverted }, probe(fx, state, part), {
     commit: () => {
       const main = fx.git.commit("refs/heads/main");
       if (!main) throw Error("no main for fix-forward probe");
@@ -425,6 +425,7 @@ async function searchAndRevert(fx: Effects, state: State, part: Part, red: RunRe
       return { candidates, reverted: revertsIn(fx.git, candidates) };
     },
   });
+  if ("note" in result && result.note) fx.log(`culprit search: ${result.note}`);
   const evidence = result.main;
   if (evidence) fx.log(`fix-forward decision: main ${short(evidence.commit)}, valid through ${short(evidence.through)}; probe ${evidence.run}`);
   const runs = result.probes.map(p => p.run).filter(Boolean);
@@ -449,8 +450,10 @@ async function searchAndRevert(fx: Effects, state: State, part: Part, red: RunRe
     case "culprit": {
       if (!evidence) return "held: the culprit has no newest-main probe";
       const finding: Finding = {
-        part, culprit: result.commit, subject: fx.git.subject(result.commit), steps: result.failed, run: red.run,
-        tip: red.commit, good, candidates: candidates.length, probes: runs, main: evidence,
+        part, culprit: result.commit, subject: fx.git.subject(result.commit), steps: result.failed,
+        run: result.range && result.range.tip !== red.commit ? evidence.run : red.run,
+        tip: result.range?.tip ?? red.commit, good, candidates: result.range?.candidates ?? candidates.length,
+        probes: runs, main: evidence, ...(result.note ? { note: result.note } : {}),
       };
       if (result.flaky.length) fx.log(`also red at ${short(red.commit)} once, green when measured again: ${result.flaky.join(", ")}`);
       await revertCulprit(fx, state, finding);
