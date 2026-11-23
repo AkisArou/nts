@@ -26,7 +26,10 @@ fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::C)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::C,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .unwrap();
@@ -56,7 +59,12 @@ fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
 #[test]
 fn identical_storage_with_different_input_absence_keeps_two_field_bodies() {
     let snapshot = snapshot("tests/refusals/a-literal-method-call-through-two-faces-loses-absence");
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     let bodies: Vec<_> = prepared
         .program
         .funcs
@@ -94,7 +102,12 @@ fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
             .iter()
             .any(|f| f.name.contains("#read@field$"))
     );
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(!prepared.program.funcs.iter().any(|f| f.name == "call"));
     assert!(
         prepared
@@ -111,7 +124,12 @@ fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
 fn a_private_helper_proves_every_incoming_replacement() {
     let snapshot =
         snapshot("tests/programs/a-literal-method-replacement-proved-through-a-private-helper");
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared
             .program
@@ -138,7 +156,12 @@ fn a_private_helper_proves_every_incoming_replacement() {
 #[test]
 fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
     let snapshot = snapshot("tests/refusals/a-literal-method-helper-has-a-narrowing-caller");
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         !prepared
             .program
@@ -169,7 +192,12 @@ fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
 fn method_identity_copies_cover_aliases_and_downstream_helpers() {
     let snapshot =
         snapshot("tests/programs/a-literal-method-identity-preserved-through-another-interface");
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert_eq!(
         prepared.program.uncompiled,
         [] as [nts_core::hir::Uncompiled; 0]
@@ -201,7 +229,12 @@ fn method_identity_copies_cover_aliases_and_downstream_helpers() {
 fn mixed_comparison_and_invocation_preserves_the_legacy_face_globally() {
     let snapshot =
         snapshot("tests/programs/a-literal-interface-comparison-and-call-keeps-its-source-path");
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert_eq!(
         prepared.program.uncompiled,
         [] as [nts_core::hir::Uncompiled; 0]

@@ -106,7 +106,12 @@ fn every_runtime_call_agrees_with_its_declaration() {
         .snapshot(&tsconfig)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::Llvm,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -119,7 +124,10 @@ fn every_runtime_call_agrees_with_its_declaration() {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();
@@ -215,7 +223,10 @@ fn arm64_passes_an_erased_value_as_two_words() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::Llvm,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .unwrap();
@@ -289,7 +300,12 @@ fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
         .snapshot(&tsconfig)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::Llvm,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -349,7 +365,12 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
         .snapshot(&tsconfig)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::Llvm,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

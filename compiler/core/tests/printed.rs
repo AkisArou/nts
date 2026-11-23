@@ -170,8 +170,12 @@ fn settled_printer_checks_follow_the_parameter_entry_split() {
     }
     // The manufactured missing generic callee and the split's empty prefix
     // blocks are settled by preparation before verification.
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("the settled program verifies");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("the settled program verifies");
     assert!(hir::verify::verify(&prepared.program).is_ok());
 }
 

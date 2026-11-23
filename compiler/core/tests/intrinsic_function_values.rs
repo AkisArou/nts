@@ -20,7 +20,10 @@ fn prepared(provided: hir::features::Provided) -> hir::Prepared {
         &snapshot,
         &hir::Options {
             provided,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .expect("valid prepared HIR")

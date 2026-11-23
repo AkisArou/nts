@@ -50,7 +50,10 @@ fn the_prepared_32_bit_constants_equal_the_node_oracle() {
             &hir::Options {
                 provider,
                 roots: hir::reachable::Roots::EveryExport,
-                ..hir::Options::new(nts_core::hir::backend::Backend::C)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::C,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .expect("the coercion population prepares");

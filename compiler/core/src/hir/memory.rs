@@ -177,7 +177,10 @@ mod tests {
         for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
             let options = Options {
                 provider,
-                ..Options::new(crate::hir::backend::Backend::C)
+                ..Options::new(
+                    crate::hir::backend::Backend::C,
+                    crate::hir::EntryUnwind::Terminal,
+                )
             };
             let before = analysis_runs();
             let normal = hir::prepare_with(&snapshot, &options).expect("the control prepares");

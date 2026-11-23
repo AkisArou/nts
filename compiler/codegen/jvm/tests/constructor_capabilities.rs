@@ -61,7 +61,7 @@ fn the_real_stream_constructor_prepares_with_both_ambient_contracts() {
                 &snapshot,
                 &hir::Options {
                     provider,
-                    ..hir::Options::new(backend)
+                    ..hir::Options::new(backend, nts_core::hir::EntryUnwind::Terminal)
                 },
             )
             .unwrap_or_else(|failure| panic!("{ambient}/{mode}: {failure:?}"));

@@ -15,8 +15,12 @@ fn prepared() -> hir::Prepared {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR verifies");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "every fixture export must compile: {:#?}",

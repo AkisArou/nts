@@ -156,7 +156,10 @@ fn native_sort_case(source: &str, driver: &str, expected_script: &str, numeric_o
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::Llvm,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .expect("prepared HIR");

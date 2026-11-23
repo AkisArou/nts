@@ -37,7 +37,10 @@ fn only_proved_integer_extrema_specialize_without_narrowing_their_operands() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::C)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::C,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .expect("prepared HIR verifies");

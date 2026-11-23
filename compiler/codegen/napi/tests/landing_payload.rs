@@ -38,10 +38,14 @@ fn the_landing_releases_moved_and_borrowed_payloads_once() {
             .prepare(&hir::PreparationOptions {
                 provider: hir::Memory::ReferenceCounting,
                 roots: hir::reachable::Roots::EntrySurface,
-                ..hir::PreparationOptions::new(backend)
+                ..hir::PreparationOptions::new(backend, nts_core::hir::EntryUnwind::Resuming)
             })
             .unwrap();
         assert_eq!(prepared.program.backend, Some(backend));
+        assert_eq!(
+            prepared.program.entry_unwind,
+            Some(hir::EntryUnwind::Resuming)
+        );
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",

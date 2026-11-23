@@ -84,7 +84,10 @@ fn the_entry_surface_pipeline_produces_valid_hir() {
     let snapshot = snapshot();
     let options = hir::Options {
         roots: Roots::EntrySurface,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     if let Err(problems) = hir::verify::verify(&prepared.program) {

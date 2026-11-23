@@ -34,7 +34,10 @@ fn execute(name: &str, source: &str, caller: &str, reference_result: bool, table
     assert!(!snapshot.has_errors(), "fixture must typecheck");
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .unwrap();
     assert!(

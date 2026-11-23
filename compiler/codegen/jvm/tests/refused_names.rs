@@ -32,7 +32,10 @@ fn a_discarded_jvm_body_keeps_no_literal_from_its_unwritten_code() {
         &snapshot,
         &hir::Options {
             specialize_numbers: false,
-            ..hir::Options::new(nts_core::hir::backend::Backend::Jvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Jvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .expect("prepare project");

@@ -108,7 +108,7 @@ pub(super) enum Helper {
     Raises,
 }
 
-pub(super) fn helper(name: &str) -> Option<Helper> {
+pub(super) fn helper(name: &str, entry_unwind: Option<super::EntryUnwind>) -> Option<Helper> {
     if super::runtime::reads_only(name) {
         return Some(Helper::Reads);
     }
@@ -190,7 +190,14 @@ pub(super) fn helper(name: &str) -> Option<Helper> {
         "nts_array_pop" | "nts_array_shift" | "nts_array_shift_ref" | "nts_array_shift_value" => {
             Helper::Takes { from: 0 }
         }
-        "nts_raise" | "nts_uncaught" => Helper::Raises,
+        "nts_raise" => Helper::Raises,
+        // Ownership transfer alone does not escape a region when the process
+        // ends. Only a product that installs a surviving landing keeps it.
+        // Raw HIR with no product contract refuses this helper by name.
+        "nts_uncaught" => match entry_unwind? {
+            super::EntryUnwind::Terminal => Helper::Reads,
+            super::EntryUnwind::Resuming => Helper::Raises,
+        },
         _ => return None,
     })
 }
@@ -555,7 +562,7 @@ impl<'p, 's> Facts<'p, 's> {
                     callee: Callee::External(name),
                     ..
                 } => matches!(
-                    helper(name),
+                    helper(name, self.program.entry_unwind),
                     Some(
                         Helper::Makes
                             | Helper::MakesOrRetains { .. }
@@ -616,7 +623,7 @@ impl<'p, 's> Facts<'p, 's> {
                 callee: Callee::External(name),
                 args,
                 ..
-            } => match helper(name) {
+            } => match helper(name, self.program.entry_unwind) {
                 // The answer is fresh or the retained input itself: fresh
                 // (region-relative) exactly when the input is.
                 Some(Helper::MakesOrRetains { from }) => {
@@ -821,7 +828,7 @@ impl<'p, 's> Facts<'p, 's> {
                 callee: Callee::External(name),
                 args,
                 ..
-            } => match helper(name) {
+            } => match helper(name, self.program.entry_unwind) {
                 Some(Helper::Reads) => Ok(true),
                 // The answer may be the value itself, retained: what is
                 // read out of the answer is read out of the value.
@@ -967,7 +974,7 @@ impl<'p, 's> Facts<'p, 's> {
                 ..
             } => (
                 matches!(
-                    helper(name),
+                    helper(name, self.program.entry_unwind),
                     Some(
                         Helper::Makes
                             | Helper::MakesOrRetains { .. }
@@ -1133,7 +1140,7 @@ impl Judged<'_> {
                     }
                 }
             }
-            Callee::External(name) => match helper(name) {
+            Callee::External(name) => match helper(name, facts.program.entry_unwind) {
                 Some(Helper::Reads) => {}
                 Some(Helper::Makes) => self.allocates = true,
                 Some(Helper::MakesOrRetains { from }) => {
@@ -1689,54 +1696,70 @@ mod tests {
 
     #[test]
     fn thrown_values_escape_a_region_through_either_runtime_handover() {
-        for (callee, raises) in [
-            ("nts_raise", true),
-            ("nts_uncaught", true),
-            ("nts_raising", false),
+        assert!(
+            helper("nts_uncaught", None).is_none(),
+            "raw HIR has no product contract"
+        );
+        for entry_unwind in [
+            super::super::EntryUnwind::Terminal,
+            super::super::EntryUnwind::Resuming,
         ] {
-            let values = vec![
-                op(OpKind::Param(0), object()),
-                op(OpKind::ObjectNew { frame: false }, object()),
-                op(
-                    OpKind::Erase {
-                        value: ValueId(1),
-                        absent: super::super::Absent::Impossible,
-                        slots: super::super::Absent::Impossible,
-                    },
-                    HirType::Erased,
+            for (callee, raises) in [
+                ("nts_raise", true),
+                (
+                    "nts_uncaught",
+                    entry_unwind == super::super::EntryUnwind::Resuming,
                 ),
-                op(OpKind::ConstNull, HirType::Managed(ManagedType::String)),
-                op(
-                    OpKind::Call {
-                        callee: Callee::External(callee.to_owned()),
-                        args: match callee {
-                            "nts_uncaught" => vec![ValueId(2), ValueId(3)],
-                            "nts_raise" => vec![ValueId(2)],
-                            _ => vec![],
+                ("nts_raising", false),
+            ] {
+                let values = vec![
+                    op(OpKind::Param(0), object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(
+                        OpKind::Erase {
+                            value: ValueId(1),
+                            absent: super::super::Absent::Impossible,
+                            slots: super::super::Absent::Impossible,
                         },
-                        frame: None,
+                        HirType::Erased,
+                    ),
+                    op(OpKind::ConstNull, HirType::Managed(ManagedType::String)),
+                    op(
+                        OpKind::Call {
+                            callee: Callee::External(callee.to_owned()),
+                            args: match callee {
+                                "nts_uncaught" => vec![ValueId(2), ValueId(3)],
+                                "nts_raise" => vec![ValueId(2)],
+                                _ => vec![],
+                            },
+                            frame: None,
+                        },
+                        HirType::Void,
+                    ),
+                ];
+                let program = Program {
+                    funcs: vec![func("root", values, ValueId(1))],
+                    entry_unwind: Some(entry_unwind),
+                    ..Program::default()
+                };
+                let shared = Shared::new(&program);
+                let mut facts = Facts::new(
+                    &shared,
+                    Scope::Region {
+                        root: 0,
+                        members: &[0],
                     },
-                    HirType::Void,
-                ),
-            ];
-            let program = Program {
-                funcs: vec![func("root", values, ValueId(1))],
-                ..Program::default()
-            };
-            let shared = Shared::new(&program);
-            let mut facts = Facts::new(
-                &shared,
-                Scope::Region {
-                    root: 0,
-                    members: &[0],
-                },
-            );
-            facts.settle();
-            assert_eq!(facts.raises[0], raises, "{callee}");
-            if raises {
+                );
+                facts.settle();
+                assert_eq!(facts.raises[0], raises, "{callee}/{entry_unwind:?}");
                 assert_eq!(
                     facts.body_verdict(0).map_err(|refusal| refusal.reason),
-                    Err("may raise a value it made".to_owned())
+                    if raises {
+                        Err("may raise a value it made".to_owned())
+                    } else {
+                        Ok(())
+                    },
+                    "{callee}/{entry_unwind:?}"
                 );
             }
         }

@@ -64,7 +64,10 @@ fn execute(kind: &str) -> Vec<String> {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();

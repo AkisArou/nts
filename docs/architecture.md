@@ -27,6 +27,11 @@ Preparation requires the selected backend explicitly; it has no default.
 The same input supplies backend capabilities, so drivers cannot independently
 set a table capability that disagrees with the backend. Raw lowering is shared;
 each prepared branch retains its backend identity beside its product roots.
+Preparation also requires the product's `EntryUnwind` contract: `Terminal`
+for executables and ordinary libraries, `Resuming` for Node-API addons that
+install a surviving landing. It has no default and is not inferred from the
+backend or open roots. An uncaught throw escapes a region only in a resuming
+product; a terminal throw ends the process.
 
 **Memory is chosen per build, not per backend.** `hir::Memory` has three:
 
@@ -93,6 +98,10 @@ beside the responsibilities they exercise.
 
 ## Decisions
 
+- Preparation requires the product's uncaught-exit contract, separately from
+  backend and roots. The product shape supplies it; an ordinary open library
+  installs no surviving landing
+  ([log](records/notebooks/decisions-log.md#preparation-names-the-products-uncaught-exit-11-23)).
 - Preparation requires a backend, including in tests and inspection commands.
   Native fixtures may share C and LLVM HIR only while their equality control
   passes; JVM branches prepare independently

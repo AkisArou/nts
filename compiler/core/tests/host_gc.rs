@@ -15,14 +15,20 @@ fn host_gc_keeps_logical_layouts_without_native_placement_or_counting() {
     assert!(!snapshot.has_errors());
     let native = hir::prepare_with(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .unwrap();
     let managed = hir::prepare_with(
         &snapshot,
         &hir::Options {
             provider: Memory::HostGc,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();
@@ -71,7 +77,10 @@ fn async_frames_only_have_lifetime_markers_for_native_providers() {
                 &snapshot,
                 &hir::Options {
                     provider,
-                    ..hir::Options::new(nts_core::hir::backend::Backend::C)
+                    ..hir::Options::new(
+                        nts_core::hir::backend::Backend::C,
+                        nts_core::hir::EntryUnwind::Terminal,
+                    )
                 },
             )
             .unwrap();

@@ -4415,3 +4415,18 @@ JVM fixtures prepare their own branches now. The payload fixture prepares once
 per emitted backend.
 
 The contract is in [architecture](../../architecture.md#the-pipeline).
+## Preparation names the product's uncaught exit (11-23)
+
+The region helper contract distinguishes ownership transfer from escape to a
+surviving host. `nts_raise` always records a value for a caller. `nts_uncaught`
+ends an ordinary executable or library process, so its owned value need not
+escape a region there; a Node-API addon installs a landing and its host resumes,
+so the value must escape there.
+
+`EntryUnwind::{Terminal, Resuming}` is therefore required at every preparation
+boundary beside Backend, with no Default. The product Shape supplies the fact
+once; backend and reachability roots cannot decide it. An ordinary C shared
+library with EveryExport roots is terminal. Tests name the product contract,
+and raw HIR with no contract cannot license an uncaught helper as region-safe.
+
+The contract is in [architecture](../../architecture.md#the-pipeline).

@@ -185,7 +185,10 @@ fn build(provider: hir::Memory) -> ScratchDir {
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();

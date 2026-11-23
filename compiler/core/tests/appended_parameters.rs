@@ -31,7 +31,10 @@ fn prepared() -> hir::Program {
         .expect("snapshot should succeed");
     let options = Options {
         provider: Memory::NoGc,
-        ..Options::new(nts_core::hir::backend::Backend::C)
+        ..Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     hir::prepare_with(&snapshot, &options)
         .expect("prepared HIR verifies")

@@ -37,7 +37,7 @@ fn prepared(name: &str) -> hir::Program {
     // **Exactly what `nts hir --prepared` builds**, options and all, because
     // that is the program a backend is handed and its own comment says so.
     //
-    // The options are not a detail: with `Options::new(nts_core::hir::backend::Backend::C)` both dead
+    // The options are not a detail: with `Options::new(nts_core::hir::backend::Backend::C, nts_core::hir::EntryUnwind::Terminal)` both dead
     // constants survive, and I wrote the test that way first and watched it
     // fail against a compiler that was optimising correctly. A test that
     // prepares the program differently from every consumer of it is measuring
@@ -45,7 +45,10 @@ fn prepared(name: &str) -> hir::Program {
     let options = hir::Options {
         provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     hir::prepare_unverified(&snapshot, &options).program
 }

@@ -211,7 +211,10 @@ fn prepare(name: &str, provider: hir::Memory) -> (ScratchDir, hir::Prepared) {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::Llvm,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .unwrap(),
@@ -379,7 +382,12 @@ fn arc_reserved_selectors_and_uncounted_ownership_are_refused() {
             .snapshot(&dir.join("tsconfig.json"))
             .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::Llvm,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert!(
             prepared
                 .diagnostics

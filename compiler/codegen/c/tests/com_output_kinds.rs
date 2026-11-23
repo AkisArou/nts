@@ -265,7 +265,10 @@ export function run(probe: Probe, mode: c_int): Float64 {{
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();

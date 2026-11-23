@@ -30,9 +30,13 @@ fn snapshot(relative: &str) -> SemanticSnapshot {
 }
 
 fn prepared(relative: &str) -> hir::Program {
-    hir::prepare(&snapshot(relative), hir::backend::Backend::C)
-        .expect("valid prepared HIR")
-        .program
+    hir::prepare(
+        &snapshot(relative),
+        hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("valid prepared HIR")
+    .program
 }
 
 fn lowered(relative: &str) -> hir::Program {

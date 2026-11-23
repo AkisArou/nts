@@ -18,7 +18,10 @@ fn prepared() -> Program {
         .expect("snapshot");
     hir::prepare_with(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .expect("valid prepared HIR")
     .program

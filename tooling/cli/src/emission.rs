@@ -115,7 +115,7 @@ impl Metadata {
                 && emission.host.checkpoints_after_callbacks(),
             targets: emission.scalar_targets(),
             provided: provided(backend),
-            ..hir::PreparationOptions::new(backend)
+            ..hir::PreparationOptions::new(backend, emission.shape.entry_unwind())
         })
     }
 }
@@ -248,6 +248,21 @@ impl Input {
 mod tests {
     use super::{Shape, product_roots};
     use nts_core::hir::reachable::Roots;
+
+    #[test]
+    fn open_roots_do_not_decide_whether_an_uncaught_throw_resumes() {
+        for (shape, expected) in [
+            (Shape::Executable, nts_core::hir::EntryUnwind::Terminal),
+            (Shape::Library, nts_core::hir::EntryUnwind::Terminal),
+            (Shape::Addon, nts_core::hir::EntryUnwind::Resuming),
+        ] {
+            assert!(matches!(
+                product_roots(shape, None, false),
+                Roots::EveryExport
+            ));
+            assert_eq!(shape.entry_unwind(), expected, "{shape:?}");
+        }
+    }
 
     /// Each shape's named roots: closed for an executable alone. A named entry
     /// never decides the variant; the product does.

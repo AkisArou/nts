@@ -77,7 +77,12 @@ export function run(): number {
 }
 "#,
     );
-    let prepared = hir::prepare(&used, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &used,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -104,7 +109,12 @@ fn a_package_named_like_a_flag_is_refused_at_its_module() {
         "/**\n * @ntsHeader f.h\n * @ntsPackage --libs\n */\ndeclare module \"c:flagged\" {\n  import type { c_int } from \"@nts/scalars\";\n  export function flagged_value(): c_int;\n}\n",
         "import { flagged_value } from \"c:flagged\";\nexport function run(): number { return flagged_value(); }\n",
     );
-    let prepared = hir::prepare(&flagged, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &flagged,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     // The source's error, said once and whole: no lowering-gap suffix.
     assert!(
         prepared.diagnostics.iter().any(|d| d.code == "NTS0005"

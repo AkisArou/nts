@@ -67,7 +67,10 @@ fn constants_fold_and_the_prepared_parser_abi_is_int32() {
         let options = hir::Options {
             provider,
             roots: hir::reachable::Roots::EveryExport,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid prepared radix HIR");
         for (name, constant, conversions) in [

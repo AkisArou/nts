@@ -199,8 +199,12 @@ fn a_typeof_comparison_is_folded_to_an_integer_compare() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    let prepared =
-        nts_core::hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR");
+    let prepared = nts_core::hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("valid HIR");
 
     // Through the *blocks*, not the value arena. Dead-code elimination drops a
     // value from the block that held it and leaves the definition behind, so
@@ -288,7 +292,14 @@ fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(nts_core::hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR"))
+    Some(
+        nts_core::hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .expect("valid HIR"),
+    )
 }
 
 fn erased_arrays(prepared: &nts_core::hir::Prepared) -> usize {

@@ -74,8 +74,12 @@ fn an_accumulator_bounded_by_a_32_bit_count_is_an_integer() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("prepared HIR should verify");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR should verify");
 
     let small = carried(&prepared.program, "small#whole");
     assert!(!small.is_empty(), "`small#whole` has a loop header");

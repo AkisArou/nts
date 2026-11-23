@@ -61,7 +61,10 @@ fn recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters() {
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .unwrap();
     assert!(

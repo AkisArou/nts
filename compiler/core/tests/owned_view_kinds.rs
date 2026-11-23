@@ -16,9 +16,13 @@ fn a_kind_is_owned_until_something_reaches_its_bytes() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    let program = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("valid HIR")
-        .program;
+    let program = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("valid HIR")
+    .program;
     let owned = hir::views::owned_view_kinds(&program);
     let int = |bits, signed| HirType::Int { bits, signed };
     let f64 = HirType::Float { bits: 64 };

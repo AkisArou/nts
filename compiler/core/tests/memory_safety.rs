@@ -19,7 +19,10 @@ fn prepared(name: &str) -> hir::Prepared {
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
             roots: hir::reachable::Roots::EveryExport,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     );
     assert!(

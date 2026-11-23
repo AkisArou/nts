@@ -57,7 +57,10 @@ fn execute(case: &str, source: &str, provider: hir::Memory) -> Vec<String> {
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();

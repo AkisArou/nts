@@ -41,7 +41,10 @@ fn narrowed_call_results_lose_only_the_integer_self_comparisons() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::C)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::C,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .expect("prepared HIR verifies");

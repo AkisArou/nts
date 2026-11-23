@@ -32,7 +32,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::new(nts_core::hir::backend::Backend::Jvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Jvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .map_err(|error| error.render(&snapshot.sources))?;

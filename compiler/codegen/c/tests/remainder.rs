@@ -59,7 +59,10 @@ fn a_remainder_answered_from_its_integers_compiles_warning_free() {
     assert!(!snapshot.has_errors(), "fixture must typecheck");
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .unwrap();
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);

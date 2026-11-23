@@ -383,7 +383,12 @@ fn opaque_pointers_reject_boxing_forgery_and_numeric_containers() {
             "{declarations} export function good(): number {{ return read(make()); }} {body}"
         );
         let snapshot = snapshot(name, &source);
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
         assert!(
             prepared.program.funcs.iter().any(|f| f.name == "good"),
@@ -415,7 +420,12 @@ fn opaque_pointee_identity_does_not_depend_on_signature_position() {
                 "import type {{ Opaque }} from \"c:types\"; type Handle = Opaque<\"_Counter\">; {declaration} {body} {witness}"
             );
             let snapshot = snapshot(&format!("opaque-position-{name}"), &source);
-            let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+            let prepared = hir::prepare(
+                &snapshot,
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+            .unwrap();
             assert!(
                 prepared.diagnostics.is_empty(),
                 "{:?}",
@@ -474,7 +484,12 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
             "{declarations} export function good(): number {{ const p = make(); p[0] = 42; return p[0]; }} {body}"
         );
         let snapshot = snapshot(&format!("scalar-pointer-{name}"), &source);
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
         assert!(
             prepared.program.funcs.iter().any(|f| f.name == "good"),
@@ -493,7 +508,12 @@ fn native_memory_verifier_rejects_corrupted_widths_and_indices() {
         "native-memory-verifier",
         "import type { Ptr } from \"c:types\"; export function run(p: Ptr<Uint8>, n: Uint8): number { p[0] = n; return p[1]; }",
     );
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -572,7 +592,12 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
                 export function run(): void {{ void make()[1]; }} {witness}"
             );
             let snapshot = snapshot(&format!("pointer-result-{brand}"), &source);
-            let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+            let prepared = hir::prepare(
+                &snapshot,
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+            .unwrap();
             assert!(
                 prepared.diagnostics.is_empty(),
                 "{brand}: {:?}",
@@ -627,7 +652,12 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
         }
     "#,
     );
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -655,7 +685,12 @@ fn sizes_of_two_structs_in_one_function_are_not_merged() {
         export function run(): number { return sizeof<One>() * 100 + sizeof<Three>(); }
     "#,
     );
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -802,7 +837,12 @@ fn local_addresses_cannot_outlive_or_free_their_storage() {
         "#
         );
         let snapshot = snapshot(&format!("local-{name}"), &source);
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert!(
             prepared.program.funcs.iter().any(|f| f.name == "good"),
             "{name}: {:?}",
@@ -866,7 +906,12 @@ fn no_escape_annotations_are_checked_and_scoped_to_their_declaration() {
         "#
             ),
         );
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert_eq!(
             prepared.diagnostics.is_empty(),
             expected,
@@ -925,7 +970,12 @@ fn a_borrow_contract_survives_the_prepared_pipeline() {
         "#
             ),
         );
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert!(
             prepared.diagnostics.is_empty(),
             "{name}: {:?}",
@@ -976,7 +1026,12 @@ fn a_copy_survives_and_is_refused_between_two_types() {
         export function go(): void { const a = local<A>(); const b = local<A>(); copy(a, b); }
     "#,
     );
-    let prepared = hir::prepare(&same, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &same,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1006,7 +1061,12 @@ fn a_copy_survives_and_is_refused_between_two_types() {
         export function go(): void { const a = local<A>(); const b = local<B>(); copy(a, b); }
     "#,
     );
-    let prepared = hir::prepare(&mismatched, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &mismatched,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared
             .diagnostics
@@ -1043,7 +1103,12 @@ fn a_promoted_variadic_tail_is_refused_with_the_type_to_declare() {
         "
             ),
         );
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         let refusal = prepared
             .diagnostics
             .iter()
@@ -1088,7 +1153,12 @@ fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
         export function run(): number { return consume(local<c_int>()); }
     "#,
     );
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert_eq!(prepared.diagnostics, [] as [nts_diagnostics::Diagnostic; 0]);
     for kind in 0..4 {
         let mut program = prepared.program.clone();
@@ -1202,7 +1272,12 @@ fn addrof_takes_a_native_place_and_nothing_else() {
         let caught = if typescript {
             Caught::Typescript
         } else {
-            let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+            let prepared = hir::prepare(
+                &snapshot,
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+            .unwrap();
             if prepared.diagnostics.is_empty() {
                 Caught::Nothing
             } else {
@@ -1301,7 +1376,12 @@ fn a_const_view_reads_and_does_not_write() {
             why = format!("{:?}", snapshot.diagnostics);
             Some("typescript")
         } else {
-            let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+            let prepared = hir::prepare(
+                &snapshot,
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+            .unwrap();
             if prepared.diagnostics.is_empty() {
                 None
             } else {
@@ -1375,7 +1455,12 @@ fn void_pointer_assignability_is_the_c_conversion() {
         let (snapshot, actual) = snapshot_allowing_errors(name, &format!("{header}{body}"));
         assert_eq!(actual, errors, "{name}: {:?}", snapshot.diagnostics);
         if !actual {
-            let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+            let prepared = hir::prepare(
+                &snapshot,
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+            .unwrap();
             assert!(
                 prepared.diagnostics.is_empty(),
                 "{name}: {:?}",
@@ -1459,7 +1544,12 @@ fn an_any_pointer_does_not_become_a_native_void_parameter() {
              export function go(p: Ptr<{element}>): void {{ accept(p); }}"
         );
         let snapshot = snapshot(&format!("native-pointer-{element}"), &source);
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert_eq!(
             !prepared.diagnostics.is_empty(),
             refused,
@@ -1497,7 +1587,12 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
     };
     let escaping = |name: &str, tag: &str| -> bool {
         let snapshot = snapshot(name, &program(tag));
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert!(
             prepared.diagnostics.is_empty(),
             "{name}: {:?}",
@@ -1635,7 +1730,12 @@ fn a_retained_callback_refuses_a_local_context_and_accepts_a_heap_one() {
         ),
     ] {
         let snapshot = snapshot(&format!("retained-{name}"), &format!("{header}{body}"));
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         assert_eq!(
             !prepared.diagnostics.is_empty(),
             refused,
@@ -1695,7 +1795,12 @@ fn an_async_callback_is_refused_and_an_async_caller_is_not() {
         ),
     ] {
         let snapshot = snapshot(&format!("bridge-{name}"), &format!("{header}{body}"));
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap();
         let said: Vec<&str> = prepared
             .diagnostics
             .iter()
@@ -1731,7 +1836,12 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
         export function run(): number { return drawn() + dashed(); }
     ",
     );
-    let prepared = hir::prepare(&called, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &called,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1747,7 +1857,12 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
         export function run(): number { return flag(); }
     ",
     );
-    let prepared = hir::prepare(&flagged, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &flagged,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     // The source's error, said once and whole: no lowering-gap suffix.
     assert!(
         prepared.diagnostics.iter().any(|d| d.code == "NTS0005"
@@ -1764,7 +1879,11 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
 /// too, so a function that was never compiled is not taken for one proven.
 fn refusals(name: &str, source: &str) -> Vec<(String, String)> {
     let snapshot = snapshot(name, source);
-    match hir::prepare(&snapshot, nts_core::hir::backend::Backend::C) {
+    match hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    ) {
         Ok(prepared) => prepared
             .diagnostics
             .into_iter()
@@ -2034,8 +2153,12 @@ fn a_kind_is_the_librarys_label_and_no_other() {
         "{library}export function f(): number {{ return takes_label(1) + takes_owned(2) + count() + Number(wide(3n)); }}\n"
     );
     let read = snapshot("library-label", &kept);
-    let prepared = hir::prepare(&read, nts_core::hir::backend::Backend::C)
-        .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    let prepared = hir::prepare(
+        &read,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -2079,8 +2202,12 @@ fn a_kind_is_the_librarys_label_and_no_other() {
          declare function takes_fake(v: Fake): number;\n\
          export function g(): number { return takes_fake(1); }\n";
     let read = snapshot("library-label-spoof", spoof);
-    let prepared = hir::prepare(&read, nts_core::hir::backend::Backend::C)
-        .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    let prepared = hir::prepare(
+        &read,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     assert!(
         prepared
             .diagnostics
@@ -2104,8 +2231,12 @@ fn a_cbool_and_a_cenum_are_c_types_labels_and_no_other() {
          declare function mode(v: CEnum<Mode, c_uint>): c_int;\n\
          export function f(): number { return (flag(true) ? 1 : 0) + mode(Mode.On); }\n";
     let read = snapshot("c-types-label", kept);
-    let prepared = hir::prepare(&read, nts_core::hir::backend::Backend::C)
-        .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    let prepared = hir::prepare(
+        &read,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -2148,8 +2279,12 @@ fn a_cbool_and_a_cenum_are_c_types_labels_and_no_other() {
          export function g(): number { return fake_flag(true); }\n\
          export function h(): number { return fake_mode(Mode.On); }\n";
     let read = snapshot("c-types-label-spoof", spoof);
-    let prepared = hir::prepare(&read, nts_core::hir::backend::Backend::C)
-        .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    let prepared = hir::prepare(
+        &read,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     for function in ["fake_flag", "fake_mode"] {
         assert!(
             prepared

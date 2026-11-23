@@ -37,7 +37,10 @@ pub fn prepare(
         snapshot,
         &nts_core::hir::Options {
             provider,
-            ..nts_core::hir::Options::new(nts_core::hir::backend::Backend::Jvm)
+            ..nts_core::hir::Options::new(
+                nts_core::hir::backend::Backend::Jvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
 }

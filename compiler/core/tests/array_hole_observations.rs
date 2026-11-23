@@ -15,8 +15,12 @@ fn a_folded_typeof_keeps_its_hole_observation_after_bounds_proof() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR verifies");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:#?}",
@@ -58,8 +62,12 @@ fn an_unknown_array_parameter_keeps_its_hole_observation() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR verifies");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:#?}",

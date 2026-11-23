@@ -18,7 +18,7 @@ pub(super) fn refused_body(backend: hir::backend::Backend) -> hir::Program {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::new(backend)
+            ..hir::Options::new(backend, nts_core::hir::EntryUnwind::Terminal)
         },
     )
     .unwrap()

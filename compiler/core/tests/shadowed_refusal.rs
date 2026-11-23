@@ -37,7 +37,10 @@ fn lower_at(relative: &str) -> Prepared {
     assert!(!snapshot.has_errors(), "fixture must typecheck");
     hir::prepare_unverified(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
 }
 

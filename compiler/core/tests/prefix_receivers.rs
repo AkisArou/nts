@@ -29,7 +29,10 @@ fn a_face_lists_the_owners_that_reach_it_as_a_prefix() {
     let options = hir::Options {
         provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     let program = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared.program,

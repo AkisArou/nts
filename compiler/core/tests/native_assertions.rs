@@ -20,8 +20,12 @@ fn snapshot() -> nts_semantic_schema::SemanticSnapshot {
 #[test]
 fn every_assertion_witness_root_survives_preparation() {
     let snapshot = snapshot();
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid assertion HIR");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("valid assertion HIR");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -95,8 +99,12 @@ fn synthesized_assertion_errors_reach_the_callers_handler() {
 #[test]
 fn proven_identity_and_satisfies_controls_have_no_assertion_cost() {
     let snapshot = snapshot();
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid assertion HIR");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("valid assertion HIR");
     for name in ["identityControl", "satisfiesControl"] {
         let func = prepared
             .program
@@ -140,8 +148,12 @@ fn a_provided_error_upcast_keeps_the_existing_representation() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("valid error assertion HIR");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("valid error assertion HIR");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

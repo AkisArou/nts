@@ -42,8 +42,12 @@ fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepare
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     (
         dir,
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-            .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
+        hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
     )
 }
 
@@ -308,7 +312,12 @@ export function run(): number {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

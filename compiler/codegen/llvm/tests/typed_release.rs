@@ -470,7 +470,10 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::Llvm,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .unwrap();
@@ -570,7 +573,10 @@ fn throwing_and_rejecting_a_function_does_not_report_its_captured_message() {
                     &snapshot,
                     &hir::Options {
                         provider,
-                        ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                        ..hir::Options::new(
+                            nts_core::hir::backend::Backend::Llvm,
+                            nts_core::hir::EntryUnwind::Terminal,
+                        )
                     },
                 )
                 .unwrap();

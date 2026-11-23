@@ -28,9 +28,13 @@ fn prepared() -> hir::Program {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("prepared HIR verifies")
-        .program
+    hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR verifies")
+    .program
 }
 
 #[test]

@@ -52,7 +52,10 @@ fn prepared(name: &str) -> hir::Prepared {
         .expect("snapshot should succeed");
     hir::prepare_unverified(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
 }
 

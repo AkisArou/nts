@@ -26,7 +26,12 @@ fn prepare(name: &str, source: &str) -> hir::Prepared {
         .snapshot(&config)
         .expect("capture");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR")
+    hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("valid HIR")
 }
 
 #[test]
@@ -144,8 +149,12 @@ fn source_body_and_synthetic_caller_refusals_keep_their_diagnostics() {
             .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&fixture)
             .expect("capture");
-        let prepared =
-            hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("valid HIR");
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .expect("valid HIR");
         for caller in callers {
             assert!(
                 prepared

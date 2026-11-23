@@ -3696,6 +3696,9 @@ pub struct Program {
     pub provider: Memory,
     /// The backend being prepared for; absent on raw lowering.
     pub backend: Option<backend::Backend>,
+    /// The product's uncaught-exit contract; absent on raw lowering.
+    /// A backend and open roots do not imply a surviving host landing.
+    pub entry_unwind: Option<EntryUnwind>,
     /// The C ABIs the program is built for ([`Options::targets`]): a store
     /// into a written scalar kind must fit on every one, and a read of one is
     /// what C may hand in on any. Every row until `prepare` names the build's.
@@ -6071,8 +6074,9 @@ pub fn described_classes(op: &Op) -> impl Iterator<Item = TypeId> + '_ {
 pub fn prepare(
     snapshot: &SemanticSnapshot,
     backend: backend::Backend,
+    entry_unwind: EntryUnwind,
 ) -> Result<Prepared, Unprepared> {
-    prepare_with(snapshot, &Options::new(backend))
+    prepare_with(snapshot, &Options::new(backend, entry_unwind))
 }
 
 /// Why [`prepare_with`] produced no program.
@@ -6142,11 +6146,29 @@ pub enum Memory {
     ReferenceCounting,
 }
 
+/// What happens after an uncaught throw leaves this product's compiled entries.
+///
+/// This is a product fact, independent of backend and reachability roots. A
+/// native shared library has open roots but installs no landing; a Node addon
+/// installs a landing and its host continues after delivery of the exception.
+/// There is no default: every preparation must name its product's contract.
+///
+/// ```compile_fail
+/// let entry_unwind = nts_core::hir::EntryUnwind::default();
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryUnwind {
+    Terminal,
+    Resuming,
+}
+
 /// What to compile, and how.
 #[derive(Debug, Clone, Copy)]
 pub struct Options<'a> {
     /// The backend this preparation serves.
     pub backend: backend::Backend,
+    /// Whether an uncaught throw can leave a surviving host with the value.
+    pub entry_unwind: EntryUnwind,
     /// The memory discipline. See [`Memory`].
     pub provider: Memory,
     /// Whether a callback returning to the program's foreign loop is a
@@ -6187,16 +6209,23 @@ pub struct Options<'a> {
 }
 
 impl Options<'_> {
-    /// Start a preparation for the named backend. There is deliberately no
-    /// default backend: a caller must not prepare JVM code as native code.
+    /// Start a preparation for the named backend and product exit contract.
+    /// Neither input has a default: a caller must not prepare JVM code as
+    /// native code or a terminal product as a resuming one.
     ///
     /// ```compile_fail
     /// let options = nts_core::hir::Options::default();
     /// ```
+    ///
+    /// ```compile_fail
+    /// use nts_core::hir::{Options, backend::Backend};
+    /// let options = Options::new(Backend::C);
+    /// ```
     #[must_use]
-    pub fn new(backend: backend::Backend) -> Self {
+    pub fn new(backend: backend::Backend, entry_unwind: EntryUnwind) -> Self {
         Self {
             backend,
+            entry_unwind,
             provider: Memory::NoGc,
             // No loop is known to checkpoint after a callback until a build
             // says whose loop the program runs.
@@ -6243,6 +6272,8 @@ pub const HOST: native::NativeAbi = if cfg!(windows) {
 pub struct PreparationOptions<'a> {
     /// [`Options::backend`].
     pub backend: backend::Backend,
+    /// [`Options::entry_unwind`].
+    pub entry_unwind: EntryUnwind,
     pub provider: Memory,
     pub callbacks_checkpoint: bool,
     pub specialize_numbers: bool,
@@ -6253,15 +6284,20 @@ pub struct PreparationOptions<'a> {
 }
 
 impl PreparationOptions<'_> {
-    /// Start a branch for the named backend, with the ordinary preparation
-    /// choices. Like [`Options::new`], this has no implicit backend.
+    /// Start a branch for the named backend and product exit contract. Like
+    /// [`Options::new`], neither input is implicit.
     ///
     /// ```compile_fail
     /// let options = nts_core::hir::PreparationOptions::default();
     /// ```
+    ///
+    /// ```compile_fail
+    /// use nts_core::hir::{PreparationOptions, backend::Backend};
+    /// let options = PreparationOptions::new(Backend::C);
+    /// ```
     #[must_use]
-    pub fn new(backend: backend::Backend) -> Self {
-        Self::from(&Options::new(backend))
+    pub fn new(backend: backend::Backend, entry_unwind: EntryUnwind) -> Self {
+        Self::from(&Options::new(backend, entry_unwind))
     }
 
     /// Whether the backend's tables answer a key's entry: as the backend said,
@@ -6279,6 +6315,7 @@ impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
     fn from(options: &Options<'a>) -> Self {
         Self {
             backend: options.backend,
+            entry_unwind: options.entry_unwind,
             provider: options.provider,
             callbacks_checkpoint: options.callbacks_checkpoint,
             specialize_numbers: options.specialize_numbers,
@@ -8511,6 +8548,7 @@ fn prepare_lowered(
     lowered.program.targets = options.targets;
     lowered.program.roots = Some(options.roots.to_owned());
     lowered.program.backend = Some(options.backend);
+    lowered.program.entry_unwind = Some(options.entry_unwind);
     // On the program the lowering produced, before any pass renumbers a value
     // the lowering recorded an obligation about.
     let mut rejected = std::mem::take(&mut lowered.rejected);
@@ -9184,7 +9222,10 @@ mod tests {
     fn preparation_check_keeps_the_program_and_rejection_precedence() {
         let mut prepared = prepare_unverified(
             &SemanticSnapshot::default(),
-            &Options::new(crate::hir::backend::Backend::C),
+            &Options::new(
+                crate::hir::backend::Backend::C,
+                crate::hir::EntryUnwind::Terminal,
+            ),
         );
         prepared.check().unwrap();
         prepared

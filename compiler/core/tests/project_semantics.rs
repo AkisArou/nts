@@ -69,7 +69,10 @@ fn project_semantics_reach_lowering_and_preparation_without_partial_emission() {
                 matches!(
                     hir::prepare_with(
                         &snapshot,
-                        &hir::Options::new(nts_core::hir::backend::Backend::C)
+                        &hir::Options::new(
+                            nts_core::hir::backend::Backend::C,
+                            nts_core::hir::EntryUnwind::Terminal
+                        )
                     ),
                     Err(Unprepared::Rejected(_))
                 ),

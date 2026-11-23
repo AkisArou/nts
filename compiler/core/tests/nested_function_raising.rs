@@ -13,8 +13,12 @@ fn captured_and_plain_nested_functions_both_reach_their_handler() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("HIR verifies");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

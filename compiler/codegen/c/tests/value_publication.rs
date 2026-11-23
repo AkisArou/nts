@@ -33,7 +33,10 @@ export function run(n:number):number { privateValue+=n; return callback(n)+priva
     assert!(!snapshot.has_errors());
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .unwrap();
     assert!(

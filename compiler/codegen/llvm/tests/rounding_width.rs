@@ -33,9 +33,13 @@ fn program(dir: &Utf8Path, signed: bool, rounding: Option<UnOp>) -> hir::Program
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let mut program = hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm)
-        .expect("prepared skeleton")
-        .program;
+    let mut program = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::Llvm,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared skeleton")
+    .program;
     program.funcs.retain(|func| func.name == "subject");
     let func = &mut program.funcs[0];
     let input = HirType::Int { bits: 32, signed };

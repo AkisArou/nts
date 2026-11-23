@@ -430,7 +430,11 @@ fn examine(file: &Utf8Path, workspace: &Workspace) -> Examined {
     let outcome = match source.snapshot(&workspace.tsconfig) {
         Err(error) => Outcome::Failed(error.to_string()),
         Ok(snapshot) if snapshot.has_errors() => Outcome::Rejected,
-        Ok(snapshot) => match hir::prepare(&snapshot, nts_core::hir::backend::Backend::C) {
+        Ok(snapshot) => match hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ) {
             // A program breaking a scalar rule doesn't compile, as one that
             // doesn't typecheck doesn't.
             Err(hir::Unprepared::Rejected(_)) => Outcome::Rejected,

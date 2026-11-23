@@ -100,7 +100,10 @@ export function moduleControl(): number {
         &snapshot,
         &hir::Options {
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap_or_else(|why| panic!("{}", why.render(&snapshot.sources)));

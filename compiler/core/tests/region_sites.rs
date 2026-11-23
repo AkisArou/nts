@@ -7,7 +7,7 @@
 use camino::Utf8Path;
 use nts_core::hir;
 
-fn report(name: &str) -> hir::regions::Report {
+fn report(name: &str, entry_unwind: hir::EntryUnwind) -> hir::regions::Report {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
@@ -21,12 +21,12 @@ fn report(name: &str) -> hir::regions::Report {
     let options = hir::Options {
         provider: hir::Memory::ReferenceCounting,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(nts_core::hir::backend::Backend::C, entry_unwind)
     };
     hir::prepare_unverified(&snapshot, &options).regions
 }
 
-fn prepared(name: &str) -> hir::Program {
+fn prepared(name: &str, entry_unwind: hir::EntryUnwind) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
@@ -40,7 +40,7 @@ fn prepared(name: &str) -> hir::Program {
     let options = hir::Options {
         provider: hir::Memory::ReferenceCounting,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(nts_core::hir::backend::Backend::C, entry_unwind)
     };
     hir::prepare_unverified(&snapshot, &options).program
 }
@@ -63,7 +63,7 @@ fn verdict(report: &hir::regions::Report, from: &str, to: &str) -> Result<(), St
 
 #[test]
 fn a_call_whose_result_is_read_and_dropped_is_a_site() {
-    let report = report("calls-a-region-could-serve");
+    let report = report("calls-a-region-could-serve", hir::EntryUnwind::Terminal);
     assert_eq!(verdict(&report, "readsAList", "build"), Ok(()));
     // A temporary it only reads, dying at the call.
     assert_eq!(
@@ -76,7 +76,7 @@ fn a_call_whose_result_is_read_and_dropped_is_a_site() {
 
 #[test]
 fn a_result_kept_past_the_call_is_not() {
-    let report = report("calls-a-region-could-serve");
+    let report = report("calls-a-region-could-serve", hir::EntryUnwind::Terminal);
     assert_eq!(
         verdict(&report, "keepsAList", "build"),
         Err("stores part of the result".to_owned())
@@ -89,7 +89,7 @@ fn a_result_kept_past_the_call_is_not() {
 
 #[test]
 fn a_callee_that_writes_outside_what_it_made_is_not() {
-    let report = report("calls-a-region-could-serve");
+    let report = report("calls-a-region-could-serve", hir::EntryUnwind::Terminal);
     assert_eq!(
         verdict(&report, "countsWhileBuilding", "buildCounting"),
         Err("writes a global".to_owned())
@@ -104,7 +104,7 @@ fn a_callee_that_writes_outside_what_it_made_is_not() {
 
 #[test]
 fn external_references_are_not_region_owned() {
-    let report = report("calls-a-region-could-serve");
+    let report = report("calls-a-region-could-serve", hir::EntryUnwind::Terminal);
     assert!(verdict(&report, "prependsToAnArgument", "prepend").is_err());
     // A field store is subject to the same external-edge ownership rule.
     assert!(verdict(&report, "wrapsAnArgument", "wrap").is_err());
@@ -116,7 +116,7 @@ fn external_references_are_not_region_owned() {
 
 #[test]
 fn a_call_that_allocates_once_is_not_worth_a_region() {
-    let report = report("calls-a-region-could-serve");
+    let report = report("calls-a-region-could-serve", hir::EntryUnwind::Terminal);
     assert_eq!(
         verdict(&report, "readsOneCell", "single"),
         Err("allocates too little for a region to pay for itself".to_owned())
@@ -128,7 +128,7 @@ fn a_call_that_allocates_once_is_not_worth_a_region() {
 /// about, and `-Werror` refused three JSON rows for it.
 #[test]
 fn a_function_only_regions_call_is_left_as_its_clone() {
-    let program = prepared("calls-a-region-could-serve");
+    let program = prepared("calls-a-region-could-serve", hir::EntryUnwind::Terminal);
     let names: Vec<&str> = program
         .funcs
         .iter()
@@ -149,28 +149,39 @@ fn a_function_only_regions_call_is_left_as_its_clone() {
 /// dropped, which is what every fixture body below does with it.
 #[test]
 fn case_conversion_of_an_outside_input_is_refused_inside_a_region() {
-    let report = report("calls-a-region-could-serve");
-    // A dynamic heap string from outside the candidate call.
-    let refused = verdict(&report, "lowersAnArgument", "lowerOfArgument")
-        .expect_err("an outside input is refused");
-    assert!(refused.contains("may retain"), "{refused:?}");
-    // Made inside the candidate call, but dynamic repeat can throw an uncaught
-    // RangeError. That value escapes the region through the runtime handover.
-    assert_eq!(
-        verdict(&report, "lowersMadeText", "lowerOfMade"),
-        Err("may raise a value it made".to_owned())
-    );
-    // An immortal literal (control): a site.
-    assert_eq!(verdict(&report, "lowersALiteral", "lowerOfLiteral"), Ok(()));
-    // Made inside an outer call is still outside the inner candidate call.
-    let refused = verdict(&report, "buildAndLower", "lowerOfArgument")
-        .expect_err("an outer-call input is refused");
-    assert!(refused.contains("may retain"), "{refused:?}");
+    for entry_unwind in [hir::EntryUnwind::Terminal, hir::EntryUnwind::Resuming] {
+        let report = report("calls-a-region-could-serve", entry_unwind);
+        // A dynamic heap string from outside the candidate call.
+        let refused = verdict(&report, "lowersAnArgument", "lowerOfArgument")
+            .expect_err("an outside input is refused");
+        assert!(refused.contains("may retain"), "{refused:?}");
+        // The dynamic repeat's RangeError escapes only when the host survives.
+        let expected = match entry_unwind {
+            hir::EntryUnwind::Terminal => Ok(()),
+            hir::EntryUnwind::Resuming => Err("may raise a value it made".to_owned()),
+        };
+        assert_eq!(verdict(&report, "lowersMadeText", "lowerOfMade"), expected);
+        // An immortal literal (control): a site in both products.
+        assert_eq!(verdict(&report, "lowersALiteral", "lowerOfLiteral"), Ok(()));
+        // Made inside an outer call is still outside the inner candidate call.
+        let refused = verdict(&report, "buildAndLower", "lowerOfArgument")
+            .expect_err("an outer-call input is refused");
+        assert!(refused.contains("may retain"), "{refused:?}");
+        let program = prepared("calls-a-region-could-serve", entry_unwind);
+        assert_eq!(
+            program
+                .funcs
+                .iter()
+                .any(|func| func.name == "lowerOfMade#region"),
+            entry_unwind == hir::EntryUnwind::Terminal,
+            "{entry_unwind:?}"
+        );
+    }
 }
 
 #[test]
 fn the_counts_add_up() {
-    let report = report("calls-a-region-could-serve");
+    let report = report("calls-a-region-could-serve", hir::EntryUnwind::Terminal);
     let refused: usize = report.refused.values().sum();
     assert_eq!(report.sites + refused, report.candidates);
     assert_eq!(report.calls.len(), report.candidates);

@@ -43,7 +43,10 @@ fn counted(name: &str, source: &str) -> String {
     assert!(!snapshot.has_errors(), "fixture must typecheck");
     let options = hir::Options {
         provider: hir::Memory::ReferenceCounting,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     let prepared = hir::prepare_with(&snapshot, &options).unwrap();
     assert!(

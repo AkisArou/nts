@@ -39,8 +39,12 @@ fn a_wide_alias_retains_its_source_view_without_changing_the_allocation() {
                     if **from == HirType::NUMBER && **to == HirType::Erased)
         }), "{name} must retain the requested view as a source edge");
     }
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("prepare the lossless carrier views");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepare the lossless carrier views");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:#?}",

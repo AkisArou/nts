@@ -25,48 +25,54 @@ fn independent_preparations_match_fresh_lowering_and_leave_the_raw_program_uncha
     let pristine = format!("{raw:?}");
     let names = vec!["kept".to_owned(), hir::lower::MODULE_INIT.to_owned()];
     let mut expected = Vec::new();
-    for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
-        for roots in [
-            reachable::Roots::EveryExport,
-            reachable::Roots::Entry(&names),
-        ] {
-            for abi in [native::NativeAbi::LP64, native::NativeAbi::LLP64] {
-                let options = Options {
-                    provider,
-                    roots,
-                    entry_files: &entry,
-                    foreign: &foreign,
-                    targets: native::Targets::only(abi),
-                    callbacks_checkpoint: true,
-                    ..Options::new(match provider {
-                        Memory::NoGc => hir::backend::Backend::Llvm,
-                        Memory::ReferenceCounting => hir::backend::Backend::C,
-                        Memory::HostGc => hir::backend::Backend::Jvm,
-                    })
-                };
-                let fresh = hir::prepare_with(&snapshot, &options).unwrap();
-                let branch = raw.prepare(&PreparationOptions::from(&options)).unwrap();
-                assert_eq!(
-                    format!("{branch:?}"),
-                    format!("{fresh:?}"),
-                    "including diagnostics, obligations and pass counters"
-                );
-                assert_eq!(
-                    format!("{raw:?}"),
-                    pristine,
-                    "preparation must not mutate the shared input"
-                );
-                assert_eq!(branch.program.provider, provider);
-                assert_eq!(branch.program.backend, Some(options.backend));
-                assert_eq!(
-                    branch.program.callbacks_checkpoint,
-                    options.callbacks_checkpoint
-                );
-                assert_eq!(
-                    branch.program.funcs.iter().any(|f| f.name == "unused"),
-                    matches!(roots, reachable::Roots::EveryExport)
-                );
-                expected.push((options, format!("{fresh:?}")));
+    for entry_unwind in [hir::EntryUnwind::Terminal, hir::EntryUnwind::Resuming] {
+        for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
+            for roots in [
+                reachable::Roots::EveryExport,
+                reachable::Roots::Entry(&names),
+            ] {
+                for abi in [native::NativeAbi::LP64, native::NativeAbi::LLP64] {
+                    let options = Options {
+                        provider,
+                        roots,
+                        entry_files: &entry,
+                        foreign: &foreign,
+                        targets: native::Targets::only(abi),
+                        callbacks_checkpoint: true,
+                        ..Options::new(
+                            match provider {
+                                Memory::NoGc => hir::backend::Backend::Llvm,
+                                Memory::ReferenceCounting => hir::backend::Backend::C,
+                                Memory::HostGc => hir::backend::Backend::Jvm,
+                            },
+                            entry_unwind,
+                        )
+                    };
+                    let fresh = hir::prepare_with(&snapshot, &options).unwrap();
+                    let branch = raw.prepare(&PreparationOptions::from(&options)).unwrap();
+                    assert_eq!(
+                        format!("{branch:?}"),
+                        format!("{fresh:?}"),
+                        "including diagnostics, obligations and pass counters"
+                    );
+                    assert_eq!(
+                        format!("{raw:?}"),
+                        pristine,
+                        "preparation must not mutate the shared input"
+                    );
+                    assert_eq!(branch.program.provider, provider);
+                    assert_eq!(branch.program.backend, Some(options.backend));
+                    assert_eq!(branch.program.entry_unwind, Some(entry_unwind));
+                    assert_eq!(
+                        branch.program.callbacks_checkpoint,
+                        options.callbacks_checkpoint
+                    );
+                    assert_eq!(
+                        branch.program.funcs.iter().any(|f| f.name == "unused"),
+                        matches!(roots, reachable::Roots::EveryExport)
+                    );
+                    expected.push((options, format!("{fresh:?}")));
+                }
             }
         }
     }

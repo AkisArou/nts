@@ -27,7 +27,10 @@ fn every_published_class_has_an_llvm_construction_entry() {
         let options = hir::Options {
             provider,
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::new(hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         };
         let prepared = hir::prepare_with(&snapshot, &options).unwrap();
         let program = &prepared.program;
@@ -131,7 +134,10 @@ fn a_function_named_as_a_factory_refuses_the_llvm_module() {
         &snapshot,
         &hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::new(hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();

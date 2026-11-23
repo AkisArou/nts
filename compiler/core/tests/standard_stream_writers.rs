@@ -28,7 +28,10 @@ fn standard_stream_subjects_survive_with_and_without_the_helpers() {
                 } else {
                     hir::features::Provided::Nothing
                 },
-                ..hir::Options::new(nts_core::hir::backend::Backend::C)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::C,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .expect("valid program");

@@ -28,7 +28,12 @@ fn erased_literal_checks_survive_and_typed_claims_remain_unchecked() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).unwrap();
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

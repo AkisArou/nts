@@ -52,7 +52,10 @@ fn a_merge_keeps_the_whole_index_range_and_the_array_check() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(nts_core::hir::backend::Backend::C)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::C,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .expect("valid prepared graph");

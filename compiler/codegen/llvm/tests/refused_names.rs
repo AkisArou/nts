@@ -38,7 +38,10 @@ fn refused_function_names_do_not_leave_unreferenced_private_data() {
             &snapshot,
             &hir::Options {
                 provider: hir::Memory::ReferenceCounting,
-                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::Llvm,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .expect("prepare project");
@@ -91,7 +94,10 @@ fn discarded_native_bodies_publish_neither_literals_nor_templates() {
         &snapshot,
         &hir::Options {
             specialize_numbers: false,
-            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .expect("prepare project");

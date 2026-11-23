@@ -60,7 +60,10 @@ fn erased_literal_membership_is_checked_on_both_native_backends() {
                 } else {
                     hir::Memory::NoGc
                 },
-                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::Llvm,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .unwrap();

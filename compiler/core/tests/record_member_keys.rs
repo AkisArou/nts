@@ -47,8 +47,12 @@ fn typed_member_and_receiver_repairs_keep_the_complete_fixture_population() {
                 );
             }
         }
-        let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-            .expect("valid member calls and definitions");
+        let prepared = hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .expect("valid member calls and definitions");
         assert!(
             prepared.diagnostics.is_empty(),
             "{fixture}: {:?}",

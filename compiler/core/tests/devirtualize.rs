@@ -35,7 +35,10 @@ fn prepared(name: &str) -> hir::Program {
         .expect("snapshot should succeed");
     hir::prepare_unverified(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .program
 }
@@ -55,7 +58,10 @@ fn known_reference_results_remain_typed_at_the_store() {
         .expect("snapshot should succeed");
     let program = hir::prepare_unverified(
         &snapshot,
-        &hir::Options::new(nts_core::hir::backend::Backend::C),
+        &hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        ),
     )
     .program;
     let iter = program

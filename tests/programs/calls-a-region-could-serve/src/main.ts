@@ -198,9 +198,8 @@ export function lowersAnArgument(count: number): number {
   return textTotal(list) + word.length;
 }
 
-// Reference-origin control: the lowered text is made inside the call, so there
-// is no external count to unbalance. Dynamic repeat can still raise a RangeError,
-// which escapes the region through the runtime handover.
+// Site (control, differing in one thing): the lowered text is made inside
+// the call, so there is no external count to unbalance.
 function lowerOfMade(count: number): Text | null {
   let head: Text | null = null;
   let length = 0;

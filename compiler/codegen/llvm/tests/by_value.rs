@@ -45,7 +45,12 @@ fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepare
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     (
         dir,
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm).unwrap(),
+        hir::prepare(
+            &snapshot,
+            nts_core::hir::backend::Backend::Llvm,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+        .unwrap(),
     )
 }
 

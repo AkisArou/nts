@@ -1613,7 +1613,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::new(hir_preparation()?.0)
+        ..hir::Options::new(hir_preparation()?.0, Shape::from_flags().entry_unwind())
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     let program = &prepared.program;
@@ -1742,7 +1742,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::new(hir_preparation()?.0)
+        ..hir::Options::new(hir_preparation()?.0, Shape::from_flags().entry_unwind())
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     for (name, why) in prepared
@@ -1897,9 +1897,13 @@ fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     }
 
     let program = if prepared {
-        hir::prepare(&snapshot, hir_preparation()?.0)
-            .map_err(|unprepared| refused(&snapshot, &unprepared))?
-            .program
+        hir::prepare(
+            &snapshot,
+            hir_preparation()?.0,
+            Shape::from_flags().entry_unwind(),
+        )
+        .map_err(|unprepared| refused(&snapshot, &unprepared))?
+        .program
     } else {
         hir::lower::lower(&snapshot).program
     };
@@ -2877,7 +2881,7 @@ fn prepare_as(
         // here as it is there.
         roots: emission::product_roots(emission.shape, entry.as_deref(), configured),
         provided: emission::provided(backend),
-        ..hir::Options::new(backend)
+        ..hir::Options::new(backend, emission.shape.entry_unwind())
     };
     // An invalid program is exactly the one worth reading, so the
     // complaints are returned beside the program rather than in its place.
@@ -3262,7 +3266,11 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // reachability pruning drops the functions with missing callees and `dce`
     // drops the dead blocks, so what matters is what survives the passes.
     if !want_passes {
-        match hir::prepare(&snapshot, hir_preparation()?.0) {
+        match hir::prepare(
+            &snapshot,
+            hir_preparation()?.0,
+            Shape::from_flags().entry_unwind(),
+        ) {
             // The count is what *reachability pruning* left, which is a
             // different question from how much lowered -- so it is labelled as
             // one rather than offered as a second headline.
@@ -4188,6 +4196,15 @@ enum Shape {
 }
 
 impl Shape {
+    /// The product installs a surviving landing only for Node-API entries.
+    /// Open library roots and backend identity do not answer this question.
+    fn entry_unwind(self) -> hir::EntryUnwind {
+        match self {
+            Self::Executable | Self::Library => hir::EntryUnwind::Terminal,
+            Self::Addon => hir::EntryUnwind::Resuming,
+        }
+    }
+
     /// From the command line, which is what a bare `emit-*` has to go on.
     fn from_flags() -> Self {
         let args: Vec<String> = std::env::args().collect();

@@ -97,6 +97,7 @@ fn transfer_program(transfers: bool) -> Program {
     };
     Program {
         funcs: vec![caller, ordinary],
+        entry_unwind: Some(crate::hir::EntryUnwind::Terminal),
         layouts: vec![
             layout(cell_id, "binding", vec![field("value", child)]),
             layout(env_id, "environment", vec![field("captured", cell)]),
@@ -323,64 +324,71 @@ fn a_verified_string_loan_carrier_and_held_payload_survive_an_outcome() {
 #[test]
 fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
     let mut panics = Vec::new();
-    for bad in [false, true] {
-        for field_view in [false, true] {
-            let mut program = transfer_program(true);
-            let body = &mut program.funcs[0];
-            body.values.push(Op {
-                kind: if field_view {
-                    OpKind::FieldView {
-                        value: ValueId(if bad { 99 } else { 0 }),
-                        source: TypeId(SYNTHETIC_CELLS),
-                        face: TypeId(SYNTHETIC_CELLS),
-                    }
-                } else {
-                    OpKind::Convert(ValueId(if bad { 99 } else { 0 }))
-                },
-                ty: body.values[0].ty.clone(),
-                origin: origin(),
-            });
-            let measured = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                memory::Analysis::of(&program).into_report()
-            }));
-            let Ok(report) = measured else {
-                panics.push((bad, field_view));
-                continue;
-            };
-            assert!(
-                report.failure.is_none(),
-                "unused metadata changes no executed operand domain: {:?}",
-                report.failure
-            );
-            // Four source objects, plus the opaque storage effect of the
-            // runtime handover in ordinary:%2. Unused view metadata adds none.
-            let mut sites: Vec<_> = report
-                .sites
-                .iter()
-                .map(|site| (site.id.function.as_str(), site.id.value, site.id.storage))
-                .collect();
-            sites.sort_unstable();
-            assert_eq!(
-                sites,
-                vec![
-                    ("ordinary", 2, memory::Storage::CallStorage),
+    for entry_unwind in [
+        crate::hir::EntryUnwind::Terminal,
+        crate::hir::EntryUnwind::Resuming,
+    ] {
+        for bad in [false, true] {
+            for field_view in [false, true] {
+                let mut program = transfer_program(true);
+                program.entry_unwind = Some(entry_unwind);
+                let body = &mut program.funcs[0];
+                body.values.push(Op {
+                    kind: if field_view {
+                        OpKind::FieldView {
+                            value: ValueId(if bad { 99 } else { 0 }),
+                            source: TypeId(SYNTHETIC_CELLS),
+                            face: TypeId(SYNTHETIC_CELLS),
+                        }
+                    } else {
+                        OpKind::Convert(ValueId(if bad { 99 } else { 0 }))
+                    },
+                    ty: body.values[0].ty.clone(),
+                    origin: origin(),
+                });
+                let measured = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    memory::Analysis::of(&program).into_report()
+                }));
+                let Ok(report) = measured else {
+                    panics.push((entry_unwind, bad, field_view));
+                    continue;
+                };
+                assert!(
+                    report.failure.is_none(),
+                    "unused metadata changes no executed operand domain: {:?}",
+                    report.failure
+                );
+                // The four source objects remain in a terminal product. A surviving
+                // landing adds the opaque CallStorage effect at ordinary:%2.
+                // Unused view metadata adds no site in either product.
+                let mut sites: Vec<_> = report
+                    .sites
+                    .iter()
+                    .map(|site| (site.id.function.as_str(), site.id.value, site.id.storage))
+                    .collect();
+                sites.sort_unstable();
+                let mut expected = vec![
                     ("root#init", 0, memory::Storage::Object),
                     ("root#init", 1, memory::Storage::Object),
                     ("root#init", 3, memory::Storage::Object),
                     ("root#init", 5, memory::Storage::Object),
-                ]
-            );
-            assert!(
-                report
-                    .sites
-                    .iter()
-                    .filter(|site| site.id.function == "root#init"
-                        && [0, 1, 5].contains(&site.id.value))
-                    .all(|site| site
-                        .obligations
+                ];
+                if entry_unwind == crate::hir::EntryUnwind::Resuming {
+                    expected.insert(0, ("ordinary", 2, memory::Storage::CallStorage));
+                }
+                assert_eq!(sites, expected, "{entry_unwind:?}");
+                assert!(
+                    report
+                        .sites
                         .iter()
-                        .any(|reason| matches!(reason, Reason::MissingOutcome(_))))
-            );
+                        .filter(|site| site.id.function == "root#init"
+                            && [0, 1, 5].contains(&site.id.value))
+                        .all(|site| site
+                            .obligations
+                            .iter()
+                            .any(|reason| matches!(reason, Reason::MissingOutcome(_))))
+                );
+            }
         }
     }
     assert!(

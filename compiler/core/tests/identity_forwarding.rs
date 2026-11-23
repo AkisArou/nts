@@ -29,7 +29,10 @@ fn prepared() -> hir::Program {
     let options = hir::Options {
         provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared.program,

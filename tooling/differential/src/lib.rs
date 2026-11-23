@@ -983,7 +983,7 @@ fn pool_options(backend: Backend, provider: hir::Memory) -> hir::Options<'static
             Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
             Backend::Jvm => nts_codegen_jvm::provides,
         }),
-        ..hir::Options::new(backend)
+        ..hir::Options::new(backend, nts_core::hir::EntryUnwind::Terminal)
     }
 }
 

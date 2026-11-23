@@ -94,7 +94,10 @@ fn legacy_homes_belong_to_the_actual_caller_context() {
     let options = hir::Options {
         provider: Memory::ReferenceCounting,
         roots: hir::reachable::Roots::Declared(&names),
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     let mut prepared = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
         .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
@@ -169,7 +172,10 @@ fn actual_recursive_region_arrivals_keep_their_physical_body() {
     let options = hir::Options {
         provider: Memory::ReferenceCounting,
         roots: hir::reachable::Roots::Declared(&names),
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     let prepared = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
         .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
@@ -211,7 +217,10 @@ fn three_preparations_have_byte_identical_reports_and_hir() {
         let snapshot = snapshot(case);
         let options = hir::Options {
             provider: Memory::ReferenceCounting,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         };
         let normal = hir::prepare_unverified(&snapshot, &options);
         assert!(
@@ -271,7 +280,10 @@ fn exhausted_budget_has_no_partial_alias_payload_effect_or_home_permission() {
         &snapshot("shared-tail"),
         &hir::Options {
             provider: Memory::NoGc,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     );
     let report = Analysis::with_limits(
@@ -315,7 +327,10 @@ fn host_gc_never_publishes_native_placement_facts() {
     let snapshot = snapshot("no-escape");
     let options = hir::Options {
         provider: Memory::HostGc,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     let prepared = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
         .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
@@ -327,7 +342,10 @@ fn census_is_the_requested_graphs_sites_and_does_not_change_prepared_hir() {
     let snapshot = snapshot("traversal");
     let options = hir::Options {
         provider: Memory::ReferenceCounting,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     let normal = hir::prepare_unverified(&snapshot, &options);
     let observed = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)

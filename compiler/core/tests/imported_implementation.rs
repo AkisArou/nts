@@ -91,8 +91,12 @@ fn refusals(root: &Utf8Path) -> Vec<String> {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("the native frontend captures the imported-implementation fixture");
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("the imported-implementation fixture prepares successfully");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("the imported-implementation fixture prepares successfully");
     prepared
         .diagnostics
         .iter()

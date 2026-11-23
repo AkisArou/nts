@@ -19,7 +19,12 @@ fn prepared(fixture: &str) -> hir::Prepared {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR should verify")
+    hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR should verify")
 }
 
 #[test]
@@ -174,8 +179,12 @@ fn reached_factories_public_callbacks_and_nested_runtime_reactions_keep_their_bo
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .unwrap();
-    let prepared = hir::prepare(&snapshot, nts_core::hir::backend::Backend::C)
-        .expect("the closure controls verify");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("the closure controls verify");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

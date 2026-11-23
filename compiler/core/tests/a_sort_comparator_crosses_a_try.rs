@@ -22,8 +22,12 @@ fn programs() -> (hir::lower::Lowered, hir::Prepared) {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let lowered = hir::lower::lower(&snapshot);
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR verifies");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR verifies");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

@@ -108,7 +108,10 @@ fn a_published_call_borrows_through_return_and_throw() {
         &hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
             provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Resuming,
+            )
         },
     )
     .unwrap();

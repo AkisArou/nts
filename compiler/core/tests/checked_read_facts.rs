@@ -19,8 +19,12 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    let prepared =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR");
+    let prepared = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR");
     assert!(
         prepared.program.uncompiled.is_empty(),
         "{:?}",

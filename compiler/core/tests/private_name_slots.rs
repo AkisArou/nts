@@ -30,7 +30,12 @@ fn prepared() -> hir::Prepared {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    hir::prepare(&snapshot, nts_core::hir::backend::Backend::C).expect("prepared HIR should verify")
+    hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("prepared HIR should verify")
 }
 
 fn layout<'a>(prepared: &'a hir::Prepared, class: &str) -> &'a hir::Layout {

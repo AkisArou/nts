@@ -1080,8 +1080,12 @@ mod tests {
             )),
             "a simple parameter has no readiness check"
         );
-        crate::hir::prepare(&snapshot, crate::hir::backend::Backend::C)
-            .expect("separated parameter entries produce valid HIR");
+        crate::hir::prepare(
+            &snapshot,
+            crate::hir::backend::Backend::C,
+            crate::hir::EntryUnwind::Terminal,
+        )
+        .expect("separated parameter entries produce valid HIR");
     }
     fn check_entry_abis(program: &Program) {
         for name in ["captured", "readOnly", "separateBodyVar", "destructured"] {
@@ -1208,8 +1212,12 @@ mod generator_tests {
                 .as_deref(),
             Some("patternGenerated")
         );
-        let prepared = crate::hir::prepare(&snapshot, crate::hir::backend::Backend::C)
-            .expect("valid separated generators");
+        let prepared = crate::hir::prepare(
+            &snapshot,
+            crate::hir::backend::Backend::C,
+            crate::hir::EntryUnwind::Terminal,
+        )
+        .expect("valid separated generators");
         for name in ["patternGenerated", "generated"] {
             let resume = format!("{name}__resume");
             assert!(

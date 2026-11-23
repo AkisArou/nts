@@ -173,7 +173,10 @@ fn agree(name: &str, source: &str, arms: &[Arm], provider: hir::Memory) {
         &hir::Options {
             provider,
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Resuming,
+            )
         },
     )
     .unwrap();

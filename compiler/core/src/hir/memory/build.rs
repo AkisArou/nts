@@ -3205,15 +3205,17 @@ impl<'p> Builder<'p> {
             }
             return;
         }
-        match regions::helper(name) {
+        match regions::helper(name, self.program.entry_unwind) {
             Some(Helper::Makes | Helper::MakesOrRetains { .. } | Helper::Copies { .. }) => {
                 self.allocation(context, id, Storage::CallResult, repeated);
-                if let Some(Helper::MakesOrRetains { from }) = regions::helper(name)
+                if let Some(Helper::MakesOrRetains { from }) =
+                    regions::helper(name, self.program.entry_unwind)
                     && let Some(arg) = argument(from)
                 {
                     self.graph.copy(self.value(context, arg), into);
                 }
-                if let Some(Helper::Copies { from }) = regions::helper(name)
+                if let Some(Helper::Copies { from }) =
+                    regions::helper(name, self.program.entry_unwind)
                     && let Some(arg) = argument(from)
                 {
                     let read = self.graph.node();

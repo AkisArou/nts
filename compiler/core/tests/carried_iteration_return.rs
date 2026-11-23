@@ -71,8 +71,12 @@ fn a_generic_owner_keeps_its_carried_return_contract_and_prepared_abi() {
     let materialized = hir::instantiate::materialise(&snapshot);
     let snapshot = materialized.as_ref().unwrap_or(&snapshot);
     assert_lowered_return_abi(snapshot);
-    let prepared = hir::prepare(snapshot, nts_core::hir::backend::Backend::C)
-        .expect("the carried return has a valid prepared ABI");
+    let prepared = hir::prepare(
+        snapshot,
+        nts_core::hir::backend::Backend::C,
+        nts_core::hir::EntryUnwind::Terminal,
+    )
+    .expect("the carried return has a valid prepared ABI");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

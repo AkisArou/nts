@@ -68,7 +68,10 @@ fn prepare_with_files(
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     );
     (
@@ -141,28 +144,32 @@ fn c_and_llvm_preparation_agree_for_native_abi_and_addon_sources() {
                 hir::reachable::Roots::EntrySurface,
                 hir::reachable::Roots::Entry(&closed),
             ] {
-                let options = hir::PreparationOptions {
-                    provider,
-                    roots,
-                    ..hir::PreparationOptions::new(hir::backend::Backend::C)
-                };
-                let c = raw.prepare(&options).unwrap();
-                let mut llvm = raw
-                    .prepare(&hir::PreparationOptions {
-                        backend: hir::backend::Backend::Llvm,
-                        ..options
-                    })
-                    .unwrap();
-                assert_eq!(c.program.backend, Some(hir::backend::Backend::C));
-                assert_eq!(llvm.program.backend, Some(hir::backend::Backend::Llvm));
-                // Compare every operation, refusal and analysis answer; only
-                // the requested backend's identity is necessarily different.
-                llvm.program.backend = c.program.backend;
-                assert_eq!(
-                    format!("{c:?}"),
-                    format!("{llvm:?}"),
-                    "{name}/{provider:?}/{roots:?}"
-                );
+                for entry_unwind in [hir::EntryUnwind::Terminal, hir::EntryUnwind::Resuming] {
+                    let options = hir::PreparationOptions {
+                        provider,
+                        roots,
+                        ..hir::PreparationOptions::new(hir::backend::Backend::C, entry_unwind)
+                    };
+                    let c = raw.prepare(&options).unwrap();
+                    let mut llvm = raw
+                        .prepare(&hir::PreparationOptions {
+                            backend: hir::backend::Backend::Llvm,
+                            ..options
+                        })
+                        .unwrap();
+                    assert_eq!(c.program.backend, Some(hir::backend::Backend::C));
+                    assert_eq!(llvm.program.backend, Some(hir::backend::Backend::Llvm));
+                    assert_eq!(c.program.entry_unwind, Some(entry_unwind));
+                    assert_eq!(llvm.program.entry_unwind, Some(entry_unwind));
+                    // Compare every operation, refusal and analysis answer; only
+                    // the requested backend's identity is necessarily different.
+                    llvm.program.backend = c.program.backend;
+                    assert_eq!(
+                        format!("{c:?}"),
+                        format!("{llvm:?}"),
+                        "{name}/{provider:?}/{roots:?}/{entry_unwind:?}"
+                    );
+                }
             }
         }
     }
@@ -203,7 +210,10 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
             &snapshot,
             &hir::Options {
                 callbacks_checkpoint,
-                ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                ..hir::Options::new(
+                    nts_core::hir::backend::Backend::Llvm,
+                    nts_core::hir::EntryUnwind::Terminal,
+                )
             },
         )
         .unwrap();
@@ -1729,7 +1739,10 @@ export function roundTrip(n: number): number { return echo(high()) + n; }
         &snapshot,
         &hir::Options {
             targets: hir::native::Targets::only(unsigned),
-            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
@@ -5812,7 +5825,10 @@ export function probe(seed: number): number {
         &snapshot,
         &hir::Options {
             targets: hir::native::Targets::of(&[sysv, win64]),
-            ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
@@ -6018,7 +6034,10 @@ export function wide(): void { take_long(2147483648n as c_long); }
                 &snapshot,
                 &hir::Options {
                     targets: hir::native::Targets::of(targets),
-                    ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                    ..hir::Options::new(
+                        nts_core::hir::backend::Backend::Llvm,
+                        nts_core::hir::EntryUnwind::Terminal,
+                    )
                 },
             ) {
                 Err(hir::Unprepared::Rejected(errors)) => errors
@@ -6822,9 +6841,11 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     // A fraction into C's `int` is refused where it is passed.
     let fraction = source.replace("add(2, 3.5)", "add(2.9, 3.5)");
     let (_, snapshot) = snapshot_of("cnumber-fraction", &fraction, &[]);
-    let Err(hir::Unprepared::Rejected(errors)) =
-        hir::prepare(&snapshot, nts_core::hir::backend::Backend::Llvm)
-    else {
+    let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(
+        &snapshot,
+        nts_core::hir::backend::Backend::Llvm,
+        nts_core::hir::EntryUnwind::Terminal,
+    ) else {
         panic!("`add(2.9, …)` must be refused");
     };
     assert!(

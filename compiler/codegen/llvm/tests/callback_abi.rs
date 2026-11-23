@@ -133,7 +133,10 @@ fn timer_columns_only_publish_void_pointer_entries_in_the_ir() {
                 &snapshot,
                 &hir::Options {
                     provider,
-                    ..hir::Options::new(nts_core::hir::backend::Backend::Llvm)
+                    ..hir::Options::new(
+                        nts_core::hir::backend::Backend::Llvm,
+                        nts_core::hir::EntryUnwind::Terminal,
+                    )
                 },
             )
             .unwrap();

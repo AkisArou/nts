@@ -177,7 +177,10 @@ fn a_source_class_with_a_library_name_keeps_its_implementation() {
         &snapshot,
         &hir::Options {
             roots: hir::reachable::Roots::EveryExport,
-            ..hir::Options::new(nts_core::hir::backend::Backend::C)
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
         },
     )
     .unwrap();

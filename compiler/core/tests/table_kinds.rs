@@ -27,7 +27,10 @@ fn prepared(name: &str) -> hir::Program {
     let options = hir::Options {
         provider: hir::Memory::ReferenceCounting,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(nts_core::hir::backend::Backend::C)
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
     };
     hir::prepare_unverified(&snapshot, &options).program
 }

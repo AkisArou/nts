@@ -142,7 +142,7 @@ pub(super) fn escaping(
                     callee: Callee::External(name),
                     ..
                 } => {
-                    super::super::regions::helper(name).is_none()
+                    super::super::regions::helper(name, program.entry_unwind).is_none()
                         || runtime::has_exceptional_outcome(name)
                 }
                 OpKind::Call { .. }
