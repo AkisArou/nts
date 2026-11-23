@@ -18,7 +18,7 @@ type Summary={verdict:string;memory:{growths:number};steps:{name:string;verdict:
 
 function runFixture(t:TestContext,{payload,known=[],knownPeak=1.25*GiB,live=true}:{payload:string;known?:string[];knownPeak?:number;live?:boolean}){
   const f=fixture(t),gate=join(f.tree,'tooling/gate');
-  copyModuleClosure(['tooling/gate/tokens.mjs','tooling/census/worker-memory.ts','tooling/gate/token-command.ts','tooling/gate/case-spawn.ts'],f.tree);
+  copyModuleClosure(['tooling/gate/tokens.mjs','tooling/census/worker-memory.ts','tooling/gate/token-command.ts','tooling/gate/case-spawn.ts','tooling/gate/json-lines.ts'],f.tree);
   const memory=ownMemory(join(f.own,'memory'),{availableKiB:4*2**20,totalKiB:4*2**20,
     resident:live?{kind:'live'}:{kind:'fixed',defaultBytes:0},scopePeak:{kind:'live'}});
   const table=join(gate,'step-table.mjs');
@@ -28,7 +28,6 @@ function runFixture(t:TestContext,{payload,known=[],knownPeak=1.25*GiB,live=true
   writeFileSync(all,'#!/bin/sh\nif [ "$1" = --list ]; then\n'+listed+'\nexit 0\nfi\nexec node '+JSON.stringify(join(gate,'payload.mjs'))+'\n');
   writeFileSync(join(gate,'payload.mjs'),`
 import assert from 'node:assert/strict';
-import {readFileSync,watch} from 'node:fs';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {acquireToken,runWithToken} from './tokens.mjs';
@@ -38,11 +37,11 @@ import {PressureError,publishPressure} from './step-result.ts';
 import {scopedSpawn} from './case-spawn.ts';
 import {tokenCommand} from './token-command.ts';
 import {gateEnvironment} from './canonical-environment.ts';
+import {waitForJsonLine} from './json-lines.ts';
 const environment=gateEnvironment(process.env,{run:process.env.NTS_GATE_RUN_DIR,owned:{NTS_GATE_TOKEN_HELD:'1'}}).env;
 const queue=join(process.env.NTS_GATE_CASE_COSTS_DIR,'queue.jsonl');
-const events=()=>readFileSync(queue,'utf8').trim().split('\\n').filter(Boolean).map(line=>JSON.parse(line));
-const requested=path=>events().some(row=>row.event==='token.request'&&row.context?.startsWith('json64:')&&JSON.parse(Buffer.from(row.context.slice(7),'base64url').toString()).project===path);
-const waitForRequest=path=>new Promise(resolve=>{const watcher=watch(queue,()=>{if(requested(path)){watcher.close();resolve();}});if(requested(path)){watcher.close();resolve();}});
+// The runner is still appending to the queue: read only its complete lines.
+const waitForRequest=path=>waitForJsonLine(queue,row=>row.event==='token.request'&&row.context?.startsWith('json64:')&&JSON.parse(Buffer.from(row.context.slice(7),'base64url').toString()).project===path);
 const compile=async(lease,bytes)=>runWithToken(lease,async()=>{
   const result=await compileActive({memoryCapKb:2*2**30/1024},process.execPath,['-e','const value=Buffer.alloc('+bytes+',1);process.stdout.write(String(value.at(-1)))'],{cwd:process.cwd(),env:environment,ownCpuSeconds:30});
   assert.equal(result.status,0,JSON.stringify(result));assert.equal(result.memoryKilled,false);assert.equal(result.stdout,'1');
