@@ -41,7 +41,7 @@ import { TEMP_DISK_FLOOR_BYTES } from "../gate/run-temporary.ts";
 import { deleteBranch, revParse, sharedCheckout, worktrees, type BranchOutcome, type Git } from "./git.ts";
 import { linkTree } from "../inputs/linker.ts";
 import { issueBranch } from "../tasks/branch.ts";
-import { describeUsers, treeUsers, type TreeUser } from "./tree-users.ts";
+import { describeUsers, treeUsers, TreeOwnershipUnavailable, type TreeUser } from "./tree-users.ts";
 import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from '../gate/disk-capacity.ts';
 import {completedBuild} from '../gate/build-completion.ts';
 import type {HostObservations} from '../gate/host-observations.ts';
@@ -126,6 +126,11 @@ export class TreeInUse extends PoolRetry {
   constructor(tree: string) { super(`tree resource lock is held for ${tree}: a gate run or disk reclamation is using it; ask again once it ends`); this.tree = tree; }
 }
 
+/** A live process lacks enough owned evidence to decide which tree it uses. */
+export class PoolOwnershipUnavailable extends PoolRetry {
+  constructor(cause:TreeOwnershipUnavailable){super(cause.message,{cause});}
+}
+
 function run(git: Git, args: readonly string[], cwd: string) {
   const r = spawnSync("git", gitArguments(args), { cwd, env: git.env ?? process.env, encoding: "utf8", maxBuffer: 64 << 20 });
   return { status: r.status ?? 1, stdout: (r.stdout ?? "").trim(), stderr: (r.stderr ?? "").trim() };
@@ -155,7 +160,10 @@ export class Pool {
   constructor(dir: string, git: Git, inputs: Inputs = () => {}, options: PoolOptions = {}) {
     this.dir = resolve(dir); this.git = git; this.inputs = inputs; this.remote = options.remote === undefined ? "origin" : options.remote;
     this.capacity=new DiskCapacity({env:git.env,host:options.host,forecast:options.forecast,pool:{dir:this.dir,git},reclamation:options.reclamation});
-    this.target = options.targetBytes ?? duTarget;this.users=options.users??treeUsers;
+    this.target = options.targetBytes ?? duTarget;this.users=tree=>{
+      try{return options.users?options.users(tree):treeUsers(tree,{runTrees:worktrees(this.git).map(row=>resolve(row.path)).filter(path=>path.startsWith(this.dir+'/')&&/^[1-9][0-9]*$/.test(path.slice(this.dir.length+1)))});}
+      catch(error){if(error instanceof TreeOwnershipUnavailable)throw new PoolOwnershipUnavailable(error);throw error;}
+    };
   }
 
   private names(): string[] {
@@ -441,6 +449,8 @@ export class Pool {
   }
 
   private resetTree(path: string, discard: boolean): void {
+    const users=this.users(path);
+    if(users.length)throw Error('cannot reset '+path+': '+using(users));
     assertWorkerPresenceWritable(path);
     if (discard) {
       checked(this.git, ["checkout", "-q", "--detach", "--force", "refs/heads/main"], path);

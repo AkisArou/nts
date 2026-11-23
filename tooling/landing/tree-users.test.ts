@@ -7,11 +7,11 @@ import {testEnvironment} from "../gate/test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertNoProcessUsers, describeUsers, observeTreeProcesses, treeUsers } from "./tree-users.ts";
+import { assertNoProcessUsers, describeUsers, observeTreeProcesses, TreeOwnershipUnavailable, treeUsers } from "./tree-users.ts";
 import {treeProcessFixture} from './tree-users-fixture.ts';
 
 for(const link of ['cwd','exe'])test('an exiting task with absent '+link+' has no owner at that link',t=>{
@@ -83,3 +83,48 @@ test("a process uses a tree by its working directory, its executable or an open 
   assert.deepEqual(treeUsers(tree,{pids:[]}), [], "once they end, nothing uses it");
   assert.deepEqual(treeUsers(join(dir, "gone")), [], "a tree that is not there has no users");
 });
+
+function runReceipt(f:ReturnType<typeof treeProcessFixture>,tree=f.tree){
+  const group='/user.slice/nts-r12345678.slice',cgroups=join(f.root,'cgroups'),scope=join(cgroups,group);
+  mkdirSync(scope,{recursive:true});
+  const info=statSync(scope,{bigint:true}),boot='11111111-1111-1111-1111-111111111111';
+  mkdirSync(join(f.proc,'sys/kernel/random'),{recursive:true});writeFileSync(join(f.proc,'sys/kernel/random/boot_id'),boot);
+  const runner=join(f.proc,'43');mkdirSync(runner);
+  writeFileSync(join(runner,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()).join('\t')+'\n');
+  writeFileSync(join(runner,'stat'),'43 (runner) '+['S',...Array<string>(18).fill('0'),'88'].join(' '));
+  const receipt={version:1,nonce:boot,boot,pid:43,start:'88',slice:'nts-r12345678.slice',scope:{group,device:String(info.dev),inode:String(info.ino)}};
+  const file=join(tree,'target/gate-scope-owner.json');mkdirSync(join(tree,'target'),{recursive:true});writeFileSync(file,JSON.stringify(receipt));
+  writeFileSync(join(f.task,'cgroup'),'0::'+group+'/nts-test-inner-compiler-private.service\n');
+  return {file,receipt,options:{...f.options,pids:[42],runTrees:[tree],cgroups}};
+}
+
+for(const mutation of ['none','absent','corrupt','future','boot','start','device','inode','sibling','conflict','missing-cgroups'] as const){
+  test('unreadable nts process attribution requires owned run evidence: '+mutation,t=>{
+    const f=treeProcessFixture(t),r=runReceipt(f),other=join(f.root,'other');mkdirSync(other);
+    chmodSync(join(f.task,'fd'),0);
+    try{
+      if(mutation==='absent')rmSync(r.file);
+      if(mutation==='corrupt')writeFileSync(r.file,'{broken');
+      if(mutation==='future')writeFileSync(r.file,JSON.stringify({...r.receipt,version:2}));
+      if(mutation==='boot')writeFileSync(r.file,JSON.stringify({...r.receipt,boot:'22222222-2222-2222-2222-222222222222'}));
+      if(mutation==='start')writeFileSync(r.file,JSON.stringify({...r.receipt,start:'89'}));
+      if(mutation==='device'||mutation==='inode')writeFileSync(r.file,JSON.stringify({...r.receipt,scope:{...r.receipt.scope,[mutation]:'999999999'}}));
+      if(mutation==='sibling')writeFileSync(join(f.task,'cgroup'),'0::'+r.receipt.scope.group+'-sibling/nts-test-inner-compiler-private.service\n');
+      if(mutation==='conflict'){
+        mkdirSync(join(other,'target'));writeFileSync(join(other,'target/gate-scope-owner.json'),JSON.stringify(r.receipt));r.options.runTrees.push(other);
+      }
+      const options=mutation==='missing-cgroups'?{...r.options,cgroups:undefined}:r.options;
+      if(mutation!=='none'){
+        for(const root of [f.tree,other])assert.throws(()=>treeUsers(root,options),error=>error instanceof TreeOwnershipUnavailable&&/unreadable process 42/.test(error.message));
+        return;
+      }
+      const users=treeUsers(f.tree,options);assert.deepEqual(users.map(row=>row.pid),[42]);assert.match(users[0]!.where,/owned gate run.*nts-test-inner-compiler-private/);
+      assert.deepEqual(treeUsers(other,options),[],'validated ownership permits an unrelated tree');
+      assert.throws(()=>assertNoProcessUsers([f.tree],options),/process 42 owns cgroup/);
+      assert.deepEqual(assertNoProcessUsers([other],options),[]);
+      // Readable evidence always wins, even when the run belongs elsewhere.
+      rmSync(join(f.task,'cwd'));symlinkSync(other,join(f.task,'cwd'));
+      assert.deepEqual(treeUsers(other,options).map(row=>row.pid),[42]);
+    }finally{chmodSync(join(f.task,'fd'),0o700);}
+  });
+}

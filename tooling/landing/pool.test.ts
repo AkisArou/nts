@@ -9,9 +9,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, PoolRetry, poolExit, pruneLines, TreeInUse, reportPoolStatus, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
+import {treeProcessFixture} from './tree-users-fixture.ts';
 import {treeUsers} from "./tree-users.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {ownMemory} from '../gate/test-memory.ts';
@@ -766,4 +767,37 @@ test('status names trash bytes and age in text and JSON without deleting it',t=>
   const json=JSON.parse(messages.join(''));assert.equal(json.trash[0].path,entry);assert.equal(json.trash[0].allocatedBytes,null);
   assert.equal(typeof json.trash[0].ageMs,'number');assert.ok(json.trash[0].diagnostic);
   assert.equal(readFileSync(join(entry,'evidence'),'utf8'),'preserve unknown trash');
+});
+
+for(const known of [true,false])test('unreadable nts process '+(known?'owned by another tree':'without an owner')+' never hard-fails a take',t=>{
+  const f=treeProcessFixture(t);let enabled=false,runTrees:string[]=[];
+  const cgroups=join(f.root,'cgroups');
+  const {s,p}=pool(t,2,{users:tree=>enabled?treeUsers(tree,{...f.options,pids:[42],runTrees,cgroups}):[]});
+  const a=p.take('fix/owner'),tip=s.git(['rev-parse','HEAD'],a.path);
+  s.git(['push','-q','origin','fix/owner'],a.path);
+  writeFileSync(join(a.path,'left.txt'),'keep landed tree');assert.equal(p.release('fix/owner',tip).state,'kept');rmSync(join(a.path,'left.txt'));
+  const group='/user.slice/nts-r12345678.slice',scope=join(cgroups,group);mkdirSync(scope,{recursive:true});
+  const info=statSync(scope,{bigint:true}),boot='11111111-1111-1111-1111-111111111111';
+  mkdirSync(join(f.proc,'sys/kernel/random'),{recursive:true});writeFileSync(join(f.proc,'sys/kernel/random/boot_id'),boot);
+  const runner=join(f.proc,'43');mkdirSync(runner);
+  writeFileSync(join(runner,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()).join('\t')+'\n');
+  writeFileSync(join(runner,'stat'),'43 (runner) '+['S',...Array<string>(18).fill('0'),'88'].join(' '));
+  mkdirSync(join(a.path,'target'),{recursive:true});
+  writeFileSync(join(a.path,'target/gate-scope-owner.json'),JSON.stringify({version:1,nonce:boot,boot,pid:43,start:'88',slice:'nts-r12345678.slice',scope:{group,device:String(info.dev),inode:String(info.ino)}}));
+  writeFileSync(join(f.task,'cgroup'),'0::'+group+'/nts-test-inner-compiler-private.service\n');
+  runTrees=known?[a.path]:[];enabled=true;chmodSync(join(f.task,'fd'),0);
+  try{
+    const retry=(error:unknown)=>error instanceof PoolRetry&&poolExit(error)===75&&/unreadable process 42/.test(error.message);
+    if(known){assert.equal(p.take('fix/other').name,'2');assert.deepEqual(p.prune({now:NOW}).released,[]);}
+    else{assert.throws(()=>p.take('fix/other'),retry);assert.throws(()=>p.prune({now:NOW}),retry);}
+    const status=p.statusTrees()[0]!;
+    if(known)assert.equal(status.users[0]!.pid,42);else assert.match(status.ownershipError!,/unreadable process 42/);
+    for(const discard of [false,true]){
+      assert.throws(()=>p.give('fix/owner',{discard}),known?/cannot reset.*pid 42/:retry);
+      assert.equal(s.git(['rev-parse','HEAD'],a.path),tip,'refusal precedes checkout reset');
+      assert.equal(s.git(['rev-parse','refs/heads/fix/owner']),tip,'refusal precedes local branch deletion');
+      assert.equal(s.git(['rev-parse','refs/heads/fix/owner'],s.origin),tip,'refusal precedes remote branch deletion');
+    }
+    enabled=false;assert.equal(p.prune({now:NOW}).released.length,1,'only a complete idle observation permits reset');
+  }finally{chmodSync(join(f.task,'fd'),0o700);}
 });

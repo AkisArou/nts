@@ -88,6 +88,10 @@ export class CgroupObservations {
 }
 // Native ownership acquisition is a safety observation even in a resource
 // fixture. Its reads still belong to the same cgroup observation owner.
+/** Physical run-root identity for read-only tree attribution, never resource policy. */
+export const cgroupOwnershipIdentity=(group:string):{device:string;inode:string}=>new CgroupObservations().observe(group,'ownership identity',()=>{
+  const value=statSync(`/sys/fs/cgroup${group}`,{bigint:true});return {device:String(value.dev),inode:String(value.ino)};
+});
 export const cgroupOwnershipInode=(group:string)=>new CgroupObservations().inode(group);
 export const cgroupOwnershipMembers=(group:string)=>new CgroupObservations().members(group);
 export const cgroupOwnershipAccounted=(group:string)=>new CgroupObservations().observe(group,'memory.current presence',()=>existsSync(`/sys/fs/cgroup${checkedGroup(group)}/memory.current`));
