@@ -142,6 +142,54 @@ fn conditional_and_aliased_null_field_controls_do_not_leak_under_poison() {
     );
 }
 
+#[test]
+fn current_phi_identities_meet_their_minima_under_poison_and_collection() {
+    let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    for name in [
+        "a-fresh-phi-alias-writes-the-original",
+        "a-fresh-phi-alias-writes-the-original-control",
+        "a-phi-swap-keeps-the-overwritten-release",
+        "a-new-allocation-leaves-the-old-alias-occupied",
+        "a-branch-allocation-meets-an-older-alias",
+    ] {
+        let expected =
+            std::fs::read_to_string(root.join(format!("tests/memory/{name}/expected"))).unwrap();
+        let floor = |key: &str| {
+            expected.lines().find_map(|line| {
+                line.strip_prefix(&format!("{key} "))
+                    .map(|number| number.parse::<i64>().unwrap())
+            })
+        };
+        let output = counted_program(&format!("tests/memory/{name}/tsconfig.json"), true);
+        let observed = |key: &str| {
+            output
+                .split_whitespace()
+                .find_map(|part| {
+                    part.strip_prefix(key)
+                        .map(|number| number.parse::<i64>().unwrap())
+                })
+                .unwrap_or_else(|| panic!("{name}: missing {key}: {output}"))
+        };
+        assert_eq!(
+            observed("retains=") + observed("releases="),
+            floor("ideal").unwrap(),
+            "{name}: {output}"
+        );
+        assert_eq!(
+            observed("allocated="),
+            floor("allocated").unwrap(),
+            "{name}: {output}"
+        );
+        if let Some(candidates) = floor("candidates") {
+            assert_eq!(observed("candidates="), candidates, "{name}: {output}");
+        }
+        assert_eq!(observed("leaked="), 0, "{name}: {output}");
+    }
+}
+
 fn counted_program(config: &str, closed: bool) -> String {
     use camino::Utf8Path;
     use nts_core::hir::{self, reachable::Roots};
