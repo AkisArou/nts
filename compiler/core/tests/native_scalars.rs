@@ -1911,6 +1911,16 @@ fn loop_index_remainders_fit_c_int_only_with_finite_whole_dividends() {
             false,
         ),
         (
+            "negated-non-strict",
+            "if (!Number.isInteger(n)) return 0; for (let i = 0; !(i >= n); i++) total += accept(100 + (i % 1000));",
+            false,
+        ),
+        (
+            "negated-non-strict-swapped",
+            "if (!Number.isInteger(n)) return 0; for (let i = 0; !(n <= i); i++) total += accept(100 + (i % 1000));",
+            false,
+        ),
+        (
             "descending",
             "for (let i = 0; i > n; i--) total += accept(100 + (i % 1000));",
             false,

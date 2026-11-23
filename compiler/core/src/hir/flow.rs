@@ -3168,12 +3168,10 @@ fn refine(op: BinOp, a: Facts, b: Facts, clear_nan: bool) -> Facts {
 
     match op {
         BinOp::Lt => {
-            // A taken strict comparison excludes +Infinity on the smaller
-            // side, even when the other side's upper bound is +Infinity.
-            // Without this, an unbounded whole loop counter's remainder
-            // still admits Infinity % k, hence NaN. A failed comparison
-            // cannot exclude it: NaN on either side also takes that edge.
-            let hi = if clear_nan { b.hi.min(f64::MAX) } else { b.hi };
+            // Every numeric member is less than b, so cannot be +Infinity.
+            // On the false edge of >=, meet keeps any NaN in a separately;
+            // a possibly NaN bound has already returned above.
+            let hi = b.hi.min(f64::MAX);
             meet(
                 a,
                 f64::NEG_INFINITY,
@@ -3188,10 +3186,10 @@ fn refine(op: BinOp, a: Facts, b: Facts, clear_nan: bool) -> Facts {
             clear_nan,
         ),
         BinOp::Gt => {
-            // The larger side of a taken strict comparison cannot be
-            // -Infinity. refine_edge also applies this to the right operand
-            // by flipping the comparison.
-            let lo = if clear_nan { b.lo.max(f64::MIN) } else { b.lo };
+            // Every numeric member is greater than b, so cannot be -Infinity.
+            // refine_edge also applies this to the right operand by flipping
+            // the comparison; meet preserves any NaN on a false <= edge.
+            let lo = b.lo.max(f64::MIN);
             meet(
                 a,
                 if a.whole { lo.floor() + 1.0 } else { lo },
@@ -5480,15 +5478,24 @@ mod tests {
         let untaken = refine(BinOp::Ge, counter, Facts::TOP, false);
         assert_eq!(untaken, counter);
         assert!(facts::rem(untaken, divisor).maybe_nan);
-        // Negating >= yields <, but its false edge can still mean NaN on
-        // the left even when the right operand is known not to be NaN.
+        // With a non-NaN bound, the false edge of >= bounds every numeric
+        // member just like <. Any NaN in the left operand survives separately.
         let numeric_bound = Facts {
             maybe_nan: false,
             ..Facts::TOP
         };
-        assert_eq!(refine(BinOp::Lt, counter, numeric_bound, false), counter);
+        assert_eq!(
+            refine(BinOp::Lt, counter, numeric_bound, false),
+            Facts::new(0.0, f64::MAX, true, false, false)
+        );
         let negative = Facts::new(f64::NEG_INFINITY, 0.0, true, true, true);
-        assert_eq!(refine(BinOp::Gt, negative, numeric_bound, false), negative);
+        assert_eq!(
+            refine(BinOp::Gt, negative, numeric_bound, false),
+            Facts::new(f64::MIN, 0.0, true, true, true)
+        );
+        // A possibly NaN bound still makes either failed comparison vacuous.
+        assert_eq!(refine(BinOp::Lt, counter, Facts::TOP, false), counter);
+        assert_eq!(refine(BinOp::Gt, negative, Facts::TOP, false), negative);
     }
 
     #[test]
