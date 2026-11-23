@@ -656,7 +656,7 @@ fn an_erased_globals_old_type_can_reenter_when_the_new_value_is_managed() {
 }
 
 #[test]
-fn a_write_through_an_identity_preserving_view_invalidates_the_original() {
+fn an_identity_preserving_view_cannot_leave_original_freshness_authoritative() {
     let mut func = fixture();
     func.values[0].kind = OpKind::ObjectNew { frame: false };
     func.values[5].kind = OpKind::Convert(ValueId(0));
