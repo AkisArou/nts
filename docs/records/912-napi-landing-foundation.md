@@ -184,3 +184,138 @@ and final bounded audit re-analyze those captures without changing them.
 | `slice1/test262-annexb.log` | `1053d82382ab929732b2b0d6ba50aeb3f2ef9272d5246dd89b2d8f4de65a69a5` |
 | `slice1/test262-staging.log` | `522fd7bc852899e10bd507fb37ad447022d397035f29457c238219ff544eabf6` |
 | `slice1/test262-harness.log` | `916f6dc113facd2a3f0ef5ded739d2051f85636b0231999167d60022faf8e5ad` |
+
+## Required-backend review revision
+
+The reviewed foundation was rebased onto main
+`8226f706f94f4e352afcb21fdf876365292d4dc0`, including #500 and #957. The
+revision comparison starts at the rebased foundation
+`93bf9d0813095f62f5f70530005fea893251767c` and ends at
+`53ec6e502a77560b95f40a036351a399ca0e4d53`. Both compiler pins are clean,
+with no applied experiment. Their binary SHA-256s are respectively
+`a77a21812a6a43cdcd29ac934cd03de24b48a1fb55ac78484f0b8a820f936fa0` and
+`acb1de84676a8d781ebc0eda1af474f6a68f9fd57e12521742490a763c0ea244`.
+
+Both preparation option types now require `new(Backend)` and have no
+`Default`; the convenience `hir::prepare` also requires the backend argument.
+Compile-fail doctests protect that requirement. The duplicated `table_entries`
+option is removed and its answer derives from the backend and provider. JVM
+split fragments preserve their parent's `raises`, with a control for each
+mode. The provided-error builder returns only the value its callers use.
+
+The landing-payload integration test prepares C and LLVM separately from the
+same raw lowering and asserts each branch's identity before emission. Older
+native ABI fixtures may share a preparation only while their prepared HIR is
+equal. A new test checks four authoritative inputs: pointer constants, bigint
+constants, buffer-untransferable, and the addon payload fixture. It prepares
+each for C and LLVM under NoGc and reference counting, with EveryExport,
+EntrySurface and closed Entry roots. It compares the entire prepared result,
+including operations, diagnostics and analysis answers, after checking both
+identities and normalizing only that identity field. A future native
+preparation difference makes the shared-fixture assumption fail. The common
+published-consuming fixture now prepares its JVM branch explicitly.
+
+The payload source moved unchanged to the shared test-support module. Its
+SHA-256 is
+`a6bb28ca852e785574e3a4570df6a4d4e575cef1092e9b4bf7db2d79018d60ca`.
+A mechanical audit finds identical literal sequences in 150 ordinary test
+callers; the two harnesses add only that shared source's module path. This
+audit excludes the new controls and the separately committed region
+expectations. The API migration changes how those callers name preparation,
+without migrating their body readers; that remains slice 2.
+
+### Exact revision comparison and region-site inventory
+
+The revision checker compares the complete exit status, stdout and stderr
+without normalization or allowances. Its known-identical control gives two
+exact views, covering 36 function views. The full capture has 2,262 views:
+2,260 prepared views covering 106,691 function views on each pin, and two
+unchanged pre-lowering declines for the intentionally invalid program.
+
+All 30 runtime corpora and 2,228 program views are byte-identical. The strict
+checker remains red for exactly two views: the open and closed Entry views of
+`calls-a-region-could-serve`. Its comparison rules were not widened. A separate
+inventory records the approved region-site consequence from the immutable
+captures, retaining the original raw diffs as well as function-local diffs.
+
+`nts_uncaught` now has the same `Helper::Raises` classification as `nts_raise`.
+A value it receives escapes to the surviving host. The region control checks
+both handovers, with `nts_raising` as the quiet control. This classification
+also reaches the existing executable region rewrite:
+
+| View | Function and site | Before | After | Reason |
+|---|---|---|---|---|
+| Open and closed Entry | `lowersMadeText`, `b0:%2`, call to `lowerOfMade` | Admitted, calls `lowerOfMade#region` | Refused: `may raise a value it made`; calls ordinary `lowerOfMade` | Dynamic `String.repeat` can throw an uncaught RangeError |
+
+Each affected view still has 39 functions. Its other 37 functions are exact.
+The ordinary `lowerOfMade` replaces its region clone: reference counting
+releases the repeated and lowercased strings, cleans the list on the throwing
+edges and calls the ordinary `Text#constructor`. In `lowersMadeText`, the
+region begin/end/hold operations and region release disappear, and the
+ordinary result is released after `textTotal`. Contents-analysis visits change
+from 493 to 498; accumulator visits remain 843. The function-local diffs list
+every changed operation. No runtime corpus visit count changes in this
+revision.
+
+The expectation changes are isolated in commit
+`53ec6e502a77560b95f40a036351a399ca0e4d53`. Besides the region-site expectation,
+the memory graph's exact inventory gains `ordinary:%2` as `CallStorage`, using
+the same existing opaque path as `nts_raise`. The four `root#init` Object
+sites remain `%0`, `%1`, `%3` and `%5`. Every MissingOutcome and invalid
+unused-operand assertion remains. The program fixture changes only its
+explanatory comment; its cases and count record remain intact.
+
+### Revision verification
+
+The revised full `inner.ts --no-agree` is green, including the new native
+equivalence, split-mode, region escape and per-backend landing-payload
+controls. The original two expected region/memory assertion failures are
+retained in `review-inner3.log`; the separate expectation commit makes the
+complete rerun green in `review-inner4.log`.
+
+The revised clean pin repeats the old-compiler payload sensitivity: fresh
+strings leak 4,800 bytes, RangeErrors 11,200 bytes, and each foreign arm retains
+100 foreign references on the old pin. All twelve revised C/LLVM arm results
+finish at zero, including conversion failure. All 30 uncaught-text
+observations again match the old compiler exactly.
+
+The five C test262 records also reconcile on the revised clean pin, with zero
+regressions, changed outcomes, missing cases or unstable outcomes. The final
+landing check is reported separately against the record commit. This remains
+the foundation slice: no published raising-entry seeding or #900 guard
+narrowing is activated.
+
+All following paths are relative to `~/.cache/nts-scratch/912/`. The original
+ownership comparison above remains its own evidence; this additional comparison
+checks the review revision against the rebased foundation.
+
+| File | SHA-256 |
+|---|---|
+| `review-inner4.log` | `77d9d09200f5c6e0a257629bc4e435d3de121829dcde42a3390d5162556494ad` |
+| `review/pins.json` | `0d660455c3fc2bc97f58fd0f71e599801a9c84f3763a5aa73b837391aad4a7ec` |
+| `scripts/review_exact_hir.py` | `ee3c87ff768599690610d0d1247bdcbff06fca6aab8409d3408e426dce31c7e7` |
+| `review/hir/summary.json` | `0e2c5a41e8141356a37d3ccfa71ab66428a8bb6661fcfd687a84b659050db16f` |
+| `review/hir/results.jsonl` | `485c9b809379d68ec2f123c6d701abf1f651f57e79e96da935c266235b8b269b` |
+| `review/hir-identical-control/summary.json` | `4aec187fd59be45e41d03141f633c132be0722e841d4814b6b1dffb85ec7c5f8` |
+| `scripts/review_region_audit.py` | `acd10845ecd8d7475da2eb733232a30a1624e1378f1e46333394fd54455f65b0` |
+| `review/region-audit/summary.json` | `5124dbd73bfb323697a69516688c2baee4917ed20259b1d84772bf303abf47f7` |
+| `review/region-audit/open.functions.diff` | `cdb935b3e857642792447e8126e0b6b6c65b1ec39ff1b0b98a45d11f055f8b43` |
+| `review/region-audit/closed.functions.diff` | `cdb935b3e857642792447e8126e0b6b6c65b1ec39ff1b0b98a45d11f055f8b43` |
+| `review/hir/tests__programs__calls-a-region-could-serve.open.diff` | `6107d789230d0a2f26212b1b6bfe76a24052e53ae3feb42fa2751091a6dc8b5f` |
+| `review/hir/tests__programs__calls-a-region-could-serve.closed.diff` | `6107d789230d0a2f26212b1b6bfe76a24052e53ae3feb42fa2751091a6dc8b5f` |
+| `scripts/review_caller_literals_final.py` | `0471056d5c57fd974f4c2d5412d0fc2a10f483f20c29ba81c73871dbdc81a0bf` |
+| `review-caller-literals-final.json` | `97b42460211d156148ed64b38cf126e9aab2c3f651721105afb9101e4b6af5f3` |
+| `scripts/review_payload.py` | `fc405ea21d90ea9ef433f3d7ebc6edd7ba5e19d2fa53de44cd87d630c9b9568e` |
+| `review/payload/before/summary.json` | `aa12bdab8e109438452273a793fa672948cb327a61c7400d1108d552f21de1a0` |
+| `review/payload/after/summary.json` | `bb3c4e23372ec994fac467651053ad23295ae1988b3c1ff233e93e247360eee4` |
+| `scripts/review_text.py` | `e267fdc84ef5dcb625c24d2a8376a631ee32a116f395403d30408c4502842ee6` |
+| `review/uncaught-text/summary.json` | `b9e8afcd698de5bb2cfe86c67b56416b82e6e0bb5b08f0584296fc3a4e18d6cc` |
+| `scripts/review_test262.sh` | `a6b8ea8554b6a17e50b8984d8ccf3f1018a367a6acac999564f22bdd222bd2db` |
+| `review/test262-language.log` | `b22d8bd15894c085e500618f112947ad580460721d5eb2989f68a77907f08962` |
+| `review/test262-builtins.log` | `843464bfb2f44b760ac7687d0e7b7d49467c42ba5994dbe8b4963d4095f0a770` |
+| `review/test262-annexb.log` | `0c3cb947b77c2cd258213ff5b6fef3f907ea803d0aed7c3d8c82966df2d4ce8b` |
+| `review/test262-staging.log` | `550a2c07449019c6321021ca3a0eaeb375279fc74918436c59e7cd6cac644867` |
+| `review/test262-harness.log` | `dfa05743716cfb74927bd38f5f50e5da59d0f8a3fd0f75530561aecb98171c41` |
+| `review-inner3.log` | `2935909df14eff9c4f2aafed1a410c297e12a7c2f9f84321d546c32a088d0a2f` |
+| `review-postproof.log` | `745bdbb10165d254709544504363a3a201870f7f9fb8b8b579a8755acd8de126` |
+| `scripts/review_postproof.sh` | `f56947e0caefca95d8f2faadfc889f8b54d8e3f4211149251f871190431f6a40` |
