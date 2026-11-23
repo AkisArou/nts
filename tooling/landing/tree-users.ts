@@ -61,17 +61,22 @@ function ownedRun(group:string,{proc=PROC,runTrees=[],cgroups}:TreeProcessOption
     const stat=statAt(pid,proc);
     return Number(uid)===process.getuid?.()&&stat?.live===true&&String(stat.started)===start;
   };
-  const owners=new Map<string,()=>void>();
-  for(const tree of new Set(runTrees)){
-    const file=join(tree,'target/gate-scope-owner.json');let bytes:string;
+  // The receipt is the run owner's observed state: absent is undefined, and
+  // any other failed read refuses attribution as an observation.
+  const receipt=(file:string):string|undefined=>{
     try{
       const info=lstatSync(file);
       if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.())throw new OwnershipObservationFailure('unowned gate receipt '+file);
-      bytes=readFileSync(file,'utf8');
+      return readFileSync(file,'utf8');
     }catch(error){
-      if(missing(error))continue;if(error instanceof OwnershipObservationFailure)throw error;
+      if(missing(error))return;if(error instanceof OwnershipObservationFailure)throw error;
       throw new OwnershipObservationFailure('unreadable gate receipt '+file+': '+errorText(error),{cause:error});
     }
+  };
+  const owners=new Map<string,()=>void>();
+  for(const tree of new Set(runTrees)){
+    const file=join(tree,'target/gate-scope-owner.json'),bytes=receipt(file);
+    if(bytes===undefined)continue;
     let owner:ReturnType<typeof parseRunOwner>;
     try{owner=parseRunOwner(bytes,file);}catch(error){throw new OwnershipObservationFailure('invalid gate receipt '+file+': '+errorText(error),{cause:error});}
     const scope=owner.scope;
@@ -82,10 +87,14 @@ function ownedRun(group:string,{proc=PROC,runTrees=[],cgroups}:TreeProcessOption
       return current.device===scope.device&&current.inode===scope.inode;
     };
     if(owner.boot!==boot()||!live(owner.pid,owner.start)||!identity())throw new OwnershipObservationFailure('unavailable gate owner identity '+file);
-    const root=realpathSync(tree);
+    let root:string;
+    try{root=realpathSync(tree);}catch(error){throw new OwnershipObservationFailure('gate run tree changed during attribution '+tree+': '+errorText(error),{cause:error});}
     owners.set(root,()=>{
-      const info=lstatSync(file);
-      if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.()||readFileSync(file,'utf8')!==bytes||owner.boot!==boot()||!live(owner.pid,owner.start)||!identity())throw new OwnershipObservationFailure('gate owner changed during attribution '+file);
+      // A run that drains removes its receipt: a receipt gone, unreadable or
+      // replaced since its first read is a changed owner, never a defect.
+      let again:string|undefined;
+      try{again=receipt(file);}catch(error){throw new OwnershipObservationFailure('gate owner changed during attribution '+file+': '+errorText(error),{cause:error});}
+      if(again!==bytes||owner.boot!==boot()||!live(owner.pid,owner.start)||!identity())throw new OwnershipObservationFailure('gate owner changed during attribution '+file);
     });
   }
   if(owners.size>1)throw new OwnershipObservationFailure('conflicting gate tree owners for '+group);

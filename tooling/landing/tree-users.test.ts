@@ -7,7 +7,7 @@ import {testEnvironment} from "../gate/test-environment.ts";
 import { test,type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -204,9 +204,22 @@ test('only a failed process or cgroup observation is an observation failure',t=>
   assert.equal(observedFailure(Object.assign(new TypeError('bad argument'),{code:'ERR_INVALID_ARG_TYPE'}),{proc:f.proc}),false);
 });
 
-test('an unreadable process scan outside proc is a hard error, never a retry',t=>{
-  const f=treeProcessFixture(t),blocked=join(f.root,'blocked'),tree=join(blocked,'tree');mkdirSync(tree,{recursive:true});
-  chmodSync(blocked,0);
-  try{assert.throws(()=>treeUsers(tree,f.options),error=>!(error instanceof TreeOwnershipUnavailable)&&(error as NodeJS.ErrnoException).code==='EACCES');}
-  finally{chmodSync(blocked,0o700);}
+// A gate run that drains removes its receipt between attribution's first read
+// and its verification: that is a changed owner, so the pool retries.
+for(const change of ['removed','unreadable','replaced'] as const)test('a receipt '+change+' during attribution is an observation failure, never a raw errno',async t=>{
+  const f=treeProcessFixture(t),r=runReceipt(f),stage=join(f.root,'staged');mkdirSync(stage);
+  copyModuleClosure(['tooling/landing/tree-users.ts'],stage);
+  const file=join(stage,'tooling/landing/tree-users.ts'),source=readFileSync(file,'utf8');
+  const anchor='  for(const verify of owners.values())verify();';assert.equal(source.split(anchor).length,2);
+  const act=change==='removed'?'removeStagedReceipt(file,{force:true});':change==='unreadable'?'chmodStagedReceipt(file,0);':`replaceStagedReceipt(file,${JSON.stringify(JSON.stringify({...r.receipt,start:'89'}))});`;
+  writeFileSync(file,`import {rmSync as removeStagedReceipt,chmodSync as chmodStagedReceipt,writeFileSync as replaceStagedReceipt} from 'node:fs';\n`
+    +source.replace(anchor,`  for(const tree of new Set(runTrees)){const file=join(tree,'target/gate-scope-owner.json');${act}}\n${anchor}`));
+  const reader:typeof import('./tree-users.ts')=await import(pathToFileURL(file).href);
+  chmodSync(join(f.task,'fd'),0);
+  try{
+    assert.throws(()=>reader.treeUsers(f.tree,r.options),error=>{
+      assert.ok(error instanceof reader.TreeOwnershipUnavailable,String(error));
+      assert.match(error.message,/unreadable process 42: gate owner changed during attribution .*gate-scope-owner\.json/);return true;
+    });
+  }finally{chmodSync(join(f.task,'fd'),0o700);if(existsSync(r.file))chmodSync(r.file,0o600);}
 });
