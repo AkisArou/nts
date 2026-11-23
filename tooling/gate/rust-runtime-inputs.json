@@ -6089,6 +6089,66 @@
       }
     },
     {
+      "source": "compiler/codegen/napi/tests/landing_payload.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
       "source": "compiler/codegen/napi/tests/libc_named_exports.rs",
       "declarations": {
         "imports": [],
@@ -6261,6 +6321,13 @@
     },
     {
       "source": "compiler/core/src/hir/appended_results.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/backend.rs",
       "declarations": {
         "imports": [],
         "assets": []
@@ -12540,6 +12607,13 @@
       }
     },
     {
+      "source": "compiler/test-support/uncaught_text.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "runtime/react/compiler/nts-react/src/babel.rs",
       "declarations": {
         "imports": [],
@@ -12731,1874 +12805,6 @@
             "path": "../../fixtures/host-components/tsconfig.json"
           }
         ]
-      }
-    },
-    {
-      "source": "tooling/bench/src/build.rs",
-      "declarations": {
-        "imports": [
-          "../../gate/case-bound.ts",
-          "../../gate/active-command.ts",
-          "../../gate/command-observations-fixture.ts"
-        ],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/bench/src/capture.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/bench/src/cli.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/bench/src/count_noise.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../results/benchmarks/count-bands.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/bench/src/execution.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/bench/src/loop_host.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../benchmarks/common/settle.c"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/bench/src/reference_link.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "directory-candidates",
-            "path": "../../../benchmarks/cases/",
-            "candidates": [
-              {
-                "name": "ref.link",
-                "kind": "optional-file"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/bench/src/references.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "directory-candidates",
-            "path": "../../../benchmarks/cases/",
-            "candidates": [
-              {
-                "name": "ref.provenance.json",
-                "kind": "optional-file"
-              },
-              {
-                "name": "ref.cpp",
-                "kind": "path-exists"
-              },
-              {
-                "name": "ref.cpp",
-                "kind": "file-exists"
-              },
-              {
-                "name": "ref.java",
-                "kind": "path-exists"
-              },
-              {
-                "name": "ref.java",
-                "kind": "file-exists"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/bench/src/reserved.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/bench/src/results.rs",
-      "declarations": {
-        "imports": [
-          "../run-session.ts"
-        ],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/bench/src/workload.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/bench/tests/count.rs",
-      "declarations": {
-        "imports": [
-          "../count-driver.ts",
-          "../host-columns.ts",
-          "../../../benchmarks/cases/fib/case.ts",
-          "../../../benchmarks/common/bench.mjs"
-        ],
-        "assets": [
-          {
-            "kind": "generated-project",
-            "role": "compiled-program",
-            "path": "../../../tsconfig.fixtures.json",
-            "directory": "./benchmarks/cases/fib",
-            "include": "directory"
-          },
-          {
-            "kind": "file",
-            "path": "../../../benchmarks/common/main.cpp"
-          },
-          {
-            "kind": "file",
-            "path": "../../../benchmarks/common/harness.h"
-          },
-          {
-            "kind": "file",
-            "path": "../../../benchmarks/common/Bench.java"
-          },
-          {
-            "kind": "file",
-            "path": "../../../results/benchmarks/count-bands.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../benchmarks/cases/fib/ref.cpp"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../benchmarks/cases/fib/ref.java"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../benchmarks/cases/fib/ref.provenance.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../benchmarks/cases/fib/driver.cpp"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../benchmarks/cases/fib/driver.java"
-          },
-          {
-            "kind": "optional-module",
-            "path": "../../../benchmarks/cases/fib/driver.mjs"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../benchmarks/cases/fib/driver.ts"
-          },
-          {
-            "kind": "directory-candidates",
-            "path": "../../../benchmarks/cases/",
-            "candidates": []
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/bench/tests/layouts.rs",
-      "declarations": {
-        "imports": [
-          "../layouts.test.ts"
-        ],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/apple_surface.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/arguments.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/check.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/emit.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/facts.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/map.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/mod.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/model.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/naming.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/parse.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_gir/prerequisites.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_header/ctype.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_header/mod.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_header/probe.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_objc.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_objc/cf.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_scratch.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/check.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/emit.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/facts.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/iid.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/map.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/mod.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/read.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/resource_params.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/bind_winmd/winrt.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/build_manifest.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/checkers.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/contents_census.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/emission.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/expect_ir.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-cache-entry-array-keeps-a-shared-layout/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-closure-over-a-module-scope-loop-head/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-bigint-compared-with-an-erased-value/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-base-typed-slot-narrowed-by-instanceof/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/array-from/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/src/generator_inputs.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "bind_scratch.rs"
-          },
-          {
-            "kind": "file",
-            "path": "gir_surface.rs"
-          },
-          {
-            "kind": "conservative",
-            "path": "bind_header"
-          },
-          {
-            "kind": "conservative",
-            "path": "bind_gir"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/src/gir_surface.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/jar_resources.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/multi_emit.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/native_paths.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/node_dependencies.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/objc_bindings.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/objc_imports.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/swift.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/windows_surface.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/src/xcframework.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/arguments.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-cast-reads-a-field-another-layout-holds/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/bind_gir_request.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/bind_gir_struct.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/bind_winmd.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/build.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../tests/interop/native-uname"
-          },
-          {
-            "kind": "data",
-            "path": "../../../tests/workspace"
-          },
-          {
-            "kind": "file",
-            "path": "../src/main.rs"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/case_roots.rs",
-      "declarations": {
-        "imports": [
-          "../../census/project.test.ts",
-          "../../config/src/index.ts"
-        ],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/cast_family_alias.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-cast-reads-a-field-another-layout-holds/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-cast-result-alias-keeps-its-tag/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-record-membership-test-through-an-erased-cast/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/check_report.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/com_ownership.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tests/interop/windows-com/ownership/ownership.winmd"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../tests/interop/windows-com/ownership/native/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/config_roots.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/contents_census.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/container-content-facts/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/invalid/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/determinism.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/entry_decisions.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/entry_roots.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/expect_ir.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/gir_for_project.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/host_gc.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/objects/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/jvm_bindings.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/memory_census.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/memory/traversal/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/multi_emit.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/node_dependencies.rs",
-      "declarations": {
-        "imports": [
-          "./fixtures/node-loop-driver.cjs",
-          "./fixtures/node-loop-blocked.cjs",
-          "../../gate/case-bound.ts",
-          "../../gate/node-deps-elf.ts",
-          "../../config/src/index.ts"
-        ],
-        "assets": [
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/c/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node/internal/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node/process/"
-          },
-          {
-            "kind": "file",
-            "path": "./fixtures/node-loop-env.c"
-          },
-          {
-            "kind": "file",
-            "path": "./fixtures/node-loop-addon.c"
-          },
-          {
-            "kind": "file",
-            "path": "./fixtures/node-deps-versions.c"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/platform_build_skips.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tests/interop/macos-classes/build.sh"
-          },
-          {
-            "kind": "file",
-            "path": "../../../tests/interop/ios-hello/build.sh"
-          },
-          {
-            "kind": "file",
-            "path": "../../../tests/interop/windows-com/build.sh"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/product_roots.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/an-addon-built-with-entry-is-prepared-open/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/refused_virtual_slots.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../compiler/core/tests/programs/refused-virtual-slot-arity/tsconfig.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../compiler/core/tests/programs/refused-virtual-slots"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/region_placements.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/stats.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/cli/tests/stdlib_beside_throws.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/vfunc_slot_witness.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/cli/tests/wasm.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/complaint_cache.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/emit.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/manifest.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/recover.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/report.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/resolution.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/resolve.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/seed.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/src/workspace.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/deps/tests/acquisition.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/artifact_shadow.rs",
-      "declarations": {
-        "imports": [
-          "../../gate/artifact-shadow.ts"
-        ],
-        "assets": [
-          {
-            "kind": "cargo-inputs",
-            "path": "../../.."
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/differential/src/call_activity.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/case_costs.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/check_report.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/domains.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/objects.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/oracle_coverage.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/oracle_emit.rs",
-      "declarations": {
-        "imports": [
-          "../oracle-emit.ts"
-        ],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/oracle_exclusions.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../benchmarks/cases"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../benchmarks/common"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../tests/programs/array-from"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../tests/programs/growable"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/differential/src/oracle_protocol_tests.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../runtime/jvm/member-templates/src/nts/rt/Check.java.in"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/differential/src/oracle_records.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "conservative",
-            "path": "../../../results/oracle-counts"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/differential/src/oracle_run.rs",
-      "declarations": {
-        "imports": [
-          "../oracle-execution.ts"
-        ],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/output.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/differential/src/source_contracts.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/native/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/objc/node_modules/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/winrt/node_modules/"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/native/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/objc/package.json"
-          },
-          {
-            "kind": "optional-file",
-            "path": "../../../runtime/winrt/package.json"
-          },
-          {
-            "kind": "conservative",
-            "path": "../../../runtime/node_modules/"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/differential/src/table_membership_tests.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/src/whole_program.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/differential/tests/jvm_sabotage.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "data",
-            "path": "../../../runtime/jvm/src/"
-          },
-          {
-            "kind": "file",
-            "path": "../../../runtime/jvm/build.sh"
-          },
-          {
-            "kind": "file",
-            "path": "../../../runtime/jvm/jar-date.txt"
-          },
-          {
-            "kind": "file",
-            "path": "../../../runtime/jvm/jdk.txt"
-          },
-          {
-            "kind": "file",
-            "path": "../../../runtime/jvm/test-vm-flags.txt"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/bitwise/tsconfig.json"
-          },
-          {
-            "kind": "project-config",
-            "role": "compiled-program",
-            "path": "../../../tests/programs/unions/tsconfig.json"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/differential/tests/whole_program.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../../tsconfig.fixtures.json"
-          },
-          {
-            "kind": "installation-inputs",
-            "path": "../../.."
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/suite/src/corpus.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/isolated.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/rows.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/adapter.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/assemble.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/discover.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/host_assets.rs",
-      "declarations": {
-        "imports": [],
-        "assets": [
-          {
-            "kind": "file",
-            "path": "../../assets/test262/host.d.ts"
-          }
-        ]
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/metadata.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/mod.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/model.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/report.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/schedule.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/select.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
-      }
-    },
-    {
-      "source": "tooling/suite/src/test262_runner/verdict.rs",
-      "declarations": {
-        "imports": [],
-        "assets": []
       }
     },
     {
@@ -18046,7 +16252,1875 @@
       }
     },
     {
+      "source": "tooling/bench/src/build.rs",
+      "declarations": {
+        "imports": [
+          "../../gate/case-bound.ts",
+          "../../gate/active-command.ts",
+          "../../gate/command-observations-fixture.ts"
+        ],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/bench/src/capture.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/bench/src/cli.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/bench/src/count_noise.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../results/benchmarks/count-bands.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/bench/src/execution.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/bench/src/loop_host.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../benchmarks/common/settle.c"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/bench/src/reference_link.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "directory-candidates",
+            "path": "../../../benchmarks/cases/",
+            "candidates": [
+              {
+                "name": "ref.link",
+                "kind": "optional-file"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/bench/src/references.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "directory-candidates",
+            "path": "../../../benchmarks/cases/",
+            "candidates": [
+              {
+                "name": "ref.provenance.json",
+                "kind": "optional-file"
+              },
+              {
+                "name": "ref.cpp",
+                "kind": "path-exists"
+              },
+              {
+                "name": "ref.cpp",
+                "kind": "file-exists"
+              },
+              {
+                "name": "ref.java",
+                "kind": "path-exists"
+              },
+              {
+                "name": "ref.java",
+                "kind": "file-exists"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/bench/src/reserved.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/bench/src/results.rs",
+      "declarations": {
+        "imports": [
+          "../run-session.ts"
+        ],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/bench/src/workload.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/bench/tests/count.rs",
+      "declarations": {
+        "imports": [
+          "../count-driver.ts",
+          "../host-columns.ts",
+          "../../../benchmarks/cases/fib/case.ts",
+          "../../../benchmarks/common/bench.mjs"
+        ],
+        "assets": [
+          {
+            "kind": "generated-project",
+            "role": "compiled-program",
+            "path": "../../../tsconfig.fixtures.json",
+            "directory": "./benchmarks/cases/fib",
+            "include": "directory"
+          },
+          {
+            "kind": "file",
+            "path": "../../../benchmarks/common/main.cpp"
+          },
+          {
+            "kind": "file",
+            "path": "../../../benchmarks/common/harness.h"
+          },
+          {
+            "kind": "file",
+            "path": "../../../benchmarks/common/Bench.java"
+          },
+          {
+            "kind": "file",
+            "path": "../../../results/benchmarks/count-bands.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/cases/fib/ref.cpp"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/cases/fib/ref.java"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/cases/fib/ref.provenance.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/cases/fib/driver.cpp"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/cases/fib/driver.java"
+          },
+          {
+            "kind": "optional-module",
+            "path": "../../../benchmarks/cases/fib/driver.mjs"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../benchmarks/cases/fib/driver.ts"
+          },
+          {
+            "kind": "directory-candidates",
+            "path": "../../../benchmarks/cases/",
+            "candidates": []
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/bench/tests/layouts.rs",
+      "declarations": {
+        "imports": [
+          "../layouts.test.ts"
+        ],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/apple_surface.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/arguments.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/check.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/emit.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/facts.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/map.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/mod.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/model.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/naming.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/parse.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_gir/prerequisites.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_header/ctype.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_header/mod.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_header/probe.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_objc.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_objc/cf.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_scratch.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/check.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/emit.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/facts.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/iid.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/map.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/mod.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/read.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/resource_params.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/bind_winmd/winrt.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/build_manifest.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/checkers.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/contents_census.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/emission.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/expect_ir.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-cache-entry-array-keeps-a-shared-layout/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-closure-over-a-module-scope-loop-head/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-bigint-compared-with-an-erased-value/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-base-typed-slot-narrowed-by-instanceof/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/array-from/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/src/generator_inputs.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "bind_scratch.rs"
+          },
+          {
+            "kind": "file",
+            "path": "gir_surface.rs"
+          },
+          {
+            "kind": "conservative",
+            "path": "bind_header"
+          },
+          {
+            "kind": "conservative",
+            "path": "bind_gir"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/src/gir_surface.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/jar_resources.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/multi_emit.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/native_paths.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/node_dependencies.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/objc_bindings.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/objc_imports.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/swift.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/windows_surface.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/src/xcframework.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/arguments.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-cast-reads-a-field-another-layout-holds/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/bind_gir_request.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/bind_gir_struct.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/bind_winmd.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/build.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../tests/interop/native-uname"
+          },
+          {
+            "kind": "data",
+            "path": "../../../tests/workspace"
+          },
+          {
+            "kind": "file",
+            "path": "../src/main.rs"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/case_roots.rs",
+      "declarations": {
+        "imports": [
+          "../../census/project.test.ts",
+          "../../config/src/index.ts"
+        ],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/cast_family_alias.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-cast-reads-a-field-another-layout-holds/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-cast-result-alias-keeps-its-tag/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-record-membership-test-through-an-erased-cast/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/check_report.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/com_ownership.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tests/interop/windows-com/ownership/ownership.winmd"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../tests/interop/windows-com/ownership/native/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/config_roots.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/contents_census.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/container-content-facts/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/invalid/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/determinism.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/entry_decisions.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-direct-call-hands-an-argument-to-a-published-method/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/entry_roots.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/expect_ir.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/gir_for_project.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/host_gc.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/objects/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/jvm_bindings.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/memory_census.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/memory/traversal/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/multi_emit.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/node_dependencies.rs",
+      "declarations": {
+        "imports": [
+          "./fixtures/node-loop-driver.cjs",
+          "./fixtures/node-loop-blocked.cjs",
+          "../../gate/case-bound.ts",
+          "../../gate/node-deps-elf.ts",
+          "../../config/src/index.ts"
+        ],
+        "assets": [
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/c/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node/internal/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node/process/"
+          },
+          {
+            "kind": "file",
+            "path": "./fixtures/node-loop-env.c"
+          },
+          {
+            "kind": "file",
+            "path": "./fixtures/node-loop-addon.c"
+          },
+          {
+            "kind": "file",
+            "path": "./fixtures/node-deps-versions.c"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/platform_build_skips.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tests/interop/macos-classes/build.sh"
+          },
+          {
+            "kind": "file",
+            "path": "../../../tests/interop/ios-hello/build.sh"
+          },
+          {
+            "kind": "file",
+            "path": "../../../tests/interop/windows-com/build.sh"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/product_roots.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/an-addon-built-with-entry-is-prepared-open/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/refused_virtual_slots.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../compiler/core/tests/programs/refused-virtual-slot-arity/tsconfig.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../compiler/core/tests/programs/refused-virtual-slots"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/region_placements.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/stats.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/cli/tests/stdlib_beside_throws.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/vfunc_slot_witness.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/cli/tests/wasm.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/complaint_cache.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/emit.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/manifest.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/recover.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/report.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/resolution.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/resolve.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/seed.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/src/workspace.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/deps/tests/acquisition.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/artifact_shadow.rs",
+      "declarations": {
+        "imports": [
+          "../../gate/artifact-shadow.ts"
+        ],
+        "assets": [
+          {
+            "kind": "cargo-inputs",
+            "path": "../../.."
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/src/call_activity.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/case_costs.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/check_report.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/domains.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/objects.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/oracle_coverage.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/oracle_emit.rs",
+      "declarations": {
+        "imports": [
+          "../oracle-emit.ts"
+        ],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/oracle_exclusions.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../benchmarks/cases"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../benchmarks/common"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../tests/programs/array-from"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../tests/programs/growable"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/src/oracle_protocol_tests.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../runtime/jvm/member-templates/src/nts/rt/Check.java.in"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/src/oracle_records.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "conservative",
+            "path": "../../../results/oracle-counts"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/src/oracle_run.rs",
+      "declarations": {
+        "imports": [
+          "../oracle-execution.ts"
+        ],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/output.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/src/source_contracts.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/src/table_membership_tests.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/src/whole_program.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/differential/tests/jvm_sabotage.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "data",
+            "path": "../../../runtime/jvm/src/"
+          },
+          {
+            "kind": "file",
+            "path": "../../../runtime/jvm/build.sh"
+          },
+          {
+            "kind": "file",
+            "path": "../../../runtime/jvm/jar-date.txt"
+          },
+          {
+            "kind": "file",
+            "path": "../../../runtime/jvm/jdk.txt"
+          },
+          {
+            "kind": "file",
+            "path": "../../../runtime/jvm/test-vm-flags.txt"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/bitwise/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/unions/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/differential/tests/whole_program.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "installation-inputs",
+            "path": "../../.."
+          }
+        ]
+      }
+    },
+    {
       "source": "tooling/publication/tests/publication.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/corpus.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/isolated.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/rows.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/adapter.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/assemble.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/discover.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/host_assets.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../assets/test262/host.d.ts"
+          }
+        ]
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/metadata.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/mod.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/model.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/report.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/schedule.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/select.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "tooling/suite/src/test262_runner/verdict.rs",
       "declarations": {
         "imports": [],
         "assets": []
