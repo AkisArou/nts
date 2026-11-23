@@ -2591,6 +2591,7 @@ fn prepare_snapshot(
         snapshot,
         &hir::Options {
             backend,
+            entry_unwind: hir::EntryUnwind::Terminal,
             specialize_numbers: specialize,
             provider,
             roots: hir::reachable::Roots::Entry(entry),

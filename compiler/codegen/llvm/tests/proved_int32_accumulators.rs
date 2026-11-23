@@ -215,7 +215,7 @@ fn proved_operands_remove_executed_conversions_on_both_native_emitters() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(hir::backend::Backend::Llvm, EntryUnwind::Terminal)
+                ..hir::Options::new(Backend::Llvm, EntryUnwind::Terminal)
             },
         )
         .expect("prepared");
