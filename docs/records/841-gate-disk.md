@@ -141,3 +141,137 @@ explicitly outside these changes. `canonical-environment.ts` selects
 this writer and `node-cache-retention.ts`'s hourly bounds. The coordinator
 required preserving that policy exactly. No shared cache, historical tmp or
 other state was deleted during the first slice.
+
+## Temporary lifetime slice (b)
+
+The run's owner closes after workers, resolution helpers, scopes and admission
+drain. A per-token receipt binds the created temporary and its parent by device,
+inode and UID. Creation authority stays in the launcher context; dependency
+capabilities retain only physical identity, preserving canonical environment
+identity. Normal close and the unit's post-stop backstop use the same guarded
+remover. Acquisition joins backstop activation before payload readiness.
+
+The backstop binds the exact creator unit and invocation. Its working directory
+holds the cleanup source through callback completion. Normal close requests its
+stop without synchronously waiting behind a creator already stopping. A closed
+receipt is idempotent only while the original temporary remains absent; a new
+root at that path receives no removal grant. Unknown, replaced or held roots
+refuse by name. No historical temporary population is discovered.
+
+The diagnostic inventory reviewed for this slice is:
+
+| Producer | Retained diagnostic population |
+| --- | --- |
+| Oracle dependency capture | Capture stdout/stderr, command, failure and identity metadata beside the registered image; only authenticated image payload directories are excluded |
+| Resolution service | Existing holder stderr and regular diagnostic metadata; sockets and links are not copied |
+| Blockers | Retained fixture/run outputs, generated reproducers, child stdout/stderr and child-result JSON |
+| Census and compiler runs | Any remaining failing input, generated output and diagnostic file in the owned temporary; already published step logs and summaries remain outside it |
+| Cores | Existing files only; the units retain LimitCORE=0 |
+
+Retained paths live below `diagnostics-<token>/files/`, preserving filesystem
+name bytes, including names that are not UTF-8. The sibling manifest maps that
+namespace to the original temporary. This separation preserves an input named
+`manifest.json`. Retention is bounded at 64 MiB and 4,096 files per run, with a
+named cap observation. Copies use a bounded buffer and flush before removal.
+Every removal logs its run, path and allocated bytes in `temporary.log`; forced
+cleanup also reports through its unit journal. Oracle setup telemetry is captured
+before removing its inputs. A cleanup failure remains non-green.
+
+Focused controls passed all 118 assertions across temporary lifetime, legacy
+temporary guards, canonical environments, candidate launchers and scoped stops.
+They include success, ordinary failure, SIGTERM, a forced SIGKILL unit stop,
+backstop activation readiness, live process/unit holders, root and parent
+identity changes, tokens, future receipts, legacy unregistered scratch, both
+retention caps and filename collisions. Strict tooling types and the source
+ownership audit also passed. Raw output is
+`~/.cache/nts-scratch/841/b/proof-v3.log`, SHA-256
+`9c89c6674894a536bf372f3f844955ae29e43bc6e7e394ba2e4b6e3056b97151`.
+
+The additional malformed-birth control was committed at
+`bd956938bdf387d0e10116c83974b308f98799e0` before its control run. Against that
+reader it failed with `Missing expected exception`: malformed owner data could
+reach normal disposal. Raw output is
+`~/.cache/nts-scratch/841/b/owner-control-leaf.log`, SHA-256
+`2e34757575b81e516a6aa3920465cf501593c7971d3a184c242100e23f9ced5d`.
+The reader now validates canonical boot/PID/birth syntax, matching creation,
+record filename and token identities, and terminal record shape. The backstop
+also requires the recorded creator unit to be inactive or failed before removal.
+The completed focused rerun passed all 119 assertions, strict typing and source
+ownership. Its raw output is `~/.cache/nts-scratch/841/b/proof-v4.log`, SHA-256
+`7d3886164ee308b86e9273b860defac08395a9e1ff8d6c28ec06b337473ec11e`.
+
+The interrupted-publication control was committed at
+`e70177c73796b8a0ebb9a90520362bd1421a51be` before execution. It failed
+with `EEXIST` on retry: a partial diagnostic directory blocked cleanup. Raw
+output is `~/.cache/nts-scratch/841/b/diagnostic-control.log`, SHA-256
+`72b6b1ce660d1089e7933da383f77d8411b12abe5e2f6c5f7751f583ff0747e4`.
+Diagnostic copies now stage inside the authenticated temporary, with a flushed
+manifest and exact staged directory identity in the receipt before atomic
+publication. Retrying at copying, prepared and published checkpoints preserves
+complete evidence and disposes temporary copies. Replaced or future publication
+records refuse removal. A real SIGKILL during copying exercises backstop recovery.
+
+The final focused population passed all 122 tests, strict typing and source
+ownership. Raw output is `~/.cache/nts-scratch/841/b/proof-v5.log`, SHA-256
+`ca308db903ca3736348d3be6cf54251a48b42f31eb239669646ede5bdfc95b13`.
+
+The exact-commit landing proof for `b6b988a90e1a326b44bfd01e0455a15305e6485a`
+passed in 1,465 seconds and disposed its temporary, but artifact review found
+aggregate owner observations were read after disposal. The regression assertion
+was committed at `ffe4a1e70c4ab5c72e3a165dc20c9fed27ac17b2` and failed
+with `missing` versus `complete`. Raw output is
+`~/.cache/nts-scratch/841/b/owner-summary-control.log`, SHA-256
+`b92013b9e801e3e224a714b3b8b64df423ef9770520db61b978e486ef52b09e7`. The owner now snapshots aggregate emissions after
+producer drain and before disposal, alongside setup costs.
+
+The focused rerun passed all 122 tests, including exact aggregate emission
+counts after temporary disposal, plus strict typing and source ownership.
+Raw output is `~/.cache/nts-scratch/841/b/proof-v6.log`, SHA-256
+`3271f3eb339e5dcac21d3073aacdfb82bb2f28d15e02034a5ca47e5eba3d7a52`.
+
+The `94ceda330dbda4c72608f97f3a3627803dacef3e` landing proof passed
+every step except tooling. Concurrent kernel controls exposed ambient holder
+observations: measure-reuse saw a sibling's nondumpable process, and
+case-admission saw another test's unit argument. The closer refused both and
+removed neither temporary. The enclosing red run still disposed its temporary,
+retained diagnostics within the logged 64 MiB cap, and published complete
+aggregate owner observations (343 emits, 68 hits, 28 held). Raw tooling output
+is `~/.cache/nts-scratch/841/b/here-v3-tooling.raw.log`,
+SHA-256 `57553337b539759fef56caa28a161995b282aaa9a51f481b20f9a36e3302e2d5`.
+
+Unit ownership now belongs to the same complete HostObservations capability as
+process ownership. Production uses the existing live guard unchanged; fixtures
+supply explicit UnitTreeOwnership arrays. Missing or malformed observations
+refuse by name. Only the temporary closer adopts this capability, on normal
+and backstop cleanup; canonical and candidate launchers reach it through that
+owner. Measurement fixtures now retain their ownMemory packets instead of
+dropping them through hostEnvironment. Argument parsing in the shared live
+guard is outside this slice (#990).
+
+Measurement packet authority now enters through pinnedGate's explicit `owned`
+argument, preserving canonical verdicts instead of marking fixture observations
+as ambient experiments. Fixed-resident case controls declare their named unit's
+logical actor through fixedMembersUnitCommand. The widened focused suite passed
+all 213 tests across nine files, including both previously failing areas, the
+complete unit observation validation, and the temporary closer's refusal of
+missing or held unit views. Strict typing and source ownership also passed.
+Raw output is `~/.cache/nts-scratch/841/b/proof-v8.log`, SHA-256
+`d2cc238de60d45304813ac218c5a43bef951e2407f4a2080dd90e51745b4acac`.
+
+The `a754fc5df9db989afac55b5636d0db827173860f` proof exposed a
+dependency regression: record writers owed the full gate because the common
+observation owner imported reclamation's guards. Its owed-test assertion failed;
+the local proof was then cancelled and drained before editing. Raw output is
+`~/.cache/nts-scratch/841/b/here-v4-tooling.raw.log`,
+SHA-256 `422d896d1452d1cdeb20a5474542c8946332ea174f11a5a125ebfd9c085c55f5`. The observation owner now returns typed
+live or fixed unit data without importing reclamation. Only the temporary
+closer dispatches the existing guards over that reading. The live guard and
+its argument parsing remain unchanged.
+
+The data-only reading passed the record-writer owed control, restoring its
+precise selection. Strict typing, source ownership and the other nine focused
+files passed. The standalone owed route needs a cache temporary directory;
+with that supplied, one remaining metadata prerequisite control requires the
+source refactor committed before execution. Raw output for that pre-commit
+check is `~/.cache/nts-scratch/841/b/proof-v10.log`, SHA-256
+`cfb695e012c309a725354f3a91ede5e0c7cc28fbceba4c91c94d4663c300755b`.

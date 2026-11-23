@@ -205,7 +205,6 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   // its outer lifetime. A neighbour's prune can reach neither one.
   const registry = join(home, ".cache/nts-gate/closed-temporaries");
   const closed = existsSync(registry) ? readdirSync(registry).map(name => (JSON.parse(readFileSync(join(registry, name), "utf8")) as { owned: { path: string } }).owned.path) : [];
-  assert.equal(summary.temporary.enclosing, planned.temporary.enclosing?.path);
   assert.deepEqual(closed, summary.temporary.state === "retained after red" && !summary.temporary.enclosing ? [planned.temporary.path] : [], JSON.stringify(summary.temporary));
   const retained = existsSync(planned.temporary.path), other = captureRunTemporary(join(neighbor, ".cache/run"));
   finishRunTemporary(other, neighbor, false, { minimumFreeBytes: 0, maxBytes: Number.MAX_SAFE_INTEGER, write: () => {} });

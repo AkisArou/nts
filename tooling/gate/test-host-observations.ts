@@ -11,8 +11,8 @@ export type OwnMemory = Record<(typeof HOST_OBSERVATION_ENVIRONMENT)[number],str
  * Called again, it changes the reading at once, as a reader polling it sees
  * it: whole, never half written.
  */
-export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, allocated, resident, clock, cpu, selfCpu, scopePeak, pressure, loopDelay, wallClock, processUsers, memberScopes }:
-  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];allocated?:HostObservationFixture['allocated'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];selfCpu?:HostObservationFixture['selfCpu'];scopePeak?:HostObservationFixture['scopePeak'];pressure?:HostObservationFixture['pressure'];loopDelay?:HostObservationFixture['loopDelay'];wallClock?:HostObservationFixture['wallClock'];processUsers?:HostObservationFixture['processUsers'];memberScopes?:string[]} = {}): OwnMemory {
+export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, allocated, resident, clock, cpu, selfCpu, scopePeak, pressure, loopDelay, wallClock, processUsers, unitUsers, memberScopes }:
+  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];allocated?:HostObservationFixture['allocated'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];selfCpu?:HostObservationFixture['selfCpu'];scopePeak?:HostObservationFixture['scopePeak'];pressure?:HostObservationFixture['pressure'];loopDelay?:HostObservationFixture['loopDelay'];wallClock?:HostObservationFixture['wallClock'];processUsers?:HostObservationFixture['processUsers'];unitUsers?:HostObservationFixture['unitUsers'];memberScopes?:string[]} = {}): OwnMemory {
   mkdirSync(dir, { recursive: true });
   const meminfo = join(dir, "meminfo"), vmstat = join(dir, "vmstat");
   writeFileSync(`${meminfo}.next`, `MemTotal:       ${totalKiB} kB\nMemFree:        ${availableKiB} kB\nMemAvailable:   ${availableKiB} kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n`);
@@ -36,6 +36,7 @@ export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = M
     loopDelay:loopDelay??previous?.loopDelay??{kind:'fixed',value:{count:0,maxMs:null,p99Ms:null}},
     wallClock:wallClock??previous?.wallClock??{kind:'fixed',now:0},
     processUsers:processes,
+    unitUsers:unitUsers??previous?.unitUsers??{kind:'fixed',units:[]},
     width:previous?.width??{logical:32,available:30},load:previous?.load??[0,0,0],clock:clock??previous?.clock??{kind:'live'}};
   writeFileSync(capability+'.next',JSON.stringify(observations)+'\n');renameSync(capability+'.next',capability);
   const capacity=join(dir,'disk-capacity.json');

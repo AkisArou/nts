@@ -4,7 +4,7 @@ import {gitArguments} from "./git-arguments/main.ts";
 import {generatedJavaScript} from './generated-javascript.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-environment.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
-import {removable,discardRunTemporary} from "./run-temporary.ts";
+import {removable,discardRunTemporary,runTemporaryIdentity} from "./run-temporary.ts";
 import {assignTestValues} from './test-environment.ts';
 import {durableRecord} from './durable-record.ts';
 import assert from "node:assert/strict";
@@ -156,7 +156,7 @@ test("only source-owned context grants gate capture policy and children retain i
   assert.deepEqual(standalone.admission,{kind:"standalone"});
   const gate=gateEnvironment(raw.env,{run,oracleAdmissionContext:"gate"});
   const capability=JSON.parse(gate.env.NTS_ORACLE_DEPENDENCIES!);
-  assert.deepEqual(capability.admission,{kind:"gate",temporary:gate.temporary});
+  assert.deepEqual(capability.admission,{kind:"gate",temporary:runTemporaryIdentity(gate.temporary)});
   assert.equal(capability.directory,standalone.directory);
   const child=gateEnvironment({...gate.env,NTS_ORACLE_DEPENDENCIES:"launcher cannot change the owned handoff"},{run});
   assert.equal(child.env.NTS_ORACLE_DEPENDENCIES,gate.env.NTS_ORACLE_DEPENDENCIES);
@@ -219,7 +219,7 @@ test('an inherited canonical command refuses a missing process view before creat
  discardRunTemporary(parent.temporary,parent.env.HOME!,parent.observations);
 });
 
-test('a canonical command holds its acquired view through a red image close and closed registration',t=>{
+test('a canonical command refuses temporary disposal when its acquired process view becomes invalid',t=>{
  const {run,base}=fixture(t),memory=ownMemory(join(run,'observations'));
  const planned=gateEnvironment(base,{run:join(run,'command'),owned:memory});
  const before=readFileSync(memory.NTS_HOST_OBSERVATIONS),payload=join(run,'invalidate-process-view.mjs'),script=join(run,'red.sh');
@@ -239,12 +239,10 @@ process.exitCode=1;
  writeFileSync(script,'#!/bin/sh\nexec '+quoted(process.execPath)+' '+quoted(payload)+'\n');
  try{
   const result=spawnTest(process.execPath,[new URL('./canonical-environment.ts',import.meta.url).pathname,'--pinned',script],{env:planned.env,encoding:'utf8'});
-  assert.equal(result.status,1,result.stdout+result.stderr);
-  const directory=join(planned.env.HOME!,'.cache/nts-gate/closed-temporaries'),files=readdirSync(directory).filter(name=>name.endsWith('.json'));
-  assert.equal(files.length,1);const entry=JSON.parse(readFileSync(join(directory,files[0]!),'utf8'));
+  assert.equal(result.status,2,result.stdout+result.stderr);
+  assert.match(result.stderr,/host observation processUsers is missing or invalid/);
+  assert.equal(existsSync(join(planned.env.HOME!,'.cache/nts-gate/closed-temporaries')),false);
   const parent=join(planned.temporary.path,'owned-image'),tree=join(parent,'tree');
-  assert.equal(entry.owned.path,planned.temporary.path);assert.ok(entry.bytes>0);
-  assert.deepEqual(entry.oracle_images,[{path:tree,bytes:null,state:'kept: host observation processUsers is missing or invalid'}]);
   assert.equal(readFileSync(join(tree,'payload'),'utf8'),'image bytes');assert.equal(lstatSync(tree).mode&0o777,0o555);
   assert.deepEqual(JSON.parse(readFileSync(join(parent,'ready.json'),'utf8')),{identity:'ready'});
   assert.deepEqual(JSON.parse(readFileSync(join(parent,'semantic.json'),'utf8')),{identity:'semantic'});
@@ -389,7 +387,7 @@ test("the explicit old-environment comparison is never landing evidence",t=>{
   assert.equal(old.report.canonical,false);assert.equal(old.env.NODE_OPTIONS,"--max-old-space-size=8192");
   assert.equal(old.env.TMPDIR,join(run,"tmp"));
   const expected:NodeJS.ProcessEnv={...launcher,TMPDIR:join(run,"tmp"),NODE_COMPILE_CACHE:join(userInfo().homedir,".cache/nts/node-compile-cache/v1"),XDG_CACHE_HOME:join(base.HOME,".cache"),NTS_GATE_RUN_DIR:run,NTS_ORACLE_TYPESCRIPT:oracleToolchainLocation()};
-  expected.NTS_ORACLE_DEPENDENCIES=JSON.stringify(dependencyCapability(new URL('../../',import.meta.url).pathname,join(run,'tmp','oracle-dependencies'),{kind:'standalone'},null,launcher,{owned:old.temporary,home:base.HOME}));
+  expected.NTS_ORACLE_DEPENDENCIES=JSON.stringify(dependencyCapability(new URL('../../',import.meta.url).pathname,join(run,'tmp','oracle-dependencies'),{kind:'standalone'},null,launcher,{owned:runTemporaryIdentity(old.temporary),home:base.HOME}));
   delete expected[ENVIRONMENT_EXPERIMENT];
   assert.deepEqual(Object.fromEntries(Object.entries(old.env).filter(([name])=>name!==ENVIRONMENT_CONTEXT)),expected);
   assert.deepEqual(old.report.dropped,[ENVIRONMENT_EXPERIMENT]);
@@ -433,7 +431,7 @@ cat <<'NAMES'
 ${listed.stdout.trim()}
 NAMES
 else
-  ${nodeCommand} --input-type=module -e 'import fs from "node:fs";import {PressureError,CaseBudgetError} from ${JSON.stringify(new URL("./step-result.ts",import.meta.url).href)};fs.writeFileSync(process.env.NTS_GATE_RUN_DIR+"/observed.json",JSON.stringify(process.env));const code=Number(fs.readFileSync("result-code","utf8"));if(code===0&&process.env.NTS_GATE_STEP==="rustfmt"){const cap=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);for(const [version,wallMs,peakBytes] of [["26.0.0",1234.5,1048576],["26.1.0",2345.5,2097152]]){const directory=cap.directory+"/node-"+version;fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(directory+"/ready.json",JSON.stringify({version:1,inputSet:{identity:{node:version}},sourceRevision:cap.sourceRevision,lockfileSha256:cap.lockfileSha256,ownerStep:"rustfmt",cost:{wallMs,peakBytes}}));for(const mode of ["cold","hit","hit"])fs.appendFileSync(process.env.NTS_GATE_RUN_DIR+"/oracle-dependency-calls.jsonl",JSON.stringify({version:1,step:"rustfmt",nodeVersion:version,directory,mode,pnpmSelectionCommands:0,wallMs:mode==="cold"?wallMs:1})+String.fromCharCode(10));}}if(code===93){const cap=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES),record=cap.seal.record,bytes=fs.readFileSync(record);fs.chmodSync(record,0o644);fs.writeFileSync(record,bytes);fs.chmodSync(record,0o444);const owner=await import(${JSON.stringify(new URL("../differential/oracle-dependencies.ts",import.meta.url).href)});await owner.captureDependencies(cap);process.exit(0);}if(code>=88){const value={version:1,kind:code===92?"unknown":"hung",verdict:code===88||code===90||code===92?"FAIL":"NOT RUN",completedFailures:code===88||code===90||code===92?1:0,step:process.env.NTS_GATE_STEP,attempt:process.env.NTS_GATE_STEP_ATTEMPT,reason:"unfinished work with retained results"};fs.writeFileSync(process.env.NTS_GATE_STEP_RESULT,JSON.stringify(value));process.exit(code===90||code===91||code===92?0:1);}if(code===86)throw new PressureError("system pressure control");if(code===87)throw new CaseBudgetError("named case exceeds the outcomes step budget");console.error("FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory");process.exit(code);' 
+  ${nodeCommand} --input-type=module -e 'import fs from "node:fs";import {PressureError,CaseBudgetError} from ${JSON.stringify(new URL("./step-result.ts",import.meta.url).href)};fs.writeFileSync(process.env.NTS_GATE_RUN_DIR+"/observed.json",JSON.stringify(process.env));const code=Number(fs.readFileSync("result-code","utf8"));if(code===0&&process.env.NTS_GATE_STEP==="rustfmt"){const cap=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);for(const [version,wallMs,peakBytes] of [["26.0.0",1234.5,1048576],["26.1.0",2345.5,2097152]]){const directory=cap.directory+"/node-"+version;fs.appendFileSync(cap.directory+"/oracle-owner-calls.jsonl",JSON.stringify({version:1,step:"rustfmt",nodeVersion:version,project:process.cwd(),directory,mode:"emit",inputsSha256:"a".repeat(64)})+String.fromCharCode(10));fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(directory+"/ready.json",JSON.stringify({version:1,inputSet:{identity:{node:version}},sourceRevision:cap.sourceRevision,lockfileSha256:cap.lockfileSha256,ownerStep:"rustfmt",cost:{wallMs,peakBytes}}));for(const mode of ["cold","hit","hit"])fs.appendFileSync(process.env.NTS_GATE_RUN_DIR+"/oracle-dependency-calls.jsonl",JSON.stringify({version:1,step:"rustfmt",nodeVersion:version,directory,mode,pnpmSelectionCommands:0,wallMs:mode==="cold"?wallMs:1})+String.fromCharCode(10));}}if(code===93){const cap=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES),record=cap.seal.record,bytes=fs.readFileSync(record);fs.chmodSync(record,0o644);fs.writeFileSync(record,bytes);fs.chmodSync(record,0o444);const owner=await import(${JSON.stringify(new URL("../differential/oracle-dependencies.ts",import.meta.url).href)});await owner.captureDependencies(cap);process.exit(0);}if(code>=88){const value={version:1,kind:code===92?"unknown":"hung",verdict:code===88||code===90||code===92?"FAIL":"NOT RUN",completedFailures:code===88||code===90||code===92?1:0,step:process.env.NTS_GATE_STEP,attempt:process.env.NTS_GATE_STEP_ATTEMPT,reason:"unfinished work with retained results"};fs.writeFileSync(process.env.NTS_GATE_STEP_RESULT,JSON.stringify(value));process.exit(code===90||code===91||code===92?0:1);}if(code===86)throw new PressureError("system pressure control");if(code===87)throw new CaseBudgetError("named case exceeds the outcomes step budget");console.error("FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory");process.exit(code);' 
 fi
 `);
   for (const code of [0,7,86,87,88,89,90,91,92,93]) {
@@ -454,15 +452,14 @@ fi
     if(code===93){assert.match(summary.steps[0].reason,/oracle dependency seal changed/);assert.equal(summary.steps[0].instrument.kind,"tooling-setup");assert.equal(instrumentPolicy(summary.steps[0].instrument?.kind)?.disposition === "operator-hold",true,"the lander's shared policy holds the instrument failure instead of attributing a regression");}
     else assert.equal(summary.steps[0].reason,code===0?"":code===92?"invalid instrument result for rustfmt":code>=88?"unfinished work with retained results":code===86?"system pressure control":code===87?"named case exceeds the outcomes step budget":"Node/V8 heap out of memory diagnostic; exit 7");
     const observed=JSON.parse(readFileSync(join(directory,"observed.json"),"utf8"));
-    // A red keeps its temporary folder, unless this run's own summary shows the
-    // disk floor evicted it: then it is gone, and the eviction is logged.
-    const pruning=summary.temporary.pruning,tmp=join(directory,"tmp");
-    const floor=code!==0&&pruning?.free_bytes!==null&&pruning?.free_bytes<pruning?.minimum_free_bytes&&pruning.removed.includes(tmp);
-    assert.equal(summary.temporary.state,code===0?"removed after green":floor?"evicted by failed-temporary bound":"retained after red");
-    assert.equal(existsSync(tmp),code!==0&&!floor);
-    if (floor) assert.ok(actual.stderr.includes(`gate tmp: evicted closed failure ${tmp} `),actual.stderr);
+    const tmp=join(directory,"tmp");
+    assert.equal(summary.temporary.state,code===0?"removed after green":"removed after red");
+    assert.equal(existsSync(tmp),false);
+    assert.ok(readFileSync(join(directory,'temporary.log'),'utf8').includes(`gate tmp: removed run=${directory} path=${tmp} bytes=`));
     assert.equal(JSON.parse(observed.NTS_ORACLE_DEPENDENCIES).admission.kind,"gate","the actual runner chooses its gate context explicitly");
     if(code===0){
+      assert.equal(summary.oracle_owners.status,"complete","owner observations must be captured before tmp disposal");
+      assert.equal(summary.oracle_owners.emits,2);
       const owner=summary.steps.find((row:{name:string})=>row.name==="rustfmt");
       assert.equal(owner.oracle_capture.ownerStep,"rustfmt");
       assert.equal(owner.oracle_capture.images.length,2,"both owned runtime images must be recovered");

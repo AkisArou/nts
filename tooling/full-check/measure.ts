@@ -210,7 +210,7 @@ export function fullCheckBound(lastGreen: RunRecord | undefined, steps: readonly
 }
 
 /** The production gate: pinned.sh from the controller's tree, measuring in the full check's. */
-export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string;env?:NodeJS.ProcessEnv;landingHome?:string}={}): Gate {
+export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string;env?:NodeJS.ProcessEnv;owned?:Readonly<Record<string,string>>;landingHome?:string}={}): Gate {
   const pinned = join(controller, "tooling/gate/pinned.sh");
   const launch = (commit: string, run: string, steps: readonly string[], bounds?: RunBounds, probeContract = false, rank: Priority = FULL_CHECK_RANK) => {
     mkdirSync(run, { recursive: true });
@@ -221,6 +221,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
     if (!lock) throw Error('full-check gate tree is in use: ' + layout.tree);
     const launcher = launcherEnvironment(selected.env);
     const owned = {
+      ...options.owned,
       ...fullOwned({ candidate: false, commit, label: 'MAIN', run, tree: layout.tree, target: layout.target }, steps),
       NTS_GATE_LOCK_FD: '8', CARGO_TARGET_DIR: layout.target,
       NTS_BIN: join(layout.target, 'release/nts'), NTS_SUITE_BIN: join(layout.target, 'release/nts-suite'),
@@ -316,7 +317,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
     let result:ReturnType<typeof spawnSync>;
     try {
       const file = join(controller, "tooling/gate/times.tsv");
-      const bounds = fullCheckBound(lastGreen, steps, existsSync(file) ? readFileSync(file, "utf8") : "", hostObservations(options.env ?? process.env).machineWidth());
+      const bounds = fullCheckBound(lastGreen, steps, existsSync(file) ? readFileSync(file, "utf8") : "", hostObservations({...options.env??process.env,...options.owned}).machineWidth());
       result = launch(commit, run, steps, bounds, false, rank);
     }
     catch(error) {

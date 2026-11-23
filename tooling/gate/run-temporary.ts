@@ -1,7 +1,7 @@
 // Only registered, closed run/tmp roots are an evictable cache. Logs, published
 // artifacts and other scratch roots are outside this policy.
 import {hostObservations,type HostObservations} from "./host-observations.ts";
-import {createHash} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from "node:fs";
 import {userInfo} from "node:os";
@@ -10,7 +10,13 @@ import {assertNoObservedProcessUsers} from '../landing/tree-users.ts';
 
 export const FAILED_TEMP_MAX_BYTES=8*2**30;
 export const TEMP_DISK_FLOOR_BYTES=40*2**30;
-export type RunTemporary={path:string;parent:string;dev:number;ino:number;uid:number;enclosing?:RunTemporary};
+export type RunTemporary={path:string;parent:string;dev:number;ino:number;uid:number;enclosing?:RunTemporary;creation?:{token:string;parentDev:number;parentIno:number}};
+/** Acquisition authority belongs to the launcher context, not the observable
+ * dependency capability or its canonical identity. */
+export function runTemporaryIdentity(owned:RunTemporary):RunTemporary {
+  return {path:owned.path,parent:owned.parent,dev:owned.dev,ino:owned.ino,uid:owned.uid,
+    ...(owned.enclosing?{enclosing:runTemporaryIdentity(owned.enclosing)}:{})};
+}
 export type DroppedOracleImage={path:string;bytes:number;state:'dropped'|'already absent'};
 export type OracleImageDisposition=DroppedOracleImage|{path:string;bytes:null;state:`kept: ${string}`};
 type ClosedTemporary={owned:RunTemporary;closed:number;bytes?:number;oracle_images?:OracleImageDisposition[]};
@@ -49,10 +55,13 @@ export function captureRunTemporary(run:string,previous?:RunTemporary,home=userI
   assertRunTemporaryOpen(run,home);
   mkdirSync(run,{recursive:true});
   const path=join(resolve(run),"tmp");
-  if (!existsSync(path)) mkdirSync(path);
+  const created=!existsSync(path);
+  if (created) mkdirSync(path);
   const stat=lstatSync(path),parent=realpathSync(run);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid!==process.getuid?.()) throw new Error(`run temporary root is not an owned real directory: ${path}`);
-  const owned={path,parent,dev:stat.dev,ino:stat.ino,uid:stat.uid};
+  const parentStat=lstatSync(parent);
+  const creation=created?{token:randomUUID(),parentDev:parentStat.dev,parentIno:parentStat.ino}:previous?.path===path?previous.creation:undefined;
+  const owned={path,parent,dev:stat.dev,ino:stat.ino,uid:stat.uid,...(creation?{creation}:{})};
   if (previous?.path===path && (previous.dev!==owned.dev || previous.ino!==owned.ino || previous.parent!==parent)) throw new Error(`run temporary directory was replaced: ${path}`);
   // The canonical handoff already carries the enclosing run's exact identity.
   // Jobs inside it share its retention lifetime instead of counting it twice.
@@ -164,6 +173,13 @@ function registeredImages(owned:RunTemporary,home:string,host?:HostObservations)
   const live=entries.filter(entry=>entry.present).map(entry=>entry.receipt.image.path);
   if(live.length)assertNoObservedProcessUsers((host??hostObservations()).processUsers(live));
   return entries;
+}
+/** Diagnostic retention excludes only authenticated image payloads. Capture
+ * stdout/stderr and failure metadata beside those trees remain evidence. */
+export function runTemporaryImageRoots(owned:RunTemporary,home:string):string[]{
+  return registeredImageFiles(owned,home).flatMap(file=>{
+    const entry=registeredImage(file,owned,home);return entry?[entry.receipt.image.path]:[];
+  });
 }
 function dropOracleImages(owned:RunTemporary,home:string,host?:HostObservations):OracleImageDisposition[] {
   const kept=(path:string,error:unknown):OracleImageDisposition=>({path,bytes:null,state:`kept: ${error instanceof Error?error.message:String(error)}`});

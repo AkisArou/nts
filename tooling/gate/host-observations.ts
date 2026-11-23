@@ -152,6 +152,10 @@ export type OwnCpu = {userUsec:number;systemUsec:number};
  * seen half moved. */
 export type CgroupCpuSample = {atMs:number;cpu:CgroupCpu;pressure:PressureReading};
 export type ScopeMemoryPeak = {readonly resettable:boolean;reset():void;read():number;close():void};
+export type UnitOwnershipReading={unit:string;workingDirectory:string;rootDirectory:string;
+  commands:{property:'ExecStartPre'|'ExecStart'|'ExecStartPost';path:string;args:string[]}[]};
+export type UnitOwnershipObservation={kind:'fixed';units:UnitOwnershipReading[]}|{kind:'live'};
+
 export type HostObservationFixture = {
   version:1;
   memberDeclarations?:{directory:string;scopeReceipts:string[]};
@@ -170,6 +174,7 @@ export type HostObservationFixture = {
   pressure:{kind:'live'}|{kind:'fixed';ownGroup:string;machine:PressureReading;default:PressureReading;cgroups?:Record<string,PressureReading>};
   loopDelay:{kind:'live'}|{kind:'fixed';value:LoopDelay};
   processUsers:{kind:'proc';root:string}|{kind:'live';pids:number[]};
+  unitUsers:UnitOwnershipObservation;
 };
 
 export interface HostObservations {
@@ -206,6 +211,8 @@ export interface HostObservations {
   cgroupCpuSample(group:string):CgroupCpuSample;
   loopDelay():LoopDelayMeter;
   processUsers(roots:readonly string[]):TreeProcessObservation;
+  /** The consumer applies its ownership guard to this explicit unit view. */
+  unitUsers():UnitOwnershipObservation;
 }
 
 function checkedGroup(group:string):string{
@@ -385,6 +392,14 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       }else if(value.processUsers?.kind==='live'){
         if(!Array.isArray(value.processUsers.pids)||value.processUsers.pids.some(pid=>!Number.isSafeInteger(pid)||pid<=0)||new Set(value.processUsers.pids).size!==value.processUsers.pids.length)throw new HostObservationError('host observation processUsers.pids is missing or invalid');
       }else throw new HostObservationError('host observation processUsers is missing or invalid');
+      if(value.unitUsers?.kind==='fixed'){
+        if(!Array.isArray(value.unitUsers.units)||value.unitUsers.units.some(unit=>
+          !unit||typeof unit!=='object'||typeof unit.unit!=='string'||!unit.unit||typeof unit.workingDirectory!=='string'||typeof unit.rootDirectory!=='string'||
+          !Array.isArray(unit.commands)||unit.commands.some(command=>!command||typeof command!=='object'||
+            !['ExecStartPre','ExecStart','ExecStartPost'].includes(command.property)||typeof command.path!=='string'||!command.path.startsWith('/')||
+            !Array.isArray(command.args)||command.args.some(argument=>typeof argument!=='string'))))
+          throw new HostObservationError('host observation unitUsers is missing or invalid');
+      }else if(value.unitUsers?.kind!=='live')throw new HostObservationError('host observation unitUsers is missing or invalid');
       return value;
     };
     read();
@@ -516,6 +531,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
         try{return observeTreeProcesses(roots,{self:process.pid,...(value.kind==='proc'?{proc:value.root}:{pids:value.pids})});}
         catch(error){throw new HostObservationError('host observation processUsers failed: '+String(error));}
       },
+      unitUsers:()=>read().unitUsers,
       disk:()=>{const value=read().disk;return {freeBytes:number(value?.freeBytes,'disk.freeBytes'),freeInodes:number(value?.freeInodes,'disk.freeInodes')};},
       allocatedBytes:path=>{const value=read().allocated;return value.kind==='live'?liveAllocatedBytes(path,env):number(value.paths?.[path]??value.defaultBytes,'allocated.paths.'+path);},
       processCharge:pid=>charge('processes',String(pid)),
@@ -557,6 +573,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     memory:()=>memory('/proc/meminfo'),
     paging:()=>paging('/proc/vmstat'),
     processUsers:roots=>observeTreeProcesses(roots,{self:process.pid}),
+    unitUsers:()=>({kind:'live'}),
     swap:()=>swap('/proc/meminfo'),
     load:()=>loadavg() as [number,number,number],
     disk:path=>{let existing=resolve(path);while(!existsSync(existing))existing=dirname(existing);const value=statfsSync(existing);return {freeBytes:value.bavail*value.bsize,freeInodes:value.ffree};},

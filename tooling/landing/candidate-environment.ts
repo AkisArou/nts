@@ -6,6 +6,7 @@ import {spawn,spawnSync,type StdioOptions} from "node:child_process";
 import {lstatSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {isAbsolute,join} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
+import {ownRunTemporary} from '../gate/run-temporary-lifetime.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {assertObservedGroupEmpty,ownedProcessGroup} from '../gate/process-group.ts';
 import {randomUUID} from 'node:crypto';
@@ -145,7 +146,15 @@ async function launch():Promise<number>{
   const acquired=acquireHostObservations(process.env,request.owned);
   const planned=candidate.gateEnvironment(process.env,{run:request.run,owned:request.owned,oracleRoot:request.tree,standalone:request.standalone,node:request.node});
   let observations=acquired.observations;
+  let lifetime:ReturnType<typeof ownRunTemporary>|undefined,green=false;
+  let temporaryFinished=false;
+  const finishTemporary=()=>{
+    if(temporaryFinished)return;temporaryFinished=true;
+    if(lifetime)lifetime.close(green);
+    else if(request.discardTemporary)finishRunTemporary(planned.temporary,planned.env.HOME!,true,{host:observations});
+  };
   try{
+    if(planned.temporary.creation)lifetime=ownRunTemporary(planned.temporary,{...planned.env,[HOST_OBSERVATIONS]:acquired.descriptor},observations);
     if(planned.env[HOST_OBSERVATIONS]!==acquired.descriptor)throw Error('candidate environment changed the owned host observation descriptor: '+HOST_OBSERVATIONS);
     observations=planned.observations??acquired.observations;
     const child=spawn(request.command[0]!,request.command.slice(1),{cwd:request.tree,env:planned.env,
@@ -158,12 +167,14 @@ async function launch():Promise<number>{
     // child instead of forwarding another signal or exiting ahead of it.
     const unregister=registerCommandCloser('candidate payload',{close:async()=>{await closed;}});
     const result=await closed;unregister();
+    green=result.status===0&&!result.signal&&!error;
+    finishTemporary();
     writeFileSync(3,JSON.stringify({signal:result.signal,error:error?{message:error.message,code:(error as NodeJS.ErrnoException).code}:null}));
     return result.status??1;
   }finally{
     // Recorder evidence lives in its own run files, as before. Its run-owned
     // scratch is discarded even when recording refuses or cannot start.
-    if(request.discardTemporary)finishRunTemporary(planned.temporary,planned.env.HOME!,true,{host:observations});
+    finishTemporary();
   }
 }
 

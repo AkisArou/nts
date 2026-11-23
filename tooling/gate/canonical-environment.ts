@@ -1,5 +1,6 @@
 // One environment contract for landing, pinned and full gates. A launcher is
 // not allowed to choose verdict policy; standalone experiments are explicit.
+import {ownRunTemporary} from './run-temporary-lifetime.ts';
 import { createHash } from "node:crypto";
 import { existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync } from "node:fs";
 import { spawn,spawnSync } from "node:child_process";
@@ -7,7 +8,7 @@ import { userInfo } from "node:os";
 import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
-import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,discardRunTemporary,removable,assertRunTemporary,assertRunTemporaryOpen} from "./run-temporary.ts";
+import {captureRunTemporary,pruneRunTemporaries,runTemporaryIdentity,discardRunTemporary,removable,assertRunTemporary,assertRunTemporaryOpen} from "./run-temporary.ts";
 import {nodeProcessBirth,nodeResolutionDirectory,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
@@ -202,7 +203,7 @@ export function gateEnvironment(
   const admissionKind=options.oracleAdmissionContext??inheritedCapability?.admission.kind??"standalone";
   // An inherited capability keeps its capture root. Only an explicit caller
   // can change its policy, and a gate grant binds that registered temporary.
-  const admission=admissionKind==="gate"?{kind:"gate" as const,temporary:inheritedCapability?.admission.kind==="gate"?inheritedCapability.admission.temporary:prior?.temporary??temporary}:{kind:"standalone" as const};
+  const admission=admissionKind==="gate"?{kind:"gate" as const,temporary:runTemporaryIdentity(inheritedCapability?.admission.kind==="gate"?inheritedCapability.admission.temporary:prior?.temporary??temporary)}:{kind:"standalone" as const};
   // A sealed parent image may already occupy the default directory. Keep it
   // intact while the candidate independently captures and seals its own root.
   const capture=join(temporary.path,"oracle-dependencies",...(foreignRoot?["source-"+createHash("sha256").update(toolingRoot).digest("hex")]:[]));
@@ -211,7 +212,7 @@ export function gateEnvironment(
   const parentImage=foreignRoot&&inheritedCapability?.seal?inheritedCapability:undefined;
   if(parentImage)assertSealedOracleRun(launcher);
   const dependencies=inheritedCapability&&!foreignRoot?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
-    JSON.stringify({...dependencyCapability(toolingRoot,capture,admission,null,env,{owned:temporary,home:host.HOME!}),...(parentImage?{parentImage}:{})}):undefined);
+    JSON.stringify({...dependencyCapability(toolingRoot,capture,admission,null,env,{owned:runTemporaryIdentity(temporary),home:host.HOME!}),...(parentImage?{parentImage}:{})}):undefined);
   if(dependencies){env.NTS_ORACLE_DEPENDENCIES=dependencies;owned.NTS_ORACLE_DEPENDENCIES=dependencies;}
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,
@@ -374,19 +375,18 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     for (const name of INFRASTRUCTURE) if (base[name] !== undefined) owned[name] = base[name];
     const planned = gateEnvironment(base, { run, owned, standalone: !base[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate" });
     reportEnvironment(planned.report);
+    const lifetime=ownRunTemporary(planned.temporary,planned.env,planned.observations);
+    let green=false;
+    try{
     const result = spawnSync("sh", [script, "--environment-ready", ...args], {
       env: planned.env,
       // Preserve only the documented gate-tree lock handoff, not arbitrary
       // inherited descriptors. Its inode/ownership is checked by pinned.sh.
       stdio: base.NTS_GATE_LOCK_FD === "8" ? ["inherit", "inherit", "inherit", "ignore", "ignore", "ignore", "ignore", "ignore", 8] : "inherit",
     });
-    // Setup-only success and failures before run.mjs still own a temporary
-    // root. Normal row completion already records its lifecycle in summary.
-    if (!existsSync(join(run,"summary.json"))) {
-      const outcome=finishRunTemporary(planned.temporary,planned.env.HOME!,result.status===0 && !result.signal && !result.error,{host:planned.observations});
-      process.stderr.write(`gate tmp: ${outcome.state}: ${outcome.path}\n`);
-    }
+    green=result.status===0&&!result.signal&&!result.error;
     if (result.error) throw result.error;
     process.exitCode = result.status ?? 1;
+    }finally{lifetime.close(green);}
   } catch (error) { if(isCommandExit(error))throw error;console.error(`gate environment: ${(error as Error).message}`); process.exitCode = 2; }
 }

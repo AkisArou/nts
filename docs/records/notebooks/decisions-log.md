@@ -4691,3 +4691,33 @@ escaped defaults, with runtime-colliding source exports linked on C and LLVM.
 The brownfield SDK config uses `prefix: "acme"` for both native library kinds,
 expressing the added `_` separator; shared-library emission remains #1005.
 The contract is in [nts-config](../../reference/nts-config.md#decisions).
+## Run temporary lifetime (11-23)
+
+Issue #841 slice (b). The approved owner removes an authenticated run temporary
+on every terminal outcome, after worker, resolution helper, scope and admission
+drain. A systemd-owned backstop binds the creating unit and invocation and
+runs its post-stop hook after it stops. Acquisition joins activation before
+payload readiness, including when a later stop interrupts startup. The run token and the directory and parent device/inode
+identities authenticate removal; a mismatch or live holder refuses by name.
+Every removal reports its run, path and allocated bytes. No historical scan
+receives a deletion grant.
+
+Failed inputs, stderr, reproducers and existing cores retain relative paths
+beside the run logs, with a mapping manifest. The per-run limits are 64 MiB
+and 4,096 files, with explicit cap diagnostics. Only authenticated dependency image
+payloads are excluded; capture stderr and failure metadata remain. Core dumps remain disabled. Backstop
+shutdown is requested without a synchronous wait behind the creating unit's
+own stop order; a completed receipt makes the later callback idempotent.
+Diagnostic copies stage inside the authenticated temporary, with a flushed
+manifest and directory identity in the receipt before atomic publication.
+The backstop resumes interrupted copying or publication; replacements refuse
+removal, and incomplete copies never become retained evidence.
+Process and unit ownership share the complete HostObservations capability.
+Production uses the existing live guards; fixtures explicitly supply their
+unit inventory and process view. Missing or malformed observations refuse by
+name. Only the temporary closer adopts this unit observation in this slice.
+The observation owner returns typed live or fixed data without importing the
+reclamation owner. The closer alone applies its existing unit guards, so
+resource observations do not add reclamation dependencies to every consumer.
+
+The contract is in [workflow](../../workflow.md#the-machine).

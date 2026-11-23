@@ -125,7 +125,8 @@ import {defaultSlots, frontendBudget} from "./budget.ts";
 import {fixedReservation} from "./reservation.ts";
 import {STEPS, stepTableProblem} from "./step-table.mjs";
 import {programOracleConsumers} from "./program-oracle-consumers.ts";
-import {finishRunTemporary} from "./run-temporary.ts";
+import {ownRunTemporary} from "./run-temporary-lifetime.ts";
+import {closeNodeResolutionSession} from "../differential/oracle-resolution.ts";
 import {gateEnvironment,sealOracleRun,oracleStepEnvironment,reportEnvironment,nodeHeapOomReason} from './canonical-environment.ts';
 import {assignOwnedValues} from './environment-values.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
@@ -372,6 +373,17 @@ let scopeCleanup = { state: "complete" };
 let summaryWritten = false;
 /** @type {()=>void} */
 let finishRun;
+/** @type {ReturnType<typeof ownRunTemporary> | undefined} */
+let temporaryLifetime;
+/** @type {import("./run-temporary-lifetime.ts").TemporaryDisposition | undefined} */
+let temporaryDisposition;
+let terminalOracleSetup;
+/** @type {ReturnType<typeof ownerCalls> | undefined} */
+let terminalOwnerCalls;
+/** @type {import("../differential/oracle-runtime.ts").NodeResolutionSession | undefined} */
+let resolutionSession;
+/** @type {Promise<void> | undefined} */
+let resolutionClosed;
 /** @type {()=>void} */
 let finishStartup;
 const runClosed=new Promise(resolve=>{finishRun=()=>resolve(undefined);});
@@ -1606,13 +1618,9 @@ function writeSummary() {
     red.push(name);
   }
   const green = red.length === 0 && scopeCleanup.state === "complete" && !diagnosticsFailure;
-  let oracleSetup;
-  const setupLog=join(RUN_DIR,"oracle-setup.log");
-  try { if(!existsSync(setupLog))writeFileSync(setupLog,"");oracleSetup=captureCost(null,setupLog); }
-  catch(error){if(isCommandExit(error))throw error;oracleSetup={ownerStep:null,instrument:{kind:"tooling-setup",reason:String(error)}};}
-  const temporary = !running.size ? finishRunTemporary(normalized.temporary,env.HOME,green && !interrupted,{host})
-    : {path:env.TMPDIR,state:"kept: rows still running"};
-  process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
+  const oracleSetup=terminalOracleSetup??null;
+  const temporary = temporaryDisposition ?? {path:env.TMPDIR,state:"kept: temporary lifetime did not close"};
+  process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}\n`);
   const wall = (Date.now() - startedAt) / 1000;
   const costsSummary = caseCosts?.summary(plan.map(name => ({ name, ...results.get(name) }))) ?? { version: 1, status: "unavailable" };
   if('steps' in costsSummary)for(const name of plan){
@@ -1681,7 +1689,7 @@ function writeSummary() {
     slower: slow,
     case_costs: costsSummary,
     oracle_calls: dependencyCalls(null, running.size === 0 && results.size === plan.length),
-    oracle_owners: ownerCalls(undefined, running.size === 0 && results.size === plan.length),
+    oracle_owners: terminalOwnerCalls ?? ownerCalls(undefined, running.size === 0 && results.size === plan.length),
   };
   try {
     writeFileSync(join(RUN_DIR, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
@@ -1800,15 +1808,22 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     try{tok.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await tok.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{diagnostics?.close();}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);failures.push(error);}
+    try{if(resolutionSession){await closeNodeResolutionSession(resolutionSession);await resolutionClosed;}}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{scopes?.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{reservation?.release();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await reservation?.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{binaryPin?.release();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    const setupLog=join(RUN_DIR,"oracle-setup.log");
+    try{if(!existsSync(setupLog))writeFileSync(setupLog,"");terminalOracleSetup=captureCost(null,setupLog);}
+    catch(error){if(isCommandExit(error))throw error;terminalOracleSetup={ownerStep:null,instrument:{kind:"tooling-setup",reason:String(error)}};}
+    terminalOwnerCalls=ownerCalls(undefined,running.size===0&&results.size===plan.length);
+    try{if(temporaryLifetime)temporaryDisposition=temporaryLifetime.close(!failures.length&&!interrupted&&!diagnosticsFailure&&(!TIME_STRICT||!slower().length)&&plan.every(name=>{const row=results.get(name);return row?.verdict==='PASS'||row?.verdict==='SKIPPED'&&ACCEPT_SKIP.has(name);}));}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     if(failures.length===1)throw failures[0];
     if(failures.length)throw new AggregateError(failures,'gate run resources failed to close');
   },
 });
 mkdirSync(RUN_DIR, { recursive: true });
+temporaryLifetime=ownRunTemporary(normalized.temporary,env,host);
 lifecycle = new RunLifecycleFeed(RUN_DIR);
 try{
   diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,startedAt:host.wallNow(),
@@ -1883,7 +1898,7 @@ if (!setupFailure) {
   catch (error) {if(isCommandExit(error))throw error; if (!stopping) setupFailure = error.message; }
 }
 if (!setupFailure && !stopping) {
-  try { normalized = await sealOracleRun(normalized,startupAbort.signal); env = normalized.env; }
+  try { normalized = await sealOracleRun(normalized,startupAbort.signal,(session,closed)=>{resolutionSession=session;resolutionClosed=closed;}); env = normalized.env; }
   catch (error) {if(isCommandExit(error))throw error; dependencySealFailure = error; }
 }
 if (!stopping && !setupFailure && !dependencySealFailure) {

@@ -17,6 +17,24 @@ import {compileActive,closeMemoryRun,MemoryRun} from '../census/worker-memory.ts
 import {treeProcessFixture} from '../landing/tree-users-fixture.ts';
 import {assertNoObservedProcessUsers} from '../landing/tree-users.ts';
 
+test('unit ownership comes from the complete owned view and invalid observations refuse by name',t=>{
+  const root=testScratch(t,'host-unit-users'),env=ownMemory(root),host=hostObservations(env);
+  assert.deepEqual(host.unitUsers(),{kind:'fixed',units:[]});
+  const unit={unit:'owned.service',workingDirectory:root,rootDirectory:'',commands:[]};
+  ownMemory(root,{unitUsers:{kind:'fixed',units:[unit]}});
+  assert.deepEqual(host.unitUsers(),{kind:'fixed',units:[unit]});
+  ownMemory(root,{availableKiB:123});
+  assert.deepEqual(host.unitUsers(),{kind:'fixed',units:[unit]});
+  const file=env.NTS_HOST_OBSERVATIONS,complete=JSON.parse(readFileSync(file,'utf8'));
+  for(const value of [undefined,null,{}, {kind:'fixed'}, {kind:'fixed',units:[null]},
+    {kind:'fixed',units:[{...unit,commands:[{property:'ExecStart',path:'/bin/node',args:[42]}]}]}]){
+    writeFileSync(file,JSON.stringify({...complete,unitUsers:value}));
+    assert.throws(()=>hostObservations(env),/host observation unitUsers/);
+  }
+  writeFileSync(file,JSON.stringify({...complete,unitUsers:{kind:'fixed',units:[]}}));
+  assert.deepEqual(host.unitUsers(),{kind:'fixed',units:[]});
+});
+
 test('process users come from the owned observation, with missing or malformed views refusing by name',t=>{
   const f=treeProcessFixture(t),env=ownMemory(join(f.root,'observations')),host=hostObservations(env);
   assert.deepEqual(host.processUsers([f.tree]),{users:[],ignored:[],unreadable:[]});

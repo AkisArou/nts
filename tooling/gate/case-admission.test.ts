@@ -11,6 +11,7 @@ import {ownMemory} from './test-memory.ts';
 import {newToolingSlice,stopToolingSlice,toolingSlice} from './tooling-slice.ts';
 import {caseMemoryKey,caseHistoryFile,readCaseHistory,writeCaseHistory,writeCostHistory,peakReservation} from './step-scheduling.ts';
 import {tokenCommand} from './token-command.ts';
+import {fixedMembersUnitCommand} from './test-cgroup-members.ts';
 
 const GiB=2**30,MiB=2**20;
 type QueueEvent={event:string;request?:number;context?:string;memory?:{reserved_bytes:number;used_bytes:number}};
@@ -58,7 +59,7 @@ ${payload}
   const env=gateEnvironment(launcher,{run:f.run,owned:{...memory,NTS_GATE_TARGET:f.target,NTS_GATE_STEPS:'integrity',NTS_GATE_SLOTS:'2',NTS_TOOLING_SLICE:slice,NTS_CENSUS_MEMORY_CAP_KB:String(2*GiB/1024)},oracleRoot:f.tree}).env;
   const result=spawnSync('systemd-run',['--user','--unit='+unit,'--slice='+slice,'--collect','--wait','--pipe','--quiet',
     '--working-directory='+f.tree,'-p','Nice=19','-p','LimitCORE=0','-p','CPUAffinity=0-3 6-31','-p','RuntimeMaxSec=120s',
-    ...Object.entries(env).filter(([,value])=>value!==undefined).map(([name,value])=>'--setenv='+name+'='+value),process.execPath,join(gate,'run.mjs')],{encoding:'utf8',maxBuffer:16*MiB});
+    ...Object.entries(env).filter(([,value])=>value!==undefined).map(([name,value])=>'--setenv='+name+'='+value),...fixedMembersUnitCommand([process.execPath,join(gate,'run.mjs')])],{encoding:'utf8',maxBuffer:16*MiB});
   spawnSync('systemctl',['--user','stop',unit],{stdio:'ignore'});
   const output=result.stdout+result.stderr;
   assert.ok(result.status!==null,output);

@@ -60,7 +60,8 @@ durableRecord(${JSON.stringify(receipt)},{owned,result});process.exitCode=1;
  try{
   const result=await candidateCommandAsync(process.execPath,{tree:f.tree,run:f.run,owned:{...options.owned,...memory},command:[process.execPath,command],discardTemporary:true},
    {...launcherEnvironment(options.env),...ambient});
-  assert.equal(result.status,1,(result.stdout??'')+(result.stderr??''));assert.equal(result.signal,null);assert.equal(result.error,undefined);
+  assert.equal(result.status,held?2:1,(result.stdout??'')+(result.stderr??''));assert.equal(result.signal,null);
+  if(held)assert.match(result.error!.message,/process 42 owns fd/);else assert.equal(result.error,undefined);
   const closed=JSON.parse(readFileSync(receipt,'utf8'));owned=closed.owned;
   assert.equal(closed.result.state,'retained after red',JSON.stringify(closed.result));
   const directory=join(options.env!.HOME!,'.cache/nts-gate/closed-temporaries'),rows=readdirSync(directory).filter(name=>name.endsWith('.json'));
