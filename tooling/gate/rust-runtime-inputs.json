@@ -4677,6 +4677,13 @@
       }
     },
     {
+      "source": "compiler/codegen/llvm/src/target_abi.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/codegen/llvm/tests/agrees_with_c.rs",
       "declarations": {
         "imports": [],
