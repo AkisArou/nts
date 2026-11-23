@@ -2014,7 +2014,7 @@ fn initializing_stores(
                         ..
                     } if harmless.contains(name) => {}
                     OpKind::Call { .. } | OpKind::Retain(_) | OpKind::Release(_) => {
-                        untouched.clear()
+                        untouched.clear();
                     }
                     _ => {}
                 }
