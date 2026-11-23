@@ -20,7 +20,7 @@ import {newTestScratch} from "../test-scratch.ts";
 type Row = { name: string; verdict: string; reason?: string; started_at?: string;
   signal?: string | null; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
 type Summary = { steps: Row[]; identities?: { commit: string }; fail_fast: boolean; interrupted: string | null;
-  temporary: { path: string; state: string; enclosing?: string } };
+  temporary: { path: string; state: string; enclosing?: string; diagnostics?:{path:string} } };
 const FAIL_FAST_STOP = "NTS_GATE_FAIL_FAST: a step failed";
 type Cancellation = { slice: string; signal: string; record: string; before: string; after: string; isolated: boolean };
 
@@ -78,7 +78,7 @@ export class GateScopes extends ActualGateScopes {
 
 // Without fail-fast the runner terminates without a timeout: records releases
 // old-paths. With it, format's failure stops old-paths and never admits records.
-function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, failFast: boolean, hold: boolean, escape?: "double-fork" | "outlive-leader", missing?: "DBUS_SESSION_BUS_ADDRESS" | "XDG_RUNTIME_DIR", control: { launcherFailure?: boolean; repository?: boolean; oracleCancellation?: "clean" | "seal" } = {}) {
+function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, failFast: boolean, hold: boolean, escape?: "double-fork" | "outlive-leader", missing?: "DBUS_SESSION_BUS_ADDRESS" | "XDG_RUNTIME_DIR", control: { launcherFailure?: boolean; repository?: boolean; nested?:boolean; oracleCancellation?: "clean" | "seal" } = {}) {
   const own = newTestScratch("runner-stop-run");
   // A closed run temporary is an evictable cache. This fixture owns its
   // registry, so no neighbour's prune decides whether its run's files exist.
@@ -101,7 +101,7 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
     }
     removable(own);rmSync(own, { recursive: true, force: true });
   });
-  const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "gate-run");
+  const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = control.nested?join(home,'.cache/outer/tmp/inner'):join(own, "gate-run");
   mkdirSync(gate, { recursive: true });
   mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("../", import.meta.url));
@@ -172,7 +172,7 @@ else
 fi
 `);
   // The mutation must never reach a capability inherited from the outer test run.
-  const launcher = control.oracleCancellation ? hostEnvironment(process.env) : { ...fixtureEnvironment(t) };
+  let launcher = control.oracleCancellation ? hostEnvironment(process.env) : { ...fixtureEnvironment(t) };
   launcher.HOME = home;
   if (missing) delete launcher[missing];
   if (control.launcherFailure) {
@@ -192,6 +192,8 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
     }
     commit = spawnTest("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).stdout.trim();
   }
+  const enclosing=control.nested?gateEnvironment(launcher,{run:join(home,'.cache/outer'),owned:gateFixtureMemory(join(own,'outer-memory'),root)}):undefined;
+  if(enclosing){launcher=enclosing.env;writeFileSync(join(enclosing.temporary.path,'sentinel'),'outer lifetime');}
   planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
     NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2",
     ...gateFixtureMemory(join(own, "memory"),root), CARGO_TARGET_DIR: target, ...(failFast ? { NTS_GATE_FAIL_FAST: "1" } : {}),
@@ -201,20 +203,33 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   assert.equal(actual.status, 1, actual.stdout + actual.stderr);
   assert.equal(actual.signal, null);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as Summary;
-  // An independent red run owns its registry entry; an enclosed run shares
-  // its outer lifetime. A neighbour's prune can reach neither one.
+  assert.equal(summary.temporary.state,'removed after red',JSON.stringify(summary.temporary));
+  assert.equal(summary.temporary.path,planned.temporary.path);
+  assert.equal(summary.temporary.enclosing,planned.temporary.enclosing?.path);
+  assert.equal(planned.temporary.enclosing?.path,enclosing?.temporary.path);
+  assert.equal(existsSync(planned.temporary.path),false);
+  assert.ok(summary.temporary.diagnostics,'a red run publishes its bounded diagnostics');
+  assert.equal(existsSync(join(summary.temporary.diagnostics.path,'manifest.json')),true);
+  if(enclosing)assert.equal(readFileSync(join(enclosing.temporary.path,'sentinel'),'utf8'),'outer lifetime');
+  // This owner never adds an ended run to the legacy eviction registry.
   const registry = join(home, ".cache/nts-gate/closed-temporaries");
   const closed = existsSync(registry) ? readdirSync(registry).map(name => (JSON.parse(readFileSync(join(registry, name), "utf8")) as { owned: { path: string } }).owned.path) : [];
-  assert.deepEqual(closed, summary.temporary.state === "retained after red" && !summary.temporary.enclosing ? [planned.temporary.path] : [], JSON.stringify(summary.temporary));
-  const retained = existsSync(planned.temporary.path), other = captureRunTemporary(join(neighbor, ".cache/run"));
+  assert.deepEqual(closed, []);
+  const other = captureRunTemporary(join(neighbor, ".cache/run"));
   finishRunTemporary(other, neighbor, false, { minimumFreeBytes: 0, maxBytes: Number.MAX_SAFE_INTEGER, write: () => {} });
   assert.deepEqual(pruneRunTemporaries(neighbor, { minimumFreeBytes: 0, maxBytes: 0, write: () => {} }).removed, [other.path]);
-  assert.equal(existsSync(planned.temporary.path), retained, "an independent registry prune cannot evict this run's temporary");
+  assert.equal(existsSync(summary.temporary.diagnostics.path),true,'a neighbouring registry prune cannot evict retained diagnostics');
+  if(enclosing)assert.equal(readFileSync(join(enclosing.temporary.path,'sentinel'),'utf8'),'outer lifetime');
   return { summary,
     admitted: existsSync(join(own, "records-started")), descendantAlive: descendantAlive(), commit,
     normalDrains: control.oracleCancellation ? readFileSync(join(own,"normal-drains.jsonl"),"utf8").trim().split("\n").map(line=>(JSON.parse(line) as {slice:string}).slice) : [],
     cancellation: control.oracleCancellation ? JSON.parse(readFileSync(join(own, "cancellation.json"), "utf8")) as Cancellation : undefined };
 }
+
+test('a nested red runner removes its tmp and preserves the enclosing lifetime',t=>{
+  const {summary}=runFixture(t,false,false,undefined,undefined,{nested:true});
+  assert.ok(summary.temporary.enclosing);
+});
 
 for (const arm of ["clean", "seal"] as const) test(`a fail-fast SIGTERM with ${arm === "seal" ? "a changed" : "an unchanged"} seal preserves capture-integrity precedence`, t => {
   const { summary, admitted, cancellation, normalDrains } = runFixture(t, true, false, undefined, undefined, { oracleCancellation: arm });

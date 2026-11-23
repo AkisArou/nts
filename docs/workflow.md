@@ -1458,13 +1458,16 @@ the tooling strict checker owns the source's type checking.
   reporting. Success, failure and signal all discard the authenticated `tmp/`.
   Its systemd backstop binds to the creator's exact unit and invocation and runs
   after that unit stops, including a forced stop or an interrupted start.
+  The bound step hierarchy drains before the creator. Delegated affinity scopes
+  still need that creator binding ([#994](https://github.com/AkisArou/nts/issues/994));
+  the backstop retains its live-holder refusal on that path.
   Acquisition waits for backstop activation before work starts. Its working
   directory retains the cleanup code until that callback drains. The receipt and token bind
   the created directory and its parent by device, inode and owner. Replacements,
   aliases, unknown state and live or unreadable holders refuse by name. Every
   removal logs the run, path and allocated bytes. Historical temporaries are
   outside this owner.
-  Process and unit holders come from the same complete host observation
+  Allocated bytes and process and unit holders come from the same complete host observation
   capability. Fixtures supply explicit process and unit views; missing or
   malformed views refuse rather than falling back to ambient ownership.
   The observation owner supplies typed unit data; the temporary closer applies
@@ -1472,7 +1475,12 @@ the tooling strict checker owns the source's type checking.
   Red runs keep failing inputs, stderr, reproducers and existing cores in a
   diagnostic directory beside their logs, preserving relative paths with a
   manifest from the original root. Retention is capped at 64 MiB and 4,096
-  files per run; hitting either cap is logged. Only authenticated dependency
+  files per run; hitting either cap is logged. Artifacts referenced by the step
+  logs are copied before unreferenced scratch. The manifest names each referenced
+  root's retained destination and whether it is complete, partial or absent;
+  the original logs remain intact. Unreadable diagnostic entries are logged and
+  skipped. After the ownership guards, directory permissions are normalized
+  before measuring allocated bytes and discarding scratch. Only authenticated dependency
   image payloads are excluded; capture stderr and failure metadata remain.
   Copies are staged inside the authenticated temporary. A flushed manifest and
   receipt bind the staged directory's identity before its atomic publication;

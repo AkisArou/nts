@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {randomUUID} from 'node:crypto';
-import {closeSync,constants,existsSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,symlinkSync,writeFileSync} from 'node:fs';
+import {chmodSync,closeSync,constants,existsSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,symlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {captureRunTemporary,createRunOracleImage} from './run-temporary.ts';
@@ -20,15 +20,44 @@ function fixture(t:Parameters<typeof testScratch>[0]){
   const temporary=captureRunTemporary(run,undefined,home),s=lstatSync(run),token=temporary.creation!.token,file=join(run,'temporary-owner-'+token+'.json');
   const r={version:1,token,run,temporary,parent:{path:run,dev:s.dev,ino:s.ino,uid:s.uid},owner:'00000000-0000-0000-0000-000000000000 1 1',unit:'fixture.service',invocation:'a'.repeat(32),backstop:`nts-tmp${token.replaceAll('-','')}.service`};
   writeFileSync(join(temporary.path,'.nts-run-token'),token);durableRecord(file,r);
-  const env=fixtureEnvironment(t,ownMemory(join(home,'observations'))),host=hostObservations(env),log:string[]=[];
+  const env=fixtureEnvironment(t,ownMemory(join(home,'observations'),{allocated:{kind:'fixed',defaultBytes:8192}})),host=hostObservations(env),log:string[]=[];
   const close=(green=false,options:Parameters<typeof closeRunTemporary>[5]={})=>closeRunTemporary(file,token,home,green,host,{log:line=>log.push(line),...options});
   return {home,run,temporary,token,file,r,env,host,log,close};
 }
 test('a drained green removes tmp and logs run id and allocated bytes once',t=>{
   const f=fixture(t);writeFileSync(join(f.temporary.path,'input.ts'),'input');
-  const result=f.close(true);assert.equal(result.state,'removed after green');assert.ok(result.bytes>0);assert.equal(existsSync(f.temporary.path),false);
+  const result=f.close(true);assert.equal(result.state,'removed after green');assert.equal(result.bytes,8192);assert.equal(existsSync(f.temporary.path),false);
   assert.deepEqual(f.close(true),result);assert.equal(f.log.filter(line=>line.startsWith('gate tmp: removed ')).length,1);
   assert.match(f.log.at(-1)!,new RegExp('run='+f.run+' .*bytes='+result.bytes));
+});
+for(const green of [true,false])test(`mode-000 diagnostics cannot block ${green?'green':'red'} disposal`,t=>{
+  const f=fixture(t),directory=join(f.temporary.path,'unreadable'),file=join(f.temporary.path,'stderr.txt');
+  mkdirSync(directory);writeFileSync(join(directory,'input.ts'),'inaccessible');chmodSync(directory,0);
+  writeFileSync(file,'inaccessible stderr');chmodSync(file,0);
+  let measured=false;
+  const host={...f.host,allocatedBytes:(path:string)=>{
+    assert.equal(path,f.temporary.path);assert.equal(lstatSync(directory).mode&0o700,0o700,'normalize before measuring');
+    measured=true;return f.host.allocatedBytes(path);
+  }};
+  const result=closeRunTemporary(f.file,f.token,f.home,green,host,{log:line=>f.log.push(line)});
+  assert.equal(measured,true);assert.equal(result.bytes,8192);assert.equal(existsSync(f.temporary.path),false);
+  if(!green){
+    const manifest=JSON.parse(readFileSync(join(result.diagnostics!.path,'manifest.json'),'utf8'));
+    assert.equal(manifest.skipped.length,2);assert.ok(f.log.some(line=>line.includes('diagnostic skipped:')&&line.includes('EACCES')));
+  }
+});
+test('a red step reference resolves after close ahead of unreferenced scratch at the file cap',t=>{
+  const f=fixture(t),filler=join(f.temporary.path,'conformance262'),artifact=join(f.temporary.path,'nts-blockers owned');
+  mkdirSync(filler);for(let i=0;i<4096;i++)writeFileSync(join(filler,String(i)),'scratch');
+  mkdirSync(artifact);writeFileSync(join(artifact,'child.stderr'),'failing child');
+  writeFileSync(join(f.run,'blockers.log'),'padding'.repeat(9361)+`\n  kept ${artifact}\n  full result at ${artifact}/child.stderr\n`);
+  const result=f.close(),manifest=JSON.parse(readFileSync(join(result.diagnostics!.path,'manifest.json'),'utf8'));
+  const reference=manifest.references.find((row:{original:string})=>row.original===artifact);
+  assert.equal(reference.state,'retained');assert.deepEqual(reference.logs,['blockers.log']);
+  assert.equal(readFileSync(join(reference.retained,'child.stderr'),'utf8'),'failing child');
+  assert.equal(result.diagnostics!.files,4096);assert.equal(result.diagnostics!.capped,true);
+  assert.match(readFileSync(join(f.run,'blockers.log'),'utf8'),/kept /,'original log evidence remains intact');
+  assert.ok(f.log.some(line=>line.includes('diagnostic references:')&&line.includes('manifest.json')));
 });
 test('a red retains bounded diagnostic paths and excludes dependency images and links',t=>{
   const f=fixture(t),root=f.temporary.path;
@@ -135,7 +164,9 @@ test('live process users and unregistered historical scratch remain untouched',t
   assert.equal(readFileSync(join(old.path,'keep'),'utf8'),'old bytes');
 });
 for(const mode of ['green','red','signal','forced','force-copy'] as const)test(`the real unit's ${mode} exit removes tmp and preserves red diagnostics`,async t=>{
-  const home=testScratch(t,'temporary-unit'),env=fixtureEnvironment(t,ownMemory(join(home,'observations'))),ready=join(home,'ready.json');
+  // Kernel wiring control: the allocated-byte view is explicitly live, while
+  // holders and every admission observation still belong to this fixture.
+  const home=testScratch(t,'temporary-unit'),env=fixtureEnvironment(t,ownMemory(join(home,'observations'),{allocated:{kind:'live'}})),ready=join(home,'ready.json');
   durableRecord(join(home,'environment.json'),env);
   if(mode==='force-copy'){
     assert.equal(spawnTest('mkfifo',[join(home,'pause')],{env,encoding:'utf8'}).status,0);
@@ -161,5 +192,8 @@ for(const mode of ['green','red','signal','forced','force-copy'] as const)test(`
   const closed=JSON.parse(readFileSync(row.receipt,'utf8')).closed;
   assert.equal(existsSync(join(row.run,'tmp')),false);assert.ok(closed.bytes>0);
   if(mode==='green')assert.equal(closed.diagnostics,undefined);
-  else assert.equal(readFileSync(join(closed.diagnostics.path,'files/stderr.txt'),'utf8'),'controlled stderr');
+  else {
+    assert.equal(readFileSync(join(closed.diagnostics.path,'files/stderr.txt'),'utf8'),'controlled stderr');
+    assert.ok(readFileSync(join(row.run,'temporary.log'),'utf8').includes('diagnostic skipped:'),'mode-000 directory was logged and disposal continued');
+  }
 });

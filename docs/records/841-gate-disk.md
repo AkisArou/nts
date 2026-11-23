@@ -164,8 +164,10 @@ The diagnostic inventory reviewed for this slice is:
 | --- | --- |
 | Oracle dependency capture | Capture stdout/stderr, command, failure and identity metadata beside the registered image; only authenticated image payload directories are excluded |
 | Resolution service | Existing holder stderr and regular diagnostic metadata; sockets and links are not copied |
-| Blockers | Retained fixture/run outputs, generated reproducers, child stdout/stderr and child-result JSON |
-| Census and compiler runs | Any remaining failing input, generated output and diagnostic file in the owned temporary; already published step logs and summaries remain outside it |
+| Blockers | `blockers-check.mjs` prints its retained root with `kept` and failed child-result JSON with `full result at`; those roots contain emitted reproducers, child stdout/stderr and child-result JSON |
+| Other conformance drivers | `blockers.mjs`, `native-half.mjs`, `differential-ts.mjs`, `unconditional-expectations.mjs`, `agreement.mjs`, `cascade-reach.mjs` and `last-mile.mjs` print `kept` roots when requested; `compiled-axis-floor.mjs` names its axis artifacts |
+| Fuzz | `fuzz-runtime.mjs` prints a `kept` failing source when `NTS_FUZZ_KEEP` is supplied; a path outside the authenticated temporary stays outside this owner's authority |
+| Census and compiler runs | `ownCensusScratch` drains and removes its own scratch. `conformance262.ts` publishes stopped compiler output in the step log before removal; any scratch left by a forced stop is fallback evidence |
 | Cores | Existing files only; the units retain LimitCORE=0 |
 
 Retained paths live below `diagnostics-<token>/files/`, preserving filesystem
@@ -173,6 +175,11 @@ name bytes, including names that are not UTF-8. The sibling manifest maps that
 namespace to the original temporary. This separation preserves an input named
 `manifest.json`. Retention is bounded at 64 MiB and 4,096 files per run, with a
 named cap observation. Copies use a bounded buffer and flush before removal.
+The review correction uses the run's step logs as the production reference
+inventory, without a second list of producer paths. Referenced top-level
+artifacts precede unreferenced scratch. Each reference's original root, source
+logs, retained destination and complete/partial/absent state are recorded in
+the diagnostic manifest, whose path is logged. Original step logs are preserved.
 Every removal logs its run, path and allocated bytes in `temporary.log`; forced
 cleanup also reports through its unit journal. Oracle setup telemetry is captured
 before removing its inputs. A cleanup failure remains non-green.

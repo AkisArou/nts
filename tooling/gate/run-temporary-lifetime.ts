@@ -3,8 +3,9 @@ import {createHash} from 'node:crypto';
 import {appendFileSync,closeSync,constants,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,mkdtempSync,openSync,readFileSync,readdirSync,readSync,realpathSync,renameSync,writeFileSync,writeSync} from 'node:fs';
 import {basename,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {StringDecoder} from 'node:string_decoder';
 import {durableRecord} from './durable-record.ts';
-import {assertRunTemporary,discardRunTemporary,runTemporaryImageRoots,type RunTemporary} from './run-temporary.ts';
+import {assertRunTemporary,discardRunTemporary,removable,runTemporaryImageRoots,type RunTemporary} from './run-temporary.ts';
 import {hostObservations,HOST_OBSERVATIONS,type HostObservations} from './host-observations.ts';
 import {hostEnvironment} from './host-environment.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
@@ -22,7 +23,7 @@ type Identity={path:string;dev:number;ino:number;uid:number};
 type Diagnostics={path:string;bytes:number;files:number;capped:boolean;cap_bytes:number;cap_files:number};
 type DiagnosticCheckpoint=(phase:'copying'|'prepared'|'published',directory:string)=>void;
 type DiagnosticPublication={version:1;stage:string;directory:Identity;manifest_sha256:string;result:Diagnostics};
-export type TemporaryDisposition={path:string;state:string;bytes:number;run:string;diagnostics?:Diagnostics};
+export type TemporaryDisposition={path:string;state:string;bytes:number;run:string;enclosing?:string;diagnostics?:Diagnostics};
 type Receipt={version:1;token:string;run:string;temporary:RunTemporary;parent:Identity;owner:string;unit:string;invocation:string;backstop:string;diagnostics?:DiagnosticPublication;closed?:TemporaryDisposition};
 const TOKEN='.nts-run-token';
 const ENTRY=new URL('./run-temporary-lifetime.ts',import.meta.url);
@@ -100,10 +101,52 @@ function publishDiagnostics(r:Receipt,home:string):Diagnostics{
   verifyDiagnosticPublication(r,d.stage);sameTemporary(r,home);renameSync(d.stage,path);
   syncDirectory(r.run);syncDirectory(r.temporary.path);return verifyDiagnosticPublication(r,path);
 }
+/** The step logs are the reference inventory, including a child which died
+ * before its producer could publish a separate retention record. Keep their
+ * referenced top-level artifacts ahead of unreferenced scratch. Read bounded
+ * chunks; a filesystem component cannot exceed 255 bytes. */
+function referencedArtifacts(r:Receipt,log:(line:string)=>void):{roots:Map<string,string[]>;capped:boolean}{
+  const references=new Map<string,string[]>(),prefix=r.temporary.path+'/';let capped=false;
+  // Match the real component names, including spaces, rather than guessing
+  // where a producer's quoted or unquoted path ends.
+  const components=readdirSync(r.temporary.path,{encoding:'buffer'}).filter(name=>Buffer.from(name.toString()).equals(name))
+    .map(name=>name.toString()).sort((a,b)=>b.length-a.length);
+  for(const name of readdirSync(r.run).filter(name=>name.endsWith('.log')).sort()){
+    const path=join(r.run,name),s=lstatSync(path);
+    if(!s.isFile()||s.isSymbolicLink()||s.uid!==r.parent.uid)continue;
+    let fd;try{fd=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW);}catch(error){
+      const code=(error as NodeJS.ErrnoException).code;if(code!=='EACCES'&&code!=='EPERM')throw error;
+      log(`gate tmp: diagnostic reference log skipped: run=${r.run} path=${JSON.stringify(path)} reason=${code}`);continue;
+    }
+    const decoder=new StringDecoder('utf8'),buffer=Buffer.alloc(64*1024);
+    let tail='';
+    try{
+      for(;;){
+        const n=readSync(fd,buffer,0,buffer.length,null),text=tail+(n?decoder.write(buffer.subarray(0,n)):decoder.end());
+        let at=0;
+        while((at=text.indexOf(prefix,at))!==-1){
+          const start=at+prefix.length,rest=text.slice(start);
+          if(rest.length<256&&n)break;
+          const component=components.find(name=>rest.startsWith(name)&&(!rest[name.length]||/[\/\s"'`<>(){}\[\],;:\x00-\x1f]/.test(rest[name.length]!)));
+          if(component){
+            if(references.has(component)||references.size<RUN_DIAGNOSTIC_FILES){
+              const logs=references.get(component)??[];if(!logs.includes(name))logs.push(name);references.set(component,logs);
+            }else capped=true;
+          }
+          at=start+Math.max(component?.length??0,1);
+        }
+        if(!n)break;
+        tail=text.slice(-Math.max(prefix.length+256,512));
+      }
+    }finally{closeSync(fd);}
+  }
+  if(capped)log(`gate tmp: diagnostic reference cap hit: run=${r.run} roots=${RUN_DIAGNOSTIC_FILES}`);
+  return {roots:references,capped};
+}
 /** Files are a bounded diagnostic fallback, never a retained dependency image.
  * Relative paths preserve failing inputs, stderr, generated reproducers and any
  * existing core. Symlinks and sockets are never followed. */
-function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,capFiles:number,checkpoint?:DiagnosticCheckpoint):Diagnostics{
+function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,capFiles:number,log:(line:string)=>void,checkpoint?:DiagnosticCheckpoint):Diagnostics{
   if(r.diagnostics)return publishDiagnostics(r,home);
   const path=diagnosticPath(r),result:Diagnostics={path,bytes:0,files:0,capped:false,cap_bytes:capBytes,cap_files:capFiles};
   if(!diagnosticShape(result,path))throw Error('invalid diagnostic retention bounds: '+r.run);
@@ -113,21 +156,31 @@ function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,cap
   const excluded=runTemporaryImageRoots(r.temporary,home);
   excluded.push(join(r.temporary.path,'.nts-oracle-images-v1'),join(r.temporary.path,TOKEN));
   const skip=new Set(excluded.map(path=>Buffer.from(path).toString('hex'))),root=Buffer.from(r.temporary.path),slash=Buffer.from('/');
+  const inventory=referencedArtifacts(r,log),references=inventory.roots,skipped:{path_hex:string;reason:string}[]=[],incomplete=new Set<string>();
+  const unreadable=(path:Buffer,error:unknown):boolean=>{
+    const code=(error as NodeJS.ErrnoException).code;if(code!=='EACCES'&&code!=='EPERM')return false;
+    if(skipped.length<capFiles)skipped.push({path_hex:path.subarray(root.length+1).toString('hex'),reason:code});
+    incomplete.add(path.subarray(root.length+1).toString().split('/')[0]!);
+    log(`gate tmp: diagnostic skipped: run=${r.run} path=${JSON.stringify(path.toString())} reason=${code}`);return true;
+  };
   const walk=(source:Buffer):void=>{
-    for(const name of readdirSync(source,{encoding:'buffer'}).sort(Buffer.compare)){
+    let names:Buffer[];
+    try{names=readdirSync(source,{encoding:'buffer'});}catch(error){if(unreadable(source,error))return;throw error;}
+    names.sort((a,b)=>source.equals(root)?Number(references.has(b.toString()))-Number(references.has(a.toString()))||Buffer.compare(a,b):Buffer.compare(a,b));
+    for(const name of names){
       // Interrupted attempts are disposable copies inside this authenticated
       // tmp, never source diagnostics and never separately retained evidence.
       if(source.equals(root)&&name.subarray(0,Buffer.byteLength(diagnosticStagePrefix(r))).equals(Buffer.from(diagnosticStagePrefix(r))))continue;
       const from=Buffer.concat([source,slash,name]);
       if(skip.has(from.toString('hex')))continue;
-      if(result.files>=capFiles||result.bytes>=capBytes){result.capped=true;return;}
-      const s=lstatSync(from);
+      if(result.files>=capFiles||result.bytes>=capBytes){result.capped=true;incomplete.add(from.subarray(root.length+1).toString().split('/')[0]!);continue;}
+      let s;try{s=lstatSync(from);}catch(error){if(unreadable(from,error))continue;throw error;}
       if(s.isSymbolicLink())continue;
       if(s.isDirectory()){walk(from);continue;}
       if(!s.isFile()||s.uid!==r.parent.uid)continue;
-      if(s.size>capBytes-result.bytes){result.capped=true;continue;}
+      if(s.size>capBytes-result.bytes){result.capped=true;incomplete.add(from.subarray(root.length+1).toString().split('/')[0]!);continue;}
       sameTemporary(r,home);
-      const fd=openSync(from,constants.O_RDONLY|constants.O_NOFOLLOW);
+      let fd;try{fd=openSync(from,constants.O_RDONLY|constants.O_NOFOLLOW);}catch(error){if(unreadable(from,error))continue;throw error;}
       try{
         const actual=fstatSync(fd);
         if(actual.dev!==s.dev||actual.ino!==s.ino||actual.size!==s.size)throw Error('diagnostic changed during close: '+from);
@@ -148,8 +201,11 @@ function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,cap
     }
   };
   walk(root);
+  const mapped=[...references].map(([name,logs])=>({original:join(r.temporary.path,name),logs,
+    retained:existsSync(join(stage,'files',name))?join(path,'files',name):null,
+    state:incomplete.has(name)?'partial':existsSync(join(stage,'files',name))?'retained':'not retained'}));
   durableRecord(join(stage,'manifest.json'),{version:1,run:r.run,token:r.token,original_root:r.temporary.path,...result,
-    retained:['failing inputs','stderr','reproducers','existing cores'],excluded,mapping:'original_root/<relative path bytes> -> path/files/<relative path bytes>'});
+    retained:['failing inputs','stderr','reproducers','existing cores'],excluded,skipped,references:mapped,references_capped:inventory.capped,mapping:'original_root/<relative path bytes> -> path/files/<relative path bytes>'});
   r.diagnostics={version:1,stage,directory:identity(stage),manifest_sha256:createHash('sha256').update(readFileSync(join(stage,'manifest.json'))).digest('hex'),result};
   durableRecord(file,r);checkpoint?.('prepared',stage);
   const published=publishDiagnostics(r,home);checkpoint?.('published',published.path);return published;
@@ -173,7 +229,7 @@ export function closeRunTemporary(file:string,token:string,home:string,green:boo
     }
     if(!lstatSync(r.temporary.path,{throwIfNoEntry:false})){
       const diagnostics=r.diagnostics?verifyDiagnosticPublication(r,r.diagnostics.result.path):undefined;
-      const closed:TemporaryDisposition={path:r.temporary.path,state:'already absent',bytes:0,run:r.run,...(diagnostics?{diagnostics}:{})};
+      const closed:TemporaryDisposition={path:r.temporary.path,state:'already absent',bytes:0,run:r.run,...(r.temporary.enclosing?{enclosing:r.temporary.enclosing.path}:{}),...(diagnostics?{diagnostics}:{})};
       durableRecord(file,{...r,closed});return closed;
     }
     sameTemporary(r,home);
@@ -188,15 +244,16 @@ export function closeRunTemporary(file:string,token:string,home:string,green:boo
       }
     };
     assertUnused();
-    const diagnostics=green&&!r.diagnostics?undefined:retainDiagnostics(file,r,home,options.capBytes??RUN_DIAGNOSTIC_BYTES,options.capFiles??RUN_DIAGNOSTIC_FILES,options.checkpoint);
+    const diagnostics=green&&!r.diagnostics?undefined:retainDiagnostics(file,r,home,options.capBytes??RUN_DIAGNOSTIC_BYTES,options.capFiles??RUN_DIAGNOSTIC_FILES,log,options.checkpoint);
+    if(diagnostics)log(`gate tmp: diagnostic references: run=${r.run} manifest=${join(diagnostics.path,'manifest.json')}`);
     if(diagnostics?.capped)log(`gate tmp: diagnostic cap hit: run=${r.run} bytes=${diagnostics.bytes} files=${diagnostics.files} cap_bytes=${diagnostics.cap_bytes} cap_files=${diagnostics.cap_files}`);
-    const measured=infrastructureProbe({purpose:'run temporary allocated bytes',command:'du',args:['-sx','-B1','--',r.temporary.path]}).stdout;
-    const bytes=Number(measured.split('\t')[0]);if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('invalid run temporary bytes: '+r.run);
     sameTemporary(r,home);
     assertUnused();
+    removable(r.temporary.path);
+    const bytes=host.allocatedBytes(r.temporary.path);if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('invalid run temporary bytes: '+r.run);
     log(`gate tmp: removing run=${r.run} path=${r.temporary.path} bytes=${bytes}`);
     discardRunTemporary(r.temporary,home,host);
-    const closed:TemporaryDisposition={path:r.temporary.path,state:green?'removed after green':'removed after red',bytes,run:r.run,...(diagnostics?{diagnostics}:{})};
+    const closed:TemporaryDisposition={path:r.temporary.path,state:green?'removed after green':'removed after red',bytes,run:r.run,...(r.temporary.enclosing?{enclosing:r.temporary.enclosing.path}:{}),...(diagnostics?{diagnostics}:{})};
     durableRecord(file,{...r,closed});
     log(`gate tmp: removed run=${r.run} path=${r.temporary.path} bytes=${bytes}`);return closed;
   }finally{unlock();}

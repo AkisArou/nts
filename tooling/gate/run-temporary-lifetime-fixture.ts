@@ -1,4 +1,4 @@
-import {mkdirSync,openSync,readFileSync,readSync,watch,writeFileSync} from 'node:fs';
+import {chmodSync,mkdirSync,openSync,readFileSync,readSync,watch,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {captureRunTemporary,createRunOracleImage} from './run-temporary.ts';
 import {closeRunTemporary,ownRunTemporary} from './run-temporary-lifetime.ts';
@@ -19,6 +19,8 @@ runAsCommand(import.meta.url,async()=>{
   const image=createRunOracleImage(temporary,home,join(temporary.path,'oracle-dependencies/tree'));
   writeFileSync(join(image,'rebuildable'),'not retained');
   writeFileSync(join(temporary.path,'oracle-dependencies/stderr'),'capture stderr');
+  mkdirSync(join(temporary.path,'unreadable'));writeFileSync(join(temporary.path,'unreadable/input.ts'),'inaccessible input');
+  chmodSync(join(temporary.path,'unreadable'),0);
   if(mode==='force-copy'){
     closeRunTemporary(owner.file,owner.token,home,false,hostObservations(env),{checkpoint:(phase,directory)=>{
       if(phase!=='copying')return;

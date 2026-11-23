@@ -1595,6 +1595,15 @@ function done(){
   summaryWritten=true;finishRun();
 }
 
+/** The same terminal verdict governs diagnostic retention and reporting.
+ * @param {unknown[]} failures
+ */
+function runIsGreen(failures=[]) {
+  return !failures.length&&!interrupted&&!diagnosticsFailure&&scopeCleanup.state==='complete'&&
+    (!TIME_STRICT||!slower().some(s=>results.get(s.name)?.verdict==='PASS'))&&
+    plan.every(name=>{const row=results.get(name);return row?.verdict==='PASS'||row?.verdict==='SKIPPED'&&ACCEPT_SKIP.has(name);});
+}
+
 function writeSummary() {
   if (outrankedNow) memoryRecord.outranked_s += (Date.now() - outrankedSince) / 1000;
   if (!identities.nts) identify(false);
@@ -1617,7 +1626,7 @@ function writeSummary() {
     if (r.verdict === "SKIPPED" && ACCEPT_SKIP.has(name)) { r.accepted = true; continue; }
     red.push(name);
   }
-  const green = red.length === 0 && scopeCleanup.state === "complete" && !diagnosticsFailure;
+  const green = runIsGreen();
   const oracleSetup=terminalOracleSetup??null;
   const temporary = temporaryDisposition ?? {path:env.TMPDIR,state:"kept: temporary lifetime did not close"};
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}\n`);
@@ -1817,7 +1826,7 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     try{if(!existsSync(setupLog))writeFileSync(setupLog,"");terminalOracleSetup=captureCost(null,setupLog);}
     catch(error){if(isCommandExit(error))throw error;terminalOracleSetup={ownerStep:null,instrument:{kind:"tooling-setup",reason:String(error)}};}
     terminalOwnerCalls=ownerCalls(undefined,running.size===0&&results.size===plan.length);
-    try{if(temporaryLifetime)temporaryDisposition=temporaryLifetime.close(!failures.length&&!interrupted&&!diagnosticsFailure&&(!TIME_STRICT||!slower().length)&&plan.every(name=>{const row=results.get(name);return row?.verdict==='PASS'||row?.verdict==='SKIPPED'&&ACCEPT_SKIP.has(name);}));}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{if(temporaryLifetime)temporaryDisposition=temporaryLifetime.close(runIsGreen(failures));}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     if(failures.length===1)throw failures[0];
     if(failures.length)throw new AggregateError(failures,'gate run resources failed to close');
   },
