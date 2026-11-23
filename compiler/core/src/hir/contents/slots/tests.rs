@@ -139,6 +139,27 @@ fn a_phi_rebinds_the_fact_and_drops_the_previous_iterations_value() {
 }
 
 #[test]
+fn a_store_through_a_forwarded_fresh_base_invalidates_its_original_name() {
+    let mut func = fixture();
+    func.values[0].kind = OpKind::ObjectNew { frame: false };
+    func.values[4].kind = OpKind::FieldSet {
+        object: ValueId(5),
+        field: 0,
+        value: ValueId(1),
+    };
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 0);
+    let mut carried = state.across(&[ValueId(5)], &[ValueId(0)]);
+    assert!(carried.known_zero(ValueId(0), Slot::Field(0)));
+    assert!(carried.known_zero(ValueId(5), Slot::Field(0)));
+    observe(&mut carried, &func, 4);
+    assert!(
+        !carried.known_zero(ValueId(0), Slot::Field(0)),
+        "the original allocation and its phi name can alias"
+    );
+}
+
+#[test]
 fn every_predecessor_must_establish_the_null_before_a_join() {
     let func = fixture();
     let mut cleared = Fresh::default();
