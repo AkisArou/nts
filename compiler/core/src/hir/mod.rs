@@ -8458,6 +8458,19 @@ fn provide(
     match provider {
         Memory::ReferenceCounting => {
             let entry_decisions = own::entries::materialize(program);
+            // Materialization redirects direct callers to private bodies. A
+            // borrowed source entry can now be unreachable under closed roots;
+            // leaving its unknown arguments here would veto the surviving
+            // callers' slot contracts. Use the same reachability owner as the
+            // later prune, before taking any ownership snapshot. Open roots
+            // retain their borrowed entries; unknown roots grant no pruning.
+            if entry_decisions
+                .iter()
+                .any(|decision| decision.kind == own::EntryDecisionKind::Implementation)
+                && let Some(roots) = program.roots.clone()
+            {
+                reachable::prune(program, roots.as_roots());
+            }
             let old_lengths: Vec<_> = program.funcs.iter().map(|func| func.values.len()).collect();
             let mut counted = rc::insert(program)?;
             let contents = contents::elide(program, &old_lengths);
