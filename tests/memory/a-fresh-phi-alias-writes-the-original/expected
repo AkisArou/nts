@@ -1,0 +1,18 @@
+ideal 6
+allocated 2
+candidates 1
+because The phi selects original for work(1). The first heap Cell has two
+because owners, the published global and alias.next: one retain. Overwriting
+because original.next must release that first reference. Distinct SSA names
+because do not make alias and original distinct objects.
+because
+because Five releases: the global's previous value when first is published,
+because the old original.next, the two frame objects' reference fields at
+because scope exit, and the global's final reference when it is cleared. The
+because original and other Cells live in the frame; first and the replacement
+because escape into their fields and account for the two heap allocations.
+because The shared first becomes a collection candidate before its last owner
+because releases it. The harness poisons freed storage and forces collection.
+because
+because The old compiler omitted the overwrite's release and leaked first.
+because The distinct-object control differs only in selecting other directly.
