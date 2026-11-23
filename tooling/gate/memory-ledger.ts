@@ -133,7 +133,7 @@ import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // the peak goes to that history when the reservation ends. An entry says
 // which of its keys were sized without a measurement of their own
 // (`unmeasured`), and which have held more than they reserved (`over`).
-import {hostObservations,hostObservationEnvironment,HostObservationError,cgroupOwnershipMembers,cgroupOwnershipAccounted,retainedCgroupCharge,retainedCgroupMembers,parseMemory,parseProcessCharge,parseCgroupCharge,type HostObservations} from "./host-observations.ts";
+import {hostObservations,hostObservationEnvironment,HostObservationError,cgroupOwnershipPopulation,cgroupOwnershipAccounted,retainedCgroupCharge,retainedCgroupPopulation,parseMemory,parseProcessCharge,parseCgroupCharge,type HostObservations} from "./host-observations.ts";
 import { spawn,spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
@@ -330,8 +330,10 @@ function ownCgroup(pid: number, host:HostObservations): CgroupRef | null {
   if (path === null || path === "/" || !accounted(path)) return null;
   // Listed before the table, so a process started in between is one the
   // members started: a process enters a cgroup by being forked in it.
-  const members = cgroupOwnershipMembers(path);
-  return ownedBy(pid, members, processTable()) ? host.acquireCgroup(path) : null;
+  const population = cgroupOwnershipPopulation(path);
+  // An unnamed member cannot certify exclusive ownership. Keep the existing
+  // process-tree measure rather than attributing an unknown process.
+  return !population.unnamed && ownedBy(pid, population.pids, processTable()) ? host.acquireCgroup(path) : null;
 }
 
 function readProcessCharge(pid: number, host:HostObservations): number {
@@ -364,7 +366,7 @@ function measuredParts(entry: LedgerEntry, table: () => Table, exclude: Readonly
   let inside: ReadonlySet<number> = NONE;
   if (cgroup !== null) {
     let bytes = retainedCgroupCharge(host,cgroup);
-    const members = tree || exclude.size ? retainedCgroupMembers(host,cgroup) : [];
+    const members = tree || exclude.size ? retainedCgroupPopulation(host,cgroup).pids : [];
     if (tree) inside = new Set(members);
     for (const pid of members) if (exclude.has(pid)) bytes -= readProcessCharge(pid, host);
     parts.push({ group: cgroup.path, bytes: Math.max(0, bytes) });
@@ -1074,7 +1076,7 @@ function accountsOf(admitted: ReadonlyMap<string, LedgerEntry>, use: (entry: Led
     const theirs = new Set<number>();
     for (const child of children) {
       if (child.measure.tree) for (const pid of processTree(child.owner.pid, table())) theirs.add(pid);
-      if (child.measure.cgroup !== null) for (const pid of retainedCgroupMembers(host,child.measure.cgroup)) theirs.add(pid);
+      if (child.measure.cgroup !== null) for (const pid of retainedCgroupPopulation(host,child.measure.cgroup).pids) theirs.add(pid);
     }
     const parts = use(entry, theirs);
     accounts.set(entry.id, { used: usedOf(parts), lent: 0, drawn: entry.drawn ?? 0, parts });

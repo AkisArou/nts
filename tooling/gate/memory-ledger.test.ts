@@ -613,6 +613,39 @@ function admitEnv(f: Fixture, extra: Readonly<Record<string, string>> = {}): Nod
 const admit = (f: Fixture, args: string[], extra?: Readonly<Record<string, string>>) =>
   spawnTest(process.execPath, [ADMIT, ...args], { encoding: "utf8", env: admitEnv(f, extra) }, `admit.ts ${args.join(" ")}`);
 
+test('admit and its census retain charges for another job with unnamed members',async t=>{
+  // Both the CLI and the in-process holders use this fixture's complete
+  // observations and private ledger; no machine memory decides this result.
+  const f=fixture(t),manager='/user.slice/user-1000.slice/user@1000.service',group=manager+'/nts.slice/fixture-979.scope';
+  const owner=ownerProcess(t),borrower=ownerProcess(t);
+  const held=await f.ask({bytes:8*GiB,what:'unnamed holder',owner:{pid:owner.pid}});
+  const child=await f.ask({bytes:2*GiB,what:'unnamed borrower',owner:{pid:borrower.pid}});
+  t.after(async()=>{for(const job of [child,held]){job.release();await job.closed;}});
+  for(const [job,path,drawsOn]of [[held,group,undefined],[child,group+'/worker',held.id]] as const){
+    const file=join(f.dir,'admitted',job.id+'.json'),entry=JSON.parse(readFileSync(file,'utf8'));
+    entry.measure={tree:true,cgroup:{path,inode:'979'}};
+    if(drawsOn!==undefined){entry.drawsOn=drawsOn;entry.drawn=2*GiB;}
+    writeFileSync(file,JSON.stringify(entry));
+  }
+  const view=JSON.parse(readFileSync(f.env.NTS_HOST_OBSERVATIONS!,'utf8'));
+  view.resident={kind:'fixed',defaultBytes:0,processes:{[borrower.pid]:GiB},cgroups:{[group]:4*GiB,[group+'/worker']:GiB},
+    members:{[group]:{pids:[owner.pid,borrower.pid],unnamed:1},[group+'/worker']:{pids:[borrower.pid],unnamed:2}}};
+  view.pressure.ownGroup=manager+'/nts.slice/fixture-runner.scope';
+  writeFileSync(f.env.NTS_HOST_OBSERVATIONS!,JSON.stringify(view));
+  const status=admit(f,['--status','--json']);assert.equal(status.status,0,status.stderr);
+  const state=JSON.parse(status.stdout);
+  assert.deepEqual(state.admitted.map((row:{what:string;used_bytes:number})=>[row.what,row.used_bytes]).sort(),[['unnamed borrower',GiB],['unnamed holder',3*GiB]]);
+  assert.ok(Array.isArray(state.holders.rows),'census is available with unnamed membership');
+  const row=state.holders.rows.find((row:{cgroup:string})=>row.cgroup===group);
+  assert.ok(row);assert.equal(row.charge_bytes,4*GiB);
+  assert.equal(row.ledgered_bytes,4*GiB,'named borrower memory is counted once; unnamed members retain the remaining cgroup charge');
+  const run=admit(f,['--bytes','1G','--what','neighbour of unnamed members','--',process.execPath,'-e',"process.stdout.write('ran')"]);
+  assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,'ran');
+  const host=hostObservations(f.env);
+  assert.deepEqual(host.cgroupPopulation(group),{pids:[owner.pid,borrower.pid],unnamed:1});
+  assert.throws(()=>host.cgroupMembers(group),/complete PIDs unavailable: 1 unnamed/);
+});
+
 test('a waiting admit retains FIFO when another job descendant departs during its holder scan',async t=>{
   const f=fixture(t),root=testScratch(t,'admit-departed-holder'),preload=join(root,'departure.mjs');
   const held=await f.ask({bytes:10*GiB,what:'departing holder',owner:{pid:ownerProcess(t).pid}});

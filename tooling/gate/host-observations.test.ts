@@ -5,7 +5,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {existsSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,parseCgroupCpu,CgroupObservations,CgroupDeparted,HostObservationError,retainedCgroupCharge,retainedCgroupMembers,reportMemoryFailure,type CgroupFiles} from './host-observations.ts';
+import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,parseCgroupCpu,CgroupObservations,CgroupDeparted,HostObservationError,retainedCgroupCharge,retainedCgroupMembers,retainedCgroupPopulation,reportMemoryFailure,type CgroupFiles} from './host-observations.ts';
 import {gateEnvironment,assertLandingEnvironment} from './canonical-environment.ts';
 import {hostEnvironment,acquireHostObservations} from './host-environment.ts';
 import {TemporaryAdmission} from './admission.ts';
@@ -241,7 +241,7 @@ function cgroupFiles(){
 for(const code of ['ENODEV','ENOENT','ESRCH'])for(const operation of ['cgroup.procs','children','stat'])
 test(`a listed scope departing at ${operation} with ${code} ends only its membership sample`,t=>{
   const f=cgroupFiles(),reader=new CgroupObservations(f.files),env=ownMemory(testScratch(t,'departed-membership'));
-  const host={...hostObservations(env),cgroupCharge:(group:string,inode?:string)=>reader.charge(group,inode),cgroupMembers:(group:string,inode?:string)=>reader.members(group,inode)};
+  const host={...hostObservations(env),cgroupCharge:(group:string,inode?:string)=>reader.charge(group,inode),cgroupMembers:(group:string,inode?:string)=>reader.members(group,inode),cgroupPopulation:(group:string,inode?:string)=>reader.population(group,inode)};
   const entry={owner:{pid:process.pid},measure:{tree:true,cgroup:{path:f.root,inode:f.root}}} as LedgerEntry;
   assert.deepEqual(host.cgroupMembers(f.root),[11,12]);assert.equal(entryUsage(entry,{host}),123);
   f.fail(f.child,operation,code);
@@ -284,11 +284,61 @@ test('a never-observed scope is a named error, never a departed sample',()=>{
 
 test('retained root samples finish on departure and preserve other instrument failures',t=>{
   const f=cgroupFiles(),reader=new CgroupObservations(f.files),env=ownMemory(testScratch(t,'retained-departure'));
-  const host={...hostObservations(env),cgroupCharge:(group:string,inode?:string)=>reader.charge(group,inode),cgroupMembers:(group:string,inode?:string)=>reader.members(group,inode)};
+  const host={...hostObservations(env),cgroupCharge:(group:string,inode?:string)=>reader.charge(group,inode),cgroupMembers:(group:string,inode?:string)=>reader.members(group,inode),cgroupPopulation:(group:string,inode?:string)=>reader.population(group,inode)};
   const ref={path:f.child,inode:f.child};
   assert.equal(retainedCgroupCharge(host,ref),123);assert.deepEqual(retainedCgroupMembers(host,ref),[12]);
+  assert.deepEqual(retainedCgroupPopulation(host,ref),{pids:[12],unnamed:0});
   f.fail(f.child,'stat','ENODEV');assert.equal(retainedCgroupCharge(host,ref),0);assert.deepEqual(retainedCgroupMembers(host,ref),[]);
+  assert.deepEqual(retainedCgroupPopulation(host,ref),{pids:[],unnamed:0});
   f.fail(f.child,'stat','EIO');assert.throws(()=>retainedCgroupCharge(host,ref),/stat.*EIO/);
+  assert.throws(()=>retainedCgroupPopulation(host,ref),/stat.*EIO/);
+});
+
+test('zero cgroup members retain population and charge but supply no complete PID list',t=>{
+  const f=cgroupFiles(),original=f.files.text;
+  let procs='123\n0\n',childProcs='0\n0\n';
+  f.files.text=(group,file)=>file==='cgroup.procs'?(group===f.root?procs:childProcs):file==='cgroup.events'?'populated 1\n':original(group,file);
+  const reader=new CgroupObservations(f.files),host={...hostObservations(ownMemory(testScratch(t,'unnamed-cgroup'))),
+    cgroupCharge:(group:string,inode?:string)=>reader.charge(group,inode),cgroupPopulation:(group:string,inode?:string)=>reader.population(group,inode),
+    processCharge:(pid:number)=>{assert.equal(pid,123,'only a named excluded member can be inspected');return 23;}};
+  assert.deepEqual(reader.population(f.child),{pids:[],unnamed:2},'unnamed members are not deduplicated');
+  assert.deepEqual(reader.population(f.root),{pids:[123],unnamed:3},'recursive population retains every unnamed member');
+  assert.equal(reader.populated(f.root),true,'the drain observation keeps the group nonempty');
+  let signals=0;
+  assert.throws(()=>{for(const _pid of reader.members(f.root))signals++;},/cgroup \/owned complete PIDs unavailable: 3 unnamed/);
+  assert.equal(signals,0,'an incomplete PID projection grants no per-PID action');
+  // No process-tree scan is needed: both the group charge and the named
+  // exclusion are supplied observations, independent of real PID 123.
+  const entry={owner:{pid:123},measure:{tree:false,cgroup:{path:f.root,inode:f.root}}} as LedgerEntry;
+  assert.equal(entryUsage(entry,{host}),123,'unnamed members retain the full cgroup charge');
+  assert.equal(entryUsage(entry,{host,exclude:123}),100);
+  procs='123\n123\n0\n';
+  assert.deepEqual(reader.population(f.root),{pids:[123],unnamed:3},'kernel repeats of a named PID do not duplicate its identity');
+  childProcs='123\n0\n0\n';
+  assert.deepEqual(reader.population(f.root),{pids:[123],unnamed:3},'a named PID repeated during recursive sampling is counted once');
+  procs='123\n0\n';
+  f.present.delete(f.child);f.files.children=()=>[];
+  assert.deepEqual(reader.population(f.root),{pids:[123],unnamed:1});
+  procs='0\n';assert.deepEqual(reader.population(f.root),{pids:[],unnamed:1});
+  procs='123\n';assert.deepEqual(reader.members(f.root),[123]);
+  procs='';assert.deepEqual(reader.population(f.root),{pids:[],unnamed:0});assert.deepEqual(reader.members(f.root),[]);
+  for(const bad of ['abc','-1','-0','1.5','1e2','0x10','Infinity','9007199254740992']){
+    procs=bad;assert.throws(()=>reader.population(f.root),error=>error instanceof HostObservationError&&error.message.includes('cgroup /owned cgroup.procs is invalid: '+JSON.stringify(bad)));
+  }
+});
+
+test('fixed population declarations retain unnamed members and reject malformed declarations',t=>{
+  const root=testScratch(t,'fixed-cgroup-population'),env=ownMemory(root,{resident:{kind:'fixed',defaultBytes:0,members:{'/owned':{pids:[123],unnamed:1},'/named':[123]}}}),host=hostObservations(env);
+  assert.deepEqual(host.cgroupPopulation('/owned'),{pids:[123],unnamed:1});
+  assert.deepEqual(host.cgroupPopulation('/named'),{pids:[123],unnamed:0});
+  assert.throws(()=>host.cgroupMembers('/owned'),/cgroup \/owned complete PIDs unavailable: 1 unnamed/);
+  assert.deepEqual(host.cgroupMembers('/named'),[123]);
+  assert.throws(()=>host.cgroupPopulation('/missing'),/resident.members has no cgroup \/missing/);
+  const complete=JSON.parse(readFileSync(env.NTS_HOST_OBSERVATIONS,'utf8'));
+  for(const value of [{pids:[0],unnamed:1},{pids:[123,123],unnamed:0},{pids:[123],unnamed:-1},{pids:[123],unnamed:1.5},{pids:[123],unnamed:2**53},{pids:[123]},null,{pids:[123],unnamed:0,extra:true},[0]]){
+    writeFileSync(env.NTS_HOST_OBSERVATIONS,JSON.stringify({...complete,resident:{...complete.resident,members:{'/owned':value}}}));
+    assert.throws(()=>host.cgroupPopulation('/owned'),/resident.members declaration is invalid for \/owned/);
+  }
 });
 
 test('a growth rejection reports its full stack and cause before stopping the run',()=>{

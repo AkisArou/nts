@@ -27,6 +27,13 @@ export class CgroupDeparted extends HostObservationError {
  * A successful stat, a parent's listing, or a retained inode proves existence.
  * Merely asking for a path does not. */
 export type CgroupFiles={inode(group:string):string;text(group:string,file:string):string;children(group:string):string[]};
+/** A zero in cgroup.procs is a member without an available PID identity.
+ * Keep its population without inventing a process to inspect or signal. */
+export type CgroupPopulation={pids:number[];unnamed:number};
+function namedMembers(group:string,population:CgroupPopulation):number[]{
+  if(population.unnamed)throw new HostObservationError(`host observation cgroup ${group} complete PIDs unavailable: ${population.unnamed} unnamed member(s)`);
+  return population.pids;
+}
 const liveCgroupFiles:CgroupFiles={
   inode:group=>String(statSync(`/sys/fs/cgroup${group}`,{bigint:true}).ino),
   text:(group,file)=>readFileSync(`/sys/fs/cgroup${group}/${file}`,'utf8'),
@@ -75,16 +82,22 @@ export class CgroupObservations {
     if(!/^\d+$/.test(text))throw new HostObservationError(`host observation cgroup ${group} memory.peak is invalid`);
     return number(Number(text),'scopePeak.bytes');
   }
-  members(group:string,retained?:string):number[]{
+  population(group:string,retained?:string):CgroupPopulation{
     this.inode(group,retained);
-    const pids=this.text(group,'cgroup.procs').trim().split(/\s+/).filter(Boolean).map(Number);
-    if(pids.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw new HostObservationError(`host observation cgroup ${group} cgroup.procs is invalid`);
+    const pids=new Set<number>();let unnamed=0;
+    for(const token of this.text(group,'cgroup.procs').trim().split(/\s+/).filter(Boolean)){
+      const pid=Number(token);
+      if(!/^\d+$/.test(token)||!Number.isSafeInteger(pid))throw new HostObservationError(`host observation cgroup ${group} cgroup.procs is invalid: ${JSON.stringify(token)}`);
+      if(pid===0)unnamed++;else pids.add(pid);
+    }
     for(const child of this.children(group)){
-      try{pids.push(...this.members(child));}
+      try{const next=this.population(child);for(const pid of next.pids)pids.add(pid);unnamed+=next.unnamed;}
       catch(error){if(!(error instanceof CgroupDeparted)||error.group!==child)throw error;}
     }
-    return pids;
+    return {pids:[...pids],unnamed};
   }
+  /** A PID-dependent operation requires a complete, named membership. */
+  members(group:string,retained?:string):number[]{return namedMembers(group,this.population(group,retained));}
 }
 // Native ownership acquisition is a safety observation even in a resource
 // fixture. Its reads still belong to the same cgroup observation owner.
@@ -94,6 +107,7 @@ export const cgroupOwnershipIdentity=(group:string):{device:string;inode:string}
 });
 export const cgroupOwnershipInode=(group:string)=>new CgroupObservations().inode(group);
 export const cgroupOwnershipMembers=(group:string)=>new CgroupObservations().members(group);
+export const cgroupOwnershipPopulation=(group:string)=>new CgroupObservations().population(group);
 export const cgroupOwnershipAccounted=(group:string)=>new CgroupObservations().observe(group,'memory.current presence',()=>existsSync(`/sys/fs/cgroup${checkedGroup(group)}/memory.current`));
 /** The count supplies a ControlGroup from a physical systemd unit listing.
  * This is safety observation, like acquisition, even in a resource fixture. */
@@ -115,6 +129,7 @@ export function sampleCgroup<T>(group:string,read:()=>T,departed:T):T{
 }
 export const retainedCgroupCharge=(host:HostObservations,ref:RetainedCgroup)=>sampleCgroup(ref.path,()=>host.cgroupCharge(ref.path,ref.inode),0);
 export const retainedCgroupMembers=(host:HostObservations,ref:RetainedCgroup)=>sampleCgroup(ref.path,()=>host.cgroupMembers(ref.path,ref.inode),[]);
+export const retainedCgroupPopulation=(host:HostObservations,ref:RetainedCgroup)=>sampleCgroup(ref.path,()=>host.cgroupPopulation(ref.path,ref.inode),{pids:[],unnamed:0});
 /** Keep the cause chain where the failure is reported, while the summary
  * retains the short reason. The runner routes growth failures here. */
 export function reportMemoryFailure(error:unknown,report:(line:string)=>void,stop:(reason:string)=>void):void{
@@ -139,7 +154,7 @@ export type HostObservationFixture = {
   allocated:{kind:'fixed';defaultBytes:number;paths?:Record<string,number>}|{kind:'live'};
   cpu:{kind:'fixed';default:CgroupCpu;cgroups?:Record<string,CgroupCpu>}|{kind:'live'};
   selfCpu:{kind:'fixed';value:OwnCpu}|{kind:'live'};
-  resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>;members?:Record<string,number[]>;files?:Record<string,Record<string,string>>}|{kind:'live'};
+  resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>;members?:Record<string,number[]|CgroupPopulation>;files?:Record<string,Record<string,string>>}|{kind:'live'};
   scopePeak:{kind:'fixed';bytes:number;resettable:boolean}|{kind:'live'};
   width:{logical:number;available:number};
   load:[number,number,number];
@@ -162,6 +177,8 @@ export interface HostObservations {
    * Its capability records that exact scope for subsequent samplers. */
   acquireCgroup(path:string):RetainedCgroup;
   cgroupCharge(path:string,inode?:string):number;
+  cgroupPopulation(path:string,inode?:string):CgroupPopulation;
+  /** Complete PID projection; an unnamed member makes this unavailable. */
   cgroupMembers(path:string,inode?:string):number[];
   cgroupText(path:string,file:string):string;
   cgroupMemoryPeak(path:string,inode?:string):number;
@@ -424,12 +441,16 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       if(mismatchedIdentity)throw new HostObservationError(`host observation resident.members creation identity does not match ${path}`);
       return false;
     };
-    const fixtureMembers=(path:string,declared:Record<string,number[]>|undefined,inode?:string):number[]=>{
+    const fixturePopulation=(path:string,declared:Record<string,number[]|CgroupPopulation>|undefined,inode?:string):CgroupPopulation=>{
       checkedGroup(path);
-      const rows=new Map<string,number[]>();
+      const rows=new Map<string,CgroupPopulation>();
       const add=(group:unknown,members:unknown)=>{
-        if(typeof group!=='string'||!Array.isArray(members)||members.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw new HostObservationError(`host observation resident.members declaration is invalid for ${path}`);
-        checkedGroup(group);rows.set(group,[...new Set([...(rows.get(group)??[]),...members as number[]])]);
+        const value=(Array.isArray(members)?{pids:members,unnamed:0}:members) as CgroupPopulation;
+        if(typeof group!=='string'||!value||typeof value!=='object'||Object.keys(value).sort().join(',')!=='pids,unnamed'
+          ||!Array.isArray(value.pids)||value.pids.some(pid=>!Number.isSafeInteger(pid)||pid<=0)||new Set(value.pids).size!==value.pids.length
+          ||!Number.isSafeInteger(value.unnamed)||value.unnamed<0)throw new HostObservationError(`host observation resident.members declaration is invalid for ${path}`);
+        checkedGroup(group);const prior=rows.get(group);
+        rows.set(group,{pids:[...new Set([...(prior?.pids??[]),...value.pids])],unnamed:(prior?.unnamed??0)+value.unnamed});
       };
       for(const [group,members]of Object.entries(declared??{}))add(group,members);
       const source=read().memberDeclarations;
@@ -439,7 +460,10 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
           const row=parseMemberDeclaration(fixtureJson(record,'resident.members declaration'),'resident.members declaration '+record);
           add(row.group,row.members);
         }
-        if(fixtureScope(path,inode,source))return [...new Set([...rows].filter(([group])=>group===path||group.startsWith(path+'/')).flatMap(([,members])=>members))];
+        if(fixtureScope(path,inode,source)){
+          const values=[...rows].filter(([group])=>group===path||group.startsWith(path+'/')).map(([,value])=>value);
+          return {pids:[...new Set(values.flatMap(value=>value.pids))],unnamed:values.reduce((total,value)=>total+value.unnamed,0)};
+        }
       }
       const value=rows.get(path);
       if(value===undefined)throw new HostObservationError(`host observation resident.members has no cgroup ${path}`);
@@ -474,7 +498,8 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       processCharge:pid=>charge('processes',String(pid)),
       acquireCgroup,
       cgroupCharge:(path,inode)=>read().resident.kind==='live'?cgroups.charge(path,inode):charge('cgroups',path,inode),
-      cgroupMembers:(path,inode)=>{const resident=read().resident;return resident.kind==='live'?cgroups.members(path,inode):fixtureMembers(path,resident.members,inode);},
+      cgroupPopulation:(path,inode)=>{const resident=read().resident;return resident.kind==='live'?cgroups.population(path,inode):fixturePopulation(path,resident.members,inode);},
+      cgroupMembers:(path,inode)=>{const resident=read().resident;return resident.kind==='live'?cgroups.members(path,inode):namedMembers(path,fixturePopulation(path,resident.members,inode));},
       cgroupText:(path,file)=>{const resident=read().resident;if(resident.kind==='live'){cgroups.inode(path);return cgroups.text(path,file);}const value=resident.files?.[path]?.[file];if(value===undefined)throw new HostObservationError(`host observation cgroup ${path} ${file} is missing`);return value;},
       cgroupMemoryPeak:(path,inode)=>{const value=read().scopePeak;if(value.kind==='live')return cgroups.peak(path,inode);fixtureScope(path,inode);return number(value.bytes,'scopePeak.bytes');},
       cgroupChildren:path=>{
@@ -514,6 +539,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     processCharge:liveProcessCharge,
     acquireCgroup:path=>({path,inode:cgroups.inode(path)}),
     cgroupCharge:(path,inode)=>cgroups.charge(path,inode),
+    cgroupPopulation:(path,inode)=>cgroups.population(path,inode),
     cgroupMembers:(path,inode)=>cgroups.members(path,inode),
     cgroupText:(path,file)=>{cgroups.inode(path);return cgroups.text(path,file);},
     cgroupMemoryPeak:(path,inode)=>cgroups.peak(path,inode),
