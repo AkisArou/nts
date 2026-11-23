@@ -9,6 +9,7 @@
 use super::facts::Facts;
 
 mod provider;
+pub(in crate::hir) mod slots;
 pub use provider::{Container, FunctionFacts, Inspection, RecognizedWrite, RejectedUse};
 
 use super::{BlockId, Callee, HirType, OpKind, Origin, Program, ValueId};

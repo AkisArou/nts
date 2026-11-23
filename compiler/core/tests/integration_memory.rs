@@ -19,6 +19,9 @@ mod memory_analysis;
 #[path = "memory_safety.rs"]
 mod memory_safety;
 
+#[path = "null_slots.rs"]
+mod null_slots;
+
 #[path = "placement_sites.rs"]
 mod placement_sites;
 

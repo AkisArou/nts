@@ -48,6 +48,7 @@
 //! a least one. Borrowing and releasing shared a direction once, and the
 //! traversal every real program is made of eliminated nothing.
 
+use super::contents::slots::{self, Fresh, freshness, slot_of};
 use super::liveness;
 use super::{BlockId, Func, HirType, Layout, ManagedType, OpKind, Program, ValueId};
 
@@ -100,9 +101,8 @@ pub struct Summaries {
     /// `(what, into)` parameter slots each function stores, by function name.
     /// See [`Summaries::stores_of`].
     stores: rustc_hash::FxHashMap<String, Vec<(u32, u32)>>,
-    /// Parameter fields every caller has already zeroed, by function name. See
-    /// [`zeroed_parameters`].
-    zeroed: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>>,
+    /// Shared point-sensitive slot facts and their interprocedural contracts.
+    slots: slots::Summaries,
     /// Globals holding a zero before anything runs, by index.
     ///
     /// Which is every reference-typed global: `Global::initial` is what it
@@ -289,7 +289,7 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             .filter(|(_, global)| global.initial == 0.0 && global.ty.may_hold_a_reference())
             .filter_map(|(at, _)| u32::try_from(at).ok())
             .collect(),
-        zeroed: zeroed_parameters(program, layouts, &harmless),
+        slots: slots::summarize(program, layouts, &harmless),
         mutating_slots,
         mutates,
         harmless,
@@ -732,17 +732,26 @@ pub fn analyze(
         .collect();
     let held = entry_owned(func, layouts);
     let vouched = summaries
-        .zeroed
+        .slots
+        .parameters
         .get(&func.name)
         .cloned()
         .unwrap_or_default();
-    let entering = freshness(func, layouts, &summaries.harmless, &vouched);
+    let entering = freshness(
+        func,
+        layouts,
+        &summaries.harmless,
+        &vouched,
+        &summaries.slots.returned,
+    )
+    .entering;
     let (initializing, still_zero) = initializing_stores(
         func,
         layouts,
         &entering,
         &summaries.harmless,
         &summaries.starts_zero,
+        &summaries.slots.returned,
     );
     // A foreign counted handle a name still holds, which is an anchor for a
     // reason *no* analysis here can see. See `held_to_the_end`. Stretched
@@ -1949,6 +1958,7 @@ fn initializing_stores(
     entering: &[Fresh],
     harmless: &rustc_hash::FxHashSet<String>,
     starts_zero: &rustc_hash::FxHashSet<u32>,
+    returned: &slots::Returned,
 ) -> (
     rustc_hash::FxHashSet<ValueId>,
     Vec<rustc_hash::FxHashSet<(ValueId, u32)>>,
@@ -1999,7 +2009,7 @@ fn initializing_stores(
                     _ => {}
                 }
             }
-            fresh.observe(func, *value, &kind, harmless);
+            fresh.observe(func, *value, &kind, harmless, returned);
         }
         // What is still a zero where the block ends, which is where a frame
         // object's fields are given back. A field the program cleared on its
@@ -2008,7 +2018,7 @@ fn initializing_stores(
         if attributable {
             for base in &fresh.bases {
                 for field in reference_fields(func, layouts, *base) {
-                    if !fresh.written.contains(*base, u64::from(field)) {
+                    if fresh.known_zero(*base, slots::Slot::Field(field)) {
                         still_zero[at].insert((*base, field));
                     }
                 }
@@ -3177,219 +3187,6 @@ fn taking(
     (takes, settled)
 }
 
-/// Fields of a returned object that are null on the way out.
-///
-/// `popDiskFrom` ends `top.next = null; return top`, so it hands back a disk
-/// whose `next` is a zero -- and the caller that links it into a list can store
-/// over that slot without giving anything back.
-fn returns_nulled(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
-    let mut agreed: Option<rustc_hash::FxHashSet<u32>> = None;
-    for block in &func.blocks {
-        let super::Terminator::Return(Some(handed)) = block.terminator else {
-            continue;
-        };
-        // A path that hands back a null constrains nothing: there is no object
-        // for a caller to store into. Bailing on it gave up on every
-        // `T | null` function, which is every one this matters for.
-        if !counted(func, layouts, handed) {
-            continue;
-        }
-        // Last write wins, and only a write this function can see counts: the
-        // same "a store is aimed by naming something" rule `inert_slots` uses.
-        let mut nulled = rustc_hash::FxHashSet::default();
-        for other in &func.blocks {
-            for value in &other.ops {
-                match &func.values[value.0 as usize].kind {
-                    OpKind::FieldSet {
-                        object,
-                        field,
-                        value: put,
-                        ..
-                    } if *object == handed => {
-                        if matches!(func.values[put.0 as usize].kind, OpKind::ConstNull) {
-                            nulled.insert(*field);
-                        } else {
-                            nulled.remove(field);
-                        }
-                    }
-                    // A store aimed at a directly-named allocation or
-                    // parameter hits that object and no other, so it says
-                    // nothing about this one.
-                    OpKind::FieldSet { object, .. }
-                        if matches!(
-                            func.values[object.0 as usize].kind,
-                            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } | OpKind::Param(_)
-                        ) => {}
-                    // Anything else is aimed through a value that came out of a
-                    // load, which could be this object under another name.
-                    OpKind::FieldSet { .. } => {
-                        return rustc_hash::FxHashSet::default();
-                    }
-                    _ => {}
-                }
-            }
-        }
-        agreed = Some(match agreed {
-            None => nulled,
-            Some(before) => before.intersection(&nulled).copied().collect(),
-        });
-    }
-    agreed.unwrap_or_default()
-}
-
-/// Parameter fields every caller has already zeroed.
-///
-/// A store into `p.f` gives back what `p.f` was holding, and a parameter is
-/// opaque -- so linking a freshly detached node into a list pays a load and a
-/// release of a null on every call. `pushDisk` does exactly that on each of
-/// `awfy-towers`' eight thousand moves, and pricing it with an unsound control
-/// put the row at 2.36x C++ against 3.05x.
-///
-/// A greatest fixpoint over call sites: assumed zero, and contradicted by a
-/// caller that passes something it cannot vouch for.
-///
-/// **Only for a function every caller of which is one of those call sites.**
-/// This said "a function nothing calls keeps the assumption, which is safe --
-/// there is no caller to be wrong about", and an exported function is called
-/// by nobody *here*: `ntsRowsDestroy(app)`, called from C with a full table,
-/// had `app.rows = []` emitted as a store over a zero, so the old array and
-/// every row in it leaked. A dispatch slot, a closure's call and a resumed
-/// suspension are callers this fixpoint never reads either. See
-/// [`invoked_only_directly`].
-///
-/// What a caller can vouch for: a fresh allocation whose field it has not
-/// written, and the result of a call that nulls the field on its way out.
-fn zeroed_parameters(
-    program: &Program,
-    layouts: &[Layout],
-    harmless: &rustc_hash::FxHashSet<String>,
-) -> rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>> {
-    let nulled: rustc_hash::FxHashMap<&str, rustc_hash::FxHashSet<u32>> = program
-        .funcs
-        .iter()
-        .map(|func| (func.name.as_str(), returns_nulled(func, layouts)))
-        .collect();
-
-    let direct_only = invoked_only_directly(program, layouts);
-    let mut zeroed: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>> = program
-        .funcs
-        .iter()
-        .map(|func| {
-            let mut slots = rustc_hash::FxHashSet::default();
-            if !direct_only.contains(func.name.as_str()) {
-                return (func.name.clone(), slots);
-            }
-            for (slot, parameter) in func
-                .parameter_values()
-                .unwrap_or_default()
-                .into_iter()
-                .enumerate()
-                .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
-            {
-                let Ok(slot) = u32::try_from(slot) else {
-                    continue;
-                };
-                for field in reference_fields(func, layouts, parameter) {
-                    slots.insert((slot, field));
-                }
-            }
-            (func.name.clone(), slots)
-        })
-        .collect();
-
-    loop {
-        let mut doomed: Vec<(String, (u32, u32))> = Vec::new();
-        for caller in &program.funcs {
-            let mut fresh = Fresh::entering(
-                caller,
-                layouts,
-                BlockId(0),
-                &rustc_hash::FxHashSet::default(),
-            );
-            for block in &caller.blocks {
-                for value in &block.ops {
-                    let kind = caller.values[value.0 as usize].kind.clone();
-                    if let OpKind::Call {
-                        callee: super::Callee::Direct(name),
-                        args,
-                        ..
-                    } = &kind
-                        && let Some(claimed) = zeroed.get(name)
-                    {
-                        for (slot, field) in claimed {
-                            let Some(given) = args.get(*slot as usize) else {
-                                continue;
-                            };
-                            let vouched = match &caller.values[given.0 as usize].kind {
-                                OpKind::Call {
-                                    callee: super::Callee::Direct(from),
-                                    ..
-                                } => nulled.get(from.as_str()).is_some_and(|f| f.contains(field)),
-                                _ => {
-                                    fresh.bases.contains(given)
-                                        && !fresh.written.contains(*given, u64::from(*field))
-                                }
-                            };
-                            if !vouched {
-                                doomed.push((name.clone(), (*slot, *field)));
-                            }
-                        }
-                    }
-                    fresh.observe(caller, *value, &kind, harmless);
-                }
-            }
-        }
-        if doomed.is_empty() {
-            return zeroed;
-        }
-        for (name, slot) in doomed {
-            if let Some(slots) = zeroed.get_mut(&name) {
-                slots.remove(&slot);
-            }
-        }
-    }
-}
-
-/// Functions whose every caller is a direct call in this program.
-///
-/// The callers `zeroed_parameters` can read, and so the only functions it may
-/// say anything about. Not exported, because the code calling an export is not
-/// here. Not in any layout's method table, because a dispatch or a closure call
-/// reaches it through a slot. Not a suspension's resume, because the runtime
-/// calls that. And called directly at least once: an assumption over no callers
-/// is true of every caller only because there are none to check.
-fn invoked_only_directly<'a>(
-    program: &'a Program,
-    layouts: &'a [Layout],
-) -> rustc_hash::FxHashSet<&'a str> {
-    let mut indirect: rustc_hash::FxHashSet<&str> = layouts
-        .iter()
-        .flat_map(|layout| layout.methods.iter().flatten())
-        .map(String::as_str)
-        .chain(program.interface_access.defaults().map(|(_, body)| body))
-        .collect();
-    indirect.extend(super::reachable::outside_callers(program));
-    let mut called: rustc_hash::FxHashSet<&str> = rustc_hash::FxHashSet::default();
-    for func in &program.funcs {
-        for op in &func.values {
-            match &op.kind {
-                OpKind::Call {
-                    callee: super::Callee::Direct(name),
-                    ..
-                } => {
-                    called.insert(name.as_str());
-                }
-                OpKind::Suspend { resume, .. } => {
-                    indirect.insert(resume.as_str());
-                }
-                _ => {}
-            }
-        }
-    }
-    called.retain(|name| !indirect.contains(name));
-    called
-}
-
 /// Parameter slots a function takes ownership of.
 ///
 /// The `consumes` column of record 0024's summary, for the functions that have
@@ -4397,436 +4194,17 @@ fn parameter_field(func: &Func, value: ValueId) -> bool {
     )
 }
 
-/// Which slots are known to hold nothing yet.
-///
-/// # Why this is worth an analysis
-///
-/// Every store to a reference field has to give up what the slot was holding,
-/// and finding that out costs a load, a null test and a call. A store that is
-/// *initializing* -- writing over a zero -- owes none of that, and almost every
-/// store in a program is one: an object literal writes each field once, an array
-/// literal writes each element once, and a constructor writes every field of an
-/// object `new` allocated a moment earlier. Paying for the general case
-/// everywhere would make a class with reference fields cost several times what
-/// it should.
-///
-/// # What it knows, and what it does not
-///
-/// It was one block at a time, and the comment here said the fix was "a forward
-/// dataflow over the CFG with union at joins -- a slot is known-zero only where
-/// it is zero on *every* path -- and the reason it is not here is that a wrong
-/// answer does not fail loudly."
-///
-/// That reason has expired. `tooling/memory` fails on a leak in seconds and the
-/// `execute` suite builds under `AddressSanitizer`, so being too eager here is
-/// now exactly as loud as being wrong anywhere else. [`freshness`] is that dataflow.
-///
-/// What it was costing: a list built head-first stores through `tail`, which is
-/// a block parameter, so every link's `next` was loaded and released on the way
-/// past -- releasing the null the constructor had just written. Thirty two
-/// operations of `traversal`'s ninety nine, and the same in four other cases.
-///
-/// A reference stops being fresh the moment it is handed to anything that could
-/// store through it. Reading a field, reading an element and asking for a length
-/// are not that; a call, a store, an edge and a return are.
-#[derive(Debug, Default, Clone, PartialEq)]
-struct Fresh {
-    /// Objects and arrays whose slots this block still knows about.
-    bases: rustc_hash::FxHashSet<ValueId>,
-    /// Slots already written, so the second store to one is not initializing.
-    written: Written,
-    /// Bases that have been stored somewhere, and so can be read back out.
-    ///
-    /// Storing `x` into `y.f` writes *`y`*'s slot and leaves `x`'s alone, so `x`
-    /// is still an object whose fields this knows about -- which is the whole of
-    /// why a list built head-first can be built without counting. What it is no
-    /// longer is *unaliased*: a load can now produce `x` under another name, and
-    /// a store through that name would be a write this cannot attribute.
-    ///
-    /// So they stay, and the first load of any kind takes all of them away.
-    escaped: rustc_hash::FxHashSet<ValueId>,
-}
-
-/// What is known on entry to every block, as a forward must-analysis.
-///
-/// A base is fresh on entry only where it is fresh on *every* path in, and a
-/// slot counts as written where it is written on *any* of them: `initializing`
-/// asks whether a store is writing over a zero, so both halves have to be true
-/// everywhere for the answer to be yes.
-///
-/// Block parameters are what make this worth doing. A value carried around a
-/// loop is a different value each time it arrives, so a fact about it dies on
-/// the edge unless something carries it across -- and every list built
-/// head-first stores through exactly such a value. Each edge maps its arguments
-/// onto the successor's parameters and the facts travel with them.
-///
-/// Optimistic on unvisited predecessors, which is what makes it terminate at
-/// the *greatest* fixpoint rather than refusing to enter a loop: the back edge
-/// is checked against the assumption rather than consulted before it exists.
-/// The same shape, and the same reason, as `crossing_borrows`.
-fn freshness(
-    func: &Func,
-    layouts: &[Layout],
-    harmless: &rustc_hash::FxHashSet<String>,
-    zeroed: &rustc_hash::FxHashSet<(u32, u32)>,
-) -> Vec<Fresh> {
-    let count = func.blocks.len();
-    let incoming = super::loops::predecessors(func);
-    let mut entry: Vec<Option<Fresh>> = vec![None; count];
-    let mut outgoing: Vec<Option<Fresh>> = vec![None; count];
-    let mut pending = std::collections::VecDeque::new();
-    let mut queued = vec![false; count];
-    if count > 0 {
-        entry[0] = Some(Fresh::entering(func, layouts, BlockId(0), zeroed));
-        pending.push_back(0);
-        queued[0] = true;
-    }
-    // None is the unvisited optimistic predecessor. Once reached, a base can
-    // only acquire writes/aliases or lose its freshness. Allocation and null
-    // stores are fixed transfer kills/gens. Canonicalization removes facts
-    // about a base already lost, so each base/slot fact moves monotonically
-    // through a finite lattice. No round limit can expose an optimistic prefix.
-    while let Some(from) = pending.pop_front() {
-        queued[from] = false;
-        let Some(mut after) = entry[from].clone() else {
-            continue;
-        };
-        for &value in &func.blocks[from].ops {
-            after.observe(func, value, &func.values[value.0 as usize].kind, harmless);
-        }
-        after.canonicalize();
-        if outgoing[from].as_ref() == Some(&after) {
-            continue;
-        }
-        outgoing[from] = Some(after);
-        for successor in func.blocks[from].terminator.successors() {
-            let at = successor.0 as usize;
-            // The entry contract is fixed, rather than a loop-carried claim.
-            if at == 0 {
-                continue;
-            }
-            let mut merged: Option<Fresh> = None;
-            for (predecessor, args) in &incoming[at] {
-                let Some(after) = &outgoing[predecessor.0 as usize] else {
-                    continue;
-                };
-                let carried = after.across(&func.blocks[at].params, args);
-                merged = Some(match merged {
-                    None => carried,
-                    Some(other) => other.both(&carried),
-                });
-            }
-            if let Some(facts) = &mut merged {
-                facts.canonicalize();
-            }
-            if entry[at] != merged {
-                entry[at] = merged;
-                if !queued[at] {
-                    queued[at] = true;
-                    pending.push_back(at);
-                }
-            }
-        }
-    }
-    entry.into_iter().map(Option::unwrap_or_default).collect()
-}
-
-/// The slots written so far, by the base they belong to.
-///
-/// Forgetting a base's slots -- an allocation makes them zeros again, an edge
-/// re-binds a block parameter -- is one removal. A set of pairs was a walk over
-/// every slot written so far, for each allocation: one block of 16,000 object
-/// literals wrote 32,000 slots and walked them 16,000 times.
-///
-/// Holds no empty set of slots, so two that hold the same slots are equal, as
-/// the fixpoint that compares them needs.
-#[derive(Debug, Default, Clone, PartialEq)]
-struct Written(rustc_hash::FxHashMap<ValueId, rustc_hash::FxHashSet<u64>>);
-
-impl Written {
-    fn contains(&self, base: ValueId, slot: u64) -> bool {
-        self.0.get(&base).is_some_and(|slots| slots.contains(&slot))
-    }
-
-    fn insert(&mut self, base: ValueId, slot: u64) {
-        self.0.entry(base).or_default().insert(slot);
-    }
-
-    fn remove(&mut self, base: ValueId, slot: u64) {
-        if let Some(slots) = self.0.get_mut(&base) {
-            slots.remove(&slot);
-            if slots.is_empty() {
-                self.0.remove(&base);
-            }
-        }
-    }
-
-    /// Every slot of `base` is a zero again, or `base` names something new.
-    fn forget(&mut self, base: ValueId) {
-        self.0.remove(&base);
-    }
-
-    fn retain_bases(&mut self, keep: impl Fn(&ValueId) -> bool) {
-        self.0.retain(|base, _| keep(base));
-    }
-
-    /// `to` has written what `from` had written in `of`.
-    fn carry(&mut self, of: &Self, from: ValueId, to: ValueId) {
-        if let Some(slots) = of.0.get(&from) {
-            self.0.entry(to).or_default().extend(slots.iter().copied());
-        }
-    }
-
-    fn union(&self, other: &Self) -> Self {
-        let mut both = self.clone();
-        for (base, slots) in &other.0 {
-            both.0
-                .entry(*base)
-                .or_default()
-                .extend(slots.iter().copied());
-        }
-        both
-    }
-}
-
-impl Fresh {
-    /// Once a base is not fresh, its alias and slot marks carry no authority.
-    /// A later allocation resets them, and phi rebinding clears them too.
-    fn canonicalize(&mut self) {
-        let bases = &self.bases;
-        self.written.retain_bases(|base| bases.contains(base));
-        self.escaped.retain(|base| self.bases.contains(base));
-    }
-
-    /// What is known on entry to a block.
-    fn entering(
-        func: &Func,
-        layouts: &[Layout],
-        block: BlockId,
-        zeroed: &rustc_hash::FxHashSet<(u32, u32)>,
-    ) -> Self {
-        let mut fresh = Self::default();
-        // A parameter whose fields every caller has already zeroed is, for
-        // those fields, exactly as good as a fresh allocation. See
-        // `zeroed_parameters`. The fields nobody vouched for are marked written
-        // straight away, so the base says only what was actually promised.
-        if block == BlockId(0) {
-            let parameters = func.parameter_values().unwrap_or_default();
-            for (slot, _) in zeroed {
-                let Some(parameter) = parameters.get(*slot as usize).copied().flatten() else {
-                    continue;
-                };
-                fresh.bases.insert(parameter);
-                for field in reference_fields(func, layouts, parameter) {
-                    if !zeroed.contains(&(*slot, field)) {
-                        fresh.written.insert(parameter, u64::from(field));
-                    }
-                }
-            }
-        }
-        // A constructor's receiver arrives freshly allocated. Only in the entry
-        // block: a later block may be reached by a path that already wrote.
-        if func.initializes_receiver
-            && block == BlockId(0)
-            && let Some(receiver) = func
-                .parameter_values()
-                .and_then(|values| values.first().copied().flatten())
-        {
-            fresh.bases.insert(receiver);
-        }
-        fresh
-    }
-
-    /// The same facts, seen from the far side of an edge.
-    ///
-    /// A value the predecessor knew about is still that value in the successor
-    /// -- SSA, so a name means one thing everywhere -- and on top of that, each
-    /// argument hands its facts to the parameter that receives it.
-    fn across(&self, params: &[ValueId], args: &[ValueId]) -> Self {
-        let mut carried = self.clone();
-        // A block parameter is re-bound on arrival, so nothing known about what
-        // it held last time survives the edge. Around a back edge those facts
-        // are stale by exactly one iteration, and the one that matters is
-        // `written`: a list built head-first writes `tail.next` every time
-        // round, and carrying that back made the *next* `tail` -- a different
-        // link entirely -- look like a slot that had already been written.
-        for param in params {
-            carried.bases.remove(param);
-            carried.escaped.remove(param);
-            carried.written.forget(*param);
-        }
-        for (slot, param) in params.iter().enumerate() {
-            let Some(arg) = args.get(slot) else { continue };
-            if self.bases.contains(arg) {
-                carried.bases.insert(*param);
-            }
-            if self.escaped.contains(arg) {
-                carried.escaped.insert(*param);
-            }
-            carried.written.carry(&self.written, *arg, *param);
-        }
-        carried
-    }
-
-    /// What two paths into one block agree about.
-    ///
-    /// Fresh where both are fresh, written where either is: `initializing` says
-    /// yes only when the slot is a zero however the block was reached.
-    fn both(&self, other: &Self) -> Self {
-        Self {
-            bases: self.bases.intersection(&other.bases).copied().collect(),
-            written: self.written.union(&other.written),
-            // Reachable on either path is reachable.
-            escaped: self.escaped.union(&other.escaped).copied().collect(),
-        }
-    }
-
-    /// Whether this store is writing over a zero.
-    fn initializing(&self, func: &Func, store: &OpKind) -> bool {
-        match store {
-            OpKind::FieldSet { object, field, .. } => {
-                self.bases.contains(object) && !self.written.contains(*object, u64::from(*field))
-            }
-            OpKind::ArraySet { array, index, .. } => {
-                self.bases.contains(array)
-                    && slot_of(func, *index)
-                        .is_some_and(|slot| !self.written.contains(*array, slot))
-            }
-            _ => false,
-        }
-    }
-
-    /// Take an operation into account.
-    fn observe(
-        &mut self,
-        func: &Func,
-        value: ValueId,
-        kind: &OpKind,
-        harmless: &rustc_hash::FxHashSet<String>,
-    ) {
-        // A call that only initializes leaves its argument as fresh as it
-        // arrived. See `initializing_only`.
-        if let OpKind::Call {
-            callee: super::Callee::Direct(name),
-            ..
-        } = kind
-            && harmless.contains(name)
-        {
-            return;
-        }
-        match kind {
-            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => {
-                self.bases.insert(value);
-                self.escaped.remove(&value);
-                // Every slot of it is zero again. This is only observable now
-                // that facts travel around a back edge: an allocation inside a
-                // loop arrived at its own block carrying the writes the *last*
-                // time round made to it, so the first store to each field
-                // stopped being an initializing one and loaded and released a
-                // null. It made `store-elsewhere` twice as expensive as it had
-                // been an hour earlier, which is the sort of thing a suite that
-                // runs in twenty seconds says immediately.
-                self.written.forget(value);
-            }
-            OpKind::FieldSet {
-                object,
-                field,
-                value: stored,
-                ..
-            } => {
-                // Storing a null puts the slot back the way the allocator left
-                // it, so the *next* store to it writes over a zero and owes no
-                // release. Recording it as written meant a field cleared and
-                // refilled in a loop loaded and released a null every time
-                // round -- `nulled-field` pays one an iteration for exactly
-                // that.
-                if matches!(func.values[stored.0 as usize].kind, OpKind::ConstNull) {
-                    self.written.remove(*object, u64::from(*field));
-                } else {
-                    self.written.insert(*object, u64::from(*field));
-                }
-            }
-            OpKind::ArraySet { array, index, .. } => {
-                if let Some(slot) = slot_of(func, *index) {
-                    self.written.insert(*array, slot);
-                } else {
-                    // An index this pass cannot name could be any of them, so
-                    // the whole array stops being something it knows about.
-                    self.bases.remove(array);
-                    self.escaped.remove(array);
-                }
-            }
-            // A load can hand back something that was stored, under a name this
-            // cannot connect to the original -- and a store through *that* name
-            // would be a write attributed to the wrong value. So the first load
-            // gives up everything that has been stored anywhere.
-            OpKind::FieldGet { .. } | OpKind::ArrayGet { .. } | OpKind::GlobalGet(_) => {
-                for value in std::mem::take(&mut self.escaped) {
-                    self.bases.remove(&value);
-                }
-            }
-            _ => {}
-        }
-        // A call that is not `harmless` can do both: store through what it is
-        // given, and read back what somebody else stored.
-        if matches!(kind, OpKind::Call { .. }) {
-            for value in std::mem::take(&mut self.escaped) {
-                self.bases.remove(&value);
-            }
-        }
-        for value in escaping_operands(kind) {
-            // A store keeps the base and only marks it reachable. Everything
-            // else that hands a reference somewhere gives it up outright.
-            if matches!(
-                kind,
-                OpKind::FieldSet { .. } | OpKind::ArraySet { .. } | OpKind::GlobalSet { .. }
-            ) {
-                if self.bases.contains(&value) {
-                    self.escaped.insert(value);
-                }
-            } else {
-                self.bases.remove(&value);
-                self.escaped.remove(&value);
-            }
-        }
-    }
-}
-
 /// The operands an operation hands to something that could store through them.
 ///
 /// Reading through a reference is not handing it anywhere, which is why the
 /// container of a load is absent and the value of a store is present.
-fn escaping_operands(kind: &OpKind) -> Vec<ValueId> {
+pub(in crate::hir) fn escaping_operands(kind: &OpKind) -> Vec<ValueId> {
     match kind {
         OpKind::FieldGet { .. } | OpKind::Length(_) => Vec::new(),
         OpKind::ArrayGet { index, .. } => vec![*index],
         OpKind::FieldSet { value, .. } => vec![*value],
         OpKind::ArraySet { index, value, .. } => vec![*index, *value],
         other => super::verify::operands(other),
-    }
-}
-
-/// An array index as a slot number, when it is a constant.
-///
-/// A computed index names no particular slot, and the caller treats that as
-/// naming all of them.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "the guards make the conversion exact: non-negative, whole, and \
-              within `u32`, which is every index an array can have"
-)]
-pub(super) fn slot_of(func: &Func, index: ValueId) -> Option<u64> {
-    match func.values[index.0 as usize].kind {
-        OpKind::ConstInt(value) => u64::try_from(value).ok(),
-        // Lowering produces a float constant for a literal index, since a
-        // TypeScript number is a double until something proves otherwise.
-        OpKind::ConstFloat(value)
-            if value >= 0.0 && value.fract() == 0.0 && value <= f64::from(u32::MAX) =>
-        {
-            Some(u64::from(value as u32))
-        }
-        _ => None,
     }
 }
 
@@ -5004,14 +4382,16 @@ mod tests {
                 .collect();
             let harmless = rustc_hash::FxHashSet::default();
             let zeroed = rustc_hash::FxHashSet::default();
-            let facts = super::freshness(func, &layouts, &harmless, &zeroed);
+            let facts =
+                super::freshness(func, &layouts, &harmless, &zeroed, &Default::default()).entering;
             assert!(
                 !facts[1].initializing(func, &func.values[4].kind),
                 "late written path, {count} blocks"
             );
             // One difference: the long path no longer writes the slot.
             func.blocks[count].ops.clear();
-            let facts = super::freshness(func, &layouts, &harmless, &zeroed);
+            let facts =
+                super::freshness(func, &layouts, &harmless, &zeroed, &Default::default()).entering;
             assert!(
                 facts[1].initializing(func, &func.values[4].kind),
                 "untouched control, {count} blocks"
