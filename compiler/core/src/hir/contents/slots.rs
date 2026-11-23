@@ -335,8 +335,8 @@ impl Fresh {
         {
             return;
         }
-        match kind {
-            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => {
+        match effect(kind) {
+            Effect::Allocate => {
                 self.bases.insert(value);
                 self.escaped.remove(&value);
                 // Every slot of it is zero again. This is only observable now
@@ -350,11 +350,10 @@ impl Fresh {
                 self.written.forget(value);
                 self.zero.forget(value);
             }
-            OpKind::FieldSet {
+            Effect::FieldWrite {
                 object,
                 field,
-                value: stored,
-                ..
+                stored,
             } => {
                 // Storing a null puts the slot back the way the allocator left
                 // it, so the *next* store to it writes over a zero and owes no
@@ -362,50 +361,49 @@ impl Fresh {
                 // refilled in a loop loaded and released a null every time
                 // round -- `nulled-field` pays one an iteration for exactly
                 // that.
-                self.zero.invalidate(Slot::Field(*field));
+                self.zero.invalidate(Slot::Field(field));
                 if matches!(func.values[stored.0 as usize].kind, OpKind::ConstNull) {
-                    self.zero.insert(*object, Slot::Field(*field));
-                    self.written.remove(*object, Slot::Field(*field));
+                    self.zero.insert(object, Slot::Field(field));
+                    self.written.remove(object, Slot::Field(field));
                 } else {
-                    self.written.insert(*object, Slot::Field(*field));
+                    self.written.insert(object, Slot::Field(field));
                 }
             }
-            OpKind::ArraySet { array, index, .. } => {
+            Effect::ElementWrite { array, index } => {
                 // Unknown array aliases may name the same indexed slot.
                 self.zero.0.retain(|_, slots| {
                     slots.retain(|slot| matches!(slot, Slot::Field(_)));
                     !slots.is_empty()
                 });
-                if let Some(slot) = slot_of(func, *index) {
-                    self.written.insert(*array, Slot::Element(slot));
+                if let Some(slot) = slot_of(func, index) {
+                    self.written.insert(array, Slot::Element(slot));
                 } else {
                     // An index this pass cannot name could be any of them, so
                     // the whole array stops being something it knows about.
-                    self.bases.remove(array);
-                    self.escaped.remove(array);
+                    self.bases.remove(&array);
+                    self.escaped.remove(&array);
                 }
             }
             // A load can hand back something that was stored, under a name this
             // cannot connect to the original -- and a store through *that* name
             // would be a write attributed to the wrong value. So the first load
             // gives up everything that has been stored anywhere.
-            OpKind::FieldGet { .. } | OpKind::ArrayGet { .. } | OpKind::GlobalGet(_) => {
+            Effect::Read => {
                 for value in std::mem::take(&mut self.escaped) {
                     self.bases.remove(&value);
                 }
             }
-            _ => {}
-        }
-        // A call that is not `harmless` can do both: store through what it is
-        // given, and read back what somebody else stored.
-        if matches!(
-            kind,
-            OpKind::Call { .. } | OpKind::Suspend { .. } | OpKind::Await { .. }
-        ) {
-            self.zero = Written::default();
-            for value in std::mem::take(&mut self.escaped) {
-                self.bases.remove(&value);
+            Effect::Call => {
+                self.zero = Written::default();
+                for base in std::mem::take(&mut self.escaped) {
+                    self.bases.remove(&base);
+                }
             }
+            // Neither the address nor the slot is attributable here. Distinct
+            // SSA names do not establish distinct storage. A release can also
+            // run foreign cleanup; retaining a foreign handle can run callbacks.
+            Effect::UnknownWrite => *self = Self::default(),
+            Effect::NoWrite => {}
         }
         for value in hir::own::escaping_operands(kind) {
             // A store keeps the base and only marks it reachable. Everything
@@ -432,6 +430,109 @@ impl Fresh {
                 self.zero.insert(value, Slot::Field(*field));
             }
         }
+    }
+}
+
+/// The transfer's one structural classification. New HIR operations cannot
+/// preserve slot authority until their effect has been decided here.
+#[derive(Clone, Copy)]
+enum Effect {
+    Allocate,
+    FieldWrite {
+        object: ValueId,
+        field: u32,
+        stored: ValueId,
+    },
+    ElementWrite {
+        array: ValueId,
+        index: ValueId,
+    },
+    Read,
+    Call,
+    UnknownWrite,
+    NoWrite,
+}
+
+fn effect(kind: &OpKind) -> Effect {
+    match kind {
+        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => Effect::Allocate,
+        OpKind::FieldSet {
+            object,
+            field,
+            value,
+        } => Effect::FieldWrite {
+            object: *object,
+            field: *field,
+            stored: *value,
+        },
+        OpKind::ArraySet { array, index, .. } => Effect::ElementWrite {
+            array: *array,
+            index: *index,
+        },
+        OpKind::FieldGet { .. }
+        | OpKind::OpenFieldGet { .. }
+        | OpKind::SharedFieldGet { .. }
+        | OpKind::ArrayGet { .. }
+        | OpKind::GlobalGet(_) => Effect::Read,
+        OpKind::Call { .. }
+        | OpKind::Suspend { .. }
+        | OpKind::Await { .. }
+        | OpKind::Yield { .. }
+        | OpKind::PromiseSubscribe { .. } => Effect::Call,
+        OpKind::OpenFieldSet { .. }
+        | OpKind::NativeStore { .. }
+        | OpKind::NativeBitStore { .. }
+        | OpKind::NativeCopy { .. }
+        | OpKind::NativeFree { .. }
+        | OpKind::NativeBlock { .. }
+        | OpKind::Retain(_)
+        | OpKind::Release(_) => Effect::UnknownWrite,
+        // None writes an existing field or array slot. GlobalSet publishes an
+        // identity, handled by escaping_operands after this transfer.
+        OpKind::Validation(_)
+        | OpKind::Optional { .. }
+        | OpKind::OptionalDefined(_)
+        | OpKind::OptionalPayload(_)
+        | OpKind::ConstHandle(_)
+        | OpKind::NativeLoad { .. }
+        | OpKind::NativeLocal { .. }
+        | OpKind::ObjcClass { .. }
+        | OpKind::ObjcSelector { .. }
+        | OpKind::NativeSizeOf(_)
+        | OpKind::NativeMalloc { .. }
+        | OpKind::NativePointerBits { .. }
+        | OpKind::NativeStringView { .. }
+        | OpKind::NativeIndexAddress { .. }
+        | OpKind::NativeFieldAddress { .. }
+        | OpKind::NativeBitLoad { .. }
+        | OpKind::NativeBridge { .. }
+        | OpKind::DelegateInvoke { .. }
+        | OpKind::Param(_)
+        | OpKind::BlockParam(_)
+        | OpKind::ConstInt(_)
+        | OpKind::ConstFloat(_)
+        | OpKind::DispatchSlot(_)
+        | OpKind::ConstBool(_)
+        | OpKind::ConstString(_)
+        | OpKind::Provided(_)
+        | OpKind::ConstTemplate { .. }
+        | OpKind::Erase { .. }
+        | OpKind::TagOf { .. }
+        | OpKind::Unerase { .. }
+        | OpKind::Binary { .. }
+        | OpKind::Unary { .. }
+        | OpKind::Convert(_)
+        | OpKind::FieldView { .. }
+        | OpKind::Return(_)
+        | OpKind::Length(_)
+        | OpKind::StringUnitAt { .. }
+        | OpKind::GlobalSet { .. }
+        | OpKind::ConstNull
+        | OpKind::ConstUndefined
+        | OpKind::CellReady { .. }
+        | OpKind::ClosureStatic
+        | OpKind::InstanceOf { .. }
+        | OpKind::ViewOfClass { .. } => Effect::NoWrite,
     }
 }
 

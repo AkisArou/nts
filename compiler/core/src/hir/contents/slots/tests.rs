@@ -282,3 +282,62 @@ fn only_closed_roots_prune_a_new_borrowed_adapter_before_counting() {
         }
     }
 }
+
+fn an_unattributable_writer_kills_the_null(kind: OpKind) {
+    let mut func = fixture();
+    let id = ValueId(u32::try_from(func.values.len()).expect("small fixture"));
+    func.values.push(Op {
+        kind,
+        ty: HirType::Void,
+        origin: func.origin.clone(),
+    });
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 3);
+    assert!(state.known_zero(ValueId(0), Slot::Field(0)));
+    state.observe(
+        &func,
+        id,
+        &func.value(id).kind,
+        &FxHashSet::default(),
+        &Returned::default(),
+    );
+    assert!(!state.known_zero(ValueId(0), Slot::Field(0)));
+}
+
+#[test]
+fn an_open_field_store_kills_the_null() {
+    an_unattributable_writer_kills_the_null(OpKind::OpenFieldSet {
+        object: ValueId(1),
+        arms: vec![hir::FieldArm {
+            ty: TypeId(1),
+            field: 0,
+        }],
+        value: ValueId(1),
+    });
+}
+
+#[test]
+fn a_native_store_kills_the_null() {
+    an_unattributable_writer_kills_the_null(OpKind::NativeStore {
+        pointer: ValueId(1),
+        index: ValueId(6),
+        value: ValueId(1),
+    });
+}
+
+#[test]
+fn a_native_bit_store_kills_the_null() {
+    an_unattributable_writer_kills_the_null(OpKind::NativeBitStore {
+        pointer: ValueId(1),
+        field: 0,
+        value: ValueId(1),
+    });
+}
+
+#[test]
+fn a_native_copy_kills_the_null() {
+    an_unattributable_writer_kills_the_null(OpKind::NativeCopy {
+        destination: ValueId(1),
+        source: ValueId(1),
+    });
+}
