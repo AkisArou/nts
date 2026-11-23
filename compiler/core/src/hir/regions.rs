@@ -1757,7 +1757,10 @@ mod tests {
                     if raises {
                         Err("may raise a value it made".to_owned())
                     } else {
-                        Ok(())
+                        // Quiet is not the same as profitable: this body
+                        // allocates only once. The repeating fixture is the
+                        // admitted terminal control.
+                        Err("allocates too little for a region to pay for itself".to_owned())
                     },
                     "{callee}/{entry_unwind:?}"
                 );
