@@ -282,3 +282,37 @@ with that supplied, one remaining metadata prerequisite control requires the
 source refactor committed before execution. Raw output for that pre-commit
 check is `~/.cache/nts-scratch/841/b/proof-v10.log`, SHA-256
 `cfb695e012c309a725354f3a91ede5e0c7cc28fbceba4c91c94d4663c300755b`.
+
+### Slice (b) review controls
+
+Allocated-byte measurement now uses HostObservations after the authenticated
+directory permission normalization. Both holder guards run again after that
+measurement. Unreadable diagnostic directories and files produce named skips
+instead of preventing disposal. The green predicate shared by retention and
+terminal reporting includes cleanup failures, interruption, accepted skips and
+strict timing.
+
+The committed controls at `66a29a1b7e9ec38a7ba3f3c44b039fc609e09993` passed:
+
+| Control | Observation |
+| --- | --- |
+| Owned allocated bytes | A fixed 8,192-byte observation is reported exactly; normalization precedes the measurement |
+| Mode-000 directory and file | Green and red disposal complete; red diagnostics name both permission skips |
+| Real unit exits with a mode-000 directory | Green, red, SIGTERM, SIGKILL and interrupted-copy recovery all remove the authenticated temporary |
+| Referenced artifacts at the file cap | A logged blockers root survives ahead of 4,096 unreferenced files; its manifest mapping resolves the retained stderr, including a root with spaces and a log chunk boundary |
+| Late holder | A unit appearing during byte measurement refuses deletion |
+| Nested red runner | Its temporary is absent, its diagnostics manifest exists, and its enclosing lifetime's sentinel survives cleanup and a neighbour's prune |
+| Owed selection | Record writers still owe only their own tests; all 124 owed controls pass |
+
+The focused suite passed all 342 tests across ten files, together with strict
+typing and the host-observation audit. Raw output is
+`~/.cache/nts-scratch/841/b/review-proof-v3.log`, SHA-256
+`8f2837dfd3e2d5ca32e53e8fd77fcf54b77ff0bae7361579b771646895b7ded2`.
+The inner route passed formatting, Clippy, build and all backend tests (583
+seconds for the tests). Raw output is
+`~/.cache/nts-scratch/841/b/review-inner-v1.log`, SHA-256
+`7a1dc52a5c25c3b761d181780c1bef5dcc02e9074d2d421dd8878e7312ceddfd`.
+
+The delegated affinity scope's missing creator binding remains a separate
+defect, #994. The workflow distinguishes it from this slice's bound step
+hierarchy and preserves the backstop's live-holder refusal on that path.
