@@ -8,7 +8,7 @@ import {durableRecord} from './durable-record.ts';
 import {assertRunTemporary,discardRunTemporary,removable,runTemporaryImageRoots,type RunTemporary} from './run-temporary.ts';
 import {hostObservations,HOST_OBSERVATIONS,type HostObservations} from './host-observations.ts';
 import {hostEnvironment} from './host-environment.ts';
-import {infrastructureProbe} from './infrastructure-probe.ts';
+import {infrastructureProbe,type InfrastructureProbe} from './infrastructure-probe.ts';
 import {assertNoObservedProcessUsers} from '../landing/tree-users.ts';
 import {assertNoUnitUsers,assertUnitTreeUnused,type UnitTreeOwnership} from './disk-reclamation.ts';
 import {processIdentity} from '../landing/lock.ts';
@@ -146,7 +146,7 @@ function referencedArtifacts(r:Receipt,log:(line:string)=>void):{roots:Map<strin
 /** Files are a bounded diagnostic fallback, never a retained dependency image.
  * Relative paths preserve failing inputs, stderr, generated reproducers and any
  * existing core. Symlinks and sockets are never followed. */
-function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,capFiles:number,log:(line:string)=>void,checkpoint?:DiagnosticCheckpoint):Diagnostics{
+function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,capFiles:number,log:(line:string)=>void,probe:InfrastructureProbe,checkpoint?:DiagnosticCheckpoint):Diagnostics{
   if(r.diagnostics)return publishDiagnostics(r,home);
   const path=diagnosticPath(r),result:Diagnostics={path,bytes:0,files:0,capped:false,cap_bytes:capBytes,cap_files:capFiles};
   if(!diagnosticShape(result,path))throw Error('invalid diagnostic retention bounds: '+r.run);
@@ -195,12 +195,16 @@ function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,cap
             copied+=n;
           }
           if(fstatSync(fd).size!==s.size)throw Error('diagnostic changed during close: '+from);
-          fsyncSync(output);result.bytes+=copied;result.files++;
+          result.bytes+=copied;result.files++;
         }finally{closeSync(output);}
       }finally{closeSync(fd);}
     }
   };
   walk(root);
+  // All payload descriptors are closed. One syncfs barrier makes their data
+  // and directory entries durable before the manifest and receipt can promise
+  // a complete publication, without a journal commit for every copied file.
+  probe({purpose:'flush run diagnostic stage',command:'sync',args:['-f','--',stage]});
   const mapped=[...references].map(([name,logs])=>({original:join(r.temporary.path,name),logs,
     retained:existsSync(join(stage,'files',name))?join(path,'files',name):null,
     state:incomplete.has(name)?'partial':existsSync(join(stage,'files',name))?'retained':'not retained'}));
@@ -213,7 +217,7 @@ function retainDiagnostics(file:string,r:Receipt,home:string,capBytes:number,cap
 /** Shared by the normal drain and the unit's ExecStop. A closed receipt is
  * idempotent only while its tmp remains absent; it never authorizes a new root. */
 export function closeRunTemporary(file:string,token:string,home:string,green:boolean,host:HostObservations|undefined,
-  options:{backstop?:boolean;capBytes?:number;capFiles?:number;units?:readonly UnitTreeOwnership[];log?:(line:string)=>void;checkpoint?:DiagnosticCheckpoint}={}):TemporaryDisposition{
+  options:{backstop?:boolean;capBytes?:number;capFiles?:number;units?:readonly UnitTreeOwnership[];log?:(line:string)=>void;probe?:InfrastructureProbe;checkpoint?:DiagnosticCheckpoint}={}):TemporaryDisposition{
   const unlock=lockStateFile(file);if(!unlock)throw Error('run temporary receipt stayed locked: '+file);
   try{
     const r=readReceipt(file,token),log=options.log??(line=>{appendFileSync(join(r.run,'temporary.log'),line+'\n');process.stderr.write(line+'\n');});
@@ -244,7 +248,7 @@ export function closeRunTemporary(file:string,token:string,home:string,green:boo
       }
     };
     assertUnused();
-    const diagnostics=green&&!r.diagnostics?undefined:retainDiagnostics(file,r,home,options.capBytes??RUN_DIAGNOSTIC_BYTES,options.capFiles??RUN_DIAGNOSTIC_FILES,log,options.checkpoint);
+    const diagnostics=green&&!r.diagnostics?undefined:retainDiagnostics(file,r,home,options.capBytes??RUN_DIAGNOSTIC_BYTES,options.capFiles??RUN_DIAGNOSTIC_FILES,log,options.probe??infrastructureProbe,options.checkpoint);
     if(diagnostics)log(`gate tmp: diagnostic references: run=${r.run} manifest=${join(diagnostics.path,'manifest.json')}`);
     if(diagnostics?.capped)log(`gate tmp: diagnostic cap hit: run=${r.run} bytes=${diagnostics.bytes} files=${diagnostics.files} cap_bytes=${diagnostics.cap_bytes} cap_files=${diagnostics.cap_files}`);
     sameTemporary(r,home);

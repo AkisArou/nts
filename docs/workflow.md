@@ -1482,8 +1482,10 @@ the tooling strict checker owns the source's type checking.
   skipped. After the ownership guards, directory permissions are normalized
   before measuring allocated bytes and discarding scratch. Only authenticated dependency
   image payloads are excluded; capture stderr and failure metadata remain.
-  Copies are staged inside the authenticated temporary. A flushed manifest and
-  receipt bind the staged directory's identity before its atomic publication;
+  Copies are staged inside the authenticated temporary. One filesystem flush
+  makes the copied data and directory entries durable before a flushed manifest
+  and receipt bind the staged directory's identity. Atomic publication flushes
+  both parent directories;
   the backstop resumes an interrupted copy or publication without retaining
   partial evidence. Replaced publications refuse removal.
   Links and sockets are never followed. Core dumps

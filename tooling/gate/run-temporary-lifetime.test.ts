@@ -12,6 +12,7 @@ import {ownMemory} from './test-memory.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {systemdEnvironment} from './environment.ts';
 import {durableRecord} from './durable-record.ts';
+import {infrastructureProbe} from './infrastructure-probe.ts';
 import {testScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 
@@ -71,6 +72,45 @@ test('a red retains bounded diagnostic paths and excludes dependency images and 
   assert.equal(existsSync(join(kept.path,'files/outside')),false);assert.equal(existsSync(join(kept.path,'files/oracle-dependencies/tree')),false);
   assert.equal(readFileSync(join(kept.path,'files/oracle-dependencies/stderr'),'utf8'),'capture failure');
   assert.equal(JSON.parse(readFileSync(join(kept.path,'manifest.json'),'utf8')).original_root,root);
+});
+test('one diagnostic filesystem barrier precedes the manifest, receipt and publication',t=>{
+  const f=fixture(t);mkdirSync(join(f.temporary.path,'nested'));
+  writeFileSync(join(f.temporary.path,'nested/input.ts'),'failing input');
+  writeFileSync(join(f.temporary.path,'stderr.txt'),'complete stderr');
+  let barriers=0,prepared=false;
+  const kept=f.close(false,{probe:request=>{
+    barriers++;
+    assert.equal(request.command,'sync');assert.deepEqual(request.args.slice(0,2),['-f','--']);
+    assert.equal(request.args.length,3);const stage=request.args[2]!;
+    assert.equal(readFileSync(join(stage,'files/nested/input.ts'),'utf8'),'failing input');
+    assert.equal(readFileSync(join(stage,'files/stderr.txt'),'utf8'),'complete stderr');
+    assert.equal(existsSync(join(stage,'manifest.json')),false);
+    assert.equal(JSON.parse(readFileSync(f.file,'utf8')).diagnostics,undefined);
+    return infrastructureProbe(request);
+  },checkpoint:(phase,directory)=>{
+    if(phase!=='prepared')return;
+    prepared=true;assert.equal(barriers,1);
+    assert.equal(JSON.parse(readFileSync(f.file,'utf8')).diagnostics.stage,directory);
+    assert.equal(JSON.parse(readFileSync(join(directory,'manifest.json'),'utf8')).files,2);
+  }}).diagnostics!;
+  assert.equal(barriers,1);assert.equal(prepared,true);assert.equal(kept.files,2);
+  assert.equal(readFileSync(join(kept.path,'files/nested/input.ts'),'utf8'),'failing input');
+  assert.equal(existsSync(f.temporary.path),false);
+});
+test('a failed diagnostic filesystem barrier preserves the original tmp for retry',t=>{
+  const f=fixture(t);writeFileSync(join(f.temporary.path,'stderr.txt'),'original stderr');
+  let stage='';
+  assert.throws(()=>f.close(false,{probe:request=>{
+    stage=request.args[2]!;throw Error('fixture diagnostic flush failed');
+  }}),/fixture diagnostic flush failed/);
+  assert.equal(readFileSync(join(f.temporary.path,'stderr.txt'),'utf8'),'original stderr');
+  assert.equal(readFileSync(join(stage,'files/stderr.txt'),'utf8'),'original stderr');
+  assert.equal(existsSync(join(stage,'manifest.json')),false);
+  assert.equal(JSON.parse(readFileSync(f.file,'utf8')).diagnostics,undefined);
+  assert.equal(existsSync(join(f.run,'diagnostics-'+f.token)),false);assert.deepEqual(f.log,[]);
+  const kept=f.close().diagnostics!;
+  assert.equal(readFileSync(join(kept.path,'files/stderr.txt'),'utf8'),'original stderr');
+  assert.equal(kept.files,1);assert.equal(existsSync(f.temporary.path),false);
 });
 test('the diagnostic byte and file caps are explicit and logged',t=>{
   for(const options of [{capBytes:3,capFiles:10},{capBytes:100,capFiles:1}]){
