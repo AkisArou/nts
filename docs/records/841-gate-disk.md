@@ -399,3 +399,10 @@ The full proof's copied controls are
 `b135b0a1543b3fd8130181f6d288b5d46d2dc581a03aeab3d28f4d666bfcfc05`,
 and `~/.cache/nts-scratch/841/b/review-here-v4-tooling.raw.log`, SHA-256
 `01cba1814662eb15f1519651fbe72761c3bf8baca1960775d0cada2a46da4a28`.
+
+Landing replay refused the original slice because both it and main inserted a
+decision at the same workflow heading. The rebase onto
+`5c00b70387d030955fda8352997ae863c9bb0ae6` preserves both the pending
+whole-program rule and the temporary-lifetime rule. The range comparison keeps
+all later slice patches unchanged; the scoped-runner fixture also retains
+main's shared process-stat reader.
