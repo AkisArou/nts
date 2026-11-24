@@ -861,3 +861,92 @@ fn only_the_last_read_in_a_block_can_give_up_a_foreign_holder() {
         );
     }
 }
+
+/// rc releases a value after the last operation that reads anything leaning
+/// on it, and which values lean depends on ownership the model does not know
+/// yet. `s = h.s; n = s.length`: `n` reads `h` if `s` is a borrowed load, and
+/// reads nothing of it if `s` took a count, so the release can follow either
+/// operation, and both are charged. Through an operand rather than the value
+/// itself, it can also follow the retain rc puts before the operation, so that
+/// one is charged before too. The control's layout holds no handle.
+#[test]
+fn every_read_that_can_be_a_holders_last_is_charged() {
+    for foreign in [false, true] {
+        let mut func = fixture();
+        let holder = HirType::Managed(hir::ManagedType::Object(TypeId(7)));
+        let string = HirType::Managed(hir::ManagedType::String);
+        let field = |name: &str, ty: HirType| hir::Field {
+            name: name.to_owned().into(),
+            ty,
+            readonly: false,
+            declared_by: None,
+            written: None,
+        };
+        let layouts = vec![hir::Layout {
+            types: vec![TypeId(7)],
+            name: "Holder".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![
+                field(
+                    "h",
+                    if foreign {
+                        foreign_type()
+                    } else {
+                        HirType::Bool
+                    },
+                ),
+                field("s", string.clone()),
+            ],
+            methods: Vec::new(),
+            base: None,
+        }];
+        let releases = hir::Program {
+            layouts: layouts.clone(),
+            ..hir::Program::default()
+        }
+        .foreign_releases();
+        let op = |kind, ty| Op {
+            kind,
+            ty,
+            origin: func.origin.clone(),
+        };
+        func.values = vec![
+            op(OpKind::Param(0), holder),
+            op(
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 1,
+                },
+                string,
+            ),
+            op(OpKind::Length(ValueId(1)), HirType::Float { bits: 64 }),
+            op(OpKind::Convert(ValueId(2)), HirType::Bool),
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+            terminator: Terminator::Return(None),
+        }];
+        let inputs = Inputs::of(&func, &layouts, &[], &releases);
+        assert!(
+            !inputs.after(ValueId(0)),
+            "named again later: not given up at its definition"
+        );
+        assert_eq!(inputs.after(ValueId(1)), foreign, "its last direct read");
+        assert!(!inputs.before(ValueId(1)), "it names the holder itself");
+        assert_eq!(
+            inputs.after(ValueId(2)),
+            foreign,
+            "a read of a load out of it"
+        );
+        assert_eq!(
+            inputs.before(ValueId(2)),
+            foreign,
+            "a read of something made from it can follow that thing's retain"
+        );
+        assert!(
+            !inputs.after(ValueId(3)) && !inputs.before(ValueId(3)),
+            "a number leans on nothing"
+        );
+    }
+}

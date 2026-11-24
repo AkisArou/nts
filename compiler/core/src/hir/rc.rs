@@ -109,6 +109,8 @@
 //! the local's to give. That is the convention at the top of this module doing
 //! the work it exists to do.
 
+pub(in crate::hir) mod last_use;
+
 use super::liveness;
 use super::own::{self, Ownership};
 use super::{ArrayFill, BlockId, Func, HirType, Layout, ManagedType, Op, OpKind, Program, ValueId};
@@ -247,8 +249,8 @@ fn insert_into(
     let mut live = liveness::analyze_with(func, &stores)?;
     let map = own::analyze(func, layouts, summaries, &mut live);
     let grown = super::appended_results::consumed_left_sides(func);
-    let arriving = arriving(func);
-    let frame_names = frame_names(func, &stores)?;
+    let arriving = last_use::arriving(func);
+    let frame_names = last_use::frame_names(func, &stores)?;
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
     // Blocks created to hold an edge's releases. Appended after the originals,
@@ -486,43 +488,12 @@ struct Block<'a> {
     /// Values an erasure took the reference of, with the erased value now
     /// holding it: what leans on the one leans on the other from there.
     repackaged: &'a rustc_hash::FxHashMap<ValueId, ValueId>,
-    /// What every edge hands each block parameter. See [`arriving`].
+    /// What every edge hands each block parameter. See [`last_use::arriving`].
     arriving: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
-    /// The frame objects each value is another name for. See [`frame_names`].
+    /// The frame objects each value is another name for. See
+    /// [`last_use::frame_names`].
     frame_names: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
     layouts: &'a [Layout],
-}
-
-/// The frame objects each value is another name for -- through a block
-/// parameter, an erasure -- as liveness keeps them live
-/// (`liveness::object_names_with`).
-///
-/// **A read of a name is a read of the object, inside a block too.** Liveness
-/// keeps a frame object live into every block a name for it reaches, and
-/// [`release_at_last_use`] then found no read of the object itself there and
-/// released it on entry: a cell captured by a `forEach` callback and carried
-/// through a later loop's block parameters had its string released at the
-/// walk's exit, before the read through the parameter that concatenated it
-/// (the Chromium lane's live-list vectors, 2026-10-07).
-fn frame_names(
-    func: &Func,
-    stores: &liveness::CalleeStores<'_>,
-) -> Result<rustc_hash::FxHashMap<ValueId, Vec<ValueId>>, liveness::Failure> {
-    Ok(liveness::object_names_with(func, stores)?
-        .into_iter()
-        .filter_map(|(name, roots)| {
-            let framed: Vec<ValueId> = roots
-                .into_iter()
-                .filter(|root| {
-                    matches!(
-                        func.values[root.0 as usize].kind,
-                        OpKind::ObjectNew { frame: true }
-                    )
-                })
-                .collect();
-            (!framed.is_empty()).then_some((name, framed))
-        })
-        .collect())
 }
 
 /// Release each value that dies in this block right after its last use, and
@@ -531,7 +502,6 @@ fn frame_names(
 ///
 /// `ops` is the block as `count_ops` left it, retains and stores included: a
 /// retain reads its value, so a release never lands before one.
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn release_at_last_use(
     func: &mut Func,
     settled: &Settled<'_>,
@@ -560,67 +530,16 @@ fn release_at_last_use(
     if pending.is_empty() {
         return pending;
     }
-    // A store that claimed a value's death moved the local's reference into
-    // the container, and the local may still be read after it: `first` in
-    // `each_upto((n) => { first += n }); return first + second` is a cell
-    // moved into the closure and read after the call. From the move on, the
-    // value is the container's, so it leans on the container.
-    let mut moved_into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> =
-        rustc_hash::FxHashMap::default();
-    for op in ops.iter() {
-        if let OpKind::FieldSet {
-            object: container,
-            value,
-            ..
-        }
-        | OpKind::ArraySet {
-            array: container,
-            value,
-            ..
-        } = &func.values[op.0 as usize].kind
-            && block.moved.contains(value)
-        {
-            moved_into.entry(*value).or_default().push(*container);
-        }
-    }
-    for (source, erased) in block.repackaged {
-        moved_into.entry(*source).or_default().push(*erased);
-    }
-    // The inverse edge, wherever a store transfers no count: into a frame
-    // container, or of a frame object into any container. Built from the same
-    // ops as `moved_into` and without its `block.moved` condition: an
-    // uncounted store is exactly the case that needs it. See `Leaning::holds`.
-    let mut holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
-    let frame = |value: &ValueId| {
-        matches!(
-            func.values[value.0 as usize].kind,
-            OpKind::ObjectNew { frame: true }
-        )
-    };
-    for op in ops.iter() {
-        if let OpKind::FieldSet {
-            object: container,
-            value,
-            ..
-        }
-        | OpKind::ArraySet {
-            array: container,
-            value,
-            ..
-        } = &func.values[op.0 as usize].kind
-            && (frame(container) || frame(value))
-        {
-            holds.entry(*container).or_default().push(*value);
-        }
-    }
-    let mut leaning = Leaning {
+    let mut leaning = last_use::Leaning::new(
         func,
-        map,
-        arriving: block.arriving,
-        moved_into,
-        holds,
-        memo: rustc_hash::FxHashMap::default(),
-    };
+        last_use::Holding::Settled {
+            map,
+            moved: block.moved,
+            repackaged: block.repackaged,
+        },
+        block.arriving,
+        ops,
+    );
     // Still needed when the block ends: what the terminator reads and what
     // leaves live, with everything either leans on.
     let mut needed: Vec<ValueId> = super::operands_of_terminator(block.terminator);
@@ -633,30 +552,12 @@ fn release_at_last_use(
             }
         }
     }
-    // Backward over the block: the first operation met that reads a pending
-    // value, or defines it, is its last use.
     let mut after: rustc_hash::FxHashMap<usize, Vec<ValueId>> = rustc_hash::FxHashMap::default();
-    for index in (0..ops.len()).rev() {
-        if pending.is_empty() {
-            break;
-        }
-        let op = ops[index];
-        let read = reads_of(&mut leaning, block.frame_names, op);
-        // Nothing runs between a call a region serves and its end
-        // (`regions`): what dies at the call is released after the end, or
-        // the free would land inside the region's window -- counted as the
-        // region's, and given back twice by its reset.
-        let at = match ops.get(index + 1) {
-            Some(next) if super::regions::ends_a_call(&func.values[next.0 as usize].kind) => {
-                index + 1
-            }
-            _ => index,
-        };
-        for value in read {
-            if pending.remove(&value) {
-                after.entry(at).or_default().push(value);
-            }
-        }
+    for (index, read) in last_use::last_uses(&mut leaning, block.frame_names, ops, &mut pending) {
+        after
+            .entry(last_use::released_after(func, ops, index))
+            .or_default()
+            .extend(read);
     }
     // What is left arrived live and is read nowhere here: dead on entry.
     let mut released: rustc_hash::FxHashSet<ValueId> = pending.iter().copied().collect();
@@ -678,177 +579,6 @@ fn release_at_last_use(
     }
     *ops = rebuilt;
     released
-}
-
-/// What `op` reads, as `release_at_last_use` asks it: the op itself, what each
-/// operand leans on, a retain's definition -- a value loaded out of something
-/// is still that thing's until its retain, and `x = o.f; release o; retain x`
-/// retains freed memory -- and, for each, the frame objects it is another name
-/// for ([`frame_names`]): `x = c.value; release the cell; retain x` is the same
-/// hazard when `c` is a block parameter naming a frame cell (a captured `let`
-/// passed to a closure after an inlined `forEach`, the Chromium lane's second
-/// live-list vector).
-fn reads_of(
-    leaning: &mut Leaning<'_, '_>,
-    frame_names: &rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
-    op: ValueId,
-) -> Vec<ValueId> {
-    let mut read = vec![op];
-    let kind = &leaning.func.values[op.0 as usize].kind;
-    let mut held: Vec<ValueId> = Vec::new();
-    if let OpKind::Retain(retained) = kind {
-        held.extend(leaning.definition(*retained).iter().copied());
-    }
-    for operand in super::operands_of(kind) {
-        held.extend(leaning.of(operand).iter().copied());
-    }
-    for value in held {
-        read.push(value);
-        read.extend(frame_names.get(&value).into_iter().flatten().copied());
-    }
-    read
-}
-
-/// What a value leans on: itself, and -- where it holds no count of its own
-/// and can point at memory -- everything its definition read, followed
-/// through. A borrowed field load leans on the object it was loaded from; an
-/// erased or converted view on what it views; a block parameter that holds no
-/// count on every argument an edge hands it.
-///
-/// A number or a boolean is a copy and leans on nothing, which also keeps
-/// arithmetic from dragging a whole computation's history along.
-struct Leaning<'a, 'f> {
-    func: &'f Func,
-    map: &'a own::Map,
-    arriving: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
-    /// Values a store in this block moved into a container, with the
-    /// containers.
-    moved_into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
-    /// The other direction, for a **frame** container only: what a store put
-    /// into it, by container.
-    ///
-    /// `moved_into` answers "the content is needed later, so do not release the
-    /// container", which is the case its comment describes -- a cell moved into
-    /// a closure and read *directly* after the call. This answers the reverse,
-    /// and nothing did: **the container is read later, so do not release what is
-    /// in it.**
-    ///
-    /// ```ts
-    /// const root = new Root();               // frame-local
-    /// const one = (tag: string) => make(root, tag);
-    /// const two = (tag: string) => make(root, tag);
-    /// console.log(one("a"));                 // reads root.names
-    /// ```
-    ///
-    /// `root`'s last op*erand* use is the store into the second closure, so it
-    /// was judged dead there and `release_value` gave up its fields -- freeing
-    /// `root.names` before either closure ran. The React lane reduced it: node
-    /// prints `a2 b21 c2` and the compiled program printed `a2 b11 c1`.
-    ///
-    /// **Only where the store transfers no count**, because that is where the
-    /// hole is: a store of a heap value into a heap container took a count, so
-    /// the content cannot reach zero while the container holds it. A frame
-    /// container has no count to give, and a frame object has none to take --
-    /// that is what `release_value`'s own doc says it exists for -- so the
-    /// store transfers nothing and the liveness has to say what the count would
-    /// have.
-    ///
-    /// The second half arrived with acyclic arrays (a2fe27266): an array whose
-    /// elements cannot form a cycle is never buffered, so escape analysis lets
-    /// a tuple stored in a non-escaping array stay in the frame. The array is
-    /// on the heap and its store is a retain of an immortal header, so the
-    /// tuple's fields were given up at the tuple's last use while the array
-    /// still reached it: `for (const [a, [b, c]] of rows)` read a freed inner
-    /// array (tests/programs/a-for-of-head-that-destructures under RC).
-    holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
-    memo: rustc_hash::FxHashMap<ValueId, std::rc::Rc<[ValueId]>>,
-}
-
-impl Leaning<'_, '_> {
-    fn of(&mut self, value: ValueId) -> std::rc::Rc<[ValueId]> {
-        if let Some(known) = self.memo.get(&value) {
-            return known.clone();
-        }
-        let found = self.walk(vec![value]);
-        self.memo.insert(value, found.clone());
-        found
-    }
-
-    /// What a value's definition leans on, whatever the value holds: what
-    /// it read, and what those lean on.
-    fn definition(&mut self, value: ValueId) -> std::rc::Rc<[ValueId]> {
-        self.walk(self.sources(value))
-    }
-
-    fn walk(&self, mut stack: Vec<ValueId>) -> std::rc::Rc<[ValueId]> {
-        let mut seen = rustc_hash::FxHashSet::default();
-        while let Some(next) = stack.pop() {
-            if !seen.insert(next) {
-                continue;
-            }
-            if let Some(containers) = self.moved_into.get(&next) {
-                stack.extend(containers.iter().copied());
-            }
-            // And what a frame container holds: reading the container is a use
-            // of everything in it, because the fields are given up when *it*
-            // dies. See `holds`.
-            if let Some(contents) = self.holds.get(&next) {
-                stack.extend(contents.iter().copied());
-            }
-            if self.holds_nothing(next) {
-                stack.extend(self.sources(next));
-            }
-        }
-        let mut found: Vec<ValueId> = seen.into_iter().collect();
-        found.sort_unstable();
-        found.into()
-    }
-
-    /// What a value was made from: its operation's operands, or what every
-    /// edge hands it where it is a block parameter.
-    fn sources(&self, value: ValueId) -> Vec<ValueId> {
-        let op = &self.func.values[value.0 as usize];
-        if matches!(op.kind, OpKind::Param(_)) {
-            return Vec::new();
-        }
-        match self.arriving.get(&value) {
-            Some(arguments) => arguments.clone(),
-            None => super::operands_of(&op.kind),
-        }
-    }
-
-    /// Whether a value is only valid while something else is: it holds no
-    /// count, and is not a scalar copy.
-    fn holds_nothing(&self, value: ValueId) -> bool {
-        let scalar = matches!(
-            self.func.values[value.0 as usize].ty,
-            HirType::Void
-                | HirType::Never
-                | HirType::Bool
-                | HirType::Int { .. }
-                | HirType::Float { .. }
-        );
-        !scalar
-            && (self.map.borrowed(value)
-                || matches!(self.map.of(value), Ownership::Unowned | Ownership::Borrowed))
-    }
-}
-
-/// Every block parameter, with the arguments each edge into it carries.
-fn arriving(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
-    let mut arriving: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> =
-        rustc_hash::FxHashMap::default();
-    for block in &func.blocks {
-        for (target, args) in edges_of(&block.terminator) {
-            let Some(params) = func.blocks.get(target.0 as usize).map(|b| &b.params) else {
-                continue;
-            };
-            for (param, argument) in params.iter().zip(args) {
-                arriving.entry(*param).or_default().push(argument);
-            }
-        }
-    }
-    arriving
 }
 
 /// The edges leaving a block, each with the arguments it carries.
@@ -2837,7 +2567,8 @@ mod tests {
     }
 
     /// `Cell { next: string, holder: Holder }` beside `Holder { h }`, where
-    /// `h` is a foreign handle or, for the managed-only twin, a string. Freeing
+    /// `h` is a foreign handle or, for the managed-only twin, a string; `s` is a
+    /// string a borrowed load can read out of the holder. Freeing
     /// a `Holder` gives up `h`, and a foreign release can enter program code
     /// that writes `next`.
     fn managed_holder_program(foreign: bool) -> Program {
@@ -2863,6 +2594,13 @@ mod tests {
                 crate::hir::Field {
                     name: "n".to_owned().into(),
                     ty: number(),
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                },
+                crate::hir::Field {
+                    name: "s".to_owned().into(),
+                    ty: string(),
                     readonly: false,
                     declared_by: None,
                     written: None,
@@ -3038,6 +2776,170 @@ mod tests {
             loads_next_between(func, 3, 6),
             foreign,
             "the store must load and release `next` after the holder's last-use release can re-enter"
+        );
+    }
+
+    #[test]
+    fn a_release_after_a_leaning_read_of_an_object_that_holds_a_handle_ends_a_null_field_fact() {
+        leaning_holder_null_fact(true);
+    }
+
+    #[test]
+    fn a_release_after_a_leaning_read_of_a_managed_only_object_keeps_a_null_field_fact() {
+        leaning_holder_null_fact(false);
+    }
+
+    /// `h = make(); x = h.s; o.next = null; x.length; o.next = "replacement"`:
+    /// `x` is a borrowed load, so it leans on `h`, and `h` is released after
+    /// `x.length` -- after the null store, though `h` itself is last read
+    /// before it. `x.length` reads a string and gives up nothing of its own.
+    fn leaning_holder_null_fact(foreign: bool) {
+        let mut program = managed_holder_program(foreign);
+        let holder = program.layouts[0].fields[1].ty.clone();
+        let func = &mut program.funcs[0];
+        func.return_type = HirType::Void;
+        func.values = vec![
+            op(OpKind::Param(0), func.params[0].ty.clone()),
+            call("make", Vec::new(), holder),
+            op(
+                OpKind::FieldGet {
+                    object: ValueId(1),
+                    field: 2,
+                },
+                string(),
+            ),
+            op(OpKind::ConstNull, string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(3),
+                },
+                HirType::Void,
+            ),
+            op(OpKind::Length(ValueId(2)), number()),
+            op(OpKind::ConstString("replacement".into()), string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(6),
+                },
+                HirType::Void,
+            ),
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: (0..8).map(ValueId).collect(),
+            terminator: Terminator::Return(None),
+        }];
+        insert(&mut program).expect("complete RC analysis");
+        let func = &program.funcs[0];
+        let ops = &func.blocks[0].ops;
+        let at = |id| {
+            ops.iter()
+                .position(|value| *value == ValueId(id))
+                .expect("the operation remains after RC insertion")
+        };
+        assert!(
+            ops[at(5)..at(7)]
+                .iter()
+                .any(|value| matches!(func.value(*value).kind, OpKind::Release(ValueId(1)))),
+            "the holder is released after the leaning read, between the two stores: {:?}",
+            ops.iter()
+                .map(|value| &func.value(*value).kind)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            loads_next_between(func, 4, 7),
+            foreign,
+            "the store must load and release `next` after a release that follows a leaning read can re-enter"
+        );
+    }
+
+    #[test]
+    fn a_release_at_a_retain_before_a_store_of_an_object_that_holds_a_handle_ends_a_null_field_fact()
+     {
+        retained_holder_null_fact(true);
+    }
+
+    #[test]
+    fn a_release_at_a_retain_before_a_store_of_a_managed_only_object_keeps_a_null_field_fact() {
+        retained_holder_null_fact(false);
+    }
+
+    /// `h = make(); x = wrap(h); o.next = null; o.next = x; x.length`, with
+    /// `x` read in the next block too: `x` holds a count of its own and
+    /// outlives the store, so the store retains it, and that retain reads
+    /// `x`'s definition. `h` is released after the retain -- before the store
+    /// itself, after the null store, though `h` is last named before both, and
+    /// though `x.length` after the store would lean on `h` had `x` been a
+    /// borrow.
+    fn retained_holder_null_fact(foreign: bool) {
+        let mut program = managed_holder_program(foreign);
+        let holder = program.layouts[0].fields[1].ty.clone();
+        let func = &mut program.funcs[0];
+        func.return_type = HirType::Void;
+        func.values = vec![
+            op(OpKind::Param(0), func.params[0].ty.clone()),
+            call("make", Vec::new(), holder),
+            call("wrap", vec![ValueId(1)], string()),
+            op(OpKind::ConstNull, string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(3),
+                },
+                HirType::Void,
+            ),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(2),
+                },
+                HirType::Void,
+            ),
+            op(OpKind::Length(ValueId(2)), number()),
+            op(OpKind::Length(ValueId(2)), number()),
+        ];
+        func.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: (0..7).map(ValueId).collect(),
+                terminator: Terminator::Jump {
+                    target: BlockId(1),
+                    args: Vec::new(),
+                },
+            },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(7)],
+                terminator: Terminator::Return(None),
+            },
+        ];
+        insert(&mut program).expect("complete RC analysis");
+        let func = &program.funcs[0];
+        let ops = &func.blocks[0].ops;
+        let at = |id| {
+            ops.iter()
+                .position(|value| *value == ValueId(id))
+                .expect("the operation remains after RC insertion")
+        };
+        assert!(
+            ops[at(4)..at(5)]
+                .iter()
+                .any(|value| matches!(func.value(*value).kind, OpKind::Release(ValueId(1)))),
+            "the holder is released after the retain, before the second store: {:?}",
+            ops.iter()
+                .map(|value| &func.value(*value).kind)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            loads_next_between(func, 4, 5),
+            foreign,
+            "the store must load and release `next` after a release at its own retain can re-enter"
         );
     }
 }

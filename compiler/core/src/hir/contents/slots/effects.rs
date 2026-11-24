@@ -1,6 +1,7 @@
 //! Fixed transfer inputs, built once per function before the CFG fixpoint.
 
 use super::{Aliases, Effect, effect};
+use crate::hir::rc::last_use::{self, Holding, Leaning};
 use crate::hir::{
     self, ForeignReleases, Func, Global, HirType, Layout, ManagedType, OpKind, ValueId,
 };
@@ -22,8 +23,9 @@ impl Inputs {
     /// `before` asks whether retaining a value can run program code, which
     /// only a foreign handle's retain does. `after` and `cleanup` ask whether
     /// giving one up can: a managed object whose layouts lead to a handle
-    /// frees it synchronously ([`ForeignReleases`]). `after` charges a managed
-    /// value only to its last operation in a block ([`counted_after`]).
+    /// frees it synchronously ([`ForeignReleases`]). A managed value is
+    /// charged only around the operations rc can release it after
+    /// ([`released_around`]).
     pub(in crate::hir) fn of(
         func: &Func,
         layouts: &[Layout],
@@ -32,7 +34,7 @@ impl Inputs {
     ) -> Self {
         let retained = foreign_values(func, retain_can_reenter);
         let given_up = foreign_values(func, |ty| releases.release_can_reenter(ty));
-        let after = counted_after(func, &retained, &given_up);
+        let charged = released_around(func, &given_up);
         let counts = func
             .values
             .iter()
@@ -40,12 +42,14 @@ impl Inputs {
             .map(|(at, op)| {
                 let (retain, cleanup) =
                     store_effects(func, layouts, globals, &op.kind, &retained, releases);
+                let operands = hir::operands_of(&op.kind);
                 Counts {
                     before: retain
-                        || hir::operands_of(&op.kind)
-                            .into_iter()
-                            .any(|value| retained[value.0 as usize]),
-                    after: after[at],
+                        || charged.before[at]
+                        || operands.iter().any(|value| retained[value.0 as usize]),
+                    after: retained[at]
+                        || charged.after[at]
+                        || operands.iter().any(|value| retained[value.0 as usize]),
                     cleanup,
                 }
             })
@@ -75,42 +79,101 @@ impl Inputs {
     }
 }
 
-/// By operation: whether a native count right after it can run program code.
+/// By operation: whether a release that can run program code can come
+/// right before it or right after it.
+///
 /// A value whose retain can re-enter is counted after its definition, when a
-/// copy takes it over, and around any read of it, so every such operation
-/// charges one. A managed value that leads to a handle re-enters only when
-/// given up, and a release never precedes a read of the value: only the last
-/// operation in its block that defines or reads it can be followed by its
-/// release. A terminator's read is no operation, so a value a terminator reads
-/// is charged to its last operation before it, and the delayed cleanup that
-/// charge sets ends the block's facts before an edge can give the value up.
-fn counted_after(func: &Func, retained: &[bool], given_up: &[bool]) -> Vec<bool> {
-    let reads = |at: usize| hir::operands_of(&func.values[at].kind);
-    let retains = |at: usize, operands: &[ValueId]| {
-        retained[at] || operands.iter().any(|value| retained[value.0 as usize])
+/// copy takes it over, and around any read of it, so every such operation is
+/// charged one where [`Inputs::of`] reads its operands. A managed value that
+/// leads to a handle re-enters only when given up, and rc gives it up after
+/// the last operation in a block that reads it (`rc::last_use::reads_of`):
+/// one that defines it or names it as an operand, or reads anything leaning on
+/// it. What leans on what depends on ownership, which is not settled yet, so
+/// this asks the same question with every choice still open
+/// ([`Holding::Unsettled`]): any value that is not a scalar copy may lean on
+/// what it was made from, any store may move, any erasure may repackage, and
+/// any callee may store any argument into another.
+///
+/// Which of those reads is the last one rc sees is not known either, so every
+/// one of them that can be is charged: every operation from the last that
+/// defines the value or names it as an operand on. Nothing before that can be,
+/// because rc's reads always include those. Each is charged after, and after
+/// the end of a region call that follows it (`last_use::released_after`).
+/// One that reaches the value only through an operand made from it is
+/// charged before as well, because rc reads that operand's definition at the
+/// retain it puts before the operation: `x = wrap(h); retain x; release h;
+/// o.f = x`. Where no operation in the block defines or names the value, rc
+/// can release it on entry, before the first operation.
+///
+/// A value no operation in a block reads is released there on entry, at the
+/// block's end or on an edge. Whatever defines it was charged in a block
+/// before, and that charge's delayed cleanup is sticky, so the facts of every
+/// block after it end at the block's end. A block parameter is in no block's
+/// operations but is bound on every edge into its block; what each edge hands
+/// it is defined before the edge, so the same holds for it. A function
+/// parameter no block reads is never stored, so never taken over: its
+/// caller's reference is the one given up, after the call returns.
+fn released_around(func: &Func, given_up: &[bool]) -> Released {
+    let mut released = Released {
+        before: vec![false; func.values.len()],
+        after: vec![false; func.values.len()],
     };
-    // An operation in no block never runs, and a parameter no block reads is
-    // never stored, so never taken over: its caller's reference is the one
-    // given up. Neither is charged a release; a retain-capable one keeps its
-    // charge, as every definition and read of one does.
-    let mut after: Vec<bool> = (0..func.values.len())
-        .map(|at| retains(at, &reads(at)))
-        .collect();
-    let mut later = rustc_hash::FxHashSet::default();
+    if !given_up.contains(&true) {
+        return released;
+    }
+    // A callee whose stores are not known stores any argument into any other,
+    // which names a superset of what rc's summaries name.
+    let Ok(frame_names) = last_use::frame_names(func, &|_| None) else {
+        // Past liveness's budget nothing here is placed, so every operation
+        // in a block may be followed or preceded by a release.
+        for block in &func.blocks {
+            for op in &block.ops {
+                released.before[op.0 as usize] = true;
+                released.after[op.0 as usize] = true;
+            }
+        }
+        return released;
+    };
+    let arriving = last_use::arriving(func);
+    let mut last_named: rustc_hash::FxHashMap<ValueId, usize> = rustc_hash::FxHashMap::default();
     for block in &func.blocks {
-        later.clear();
-        for &op in block.ops.iter().rev() {
-            let at = op.0 as usize;
-            let operands = reads(at);
-            after[at] = retains(at, &operands)
-                || (given_up[at] && !later.contains(&op))
-                || operands
-                    .iter()
-                    .any(|value| given_up[value.0 as usize] && !later.contains(value));
-            later.extend(operands);
+        // The last operation that defines or names each value: rc's last read
+        // of it is never earlier.
+        last_named.clear();
+        for (index, op) in block.ops.iter().enumerate() {
+            last_named.insert(*op, index);
+            for operand in hir::operands_of(&func.values[op.0 as usize].kind) {
+                last_named.insert(operand, index);
+            }
+        }
+        let mut leaning = Leaning::new(func, Holding::Unsettled, &arriving, &block.ops);
+        for (index, &op) in block.ops.iter().enumerate() {
+            let operands = hir::operands_of(&func.values[op.0 as usize].kind);
+            for value in last_use::reads_of(&mut leaning, &frame_names, op) {
+                if !given_up[value.0 as usize] {
+                    continue;
+                }
+                match last_named.get(&value) {
+                    Some(&last) if index < last => continue,
+                    Some(_) => {}
+                    None => released.before[block.ops[0].0 as usize] = true,
+                }
+                released.after[op.0 as usize] = true;
+                released.after
+                    [block.ops[last_use::released_after(func, &block.ops, index)].0 as usize] =
+                    true;
+                if value != op && !operands.contains(&value) {
+                    released.before[op.0 as usize] = true;
+                }
+            }
         }
     }
-    after
+    released
+}
+
+struct Released {
+    before: Vec<bool>,
+    after: Vec<bool>,
 }
 
 /// Whether retaining a value of this type can run program code: only a

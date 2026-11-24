@@ -47,11 +47,19 @@ Retaining a managed value never runs code, so only handles and erased values
 invalidate before a store. A handle or erased value can be counted after its
 definition and around any read, so every operation that defines or reads one
 charges a native count. A managed value that leads to a handle re-enters only
-when given up, and is never given up before an operation that reads it, so its
-release is charged only to the last operation in its block that defines or
-reads it; a terminator's read is charged to the operation before it, whose
-delayed cleanup ends the block's facts before an edge. A parameter no block
-reads is never stored, so never taken over, and its callee gives up nothing.
+when given up, and rc gives it up after its last use in a block: the last
+operation that reads it or anything leaning on it, such as a borrowed load out
+of it, a view of it, a block parameter it arrives as, a frame name for it or a
+container it was moved into. The slot model asks rc's own walk
+(`rc::last_use`) with ownership left open, so every non-scalar value may lean
+on what it was made from and every store may move. The operation that walk
+answers is charged after (and after a region call's end that follows it), and
+also before when the value reached it only through an operand made from it,
+because rc's retain of that operand comes before the operation. A value read
+by no operation in a block is released on entry, at the block's end or on an
+edge, after the sticky delayed cleanup an earlier block's charge set. A
+parameter no block reads is never stored, so never taken over, and its callee
+gives up nothing.
 
 The fixed metadata also covers native counts inserted after value definitions
 and around operand uses, rather than only stores. Copied field results can
