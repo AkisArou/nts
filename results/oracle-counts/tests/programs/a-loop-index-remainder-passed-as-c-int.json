@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-loop-index-remainder-passed-as-c-int",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-loop-index-remainder-passed-as-c-int/src/main.ts",
+      "signature": "ac5b31ea97b631a85959883b80ac0c2427fc6555d4f416e42a3bc36689ed1165",
+      "keys": {
+        "c": "efba04465619fbd0cf5d05a33608fefc",
+        "jvm": "3c1efc2babaf0ec41397f0264d4bceca",
+        "llvm": "85770bde398b43a8790df9db6b5dc604"
+      },
+      "cases_sha256": "13307d1aeed0a7831047e52b169f1a6a554a421605fac8d0bd74c42ea7b80e85",
+      "driver_sha256": "06e56f6db5f9d4fce15a96f05ce40b271d841dbb7aa9e8650dd1a05aa2bba286",
+      "populations": {
+        "control": {
+          "count": 29,
+          "cases_sha256": "6393f453fde83f0eb54ff20426d78ecf53819ace3a51bd2c8dc3dc79297a7dfb"
+        },
+        "counted": {
+          "count": 29,
+          "cases_sha256": "3267ad8259a46fa9a34ed57f2f254a360744dbd3e02ba9cc9d852413c8c14176"
+        },
+        "negatedCounted": {
+          "count": 29,
+          "cases_sha256": "50640b424bc80fb64a050edd732b39c3f874c965ffb17fbc6f44c7a14527dadb"
+        },
+        "negatedSwappedCounted": {
+          "count": 29,
+          "cases_sha256": "3f6df82d572bf6c1a3c85bff2ed6036ee5be0f0d39206ff1ab87394625e32c58"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}
