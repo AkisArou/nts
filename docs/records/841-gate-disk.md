@@ -700,3 +700,14 @@ the setup removal before preparation and the fresh receipt in
 | `verified-controller-control-1795556520470/v11-staging-reuse.json` | `088a3ab6a07d2fe3cd816b6c48487ef61e8e24de85fb7dc230e80b43fa756783` |
 | `identity-adoption-verified-controller-v11.log` | `0168e85f41053e620e1139f447b68cfa6bf0268590e1877f42c823aabe772bc1` |
 | `verified-controller-control-1795556520470/v11-lifetime-result.json` | `f7e1afede43c2524591da513b5b5679016baec8047a7aec62a42b1ff98b3f93e` |
+
+Review corrected the v11 route attribution and narrowed #1009's retirement
+condition to the landing-service direct runner handoff. The workflow and code
+comment state that condition; an appended decisions-log correction preserves
+the earlier entry. Implementation behavior is unchanged. The repeated focused
+proof passed all 26 lifetime controls, with no failures, cancellations or
+skips. Raw output is `~/.cache/nts-scratch/841/b/review-correction-lifetime-v1.log`,
+SHA-256 `e6141abaf2a6e8563ed256a73c2c83de70cef2e9900806e333d356a288f0270d`.
+The branch then rebased without conflicts onto the accepted-main record refresh
+`f12c78199d6d` and republished its installation catalog before the final local
+check. No observations were deleted or rewritten by this correction.
