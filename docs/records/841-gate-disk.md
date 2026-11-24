@@ -538,12 +538,15 @@ Clippy and build phases include their admission waits. Raw output is
 `~/.cache/nts-scratch/841/b/adoption-rebased-inner-v1.log`, SHA-256
 `227ac098060b0c9b02b3ed22f04401de4a11f1986d036c5a7479283c5dd76490`.
 
-Review of `a2e631418996fed7dee6ae38c89acaa6cc3321df` identified a further
+Review of `a2e631418996fed7dee6ae38c89acaa6cc3321df` raised a possible
 cross-version boundary: the verified controller's `pinnedGate` runs setup,
 compiler preparation and `all.sh` before entering the candidate runner. The
-earlier direct-launch control did not exercise those producers. The reviewed
-allowlist could reject harmless setup or compiler scratch inside the run's
-own authenticated temporary.
+earlier direct-launch control did not exercise those producers. A prepared
+root containing harmless scratch would fail the reviewed content allowlist.
+The later v11 control showed that this controller route does not hand that
+prepared root to the adoption path: old setup disposes its temporary and the
+candidate launcher creates a fresh lifetime. The landing service's direct
+runner handoff is the demonstrated adopting route.
 
 The coordinator ruled that adoption takes the whole directory by identity.
 Its root must be the gate uid's physical `tmp` directly under this run, its
@@ -551,12 +554,15 @@ parent must be the run, and no lifetime receipt may exist. Contents no longer
 decide adoption. Close retains the existing holder and unit checks, identity
 rechecks and bounded diagnostic publication. Refusal controls now map each
 root alias, foreign uid identity, wrong parent, wrong run, replaced inode or
-existing receipt to its own exact diagnostic and preserve the refused path.
+existing receipt to an exact asserted diagnostic and preserve the refused path.
 
-The adoption shim retires once both services and the verified controller run
-the #841 lifetime-owning code. Follow-up [#1009](https://github.com/akisArou/nts/issues/1009)
-was created through `tooling/tasks/new.ts` under #545 and remains held until
-that condition is proved.
+The adoption shim retires once the landing service uses the #841
+lifetime-owning launcher and no active pre-lifetime landing service can hand
+the direct runner a prepared root. The measured verified-controller route is
+outside this condition because it creates a fresh candidate lifetime.
+Follow-up [#1009](https://github.com/akisArou/nts/issues/1009) was created through
+`tooling/tasks/new.ts` under #545 and remains held until the landing-service
+condition is proved.
 
 The first proof of identity-based adoption passed strict types, the host audit,
 all 369 records and 363 of 364 focused tests. The expanded runner fixture had
@@ -662,17 +668,31 @@ controller at `2017bf23a3de7f0d28da263d6403b519735517cd` then ran the real
 `pinnedGate`, setup, release `prepare_compiler` and `all.sh` route at candidate
 `e68e5c81cf64262b14377b3a524cfe22a8b80f73` through the warm pin owner.
 
+**V11 observed no adoption.** Neither `temporary.log` nor the control or full
+log contains `adopted pre-lifetime launcher temporary`. The full log's first
+`gate tmp: removed after green` line precedes compiler preparation: old setup
+disposed its temporary. The candidate launcher then created a fresh lifetime,
+whose single receipt has its own creation token and the measurement scope as
+creator. Its temporary log contains only the zero-byte removal pair. This
+control proves fresh-lifetime disposal on that route; it does not prove a
+verified controller handing prepared scratch to `run.mjs` for adoption.
+
 The runner was green and `rustfmt` passed. `prepare.cpu` exists, the lifetime
 receipt is closed, its backstop is inactive, `scope_cleanup` is complete,
 `temporary.state` is `removed after green`, and the exact `tmp/` is absent.
 The controller wrapper correctly returned **held** with
 `the run was not in the canonical environment`. Explicit fixture observations
 and caches make this a recorded experiment, never canonical landing evidence.
-The scratch harness's original green-wrapper assertion was wrong; a separate
-read-only verification asserted the held verdict and exact reason, the exact
-experiment-variable population, and all the lifetime facts above. The result
-retains those variable names and receipt identities. No product handoff fix was
-made for this expected classification.
+The scratch harness's original green-wrapper assertion was wrong and failed
+before its adoption assertion could run. The separate read-only verification
+omitted that adoption assertion. It asserted the held verdict and exact reason,
+the exact experiment-variable population, and the fresh-lifetime facts above.
+The result retains those variable names and receipt identities. It is not
+adoption evidence. No product handoff fix was made for this expected
+classification. A later read-only review records the absent adoption markers,
+the setup removal before preparation and the fresh receipt in
+`~/.cache/nts-scratch/841/b/v11-adoption-review.json`. SHA-256
+`ae96d87d2b1783aa35289a882e3894c944cd59f02bd64ecbe96c153e67d0421e`.
 
 | Path under `~/.cache/nts-scratch/841/b/` | SHA-256 |
 | --- | --- |

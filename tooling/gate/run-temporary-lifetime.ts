@@ -43,10 +43,11 @@ const identity=(path:string):Identity=>{
 function sameParent(receipt:Receipt):void{
   if(JSON.stringify(identity(receipt.parent.path))!==JSON.stringify(receipt.parent))throw Error('run temporary parent identity changed: '+receipt.run);
 }
-/** The running gate may acquire its old launcher's entire prepared root by
- * identity, including setup and compiler scratch. This explicit handoff is
- * never historical discovery. Remove it once both services and the verified
- * controller run the #841 lifetime-owning code (follow-up #1009). */
+/** The running gate may acquire the old landing service's entire prepared
+ * root by identity, including any scratch. This explicit handoff is never
+ * historical discovery. Remove it once the landing service runs the #841
+ * launcher and no pre-lifetime landing service can hand the direct runner
+ * a prepared root, proving both facts at deletion (follow-up #1009). */
 export function adoptPreparedRunTemporary(temporary:RunTemporary,run:string,home:string):RunTemporary&{creation:NonNullable<RunTemporary['creation']>}{
   assertRunTemporaryOpen(run,home);assertRunTemporary(temporary,home);
   if(temporary.creation)throw Error('run temporary already has creation authority: '+temporary.path);

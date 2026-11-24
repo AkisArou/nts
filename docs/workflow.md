@@ -1496,8 +1496,12 @@ the tooling strict checker owns the source's type checking.
   identities and forwards the new creation token through the canonical handoff.
   Root aliases, foreign ownership, a wrong parent, changed identities and existing
   receipts refuse adoption; no historical temporary population is discovered.
-  This compatibility path is removed once both services and the verified controller
-  run the lifetime-owning launcher code (#1009).
+  The landing service's pre-lifetime direct runner handoff uses this
+  compatibility path. It is removed once the landing service uses the
+  lifetime-owning launcher and no active pre-lifetime landing service can
+  hand the direct runner a prepared root (#1009). The verified full-check
+  controller's measured `pinnedGate` route disposes the setup temporary and
+  creates a fresh candidate lifetime; that route does not adopt a prepared root.
   Links and sockets are never followed. Core dumps
   remain disabled. The normal owner requests backstop shutdown without waiting
   behind its own unit's stop; a closed receipt makes that later callback inert.

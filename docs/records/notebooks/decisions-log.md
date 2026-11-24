@@ -4691,6 +4691,7 @@ escaped defaults, with runtime-colliding source exports linked on C and LLVM.
 The brownfield SDK config uses `prefix: "acme"` for both native library kinds,
 expressing the added `_` separator; shared-library emission remains #1005.
 The contract is in [nts-config](../../reference/nts-config.md#decisions).
+
 ## Run temporary lifetime (11-23)
 
 Issue #841 slice (b). The approved owner removes an authenticated run temporary
@@ -4735,3 +4736,21 @@ The compatibility path retires once both services and the verified controller
 run the #841 lifetime-owning code. Follow-up #1009 tracks that removal.
 The contract is in [workflow](../../workflow.md#the-machine).
 
+## Prepared temporary adoption is a landing-service handoff (11-25)
+
+This corrects the route attribution and retirement condition in
+[Prepared run temporaries are adopted by identity (11-24)](#prepared-run-temporaries-are-adopted-by-identity-11-24).
+The demonstrated adopting route is the older landing service's direct runner
+handoff. The verified full-check controller's measured `pinnedGate` route
+instead disposes its setup temporary and creates a fresh candidate lifetime.
+The v11 control observed no adoption and does not prove that controller
+handing a populated root to the adoption path. Its fresh-lifetime cleanup
+facts remain valid; the distinction is recorded in
+[the slice evidence](../841-gate-disk.md).
+
+Identity-based adoption and its disposal guards are unchanged. Follow-up
+#1009 removes the compatibility path once the landing service runs the #841
+lifetime-owning launcher and no pre-lifetime landing service can invoke the
+direct runner with a prepared root. Both facts must be proved at deletion;
+the verified-controller route is outside that condition.
+The contract is in [workflow](../../workflow.md#the-machine).
