@@ -50,7 +50,8 @@ charges a native count. A managed value that leads to a handle re-enters only
 when given up, and is never given up before an operation that reads it, so its
 release is charged only to the last operation in its block that defines or
 reads it; a terminator's read is charged to the operation before it, whose
-delayed cleanup ends the block's facts before an edge.
+delayed cleanup ends the block's facts before an edge. A parameter no block
+reads is never stored, so never taken over, and its callee gives up nothing.
 
 The fixed metadata also covers native counts inserted after value definitions
 and around operand uses, rather than only stores. Copied field results can

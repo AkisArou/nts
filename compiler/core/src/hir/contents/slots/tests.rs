@@ -845,6 +845,14 @@ fn only_the_last_read_in_a_block_can_give_up_a_foreign_holder() {
             !inputs.after(ValueId(0)),
             "read later: not given up at its definition"
         );
+        // A parameter no block reads is never stored, so its caller's
+        // reference is the one given up, after the call.
+        let mut unread = func.clone();
+        unread.blocks[0].ops = Vec::new();
+        unread.blocks[0].terminator = Terminator::Return(None);
+        let unread = Inputs::of(&unread, &layouts, &[], &releases);
+        assert!(!unread.after(ValueId(0)), "an unread parameter");
+        assert!(!unread.reenters(), "nothing in the body can re-enter");
         assert!(!inputs.after(ValueId(1)), "read again later in the block");
         assert_eq!(
             inputs.after(ValueId(2)),

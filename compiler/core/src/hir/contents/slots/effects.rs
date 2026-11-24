@@ -89,12 +89,12 @@ fn counted_after(func: &Func, retained: &[bool], given_up: &[bool]) -> Vec<bool>
     let retains = |at: usize, operands: &[ValueId]| {
         retained[at] || operands.iter().any(|value| retained[value.0 as usize])
     };
-    // An operation in no block runs nowhere; any answer is sound for it.
+    // An operation in no block never runs, and a parameter no block reads is
+    // never stored, so never taken over: its caller's reference is the one
+    // given up. Neither is charged a release; a retain-capable one keeps its
+    // charge, as every definition and read of one does.
     let mut after: Vec<bool> = (0..func.values.len())
-        .map(|at| {
-            let operands = reads(at);
-            given_up[at] || operands.iter().any(|value| given_up[value.0 as usize])
-        })
+        .map(|at| retains(at, &reads(at)))
         .collect();
     let mut later = rustc_hash::FxHashSet::default();
     for block in &func.blocks {
