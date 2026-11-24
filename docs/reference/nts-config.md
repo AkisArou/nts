@@ -109,7 +109,7 @@ is refused before anything is written, naming the backend it belongs to.
 | `cpu` | `app.cli`, `app.linux` | `"baseline"` | x86-64-v3 | passed to the target |
 | `soname` | native libraries | `string` | `lib<name>.so` etc. | the shared library's file name, its ELF `soname` and its Mach-O install name (`@rpath/<file>`) |
 | `header` | native libraries | `string` | product name | the installed header name. Typed, and not read by the build |
-| `prefix` | native libraries | `string` | product name, escaped as a C identifier | static libraries name exported C symbols `<prefix>_<C name>`, including exported values and the module initializer; `program.h` declares those names. The default replaces nonidentifier characters with `_`, escapes an empty/invalid initial or reserved namespace with `product_`, then applies C keyword/header escaping. This mapping is not injective: `probe-llvm` and `probe_llvm` both give `probe_llvm`; choose explicit prefixes to distinguish them. An explicit prefix must be a nonempty C identifier outside `__nts_` and `_` followed by an uppercase letter. Shared libraries do not read it yet (#1005) |
+| `prefix` | native libraries | `string` | product name, normalized as a C identifier fragment | static libraries name exported C symbols `<prefix>_<C name>`, including exported values and the module initializer; `program.h` declares those names. Explicit and default prefixes use `[A-Za-z_][A-Za-z0-9_]*`, outside `__nts_` (including a separator that completes it) and `_` followed by an uppercase letter. A fragment is always followed by `_` and a name, so `main` and `int` are valid: a product named `int` gives `int_error`. The default replaces nonidentifier characters with `_` and escapes an empty/invalid initial or reserved namespace with `product_`. This mapping is not injective: `probe-llvm` and `probe_llvm` both give `probe_llvm`; choose explicit prefixes to distinguish them. Shared libraries do not read it yet (#1005) |
 | `apiVersion` | `library.node` | `number` | `8` | the Node-API version, which is the target's id |
 | `platforms` | `library.node` | `{ os, arch }[]` | Linux x86-64 | one target per machine |
 | `javaPackage` | `jar`, `aar` | `string` | required | the package the generated classes are in, in place of `nts.gen` |
@@ -303,12 +303,13 @@ SDK and set of inputs**, by the platform's binder, and kept in a shared store,
 ## Decisions
 
 - **Static native libraries namespace their source-owned public C symbols.**
-  `prefix`, or the C spelling of the product name by default, is resolved before native emission.
+  `prefix`, or the product name normalized as an identifier fragment by default,
+  is resolved before native emission.
   The shared symbol owner supplies C, LLVM, the header and publication lists;
   constructors call the same frozen initializer name. Bare emissions, apps,
   executables, addons and shared libraries retain their existing names. Shared
   library prefixes are pending #1005
-  ([log](../records/notebooks/decisions-log.md#static-libraries-read-their-c-symbol-prefix-11-24)).
+  ([log](../records/notebooks/decisions-log.md#c-prefixes-are-identifier-fragments-11-24)).
 
 - **x86-64 builds default to x86-64-v3,** with a clear error on an older CPU and
   `cpu: "baseline"` as the portable opt-out

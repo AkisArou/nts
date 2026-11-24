@@ -49,27 +49,14 @@ impl<'a> SourceSymbols<'a> {
                     }
                 })
                 .collect();
-            if !name
-                .as_bytes()
-                .first()
-                .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
-                || name == "__nts"
-                || name.starts_with("__nts_")
-                || (name.starts_with('_')
-                    && name.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
-            {
+            if !valid_prefix_fragment(&name) {
                 name.insert_str(0, "product_");
             }
-            return Ok(Self::build(source, Some(&c_identifier(&name))));
+            return Ok(Self::build(source, Some(&name)));
         };
-        if !crate::symbols::is_native_c_identifier(prefix)
-            || prefix == "__nts"
-            || prefix.starts_with("__nts_")
-            || (prefix.starts_with('_')
-                && prefix.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
-        {
+        if !valid_prefix_fragment(prefix) {
             return Err(format!(
-                "invalid C symbol prefix `{prefix}`: expected a nonempty C identifier outside `__nts_` and `_` followed by an uppercase letter"
+                "invalid C symbol prefix `{prefix}`: expected [A-Za-z_][A-Za-z0-9_]* outside `__nts_` and `_` followed by an uppercase letter"
             ));
         }
         Ok(Self::build(source, Some(prefix)))
@@ -197,6 +184,22 @@ impl<'a> SourceSymbols<'a> {
     }
 }
 
+/// This is followed by `_` and a name, so keywords and `main` are valid.
+/// The separator itself must not complete the compiler's reserved namespace.
+fn valid_prefix_fragment(prefix: &str) -> bool {
+    prefix
+        .as_bytes()
+        .first()
+        .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
+        && prefix
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        && prefix != "__nts"
+        && !prefix.starts_with("__nts_")
+        && !(prefix.starts_with('_')
+            && prefix.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,9 +218,16 @@ mod tests {
             ("__nts_probe", "product___nts_probe"),
             ("__nts", "product___nts"),
             ("_Reserved", "product__Reserved"),
-            ("int", "int_"),
+            ("int", "int"),
+            ("main", "main"),
         ] {
             let symbols = SourceSymbols::for_product(&program, product, None).expect("default");
+            assert_eq!(symbols.function("register"), format!("{prefix}_register_"));
+            assert_eq!(symbols.global(0), format!("{prefix}_g0"));
+        }
+        for prefix in ["int", "main", "chosen"] {
+            let symbols =
+                SourceSymbols::for_product(&program, "unused", Some(prefix)).expect("fragment");
             assert_eq!(symbols.function("register"), format!("{prefix}_register_"));
             assert_eq!(symbols.global(0), format!("{prefix}_g0"));
         }

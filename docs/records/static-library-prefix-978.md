@@ -8,9 +8,10 @@ source symbol plan shared by C and LLVM. Header declarations, publication
 lists, definitions, references and the library constructor consume that plan.
 
 An explicit prefix is validated with its value in the refusal. The default
-normalizes product-name punctuation to `_`, escapes an empty/invalid initial
-or reserved namespace with `product_`, then uses the existing C keyword/header
-escaping. `probe-llvm` and `probe_llvm` both give `probe_llvm`; explicit
+normalizes product-name punctuation to `_` and escapes an empty/invalid initial
+or reserved namespace with `product_`. Both routes validate an ASCII identifier
+fragment, which is always followed by `_` and a name: `main` and `int` are valid,
+and a product named `int` gives `int_error`. `probe-llvm` and `probe_llvm` both give `probe_llvm`; explicit
 prefixes distinguish this deliberate default collision. The resulting public name is
 `<prefix>_<existing C spelling>`. Raw emissions and other product kinds keep
 their names; shared-library prefix support is tracked by #1005.

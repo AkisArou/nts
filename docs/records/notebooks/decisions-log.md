@@ -4660,3 +4660,19 @@ libc's `error()` from both that host and another library. Host-owned helper
 names coexist with the archive's source functions.
 
 The contract is in [nts-config](../../reference/nts-config.md#decisions).
+
+## C prefixes are identifier fragments (11-24)
+
+Approved by the coordinator for #978. This supersedes the keyword/header
+escaping and standalone-identifier validation in the earlier
+[static-library prefix decision](#static-libraries-read-their-c-symbol-prefix-11-24).
+A prefix is always followed by `_` and a name; it is never a standalone symbol.
+Both explicit and default prefixes therefore use the same ASCII fragment
+rule, `[A-Za-z_][A-Za-z0-9_]*`, with the reserved-namespace guards. `main` and
+keyword fragments such as `int` are valid. A product named `int` gives
+`int_error`, as an explicit `int` would. Default punctuation normalization and
+the `product_` escape for an empty name, an invalid first character or a
+reserved namespace remain unchanged. Unit controls cover `main` and `int` in
+both routes, and the C/LLVM host regression uses them as explicit prefixes.
+
+The contract is in [nts-config](../../reference/nts-config.md#decisions).

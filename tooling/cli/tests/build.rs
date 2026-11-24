@@ -442,13 +442,17 @@ fn static_library_exports_use_the_product_prefix() {
         return;
     }
     let mut products = String::new();
-    for backend in ["c", "llvm"] {
+    for (backend, explicit_prefix) in [("c", "main"), ("llvm", "int")] {
         for explicit in [false, true] {
             let name = format!(
                 "{backend}_{}",
                 if explicit { "explicit" } else { "default" }
             );
-            let prefix = if explicit { "prefix: 'chosen'," } else { "" };
+            let prefix = if explicit {
+                format!("prefix: '{explicit_prefix}',")
+            } else {
+                String::new()
+            };
             writeln!(products, "{name}: library.staticNative({{ {prefix} entry:'./src/main.ts', targets:[target.linux({{backend:'{backend}'}})] }}),").expect("product config");
         }
     }
@@ -495,13 +499,13 @@ fn static_library_exports_use_the_product_prefix() {
             hosts.join("libother.so").as_os_str(),
         ],
     );
-    for backend in ["c", "llvm"] {
+    for (backend, explicit_prefix) in [("c", "main"), ("llvm", "int")] {
         for explicit in [false, true] {
             let product = format!(
                 "{backend}_{}",
                 if explicit { "explicit" } else { "default" }
             );
-            let prefix = if explicit { "chosen" } else { &product };
+            let prefix = if explicit { explicit_prefix } else { &product };
             static_prefix_consumer(&project, &hosts, &product, prefix, &oracle.stdout);
         }
     }
