@@ -569,3 +569,34 @@ SHA-256 `614ee8e1aaffd4e6c51e5ac234677b7ea25c57d2e614795b5be55e68b82f568d`.
 The corrected-file proof is
 `~/.cache/nts-scratch/841/b/identity-adoption-lifetime-v2.log`, SHA-256
 `2a8e1003e586d93784505fb4b7e9dbecaf2ab36e26d4b0ee8c0e86ab47913da2`.
+
+The identity-adoption inner proof passed formatting, Clippy, the fresh compiler
+build and backend tests (717 seconds for tests). Raw output is
+`~/.cache/nts-scratch/841/b/identity-adoption-inner-v1.log`, SHA-256
+`b06761e1ea42484ac38b1f009980ce7b6b16471c4f71410e27d6613bc22c0f2b`.
+The independent old-service queued-path control also passed against controller
+`2017bf23a3de7f0d28da263d6403b519735517cd` and candidate
+`aae372728f315321109a5afa23fb9d5ec4eb6e21`: its prepared temporary was adopted,
+the step passed, and the original temporary was removed after green. Result:
+`~/.cache/nts-scratch/841/b/old-service-control-1795497717788/result.json`, SHA-256
+`8dd457de81840ab577004abc9e48c1b50190b134a4c3e087d2aa5843c7b463fd`.
+
+The power cut interrupted `nts-841-identity-adoption-verified-controller-v7`
+while it still waited for admission. It is **not measured**: its log has no
+`CONTROL INPUT`, and no new control home, run or temporary was created.
+No backstop cleanup is credited to that interruption. The read-only resume
+audit found no Git index lock, pin build lock, pin tree lock or gate root
+receipt. The task tree's persistent empty flock inodes had no kernel holders;
+they were preserved. The pin tree's untracked TypeScript source was preserved.
+Audit: `~/.cache/nts-scratch/841/b/power-cut-resume-audit.json`, SHA-256
+`777581bf9ac785de8062f968725dbb7ebe0df35751d68681dd1f8b76a50abb10`.
+
+The named, admitted v8 control used Node 26.13.0 and the canonical host
+environment with the JDK, Android SDK and debuginfod URL. Its disk preflight
+refused before compiler preparation: 47,629,881,344 free bytes, a
+42,949,672,960-byte floor, and existing promises left -2,835,984,384 available
+bytes against 4,682,612,736 bytes of compiler working headroom. This measured
+capacity refusal is not a gate verdict. Only this task tree's authorized
+30,224,384-byte incremental output was reclaimed; shared state was not deleted.
+Raw output: `~/.cache/nts-scratch/841/b/identity-adoption-verified-controller-v8.log`,
+SHA-256 `9be62e0d416fbaaf834d3197e1cdbf7cd422ffc3932c8733d3d82e5a939f1f8c`.
