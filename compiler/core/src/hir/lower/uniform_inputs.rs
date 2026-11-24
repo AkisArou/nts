@@ -673,7 +673,7 @@ impl FuncBuilder<'_> {
             ] {
                 // Only the outward-facing infinity is unconstrained. A
                 // singleton infinity must still enforce its other side.
-                if bound == unbounded {
+                if bound.to_bits() == unbounded.to_bits() {
                     continue;
                 }
                 let limit = self.push(OpKind::ConstFloat(bound), HirType::NUMBER, origin.clone());
@@ -750,6 +750,7 @@ mod tests {
 
     // Execute the emitted guard's branches. This evaluates HIR operations,
     // rather than reimplementing the interval predicate under test.
+    #[allow(clippy::float_cmp, reason = "HIR Eq and Ne use exact IEEE comparisons")]
     fn admits(builder: &FuncBuilder<'_>, input: f64) -> bool {
         fn number(builder: &FuncBuilder<'_>, value: ValueId, input: f64) -> f64 {
             match builder.values[value.0 as usize].kind {
@@ -773,7 +774,7 @@ mod tests {
                 None => return true,
                 Some(Terminator::Unreachable) => return false,
                 Some(Terminator::Jump { target, args }) => {
-                    assert!(args.is_empty());
+                    assert_eq!(args.as_slice(), []);
                     block = *target;
                 }
                 Some(Terminator::Branch {
@@ -823,7 +824,7 @@ mod tests {
                 for input in [f64::NEG_INFINITY, -1.0, 0.0, 1.0, f64::INFINITY, f64::NAN] {
                     assert_eq!(
                         admits(guard, input),
-                        input == expected,
+                        input.to_bits() == expected.to_bits(),
                         "{expected:?}: {input:?}"
                     );
                 }
