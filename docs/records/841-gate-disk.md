@@ -514,3 +514,26 @@ allocated bytes, left no temporary, and logged its 64 MiB diagnostic cap.
 | `~/.cache/nts-scratch/841/b/adoption-here-v1-summary.json` | `db16f9143a6f95823fcd196ffb62da9a119673367f3b0261504e7c9ed52e3f86` |
 | `~/.cache/nts-scratch/841/b/adoption-here-v1-tooling.raw.log` | `c2ec0a0fed33bcdaf55a6db7769e4f925c9c81f69401c8d81bdfff5b96bf5e96` |
 | `~/.cache/nts-scratch/841/b/adoption-here-v1-records.log` | `b4e8089de45af911f07102ddaf767e2843f947b4deb273d7bd15b27b3c863834` |
+
+After that rebase, all 364 focused tests passed, including the legacy-launcher
+control under its mandatory nested harness. Strict tooling types, the host audit
+and all 369 records also passed. Raw output is
+`~/.cache/nts-scratch/841/b/adoption-rebased-proof-v1.log`, SHA-256
+`2c6497222ad4792581567730dadf6b1274499505999d32c28fac29c4b1e69bbf`.
+
+The separate old-service control was repeated against main
+`dc669ade6118337d888403188e4956bf095044b8` and candidate
+`59a99ee41616ad88c440d88697295a39053f9486`. It passed: the original prepared
+device/inode was adopted, the step ran, its token reached the child, the receipt
+closed, the temporary was absent and its backstop was inactive. Raw output is
+`~/.cache/nts-scratch/841/b/adoption-rebased-old-service-v1.log`, SHA-256
+`684f0d6ddb2c39dbe3fe570c199114fa83c08520920331fc6f36ce4093033f44`.
+The structured result is
+`~/.cache/nts-scratch/841/b/old-service-control-1795486461264/result.json`, SHA-256
+`149fcc39f8a5b0b8d381870dfeee58d9cf55b747768f1c8e414103dad5ff932f`.
+
+Fresh inner proof on that rebased implementation passed formatting, Clippy,
+the compiler build and all backend tests. Tests took 656 seconds; the reported
+Clippy and build phases include their admission waits. Raw output is
+`~/.cache/nts-scratch/841/b/adoption-rebased-inner-v1.log`, SHA-256
+`227ac098060b0c9b02b3ed22f04401de4a11f1986d036c5a7479283c5dd76490`.
