@@ -109,6 +109,18 @@ usual unavailable Mac/Windows execution skips remain. This standalone run
 selects a compiler explicitly and is experimental evidence; the canonical
 landing check is separate.
 
+The first canonical check completed with 22 passing steps and only `records`
+failing. The branch predated the accepted census refresh in `dc669ade61`;
+changing the CLI producer made those old rows stale, and the census owner
+correctly refused their hashes against newer accepted main. The coordinator
+confirmed this cause. Rebasing onto `2017bf23a3de` carried the accepted records
+and #936's revert forward without conflicts; no records were deleted and no
+gate scripts changed. The first check's summary is
+`/home/akisarou/.cache/nts-landing/runs/here-6f3de5ba6e61-1795493495170/summary.json`
+(SHA-256 `27e78893beab6a87b2ee7aa146159dd8c3458fa39e4b51786c216c83d9605015`),
+with `records.log` alongside it
+(`7929644a243cdd6a3a1db2dc4a0996dea21ad477feba853b2ea36ede8fe09005`).
+
 | Evidence | SHA-256 |
 |---|---|
 | `focused.log` | `99485745eca746095e1aee7cbd0cee143d91483dee7ec27eaac310c0293bd03b` |
