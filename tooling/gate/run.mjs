@@ -103,7 +103,7 @@ import {GateScopes} from "./scopes/step-scope.ts";
 import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {RunLifecycleFeed} from "./run-lifecycle.ts";
-import {ProgressBound, stepBound, stepBoundReason, stepBoundWait} from "./step-bound.ts";
+import {ProgressBound, progressSummary, stepBound, stepBoundReason, stepBoundWait, stepCpuBound, stepCpuBoundReason} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
@@ -1303,6 +1303,13 @@ function start(step, slots, rider = false) {
     report(step.name); stop(`step scope setup failed: ${error.message}`); return;
   }
   try{diagnostics?.beginStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);stop(`host observation: ${error}`);return;}
+  // The bound samples the step's slice: what it ran, and how long it was
+  // runnable while none of it ran (cpu.pressure `full`), which spends nothing
+  // (step-bound.ts). A sample that cannot be read stops the run by name.
+  const sampleCpu = () => ({ usageUsec: host.cgroupCpu(scope.group).usageUsec, waitingUsec: host.cgroupPressure(scope.group).resources.cpu.full.totalUsec });
+  let firstCpu;
+  try { firstCpu = sampleCpu(); }
+  catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); return; }
   const log = join(RUN_DIR, `${step.name}.log`);
   const timeFile = join(RUN_DIR, `${step.name}.gnu-time`);
   rmSync(join(RUN_DIR, `${step.name}.instrument.json`), { force: true });
@@ -1328,15 +1335,19 @@ function start(step, slots, rider = false) {
   // **Past its bound the step is stopped through its own scope** and held: its
   // log stays, and it is neither a pass nor a red verdict about the change.
   // Killed again until it exits: a kill reaches only what its scope holds.
+  // Its CPU is sampled on the bound's own tick and at its end; the
+  // observations between (a token granted or returned) only mark declared
+  // waits. Its CPU bound is its bound at every slot it may hold.
   let boundTimer;
-  const boundStarted = host.now(), boundClock = new ProgressBound({ execution_s: bound.seconds, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
-  let boundState = boundClock.observe(boundStarted), boundFailure;
-  owned.observeBound = (now, u) => {
+  const cpuBound = stepCpuBound(bound, width(step.name));
+  const boundStarted = host.now(), boundClock = new ProgressBound({ execution_s: bound.seconds, cpu_s: cpuBound, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
+  let boundState = boundClock.observe(boundStarted, undefined, firstCpu), boundFailure;
+  owned.observeBound = (now, u, cpu) => {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
       requests: tok.waiting.filter(request => request.step === step.name).map(request => request.bytes ?? tokenBytes(step)),
       freeSlots: SLOTS - u.slots - withhold, freeFrontends: step.fe ? FRONTENDS - u.fe : Infinity,
       freeBytes: reserved() - u.bytes - withholdBytes });
-    boundState = boundClock.observe(now, waiting);
+    boundState = boundClock.observe(now, waiting, cpu);
   };
   const stopAtBound = () => {
     if (!stopping) owned.overBound = true;
@@ -1347,10 +1358,13 @@ function start(step, slots, rider = false) {
   };
   const checkBound = () => {
     outranked();
-    owned.observeBound(host.now(), used());
+    let cpu;
+    try { cpu = sampleCpu(); }
+    catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); return; }
+    owned.observeBound(host.now(), used(), cpu);
     if (boundState.expired) {
-      boundFailure = boundState.expired === "wall_s"
-        ? `step exceeded the landing wall ceiling of ${STEP_CEILING} s` : stepBoundReason(bound.seconds);
+      boundFailure = boundState.expired === "wall_s" ? `step exceeded the landing wall ceiling of ${STEP_CEILING} s`
+        : boundState.expired === "cpu_s" ? stepCpuBoundReason(cpuBound) : stepBoundReason(bound.seconds);
       stopAtBound();
     } else {
       boundTimer = setTimeout(checkBound, 500);
@@ -1360,15 +1374,19 @@ function start(step, slots, rider = false) {
   boundTimer = setTimeout(checkBound, Math.min(500, bound.seconds * 1000));
   boundTimer.unref();
   process.stderr.write(elastic
-    ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running; execution bound ${bound.seconds} s; admission waits excluded${STEP_CEILING === undefined ? "" : `; wall ceiling ${STEP_CEILING} s`})\n`
-    : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running; bound ${bound.seconds} s)\n`);
+    ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running; execution bound ${bound.seconds} s; admission waits and CPU lost to other work excluded; CPU bound ${cpuBound} cpu-s${STEP_CEILING === undefined ? "" : `; wall ceiling ${STEP_CEILING} s`})\n`
+    : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running; bound ${bound.seconds} s, CPU lost to other work excluded; CPU bound ${cpuBound} cpu-s)\n`);
   let completed = false;
   const complete = async (code, signal, spawnError) => {
     if (completed) return;
     completed = true;
     clearTimeout(boundTimer);
     delete owned.observeBound;
-    boundState = boundClock.observe(host.now());
+    // A last sample of its slice, whose processes have exited: it still exists until the drain.
+    let lastCpu;
+    try { lastCpu = sampleCpu(); }
+    catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); }
+    boundState = boundClock.observe(host.now(), undefined, lastCpu);
     // A last sample, of whatever of the step still runs: a step shorter than
     // the sampling interval is measured by it.
     sampleStep(owned);
@@ -1399,7 +1417,7 @@ function start(step, slots, rider = false) {
     }
     const {cpu,user,sys,maxrss_kb:maxrss}=measurement??{};
     // After the drain, so no process of the step can still write over it.
-    if (elastic) writeFileSync(log, `\nstep budget: ${boundState.used_s.toFixed(3)} s execution; admission waits ${JSON.stringify(boundState.waited_s)}\n`, { flag: "a" });
+    if (elastic) writeFileSync(log, `\nstep budget: ${boundState.used_s.toFixed(3)} s execution; admission waits ${JSON.stringify(boundState.waited_s)}; ${progressSummary(boundState)}\n`, { flag: "a" });
     if (owned.overBound) writeFileSync(log, `\n${boundFailure}: stopped through its scope\n`, { flag: "a" });
     let oracleCapture, captureProblem;
     try { oracleCapture = captureCost(step.name, log); } catch (error) {if(isCommandExit(error))throw error; captureProblem = error.message; }
@@ -1424,7 +1442,9 @@ function start(step, slots, rider = false) {
     if (memory.killed > 0) memoryRecord.steps_killed++;
     const extra = { exit: code, signal, wall, cpu, user, sys, cpu_measure:measurement?.cpu_measure,gnu_time:gnuTime,maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
       diagnostics:stepDiagnostics, memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis,
-      bound_clock: { execution_s: boundState.used_s, admission_wait_s: boundState.waited_s, ...(STEP_CEILING === undefined ? {} : { wall_ceiling_s: STEP_CEILING }) } };
+      bound_cpu_s: cpuBound,
+      bound_clock: { execution_s: boundState.used_s, admission_wait_s: boundState.waited_s, cpu_s: boundState.cpu_s, cpu_lost_s: boundState.cpu_lost_s,
+        stalled_s: boundState.stalled_s, ...(STEP_CEILING === undefined ? {} : { wall_ceiling_s: STEP_CEILING }) } };
     caseMemory.flush(step.name);
     if (oracleCapture) extra.oracle_capture = oracleCapture;
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });

@@ -25,9 +25,22 @@
 // step holds the queue for minutes, not the hour the full check allows.
 //
 // **The clock that spends a bound** is `ProgressBound`, the same owner the
-// full check's run bound uses (tooling/full-check/measure-command.ts): a
-// declared admission wait spends nothing, and a step's budget is the rest of
-// its wall time.
+// full check's run bound uses (tooling/full-check/measure-command.ts). A
+// declared admission wait spends nothing, and neither does CPU that other
+// work took from the step: run.mjs samples the step slice's cpu.stat and its
+// cpu.pressure `full` every 500 ms. `full` is time some of the step's tasks
+// were runnable and none of them ran; `some` would also excuse a step that
+// competes only with its own threads, as an oversubscribed build does. The
+// excuse is a lower bound on the CPU taken, in the safe direction: the kernel
+// averages a cgroup's stall over the CPUs it was busy on, so a step spread
+// over N CPUs reports roughly 1/N of its real wait, and only a step on one CPU
+// is excused exactly. A sleeping or hung step stalls and spends its bound at
+// wall rate.
+//
+// **A CPU bound backs the execution bound**: the step's bound times its width,
+// as if it ran at every slot it may hold for its whole bound. A step whose
+// threads outrun its width reaches it first; nothing a healthy step records
+// comes near it.
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 
 export const STEP_BOUND_FACTOR = 3;
@@ -57,8 +70,9 @@ export function stepBoundWait(state: {
 }
 
 /** A cgroup's CPU counters at one moment: what it ran (cpu.stat usage_usec)
- * and how long some task of it was runnable but not running (cpu.pressure
- * `some` total), both in microseconds since the cgroup began. */
+ * and how long it was runnable while the CPUs ran other work, by the
+ * cpu.pressure total its owner reads (`some` for a full-check run, `full` for
+ * a step), both in microseconds since the cgroup began. */
 export type CpuSample = { usageUsec: number; waitingUsec: number };
 
 /** A run's steps as its runner reports them (run-lifecycle.ts): how many
@@ -94,11 +108,14 @@ const LIMIT_ORDER: readonly ProgressLimit[] = ["execution_s", "stall_s", "lifecy
  * Each interval between observations is the state the previous observation
  * named. A declared wait (the ledger's memory or priority, the runner's slots
  * or frontends) spends nothing. Otherwise, given CPU samples of the work's
- * cgroup, the time some of it was runnable but given no CPU is CPU lost to
- * other work, which a higher rank takes by design (ranks.ts), and spends
- * nothing either; the rest is used, and what of it the work did not run is
- * stalled. Without CPU samples every undeclared second is used, as a step's
- * budget is. IO and memory pressure are not progress: a hung IO wait would
+ * cgroup, the time it was runnable but given no CPU is CPU lost to other
+ * work, which a higher rank takes by design (ranks.ts), and spends nothing
+ * either; the rest is used, and what of it the work did not run is stalled.
+ * Once a bound has a sample, an observation without one only marks where a
+ * declared wait begins or ends: the undeclared time since the last sample is
+ * divided at the next one, so waits stay exact to the millisecond while the
+ * counters are read at the sampler's pace. Without any sample every
+ * undeclared second is used. IO and memory pressure are not progress: a hung IO wait would
  * excuse itself for ever. Given the run's step lifecycle, used time with no
  * step running counts towards `lifecycle_s` until the next step event: work
  * no step bounds -- setup, the release build, the time after the last step --
@@ -114,6 +131,7 @@ export class ProgressBound {
   #wait: BoundWait | undefined;
   #cpu: CpuSample | undefined;
   #steps: StepLifecycle | undefined;
+  #pending = 0;
   #state: Omit<ProgressState, "expired" | "waited_s"> = { wall_s: 0, used_s: 0, stalled_s: 0, cpu_s: 0, cpu_lost_s: 0, outside_s: 0 };
   #waited: Partial<Record<BoundWait, number>> = {};
   readonly limits: Readonly<ProgressLimits>;
@@ -128,15 +146,17 @@ export class ProgressBound {
   /** The interval since the last observation, then what holds from `nowMs` on. */
   observe(nowMs: number, waiting?: BoundWait, cpu?: CpuSample, steps?: StepLifecycle): ProgressState {
     const elapsed = Math.max(0, nowMs - this.#last) / 1000, state = this.#state, before = this.#cpu, earlier = this.#steps;
-    const ran = cpu && before ? Math.max(0, cpu.usageUsec - before.usageUsec) / 1e6 : 0;
-    state.cpu_s += ran;
     let active = 0;
     if (this.#wait) this.#waited[this.#wait] = (this.#waited[this.#wait] ?? 0) + elapsed;
-    else if (cpu && before) {
-      const lost = Math.min(elapsed, Math.max(0, cpu.waitingUsec - before.waitingUsec) / 1e6);
-      active = elapsed - lost;
-      state.cpu_lost_s += lost; state.used_s += active; state.stalled_s += active - Math.min(active, ran);
-    } else { active = elapsed; state.used_s += elapsed; }
+    // Sampled, undeclared time waits for the next sample to divide it.
+    else if (before) this.#pending += elapsed;
+    else { active = elapsed; state.used_s += elapsed; }
+    if (cpu && before) {
+      const ran = Math.max(0, cpu.usageUsec - before.usageUsec) / 1e6, pending = this.#pending;
+      const lost = Math.min(pending, Math.max(0, cpu.waitingUsec - before.waitingUsec) / 1e6);
+      active = pending - lost; this.#pending = 0;
+      state.cpu_s += ran; state.cpu_lost_s += lost; state.used_s += active; state.stalled_s += active - Math.min(active, ran);
+    }
     if (steps) {
       if ((earlier?.running ?? 0) === 0) state.outside_s += active;
       if (earlier && steps.events !== earlier.events) state.outside_s = 0;
@@ -197,6 +217,15 @@ export function landingCeiling(estimateSeconds: number): number {
 
 /** The reason a step stopped at its bound records. */
 export const stepBoundReason = (seconds: number): string => `step exceeded its bound of ${seconds} s`;
+
+/** A step's CPU bound: its bound at every slot it may hold (run.mjs's `width`, step-scheduling.ts's usableWidth). */
+export function stepCpuBound(bound: StepBound, width: number): number {
+  if (!positive(width)) throw new Error(`a step's CPU bound needs a positive width, not ${String(width)}`);
+  return bound.seconds * width;
+}
+
+/** The reason a step stopped at its CPU bound records. */
+export const stepCpuBoundReason = (cpuSeconds: number): string => `step exceeded its CPU bound of ${cpuSeconds} cpu-s`;
 
 /**
  * The steps whose bound nothing measured derives: no committed baseline and no
