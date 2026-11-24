@@ -449,3 +449,49 @@ exit controls remain green. Raw output is
 Inner passed formatting, Clippy, build and backend tests (430 seconds for the
 tests). Raw output is `~/.cache/nts-scratch/841/b/stage-sync-inner-v1.log`, SHA-256
 `51c87604c8c0f261d955f153c3ce8e106e645ece37a4610d6486ce6b6b6858c1`.
+
+The queued landing exposed a launch boundary that the same-version local check
+did not cover: main's pre-lifetime launcher had prepared the run's `tmp`
+without a creation record. The candidate refused it before starting any step.
+The refused run's output is copied to
+`~/.cache/nts-scratch/841/b/adoption-refused-queued.log`, SHA-256
+`14436f2fa9d2f91b2ce98a39c68e40328a3f851f42dddb0383c1bb4077a4f71b`.
+
+The runner now explicitly adopts that prepared root before arming its normal
+lifetime. It validates the expected path directly under this run, the owned
+physical root and parent, and an empty population except for the owned, empty
+canonical `oracle-resolution` directory. It logs adoption and forwards the
+new token and parent identity in the canonical context; children borrow that
+lifetime. Unknown contents, occupied setup, aliases, changed roots and a
+different run path refuse adoption. Other callers still require creation
+authority; historical roots receive no new discovery or deletion grant.
+
+A separate named, admitted control copied main's actual `captureRunTemporary`
+and candidate launcher through `copyModuleClosure`. Their bytes were checked
+against the recorded main commit, which also stayed unchanged during copying.
+The old preparer made the root, and the old launcher invoked the candidate's
+real runner. The candidate logged adoption, passed its step, forwarded its
+token, closed its receipt and removed that same device/inode.
+
+| Preparer and launcher | Candidate implementation | Outcome |
+| --- | --- | --- |
+| Main `5c00b70387d030955fda8352997ae863c9bb0ae6` | `2f66cf6e0899ec8f1258181290c5d7ef634037e5` | PASS; exact prepared temporary absent and lifetime closed |
+
+The procedure is `~/.cache/nts-scratch/841/b/old-service-control.mjs`, SHA-256
+`be5bc234c86dd93edb0e8e332776e3696a4d7cf3ab94f17556766732f02675be`.
+Raw output is `~/.cache/nts-scratch/841/b/adoption-old-service-v2.log`, SHA-256
+`1de12d78e84444705f2683d86b72bf549fc7ba1ab639be61e297dcaed06fb28b`.
+The structured result is
+`~/.cache/nts-scratch/841/b/old-service-control-1795478647770/result.json`, SHA-256
+`4f16c740b0c35f7191b4109218e85dec63c05fa44069333a97d921920ad46c2f`.
+
+All 364 focused tests across thirteen files passed, along with strict tooling
+types and the host audit. This includes the prepared-root real-unit control,
+acceptance and refusal controls, the unchanged historical-root refusal, and
+the existing identity, holder, diagnostics and forced-stop controls. Raw
+output is `~/.cache/nts-scratch/841/b/adoption-proof-v2.log`, SHA-256
+`e00bf66b0ff5790bcb16e320a39e1cb3a35fb0da8dbe07ba3c0a0e464d41ad4d`.
+Inner passed formatting, Clippy, build and backend tests (907 seconds for the
+tests, after a 328-second oracle-capture admission wait). Raw output is
+`~/.cache/nts-scratch/841/b/adoption-inner-v1.log`, SHA-256
+`ab18412a90c273e2de66a0af60ab72e90ddb27f5e8c46c469806af4c856980da`.
