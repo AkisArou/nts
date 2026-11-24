@@ -600,3 +600,30 @@ capacity refusal is not a gate verdict. Only this task tree's authorized
 30,224,384-byte incremental output was reclaimed; shared state was not deleted.
 Raw output: `~/.cache/nts-scratch/841/b/identity-adoption-verified-controller-v8.log`,
 SHA-256 `9be62e0d416fbaaf834d3197e1cdbf7cd422ffc3932c8733d3d82e5a939f1f8c`.
+
+After the pool's authorized upkeep, v9 still refused before preparation:
+53,363,941,376 free bytes and 2,898,075,648 available after the floor and live
+promises, against the same 4,682,612,736-byte working headroom. Raw output is
+`~/.cache/nts-scratch/841/b/identity-adoption-verified-controller-v9.log`, SHA-256
+`fceafbbc0ba9cfa53da32d1ffaa35eef10209af2b45679c2c036038d7f7f46b8`.
+
+The exact-commit local check at
+`9823ec5b07f7f99f33d2887884b36ee5481d3213` passed all 360 tooling entries and
+every selected step except records. The unchanged branch selector row differed
+from a newer accepted-main refresh. The launch line said
+`9823ec5b07f7, replayed onto main 10fe03ef3a99 when it lands`, while the local
+check ran the branch tree and compared its older row with accepted main.
+The coordinator filed this boundary as [#1018](https://github.com/akisArou/nts/issues/1018).
+The branch was then rebased onto main without conflicts and its installation
+catalog republished. No selector observations were deleted or rewritten here.
+
+That red run completed scope cleanup and removed 512,823,296 allocated temporary
+bytes. Its original `tmp/` is absent. Diagnostic publication retained 688 files
+within the 64 MiB cap and logged the cap. Copied evidence remains in issue scratch:
+
+| Path under `~/.cache/nts-scratch/841/b/` | SHA-256 |
+| --- | --- |
+| `identity-adoption-here-v2-summary.json` | `27f35ff5acbf8cdbcdece15b568c0615eafdf26d7b4e24ecb2463bbb1f3d4be6` |
+| `identity-adoption-here-v2-records.log` | `636b880419b440edcf0e9a9be0e45df7f69701140c86ad1e7d7cd9af69f1c532` |
+| `identity-adoption-here-v2-temporary.log` | `cc97d63d77cb1555c34cc7709c1f1bc001d87190b93c14497d920761d0913bb9` |
+| `identity-adoption-here-v2-tooling-tests.raw.log` | `b133bb4a44b412c1ec2c3d84d7715eb4c13f102b58fb60f53d5ca73b4f4bb7a4` |
