@@ -442,19 +442,19 @@ fn static_library_exports_use_the_product_prefix() {
         return;
     }
     let mut products = String::new();
-    for (backend, explicit_prefix) in [("c", "main"), ("llvm", "int")] {
-        for explicit in [false, true] {
-            let name = format!(
-                "{backend}_{}",
-                if explicit { "explicit" } else { "default" }
-            );
-            let prefix = if explicit {
-                format!("prefix: '{explicit_prefix}',")
-            } else {
-                String::new()
-            };
-            writeln!(products, "{name}: library.staticNative({{ {prefix} entry:'./src/main.ts', targets:[target.linux({{backend:'{backend}'}})] }}),").expect("product config");
-        }
+    let cases = [
+        ("c_default", "c", None, "c_default"),
+        ("c_explicit", "c", Some("main"), "main"),
+        ("llvm_default", "llvm", None, "llvm_default"),
+        ("llvm_explicit", "llvm", Some("int"), "int"),
+        ("nts", "c", None, "product_nts"),
+        ("nts_str", "llvm", None, "product_nts_str"),
+        ("_", "c", None, "product__"),
+        ("__private", "llvm", None, "product___private"),
+    ];
+    for (name, backend, prefix, _) in cases {
+        let prefix = prefix.map_or_else(String::new, |value| format!("prefix: '{value}',"));
+        writeln!(products, "{name}: library.staticNative({{ {prefix} entry:'./src/main.ts', targets:[target.linux({{backend:'{backend}'}})] }}),").expect("product config");
     }
     let project = fixture(
         "build-static-prefix",
@@ -469,7 +469,10 @@ fn static_library_exports_use_the_product_prefix() {
          for (let i = 0; i < 3; i++) { values.push(i); }\n\
          export let value = values.length;\n\
          export function error(n: number): number { return helper(n) * 3; }\n\
-         export function throwError(n: number): number { return helper(n) * 3; }\n",
+         export function throwError(n: number): number { return helper(n) * 3; }\n\
+         export function checkpoint(): void {}\n\
+         export function release(n: number): number { return n + 1; }\n\
+         export function slice(n: number): number { return n + 2; }\n",
     )
     .expect("entry");
     let oracle_source = project.join("oracle.ts");
@@ -481,7 +484,7 @@ fn static_library_exports_use_the_product_prefix() {
     )
     .expect("oracle entry");
     let oracle = Command::new("node").args(["--no-warnings", "-e",
-        "import(require('node:url').pathToFileURL(process.argv[1]).href).then(a=>console.log([a.error(4.5),a.throwError(4.5),a.value].join(' ')))"
+        "import(require('node:url').pathToFileURL(process.argv[1]).href).then(a=>{a.checkpoint();console.log([a.error(4.5),a.throwError(4.5),a.value,a.release(4.5),a.slice(4.5)].join(' '))})"
     ]).arg(&oracle_source).output().expect("node oracle");
     assert!(oracle.status.success(), "{oracle:?}");
     let run = build(&project, &[]);
@@ -499,15 +502,8 @@ fn static_library_exports_use_the_product_prefix() {
             hosts.join("libother.so").as_os_str(),
         ],
     );
-    for (backend, explicit_prefix) in [("c", "main"), ("llvm", "int")] {
-        for explicit in [false, true] {
-            let product = format!(
-                "{backend}_{}",
-                if explicit { "explicit" } else { "default" }
-            );
-            let prefix = if explicit { explicit_prefix } else { &product };
-            static_prefix_consumer(&project, &hosts, &product, prefix, &oracle.stdout);
-        }
+    for (product, _, _, prefix) in cases {
+        static_prefix_consumer(&project, &hosts, product, prefix, &oracle.stdout);
     }
 }
 
@@ -530,7 +526,16 @@ fn static_prefix_consumer(
         .lines()
         .filter_map(|line| line.split_whitespace().next().map(str::to_owned))
         .collect();
-    for raw in ["error", "throwError", "helper", "value", "module__init"] {
+    for raw in [
+        "error",
+        "throwError",
+        "helper",
+        "value",
+        "module__init",
+        "checkpoint",
+        "release",
+        "slice",
+    ] {
         assert!(
             symbols.contains(&format!("{prefix}_{raw}")),
             "{product}: missing {raw}: {symbols:?}"
@@ -538,12 +543,21 @@ fn static_prefix_consumer(
         assert!(!symbols.contains(raw), "{product}: leaked {raw}");
     }
     let header = std::fs::read_to_string(directory.join("program.h")).expect("header");
-    for raw in ["error", "throwError", "value", "module__init"] {
+    for raw in [
+        "error",
+        "throwError",
+        "value",
+        "module__init",
+        "checkpoint",
+        "release",
+        "slice",
+    ] {
         assert!(
             header.contains(&format!("{prefix}_{raw}")),
             "{product}: header omits {raw}: {header}"
         );
     }
+    assert!(!header.contains("`module__init`"), "{product}: {header}");
     let executable = hosts.join(product);
     compile_host(
         hosts,
@@ -557,7 +571,8 @@ void other_reports(void);
 double throwError(double n) {{ return n - 2; }}
 double helper(double n) {{ return n - 100; }}
 int main(void) {{
-    printf("%g %g %g\n", {prefix}_error(4.5), {prefix}_throwError(4.5), {prefix}_value);
+    {prefix}_checkpoint();
+    printf("%g %g %g %g %g\n", {prefix}_error(4.5), {prefix}_throwError(4.5), {prefix}_value, {prefix}_release(4.5), {prefix}_slice(4.5));
     if (throwError(4.5) != 2.5 || helper(4.5) != -95.5) return 2;
     error(0, 0, "host reached libc error()");
     other_reports();
@@ -600,6 +615,12 @@ fn static_library_refuses_invalid_prefixes_by_value() {
         "two-words",
         "__nts",
         "__nts_private",
+        "nts",
+        "nts_str",
+        "nts_",
+        "_",
+        "__",
+        "__private",
         "_Reserved",
     ] {
         let project = fixture(
@@ -639,7 +660,7 @@ fn raw_emission_keeps_its_names_beside_a_static_product() {
     assert!(ran.status.success(), "{ran:?}");
     let header = std::fs::read_to_string(out.join("program.h")).expect("header");
     assert!(header.contains("C symbol: published."), "{header}");
-    assert!(!header.contains("acme_published"), "{header}");
+    assert!(!header.contains("chosen_published"), "{header}");
 }
 
 /// A plugin built from a static archive: its own entry calls an export and
@@ -4624,6 +4645,9 @@ fn the_workspace_fixture_still_builds() {
 
 /// The workspace scheduler is deliberately a declaration-only placeholder.
 fn assert_only_notify_is_missing(out: &Path) {
+    let header = std::fs::read_to_string(out.join("sdkStatic/linux-gnu-x86_64/program.h"))
+        .expect("static SDK header");
+    assert!(header.contains("C symbol: acme_remember."), "{header}");
     for product in ["sdk", "sdkStatic"] {
         let path = out
             .join(product)

@@ -16,6 +16,12 @@ prefixes distinguish this deliberate default collision. The resulting public nam
 `<prefix>_<existing C spelling>`. Raw emissions and other product kinds keep
 their names; shared-library prefix support is tracked by #1005.
 
+Review tightened fragment validation to include the separating underscore.
+`nts`, `nts_*`, `_`, `__*` and `_` followed by uppercase are reserved. Explicit
+values refuse by value; defaults escape with `product_`. This keeps products
+named `nts` or `nts_str` from defining runtime symbols such as `nts_checkpoint`,
+`nts_release` or `nts_str_slice`, and keeps `_` from creating `__error`.
+
 ## Consumer inventory
 
 There are 23 static-product configs under `tests/interop`: 22 have C consumers,
@@ -50,7 +56,7 @@ such as `pollfd_size` are unrelated and retain their native names.
 | native-void-pointer | explicit `lib`, both backends | generated function names |
 | ts-from-c | default `lib` | generated function names; header-local helpers and type aliases retain their names |
 | windows-resource-atoms/overloads | explicit `lib`, both backends | generated function names |
-| tests/workspace/apps/linux-brownfield | default `sdkStatic` | static config uses its default; shared config unchanged |
+| tests/workspace/apps/linux-brownfield | explicit `acme` | both product configs express `acme_<C name>`; static applies it, shared emission pending #1005 |
 
 Eight LLVM native-ABI tests reuse these same C callers: native-closure,
 native-string, native-callback, native-poll, native-fd,

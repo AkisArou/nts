@@ -56,7 +56,7 @@ impl<'a> SourceSymbols<'a> {
         };
         if !valid_prefix_fragment(prefix) {
             return Err(format!(
-                "invalid C symbol prefix `{prefix}`: expected [A-Za-z_][A-Za-z0-9_]* outside `__nts_` and `_` followed by an uppercase letter"
+                "invalid C symbol prefix `{prefix}`: expected [A-Za-z_][A-Za-z0-9_]* outside the runtime's `nts_` namespace and C's `__` or `_` followed by an uppercase letter (including the separating `_`)"
             ));
         }
         Ok(Self::build(source, Some(prefix)))
@@ -185,7 +185,7 @@ impl<'a> SourceSymbols<'a> {
 }
 
 /// This is followed by `_` and a name, so keywords and `main` are valid.
-/// The separator itself must not complete the compiler's reserved namespace.
+/// The separator must not complete a runtime or C-reserved namespace either.
 fn valid_prefix_fragment(prefix: &str) -> bool {
     prefix
         .as_bytes()
@@ -194,8 +194,10 @@ fn valid_prefix_fragment(prefix: &str) -> bool {
         && prefix
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || c == b'_')
-        && prefix != "__nts"
-        && !prefix.starts_with("__nts_")
+        && prefix != "nts"
+        && !prefix.starts_with("nts_")
+        && prefix != "_"
+        && !prefix.starts_with("__")
         && !(prefix.starts_with('_')
             && prefix.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
 }
@@ -217,6 +219,12 @@ mod tests {
             ("", "product_"),
             ("__nts_probe", "product___nts_probe"),
             ("__nts", "product___nts"),
+            ("nts", "product_nts"),
+            ("nts_str", "product_nts_str"),
+            ("nts_", "product_nts_"),
+            ("_", "product__"),
+            ("__", "product___"),
+            ("__private", "product___private"),
             ("_Reserved", "product__Reserved"),
             ("int", "int"),
             ("main", "main"),
@@ -237,6 +245,12 @@ mod tests {
             "9bad",
             "__nts",
             "__nts_private",
+            "nts",
+            "nts_str",
+            "nts_",
+            "_",
+            "__",
+            "__private",
             "_Reserved",
         ] {
             let error = SourceSymbols::for_product(&program, "probe-llvm", Some(prefix))

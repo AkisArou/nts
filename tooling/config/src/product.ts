@@ -130,7 +130,11 @@ export interface NativeLibraryProduct extends ProductBase {
   /** The installed header. Defaults to the product name. */
   readonly header?: string;
   /**
-   * Prefix on every exported C symbol. Defaults to the product name.
+   * Exported C symbols use `<prefix>_<C name>`, with an added `_` separator.
+   * Defaults to the product name normalized as a C identifier fragment:
+   * nonidentifier characters become `_`; an empty name, invalid initial or
+   * reserved namespace is escaped with `product_`. Static libraries apply
+   * this policy; shared-library prefix emission is pending #1005.
    *
    * The one library kind that had no way to name its namespace. An AAR has
    * `javaPackage` and an XCFramework has `moduleName`; C has one flat namespace

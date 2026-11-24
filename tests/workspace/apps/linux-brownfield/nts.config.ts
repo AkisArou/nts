@@ -27,11 +27,12 @@ export default defineConfig({
       soname: "libacme.so.0",
       header: "acme.h",
 
-      // Every exported symbol gets this. C has one flat namespace per process,
+      // Exports use `<prefix>_<C name>`. C has one flat namespace per process,
       // so `remember` from two libraries is a silent interposition at load
       // rather than a link error -- the hazard the comment above named and no
-      // field could express. `src/main.cpp` links `acme_remember` unchanged.
-      prefix: "acme_",
+      // field could express. `src/main.cpp` calls `acme_remember`; shared
+      // library prefix emission is pending #1005.
+      prefix: "acme",
 
       // No export list. The ABI is what `nts/sdk.ts` exports, and `dumpState`
       // -- which the app's own tests use -- lives in `nts/internal.ts` where the
@@ -39,14 +40,13 @@ export default defineConfig({
       // "notify"]` here, restating the entry to subtract one name from it.
     }),
 
-    // The same code as an archive, which is what a consumer links when it will
-    // not ship a second file -- and the reason both kinds exist. `static-library`
-    // was constructible and nothing in the tree built one, so nothing had ever
-    // checked that the two differ only in packaging.
+    // Publish the same source as an archive under the same intended C namespace.
+    // The archive applies the prefix now; shared-library emission follows #1005.
     sdkStatic: library.staticNative({
       targets: [target.linux()],
       entry: "./nts/sdk.ts",
       header: "acme.h",
+      prefix: "acme",
     }),
   },
   // An `add_custom_command` plus a generated CMake config package, so a

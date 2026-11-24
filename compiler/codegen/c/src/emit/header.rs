@@ -92,17 +92,20 @@ pub(super) fn emit(
     }
     writer.line(origin, "/* Object aliases below are named from the export and parameter; returns use <export>_return_t.");
     writer.line(origin, " * Regenerate this header together with program.c. Managed pointers must follow the runtime's lifetime rules.");
+    let initializer = program
+        .source_symbols
+        .function(nts_core::hir::lower::MODULE_INIT);
     writer.line(
         origin,
-        " * If `module__init` is declared below, call it once before any export: the",
+        format!(" * If `{initializer}` is declared below, it must run before any export."),
     );
     writer.line(
         origin,
-        " * program has module-level state, and an export that reads it before the",
+        " * Built libraries run it at load time; callers of raw output call it once.",
     );
     writer.line(
         origin,
-        " * initializer runs sees a zero rather than what the module assigned.",
+        " * Reading module state before initialization sees zero rather than the assigned value.",
     );
     writer.line(origin, " * For promises: call, run nts_checkpoint(), then inspect nts_promise_state() (0 pending, 1 fulfilled, 2 rejected).");
     writer.line(origin, " * Read nts_promise_value() only after settlement. A checkpoint drains microtasks; pending I/O needs a host loop. */");
@@ -340,9 +343,12 @@ fn published_values(
                 &format!("{published}_t"),
             )?;
             let display = published.escape_default().to_string().replace("*/", "* /");
+            let initializer = program
+                .source_symbols
+                .function(nts_core::hir::lower::MODULE_INIT);
             writer.line(
                 &global.origin,
-                format!("/* Export: {display}. C symbol: {symbol}. A value, not a function: it holds what `module__init` assigned. */"),
+                format!("/* Export: {display}. C symbol: {symbol}. A value, not a function: it holds what `{initializer}` assigned. */"),
             );
             writer.line(&global.origin, format!("extern {ty} {symbol};"));
             Ok(())

@@ -4676,3 +4676,18 @@ reserved namespace remain unchanged. Unit controls cover `main` and `int` in
 both routes, and the C/LLVM host regression uses them as explicit prefixes.
 
 The contract is in [nts-config](../../reference/nts-config.md#decisions).
+
+## Native prefix fragments reserve the runtime namespace and separator (11-24)
+
+Review of #978 found that a prefix fragment must reserve namespaces after its
+separating underscore is included. `nts` and `nts_*` can otherwise name runtime
+symbols such as `nts_checkpoint`, `nts_release` and `nts_str_slice`; `_` can
+produce `__error`. The fragment owner now refuses explicit `nts`, `nts_*`, `_`,
+`__*` and `_` followed by uppercase, with the value in the refusal. Defaults
+escape these fragments with `product_`, through the same rule. `main` and `int`
+remain valid fragments. Unit and CLI controls cover explicit refusals and
+escaped defaults, with runtime-colliding source exports linked on C and LLVM.
+
+The brownfield SDK config uses `prefix: "acme"` for both native library kinds,
+expressing the added `_` separator; shared-library emission remains #1005.
+The contract is in [nts-config](../../reference/nts-config.md#decisions).

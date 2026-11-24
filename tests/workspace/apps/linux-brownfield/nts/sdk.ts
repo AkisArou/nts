@@ -1,10 +1,8 @@
 // Exported as C symbols, so the surface is functions rather than a class.
 //
-// The names are unprefixed: `prefix: "acme_"` in the config puts `acme_` on
-// every exported symbol, so `src/main.cpp` still links `acme_remember`. They
-// were spelled `acme_remember` here because there was no field to say it in,
-// which is a namespace encoded in an identifier -- exactly what `javaPackage`
-// and `moduleName` exist to avoid on the other library kinds.
+// The source names are unprefixed: `prefix: "acme"` in the config names each
+// export `acme_<C name>`, so the host calls `acme_remember`. Static libraries
+// apply this policy; shared-library prefix emission is pending #1005.
 import { scheduler } from "@workspace/notifications";
 import { store } from "@workspace/storage";
 
