@@ -53,6 +53,7 @@ impl<'a> SourceSymbols<'a> {
                 .as_bytes()
                 .first()
                 .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
+                || name == "__nts"
                 || name.starts_with("__nts_")
                 || (name.starts_with('_')
                     && name.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
@@ -62,6 +63,7 @@ impl<'a> SourceSymbols<'a> {
             return Ok(Self::build(source, Some(&c_identifier(&name))));
         };
         if !crate::symbols::is_native_c_identifier(prefix)
+            || prefix == "__nts"
             || prefix.starts_with("__nts_")
             || (prefix.starts_with('_')
                 && prefix.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
@@ -211,6 +213,7 @@ mod tests {
             ("9probe", "product_9probe"),
             ("", "product_"),
             ("__nts_probe", "product___nts_probe"),
+            ("__nts", "product___nts"),
             ("_Reserved", "product__Reserved"),
             ("int", "int_"),
         ] {
@@ -218,7 +221,14 @@ mod tests {
             assert_eq!(symbols.function("register"), format!("{prefix}_register_"));
             assert_eq!(symbols.global(0), format!("{prefix}_g0"));
         }
-        for prefix in ["", "probe-llvm", "9bad", "__nts_private", "_Reserved"] {
+        for prefix in [
+            "",
+            "probe-llvm",
+            "9bad",
+            "__nts",
+            "__nts_private",
+            "_Reserved",
+        ] {
             let error = SourceSymbols::for_product(&program, "probe-llvm", Some(prefix))
                 .expect_err("invalid explicit prefix");
             assert!(error.contains(&format!("`{prefix}`")), "{error}");

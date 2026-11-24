@@ -589,7 +589,14 @@ fn static_library_refuses_invalid_prefixes_by_value() {
         skip("node, clang and nm");
         return;
     }
-    for prefix in ["", "9bad", "two-words", "__nts_private", "_Reserved"] {
+    for prefix in [
+        "",
+        "9bad",
+        "two-words",
+        "__nts",
+        "__nts_private",
+        "_Reserved",
+    ] {
         let project = fixture(
             "build-invalid-prefix",
             &STATIC.replace("entry:", &format!("prefix: {prefix:?}, entry:")),
