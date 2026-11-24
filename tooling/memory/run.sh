@@ -181,6 +181,15 @@ if [ "${1-}" = --case ]; then
     # in a case that is about which path its objects die by: `typed N`.
     typed=$(read_num "$elided" typed)
     want_typed=$(grep '^typed ' "$dir/expected" | awk '{print $2}')
+    # One `typed N` at most, and N a count: anything else is refused by name
+    # rather than compared, so a typo cannot pass as "not checked".
+    typed_lines=$(grep -cE '^typed( |$)' "$dir/expected" || true)
+    if [ "$typed_lines" -gt 1 ] ||
+       { [ "$typed_lines" -eq 1 ] && ! grep -qE '^typed [0-9]+$' "$dir/expected"; }; then
+      malformed_typed=1
+    else
+      malformed_typed=""
+    fi
     ideal=$(grep '^ideal ' "$dir/expected" | awk '{print $2}')
     floor=$(grep '^allocated ' "$dir/expected" | awk '{print $2}')
 
@@ -189,6 +198,7 @@ if [ "${1-}" = --case ]; then
     [ "$answer" = "$naive_answer" ] || { note="ANSWER CHANGED: $naive_answer -> $answer"; fail=1; }
     [ "$leaked" = "0" ] || { note="LEAKED $leaked"; fail=1; }
     [ -n "$floor" ] || { note='no "allocated" line in expected'; fail=1; }
+    [ -z "$malformed_typed" ] || { note='malformed "typed" line in expected: want one "typed N"'; fail=1; }
     # The two floors are not independent. Nothing on the frame has a count to
     # change, so an allocation floor of zero forces an operation floor of zero --
     # and six `expected` files said otherwise, because they were written when

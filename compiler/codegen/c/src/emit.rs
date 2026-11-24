@@ -3443,6 +3443,44 @@ fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
     format!("__nts_fnval_{}", object_type_name(layout))
 }
 
+/// The numbers both backends write into headers, each checked against the
+/// runtime's macro, so a backend that disagrees fails to compile.
+fn emit_header_constants(writer: &mut CodeWriter, origin: &Origin) {
+    // One number both backends write into a count word, checked against the
+    // macro that defines it. A backend that got this wrong would produce
+    // storage the collector believes it may free.
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(NTS_IMMORTAL == {}u, \"NTS_IMMORTAL is not what nts writes\");",
+            nts_core::hir::layout::IMMORTAL
+        ),
+    );
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(NTS_DYING == {}u, \"NTS_DYING is not what nts writes\");",
+            nts_core::hir::layout::DYING
+        ),
+    );
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(NTS_ARRAY_IMMUTABLE == {}u, \"template immutability flag differs\");",
+            nts_core::hir::layout::TEMPLATE_IMMUTABLE
+        ),
+    );
+    // Where a string's units start, which the literals below lay out by hand:
+    // a header, the hash the runtime keeps, then the units.
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(NTS_STRING_UNITS == {}u, \"a string's units are not where nts puts them\");",
+            nts_core::hir::layout::STRING_UNITS
+        ),
+    );
+}
+
 /// A C struct per object type, and its descriptor.
 ///
 /// A real struct rather than manual offsets, so the C compiler decides padding
@@ -3484,39 +3522,7 @@ fn emit_object_types(
         writer.blank(origin);
     }
 
-    // One number both backends write into a count word, checked against the
-    // macro that defines it. A backend that got this wrong would produce
-    // storage the collector believes it may free.
-    writer.line(
-        origin,
-        format!(
-            "_Static_assert(NTS_IMMORTAL == {}u, \"NTS_IMMORTAL is not what nts writes\");",
-            nts_core::hir::layout::IMMORTAL
-        ),
-    );
-    writer.line(
-        origin,
-        format!(
-            "_Static_assert(NTS_DYING == {}u, \"NTS_DYING is not what nts writes\");",
-            nts_core::hir::layout::DYING
-        ),
-    );
-    writer.line(
-        origin,
-        format!(
-            "_Static_assert(NTS_ARRAY_IMMUTABLE == {}u, \"template immutability flag differs\");",
-            nts_core::hir::layout::TEMPLATE_IMMUTABLE
-        ),
-    );
-    // Where a string's units start, which the literals below lay out by hand:
-    // a header, the hash the runtime keeps, then the units.
-    writer.line(
-        origin,
-        format!(
-            "_Static_assert(NTS_STRING_UNITS == {}u, \"a string's units are not where nts puts them\");",
-            nts_core::hir::layout::STRING_UNITS
-        ),
-    );
+    emit_header_constants(writer, origin);
     for layout in &program.layouts {
         // A property name C cannot spell, which stops the *whole* struct.
         //

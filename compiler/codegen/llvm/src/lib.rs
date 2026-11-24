@@ -1485,41 +1485,7 @@ fn typed_releases(
         let _ = writeln!(text, "  store i64 0, ptr %count.at");
         let _ = writeln!(text, "  %dying = or i32 %flags, {DYING}");
         let _ = writeln!(text, "  store i32 %dying, ptr %flags.at");
-        let fields = nts_codegen_common::release::Fields::of(layout);
-        for (index, (field, child)) in fields.managed.iter().zip(&plan.children).enumerate() {
-            let Some(offset) = placed.offsets.get(*field) else {
-                return Err(site().refuse("a typed release of a field with no placement"));
-            };
-            let _ = writeln!(
-                text,
-                "  %f{index}.at = getelementptr inbounds i8, ptr %object, i64 {offset}"
-            );
-            let _ = writeln!(text, "  %f{index} = load ptr, ptr %f{index}.at");
-            let _ = writeln!(text, "  %f{index}.live = icmp ne ptr %f{index}, null");
-            let _ = writeln!(
-                text,
-                "  br i1 %f{index}.live, label %f{index}.release, label %f{index}.next\nf{index}.release:"
-            );
-            let call = match child {
-                Some(child) => runtime_call::direct(
-                    "void",
-                    &DirectCallee::global(
-                        site(),
-                        platform,
-                        typed_release_symbol(&program.layouts[*child]),
-                    )?,
-                    Operand::new("ptr", format!("%f{index}")),
-                ),
-                None => runtime_call::call(
-                    site(),
-                    platform,
-                    "nts_release",
-                    &[Operand::new("ptr", format!("%f{index}"))],
-                )?,
-            };
-            let _ = writeln!(text, "  {call}");
-            let _ = writeln!(text, "  br label %f{index}.next\nf{index}.next:");
-        }
+        typed_release_fields(&mut text, program, platform, (layout, &placed, plan))?;
         let _ = writeln!(
             text,
             "  {}",
@@ -1541,6 +1507,57 @@ fn typed_releases(
         let _ = writeln!(text, "  br label %done\ndone:");
         let _ = writeln!(text, "  ret void\n}}");
         out.push_str(&text);
+    }
+    Ok(())
+}
+
+/// A typed release's fields, given up in order: each through its static
+/// type's typed release where the plan names one, else `nts_release`.
+fn typed_release_fields(
+    text: &mut String,
+    program: &Emission<'_>,
+    platform: Platform,
+    (layout, placed, plan): (
+        &nts_core::hir::Layout,
+        &nts_core::hir::layout::Placement,
+        &nts_codegen_common::release::TypedRelease,
+    ),
+) -> Result<(), Diagnostic> {
+    let site = || Site::synthetic(program, "typed releases");
+    let fields = nts_codegen_common::release::Fields::of(layout);
+    for (index, (field, child)) in fields.managed.iter().zip(&plan.children).enumerate() {
+        let Some(offset) = placed.offsets.get(*field) else {
+            return Err(site().refuse("a typed release of a field with no placement"));
+        };
+        let _ = writeln!(
+            text,
+            "  %f{index}.at = getelementptr inbounds i8, ptr %object, i64 {offset}"
+        );
+        let _ = writeln!(text, "  %f{index} = load ptr, ptr %f{index}.at");
+        let _ = writeln!(text, "  %f{index}.live = icmp ne ptr %f{index}, null");
+        let _ = writeln!(
+            text,
+            "  br i1 %f{index}.live, label %f{index}.release, label %f{index}.next\nf{index}.release:"
+        );
+        let call = match child {
+            Some(child) => runtime_call::direct(
+                "void",
+                &DirectCallee::global(
+                    site(),
+                    platform,
+                    typed_release_symbol(&program.layouts[*child]),
+                )?,
+                Operand::new("ptr", format!("%f{index}")),
+            ),
+            None => runtime_call::call(
+                site(),
+                platform,
+                "nts_release",
+                &[Operand::new("ptr", format!("%f{index}"))],
+            )?,
+        };
+        let _ = writeln!(text, "  {call}");
+        let _ = writeln!(text, "  br label %f{index}.next\nf{index}.next:");
     }
     Ok(())
 }

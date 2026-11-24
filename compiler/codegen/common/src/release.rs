@@ -71,7 +71,7 @@ pub struct TypedRelease {
 /// A layout has one when an object of it can die without anything the
 /// generic death decides at run time:
 ///
-/// - **Reference counting.** NoGC releases nothing.
+/// - **Reference counting.** `NoGc` releases nothing.
 /// - **Proved acyclic** by the cycle graph (`Program::cycles`), the same fact
 ///   its descriptor's `cyclic` carries, so no object of it is ever a cycle
 ///   candidate and no decrement of one has anything to buffer. The graph
