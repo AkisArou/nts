@@ -4600,3 +4600,33 @@ through existing Program ASTs or a measured reuse design, with facts equality
 and bounded starts. No native retirement is part of #857.
 
 The evidence is in [the record](../857-tooling-retention.md).
+## Missed benchmark nights get the next start (11-24)
+
+Approved by the coordinator for #965. The full-check controller retains an
+unmeasured night's overdue state across restarts and unsuccessful attempts.
+At the next slot, benchmarks on the newest verified start before another
+core, wide or records run. A running run finishes. This orders controller
+starts only: a stale-verified core keeps its culprit-search rank and can run
+beside the benchmark unit; landing and culprit-search admission retain their
+priority. Only a measured record clears the overdue state.
+
+The session asks with-lock for --wait at full-check priority, within its
+standing seven-and-a-half-hour observation budget and eight-hour unit guard.
+Waiting spends that budget; expiry while waiting records an unmeasured night
+and its refusal reason. Refused attempts keep their logs and outcomes, with
+the reason and path in status. No separate day-long admission budget is added.
+
+The contract is in [workflow](../../workflow.md#benchmarks).
+
+## Stored due benchmark nights retain their priority (11-24)
+
+Approved by the coordinator for #965. Existing controller state can already
+contain a due current night and an unmeasured prior night while lacking the
+new overdue marker. The normal state reader infers that missing marker, and
+the next ordinary write persists it. This is a reader contract, not a one-off
+migration command. Explicit stored values remain authoritative; a measured
+prior night does not infer overdue. Future and unknown state versions remain
+protected before adoption. This brings the existing starved controller under
+the same next-start bound immediately after the change lands.
+
+The contract is in [workflow](../../workflow.md#benchmarks).

@@ -501,7 +501,7 @@ they cannot poison the reusable baseline for unchanged artifacts.
   unit observation refuses by name. Changes coalesce onto the newest verified;
   skipped opportunities consume no start.
   The nightly run, at 03:00 by default, can cross the gap before new benchmarks
-  start. A wide run of the current verified commit answers that night when it
+  start, unless a missed benchmark night gives benchmarks the next start. A wide run of the current verified commit answers that night when it
   starts at or after the latest nightly slot, whatever its verdict, or ends
   at or after the slot with green or red. A held straddling run leaves one
   rerun due; that rerun's post-slot start answers the night even if held again.
@@ -869,16 +869,28 @@ locked session on CPU 4 and keep the wall-time floor below.
 - **Due from the nightly slot until they run.** The slot makes them due on
   the newest `verified`, regardless of daytime wide runs, until they run or the
   next nightly slot replaces them; a slot that comes while a night's run
-  measures waits for it. They never block a landing, start when the core has
-  nothing to do, and measure in their own unit while the core goes on.
+  measures waits for it. When the previous slot ended without a measured
+  record, benchmarks on the newest `verified` start before the controller
+  starts another core, wide or records run. A running run finishes; culprit
+  probes keep their rank. The overdue state survives restarts and unsuccessful
+  attempts, and clears only when a record is measured. A stored due slot after
+  an unmeasured prior night derives a missing overdue marker on read; explicit
+  markers are preserved. Controller start order changes no memory rank: landings never wait for benchmarks, and a stale
+  core keeps its culprit-search rank. Once the benchmark unit starts, core
+  and records continue beside it; wide waits for its measurement.
 - **A session ends with its own outcome.** Its seven-and-a-half-hour observation
   budget includes admission. At the budget it stops its measurement unit,
   retains every completed row, names the cases not reached as `NOT_RUN`, and
   ends the night without restarting. The partial immutable run keeps its
   observations without replacing the newest complete run in `full.md`.
   The containing unit's eight-hour guard bounds a runaway, including finalization.
-- **Only a record counts.** An attempt the measurement lock does not admit
-  leaves them due, asked again later rather than waited for; a run whose unit
+- **Only a record counts.** A held measurement lock queues the nightly attempt
+  through `with-lock --wait` at full-check priority within its observation
+  budget. A higher-ranked sitting goes first; release admits the queued night
+  without a new controller request. A wait that exhausts the budget ends
+  unmeasured with its refusal reason retained. Other admission refusals leave
+  benchmarks due for a later attempt, keeping the log, outcome and reason in
+  status. A run whose unit
   stopped before it finished (stopped, killed, or past its eight-hour hang
   guard) is started once more, then the night is a task; only a run that kept
   a record counts as measured, and the full check's status says what stopped
@@ -1851,6 +1863,17 @@ the first node task.
   call starts fresh. Step discovery releases its inference cache before Rust
   selection; the final detached input graph remains memoized
   ([log](records/notebooks/decisions-log.md#composed-selectors-project-within-one-validation-boundary-11-23)).
+
+- **A missed benchmark night gets the next controller start.** After a slot
+  ends without a measured record, benchmarks start on the newest verified
+  before another core, wide or records run. Measurement queues at full-check
+  rank within the session budget; only a measured record clears the overdue
+  state. Readers infer a missing marker for a stored due slot after an
+  unmeasured night, preserving explicit values. Existing work finishes,
+  landings retain priority, and stale cores can start beside the benchmark
+  unit at their existing rank
+  ([log](records/notebooks/decisions-log.md#missed-benchmark-nights-get-the-next-start-11-24),
+  [state adoption](records/notebooks/decisions-log.md#stored-due-benchmark-nights-retain-their-priority-11-24)).
 
 - **A pending whole program still declines at compile time.** Its module
   evaluation cuts and host dependence are checked before its pending answer,

@@ -24,17 +24,21 @@
 //      submitted (seconds; followRecords); then the same for the benchmarks
 //      unit and the run record it kept (followBenchmarks). A unit still
 //      running benchmarks hold wide; core and records continue;
-//   1. a due core advancing stale `verified`, before an owed wide run, once
+//   1. overdue benchmarks after a night without a record, before another
+//      core, wide or records start; their unit queues for measurement at
+//      full-check rank. Existing work finishes and culprit probes keep rank.
+//   2. a due core advancing stale `verified`, before an owed wide run, once
 //      per verified until that wide starts; otherwise the wide steps on changed
 //      `verified`, after their minimum gap, when no
 //      landing is queued/running and no higher-priority memory request waits;
 //      the nightly run crosses the gap, before new benchmarks start;
-//   2. the core (every other step of all.sh) on the newest `main`, if main
+//   3. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
-//   3. due benchmarks on the newest `verified`: nts-bench built there, then
+//   4. due benchmarks on the newest `verified`: nts-bench built there, then
 //      measured in the benchmarks unit, beside core but excluding wide, once the measurement
-//      lock admits it with CPU 4 and its sibling 5 quiet: an attempt the lock
-//      does not admit keeps them due, asked again ten minutes later, until
+//      lock admits it with CPU 4 and its sibling 5 quiet. The attempt queues
+//      with --wait within the session budget. Other admission
+//      refusals retain their logs and keep them due, asked again later, until
 //      they run or the next nightly slot replaces them. One night's run is in
 //      flight at a time: a night measures once the last run landed or was
 //      given up.
@@ -101,7 +105,7 @@ import { newTest262Fails, newTest262FailsTask, writeNewFails } from "../records/
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, FULL_MD, measureJob, publishAt, publishRecord, slowerRows, type MeasureJob, type MeasureOutcome, type Publisher } from "./bench.ts";
-import { DEFAULT_SCHEDULE, dueNightly, nextNightly, parseTimes, wideDecision, wideMemoryWaiter, WIDE_MIN_GAP_MS, type Schedule } from "./schedule.ts";
+import { DEFAULT_SCHEDULE, dueNightly, lastNightly, nextNightly, parseTimes, wideDecision, wideMemoryWaiter, WIDE_MIN_GAP_MS, type Schedule } from "./schedule.ts";
 import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, answerTask, newTask, retainTaskHistory, type TaskAnswer, type BenchOutcome, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Measuring, type Part, type PartState, type RecordsRun, type RecordsRunOutcome, type RunRecord, type State } from "./state.ts";
 import { BENCH_UNIT, lowPriority, recordsUnitName } from "./unit.ts";
 
@@ -201,6 +205,7 @@ async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records
   housekeeping(fx, state);
   if (await followRecords(fx, state)) return "records";
   if (await followBenchmarks(fx, state)) return "benchmarks";
+  refreshNightly(fx, state);
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
   // With no previous wide result, only nights after scheduling began are
@@ -209,13 +214,6 @@ async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records
     state.wide.since = state.wide.last_run?.at ?? now.toISOString();
     writeState(fx.layout.state, state);
   }
-  // Answered on its own: a cycle that first gets to the night later still
-  // makes it due. A state that never answered one starts
-  // here, and its first night is the next slot.
-  if (!state.nightly) { state.nightly = now.toISOString(); writeState(fx.layout.state, state); }
-  // A slot that comes while a night's run measures is answered once it ends.
-  const night = dueNightly(fx.schedule, new Date(state.nightly), now);
-  if (night && !state.benchmarks_due?.measuring) answerNightly(fx, state, night, verified);
   const benchmark=benchmarkBusy(fx,state);
   const busy = fx.queue.busy() ?? fx.memoryWaiter();
   const wide = wideDecision({ schedule: fx.schedule, last: state.wide.last_run, verified, now, since: state.wide.since, busy, hardBusy:benchmark });
@@ -232,6 +230,8 @@ async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records
     delete state.wide.postponed_for_verified;
     writeState(fx.layout.state, state);
   }
+  const overdue = startOverdueBenchmarks(fx, state);
+  if (overdue) return overdue === "waiting" ? "idle" : "benchmarks";
   const coreFirst = coreDue && verified && wide.due && !wide.waiting
     && state.wide.postponed_for_verified !== verified && coreRank(fx, main) === CULPRIT_SEARCH_RANK;
   if (coreFirst) {
@@ -399,12 +399,18 @@ function pushVerified(fx: Effects, state: State): void {
  * so `--status` can tell. `since` names when the piece of work began, when
  * it began before this call.
  */
+const activeOperations = new WeakSet<State>();
 function doing<T>(fx: Effects, state: State, what: Doing["doing"], commit: string, work: () => T, since = fx.now().toISOString()): T {
+  const nested = activeOperations.has(state);
+  const previous = nested ? state.now : undefined;
+  activeOperations.add(state);
   state.now = { doing: what, commit, since };
   writeState(fx.layout.state, state);
   try { return work(); }
   finally {
-    delete state.now;
+    if (previous) state.now = previous;
+    else delete state.now;
+    if (!nested) activeOperations.delete(state);
     writeState(fx.layout.state, state);
   }
 }
@@ -680,6 +686,11 @@ export function recordsUnit(layout: Layout, part: Part, records: { commit: strin
  */
 function startRecords(fx: Effects, state: State, part: Part, records: RecordsRun & { run: string }, again = false): void {
   const tree = fx.layout.records[part], now = fx.now(), save = () => writeState(fx.layout.state, state);
+  if (startOverdueBenchmarks(fx, state) === "waiting") {
+    records.result = "waiting for overdue benchmarks to start";
+    save();
+    return;
+  }
   let spec: UnitSpec | null = null, error: string | null = null;
   try {
     if (!records.pin) throw new Error("the records have no pin to record with");
@@ -898,6 +909,10 @@ async function followRecords(fx: Effects, state: State): Promise<boolean> {
   let again = false;
   for (const part of PARTS) {
     const records = state[part].records;
+    if (records?.outcome === "recording" && records.run && !records.job) {
+      startRecords(fx, state, part, Object.assign(records, { run: records.run }));
+      continue;
+    }
     if (recording(records)) {
       if (await followRecording(fx, state, part, records)) again = true;
       continue;
@@ -962,8 +977,33 @@ export function benchmarksUnit(layout: Layout, measuring: { commit: string; run:
  * it. A slot that comes while a night's run measures is answered when it
  * ends (cycle).
  */
+function refreshNightly(fx: Effects, state: State): void {
+  const now = fx.now();
+  if (!state.nightly) { state.nightly = now.toISOString(); writeState(fx.layout.state, state); }
+  const night = dueNightly(fx.schedule, new Date(state.nightly), now);
+  if (night && !state.benchmarks_due?.measuring) answerNightly(fx, state, night, fx.git.commit("refs/heads/verified"));
+}
+
+/** Controller start order only: the unit retains full-check admission rank. */
+function startOverdueBenchmarks(fx: Effects, state: State): "waiting" | "done" | "started" | null {
+  refreshNightly(fx, state);
+  const due = state.benchmarks_due;
+  if (!state.benchmarks_overdue || !due || due.measuring || benchmarkBusy(fx, state)) return null;
+  const verified = fx.git.commit("refs/heads/verified");
+  if (!verified) return null; // A core must establish the first verified.
+  if (publishing(state.bench)) {
+    const waiting = `the run at ${short(state.bench.commit)} still waits to land (${state.bench.result})`;
+    if (due.waiting !== waiting) { due.waiting = waiting; writeState(fx.layout.state, state); }
+    return "waiting";
+  }
+  if (due.asked && fx.now().getTime() - Date.parse(due.asked) < BENCH_ASK_AGAIN_MS) return "waiting";
+  return startBenchmarks(fx, state, verified);
+}
+
 function answerNightly(fx: Effects, state: State, night: Date, verified: string | null): void {
   const now = fx.now().toISOString(), left = state.benchmarks_due;
+  const previousSlotEnd = nextNightly(fx.schedule, lastNightly(fx.schedule, new Date(state.nightly!)));
+  if (left || (state.bench && !state.bench.measured) || night.getTime() > previousSlotEnd.getTime()) state.benchmarks_overdue = true;
   state.nightly = now;
   if (left) {
     endNight(fx, state, { commit: verified ?? "", at: now, run: "", outcome: "not-run",
@@ -973,7 +1013,7 @@ function answerNightly(fx: Effects, state: State, night: Date, verified: string 
   else {
     const until = nextNightly(fx.schedule, night).toISOString();
     state.benchmarks_due = { since: now, until };
-    fx.log(`benchmarks due until ${until}: nts-bench measures the newest verified once the core has nothing to do and the measurement lock admits it`);
+    fx.log(`benchmarks due until ${until}: nts-bench measures the newest verified ${state.benchmarks_overdue ? "before another core, wide or records start (the previous night has no measured record)" : "once the core has nothing to do"}, once the measurement lock admits it`);
   }
   writeState(fx.layout.state, state);
 }
@@ -993,6 +1033,7 @@ const budgetText = (budget: MeasureOutcome["budget"]) => budget ? `; session tim
 function endNight(fx: Effects, state: State, bench: Pick<BenchRun, "commit" | "at" | "run" | "result" | "outcome"> & Partial<BenchRun>): "done" {
   state.bench = { submitted: null, measured: false, ...bench };
   delete state.benchmarks_due;
+  if (bench.measured) delete state.benchmarks_overdue;
   fx.log(`benchmarks at ${bench.commit ? short(bench.commit) : "nothing verified"}: ${bench.result}${budgetText(bench.budget)}`);
   writeState(fx.layout.state, state);
   return "done";
@@ -1123,7 +1164,7 @@ async function followBenchmarks(fx: Effects, state: State): Promise<boolean> {
 
 /**
  * The night's answer from its unit's outcome. Not admitted, it started
- * nothing: its folder goes, and the benchmarks stay due, asked again later.
+ * nothing: its logs stay, and the benchmarks stay due, asked again later.
  * A run that kept no record ends the night as a task. One that kept a record
  * is measured, and its record is published on the newest main and submitted.
  */
@@ -1131,9 +1172,12 @@ async function measured(fx: Effects, state: State, measuring: Measuring, outcome
   const { commit, at, run } = measuring;
   const budget = budgetText(outcome.budget);
   if (!outcome.admitted) {
-    // Its log holds only the refusal, said here and in the state.
-    rmSync(run, { recursive: true, force: true });
-    askLater(fx, state, commit, `not admitted: ${outcome.reason ?? "no reason given"}`);
+    const why = `not admitted: ${outcome.reason ?? "no reason given"}; see ${run}`;
+    if (outcome.budget) {
+      endNight(fx, state, { commit, at, run, result: why, outcome: "not-run", budget: outcome.budget });
+      return true;
+    }
+    askLater(fx, state, commit, why);
     return false;
   }
   if (!outcome.record) {
@@ -1251,7 +1295,7 @@ function upkeepPool(fx: Pick<CountEffects, "prunePool" | "log">): void {
 
 /** The pins the records units record with now: the count keeps them, whatever main and verified are by then. */
 export function recordingPins(state: State): string[] {
-  return PARTS.flatMap(part => { const records = state[part].records; return recording(records) && records.pin ? [basename(dirname(records.pin))] : []; });
+  return PARTS.flatMap(part => { const records = state[part].records; return (recording(records) || records?.outcome === "recording") && records.pin ? [basename(dirname(records.pin))] : []; });
 }
 
 /**
@@ -1298,7 +1342,7 @@ function housekeeping(fx: Effects, state: State): void {
   const kept = new Set([state.core.last_run?.run, state.wide.last_run?.run, state.core.last_green?.run, state.wide.last_green?.run]);
   for (const part of PARTS) {
     const records = state[part].records;
-    if (recording(records)) kept.add(records.run);
+    if (recording(records) || records?.outcome === "recording") kept.add(records.run);
     if (following(records)) kept.add(dirname(records.delta));
   }
   kept.add(state.benchmarks_due?.measuring?.run);

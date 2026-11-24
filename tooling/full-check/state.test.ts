@@ -22,6 +22,47 @@ test('older state has no wide postponement and a full verified SHA survives rest
   assert.equal(readState(file).wide.postponed_for_verified, undefined);
 });
 
+test('a stored due night recovers overdue priority once without rewriting on read', t => {
+  for (const version of [1, 2]) {
+    const file = join(testScratch(t, 'overdue-reader'), 'state-v2.json');
+    const state = emptyState();
+    state.nightly = '2026-11-13T03:30:00.000Z';
+    state.benchmarks_due = { since: state.nightly, until: '2026-11-14T03:00:00.000Z' };
+    state.bench = { commit: 'a'.repeat(40), at: '2026-11-12T03:30:00.000Z', run: '', result: 'not run: the core goes first', measured: false, submitted: null };
+    const original = JSON.stringify({ ...state, version });
+    writeFileSync(file, original);
+    const adopted = readState(file);
+    assert.equal(adopted.benchmarks_overdue, true);
+    assert.equal(readFileSync(file, 'utf8'), original, 'reading does not publish a migration');
+    writeState(file, adopted);
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).benchmarks_overdue, true, 'the next ordinary write retains the inferred marker');
+    assert.equal(readState(file).benchmarks_overdue, true);
+  }
+});
+
+for (const route of ['explicit-false', 'explicit-true', 'measured', 'no-prior', 'not-due'] as const) test(`overdue adoption preserves ${route} state`, t => {
+  const file = join(testScratch(t, 'overdue-reader-control'), 'state-v2.json'), state = emptyState();
+  state.nightly = '2026-11-13T03:30:00.000Z';
+  state.benchmarks_due = { since: state.nightly, until: '2026-11-14T03:00:00.000Z' };
+  state.bench = { commit: 'a'.repeat(40), at: '2026-11-12T03:30:00.000Z', run: '', result: 'prior night', measured: route === 'measured', submitted: null };
+  if (route === 'explicit-false') state.benchmarks_overdue = false;
+  if (route === 'explicit-true') state.benchmarks_overdue = true;
+  if (route === 'no-prior') delete state.bench;
+  if (route === 'not-due') delete state.benchmarks_due;
+  const original = JSON.stringify(state); writeFileSync(file, original);
+  assert.equal(readState(file).benchmarks_overdue, route === 'explicit-false' ? false : route === 'explicit-true' ? true : undefined);
+  assert.equal(readFileSync(file, 'utf8'), original);
+});
+
+for (const version of [0, 3]) test(`overdue adoption cannot bypass protected state version ${version}`, t => {
+  const file = join(testScratch(t, 'overdue-version'), 'state-v2.json'), state = emptyState();
+  state.benchmarks_due = { since: AT, until: '2026-11-14T03:00:00.000Z' };
+  state.bench = { commit: 'a'.repeat(40), at: '2026-11-12T03:30:00.000Z', run: '', result: 'not run', measured: false, submitted: null };
+  const original = JSON.stringify({ ...state, version }); writeFileSync(file, original);
+  assert.throws(() => readState(file), /version/);
+  assert.equal(readFileSync(file, 'utf8'), original);
+});
+
 test('legacy task rows migrate once with stable distinct identities and no answers',t=>{
   const root=testScratch(t,'task-migration'),legacy=join(root,'state.json'),file=join(root,'state-v2.json');
   const rows=[{at:AT,line:'- one unhandled report'},{at:AT,line:'- one unhandled report'}];

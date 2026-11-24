@@ -4,19 +4,10 @@
 //
 //   tooling/gate/with-lock.sh --key bench-session target/release/nts-bench --root <tree>
 //
-// here asked without --wait. The wrapper takes memory and the CPU mutex
-// together under the session's key; waiting holds neither resource.
-//
-// A measurement waits for the reserved core and nothing else (AGENTS.md, The
-// machine): gates, landing checks and agents' work run on the other CPUs, and
-// nts-bench records the machine's load and free memory beside every row.
-// with-lock.sh admits the run once CPUs 4-5 are quiet, and nts-bench asks
-// again before it starts. Joint admission uses the full check's priority
-// and the bench-session history; every case's host
-// columns run inside that reservation. A run either did not start -- the lock held by
-// another measurement, or the pair busy -- which is exit 75 from either and
-// leaves the benchmarks due for a later cycle, so the full check never waits
-// behind another measurement; or it ran.
+// with --wait. The wrapper queues at full-check priority and takes memory
+// and the CPU mutex together; waiting holds neither resource. The session's
+// observation budget bounds that wait. Other EX_TEMPFAIL refusals leave the
+// benchmarks due and retain their log and reason.
 //
 // The run is background work (background.ts): the benchmarks unit measures in
 // the bench tree, a tree of its own at verified, on that tree's own code --
@@ -54,7 +45,7 @@ export const NOT_ADMITTED_EXIT = 75;
 
 /** One attempt at the benchmarks: not admitted, and why; or admitted, with the run's exit status. */
 export type SessionBudget = { milliseconds: number; unreached: string[] };
-export type BenchAttempt = { admitted: false; reason: string } | { admitted: true; status: number; budget?: SessionBudget; record?: string };
+export type BenchAttempt = { admitted: false; reason: string; budget?: SessionBudget } | { admitted: true; status: number; budget?: SessionBudget; record?: string };
 /** Measure in `tree`, keeping the output in `run`. */
 export type Bench = (tree: string, run: string) => BenchAttempt;
 
@@ -83,7 +74,11 @@ export function benchWithLock(binary: string, history: string, ownerUnit: string
       status = spawnSync(process.execPath, [SESSION, tree, run, binary, history, ownerUnit],
         { cwd: tree, stdio: ["ignore", out, out] }).status ?? 1;
     } finally { closeSync(out); }
-    if (status === NOT_ADMITTED_EXIT) return { admitted: false, reason: admission(readFileSync(log, "utf8")) };
+    if (status === NOT_ADMITTED_EXIT) {
+      const outcome = join(run, SESSION_OUTCOME);
+      const kept = existsSync(outcome) ? JSON.parse(readFileSync(outcome, "utf8")) as BenchAttempt : undefined;
+      return { admitted: false, reason: admission(readFileSync(log, "utf8")), ...(!kept?.admitted && kept?.budget ? { budget: kept.budget } : {}) };
+    }
     const outcome = join(run, SESSION_OUTCOME);
     return existsSync(outcome) ? JSON.parse(readFileSync(outcome, "utf8")) as BenchAttempt : { admitted: true, status };
   };
@@ -141,7 +136,7 @@ export type MeasureOutcome = { admitted: boolean; reason?: string; record?: stri
  */
 export function measureJob(tree: string, job: MeasureJob, bench: Bench): void {
   const attempt = bench(tree, job.run);
-  if (!attempt.admitted) { writeOutcome<MeasureOutcome>(job.outcome, { status: NOT_ADMITTED_EXIT, admitted: false, reason: attempt.reason }); return; }
+  if (!attempt.admitted) { writeOutcome<MeasureOutcome>(job.outcome, { status: NOT_ADMITTED_EXIT, admitted: false, reason: attempt.reason, ...(attempt.budget ? { budget: attempt.budget } : {}) }); return; }
   const budget = attempt.budget ? { budget: attempt.budget } : {};
   if (attempt.budget && attempt.record) {
     const record = join(job.run, basename(attempt.record));

@@ -12,7 +12,7 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // newest main until it lands or its attempts run out.
 import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
-import {chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync} from "node:fs";
+import {chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, symlinkSync, utimesSync, writeFileSync} from "node:fs";
 import {basename, dirname, join} from "node:path";
 import {test} from "node:test";
 import {randomUUID} from 'node:crypto';
@@ -450,7 +450,7 @@ test('benchmark ownership blocks wide work beyond the nightly idle deadline and 
   for(const recorded of [false,true]){
     const repo=repository(t),first=repo.commit({'a.txt':'first'},'first'),gate=fakeGate(repo);
     const now=new Date('2026-11-06T12:00:00Z'),fx=harness(repo,gate,{now,idle:true});await cycle(fx);
-    const state=readState(repo.layout.state);state.wide.since='2026-11-05T00:00:00Z';state.nightly='2026-11-05T00:00:00Z';
+    const state=readState(repo.layout.state);state.wide.since='2026-11-05T00:00:00Z';state.nightly=new Date(2026,10,5,4).toISOString(); // The preceding slot was answered; this control has no skipped benchmark night.
     const unit=recorded?'fixture-retained-bench':BENCH_UNIT;
     assert.equal(fx.units.start({name:unit,cwd:repo.root,command:['fixture benchmark'],log:join(repo.root,'bench.log')}),null);
     if(recorded)state.benchmarks_due={since:'2026-11-05T00:00:00Z',until:'2026-11-07T03:00:00Z',measuring:{commit:first,run:join(repo.root,'measuring'),at:now.toISOString(),job:{unit,outcome:join(repo.root,'bench.outcome.json'),at:now.toISOString(),starts:1}}};
@@ -1558,15 +1558,14 @@ test("only a run that kept a record counts as measured: one that kept none ends 
   assert.equal(ended.benchmarks_due, undefined);
   assert.ok(ended.tasks.some(one => one.line.includes("kept no run record")), JSON.stringify(ended.tasks));
   const bench = stubBench(), next = at(NEXT_NIGHT, { bench });
-  assert.equal(await cycle(next), "wide", "the nightly attempt repeats unchanged verified");
-  assert.equal(await cycle(next), "benchmarks", "nothing was measured, so the next night measures the same commit");
+  assert.equal(await cycle(next), "benchmarks", "the missed night orders benchmarks before wide");
   measureIn(next);
   assert.equal(await cycle(next), "benchmarks");
   assert.equal(bench.calls.length, 1);
   assert.deepEqual([readState(repo.layout.state).bench?.commit, readState(repo.layout.state).bench?.measured], [first, true]);
 });
 
-test("an attempt the measurement lock does not admit keeps nothing and leaves the benchmarks due, asked again later; a night that never ran is replaced by the next and says what held it", async t => {
+test("an attempt not admitted keeps its logs and reason and leaves the benchmarks due, asked again later; a night that never ran is replaced by the next and says what held it", async t => {
   const repo = repository(t), gate = fakeGate(repo);
   const refusal = "with-lock: pid 4242 is measuring; not starting another";
   const bench = stubBench({ refuse: [refusal, refusal] }), at = machine(repo, gate, { bench });
@@ -1575,13 +1574,14 @@ test("an attempt the measurement lock does not admit keeps nothing and leaves th
   const night = at(NIGHT);
   assert.equal(await cycle(night), "wide");
   assert.equal(await cycle(night), "benchmarks");
+  const refusedRun = readState(repo.layout.state).benchmarks_due!.measuring!.run;
   measureIn(night);
   assert.equal(await cycle(night), "idle", "not admitted, the cycle goes on");
   const waiting = readState(repo.layout.state);
   assert.equal(bench.calls.length, 1);
-  assert.deepEqual([waiting.benchmarks_due?.waiting, waiting.benchmarks_due?.measuring], [`not admitted: ${refusal}`, undefined]);
+  assert.deepEqual([waiting.benchmarks_due?.waiting, waiting.benchmarks_due?.measuring], [`not admitted: ${refusal}; see ${refusedRun}`, undefined]);
   assert.equal(waiting.bench, undefined, "an attempt that started nothing ends nothing");
-  assert.deepEqual(readdirSync(repo.layout.runs).filter(name => /^bench-[0-9a-f]{12}-\d+$/.test(name)), [], "nothing of it is kept");
+  assert.ok(existsSync(join(refusedRun, BENCH_OUTCOME)), "the refusal outcome survives");
   assert.equal(await cycle(night), "idle", "and it is not asked again at once");
   assert.equal(night.units.specs.length, 1);
   const later = at(new Date(NIGHT.getTime() + BENCH_ASK_AGAIN_MS));
@@ -1591,13 +1591,237 @@ test("an attempt the measurement lock does not admit keeps nothing and leaves th
   assert.equal(bench.calls.length, 2);
   // The next nightly slot comes first: it replaces the night, saying what held it, and measures.
   const next = at(NEXT_NIGHT);
-  assert.equal(await cycle(next), "wide", "nightly wide comes before a new benchmark unit");
-  assert.equal(await cycle(next), "benchmarks");
-  assert.ok(next.lines.some(line => line.includes(`not run: not admitted: ${refusal}; the nightly slot at`) && line.includes("replaced the night")), next.lines.join("\n"));
+  assert.equal(await cycle(next), "benchmarks", "a missed night precedes nightly wide");
+  assert.ok(next.lines.some(line => line.includes(`not run: not admitted: ${refusal}; see `) && line.includes("the nightly slot at") && line.includes("replaced the night")), next.lines.join("\n"));
   measureIn(next);
   assert.equal(await cycle(next), "benchmarks");
   const measured = readState(repo.layout.state);
   assert.deepEqual([measured.bench?.outcome, measured.bench?.commit, measured.bench?.measured], ["submitted", first, true], "measured, and its record submitted");
+});
+
+for (const route of ["core", "nightly-wide", "stale-core"] as const) test(`ordinary ${route} work keeps its order before a held culprit retry`, async t => {
+  const repo = repository(t), gate = fakeGate(repo);
+  let now = new Date(2026, 10, 6, 12);
+  const fx = harness(repo, gate, { idle: true }); fx.now = () => now;
+  const first = repo.commit({ "a.txt": "verified" }, "verified");
+  await cycle(fx);
+  const red = repo.commit({ "a.txt": "previous candidate" }, "previous candidate");
+  const main = repo.commit({ "a.txt": "new candidate" }, "new main");
+  if (route !== "core") now = new Date(2026, 10, 7, route === "stale-core" ? 6 : 3, 30);
+  const state = readState(repo.layout.state);
+  state.nightly = now.toISOString(); // No benchmark night is due in this control.
+  state.wide.last_run = { commit: first, at: new Date(2026, 10, 6, 11).toISOString(), verdict: "green", failed: [], run: "previous wide" };
+  const held = { commit: red, at: new Date(2026, 10, 6, 10).toISOString(), verdict: "red" as const, failed: [route === "nightly-wide" ? "integrity" : "tests"], run: "held red",
+    search: { result: "held control", at: new Date(2026, 10, 6, 10).toISOString() } };
+  if (route === "nightly-wide") {
+    state.wide.last_green = state.wide.last_run;
+    state.wide.last_run = held;
+  } else state.core.last_run = held;
+  if (route === "stale-core") fx.landedTimes = () => new Map([[red, new Date(now.getTime() - 7_200_001).toISOString()], [main, now.toISOString()]]);
+  state.now = { doing: "records", commit: first, since: state.nightly }; // Left by an earlier controller, not an active outer operation.
+  writeState(repo.layout.state, state);
+  const before = gate.measured.length;
+  const part = route === "nightly-wide" ? "wide" : "core";
+  assert.equal(await cycle(fx), part);
+  assert.deepEqual(gate.measured.slice(before)[0], { commit: part === "wide" ? first : main,
+    steps: part === "wide" ? ["integrity"] : ["build", "tests", "typescript-c"], label: part,
+    rank: route === "stale-core" ? "culprit-search" : "full-check" });
+  assert.equal(readState(repo.layout.state).benchmarks_overdue, undefined);
+  assert.equal(readState(repo.layout.state).now, undefined, "a completed top-level operation clears a stopped controller's old status");
+});
+
+for (const blocker of ["held-search", "cooldown", "publication"] as const) test(`completed records are followed before the ${blocker} wait`, async t => {
+  const repo = repository(t), gate = fakeGate(repo), fx = harness(repo, gate, { recorder: newCase() });
+  const first = repo.commit(NEW_CASE, "rows to record");
+  await cycle(fx);
+  recordIn(fx);
+  const state = readState(repo.layout.state), now = fx.now();
+  state.nightly = now.toISOString();
+  if (blocker === "held-search") {
+    const red = repo.commit({ "a.txt": "old candidate" }, "old candidate");
+    state.core.last_run = { commit: red, at: now.toISOString(), verdict: "red", failed: ["tests"], run: "red",
+      search: { result: "held control", at: new Date(now.getTime() - 3_600_000).toISOString() } };
+  } else {
+    state.benchmarks_overdue = true;
+    state.benchmarks_due = { since: now.toISOString(), until: new Date(now.getTime() + 86_400_000).toISOString(),
+      ...(blocker === "cooldown" ? { asked: now.toISOString(), waiting: "the prior admission refusal" } : {}) };
+    if (blocker === "publication") {
+      const submitted = "b".repeat(40); fx.queue.submit(submitted);
+      state.bench = { commit: first, at: now.toISOString(), run: repo.root, result: "queued", measured: true, record: join(repo.root, "record.json"), submitted };
+    }
+  }
+  writeState(repo.layout.state, state);
+  const before = gate.measured.length;
+  assert.equal(await cycle(fx), "records");
+  assert.ok(readState(repo.layout.state).core.records!.submitted);
+  assert.equal(gate.measured.length, before, "following completed records starts no core, wide or culprit measurement");
+});
+
+test("an overdue night waiting for a prior publication persists its status reason", async t => {
+  const repo = repository(t), gate = fakeGate(repo), at = machine(repo, gate);
+  const first = repo.commit({ "a.txt": "first" }, "first verified");
+  await cycle(at(BEFORE));
+  const night = at(NIGHT);
+  await cycle(night); await cycle(night); measureIn(night); await cycle(night);
+  repo.commit({ "a.txt": "new verified" }, "new verified while the record waits");
+  assert.equal(await cycle(night), "core");
+  const afterOutage = at(new Date(2026, 10, 9, 4));
+  assert.equal(await cycle(afterOutage), "idle");
+  const waiting = readState(repo.layout.state);
+  assert.equal(waiting.benchmarks_overdue, true);
+  assert.equal(waiting.benchmarks_due!.waiting, `the run at ${first.slice(0, 12)} still waits to land (${waiting.bench!.result})`);
+  assert.equal(afterOutage.units.specs.length, 1);
+});
+
+test("a measured night answered before dawn detects the following skipped slot", async t => {
+  const repo = repository(t), gate = fakeGate(repo), at = machine(repo, gate);
+  repo.commit({ "a.txt": "first" }, "first verified");
+  await cycle(at(new Date(2026, 10, 8, 1)));
+  const late = at(new Date(2026, 10, 9, 1)); // Answers Nov 8's 03:00 slot.
+  assert.equal(await cycle(late), "wide");
+  assert.equal(await cycle(late), "benchmarks");
+  measureIn(late); assert.equal(await cycle(late), "benchmarks");
+  late.queue.answers.set(readState(repo.layout.state).bench!.submitted!, answer("landed", "landed"));
+  const nextVerified = repo.commit({ "a.txt": "second" }, "verified before the outage");
+  assert.equal(await cycle(late), "core");
+  repo.commit({ "a.txt": "unchecked" }, "main moves during the outage");
+  const afterOutage = at(new Date(2026, 10, 10, 4)); // Nov 9's slot was skipped.
+  const before = gate.measured.length;
+  assert.equal(await cycle(afterOutage), "benchmarks");
+  assert.equal(readState(repo.layout.state).benchmarks_overdue, true);
+  assert.deepEqual(gate.measured.slice(before).map(row => [row.label, row.commit]), [["bench-build", nextVerified]]);
+});
+
+test("startup before dawn retains its first skipped nightly slot", async t => {
+  const repo = repository(t), gate = fakeGate(repo), at = machine(repo, gate);
+  const first = repo.commit({ "a.txt": "first" }, "first verified");
+  await cycle(at(new Date(2026, 10, 8, 1)));
+  repo.commit({ "a.txt": "unchecked" }, "main keeps moving");
+  const afterOutage = at(new Date(2026, 10, 9, 4));
+  assert.equal(await cycle(afterOutage), "benchmarks");
+  assert.equal(readState(repo.layout.state).benchmarks_overdue, true);
+  assert.equal(readState(repo.layout.state).benchmarks_due!.measuring!.commit, first);
+});
+
+for (const prior of ['unmeasured', 'measured', 'explicit-false'] as const) test(`restart adopts a legacy due night with ${prior} prior state`, async t => {
+  const repo = repository(t), gate = fakeGate(repo), units = stubUnits();
+  const setup = harness(repo, gate, { now: BEFORE, units }); // Supplied waiter keeps daytime wide out of setup.
+  const first = repo.commit({ 'a.txt': 'first' }, 'first verified');
+  assert.equal(await cycle(setup), 'core');
+  const newest = repo.commit({ 'a.txt': 'newest verified' }, 'newest verified');
+  assert.equal(await cycle(setup), 'core');
+  repo.commit({ 'a.txt': 'unchecked main' }, 'main keeps moving');
+  const state = readState(repo.layout.state);
+  state.nightly = NIGHT.toISOString(); // The current slot was already answered by the older controller.
+  state.benchmarks_due = { since: state.nightly, until: NEXT_NIGHT.toISOString() };
+  state.bench = { commit: first, at: new Date(2026, 10, 6, 3, 30).toISOString(), run: '', result: 'the prior night ended', submitted: null, measured: prior === 'measured' };
+  delete state.benchmarks_overdue;
+  if (prior === 'explicit-false') state.benchmarks_overdue = false;
+  writeFileSync(repo.layout.state, JSON.stringify(state)); // Exactly the old on-disk shape; no reader adoption before restart.
+  if (prior !== 'explicit-false') assert.equal(Object.hasOwn(JSON.parse(readFileSync(repo.layout.state, 'utf8')), 'benchmarks_overdue'), false);
+  const restarted = harness(repo, gate, { now: NIGHT, units, idle: true });
+  const before = gate.measured.length;
+  assert.equal(await cycle(restarted), prior === 'unmeasured' ? 'benchmarks' : 'wide');
+  assert.deepEqual(gate.measured.slice(before).map(row => [row.label, row.commit]), [[prior === 'unmeasured' ? 'bench-build' : 'wide', newest]]);
+  const persisted = JSON.parse(readFileSync(repo.layout.state, 'utf8'));
+  assert.equal(persisted.benchmarks_overdue, prior === 'unmeasured' ? true : prior === 'explicit-false' ? false : undefined);
+  assert.equal(units.running(BENCH_UNIT), prior === 'unmeasured');
+});
+
+test("overdue benchmarks start at the second slot despite moving main, then stale core keeps its rank beside them", async t => {
+  const repo = repository(t), gate = fakeGate(repo), at = machine(repo, gate);
+  repo.commit({ "a.txt": "first" }, "verified");
+  await cycle(at(BEFORE));
+  const night = at(NIGHT);
+  await cycle(night); // First night's wide.
+  let newest = "";
+  for (let index = 0; index < 3; index++) {
+    newest = repo.commit({ "a.txt": String(index) }, "main keeps moving");
+    assert.equal(await cycle(night), "core");
+  }
+  const unchecked = repo.commit({ "a.txt": "unchecked" }, "new main at the second slot");
+  const next = at(NEXT_NIGHT);
+  const before = gate.measured.length;
+  assert.equal(await cycle(next), "benchmarks");
+  assert.deepEqual(gate.measured.slice(before).map(row => [row.label, row.commit, row.rank]), [["bench-build", newest, "full-check"]]);
+  assert.equal(readState(repo.layout.state).benchmarks_overdue, true);
+  assert.equal(readState(repo.layout.state).benchmarks_due!.measuring!.commit, newest);
+  // A restarted controller reads the barrier and adopts the unit. It does not
+  // wait for measurement completion before launching a stale-verified core.
+  const restarted = at(NEXT_NIGHT);
+  restarted.landedTimes = () => new Map([[unchecked, new Date(NEXT_NIGHT.getTime() - 7_200_001).toISOString()]]);
+  assert.equal(await cycle(restarted), "core");
+  assert.equal(gate.measured.at(-1)!.rank, "culprit-search");
+  assert.equal(next.units.specs.length, 1);
+  measureIn(restarted);
+  assert.equal(await cycle(restarted), "benchmarks");
+  assert.equal(readState(repo.layout.state).benchmarks_overdue, undefined, "only a measured record clears the barrier");
+});
+
+test("a core crossing the second slot starts overdue benchmarks before its records unit", async t => {
+  const repo = repository(t), gate = fakeGate(repo), units = stubUnits(), queue = stubQueue();
+  let now = BEFORE;
+  const fx = harness(repo, gate, { units, queue, idle: true });
+  fx.now = () => now;
+  repo.commit({ "a.txt": "verified" }, "verified");
+  await cycle(fx);
+  now = NIGHT;
+  await cycle(fx); // First night's wide, benchmarks still due.
+  const next = repo.commit(NEW_CASE, "pending rows in the straddling core");
+  const run = gate.run;
+  gate.run = (...args) => { const result = run(...args); if (args[2] === "core") now = NEXT_NIGHT; return result; };
+  const start = units.start;
+  units.start = spec => {
+    if (spec.name === recordsUnitName("core")) assert.equal(readState(repo.layout.state).now?.doing, "records", "nested benchmark status restores the records start");
+    return start(spec);
+  };
+  assert.equal(await cycle(fx), "core");
+  assert.deepEqual(units.specs.map(spec => spec.name), [BENCH_UNIT, recordsUnitName("core")]);
+  assert.equal(readState(repo.layout.state).benchmarks_due!.measuring!.commit, next);
+  assert.equal(readFileSync(readState(repo.layout.state).core.records!.pin!, "utf8"), `compiler at ${next}\n`, "pin survives the benchmark build");
+});
+
+test("a held measurement lock keeps one overdue night in its unit until release within the night", async t => {
+  const repo = repository(t), gate = fakeGate(repo), bench = stubBench(), at = machine(repo, gate, { bench });
+  repo.commit({ "a.txt": "verified" }, "verified");
+  await cycle(at(BEFORE));
+  await cycle(at(NIGHT));
+  const next = at(NEXT_NIGHT);
+  assert.equal(await cycle(next), "benchmarks", "the second slot starts the queued measurement before wide");
+  const due = readState(repo.layout.state).benchmarks_due!;
+  // Unit remains alive behind the sitting; release is structural, not a timer.
+  const restarted = at(new Date(NEXT_NIGHT.getTime() + BENCH_ASK_AGAIN_MS));
+  assert.equal(await cycle(restarted), "idle");
+  assert.equal(bench.calls.length, 0);
+  assert.equal(restarted.units.specs.length, 1, "one queued attempt, no re-asking");
+  assert.deepEqual(readState(repo.layout.state).benchmarks_due, due);
+  measureIn(restarted); // The sitting releases the lock, the unit measures.
+  assert.equal(await cycle(restarted), "benchmarks");
+  assert.equal(bench.calls.length, 1);
+  assert.equal(readState(repo.layout.state).bench!.measured, true);
+  assert.equal(readState(repo.layout.state).benchmarks_due, undefined);
+});
+
+for (const kind of ["refused", "no-record", "interrupted", "budget"] as const) test(`overdue state survives ${kind} and restart until a measured record`, async t => {
+  const repo = repository(t), gate = fakeGate(repo), at = machine(repo, gate);
+  repo.commit({ "a.txt": "verified" }, "verified");
+  await cycle(at(BEFORE));
+  await cycle(at(NIGHT));
+  const failed: Bench = kind === "budget" ? () => ({ admitted: false, reason: "session time budget exhausted while waiting for measurement admission", budget: { milliseconds: 10, unreached: [] } })
+    : kind === "refused" ? () => ({ admitted: false, reason: "private refusal" }) : stubBench({ noRecord: true });
+  const next = at(NEXT_NIGHT, { bench: failed });
+  assert.equal(await cycle(next), "benchmarks");
+  if (kind === "interrupted") {
+    next.units.stop(BENCH_UNIT); await cycle(next); next.units.stop(BENCH_UNIT);
+  } else measureIn(next);
+  await cycle(next);
+  assert.equal(readState(repo.layout.state).benchmarks_overdue, true);
+  if (kind === "budget") assert.match(readState(repo.layout.state).bench!.result, /time budget exhausted while waiting/);
+  const later = at(new Date(2026, 10, 9, 3, 30));
+  assert.equal(await cycle(later), "benchmarks");
+  measureIn(later);
+  assert.equal(await cycle(later), "benchmarks");
+  assert.equal(readState(repo.layout.state).benchmarks_overdue, undefined);
 });
 
 test("a nightly slot the controller first reaches hours later still makes the benchmarks due", async t => {

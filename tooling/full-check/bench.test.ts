@@ -93,7 +93,7 @@ test('the nightly reader consumes the real ratio model without absolute-time loa
   const page=renderFull([old,changed]);assert.deepEqual(slowerRows(page),['ratio-case']);assert.match(page,/node: .*\*\*SLOWER THAN BEST\*\*/);
 });
 
-test("the session delegates joint admission to the tree's with-lock.sh with its key and history, without --wait; exit75 did not start", t => {
+test("the session delegates joint admission to the tree's with-lock.sh with --wait, its key and history; a refused attempt keeps its log and reason", t => {
   const root = scratch(t, "full-check-lock-");
   const gate = join(root, "tree/tooling/gate"), tree = join(root, "tree"), run = join(root, "run"), history = join(root, "target/gate-costs");
   for (const dir of [gate, run]) mkdirSync(dir, { recursive: true });
@@ -119,8 +119,8 @@ writeFileSync(${JSON.stringify(join(run, "second.json"))}, JSON.stringify(bench(
 `);
   assert.deepEqual(JSON.parse(readFileSync(join(run, "first.json"), "utf8")), { admitted: true, status: 0 });
   const argv = readFileSync(join(gate, "argv"), "utf8").split("\n").filter(Boolean);
-  assert.deepEqual(argv.slice(0, 6), ["--key", "bench-session", join(run, "nts-bench"), "--root", tree, "--journal"]);
-  assert.ok(argv[6].startsWith(run + "/bench-"));
+  assert.deepEqual(argv.slice(0, 7), ["--wait", "--key", "bench-session", join(run, "nts-bench"), "--root", tree, "--journal"]);
+  assert.ok(argv[7].startsWith(run + "/bench-"));
   assert.deepEqual(readFileSync(join(gate, "memory"), "utf8").split("\n").filter(Boolean), ["full-check", history],
     "the caller carries priority and history but no memory reservation into joint admission");
   assert.equal(readLedger(memory.NTS_MEMORY_LEDGER).admitted.filter(entry => entry.live).length, 0, "the session's reservation ends with it");
@@ -130,6 +130,38 @@ writeFileSync(${JSON.stringify(join(run, "second.json"))}, JSON.stringify(bench(
   assert.deepEqual(JSON.parse(readFileSync(join(run, "second.json"), "utf8")), { admitted: false, reason: "with-lock: pid 4242 is measuring; not starting another" });
   // Between the two, what the ledger says of the first session's reservation, which ended with it.
   assert.match(readFileSync(join(run, "bench.log"), "utf8"), /nts-bench measured[\s\S]*with-lock: pid 4242 is measuring/);
+});
+
+for (const expireWhileWaiting of [false, true]) test(`a held measurement waits within the session budget and retains its outcome: expiry ${expireWhileWaiting}`, t => {
+  const root = scratch(t, "full-check-held-lock-"), tree = join(root, "tree"), run = join(root, "run");
+  const gate = join(tree, "tooling/gate"), ready = join(run, "waiting"), release = join(run, "release"), result = join(run, "outcome.json");
+  for (const dir of [gate, run]) mkdirSync(dir, { recursive: true });
+  assert.equal(spawnSync("mkfifo", [release], { env: fixtureEnvironment(t) }).status, 0);
+  // Supplied mutex: only --wait retains the request, and the sitting releases
+  // it through the FIFO. Production joint admission's priority is tested by
+  // with-lock.test.ts; this tests the session's command and budget wiring.
+  writeFileSync(join(gate, "with-lock.sh"), `if [ "$1" != --wait ]; then echo 'with-lock: held' >&2; exit 75; fi
+: > "${ready}"
+read token < "${release}"
+echo measured
+`);
+  inUnit(t, root, unit => `import assert from 'node:assert/strict';
+import {existsSync,readFileSync,writeFileSync} from 'node:fs';
+import {runSession} from ${JSON.stringify(new URL("./bench-session.ts", import.meta.url).href)};
+import {waitFor} from ${JSON.stringify(new URL("../gate/test-wait.ts", import.meta.url).href)};
+let expire,cancelled=false,ended=false;
+const running=runSession(${JSON.stringify(tree)},${JSON.stringify(run)},'/unused',${JSON.stringify(join(root, "history"))},${JSON.stringify(unit)},500,${JSON.stringify(join(run, "journal.jsonl"))},
+ {schedule(callback){expire=callback;return()=>{cancelled=true;};}}).then(result=>{ended=true;return result;});
+await waitFor('the nightly session to queue behind the sitting',()=>existsSync(${JSON.stringify(ready)}));
+assert.equal(ended,false);
+${expireWhileWaiting ? "expire();" : `writeFileSync(${JSON.stringify(release)},${JSON.stringify("released\n")});`}
+const outcome=await running;assert.equal(cancelled,true);
+writeFileSync(${JSON.stringify(result)},JSON.stringify(outcome));
+`);
+  const outcome = JSON.parse(readFileSync(result, "utf8"));
+  assert.deepEqual(outcome, expireWhileWaiting
+    ? { admitted: false, reason: "session time budget exhausted while waiting for measurement admission", budget: { milliseconds: 500, unreached: [] } }
+    : { admitted: true, status: 0 });
 });
 
 test("why a run was not admitted is the last refusal its log gives, the lock's or nts-bench's", () => {
@@ -162,7 +194,7 @@ for (const stopFails of [false, true]) test(`a session past its budget retains i
   writeFileSync(journal, JSON.stringify({ version: 1, metadata, cases, requested: [], lanes: null }) + "\n" +
     JSON.stringify({ name: "control", measured: observed, failure: null, conditions: {}, spoiled: false, failed: [] }) + "\n" + '{"name":"not-reached"');
   const gate = join(repo.dir, "tooling/gate"); mkdirSync(gate, { recursive: true });
-  writeFileSync(join(gate, "with-lock.sh"), 'shift 2\nexec "$@"\n');
+  writeFileSync(join(gate, "with-lock.sh"), 'shift 3\nexec "$@"\n');
   const binary = join(run, "blocked-bench"), ready=join(run,"ready");
   const marker = join(run, "stop-refused"), bin = join(run, "bin");
   if (stopFails) {

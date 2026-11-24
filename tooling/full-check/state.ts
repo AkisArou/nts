@@ -192,6 +192,8 @@ export type State = {
   bench?: BenchRun;
   /** The nightly benchmarks while they are due (service.ts's runBenchmarks). */
   benchmarks_due?: BenchmarksDue;
+  /** A night missed its record: order benchmark starts first until a record is measured. */
+  benchmarks_overdue?: boolean;
   /** When the benchmarks last answered the nightly slot (schedule.ts's dueNightly). */
   nightly?: string;
   /** The last commit `verified` was pushed at, and when a push last failed. */
@@ -234,6 +236,9 @@ export function readState(file: string): State {
     }
   }
   validateTasks(tasks,value.version === 1 ? migrated.task_sequence : rest.task_sequence!,source);
+  // A due slot after an unmeasured night already owes the benchmark start,
+  // including state written before this marker existed. Explicit choices stay.
+  if (rest.benchmarks_overdue === undefined && rest.benchmarks_due && rest.bench && !rest.bench.measured) rest.benchmarks_overdue = true;
   return { ...emptyState(), ...rest, version: 2, tasks, task_sequence: value.version === 1 ? migrated.task_sequence : rest.task_sequence! };
 }
 

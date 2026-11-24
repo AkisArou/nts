@@ -37,7 +37,7 @@ export async function runSession(tree: string, run: string, binary: string, hist
     owned: { NTS_MEMORY_PRIORITY: "full-check", NTS_GATE_COSTS_DIR: history } });
   const sealed = await sealOracleRun(planned);
   const handoff = join(run, `${unit}.command.json`);
-  writeFileSync(handoff, JSON.stringify({ cwd: tree, env: sealed.env, command: ["sh", join(tree, "tooling/gate/with-lock.sh"), "--key", "bench-session", binary, "--root", tree, "--journal", journal] }));
+  writeFileSync(handoff, JSON.stringify({ cwd: tree, env: sealed.env, command: ["sh", join(tree, "tooling/gate/with-lock.sh"), "--wait", "--key", "bench-session", binary, "--root", tree, "--journal", journal] }));
   const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(process.env, "full-check"), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
     ...lowPriority().map(setting => `--property=${setting}`), "--property=TimeoutStopSec=5s",
     `--property=BindsTo=${ownerUnit}.service`, `--property=After=${ownerUnit}.service`,
@@ -62,6 +62,11 @@ export async function runSession(tree: string, run: string, binary: string, hist
   }
   if (!exhausted) return status === 75 ? { admitted: false, reason: "not admitted" } : { admitted: true, status };
 
+  if (!existsSync(journal)) {
+    const reason = "session time budget exhausted while waiting for measurement admission";
+    console.error(`not admitted: ${reason}`);
+    return { admitted: false, reason, budget: { milliseconds: budgetMs, unreached: [] } };
+  }
   let record: string | undefined;
   let unreached = readdirSync(join(tree, "benchmarks/cases"), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
   try {
