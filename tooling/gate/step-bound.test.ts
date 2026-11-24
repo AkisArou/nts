@@ -13,7 +13,7 @@ import {readStepBaseline} from "./step-time.ts";
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
-import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, ProgressBound, landingCeiling, progressSummary, stepBound, stepBoundReason, stepBoundWait, unmeasuredSteps } from "./step-bound.ts";
+import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, ProgressBound, landingCeiling, progressSummary, stepBound, stepBoundReason, stepBoundWait, stepCpuBound, stepCpuBoundReason, unmeasuredSteps } from "./step-bound.ts";
 import { instrumentPolicy } from "./step-result.ts";
 import { readRunLifecycle } from "./run-lifecycle.ts";
 import { usableWidth } from "./step-scheduling.ts";
@@ -22,6 +22,10 @@ import { spawnTest } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import { removable } from "./run-temporary.ts";
+import { randomUUID } from "node:crypto";
+import { gateCpus, inheritedCpus } from "./affinity.ts";
+import { newToolingSlice, stopToolingSlice, toolingSlice, toolingSliceArgs } from "./tooling-slice.ts";
+import type { Priority } from "./ranks.ts";
 
 // These are arithmetic policy vectors, not comparisons of measured CPU.
 const baseline = () => readStepBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
@@ -115,6 +119,47 @@ test("used time outside any step, with no step event, spends a run's lifecycle b
   assert.equal(new ProgressBound({ execution_s: 2 }, 0).observe(5000).outside_s, 0, "without a lifecycle nothing is outside a step");
 });
 
+test("a sampled bound divides the undeclared time between samples at the next one, while declared waits stay exact", () => {
+  // A step's clock: CPU read on its tick, waits marked as tokens move.
+  const step = new ProgressBound({ execution_s: 100 }, 0);
+  step.observe(0, undefined, cpu(0));
+  step.observe(200);                // a case ends: the step waits for a token
+  step.observe(700, "memory");      // still waiting, now for memory
+  step.observe(1000);               // granted
+  const sampled = step.observe(2000, undefined, cpu(0.4, 0.6));
+  assert.deepEqual([sampled.waited_s, sampled.cpu_s], [{ memory: 0.3 }, 0.4]);
+  // Of the 1.7 s outside the wait, what it lost is at most the 0.6 s the counter names.
+  assert.ok(Math.abs(sampled.used_s - 1.1) < 1e-9 && Math.abs(sampled.cpu_lost_s - 0.6) < 1e-9, JSON.stringify(sampled));
+  const between = step.observe(2400, "slots");
+  assert.ok(Math.abs(between.used_s - 1.1) < 1e-9, "an observation without a sample spends nothing yet");
+  assert.equal(between.expired, undefined);
+  const next = step.observe(3000, undefined, cpu(0.8, 0.6));
+  assert.ok(Math.abs(next.used_s - 1.5) < 1e-9 && Math.abs(next.waited_s.slots! - 0.6) < 1e-9, JSON.stringify(next));
+  // Lost CPU never exceeds the undeclared time it is set against.
+  const capped = new ProgressBound({ execution_s: 100 }, 0);
+  capped.observe(0, undefined, cpu(0));
+  capped.observe(500, "priority");
+  assert.deepEqual([capped.observe(1000, undefined, cpu(0, 1)).cpu_lost_s, capped.observe(1000).used_s], [0.5, 0]);
+});
+
+test("a step's CPU bound is its bound at every slot it may hold, and holds a spinner that the lost CPU it reports would excuse", () => {
+  assert.equal(stepCpuBound({ seconds: 3, basis: "stated" }, 1), 3);
+  assert.equal(stepCpuBound({ seconds: 6300, basis: "derived" }, 8), 50_400);
+  for (const width of [0, -1, Number.NaN]) assert.throws(() => stepCpuBound({ seconds: 3, basis: "stated" }, width), /needs a positive width/);
+  assert.equal(stepCpuBoundReason(3), "step exceeded its CPU bound of 3 cpu-s");
+  // Threads past its width on CPUs that other work also takes: its loss excuses most of its time, its CPU does not.
+  const spinner = new ProgressBound({ execution_s: 10, cpu_s: 30 }, 0);
+  spinner.observe(0, undefined, cpu(0));
+  const held = spinner.observe(8000, undefined, cpu(32, 7));
+  assert.deepEqual([held.expired, held.used_s], ["cpu_s", 1]);
+  // Outranked, a step whose work keeps it runnable loses its time and stays inside its bound.
+  const outranked = new ProgressBound({ execution_s: 3, cpu_s: 3 }, 0);
+  outranked.observe(0, undefined, cpu(0));
+  const slowed = outranked.observe(30_000, undefined, cpu(0.3, 29.7));
+  assert.deepEqual([slowed.expired, slowed.cpu_lost_s], [undefined, 29.7]);
+  assert.equal(new ProgressBound({ execution_s: 3 }, 0).observe(30_000).expired, "execution_s", "the counterfactual: unsampled, the same 30 s spend its bound");
+});
+
 test("a stated bound wins; otherwise three times the step's work and the run's over their slots, above a floor", () => {
   const run = { cost: 2400, slots: 24 };
   assert.deepEqual(stepBound({ name: "s", bound: 7 }, 1e6, 8, run), { seconds: 7, basis: "stated" });
@@ -168,8 +213,15 @@ test("no bound would have stopped the committed healthy run", () => {
   }
 });
 
-/** A real runner in a scratch repository running `steps`: `format` never finishes, `records` finishes at once. */
-function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, owned: Record<string, string> = {}) {
+/** How a fixture's runner runs: `format`'s command (else it sleeps until the test ends), a rank its run root takes beside every rank's work under nts.slice (else nested where the test runs), and live CPU counters. */
+type FixtureRun = { owned?: Record<string, string>; format?: string[]; rank?: Priority; live?: boolean };
+
+/**
+ * A real runner in a scratch repository running `steps`, in a unit of its own
+ * stopped by name: `format` runs its command or never finishes, `records`
+ * finishes at once.
+ */
+function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, rank, live = false }: FixtureRun = {}) {
   // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
   const own = newTestScratch("step-bound");
   t.after(() => { writeFileSync(join(own, "release"), "the test is over"); removable(own); rmSync(own, { recursive: true, force: true }); });
@@ -194,8 +246,13 @@ export { stepTableProblem };
   assert.equal(listed.status, 0, listed.stderr);
   writeFileSync(join(gate, "payload.mjs"), `
 import { existsSync, watch } from "node:fs";
-const own = ${JSON.stringify(own)};
-if (process.env.NTS_GATE_STEP === "format") {
+import { spawnSync } from "node:child_process";
+const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)};
+if (process.env.NTS_GATE_STEP === "format" && format) {
+  const ran = spawnSync(format[0], format.slice(1), { stdio: "inherit" });
+  console.log("format finished");
+  process.exit(ran.status ?? 1);
+} else if (process.env.NTS_GATE_STEP === "format") {
   console.log("format waits for a release that comes only after the test");
   await new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
 } else console.log("records finished");
@@ -209,12 +266,26 @@ else
   exec ${JSON.stringify(process.execPath)} "$(dirname "$0")/payload.mjs"
 fi
 `);
-  // An ample memory reading and a ledger of its own, as every test that starts a real runner gives it.
-  const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", ...gateFixtureMemory(join(own, "memory"),root), CARGO_TARGET_DIR: target, ...owned,
+  // An ample memory reading and a ledger of its own, as every test that starts
+  // a real runner gives it; live, its own cgroups' CPU counters.
+  const counters = live ? { cpu: { kind: "live" as const }, pressure: { kind: "live" as const } } : {};
+  // Ranked, the run's root is a sibling of every rank's work, not nested in the test's.
+  const inherited = rank ? undefined : toolingSlice(), slice = rank ? undefined : inherited ?? newToolingSlice(true);
+  if (slice && !inherited) t.after(() => stopToolingSlice(slice));
+  const launcher: NodeJS.ProcessEnv = { ...hostEnvironment(process.env), HOME: join(own, "home") };
+  if (rank) delete launcher.NTS_TOOLING_SLICE;
+  const planned = gateEnvironment(launcher, { run, owned: {
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", ...gateFixtureMemory(join(own, "memory"), root, counters), CARGO_TARGET_DIR: target,
+    ...(slice ? { NTS_TOOLING_SLICE: slice } : {}), ...(rank ? { NTS_MEMORY_PRIORITY: rank } : {}), ...owned,
   } });
-  const result = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
-  type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string;
+  const unit = `nts-test-step-bound-${randomUUID()}`;
+  t.after(() => { spawnTest("systemctl", ["--user", "stop", unit], { encoding: "utf8" }); });
+  const result = spawnTest("systemd-run", ["--user", `--unit=${unit}`, ...(slice ? [`--slice=${slice}`] : toolingSliceArgs({}, rank!)),
+    "--collect", "--wait", "--pipe", "--quiet", `--working-directory=${root}`, "-p", "LimitCORE=0", "-p", "CPUAffinity=0-3 6-31", "-p", "RuntimeMaxSec=300s",
+    ...Object.entries(planned.env).filter(([, value]) => value !== undefined).map(([name, value]) => `--setenv=${name}=${value}`),
+    process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
+  type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string; wall: number; bound_cpu_s: number;
+    bound_clock: { execution_s: number; cpu_s: number; cpu_lost_s: number; stalled_s: number };
     instrument?: { kind: string; verdict: string; reason: string }; scope?: { populated: number } };
   assert.ok(existsSync(join(run, "summary.json")), `the runner wrote no summary (exit ${result.status}):\n${result.stdout}${result.stderr}`);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as { verdict: string; steps: Row[]; interrupted: unknown; scope_cleanup: { state: string } };
@@ -223,7 +294,7 @@ fi
 }
 
 test("a step past its bound is stopped through its scope and held, its log kept, and the run finishes", t => {
-  const { result, summary, format, records } = runFixture(t, "format records", { format: 3 });
+  const { result, summary, format, records } = runFixture(t, "format records", { format: 3 }, { live: true });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(result.signal, null);
   assert.equal(format.verdict, "INSTRUMENT", result.stdout);
@@ -253,11 +324,58 @@ test("a step within its bound is untouched, and the runner publishes its step li
 });
 
 test("under a landing check's ceiling, a step is stopped there whatever its own bound", t => {
-  const { result, format, records } = runFixture(t, "format records", { format: 7200 }, { NTS_GATE_STEP_CEILING_S: "3" });
+  const { result, format, records } = runFixture(t, "format records", { format: 7200 }, { owned: { NTS_GATE_STEP_CEILING_S: "3" } });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(format.verdict, "INSTRUMENT");
   assert.equal(format.reason, "step exceeded its bound of 3 s");
   assert.deepEqual([format.bound_s, format.bound_basis], [3, "ceiling"]);
   assert.equal(records.verdict, "PASS");
   assert.deepEqual([records.bound_s, records.bound_basis], [3, "ceiling"]);
+});
+
+// One gate CPU, outside the measurement CPUs, for a control and its competitor alike.
+const lastGateCpu = () => gateCpus(inheritedCpus()).split(",").at(-1)!.split("-").at(-1)!;
+const loop = (iterations: number) => `i=0; while [ $i -lt ${iterations} ]; do i=$((i+1)); done`;
+
+test("a step outranked for its CPU by landing-weight work stays inside its bound however long that work holds the CPU", t => {
+  // The step's loop and a landing-weight spinner share one CPU, where cpu.pressure `full` is exact; its run's root is at the full check's weight.
+  const cpu = lastGateCpu(), spinner = `nts-test-step-bound-spinner-${randomUUID()}`;
+  t.after(() => { spawnTest("systemctl", ["--user", "stop", spinner], { encoding: "utf8" }); });
+  const spun = spawnTest("systemd-run", ["--user", `--unit=${spinner}`, ...toolingSliceArgs({}, "landing"), "--collect", "--quiet",
+    "-p", "LimitCORE=0", "-p", "RuntimeMaxSec=300s", "taskset", "-c", cpu, "sh", "-c", "while :; do :; done"], { encoding: "utf8" });
+  assert.equal(spun.status, 0, spun.stderr);
+  const { result, format } = runFixture(t, "format", { format: 3 }, { live: true, rank: "full-check", format: ["taskset", "-c", cpu, "sh", "-c", loop(100_000)] });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(format.verdict, "PASS", format.reason);
+  const clock = format.bound_clock;
+  t.diagnostic(`${format.wall} s: ${JSON.stringify(clock)}`);
+  assert.ok(clock.cpu_lost_s > 3 && clock.execution_s < 3, `it lost more than its bound of 3 s to the spinner and spent less: ${JSON.stringify(clock)} in ${format.wall} s`);
+});
+
+test("a step whose own threads oversubscribe its one CPU spends its bound for the time it runs: competing with itself is no loss", t => {
+  // Four threads of bounded work on one CPU: some thread always waits (cpu.pressure `some`), yet one always runs (`full` stays near zero).
+  const cpu = lastGateCpu(), work = `for t in 1 2 3 4; do (${loop(100_000)}) & done; wait`;
+  const { result, format } = runFixture(t, "format", { format: 600 }, { live: true, format: ["taskset", "-c", cpu, "sh", "-c", work] });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(format.verdict, "PASS", format.reason);
+  const clock = format.bound_clock;
+  t.diagnostic(`${format.wall} s: ${JSON.stringify(clock)}`);
+  assert.ok(clock.cpu_s >= 0.5 && clock.execution_s >= 0.9 * clock.cpu_s, `its execution covers the CPU it ran: ${JSON.stringify(clock)}`);
+});
+
+test("a step spinning past its width is stopped through its scope at its CPU bound, by name", t => {
+  // Eight spinning threads for a step of width 1, at an agent's rank: it runs
+  // more than one CPU-second per second unless the machine gives it less than
+  // an eighth of each of eight CPUs, so its CPU bound comes before its bound.
+  const work = "for t in 1 2 3 4 5 6 7 8; do (while :; do :; done) & done; wait";
+  const { result, format } = runFixture(t, "format", { format: 20 }, { live: true, rank: "agent", format: ["sh", "-c", work] });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(format.verdict, "INSTRUMENT", result.stdout);
+  assert.equal(format.bound_cpu_s, 20);
+  assert.equal(format.reason, "step exceeded its CPU bound of 20 cpu-s");
+  assert.deepEqual(format.instrument, { kind: "step-bound", verdict: "INSTRUMENT", reason: "step exceeded its CPU bound of 20 cpu-s" });
+  assert.equal(format.scope?.populated, 0, "its scope was drained");
+  assert.match(readFileSync(format.log, "utf8"), /\nstep exceeded its CPU bound of 20 cpu-s: stopped through its scope\n$/);
+  t.diagnostic(`${format.wall} s: ${JSON.stringify(format.bound_clock)}`);
+  assert.ok(format.bound_clock.cpu_s >= 20 && format.bound_clock.execution_s < 20, JSON.stringify(format.bound_clock));
 });
