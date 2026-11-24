@@ -1131,6 +1131,88 @@ fn assert_unsigned_return_control(dir: &Utf8Path, ir: &str) {
 }
 
 #[test]
+fn native_call_to_the_unprefixed_export_name_uses_the_frozen_namespace() {
+    let source = "import { abs as cAbs } from 'c:stdlib';
+        import type { c_int } from '@nts/scalars';
+        export function abs(n: c_int): c_int { return cAbs(n); }";
+    let (_, prepared) = prepare("prefixed-libc-wrapper", source);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    for prefix in [None, Some("lib")] {
+        let symbols = Rc::new(match prefix {
+            Some(prefix) => {
+                SourceSymbols::for_product(&prepared.program, "lib", Some(prefix)).unwrap()
+            }
+            None => SourceSymbols::new(&prepared.program),
+        });
+        let plan =
+            nts_codegen_c::EntryAbi::with_source_symbols(&prepared.program, Rc::clone(&symbols));
+        let c = nts_codegen_c::emit_planned(&plan, hir::native::NativeAbi::LP64);
+        let llvm = nts_codegen_llvm::emit_with_source_symbols(
+            &prepared.program,
+            nts_codegen_llvm::Platform::SYSV_X86_64,
+            symbols,
+        );
+        for (backend, diagnostics) in [("c", &c.diagnostics), ("llvm", &llvm.diagnostics)] {
+            if prefix.is_some() {
+                assert!(diagnostics.is_empty(), "{backend}: {diagnostics:?}");
+            } else {
+                assert!(
+                    diagnostics.iter().any(|d| d.message.contains(
+                        "foreign symbol `abs` collides with a runtime or compiled function"
+                    )),
+                    "{backend}: {diagnostics:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn native_call_cannot_redefine_a_prefixed_export() {
+    let source = "import type { c_int } from '@nts/scalars';
+        declare function lib_twice(n: c_int): c_int;
+        export function twice(n: c_int): c_int { return lib_twice(n); }";
+    let (_, prepared) = prepare("prefixed-native-collision", source);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    for prefix in [None, Some("lib")] {
+        let symbols = Rc::new(match prefix {
+            Some(prefix) => {
+                SourceSymbols::for_product(&prepared.program, "lib", Some(prefix)).unwrap()
+            }
+            None => SourceSymbols::new(&prepared.program),
+        });
+        let plan =
+            nts_codegen_c::EntryAbi::with_source_symbols(&prepared.program, Rc::clone(&symbols));
+        let c = nts_codegen_c::emit_planned(&plan, hir::native::NativeAbi::LP64);
+        let llvm = nts_codegen_llvm::emit_with_source_symbols(
+            &prepared.program,
+            nts_codegen_llvm::Platform::SYSV_X86_64,
+            symbols,
+        );
+        for (backend, diagnostics) in [("c", &c.diagnostics), ("llvm", &llvm.diagnostics)] {
+            if prefix.is_none() {
+                assert!(diagnostics.is_empty(), "{backend}: {diagnostics:?}");
+            } else {
+                assert!(
+                    diagnostics.iter().any(|d| d.message.contains(
+                        "foreign symbol `lib_twice` collides with a runtime or compiled function"
+                    )),
+                    "{backend}: {diagnostics:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn conflicting_abis_and_runtime_collisions_are_refused() {
     for (name, source, expected) in [
         ("overloads", "declare function foreign(v: c_int): c_int; declare function foreign(v: c_uint): c_uint;

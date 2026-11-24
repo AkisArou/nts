@@ -465,6 +465,8 @@ fn static_library_exports_use_the_product_prefix() {
     std::fs::write(
         project.join("src/main.ts"),
         "import { helper } from './internal.js';\n\
+         import { abs as cAbs } from 'c:stdlib';\n\
+         import type { c_int } from '@nts/scalars';\n\
          const values: number[] = [];\n\
          for (let i = 0; i < 3; i++) { values.push(i); }\n\
          export let value = values.length;\n\
@@ -472,7 +474,8 @@ fn static_library_exports_use_the_product_prefix() {
          export function throwError(n: number): number { return helper(n) * 3; }\n\
          export function checkpoint(): void {}\n\
          export function release(n: number): number { return n + 1; }\n\
-         export function slice(n: number): number { return n + 2; }\n",
+         export function slice(n: number): number { return n + 2; }\n\
+         export function abs(n: c_int): c_int { return cAbs(n); }\n",
     )
     .expect("entry");
     let oracle_source = project.join("oracle.ts");
@@ -480,11 +483,15 @@ fn static_library_exports_use_the_product_prefix() {
         &oracle_source,
         std::fs::read_to_string(project.join("src/main.ts"))
             .expect("entry")
-            .replace("./internal.js", "./src/internal.ts"),
+            .replace("./internal.js", "./src/internal.ts")
+            .replace(
+                "import { abs as cAbs } from 'c:stdlib';",
+                "const cAbs = Math.abs;",
+            ),
     )
     .expect("oracle entry");
     let oracle = Command::new("node").args(["--no-warnings", "-e",
-        "import(require('node:url').pathToFileURL(process.argv[1]).href).then(a=>{a.checkpoint();console.log([a.error(4.5),a.throwError(4.5),a.value,a.release(4.5),a.slice(4.5)].join(' '))})"
+        "import(require('node:url').pathToFileURL(process.argv[1]).href).then(a=>{a.checkpoint();console.log([a.error(4.5),a.throwError(4.5),a.value,a.release(4.5),a.slice(4.5),a.abs(-3),Math.abs(-4)].join(' '))})"
     ]).arg(&oracle_source).output().expect("node oracle");
     assert!(oracle.status.success(), "{oracle:?}");
     let run = build(&project, &[]);
@@ -535,6 +542,7 @@ fn static_prefix_consumer(
         "checkpoint",
         "release",
         "slice",
+        "abs",
     ] {
         assert!(
             symbols.contains(&format!("{prefix}_{raw}")),
@@ -551,6 +559,7 @@ fn static_prefix_consumer(
         "checkpoint",
         "release",
         "slice",
+        "abs",
     ] {
         assert!(
             header.contains(&format!("{prefix}_{raw}")),
@@ -567,12 +576,14 @@ fn static_prefix_consumer(
 #include "program.h"
 #include <error.h>
 #include <stdio.h>
+#include <stdlib.h>
 void other_reports(void);
 double throwError(double n) {{ return n - 2; }}
 double helper(double n) {{ return n - 100; }}
 int main(void) {{
+    int (*volatile host_abs)(int) = abs;
     {prefix}_checkpoint();
-    printf("%g %g %g %g %g\n", {prefix}_error(4.5), {prefix}_throwError(4.5), {prefix}_value, {prefix}_release(4.5), {prefix}_slice(4.5));
+    printf("%g %g %g %g %g %d %d\n", {prefix}_error(4.5), {prefix}_throwError(4.5), {prefix}_value, {prefix}_release(4.5), {prefix}_slice(4.5), {prefix}_abs(-3), host_abs(-4));
     if (throwError(4.5) != 2.5 || helper(4.5) != -95.5) return 2;
     error(0, 0, "host reached libc error()");
     other_reports();

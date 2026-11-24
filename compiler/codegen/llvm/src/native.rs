@@ -3,13 +3,13 @@
 
 use std::collections::BTreeMap;
 
-use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId, native::Function};
+use nts_core::hir::{Callee, Func, HirType, OpKind, ValueId, native::Function};
 use nts_diagnostics::Diagnostic;
 
 use super::aggregate::{self, Crossing, Plan};
 use super::runtime_call::{self, Called, DirectCallee, Operand, Site};
 use super::target_abi::RuntimeAbi;
-use super::{Platform, name, refuse, signatures, ty_of};
+use super::{Emission, Platform, name, refuse, signatures, ty_of};
 
 /// How this call's arguments and result cross, or the refusal that names why
 /// one cannot: a record or an erased value on arm64, whose convention this
@@ -108,7 +108,7 @@ pub(super) fn split_destination<'a>(
 }
 
 pub(super) fn declarations(
-    program: &Program,
+    program: &Emission<'_>,
     platform: Platform,
 ) -> Result<Vec<String>, Vec<Diagnostic>> {
     let mut seen: BTreeMap<&str, (&Function, String)> = BTreeMap::new();
@@ -145,9 +145,8 @@ pub(super) fn declarations(
                 || nts_core::hir::runtime::parameters(symbol).is_some())
                 && target.convention == nts_core::hir::native::Convention::C)
                 || program
-                    .funcs
-                    .iter()
-                    .any(|f| nts_codegen_common::symbols::c_identifier(&f.name) == symbol)
+                    .native_funcs()
+                    .any(|f| program.source_symbols.function(&f.name) == symbol)
             {
                 Some(format!(
                     "foreign symbol `{symbol}` collides with a runtime or compiled function"
