@@ -69,3 +69,40 @@ The paused Chromium runtime has separate consumers outside this inventory.
 module-state guard. The coordinator deferred their migration to #1006 under
 the paused Chromium group #581. The owed rule names their standalone `verify.ts` workflow;
 the full-check executable step list contains no Chromium execution step.
+
+## Proof
+
+Hand-run evidence is kept in `/home/akisarou/.cache/nts-scratch/978/`.
+The focused run passed seven tests covering the C/LLVM static prefix matrix,
+header and archive names, host calls agreeing with Node, libc `error` observed
+on stderr both directly and through another shared object, raw emission,
+initialization, and unchanged app/addon/shared-library names. The final
+fragment-policy CLI suite also passed all 181 tests, including explicit
+`main`/`int` prefixes and invalid-value refusals.
+
+The regression was also run against the immutable compiler from the green
+landing of `446c05700ede0775efd46d9f9fc9cfb14817f153` (compiler SHA-256
+`25e1f138b63cc20282dfd3024dee1283aa54a862fad479820d996963d9770d00`).
+It failed at the first archive assertion: `c_default: missing error`, because
+the archive exported raw `error` instead of `c_default_error`. This comparison
+ran after committing the fix, using a copied compiler and a backup of the
+fixed binary. The copied immutable binary's read-only mode initially blocked
+the wrapper's restoration; restoring write permission and copying the backup
+back restored matching SHA-256 hashes before the subsequent fresh builds.
+
+Before the ABI-test helper, the complete no-fail-fast inner run had exactly
+eight LLVM native-ABI failures: each reused a migrated caller with raw emission.
+The other targets completed, rather than being skipped after that failure.
+The harness inventory check accepts 31 harnesses and 350 case files.
+After the helper, all eight passed together in the complete `inner.ts --no-agree`
+run. Formatting, Clippy, fresh compiler build, selected Rust tests and the
+native frontend invariant check all passed. Admission waits are included in
+the logged step durations.
+
+| Evidence | SHA-256 |
+|---|---|
+| `focused.log` | `99485745eca746095e1aee7cbd0cee143d91483dee7ec27eaac310c0293bd03b` |
+| `before.log` | `4f7076d154eb2f87a56c3121e648a071daa862e69c0e03b9b99000fdefe371fe` |
+| `inner-6.log` (before ABI-test helper) | `7b50d37a15ef067e9b360b049017ba26e5f3bc9335d91e55994ed801a99482bd` |
+| `inner-7.log` (complete green run) | `e5ad17eadf147654d867ab645b7066c50e316b43f1625e97653ac073db3b47e7` |
+| `test-layout.log` | `d3df20f3802ae4bec5f1f6d136bf6ac2153d768a9f7b68b87be88776e735dbb6` |
