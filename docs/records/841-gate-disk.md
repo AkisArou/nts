@@ -557,3 +557,15 @@ The adoption shim retires once both services and the verified controller run
 the #841 lifetime-owning code. Follow-up [#1009](https://github.com/akisArou/nts/issues/1009)
 was created through `tooling/tasks/new.ts` under #545 and remains held until
 that condition is proved.
+
+The first proof of identity-based adoption passed strict types, the host audit,
+all 369 records and 363 of 364 focused tests. The expanded runner fixture had
+created its populated `oracle-resolution` with mode 0755; the existing resolver
+guard requires 0700 and refused it before adoption. Only the fixture mode was
+corrected. All 26 lifetime controls then passed, including populated scratch,
+the outside link sentinel, exact refusal messages and real-unit termination.
+The initial proof is `~/.cache/nts-scratch/841/b/identity-adoption-proof-v1.log`,
+SHA-256 `614ee8e1aaffd4e6c51e5ac234677b7ea25c57d2e614795b5be55e68b82f568d`.
+The corrected-file proof is
+`~/.cache/nts-scratch/841/b/identity-adoption-lifetime-v2.log`, SHA-256
+`2a8e1003e586d93784505fb4b7e9dbecaf2ab36e26d4b0ee8c0e86ab47913da2`.
