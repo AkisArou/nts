@@ -172,24 +172,6 @@ pub struct Templates<'a> {
     /// `substitute` answers `None`, nothing is recorded, and the behaviour is
     /// what it was.
     function_forms: FxHashMap<Owner, Vec<TypeId>>,
-    /// Anonymous records mentioning exactly one owner's type parameters, by
-    /// owner: `{ value: T }`, the type of `{ value }` written in `hold<T>`.
-    ///
-    /// **A third list because an anonymous record is neither of the others.**
-    /// It has no symbol, so it is not a template, and the checker makes no
-    /// instance of it -- nothing in the program is typed `{ value: string }`
-    /// -- so unlike a function form it must be materialised as well as looked
-    /// up. Without it every copy of `hold` laid its box out once, at whichever
-    /// copy asked first, and `hold<string>` stored a string into a double.
-    ///
-    /// The instance is found or made by the composite index, which compares the
-    /// whole record, declaration nodes included: a copy whose `{ value: number
-    /// }` the checker already made at a call site reuses that record, and two
-    /// literals of the same shape stay two records.
-    object_forms: FxHashMap<Owner, Vec<TypeId>>,
-    /// Whether a type mentions a parameter, for every type a lookup asked
-    /// about: the substitution walk asks it at every node it reaches.
-    mentions: RefCell<FxHashMap<TypeId, bool>>,
     /// Composite types a recorded call needs in a concrete generic function.
     /// These roots can be absent even when that caller has a real copy: the
     /// checker records `Action<S>`, not every `Action<number>` its copies need.
@@ -233,7 +215,6 @@ impl<'a> Templates<'a> {
         }
         let mut templates: FxHashMap<Owner, Vec<TypeId>> = FxHashMap::default();
         let mut function_forms: FxHashMap<Owner, Vec<TypeId>> = FxHashMap::default();
-        let mut object_forms: FxHashMap<Owner, Vec<TypeId>> = FxHashMap::default();
         for (at, record) in snapshot.types.iter().enumerate() {
             let ty = TypeId(u32::try_from(at).unwrap_or(u32::MAX));
             // In this loop rather than a second pass over the type table: it
@@ -260,13 +241,6 @@ impl<'a> Templates<'a> {
                 && let Some(owner @ Owner::Function(_)) = one_owner_of(snapshot, &owners, ty)
             {
                 function_forms.entry(owner).or_default().push(ty);
-            }
-            // Also before the `symbol` gate, which an anonymous record never
-            // passes either. See `object_forms`.
-            if is_anonymous_record(snapshot, ty, record)
-                && let Some(owner) = one_owner_of(snapshot, &owners, ty)
-            {
-                object_forms.entry(owner).or_default().push(ty);
             }
             let Some(symbol) = record.symbol else {
                 continue;
@@ -300,11 +274,7 @@ impl<'a> Templates<'a> {
             }
             templates.entry(owner).or_default().push(ty);
         }
-        for list in templates
-            .values_mut()
-            .chain(function_forms.values_mut())
-            .chain(object_forms.values_mut())
-        {
+        for list in templates.values_mut().chain(function_forms.values_mut()) {
             list.sort_by_key(|ty| ty.0);
             list.dedup();
         }
@@ -314,8 +284,6 @@ impl<'a> Templates<'a> {
             declarations,
             by_owner: templates,
             function_forms,
-            object_forms,
-            mentions: RefCell::new(FxHashMap::default()),
             required_call_forms: OnceCell::new(),
             owners,
             lookup_index: OnceCell::new(),
@@ -408,7 +376,6 @@ impl<'a> Templates<'a> {
             .into_iter()
             .flatten()
             .chain(self.function_forms.get(&owner).into_iter().flatten())
-            .chain(self.object_forms.get(&owner).into_iter().flatten())
         {
             if let Some(instance) = substitute(&mut lookup, *template, sigma, 0)
                 && instance != *template
@@ -432,7 +399,6 @@ impl<'a> Templates<'a> {
             .by_owner
             .keys()
             .chain(required.keys())
-            .chain(self.object_forms.keys())
             .copied()
             .collect();
         owners.sort_by_key(|owner| match owner {
@@ -451,7 +417,6 @@ impl<'a> Templates<'a> {
                     .into_iter()
                     .flatten()
                     .chain(required.get(&owner).into_iter().flatten())
-                    .chain(self.object_forms.get(&owner).into_iter().flatten())
                 {
                     if substitute(&mut lookup, *template, &sigma, 0).is_none() {
                         plan.push((*template, sigma.clone()));
@@ -595,9 +560,6 @@ fn required_call_forms(
 /// module exists to close, reappearing as a bug in its fix.
 trait Site {
     fn snapshot(&self) -> &SemanticSnapshot;
-    /// Whether `ty` mentions a type parameter, answered once per type: a
-    /// record never changes once made, so neither does the answer.
-    fn mentions(&mut self, ty: TypeId) -> bool;
     /// What this walk has already answered, so a type graph that reaches
     /// itself is walked once.
     fn memo(&mut self) -> &mut Memo;
@@ -608,16 +570,11 @@ trait Site {
     /// with this shape.
     fn composite(&mut self, wanted: TypeKind, symbol: Option<SymbolId>) -> Option<TypeId>;
     /// The id of the instantiation `D<args>`, where `D` is `declaration`.
-    ///
-    /// `outer` binds what `declaration`'s members mention beside its own
-    /// parameters: nothing for a declaration, and the caller's sigma for an
-    /// undeclared generic's template (see `substitute_kind`).
     fn instance(
         &mut self,
         symbol: SymbolId,
         declaration: TypeId,
         args: Vec<TypeId>,
-        outer: &Sigma,
         depth: u32,
     ) -> Option<TypeId>;
     /// The id of a signature with this shape.
@@ -648,7 +605,7 @@ fn substitute(site: &mut impl Site, ty: TypeId, sigma: &Sigma, depth: u32) -> Op
     }
     // Nothing to substitute: the type is already what it will be, whatever the
     // sigma says. This is what stops the walk at every concrete leaf.
-    if !site.mentions(ty) {
+    if !mentions_a_parameter(site.snapshot(), ty) {
         return Some(ty);
     }
     let key = (ty, sigma.iter().map(|(k, v)| (*k, *v)).collect());
@@ -699,33 +656,7 @@ fn substitute_kind(site: &mut impl Site, ty: TypeId, sigma: &Sigma, depth: u32) 
             {
                 return None;
             }
-            return site.instance(symbol, declaration, args, &Sigma::new(), depth + 1);
-        }
-    }
-    // **A generic this program cannot see the declaration of** -- a library's
-    // `PromiseWithResolvers<T>`, whose parameter is declared in a file the
-    // frontend did not decode, so no parameter has an owner and no record is
-    // its declaration. `PromiseWithResolvers<IteratorResult<T>>` is still an
-    // instantiation, and under `T := number` it is the one with those
-    // arguments: found by them where the checker made it, and otherwise made
-    // from this record, whose members are the declaration's written at these
-    // arguments, with the caller's sigma for what they name of its own.
-    //
-    // The structural arm below made an argument-less twin carrying the symbol
-    // instead, and could not make one at all for a type with a generic method:
-    // `then<TResult1>` binds a parameter no sigma names, so a record holding a
-    // `Promise` anywhere in it had no instance in any copy.
-    if named.is_none()
-        && let Some(symbol) = record.symbol
-        && matches!(&record.kind, TypeKind::Object { .. })
-    {
-        let args = arguments(site.snapshot(), ty);
-        if !args.is_empty() {
-            let args = substitute_all(site, &args, sigma, depth + 1)?;
-            if args.iter().any(|arg| site.mentions(*arg)) {
-                return None;
-            }
-            return site.instance(symbol, ty, args, sigma, depth + 1);
+            return site.instance(symbol, declaration, args, depth + 1);
         }
     }
     let wanted = match &record.kind {
@@ -961,15 +892,6 @@ impl Site for Lookup<'_, '_> {
         self.templates.snapshot
     }
 
-    fn mentions(&mut self, ty: TypeId) -> bool {
-        if let Some(known) = self.templates.mentions.borrow().get(&ty) {
-            return *known;
-        }
-        let answer = mentions_a_parameter(self.templates.snapshot, ty);
-        self.templates.mentions.borrow_mut().insert(ty, answer);
-        answer
-    }
-
     fn memo(&mut self) -> &mut Memo {
         &mut self.memo
     }
@@ -990,7 +912,6 @@ impl Site for Lookup<'_, '_> {
         symbol: SymbolId,
         _declaration: TypeId,
         args: Vec<TypeId>,
-        _outer: &Sigma,
         _depth: u32,
     ) -> Option<TypeId> {
         self.templates.index.get(&(symbol, args)).copied()
@@ -1067,8 +988,6 @@ struct Writer<'s> {
     index: FxHashMap<(SymbolId, Vec<TypeId>), TypeId>,
     declarations: FxHashMap<SymbolId, TypeId>,
     memo: Memo,
-    /// See [`Site::mentions`].
-    mentions: FxHashMap<TypeId, bool>,
     created: usize,
 }
 
@@ -1083,7 +1002,6 @@ impl<'s> Writer<'s> {
             index,
             declarations,
             memo: FxHashMap::default(),
-            mentions: FxHashMap::default(),
             created: 0,
         }
     }
@@ -1142,15 +1060,6 @@ impl Site for Writer<'_> {
         self.snapshot
     }
 
-    fn mentions(&mut self, ty: TypeId) -> bool {
-        if let Some(known) = self.mentions.get(&ty) {
-            return *known;
-        }
-        let answer = mentions_a_parameter(self.snapshot, ty);
-        self.mentions.insert(ty, answer);
-        answer
-    }
-
     fn memo(&mut self) -> &mut Memo {
         &mut self.memo
     }
@@ -1179,7 +1088,6 @@ impl Site for Writer<'_> {
         symbol: SymbolId,
         declaration: TypeId,
         args: Vec<TypeId>,
-        outer: &Sigma,
         depth: u32,
     ) -> Option<TypeId> {
         if let Some(&known) = self.index.get(&(symbol, args.clone())) {
@@ -1197,13 +1105,10 @@ impl Site for Writer<'_> {
         }
         self.index.insert((symbol, args.clone()), id);
 
-        let mut own: Sigma = arguments(self.snapshot, declaration)
+        let own: Sigma = arguments(self.snapshot, declaration)
             .into_iter()
             .zip(args)
             .collect();
-        for (parameter, bound) in outer {
-            own.entry(*parameter).or_insert(*bound);
-        }
         let Some(TypeKind::Object { properties }) = self
             .snapshot
             .types
@@ -1444,147 +1349,48 @@ fn one_owner_of(
 }
 
 /// The type parameters a type mentions, through arrays, unions, tuples,
-/// functions, instantiations and anonymous records.
-///
-/// **An anonymous record's properties are part of what it mentions.** A named
-/// generic's record carries its parameters as `type_arguments`, so reading
-/// those answers for its members. An object literal's or a type literal's
-/// record has no arguments and no symbol: `{ value }` inside `hold<T>` is
-/// `{ value: T }` with nothing to say so but its property. Read as concrete,
-/// substitution answered it unchanged under every copy, and `hold<number>`
-/// and `hold<string>` shared one layout whose `value` was whichever copy laid
-/// it out first. Named records are still read through their arguments only:
-/// their properties are the declaration's, and walking them would walk the
-/// whole of `lib.dom` from any `Window`.
-///
-/// What a record's own generic member binds is not free **within that
-/// member**. In `{ map<U>(f: (t: T) => U): U }` the record mentions `T`; `U` is
-/// the method's, and counting it would make the record a form of the method.
-/// The binding is scoped: a signature binds its type parameters in its own
-/// parameter and return types and nowhere else, so `{ value: T; again?: typeof
-/// hold }` inside `hold<T>` mentions `T` through `value` even though `hold`'s
-/// own signature binds a `T` of the same identity. Only signatures reached
-/// through a record's property bind this way; a generic function type met
-/// directly keeps its parameters, which is how a generic function's own type
-/// is a form of that function.
+/// functions and instantiations.
 fn parameters_in(snapshot: &SemanticSnapshot, ty: TypeId, into: &mut Vec<TypeId>) {
     // The type graph is finite, but it need not be shallow or acyclic. Every
-    // type enters once per context, so absence means the complete graph has no
-    // parameter; it never means that a recursion depth stopped the search
-    // early. The context is whether the walk is inside a record's member, and
-    // which parameters the signatures enclosing this point bind there.
-    let mut pending = vec![(ty, Scope::default())];
+    // type enters once, so absence means the complete graph has no parameter;
+    // it never means that a recursion depth stopped the search early.
+    let mut pending = vec![ty];
     let mut visited = FxHashSet::default();
     let mut found: FxHashSet<_> = into.iter().copied().collect();
-    while let Some((ty, scope)) = pending.pop() {
-        if !visited.insert((ty, scope.clone())) {
+    while let Some(ty) = pending.pop() {
+        if !visited.insert(ty) {
             continue;
         }
-        let Some(record) = snapshot.types.get(ty.0 as usize) else {
-            continue;
-        };
-        match &record.kind {
-            TypeKind::TypeParameter { .. } => {
-                if !scope.bound.contains(&ty) && found.insert(ty) {
+        match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::TypeParameter { .. }) => {
+                if found.insert(ty) {
                     into.push(ty);
                 }
             }
-            TypeKind::Array(element) => pending.push((*element, scope)),
-            TypeKind::Tuple(tuple) => {
-                pending.extend(tuple.elements.iter().rev().map(|ty| (*ty, scope.clone())));
+            Some(TypeKind::Array(element)) => pending.push(*element),
+            Some(TypeKind::Tuple(tuple)) => {
+                pending.extend(tuple.elements.iter().rev().copied());
             }
-            TypeKind::Union(items) | TypeKind::Intersection(items) => {
-                pending.extend(items.iter().rev().map(|ty| (*ty, scope.clone())));
+            Some(TypeKind::Union(items) | TypeKind::Intersection(items)) => {
+                pending.extend(items.iter().rev().copied());
             }
-            TypeKind::Function(signature) => {
+            Some(TypeKind::Function(signature)) => {
                 if let Some(signature) = snapshot.signatures.get(signature.0 as usize) {
-                    let inner = if scope.member {
-                        scope.binding(&signature.type_parameters)
-                    } else {
-                        scope
-                    };
-                    pending.push((signature.return_type, inner.clone()));
+                    pending.push(signature.return_type);
                     pending.extend(
                         signature
                             .parameters
                             .iter()
                             .rev()
-                            .map(|parameter| (parameter.ty, inner.clone())),
+                            .map(|parameter| parameter.ty),
                     );
                 }
             }
-            TypeKind::Object { properties } if is_anonymous_record(snapshot, ty, record) => {
-                let member = scope.inside_member();
-                pending.extend(
-                    properties
-                        .iter()
-                        .rev()
-                        .map(|property| (property.ty, member.clone())),
-                );
-            }
             // Arguments also belong to opaque/Structured forms, not only
             // Object records. This is the same edge policy as the old walk.
-            _ => pending.extend(
-                arguments(snapshot, ty)
-                    .into_iter()
-                    .rev()
-                    .map(|ty| (ty, scope.clone())),
-            ),
+            _ => pending.extend(arguments(snapshot, ty).into_iter().rev()),
         }
     }
-}
-
-/// Where [`parameters_in`] is: inside a record's member or not, and the type
-/// parameters the signatures around this point bind, sorted. Shared rather than
-/// copied, because every edge of the walk carries one.
-#[derive(Clone, Default, PartialEq, Eq, Hash)]
-struct Scope {
-    member: bool,
-    bound: std::rc::Rc<[TypeId]>,
-}
-
-impl Scope {
-    /// The same bindings, inside a record's member.
-    fn inside_member(&self) -> Self {
-        Self {
-            member: true,
-            bound: std::rc::Rc::clone(&self.bound),
-        }
-    }
-
-    /// These bindings and a signature's own parameters.
-    fn binding(self, parameters: &[TypeId]) -> Self {
-        if parameters
-            .iter()
-            .all(|parameter| self.bound.contains(parameter))
-        {
-            return self;
-        }
-        let mut bound: Vec<TypeId> = self.bound.iter().chain(parameters).copied().collect();
-        bound.sort_unstable();
-        bound.dedup();
-        Self {
-            member: self.member,
-            bound: bound.into(),
-        }
-    }
-}
-
-/// Whether `ty` is an anonymous record: see [`is_anonymous_record`].
-#[must_use]
-pub(crate) fn is_an_anonymous_record(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    snapshot
-        .types
-        .get(ty.0 as usize)
-        .is_some_and(|record| is_anonymous_record(snapshot, ty, record))
-}
-
-/// An object record with neither a declaring symbol nor type arguments: an
-/// object literal's type or a type literal, whose properties are all it is.
-fn is_anonymous_record(snapshot: &SemanticSnapshot, ty: TypeId, record: &TypeRecord) -> bool {
-    matches!(record.kind, TypeKind::Object { .. })
-        && record.symbol.is_none()
-        && snapshot.type_arguments.get(&ty).is_none_or(Vec::is_empty)
 }
 
 pub(super) fn mentions_a_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
@@ -1644,7 +1450,7 @@ mod tests {
             }
             let mut writer = Writer::new(&mut snapshot, FxHashMap::default(), FxHashMap::default());
             let created = writer
-                .instance(SymbolId(0), TypeId(0), actual, &Sigma::new(), 0)
+                .instance(SymbolId(0), TypeId(0), actual, 0)
                 .expect("empty owned instance");
             assert_eq!(
                 writer
@@ -1956,13 +1762,7 @@ mod tests {
         let mut writer = Writer::new(&mut snapshot, index.clone(), declarations);
         writer.created = BUDGET;
         assert_eq!(
-            writer.instance(
-                SymbolId(0),
-                TypeId(0),
-                vec![TypeId(4), TypeId(4)],
-                &Sigma::new(),
-                0
-            ),
+            writer.instance(SymbolId(0), TypeId(0), vec![TypeId(4), TypeId(4)], 0),
             Some(TypeId(6))
         );
         assert_eq!(writer.composite(TypeKind::Unknown, None), Some(TypeId(4)));
@@ -2227,276 +2027,5 @@ mod tests {
             required_call_forms(&snapshot, &owners),
             FxHashMap::from_iter([(owner, vec![TypeId(4)])])
         );
-    }
-
-    fn property(
-        name: &str,
-        ty: TypeId,
-        declaration: u32,
-        kind: nts_semantic_schema::MemberKind,
-    ) -> PropertyRecord {
-        PropertyRecord {
-            name: name.into(),
-            ty,
-            readonly: false,
-            optional: false,
-            declaration: Some(NodeId(declaration)),
-            kind,
-            own: true,
-        }
-    }
-
-    fn parameter(name: &str) -> TypeKind {
-        TypeKind::TypeParameter {
-            name: name.to_owned(),
-            is_this: false,
-            constraint: None,
-        }
-    }
-
-    /// `{ value: T }`, the type of `{ value }` inside `hold<T>`: a record with
-    /// no symbol and no arguments, whose only mention of `T` is its property.
-    /// Each sigma gets its own record, the same sigma the same one, and the
-    /// lookup a copy makes finds what the writer made.
-    #[test]
-    fn an_anonymous_record_is_a_form_of_the_one_owner_its_properties_mention() {
-        use nts_semantic_schema::MemberKind;
-        let mut graph = snapshot(vec![
-            parameter("T"),
-            TypeKind::Number,
-            TypeKind::String,
-            TypeKind::Object {
-                properties: vec![property("value", TypeId(0), 29, MemberKind::Field)],
-            },
-        ]);
-        let form = TypeId(3);
-        let owner = Owner::Function(NodeId(10));
-        let owners = FxHashMap::from_iter([(TypeId(0), owner)]);
-        assert!(mentions_a_parameter(&graph, form));
-        assert_eq!(one_owner_of(&graph, &owners, form), Some(owner));
-        let number = Sigma::from([(TypeId(0), TypeId(1))]);
-        let string = Sigma::from([(TypeId(0), TypeId(2))]);
-        let (as_number, as_string, again) = {
-            let mut writer = Writer::new(&mut graph, FxHashMap::default(), FxHashMap::default());
-            let as_number = substitute(&mut writer, form, &number, 0).expect("number instance");
-            let as_string = substitute(&mut writer, form, &string, 0).expect("string instance");
-            let again = substitute(&mut writer, form, &number, 0);
-            (as_number, as_string, again)
-        };
-        assert_ne!(as_number, form);
-        assert_ne!(as_number, as_string);
-        assert_eq!(again, Some(as_number));
-        let field = |ty: TypeId| match &graph.types[ty.0 as usize].kind {
-            TypeKind::Object { properties } => properties[0].ty,
-            other => panic!("not a record: {other:?}"),
-        };
-        assert_eq!(field(as_number), TypeId(1));
-        assert_eq!(field(as_string), TypeId(2));
-        assert!(!mentions_a_parameter(&graph, as_number));
-        let templates = Templates::new(&graph);
-        assert_eq!(templates.resolve(form, &number), Some(as_number));
-        assert_eq!(templates.resolve(form, &string), Some(as_string));
-    }
-
-    /// One difference from the record above: the record has a symbol, so it is
-    /// a named type, read through its arguments, and it has none.
-    #[test]
-    fn a_named_record_is_read_through_its_arguments_only() {
-        use nts_semantic_schema::MemberKind;
-        let mut graph = snapshot(vec![
-            parameter("T"),
-            TypeKind::Object {
-                properties: vec![property("value", TypeId(0), 29, MemberKind::Field)],
-            },
-        ]);
-        graph.types[1].symbol = Some(SymbolId(0));
-        assert!(!mentions_a_parameter(&graph, TypeId(1)));
-    }
-
-    /// `{ value: T, map<U>(u: U): U }`: `U` is the method's own, bound by its
-    /// signature, so the record mentions `T` alone and stays a form of the
-    /// function that owns `T` -- not of the method, whose copies would map
-    /// `this` to a record nothing builds. Without `value`, it mentions nothing.
-    #[test]
-    fn a_generic_members_own_parameters_are_not_free_in_its_record() {
-        use nts_semantic_schema::MemberKind;
-        let mut graph = snapshot(vec![
-            parameter("T"),
-            parameter("U"),
-            TypeKind::Function(SignatureId(0)),
-            TypeKind::Object {
-                properties: vec![
-                    property("value", TypeId(0), 29, MemberKind::Field),
-                    property("map", TypeId(2), 30, MemberKind::Method),
-                ],
-            },
-            TypeKind::Object {
-                properties: vec![property("map", TypeId(2), 31, MemberKind::Method)],
-            },
-        ]);
-        graph.signatures = vec![SignatureRecord {
-            parameters: vec![ParameterRecord {
-                name: "u".to_owned(),
-                ty: TypeId(1),
-                optional: false,
-                rest: false,
-            }],
-            return_type: TypeId(1),
-            type_parameters: vec![TypeId(1)],
-            is_construct: false,
-            type_predicate: None,
-            this_type: None,
-        }];
-        let mut found = Vec::new();
-        parameters_in(&graph, TypeId(3), &mut found);
-        assert_eq!(found, vec![TypeId(0)]);
-        assert!(!mentions_a_parameter(&graph, TypeId(4)));
-        // The generic function type met directly keeps its parameter: that is
-        // how a generic function's own type is a form of that function.
-        assert!(mentions_a_parameter(&graph, TypeId(2)));
-        let owners = FxHashMap::from_iter([
-            (TypeId(0), Owner::Function(NodeId(10))),
-            (TypeId(1), Owner::Function(NodeId(30))),
-        ]);
-        assert_eq!(
-            one_owner_of(&graph, &owners, TypeId(3)),
-            Some(Owner::Function(NodeId(10)))
-        );
-    }
-
-    /// `type L = { next: L | null; v: T }` inside `hold<T>`: the walk enters
-    /// each record once, so it completes and finds `T`; substitution, which
-    /// cannot name a record still being made, stops at its depth bound and
-    /// answers nothing, leaving the form as it was rather than spinning.
-    #[test]
-    fn a_self_referential_anonymous_record_completes() {
-        use nts_semantic_schema::MemberKind;
-        let mut graph = snapshot(vec![
-            parameter("T"),
-            TypeKind::Null,
-            TypeKind::Union(vec![TypeId(1), TypeId(3)]),
-            TypeKind::Object {
-                properties: vec![
-                    property("next", TypeId(2), 26, MemberKind::Field),
-                    property("v", TypeId(0), 34, MemberKind::Field),
-                ],
-            },
-            TypeKind::Number,
-        ]);
-        let mut found = Vec::new();
-        parameters_in(&graph, TypeId(3), &mut found);
-        assert_eq!(found, vec![TypeId(0)]);
-        let owner = Owner::Function(NodeId(10));
-        let owners = FxHashMap::from_iter([(TypeId(0), owner)]);
-        assert_eq!(one_owner_of(&graph, &owners, TypeId(3)), Some(owner));
-        let sigma = Sigma::from([(TypeId(0), TypeId(4))]);
-        {
-            let mut writer = Writer::new(&mut graph, FxHashMap::default(), FxHashMap::default());
-            assert_eq!(substitute(&mut writer, TypeId(3), &sigma, 0), None);
-            assert_eq!(writer.created, 0, "nothing half-made is left behind");
-        }
-        assert_eq!(Templates::new(&graph).resolve(TypeId(3), &sigma), None);
-    }
-
-    /// `PromiseWithResolvers<T>` from a file the frontend did not decode: a
-    /// record with a symbol and arguments, but no declaration, whose members
-    /// include a method generic in a parameter of its own. Under `T := number`
-    /// it is the instance with arguments `[number]`: made once from this
-    /// record, with the generic method left out and the arguments recorded,
-    /// and found by those arguments afterwards, by the writer and a lookup.
-    #[test]
-    fn an_undeclared_generic_is_instantiated_from_its_template() {
-        use nts_semantic_schema::MemberKind;
-        let mut graph = snapshot(vec![
-            parameter("T"),
-            parameter("U"),
-            TypeKind::Function(SignatureId(0)),
-            TypeKind::Object {
-                properties: vec![
-                    property("value", TypeId(0), 40, MemberKind::Field),
-                    property("then", TypeId(2), 41, MemberKind::Method),
-                ],
-            },
-            TypeKind::Number,
-        ]);
-        graph.types[3].symbol = Some(SymbolId(0));
-        graph.type_arguments.insert(TypeId(3), vec![TypeId(0)]);
-        graph.signatures = vec![SignatureRecord {
-            parameters: vec![ParameterRecord {
-                name: "u".to_owned(),
-                ty: TypeId(1),
-                optional: false,
-                rest: false,
-            }],
-            return_type: TypeId(1),
-            type_parameters: vec![TypeId(1)],
-            is_construct: false,
-            type_predicate: None,
-            this_type: None,
-        }];
-        let sigma = Sigma::from([(TypeId(0), TypeId(4))]);
-        let (made, again) = {
-            let mut writer = Writer::new(&mut graph, FxHashMap::default(), FxHashMap::default());
-            let made = substitute(&mut writer, TypeId(3), &sigma, 0).expect("an instance");
-            (made, substitute(&mut writer, TypeId(3), &sigma, 0))
-        };
-        assert_eq!(again, Some(made));
-        let record = &graph.types[made.0 as usize];
-        assert_eq!(record.symbol, Some(SymbolId(0)));
-        assert_eq!(graph.type_arguments.get(&made), Some(&vec![TypeId(4)]));
-        let TypeKind::Object { properties } = &record.kind else {
-            panic!("not a record: {:?}", record.kind);
-        };
-        let kept: Vec<_> = properties.iter().map(|p| (p.name.clone(), p.ty)).collect();
-        assert_eq!(kept, vec![("value".into(), TypeId(4))]);
-        let templates = Templates::new(&graph);
-        assert_eq!(templates.resolve(TypeId(3), &sigma), Some(made));
-    }
-
-    /// `{ value: T; again?: typeof hold }` inside `hold<T>`: `hold`'s own
-    /// signature binds `T`, but only within itself. The sibling `value` still
-    /// mentions it, so the record is a form of `hold`. The control, with
-    /// `again` alone, mentions nothing: there `T` occurs only where the
-    /// signature binds it.
-    #[test]
-    fn a_member_binds_its_parameters_only_within_its_own_signature() {
-        use nts_semantic_schema::MemberKind;
-        let graph = |properties| {
-            let mut graph = snapshot(vec![
-                parameter("T"),
-                TypeKind::Number,
-                TypeKind::Function(SignatureId(0)),
-                TypeKind::Object { properties },
-            ]);
-            graph.signatures = vec![SignatureRecord {
-                parameters: vec![ParameterRecord {
-                    name: "value".to_owned(),
-                    ty: TypeId(0),
-                    optional: false,
-                    rest: false,
-                }],
-                return_type: TypeId(1),
-                type_parameters: vec![TypeId(0)],
-                is_construct: false,
-                type_predicate: None,
-                this_type: None,
-            }];
-            graph
-        };
-        let again = property("again", TypeId(2), 31, MemberKind::Field);
-        let both = graph(vec![
-            property("value", TypeId(0), 30, MemberKind::Field),
-            again.clone(),
-        ]);
-        let mut found = Vec::new();
-        parameters_in(&both, TypeId(3), &mut found);
-        assert_eq!(found, vec![TypeId(0)]);
-        // The order of the two members does not decide it either.
-        let reversed = graph(vec![
-            again.clone(),
-            property("value", TypeId(0), 30, MemberKind::Field),
-        ]);
-        assert!(mentions_a_parameter(&reversed, TypeId(3)));
-        assert!(!mentions_a_parameter(&graph(vec![again]), TypeId(3)));
     }
 }

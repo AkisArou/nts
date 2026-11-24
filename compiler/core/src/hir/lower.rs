@@ -738,9 +738,6 @@ struct Shared {
     target_copies: rustc_hash::FxHashMap<NodeId, Vec<TypeId>>,
     /// Typed comparator sorts share one generated helper family per contract.
     sort_helpers: array_sort::Registry,
-    /// Every copy of every generic, class and function alike: what an object
-    /// literal written inside one lowers its members per (`per_copy_literals`).
-    class_copies: Vec<ClassCopy>,
 }
 
 impl Shared {
@@ -815,7 +812,6 @@ impl Shared {
             thenables,
             target_copies: constructor_targets(&probe),
             sort_helpers: array_sort::Registry::default(),
-            class_copies,
         }
     }
 
@@ -869,8 +865,7 @@ impl Shared {
         // structural ones are: a call with nothing deferred names the same
         // copy everywhere, and one that deferred names this copy's.
         builder.calls.class = copy
-            .calls_in
-            .or(copy.instance)
+            .instance
             .and_then(|at| self.generics.at_call_in.get(&at));
         // A generic function's own instance is the final override.
         builder.calls.function = within.and_then(|at| self.generics.at_call_in_copy.get(&at));
