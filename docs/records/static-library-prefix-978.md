@@ -99,6 +99,16 @@ run. Formatting, Clippy, fresh compiler build, selected Rust tests and the
 native frontend invariant check all passed. Admission waits are included in
 the logged step durations.
 
+The single requested landing-plan retry succeeded. Both selector records were
+accepted as `stale-live`, and the earlier child-process `Unexpected EOF` did
+not recur. Its plan defers interop, so the entire interop step was run
+separately with the freshly built `nts-dev` compiler: PASS, 429 seconds of
+execution, no failed fixtures. Both C and LLVM product callers passed,
+including the overload host before its Windows-only execution skip. The
+usual unavailable Mac/Windows execution skips remain. This standalone run
+selects a compiler explicitly and is experimental evidence; the canonical
+landing check is separate.
+
 | Evidence | SHA-256 |
 |---|---|
 | `focused.log` | `99485745eca746095e1aee7cbd0cee143d91483dee7ec27eaac310c0293bd03b` |
@@ -106,3 +116,7 @@ the logged step durations.
 | `inner-6.log` (before ABI-test helper) | `7b50d37a15ef067e9b360b049017ba26e5f3bc9335d91e55994ed801a99482bd` |
 | `inner-7.log` (complete green run) | `e5ad17eadf147654d867ab645b7066c50e316b43f1625e97653ac073db3b47e7` |
 | `test-layout.log` | `d3df20f3802ae4bec5f1f6d136bf6ac2153d768a9f7b68b87be88776e735dbb6` |
+| `plan-retry.log` | `7db724f3a0df2f3f64e602bdff5877130479f7c3996f41182fee1632f33a843a` |
+| `interop.log` (runner) | `25cb2327e80a72c85a01f68a5fb156c24063635b7567836cc288a28b6de38c80` |
+| `interop-run/interop.log` (fixtures) | `a1b6e3da69cbd8ccbdf18194a581a0b0279a6311d869000bbdfdaed29720047d` |
+| `interop-run/summary.json` | `c8550de1c7a8e131182c17e482b5cce709b0a22aff4a7212e5bc1b930120e8d3` |
