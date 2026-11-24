@@ -4537,3 +4537,26 @@ published surface. The measurements are in
 
 The contract is in [native](../../targets/native.md#decisions) and
 [node-addon](../../targets/node-addon.md#decisions).
+
+## A step's bound spends no CPU that other work takes (11-24)
+
+Approved by the coordinator for #889. A gate step's execution bound counted
+every second outside the runner's declared admission waits. A full-check step
+runs at CPU weight 10, so when outranked it spent its bound while it barely
+ran. The runner now samples the step slice's `cpu.stat` and `cpu.pressure`
+`full` on the bound's 500 ms tick and at the step's end. `ProgressBound`
+divides the undeclared time between two samples at the second one. Lost CPU
+spends nothing, and declared waits stay exact.
+
+`full` was chosen over `some` by measurement: a self-oversubscribed step had
+58% of its time excused under `some` and 15% under `full`. The excuse is a stated
+lower bound: the kernel averages a cgroup's stall over the CPUs it was busy
+on, so a step spread over several CPUs has roughly a third to a half of its
+real loss still counted. It is not scaled by any estimate. The full check's
+run bound keeps `some` and under-counts in the same, safe direction. A CPU
+bound of the bound times the step's width backs the execution bound, and the
+bound has no separate stall limit. The measurements and controls are in
+[step-bound-lost-cpu-889](../step-bound-lost-cpu-889.md).
+
+The contract is in [the workflow](../../workflow.md#decisions).
+

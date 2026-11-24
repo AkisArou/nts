@@ -339,8 +339,17 @@ slots, at least an hour; in a landing check, at most max(15 minutes, three
 times the change's estimate). A tokened step spends this execution allowance
 while a case runs or its script works; a known admission wait with no case
 running spends none. This includes memory, priority, slots and frontend
-admission. The log and summary name these waits. A landing's ceiling always
-bounds wall time, including waits.
+admission. Nor does CPU that other work takes from the step: the runner
+samples the step slice's `cpu.stat` and `cpu.pressure` `full` (time it had
+runnable tasks and none of them ran) every 500 ms, and that lost time spends
+nothing. `some` is not read, because a step whose threads outnumber its CPUs
+would excuse itself. The excuse is a lower bound on the CPU taken: the kernel
+averages a cgroup's stall over the CPUs it was busy on, so only a step on one
+CPU is excused exactly. A sleeping or hung step spends its bound at wall rate.
+A CPU bound backs it: the bound times the slots the step may hold, which
+stops a step whose threads outrun its width. The log and summary name the
+waits, the lost CPU and the CPU it ran. A landing's ceiling always bounds wall
+time, including waits.
 
 **A full-check run is held when it stops progressing, never because higher
 ranks slowed it.** Its bound
@@ -2939,6 +2948,13 @@ death; an absent timestamp remains explicit after forced termination.
   reach belongs to the shared `projectMembers` owner. Until the census reader
   declares those inputs, an imported file outside the case can miss the landing
   census check; green-core native refresh still covers every row.
+
+- **A step's bound spends no CPU that other work takes from it.** The runner
+  samples the step slice's `cpu.pressure` `full`, never `some`, whose own
+  threads would excuse an oversubscribed step. The excuse is a lower bound,
+  never scaled by an estimate. A CPU bound of the bound times the step's width
+  backs it, and the bound has no separate stall limit
+  ([log](records/notebooks/decisions-log.md#a-steps-bound-spends-no-cpu-that-other-work-takes-11-24)).
 
 - **The full check's run bound measures progress, not wall time.** A run is
   held when it has stalled outside its own waits for its stall bound, when no
