@@ -349,8 +349,10 @@ runnable tasks and none of them ran) every 500 ms, and that lost time spends
 nothing. `some` is not read, because a step whose threads outnumber its CPUs
 would excuse itself. The excuse is a lower bound on the CPU taken: the kernel
 averages a cgroup's stall over the CPUs it was busy on, so only a step on one
-CPU is excused exactly. A sleeping or hung step spends its bound at wall rate.
-A CPU bound backs it: the bound times the slots the step may hold, which
+CPU is excused exactly, and the step's launch (its scope's creation and entry
+check, before its own work is in its slice) is not excused at all. Each sample
+is one observation: the counters and the moment they describe. A sleeping or
+hung step spends its bound at wall rate. A CPU bound backs it: the bound times the slots the step may hold, which
 stops a step whose threads outrun its width. The log and summary name the
 waits, the lost CPU and the CPU it ran. A landing's ceiling always bounds wall
 time, including waits.

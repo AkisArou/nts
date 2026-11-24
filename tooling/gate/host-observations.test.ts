@@ -218,6 +218,28 @@ test('CPU observations own all three counters, and an omission cannot select the
   assert.throws(()=>host.cgroupCpu('/does-not-exist'),/cpu.default.userUsec/);
 });
 
+test('a CPU sample is one observation: its counters and its moment from one version of the capability, and a missing or half-written part refuses by name',t=>{
+  const root=testScratch(t,'host-cpu-sample');
+  const pressure=(full:number)=>{const line=(totalUsec:number)=>({avg10:0,totalUsec});const resource=(totalUsec:number)=>({some:line(totalUsec),full:line(totalUsec)});return {identity:'/step:fixture',resources:{cpu:resource(full),memory:resource(0),io:resource(0)}};};
+  const env=ownMemory(root,{clock:{kind:'fixed',now:0},cpu:{kind:'fixed',default:{usageUsec:0,userUsec:0,systemUsec:0}}});
+  const host=hostObservations(env),file=env.NTS_HOST_OBSERVATIONS;
+  const write=(change:(data:any)=>void)=>{const data=JSON.parse(readFileSync(file,'utf8'));change(data);writeFileSync(file,JSON.stringify(data));};
+  assert.deepEqual([host.cgroupCpuSample('/step').atMs,host.cgroupCpuSample('/step').cpu.usageUsec,host.cgroupCpuSample('/step').pressure.resources.cpu.full.totalUsec],[0,0,0]);
+  // A fixture moves its clock and the step's counters in one write; one sample sees them all moved.
+  write(data=>{data.clock.now=30_000;data.cpu.cgroups={'/step':{usageUsec:300_000,userUsec:300_000,systemUsec:0}};data.pressure.cgroups={'/step':pressure(29_700_000)};});
+  const moved=host.cgroupCpuSample('/step');
+  assert.deepEqual([moved.atMs,moved.cpu.usageUsec,moved.pressure.resources.cpu.full.totalUsec],[30_000,300_000,29_700_000]);
+  assert.deepEqual(host.cgroupCpuSample('/other').cpu,{usageUsec:0,userUsec:0,systemUsec:0},'another cgroup keeps the default');
+  write(data=>{delete data.pressure.cgroups['/step'].resources.cpu.full.totalUsec;});
+  assert.throws(()=>host.cgroupCpuSample('/step'),/pressure\.cgroups\.\/step\.cpu\.full is missing or invalid/);
+  write(data=>{data.pressure.cgroups['/step']=pressure(1);delete data.cpu.cgroups['/step'].usageUsec;});
+  assert.throws(()=>host.cgroupCpuSample('/step'),/cpu\.cgroups\.\/step\.usageUsec/);
+  write(data=>{data.cpu.cgroups['/step'].usageUsec=1;delete data.clock.now;});
+  assert.throws(()=>host.cgroupCpuSample('/step'),/clock\.now/);
+  writeFileSync(file,readFileSync(file,'utf8').slice(0,40));
+  assert.throws(()=>host.cgroupCpuSample('/step'),/cannot read host observation capability/);
+});
+
 test('cpu.stat requires one whole nonnegative counter of each kind',()=>{
   assert.deepEqual(parseCgroupCpu('usage_usec 600\nuser_usec 400\nsystem_usec 200\nnice_usec 15\n'),{usageUsec:600,userUsec:400,systemUsec:200});
   for(const text of ['user_usec 1\nsystem_usec 0\n','usage_usec -1\nuser_usec 1\nsystem_usec 0\n','usage_usec 1\nuser_usec 1\nuser_usec 1\nsystem_usec 0\n'])assert.throws(()=>parseCgroupCpu(text),/cpu.stat/);

@@ -144,6 +144,13 @@ export type MachineMemory = {availableBytes:number;totalBytes:number};
 export type DiskSpace = {freeBytes:number;freeInodes:number};
 export type CgroupCpu = {usageUsec:number;userUsec:number;systemUsec:number};
 export type OwnCpu = {userUsec:number;systemUsec:number};
+/** One sample of a cgroup's CPU: its cpu.stat and cpu.pressure, and the
+ * moment (`now`'s clock) they describe. A rate over two samples needs the
+ * counters and the moment of each from one observation: live, the clock is
+ * read just after both counters; a fixture gives all three from one read of
+ * its file, so a fixture that moves its clock and counters together is never
+ * seen half moved. */
+export type CgroupCpuSample = {atMs:number;cpu:CgroupCpu;pressure:PressureReading};
 export type ScopeMemoryPeak = {readonly resettable:boolean;reset():void;read():number;close():void};
 export type HostObservationFixture = {
   version:1;
@@ -196,6 +203,7 @@ export interface HostObservations {
   ownCgroup():string;
   machinePressure():PressureReading;
   cgroupPressure(group:string):PressureReading;
+  cgroupCpuSample(group:string):CgroupCpuSample;
   loopDelay():LoopDelayMeter;
   processUsers(roots:readonly string[]):TreeProcessObservation;
 }
@@ -380,6 +388,21 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       return value;
     };
     read();
+    const cpuOf=(value:HostObservationFixture,path:string):CgroupCpu=>{
+      const cpu=value.cpu;if(cpu.kind==='live')return liveCgroupCpu(path,cgroups);
+      return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);
+    };
+    const pressureOf=(value:HostObservationFixture,group:string):PressureReading=>{
+      checkedGroup(group);const pressure=value.pressure;if(pressure.kind==='live')return livePressure(cgroups,group);
+      return pressureReading(pressure.cgroups?.[group]??{...pressure.default,identity:group+':'+pressure.default.identity},'pressure.cgroups.'+group);
+    };
+    const nowOf=(value:HostObservationFixture):number=>{
+      const clock=value.clock;
+      if(clock?.kind==='live')return performance.now();
+      if(clock?.kind==='fixed')return number(clock.now,'clock.now');
+      if(clock?.kind==='file'){const text=textFile(clock.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}
+      throw new HostObservationError('host observation clock is missing or invalid');
+    };
     // Each acquired physical scope publishes its own immutable identity in
     // this fixture's capability. Separate records avoid cross-process lost
     // updates. Acquisition is provenance only: it declares no resource value.
@@ -507,17 +530,19 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
         if(resident.kind==='live')return cgroups.children(path);
         return fixtureCgroupChildren(Object.keys(resident.cgroups??{}),path);
       },
-      cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path,cgroups);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
+      cgroupCpu:path=>cpuOf(read(),path),
       ownCpu:()=>{const value=read().selfCpu;return value.kind==='live'?liveOwnCpu():ownCpu(value.value);},
       ownScopeMemoryPeak:()=>scopePeak(),
       scopeMemoryPeak:group=>scopePeak(group),
       machineWidth:()=>number(read().width?.logical,'width.logical'),
       availableWidth:()=>number(read().width?.available,'width.available'),
-      now:()=>{const value=read().clock;if(value?.kind==='live')return performance.now();if(value?.kind==='fixed')return number(value.now,'clock.now');if(value?.kind==='file'){const text=textFile(value.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}throw new HostObservationError('host observation clock is missing or invalid');},
+      now:()=>nowOf(read()),
       wallNow:()=>{const value=read().wallClock;return value.kind==='live'?Date.now():number(value.now,'wallClock.now');},
       ownCgroup:()=>{const value=read().pressure;return value.kind==='live'?liveOwnCgroup():checkedGroup(value.ownGroup);},
       machinePressure:()=>{const value=read().pressure;return value.kind==='live'?livePressure(cgroups):pressureReading(value.machine,'pressure.machine');},
-      cgroupPressure:group=>{checkedGroup(group);const value=read().pressure;return value.kind==='live'?livePressure(cgroups,group):pressureReading(value.cgroups?.[group]??{...value.default,identity:group+':'+value.default.identity},'pressure.cgroups.'+group);},
+      cgroupPressure:group=>pressureOf(read(),group),
+      // One read: the counters and the clock of one version of the file.
+      cgroupCpuSample:group=>{const value=read(),cpu=cpuOf(value,group),pressure=pressureOf(value,group);return {cpu,pressure,atMs:nowOf(value)};},
       loopDelay:()=>{
         const initial=read().loopDelay;if(initial.kind==='live')return liveLoopDelay();let closed=false;
         const opened=()=>{if(closed)throw new HostObservationError('host observation loopDelay meter is closed');};
@@ -555,6 +580,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     ownCgroup:liveOwnCgroup,
     machinePressure:()=>livePressure(cgroups),
     cgroupPressure:group=>livePressure(cgroups,group),
+    cgroupCpuSample:group=>{const cpu=liveCgroupCpu(group,cgroups),pressure=livePressure(cgroups,group);return {cpu,pressure,atMs:performance.now()};},
     loopDelay:liveLoopDelay,
   };
 }

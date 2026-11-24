@@ -23,6 +23,8 @@ import { newTestScratch } from "./test-scratch.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import { removable } from "./run-temporary.ts";
 import { randomUUID } from "node:crypto";
+import { hostObservations } from "./host-observations.ts";
+import { ownMemory } from "./test-memory.ts";
 import { gateCpus, inheritedCpus } from "./affinity.ts";
 import { newToolingSlice, stopToolingSlice, toolingSlice, toolingSliceArgs } from "./tooling-slice.ts";
 import type { Priority } from "./ranks.ts";
@@ -213,15 +215,23 @@ test("no bound would have stopped the committed healthy run", () => {
   }
 });
 
-/** How a fixture's runner runs: `format`'s command (else it sleeps until the test ends), a rank its run root takes beside every rank's work under nts.slice (else nested where the test runs), and live CPU counters. */
-type FixtureRun = { owned?: Record<string, string>; format?: string[]; rank?: Priority; live?: boolean };
+/**
+ * What the step's slice is observed to do, in the fixture's own observations:
+ * the clock stands at 0 until `format` moves it by `clockS`, and its slice's
+ * cpu.stat usage by `usageS` and cpu.pressure `full` by `fullS`, all in one
+ * write of the capability file. Then `format` exits, or waits for the release.
+ */
+type Advance = { clockS: number; usageS: number; fullS: number; then: "exit" | "wait" };
+
+/** How a fixture's runner runs: `format`'s command (else it sleeps until the test ends), or the observations it advances; a rank its run root takes beside every rank's work under nts.slice (else nested where the test runs); and live CPU counters. */
+type FixtureRun = { owned?: Record<string, string>; format?: string[]; advance?: Advance; rank?: Priority; live?: boolean };
 
 /**
  * A real runner in a scratch repository running `steps`, in a unit of its own
  * stopped by name: `format` runs its command or never finishes, `records`
  * finishes at once.
  */
-function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, rank, live = false }: FixtureRun = {}) {
+function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, advance, rank, live = false }: FixtureRun = {}) {
   // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
   const own = newTestScratch("step-bound");
   t.after(() => { writeFileSync(join(own, "release"), "the test is over"); removable(own); rmSync(own, { recursive: true, force: true }); });
@@ -244,17 +254,39 @@ export { stepTableProblem };
   writeFileSync(join(gate, "times.tsv"), "format\t1\t1\t1\nrecords\t1\t1\t1\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
+  // An ample memory reading and a ledger of its own, as every test that starts
+  // a real runner gives it; live, its own cgroups' CPU counters; advanced, a
+  // clock that stands until the step moves it.
+  const counters = live ? { cpu: { kind: "live" as const }, pressure: { kind: "live" as const } } : advance ? { clock: { kind: "fixed" as const, now: 0 } } : {};
+  const memory = gateFixtureMemory(join(own, "memory"), root, counters);
   writeFileSync(join(gate, "payload.mjs"), `
-import { existsSync, watch } from "node:fs";
+import { existsSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)};
-if (process.env.NTS_GATE_STEP === "format" && format) {
+const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)};
+const observations = ${JSON.stringify(memory.NTS_HOST_OBSERVATIONS)};
+const release = () => new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
+if (process.env.NTS_GATE_STEP === "format" && advance) {
+  // The step's slice is the component of its own cgroup that names the slice its runner gave it.
+  const cgroup = /^0::(.+)$/m.exec(readFileSync("/proc/self/cgroup", "utf8"))[1].split("/"), at = cgroup.indexOf(process.env.NTS_TOOLING_SLICE);
+  if (at < 1) throw new Error("the step's cgroup " + cgroup.join("/") + " does not name its slice " + process.env.NTS_TOOLING_SLICE);
+  const group = cgroup.slice(0, at + 1).join("/"), us = seconds => Math.round(seconds * 1e6), value = JSON.parse(readFileSync(observations, "utf8"));
+  value.clock = { kind: "fixed", now: value.clock.now + advance.clockS * 1000 };
+  value.cpu.cgroups = { ...value.cpu.cgroups, [group]: { usageUsec: us(advance.usageS), userUsec: us(advance.usageS), systemUsec: 0 } };
+  const reading = structuredClone(value.pressure.default);
+  reading.identity = group + ":fixture";
+  reading.resources.cpu.some.totalUsec = reading.resources.cpu.full.totalUsec = us(advance.fullS);
+  value.pressure.cgroups = { ...value.pressure.cgroups, [group]: reading };
+  writeFileSync(observations + ".advance", JSON.stringify(value) + "\\n");
+  renameSync(observations + ".advance", observations);
+  console.log("format advanced its observations: " + JSON.stringify(advance));
+  if (advance.then === "wait") await release();
+} else if (process.env.NTS_GATE_STEP === "format" && format) {
   const ran = spawnSync(format[0], format.slice(1), { stdio: "inherit" });
   console.log("format finished");
   process.exit(ran.status ?? 1);
 } else if (process.env.NTS_GATE_STEP === "format") {
   console.log("format waits for a release that comes only after the test");
-  await new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
+  await release();
 } else console.log("records finished");
 `);
   writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
@@ -266,16 +298,13 @@ else
   exec ${JSON.stringify(process.execPath)} "$(dirname "$0")/payload.mjs"
 fi
 `);
-  // An ample memory reading and a ledger of its own, as every test that starts
-  // a real runner gives it; live, its own cgroups' CPU counters.
-  const counters = live ? { cpu: { kind: "live" as const }, pressure: { kind: "live" as const } } : {};
   // Ranked, the run's root is a sibling of every rank's work, not nested in the test's.
   const inherited = rank ? undefined : toolingSlice(), slice = rank ? undefined : inherited ?? newToolingSlice(true);
   if (slice && !inherited) t.after(() => stopToolingSlice(slice));
   const launcher: NodeJS.ProcessEnv = { ...hostEnvironment(process.env), HOME: join(own, "home") };
   if (rank) delete launcher.NTS_TOOLING_SLICE;
   const planned = gateEnvironment(launcher, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", ...gateFixtureMemory(join(own, "memory"), root, counters), CARGO_TARGET_DIR: target,
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", ...memory, CARGO_TARGET_DIR: target,
     ...(slice ? { NTS_TOOLING_SLICE: slice } : {}), ...(rank ? { NTS_MEMORY_PRIORITY: rank } : {}), ...owned,
   } });
   const unit = `nts-test-step-bound-${randomUUID()}`;
@@ -333,23 +362,74 @@ test("under a landing check's ceiling, a step is stopped there whatever its own 
   assert.deepEqual([records.bound_s, records.bound_basis], [3, "ceiling"]);
 });
 
+test("a step whose slice is observed to lose CPU to other work spends none of that time; without the loss, the same time spends its bound", t => {
+  // Owned observations decide it, not the machine: 30 s pass on the
+  // fixture's clock while the step's own slice runs 0.3 s and is runnable
+  // with none of it running (cpu.pressure `full`) for 29.7 s. Keyed by the
+  // step's own cgroup, a runner that sampled any other cgroup would read the
+  // default zeros and spend the 30 s.
+  const lost = runFixture(t, "format", { format: 3 }, { advance: { clockS: 30, usageS: 0.3, fullS: 29.7, then: "exit" } });
+  assert.equal(lost.result.status, 0, lost.result.stdout + lost.result.stderr);
+  assert.equal(lost.format.verdict, "PASS", lost.format.reason);
+  const clock = lost.format.bound_clock;
+  t.diagnostic(`lost: ${JSON.stringify(clock)}`);
+  assert.ok(Math.abs(clock.execution_s - 0.3) < 1e-6 && Math.abs(clock.cpu_lost_s - 29.7) < 1e-6 && Math.abs(clock.cpu_s - 0.3) < 1e-6,
+    `of 30 s, the 29.7 s its slice lost spent nothing and the 0.3 s it ran did: ${JSON.stringify(clock)}`);
+  // The counterfactual: the same 30 s, with no loss observed, spend its bound.
+  const kept = runFixture(t, "format", { format: 3 }, { advance: { clockS: 30, usageS: 0.3, fullS: 0, then: "wait" } });
+  assert.equal(kept.result.status, 1, kept.result.stdout + kept.result.stderr);
+  assert.equal(kept.format.verdict, "INSTRUMENT", kept.result.stdout);
+  assert.equal(kept.format.reason, "step exceeded its bound of 3 s");
+  assert.ok(kept.format.bound_clock.execution_s >= 30 && kept.format.bound_clock.cpu_lost_s === 0, JSON.stringify(kept.format.bound_clock));
+});
+
 // One gate CPU, outside the measurement CPUs, for a control and its competitor alike.
 const lastGateCpu = () => gateCpus(inheritedCpus()).split(",").at(-1)!.split("-").at(-1)!;
 const loop = (iterations: number) => `i=0; while [ $i -lt ${iterations} ]; do i=$((i+1)); done`;
 
-test("a step outranked for its CPU by landing-weight work stays inside its bound however long that work holds the CPU", t => {
-  // The step's loop and a landing-weight spinner share one CPU, where cpu.pressure `full` is exact; its run's root is at the full check's weight.
-  const cpu = lastGateCpu(), spinner = `nts-test-step-bound-spinner-${randomUUID()}`;
-  t.after(() => { spawnTest("systemctl", ["--user", "stop", spinner], { encoding: "utf8" }); });
-  const spun = spawnTest("systemd-run", ["--user", `--unit=${spinner}`, ...toolingSliceArgs({}, "landing"), "--collect", "--quiet",
-    "-p", "LimitCORE=0", "-p", "RuntimeMaxSec=300s", "taskset", "-c", cpu, "sh", "-c", "while :; do :; done"], { encoding: "utf8" });
-  assert.equal(spun.status, 0, spun.stderr);
-  const { result, format } = runFixture(t, "format", { format: 3 }, { live: true, rank: "full-check", format: ["taskset", "-c", cpu, "sh", "-c", loop(100_000)] });
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(format.verdict, "PASS", format.reason);
-  const clock = format.bound_clock;
-  t.diagnostic(`${format.wall} s: ${JSON.stringify(clock)}`);
-  assert.ok(clock.cpu_lost_s > 3 && clock.execution_s < 3, `it lost more than its bound of 3 s to the spinner and spent less: ${JSON.stringify(clock)} in ${format.wall} s`);
+test("a task alone in its cgroup and always runnable on one CPU is either running or counted in cpu.pressure full, whatever else holds that CPU", async t => {
+  // The premise: the loop is its cgroup's only task, always runnable, on one
+  // CPU. Every moment of it is then either on the CPU (cpu.stat usage) or
+  // runnable and not running, which `full` counts exactly for a cgroup busy on
+  // one CPU. Whoever else takes the CPU, this landing-weight spinner or any
+  // load around the test, only moves time from one counter to the other, so
+  // the sum covers the interval at any load. The counters bracket the clock:
+  // the first sample's moment is read after its counters, the second's before.
+  const cpu = lastGateCpu(), dir = newTestScratch("step-bound-psi");
+  t.after(() => { removable(dir); rmSync(dir, { recursive: true, force: true }); });
+  assert.ok(cpu !== "4" && cpu !== "5", `the loop's CPU ${cpu} is a measurement CPU`);
+  const host = hostObservations(ownMemory(dir, { cpu: { kind: "live" }, pressure: { kind: "live" }, clock: { kind: "live" } }));
+  const spinner = `nts-test-step-bound-spinner-${randomUUID()}`, looper = `nts-test-step-bound-loop-${randomUUID()}`;
+  // Runaway bounds only: nothing in the arm waits on them.
+  const start = (unit: string, rank: Priority) => spawnTest("systemd-run", ["--user", `--unit=${unit}`, ...toolingSliceArgs({}, rank), "--collect", "--quiet",
+    "-p", "LimitCORE=0", "-p", "RuntimeMaxSec=120s", "-p", `CPUAffinity=${cpu}`, "sh", "-c", "while :; do :; done"], { encoding: "utf8" });
+  try {
+    const spun = start(spinner, "landing");
+    assert.equal(spun.status, 0, spun.stderr);
+    const looped = start(looper, "full-check");
+    assert.equal(looped.status, 0, looped.stderr);
+    const group = spawnTest("systemctl", ["--user", "show", looper, "-p", "ControlGroup", "--value"], { encoding: "utf8" }).stdout.trim();
+    assert.match(group, /^\/.+\.service$/, `the loop's unit ${looper} has no cgroup`);
+    const procs = readFileSync(`/sys/fs/cgroup${group}/cgroup.threads`, "utf8").trim().split("\n");
+    assert.equal(procs.length, 1, `the loop's cgroup ${group} holds only the loop, not ${procs.join(" ")}`);
+    const allowed = /^Cpus_allowed_list:\s*(\S+)$/m.exec(readFileSync(`/proc/${procs[0]}/status`, "utf8"))?.[1];
+    assert.equal(allowed, cpu, `the kernel did not hold the loop to CPU ${cpu} (its cpuset allows ${allowed})`);
+    const first = host.cgroupCpuSample(group);
+    await new Promise(resolve => setTimeout(resolve, 2000)); // the measured interval
+    const at = host.now(), second = host.cgroupCpuSample(group);
+    // /proc/<pid>/stat's 39th field, the CPU it last ran on; fields 3 on follow the command's closing parenthesis.
+    const stat = readFileSync(`/proc/${procs[0]}/stat`, "utf8"), ranOn = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[36];
+    assert.equal(ranOn, cpu, `the loop last ran on CPU ${ranOn}, not its CPU ${cpu}`);
+    const interval = (at - first.atMs) / 1000, ran = (second.cpu.usageUsec - first.cpu.usageUsec) / 1e6;
+    const waited = (second.pressure.resources.cpu.full.totalUsec - first.pressure.resources.cpu.full.totalUsec) / 1e6;
+    const seen = `on CPU ${cpu}, ${group} ran ${ran.toFixed(3)} s and lost ${waited.toFixed(3)} s to other work (cpu.pressure full) in ${interval.toFixed(3)} s`;
+    t.diagnostic(seen);
+    assert.ok(interval >= 1, `the interval is ${interval} s`);
+    assert.ok(ran + waited >= 0.95 * interval, `every moment is run or excused as lost: ${seen}`);
+    assert.ok(waited > 0, `the spinner took some of the CPU, excused as lost: ${seen}`);
+  } finally {
+    for (const unit of [looper, spinner]) spawnTest("systemctl", ["--user", "stop", unit], { encoding: "utf8" });
+  }
 });
 
 test("a step whose own threads oversubscribe its one CPU spends its bound for the time it runs: competing with itself is no loss", t => {
@@ -363,12 +443,10 @@ test("a step whose own threads oversubscribe its one CPU spends its bound for th
   assert.ok(clock.cpu_s >= 0.5 && clock.execution_s >= 0.9 * clock.cpu_s, `its execution covers the CPU it ran: ${JSON.stringify(clock)}`);
 });
 
-test("a step spinning past its width is stopped through its scope at its CPU bound, by name", t => {
-  // Eight spinning threads for a step of width 1, at an agent's rank: it runs
-  // more than one CPU-second per second unless the machine gives it less than
-  // an eighth of each of eight CPUs, so its CPU bound comes before its bound.
-  const work = "for t in 1 2 3 4 5 6 7 8; do (while :; do :; done) & done; wait";
-  const { result, format } = runFixture(t, "format", { format: 20 }, { live: true, rank: "agent", format: ["sh", "-c", work] });
+test("a step running past its width is stopped through its scope at its CPU bound, by name", t => {
+  // Owned observations: in 5 s on the fixture's clock its slice runs 25 cpu-s,
+  // past the 20 cpu-s of a 20 s bound at width 1, long before the bound.
+  const { result, format } = runFixture(t, "format", { format: 20 }, { advance: { clockS: 5, usageS: 25, fullS: 0, then: "wait" } });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(format.verdict, "INSTRUMENT", result.stdout);
   assert.equal(format.bound_cpu_s, 20);
@@ -376,6 +454,5 @@ test("a step spinning past its width is stopped through its scope at its CPU bou
   assert.deepEqual(format.instrument, { kind: "step-bound", verdict: "INSTRUMENT", reason: "step exceeded its CPU bound of 20 cpu-s" });
   assert.equal(format.scope?.populated, 0, "its scope was drained");
   assert.match(readFileSync(format.log, "utf8"), /\nstep exceeded its CPU bound of 20 cpu-s: stopped through its scope\n$/);
-  t.diagnostic(`${format.wall} s: ${JSON.stringify(format.bound_clock)}`);
-  assert.ok(format.bound_clock.cpu_s >= 20 && format.bound_clock.execution_s < 20, JSON.stringify(format.bound_clock));
+  assert.ok(Math.abs(format.bound_clock.cpu_s - 25) < 1e-6 && Math.abs(format.bound_clock.execution_s - 5) < 1e-6, JSON.stringify(format.bound_clock));
 });

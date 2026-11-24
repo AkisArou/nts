@@ -1305,8 +1305,12 @@ function start(step, slots, rider = false) {
   try{diagnostics?.beginStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);stop(`host observation: ${error}`);return;}
   // The bound samples the step's slice: what it ran, and how long it was
   // runnable while none of it ran (cpu.pressure `full`), which spends nothing
-  // (step-bound.ts). A sample that cannot be read stops the run by name.
-  const sampleCpu = () => ({ usageUsec: host.cgroupCpu(scope.group).usageUsec, waitingUsec: host.cgroupPressure(scope.group).resources.cpu.full.totalUsec });
+  // (step-bound.ts). A sample is one observation, the counters with the
+  // moment they describe; one that cannot be read stops the run by name.
+  const sampleCpu = () => {
+    const { atMs, cpu, pressure } = host.cgroupCpuSample(scope.group);
+    return { atMs, cpu: { usageUsec: cpu.usageUsec, waitingUsec: pressure.resources.cpu.full.totalUsec } };
+  };
   let firstCpu;
   try { firstCpu = sampleCpu(); }
   catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); return; }
@@ -1340,8 +1344,8 @@ function start(step, slots, rider = false) {
   // waits. Its CPU bound is its bound at every slot it may hold.
   let boundTimer;
   const cpuBound = stepCpuBound(bound, width(step.name));
-  const boundStarted = host.now(), boundClock = new ProgressBound({ execution_s: bound.seconds, cpu_s: cpuBound, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
-  let boundState = boundClock.observe(boundStarted, undefined, firstCpu), boundFailure;
+  const boundStarted = firstCpu.atMs, boundClock = new ProgressBound({ execution_s: bound.seconds, cpu_s: cpuBound, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
+  let boundState = boundClock.observe(boundStarted, undefined, firstCpu.cpu), boundFailure;
   owned.observeBound = (now, u, /** @type {import("./step-bound.ts").CpuSample | undefined} */ cpu) => {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
       requests: tok.waiting.filter(request => request.step === step.name).map(request => request.bytes ?? tokenBytes(step)),
@@ -1358,10 +1362,10 @@ function start(step, slots, rider = false) {
   };
   const checkBound = () => {
     outranked();
-    let cpu;
-    try { cpu = sampleCpu(); }
+    let sample;
+    try { sample = sampleCpu(); }
     catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); return; }
-    owned.observeBound(host.now(), used(), cpu);
+    owned.observeBound(sample.atMs, used(), sample.cpu);
     if (boundState.expired) {
       boundFailure = boundState.expired === "wall_s" ? `step exceeded the landing wall ceiling of ${STEP_CEILING} s`
         : boundState.expired === "cpu_s" ? stepCpuBoundReason(cpuBound) : stepBoundReason(bound.seconds);
@@ -1383,10 +1387,10 @@ function start(step, slots, rider = false) {
     clearTimeout(boundTimer);
     delete owned.observeBound;
     // A last sample of its slice, whose processes have exited: it still exists until the drain.
-    let lastCpu;
-    try { lastCpu = sampleCpu(); }
+    let last;
+    try { last = sampleCpu(); }
     catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); }
-    boundState = boundClock.observe(host.now(), undefined, lastCpu);
+    boundState = last ? boundClock.observe(last.atMs, undefined, last.cpu) : boundClock.observe(host.now());
     // A last sample, of whatever of the step still runs: a step shorter than
     // the sampling interval is measured by it.
     sampleStep(owned);

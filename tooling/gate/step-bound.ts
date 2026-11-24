@@ -34,8 +34,13 @@
 // excuse is a lower bound on the CPU taken, in the safe direction: the kernel
 // averages a cgroup's stall over the CPUs it was busy on, so a step spread
 // over N CPUs reports roughly 1/N of its real wait, and only a step on one CPU
-// is excused exactly. A sleeping or hung step stalls and spends its bound at
-// wall rate.
+// is excused exactly. The step's launch -- `systemd-run --scope` in the
+// runner's cgroup, then its entry check and shell spread over the gate CPUs --
+// is not in its slice or is diluted, so an outranked launch spends its bound
+// (seconds at a landing's 100:1, against bounds of minutes; #1014's record).
+// Each sample is one HostObservations observation, the counters with the
+// moment they describe (cgroupCpuSample). A sleeping or hung step stalls and
+// spends its bound at wall rate.
 //
 // **A CPU bound backs the execution bound**: the step's bound times its width,
 // as if it ran at every slot it may hold for its whole bound. A step whose
