@@ -1,0 +1,23 @@
+ideal 21
+allocated 23
+typed 15
+because Five pairs, each holding a `Leaf` on the left and a `Heavy` on the right,
+because and each `Heavy` a `Note`, in one array of pairs.
+because
+because Zero retains: every object is built into the argument that stores it,
+because so each store is a move, and every read is a borrow.
+because
+because Twenty-one releases, each giving up a real owner's reference: the array,
+because its five pairs, the ten leaf fields of those pairs, and the five notes
+because their `Heavy`s hold.
+because
+because Twenty-three allocations: twenty objects, the array, and the two blocks
+because it grows through for five pushes (capacities 4 and 8), the cost
+because `array-of-objects` records.
+because
+because Fifteen typed deaths: the five pairs, the five plain leaves and the five
+because notes die in a release specialized by type. The five `Heavy`s do not:
+because `Leaf`'s typed release finds another descriptor and hands each to
+because `nts_release`, whose death gives its note up through `Note`'s typed
+because release. A typed release that took the field's static type as the layout
+because would count the same releases and leak every note.

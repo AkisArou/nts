@@ -1,0 +1,21 @@
+ideal 16
+allocated 19
+typed 10
+because Ten slots in one `Leaf[]`: five plain leaves and five `Heavy`s, each
+because `Heavy` holding a `Note`.
+because
+because Zero retains: every object is built into the push that stores it, and
+because every read is a borrow.
+because
+because Sixteen releases, each a real owner's: the array, its ten slots and the
+because five notes their `Heavy`s hold.
+because
+because Nineteen allocations: fifteen objects, the array, and the three blocks it
+because grows through for ten pushes (capacities 4, 8 and 16), the cost
+because `array-of-objects` records.
+because
+because Ten typed deaths: the five plain leaves and the five notes. The array's
+because descriptor releases each slot through `Leaf`'s typed release, which finds
+because another descriptor on each `Heavy` and hands it to `nts_release`; its
+because death gives the note up through `Note`'s typed release. Taking the
+because element type as the layout would leak every note.

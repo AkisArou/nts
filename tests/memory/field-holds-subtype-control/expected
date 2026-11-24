@@ -1,0 +1,14 @@
+ideal 16
+allocated 18
+typed 15
+because The control for `field-holds-subtype`: five pairs of plain leaves in one
+because array, and nothing else.
+because
+because Zero retains, as there. Sixteen releases: the array, its five pairs and
+because their ten leaves.
+because
+because Eighteen allocations: fifteen objects, the array and its two growth
+because blocks (capacities 4 and 8).
+because
+because Fifteen typed deaths: every object dies in a release specialized by its
+because type, because every field holds exactly its static type.

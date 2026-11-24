@@ -4174,9 +4174,10 @@ fn emit_reference_fields(
         // A field whose static type has a typed release gives its object up
         // through it; the release itself checks the object's layout.
         let visit = match action {
-            Action::Release => typed
-                .for_type(&layout.fields[*at].ty)
-                .map_or_else(|| visit.to_owned(), |child| typed_release_name(program, child)),
+            Action::Release => typed.for_type(&layout.fields[*at].ty).map_or_else(
+                || visit.to_owned(),
+                |child| typed_release_name(program, child),
+            ),
             Action::Trace => visit.to_owned(),
         };
         writer.line(
@@ -4214,14 +4215,15 @@ fn typed_release_name(program: &Emission<'_>, layout: usize) -> String {
 /// The release a value of this static type is given up with: its layout's
 /// typed release, or the runtime's.
 fn release_for(program: &Emission<'_>, typed: &TypedReleases, ty: &HirType) -> String {
-    typed
-        .for_type(ty)
-        .map_or_else(|| "nts_release".to_owned(), |at| typed_release_name(program, at))
+    typed.for_type(ty).map_or_else(
+        || "nts_release".to_owned(),
+        |at| typed_release_name(program, at),
+    )
 }
 
 /// Declared before every descriptor, so a contents callback and a body can
-/// call any of them. `static inline`, so one no site reaches is not
-/// `-Wunused-function`.
+/// call any of them. `NTS_MAYBE_UNUSED`: one per eligible layout, and a
+/// program need not reach every one.
 fn emit_typed_release_prototypes(
     writer: &mut CodeWriter,
     origin: &Origin,
@@ -4234,7 +4236,7 @@ fn emit_typed_release_prototypes(
             writer.line(
                 origin,
                 format!(
-                    "static inline void {}(NtsHeader *{object});",
+                    "NTS_MAYBE_UNUSED static inline void {}(NtsHeader *{object});",
                     typed_release_name(program, at)
                 ),
             );
@@ -4278,13 +4280,15 @@ fn emit_typed_releases(
         writer.line(origin, "    nts_count_release();");
         writer.line(origin, "#endif");
         writer.line(origin, format!("    if ({object}->reserved == 1u) {{"));
-        writer.line(
-            origin,
-            format!("        {shape} *{receiver} = ({shape} *){object};"),
-        );
         writer.line(origin, format!("        {object}->reserved = 0;"));
         writer.line(origin, format!("        {object}->flags |= NTS_DYING;"));
         let fields = nts_codegen_common::release::Fields::of(layout);
+        if !fields.managed.is_empty() {
+            writer.line(
+                origin,
+                format!("        {shape} *{receiver} = ({shape} *){object};"),
+            );
+        }
         for (field, child) in fields.managed.iter().zip(&plan.children) {
             let member = c_member_at(layout, *field);
             let release = child.map_or_else(
@@ -4367,7 +4371,10 @@ fn emit_typed_array_descriptors(
     for &element in elements {
         let shape = object_type_name(&program.layouts[element]);
         let callback = format!("__nts_typed_slots_{shape}");
-        writer.line(origin, format!("static void {callback}(NtsHeader *{object}) {{"));
+        writer.line(
+            origin,
+            format!("static void {callback}(NtsHeader *{object}) {{"),
+        );
         writer.line(
             origin,
             format!("    NtsHeader **{slot} = NTS_ITEMS((NtsArray *){object}, NtsHeader *);"),

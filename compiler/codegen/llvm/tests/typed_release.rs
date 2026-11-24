@@ -624,3 +624,252 @@ fn throwing_and_rejecting_a_function_does_not_report_its_captured_message() {
         }
     }
 }
+
+/// The source of `typed_releases_follow_the_proved_layout_graph`: a chain of
+/// `TYPED_RELEASE_DEPTH + 2` classes, each holding the next, beside a subtype
+/// in a base-typed field, an erased field and a cyclic class.
+fn graph_source() -> String {
+    let length = nts_codegen_common::release::TYPED_RELEASE_DEPTH + 2;
+    let mut source = String::from(
+        "class Note { size: number; constructor(size: number) { this.size = size; } }\n\
+         class Leaf { value: number; constructor(value: number) { this.value = value; } }\n\
+         class Heavy extends Leaf {\n\
+           note: Note;\n\
+           constructor(value: number) { super(value); this.note = new Note(value + 1); }\n\
+         }\n\
+         class Pair { left: Leaf; right: Leaf; constructor(left: Leaf, right: Leaf) { this.left = left; this.right = right; } }\n\
+         class Opaque { held: unknown; constructor(held: unknown) { this.held = held; } }\n\
+         class Ring { weight: number; next: Ring | null = null; constructor(weight: number) { this.weight = weight; } }\n\
+         export function makePairs(x: number): Pair[] {\n\
+           const pairs: Pair[] = [];\n\
+           for (let i = 0; i < 4; i++) pairs.push(new Pair(new Leaf(x + i), new Heavy(x - i)));\n\
+           return pairs;\n\
+         }\n\
+         export function makeOpaque(x: number): Opaque { return new Opaque(new Leaf(x)); }\n\
+         export function makeRing(x: number): Ring { const ring = new Ring(x); ring.next = new Ring(x + 1); return ring; }\n",
+    );
+    for at in 0..length - 1 {
+        let next = at + 1;
+        source.push_str(&format!(
+            "class C{at} {{ next: C{next}; constructor(next: C{next}) {{ this.next = next; }} }}\n"
+        ));
+    }
+    let last = length - 1;
+    source.push_str(&format!(
+        "class C{last} {{ value: number; constructor(value: number) {{ this.value = value; }} }}\n"
+    ));
+    let mut chain = format!("new C{last}(x)");
+    for at in (0..last).rev() {
+        chain = format!("new C{at}({chain})");
+    }
+    source.push_str(&format!(
+        "export function makeChain(x: number): C0 {{ return {chain}; }}\n"
+    ));
+    source
+}
+
+/// Deaths each released graph must finish in a typed release. The chain is
+/// released by the runtime from C, so `C0` dies generically; `C1`'s typed
+/// release is the one the depth bound stops, handing `C2` to `nts_release`;
+/// `C3` onwards die typed again. The pairs' array is proved acyclic, so its
+/// typed descriptor releases four pairs through `Pair`'s typed release; their
+/// plain leaves die typed, each `Heavy` does not, and its note dies typed from
+/// the generic death's contents callback. The erased field and the cyclic
+/// class have none. `Ring` names its number `weight`: a `Leaf` slot can hold
+/// any object laid out like one, and a `Ring` with a leading `value` would
+/// make the pairs' array cyclic. A release that trusted the static type would
+/// also count twelve, and leave the four notes alive.
+const GRAPH_DRIVER: &str = r#"
+#include "nts_runtime.h"
+#include <stdlib.h>
+extern NtsHeader *makeChain(double);
+extern NtsHeader *makePairs(double);
+extern NtsHeader *makeOpaque(double);
+extern NtsHeader *makeRing(double);
+/* A failed check exits at once: the leak a control makes is this driver's
+   to report, before LeakSanitizer's exit report could replace its status. */
+static void expect(int holds, int status) {
+  if (!holds) _Exit(status);
+}
+int main(void) {
+  size_t base = nts_live_count();
+  nts_counting_reset();
+  nts_release(makeChain(3));
+  expect(nts_counted_typed_deaths() == CHAIN_TYPED, 30);
+  nts_counting_reset();
+  nts_release(makePairs(3));
+  expect(nts_counted_typed_deaths() == 12, 31);
+  nts_counting_reset();
+  nts_release(makeOpaque(3));
+  nts_release(makeRing(3));
+  expect(nts_counted_typed_deaths() == 0, 32);
+  nts_collect_cycles();
+  expect(nts_live_count() == base, 33);
+  return 0;
+}
+"#;
+
+/// Make every typed release assume its layout, as a release that trusted the
+/// static type would: the descriptor comparison no longer decides anything.
+fn assuming_the_static_layout(source: &str, llvm: bool) -> String {
+    let mut changed = 0;
+    let lines: Vec<String> = source
+        .lines()
+        .map(|line| {
+            if llvm && line.starts_with("  %mine0 = or i1 false, ") {
+                changed += 1;
+                line.replace("or i1 false, ", "or i1 true, ")
+            } else if !llvm
+                && line.starts_with("    if (!__nts_object || (")
+                && line.contains("->descriptor != &")
+            {
+                changed += 1;
+                "    if (!__nts_object) {".to_owned()
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect();
+    assert!(changed > 0, "no typed release comparison found");
+    lines.join("\n") + "\n"
+}
+
+#[test]
+fn typed_releases_follow_the_proved_layout_graph() {
+    use nts_codegen_common::release::{TYPED_RELEASE_DEPTH, TypedReleases};
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = ScratchDir::new(&root.join("target/typed-release-tests"), "graph");
+    std::fs::write(dir.join("main.ts"), graph_source()).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
+    )
+    .unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Memory::ReferenceCounting,
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+        },
+    )
+    .unwrap();
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let program = &prepared.program;
+    let cycles = program.cycles();
+    let plan = TypedReleases::plan(program, &cycles);
+    let layout = |name: &str| {
+        program
+            .layouts
+            .iter()
+            .position(|layout| layout.name == name)
+            .unwrap_or_else(|| panic!("no layout {name}"))
+    };
+    // Proved acyclic, with no erased or foreign slot: specialized.
+    for name in ["Note", "Leaf", "Heavy", "Pair"] {
+        assert!(
+            plan.of(layout(name)).is_some(),
+            "{name} has no typed release"
+        );
+    }
+    // Acyclic only if an erased field's contents are ignored: the cycle graph
+    // treats `unknown` as reaching every layout, and an erased slot is the
+    // clear-before-release protocol's either way.
+    assert!(plan.of(layout("Opaque")).is_none());
+    assert!(cycles.cyclic[layout("Opaque")]);
+    // Cyclic: the collector's candidate rules stay the runtime's.
+    assert!(plan.of(layout("Ring")).is_none());
+    // Every chain of typed deaths stays within the bound, and the release
+    // whose child would pass it hands that child to `nts_release`.
+    let length = TYPED_RELEASE_DEPTH + 2;
+    for at in 0..length {
+        let typed = plan.of(layout(&format!("C{at}"))).unwrap();
+        assert!(typed.depth <= TYPED_RELEASE_DEPTH, "C{at}: {typed:?}");
+    }
+    assert_eq!(plan.of(layout("C2")).unwrap().depth, TYPED_RELEASE_DEPTH);
+    assert_eq!(plan.of(layout("C1")).unwrap().children, [None]);
+    assert_eq!(plan.of(layout("C1")).unwrap().depth, 1);
+    assert_eq!(
+        plan.of(layout("C0")).unwrap().children,
+        [Some(layout("C1"))]
+    );
+    assert_eq!(
+        plan.of(layout("C3")).unwrap().children,
+        [Some(layout("C4"))]
+    );
+
+    let c = nts_codegen_c::emit(program, hir::native::NativeAbi::LP64);
+    let llvm = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    for absent in ["Opaque", "Ring"] {
+        assert!(
+            !c.writer
+                .text()
+                .contains(&format!("__nts_typed_release_NtsObj_{absent}"))
+        );
+        assert!(
+            !llvm
+                .text
+                .contains(&format!("@__nts_typed_release_{absent}("))
+        );
+    }
+    let chain_typed = length - 2;
+    std::fs::write(
+        dir.join("drive.c"),
+        GRAPH_DRIVER.replace("CHAIN_TYPED", &chain_typed.to_string()),
+    )
+    .unwrap();
+    let mut sources = Vec::new();
+    for file in c.support_files() {
+        let path = file.write(dir.as_std_path()).unwrap();
+        if file.compiled {
+            sources.push(path);
+        }
+    }
+    for (input, text, is_llvm) in [
+        ("graph.c", c.writer.text(), false),
+        ("graph.ll", llvm.text.as_str(), true),
+    ] {
+        std::fs::write(dir.join(input), text).unwrap();
+        run_native(
+            &dir,
+            hir::Memory::ReferenceCounting,
+            input,
+            &sources,
+            0,
+            None,
+        );
+        // The control: the same program with each typed release trusting the
+        // static type. A `Heavy` then dies as a `Leaf`, and its note is never
+        // released.
+        let assumed = format!("assumed-{input}");
+        std::fs::write(
+            dir.join(&assumed),
+            assuming_the_static_layout(text, is_llvm),
+        )
+        .unwrap();
+        run_native(
+            &dir,
+            hir::Memory::ReferenceCounting,
+            &assumed,
+            &sources,
+            33,
+            None,
+        );
+    }
+}

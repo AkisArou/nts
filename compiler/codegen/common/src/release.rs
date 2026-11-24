@@ -132,7 +132,10 @@ impl TypedReleases {
                 made[at]
                     && !cycles.cyclic.get(at).copied().unwrap_or(true)
                     && Fields::of(layout).erased.is_empty()
-                    && layout.fields.iter().all(|field| field.ty.counting().is_none())
+                    && layout
+                        .fields
+                        .iter()
+                        .all(|field| field.ty.counting().is_none())
                     && nts_core::hir::layout::place(&layout.fields).is_some()
             })
             .collect();

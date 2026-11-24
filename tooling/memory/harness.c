@@ -87,14 +87,17 @@ int main(void) {
   size_t retains = nts_counted_retains();
   size_t releases = nts_counted_releases();
   size_t allocated = nts_counted_allocations();
+  /* Deaths a release specialized by type finished itself
+     (`nts_object_reclaim`): which path a case's objects died by. */
+  size_t typed = nts_counted_typed_deaths();
   size_t candidates = nts_cycle_candidates() - candidates_before;
   nts_collect_cycles();
   size_t after = nts_live_count();
 
   (void)settled;
-  printf("retains=%zu releases=%zu allocated=%zu candidates=%zu leaked=%zd "
-         "answer=%.0f\n",
-         retains, releases, allocated, candidates,
+  printf("retains=%zu releases=%zu allocated=%zu candidates=%zu typed=%zu "
+         "leaked=%zd answer=%.0f\n",
+         retains, releases, allocated, candidates, typed,
          (ptrdiff_t)after - (ptrdiff_t)before, answer);
   return 0;
 }

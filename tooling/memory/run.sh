@@ -177,6 +177,10 @@ if [ "${1-}" = --case ]; then
     # asserting a zero they never come near.
     cand=$(read_num "$elided" candidates)
     want_cand=$(grep '^candidates ' "$dir/expected" | awk '{print $2}')
+    # The same for the deaths a release specialized by type finished itself,
+    # in a case that is about which path its objects die by: `typed N`.
+    typed=$(read_num "$elided" typed)
+    want_typed=$(grep '^typed ' "$dir/expected" | awk '{print $2}')
     ideal=$(grep '^ideal ' "$dir/expected" | awk '{print $2}')
     floor=$(grep '^allocated ' "$dir/expected" | awk '{print $2}')
 
@@ -202,6 +206,8 @@ if [ "${1-}" = --case ]; then
       [ -n "$floor" ] && [ "$alloc" -gt "$floor" ] && over="${over:+$over, }$((alloc - floor)) allocations"
       [ -n "$want_cand" ] && [ "$cand" -ne "$want_cand" ] &&
         over="${over:+$over, }$cand candidates against $want_cand"
+      [ -n "$want_typed" ] && [ "$typed" -ne "$want_typed" ] &&
+        over="${over:+$over, }$typed typed deaths against $want_typed"
       [ -n "$over" ] && { note="$over above"; fail=1; }
     fi
 

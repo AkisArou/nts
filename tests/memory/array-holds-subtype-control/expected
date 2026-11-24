@@ -1,0 +1,12 @@
+ideal 11
+allocated 14
+typed 10
+because The control for `array-holds-subtype`: ten plain leaves in one `Leaf[]`.
+because
+because Zero retains, as there. Eleven releases: the array and its ten slots.
+because
+because Fourteen allocations: ten leaves, the array and its three growth blocks
+because (capacities 4, 8 and 16).
+because
+because Ten typed deaths: every leaf dies in `Leaf`'s release specialized by
+because type, through the array's typed descriptor.

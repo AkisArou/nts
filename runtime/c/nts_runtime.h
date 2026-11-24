@@ -66,11 +66,18 @@
  * takes an object's fields out of type-based alias analysis; a compiler without
  * the attribute does no such analysis to take them out of. */
 #define NTS_OBJECT_STRUCT __attribute__((may_alias))
+/* On each release specialized by type the compiler emits: one per eligible
+ * layout, whether or not a site of this program reaches it. Not an
+ * optimisation either; it keeps `-Wunused-function` quiet about a definition
+ * that is complete and correct but unused, which C reports even for `static
+ * inline` in the file that defines it. */
+#define NTS_MAYBE_UNUSED __attribute__((unused))
 #else
 #define NTS_ALLOCATES
 #define NTS_ALLOCATES_OR_NULL
 #define NTS_READS_ONLY
 #define NTS_OBJECT_STRUCT
+#define NTS_MAYBE_UNUSED
 #endif
 
 /* # The runtime's symbols are its product's own
@@ -1682,7 +1689,10 @@ void nts_release(NtsHeader *object);
  * anything else, and `NTS_POISON` stops by name if it is. `nts_count_release`
  * counts the typed release's arrival in an `NTS_COUNT_OPERATIONS` build, once,
  * exactly where `nts_release` would have counted it, and does nothing in any
- * other; `nts_counted_typed_deaths` says how many deaths took this path. */
+ * other. Only the C backend's typed releases call it: an emitted module has no
+ * preprocessor, and `tests/memory` counts C programs alone.
+ * `nts_counted_typed_deaths` says how many deaths took this path, on either
+ * backend, since `nts_object_reclaim` counts them. */
 void nts_object_reclaim(NtsHeader *object);
 void nts_count_release(void);
 size_t nts_counted_typed_deaths(void);

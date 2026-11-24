@@ -1462,11 +1462,22 @@ fn typed_releases(
         let _ = writeln!(
             text,
             "  {}",
-            runtime_call::call(site(), platform, "nts_release", &[Operand::new("ptr", "%object")])?
+            runtime_call::call(
+                site(),
+                platform,
+                "nts_release",
+                &[Operand::new("ptr", "%object")]
+            )?
         );
         let _ = writeln!(text, "  ret void\nmine:");
-        let _ = writeln!(text, "  %count.at = getelementptr inbounds i8, ptr %object, i64 8");
-        let _ = writeln!(text, "  %flags.at = getelementptr inbounds i8, ptr %object, i64 16");
+        let _ = writeln!(
+            text,
+            "  %count.at = getelementptr inbounds i8, ptr %object, i64 8"
+        );
+        let _ = writeln!(
+            text,
+            "  %flags.at = getelementptr inbounds i8, ptr %object, i64 16"
+        );
         let _ = writeln!(text, "  %count = load i64, ptr %count.at");
         let _ = writeln!(text, "  %flags = load i32, ptr %flags.at");
         let _ = writeln!(text, "  %last = icmp eq i64 %count, 1");
@@ -1555,11 +1566,15 @@ fn typed_array_descriptors(out: &mut String, program: &Emission<'_>) {
     let mut wanted = std::collections::BTreeMap::new();
     for func in program.native_funcs() {
         for op in &func.values {
-            if let (OpKind::ArrayNew { .. }, HirType::Managed(nts_core::hir::ManagedType::Array(element))) =
-                (&op.kind, &op.ty)
+            if let (
+                OpKind::ArrayNew { .. },
+                HirType::Managed(nts_core::hir::ManagedType::Array(element)),
+            ) = (&op.kind, &op.ty)
                 && let Some(at) = typed_array_element(program, element)
             {
-                wanted.entry(at).or_insert_with(|| nts_codegen_common::counting::array_element(element));
+                wanted
+                    .entry(at)
+                    .or_insert_with(|| nts_codegen_common::counting::array_element(element));
             }
         }
     }
@@ -1720,7 +1735,11 @@ fn reference_fields(
             match child {
                 Some(symbol) => Ok(runtime_call::direct(
                     "void",
-                    &DirectCallee::global(Site::synthetic(program, "descriptors"), platform, symbol)?,
+                    &DirectCallee::global(
+                        Site::synthetic(program, "descriptors"),
+                        platform,
+                        symbol,
+                    )?,
                     Operand::new("ptr", field),
                 )),
                 None => runtime_call::call(
