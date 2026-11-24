@@ -107,21 +107,7 @@ pub(super) fn emit(
     writer.line(origin, " * For promises: call, run nts_checkpoint(), then inspect nts_promise_state() (0 pending, 1 fulfilled, 2 rejected).");
     writer.line(origin, " * Read nts_promise_value() only after settlement. A checkpoint drains microtasks; pending I/O needs a host loop. */");
 
-    // Typedefs share C's ordinary identifier namespace with functions/globals.
-    // Reserve these first so an alias never makes an otherwise legal export invalid.
-    let mut names: FxHashSet<String> = program
-        .funcs
-        .iter()
-        .map(|f| program.function(&f.name))
-        .collect();
-    names.extend(
-        program
-            .globals
-            .iter()
-            .enumerate()
-            .map(|(at, _)| program.source_symbols.global(at)),
-    );
-    names.extend(program.layouts.iter().map(object_type_name));
+    let mut names = occupied_names(program);
     let next_entries = next_exports(program, defined, &mut names);
     for ((internal, published), next) in program.public_api.iter().zip(&next_entries) {
         let Some(func) = program
@@ -201,6 +187,25 @@ pub(super) fn emit(
     published_values(&mut writer, &mut names, program, diagnostics);
     writer.line(origin, "#endif /* __nts_program_h */");
     writer.text().to_owned()
+}
+
+/// Typedefs share C's ordinary identifier namespace with functions and globals.
+/// Reserve the frozen ABI spellings before choosing any alias.
+fn occupied_names(program: &Program) -> FxHashSet<String> {
+    let mut names: FxHashSet<String> = program
+        .funcs
+        .iter()
+        .map(|f| program.function(&f.name))
+        .collect();
+    names.extend(
+        program
+            .globals
+            .iter()
+            .enumerate()
+            .map(|(at, _)| program.source_symbols.global(at)),
+    );
+    names.extend(program.layouts.iter().map(object_type_name));
+    names
 }
 
 struct NextExport<'a> {
