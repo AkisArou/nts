@@ -138,3 +138,39 @@ with `records.log` alongside it
 | `interop.log` (runner) | `25cb2327e80a72c85a01f68a5fb156c24063635b7567836cc288a28b6de38c80` |
 | `interop-run/interop.log` (fixtures) | `a1b6e3da69cbd8ccbdf18194a581a0b0279a6311d869000bbdfdaed29720047d` |
 | `interop-run/summary.json` | `c8550de1c7a8e131182c17e482b5cce709b0a22aff4a7212e5bc1b930120e8d3` |
+
+## Review controls
+
+Review of `870a1e99917cfec2efa35e8ade96aa8f03e40493` found that the prefix
+fragment could itself enter the runtime namespace or complete C's reserved
+double underscore. The expanded unit/refusal tables cover `nts`, `nts_str`,
+`nts_`, `_`, `__` and `__private`, alongside the earlier controls. The host
+matrix now includes reserved default product names and source exports named
+`checkpoint`, `release` and `slice`: archive names, generated headers and host
+results agree with the escaped policy on C and LLVM, while libc still answers.
+The brownfield workspace check also asserts `acme_remember` in the static
+header. Header initializer prose reads the frozen name and distinguishes
+load-time construction from a raw caller's initialization responsibility.
+
+All four focused tests passed. Against the reviewed compiler (SHA-256
+`0c659209ab3829eb08f94b5380ab3e72f0e36c8763bcedf2f4fb7de1ed09084d`),
+both prefix tests failed: explicit `nts` was accepted, and the default `nts`
+product failed compilation with conflicting types for `nts_release`.
+The comparison ran after committing the fixes, from a backed-up binary;
+restoration completed with matching SHA-256
+`7b5cef2e04d451fed5275301c755a760d5dcb8bb0ac618587e56411ec5bebc39`.
+
+The complete inner run passed formatting, Clippy, fresh build, all selected
+Rust tests and the native frontend check. Full interop passed again (537
+seconds execution), including C and LLVM callers, with the usual unavailable
+Mac/Windows execution skips. These standalone focused/interop runs select the
+fresh compiler explicitly; the canonical landing check remains separate.
+
+| Review evidence, under the same scratch directory | SHA-256 |
+|---|---|
+| `review-focused.log` | `dfe58c248ee88b40da0fa44eb99c8bdf619d83e8e8913e2701df64c667227efe` |
+| `review-before.log` | `f3b83ee2e9a9c93357c948f7d891d252b65bdf3756d3a076920ec89a104ebf9e` |
+| `review-inner.log` | `8e38a6e2e6459048ba0fecab72e0057240600712b8fb877f4a81403e8c32f30f` |
+| `review-interop.log` | `66e806de61465bdae80cb4096942470eb93b55196655794343cc42c112469cba` |
+| `review-interop-run/interop.log` | `97ba77446d9bb6206aabace0388fa997ec1b09ead2b876acf147e72beab9d0cb` |
+| `review-interop-run/summary.json` | `224bb32aaf1c4b0801b54d68ae0cfe8e192b127342f9d51aaace43f5be518b5d` |
