@@ -18337,6 +18337,24 @@
           }
         ]
       }
+    },
+    {
+      "source": "compiler/core/tests/table_write_borrows.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-table-write-borrows-its-key/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "programs/a-table-write-in-a-program-counting-a-foreign-handle/tsconfig.json"
+          }
+        ]
+      }
     }
   ]
 }

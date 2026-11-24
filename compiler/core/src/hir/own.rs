@@ -115,6 +115,10 @@ pub struct Summaries {
     /// and written at most once in the whole program, after every pass that can
     /// add a write. See [`settled_globals`].
     settled_globals: rustc_hash::FxHashSet<u32>,
+    /// Whether any value in the program is a counted foreign handle, whose
+    /// release can run foreign code that reaches back into the program. See
+    /// [`holds_foreign_counts`].
+    foreign_counts: bool,
 }
 
 impl Summaries {
@@ -242,6 +246,57 @@ pub(super) fn settled_globals(program: &Program) -> rustc_hash::FxHashSet<u32> {
         .collect()
 }
 
+/// Whether any function names a counted foreign handle: an Objective-C,
+/// `GObject`, COM or host object, which the program counts with its own
+/// system's pair.
+///
+/// Every such handle enters as a value of its type -- a native call's result,
+/// a parameter, a load -- so a program none of whose values has one holds
+/// none, erased or not, and no release in it can run foreign code. That is
+/// what lets a table write end no borrow ([`HelperEffect::of`]): giving up a
+/// managed value frees memory and gives up its fields, and runs nothing.
+fn holds_foreign_counts(program: &Program) -> bool {
+    program
+        .funcs
+        .iter()
+        .any(|func| func.values.iter().any(|op| op.ty.counting().is_some()))
+}
+
+/// What a runtime helper can end of a borrow held across it.
+///
+/// One answer, read by both borrow decisions: the window of a borrow that
+/// crosses blocks ([`Effects::of`]) and the block-local one
+/// ([`Ends::of`]). Two readers deriving it apart is how a borrow is ended in
+/// one and survives in the other.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HelperEffect {
+    /// Nothing: it stores and releases nothing (`runtime::stores_nothing`),
+    /// or it writes only the table it is handed in a program whose releases
+    /// run no foreign code (`runtime::writes_only_its_table`). No borrow
+    /// rests on a table's storage -- every read out of one retains -- so
+    /// writing it can overwrite no slot a borrow was read from.
+    Nothing,
+    /// An element borrow: it writes element storage and releases elements,
+    /// but no field, and runs no program code (`keeps_field_borrows`).
+    Elements,
+    /// Every borrow: it may store anywhere or run program code.
+    Every,
+}
+
+impl HelperEffect {
+    fn of(name: &str, foreign_counts: bool) -> Self {
+        if super::runtime::stores_nothing(name)
+            || (!foreign_counts && super::runtime::writes_only_its_table(name))
+        {
+            Self::Nothing
+        } else if super::keeps_field_borrows(name) {
+            Self::Elements
+        } else {
+            Self::Every
+        }
+    }
+}
+
 /// Read every function once, before any of them is counted.
 #[must_use]
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
@@ -293,6 +348,7 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
     let (mutates, mutating_slots) = mutating(program);
     Summaries {
         settled_globals: settled_globals(program),
+        foreign_counts: holds_foreign_counts(program),
         starts_zero: program
             .globals
             .iter()
@@ -599,6 +655,7 @@ fn classify(
             live,
             mutates: &summaries.mutates,
             mutating_slots: &summaries.mutating_slots,
+            foreign_counts: summaries.foreign_counts,
         };
         // Read once, by the first value in the block that asks.
         let windows = std::cell::OnceCell::new();
@@ -1372,14 +1429,17 @@ impl Effects<'_> {
             // One that stores nothing and releases nothing ends neither: a
             // table read with a key read out of an array (`counts[words[i]]`)
             // took a retain and a release of the key per lookup, a fifth of
-            // `record-word-counts`.
+            // `record-word-counts`. Nor does a write of a table, whose storage
+            // no borrow rests on: the key of `counts.set(w, ...)`, carried
+            // past the `??` of an update to the write, was retained and
+            // released per round, 7% of `map-entries-top-k`.
             OpKind::Call {
                 callee: super::Callee::External(callee),
                 ..
             } => {
-                let stores = !super::runtime::stores_nothing(callee);
-                ends[Self::ELEMENT_HELPER] = stores;
-                ends[Self::FIELD_HELPER] = stores && !super::keeps_field_borrows(callee);
+                let effect = HelperEffect::of(callee, summaries.foreign_counts);
+                ends[Self::ELEMENT_HELPER] = effect != HelperEffect::Nothing;
+                ends[Self::FIELD_HELPER] = effect == HelperEffect::Every;
             }
             OpKind::Call { .. } => ends[Self::CALL] = true,
             OpKind::FieldSet { object, field, .. } => {
@@ -2428,6 +2488,8 @@ struct Surroundings<'a> {
     mutates: &'a rustc_hash::FxHashSet<String>,
     /// The same question for a dispatch, which has no single callee.
     mutating_slots: &'a rustc_hash::FxHashSet<u32>,
+    /// Whether a release can run foreign code ([`Summaries::foreign_counts`]).
+    foreign_counts: bool,
 }
 
 fn mutating(program: &Program) -> (rustc_hash::FxHashSet<String>, rustc_hash::FxHashSet<u32>) {
@@ -4106,21 +4168,17 @@ impl Ends {
                 callee: super::Callee::Virtual { slot, .. },
                 ..
             } => every(around.mutating_slots.contains(slot)),
-            // A helper that stores nothing and releases nothing
-            // (`runtime::stores_nothing`) cannot overwrite any slot or give up
-            // any reference, so nothing borrowed can end in it.
+            // A helper that stores nothing and releases nothing, or writes
+            // only its table, cannot overwrite a slot a borrow was read from
+            // ([`HelperEffect`]), so nothing borrowed can end in it.
             OpKind::Call {
                 callee: super::Callee::External(name),
                 ..
-            } => {
-                if super::runtime::stores_nothing(name) {
-                    Self::Nothing
-                } else if super::keeps_field_borrows(name) {
-                    Self::UnlessAParameterField
-                } else {
-                    Self::Every
-                }
-            }
+            } => match HelperEffect::of(name, around.foreign_counts) {
+                HelperEffect::Nothing => Self::Nothing,
+                HelperEffect::Elements => Self::UnlessAParameterField,
+                HelperEffect::Every => Self::Every,
+            },
             OpKind::Call { .. } => Self::Every,
             OpKind::FieldSet {
                 object: into,
@@ -4914,5 +4972,55 @@ mod tests {
             unlisted.is_empty(),
             "these return an argument unretained and are not in RUNTIME_HANDS_BACK: {unlisted:?}"
         );
+    }
+
+    /// A table write ends no borrow where no release can run foreign code, and
+    /// every borrow where one can: the one place the two borrow decisions ask.
+    #[test]
+    fn a_table_write_ends_no_borrow_unless_a_release_can_run_foreign_code() {
+        use super::HelperEffect;
+        for name in crate::hir::runtime::WRITES_ONLY_ITS_TABLE {
+            assert!(
+                HelperEffect::of(name, false) == HelperEffect::Nothing,
+                "{name} writes only its table"
+            );
+            assert!(
+                HelperEffect::of(name, true) == HelperEffect::Every,
+                "{name} may release a foreign handle, whose code can write any slot"
+            );
+        }
+        // The controls: a helper that stores nothing ends nothing either way,
+        // an array helper ends elements, and an unknown one ends everything.
+        for foreign in [false, true] {
+            assert!(HelperEffect::of("nts_map_get", foreign) == HelperEffect::Nothing);
+            assert!(HelperEffect::of("nts_array_splice", foreign) == HelperEffect::Elements);
+            assert!(HelperEffect::of("nts_array_extend_foreign", foreign) == HelperEffect::Every);
+            assert!(HelperEffect::of("nts_map_extend", foreign) == HelperEffect::Every);
+        }
+    }
+
+    /// A program names a counted foreign handle only through a value of its
+    /// type; one with none holds none.
+    #[test]
+    fn a_counted_foreign_value_anywhere_is_what_makes_a_release_foreign() {
+        let mut program = stopped_summary_program();
+        assert!(!super::holds_foreign_counts(&program));
+        let origin = program.funcs[1].origin.clone();
+        program.funcs[1].values.push(crate::hir::Op {
+            kind: super::OpKind::ConstNull,
+            ty: super::HirType::NativePointer(crate::hir::native::Pointee::Opaque(
+                crate::hir::native::Handle {
+                    tag: "ReentrantObject".into(),
+                    ancestors: Vec::new(),
+                    family: crate::hir::native::Family::GObject,
+                    interface: false,
+                    spelling: crate::hir::native::Spelling::Tag,
+                },
+            )),
+            origin,
+        });
+        assert!(super::holds_foreign_counts(&program));
+        let layouts = program.layouts.clone();
+        assert!(super::summarize(&program, &layouts).foreign_counts);
     }
 }

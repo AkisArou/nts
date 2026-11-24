@@ -1,0 +1,29 @@
+ideal 31
+allocated 13
+because Seventeen rounds of `counts.set(w, (counts.get(w) ?? 0) + 1)` over four
+because words, then the table's entries as pairs. The words are read out of
+because `words`, which its caller holds for the call and nothing writes while
+because a word is read, so no lookup key takes a count of its own: before the
+because table write was known to write only its table (#902) each round
+because retained the key and released it after the write, 34 operations more
+because (65).
+because
+because Allocations: thirteen.
+because   2  `words`, allocated and grown once as the four words are pushed
+because   4  the words, `"w" + i`
+because   2  the `Map` and its table
+because   1  the pairs' array, sized at the table's live count
+because   4  the pairs, `[key, value]`: the language makes each one fresh
+because
+because Operations: thirty-one.
+because   5  `words` dying: one release per word, which the push moved in, and
+because      the array's own
+because   4  the table's own count of each key, taken on first insertion; the
+because      thirteen updates take none, of the key or of the table
+because   5  the table dying: its own release and one per key it holds
+because   4  each pair's count of its key, read out of the table
+because   9  the pairs dying: one release per pair, its key's release, and the
+because      array's own
+because   4  the release of the slot each pair is stored over, always empty:
+because      the array is allocated `Filled`, as `map-entries` says, and #899 is
+because      what drops these

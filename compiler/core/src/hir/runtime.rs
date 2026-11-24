@@ -3322,6 +3322,54 @@ pub fn stores_nothing(name: &str) -> bool {
         || name == "nts_refused"
 }
 
+/// Helpers that write only the table they are handed first: they store into
+/// that table's own storage and nowhere else, and run no program code.
+///
+/// Checked against `runtime/c/nts_runtime.c`: `nts_map_set` (through
+/// `nts_map_set_as` and `nts_map_set_unpromised`), `nts_map_entry_set`,
+/// `nts_set_add`, `nts_map_delete` and `nts_map_clear`. Between them they
+/// insert a key (`nts_map_insert_at`, which retains it), overwrite a value
+/// (`nts_map_overwrite`, which retains the new one before releasing the old),
+/// delete or clear entries (releasing the key and value each held), and grow
+/// or widen the table (`nts_map_rehash`, `nts_map_widen`). None of them
+/// releases an argument, and hashing and comparing a key call no program code
+/// except for an Objective-C key (`tables::OBJC`), whose `-hash` and
+/// `-isEqual:` are foreign calls -- and a counted foreign handle, below.
+///
+/// # What a borrow can say about one
+///
+/// No borrow rests on what they write. A table's storage is no field and no
+/// element in HIR -- a table is `ManagedType::Table`, which has no layout --
+/// and every read out of one retains what it hands back
+/// ([`RETAINS_ONLY_ITS_RESULT`]), so nothing is ever borrowed from it. What
+/// they release can free only what nothing else holds, and a borrow's
+/// container is held by something else: a parameter's caller, an owned local,
+/// a settled global, or the anchored slot it was read from.
+///
+/// The one way such a release could reach program code is a counted
+/// **foreign** handle: giving up a `GObject` can run its handlers, which can
+/// write any slot. A table's static types do not rule one out -- a
+/// `Map<string, number>` can be written through a `Map<string, unknown>`
+/// alias of the same table -- so `own` lets a borrow survive one of these only
+/// in a program that holds no counted foreign handle at all, the caution
+/// `keeps_field_borrows` takes with its `_foreign` helpers: **table writes end
+/// no borrow unless the program counts a foreign handle.** Which tables can
+/// receive a foreign value is a finer fact this does not derive.
+pub const WRITES_ONLY_ITS_TABLE: &[&str] = &[
+    "nts_map_clear",
+    "nts_map_delete",
+    "nts_map_entry_set",
+    "nts_map_set",
+    "nts_set_add",
+];
+
+/// Whether a helper writes only the table it is handed first
+/// ([`WRITES_ONLY_ITS_TABLE`]).
+#[must_use]
+pub fn writes_only_its_table(name: &str) -> bool {
+    WRITES_ONLY_ITS_TABLE.contains(&name)
+}
+
 /// What `regions::rewrite` puts around a call it serves. None stores into
 /// the program: they open and close the runtime's own region, retain an
 /// argument into its kept list, or do nothing at all (`nts_region_hold`). A
@@ -3352,6 +3400,26 @@ mod tests {
     /// `nts_bigint_from_number`, three rows after `nts_bigint_shr` -- and the
     /// LLVM table's copy of this test had been catching its own version of the
     /// same mistake for some time. One table had a guard and the other did not.
+    /// Each table writer is a table helper the runtime declares, so a rename
+    /// fails here rather than leaving a contract that names nothing.
+    #[test]
+    fn every_table_writer_is_a_declared_table_helper() {
+        for name in super::WRITES_ONLY_ITS_TABLE {
+            assert!(
+                super::declared(name).is_some(),
+                "`{name}` is in WRITES_ONLY_ITS_TABLE but the runtime declares no such helper"
+            );
+            assert!(
+                super::super::tables::kind_at(name).is_some() || *name == "nts_map_clear",
+                "`{name}` is not a keyed table helper"
+            );
+            assert!(
+                !super::stores_nothing(name),
+                "`{name}` writes its table; it cannot also store nothing"
+            );
+        }
+    }
+
     #[test]
     fn the_table_is_sorted_because_it_is_binary_searched() {
         for pair in SIGNATURES.windows(2) {

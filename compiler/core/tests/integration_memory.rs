@@ -34,5 +34,8 @@ mod published_consuming_entries;
 #[path = "region_sites.rs"]
 mod region_sites;
 
+#[path = "table_write_borrows.rs"]
+mod table_write_borrows;
+
 #[path = "written_storage.rs"]
 mod written_storage;
