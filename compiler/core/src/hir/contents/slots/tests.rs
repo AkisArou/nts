@@ -784,3 +784,72 @@ fn delayed_foreign_cleanup_survives_a_writer_and_a_cfg_join() {
         );
     }
 }
+
+/// A managed value that leads to a handle is given up after its last read in
+/// a block, never before a later one, so only that read ends the block's slot
+/// facts. A terminator's read is no operation: the last operation before it
+/// still charges the release, and its delayed cleanup ends the block. The
+/// control's layout holds no handle, so no read of it charges one.
+#[test]
+fn only_the_last_read_in_a_block_can_give_up_a_foreign_holder() {
+    for foreign in [false, true] {
+        let mut func = fixture();
+        let holder = HirType::Managed(hir::ManagedType::Object(TypeId(7)));
+        let layouts = vec![hir::Layout {
+            types: vec![TypeId(7)],
+            name: "Holder".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![hir::Field {
+                name: "h".to_owned().into(),
+                ty: if foreign {
+                    foreign_type()
+                } else {
+                    HirType::Bool
+                },
+                readonly: false,
+                declared_by: None,
+                written: None,
+            }],
+            methods: Vec::new(),
+            base: None,
+        }];
+        let releases = hir::Program {
+            layouts: layouts.clone(),
+            ..hir::Program::default()
+        }
+        .foreign_releases();
+        func.values = vec![
+            Op {
+                kind: OpKind::Param(0),
+                ty: holder,
+                origin: func.origin.clone(),
+            },
+            Op {
+                kind: OpKind::Convert(ValueId(0)),
+                ty: HirType::Bool,
+                origin: func.origin.clone(),
+            },
+            Op {
+                kind: OpKind::Convert(ValueId(0)),
+                ty: HirType::Bool,
+                origin: func.origin.clone(),
+            },
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+            terminator: Terminator::Return(Some(ValueId(0))),
+        }];
+        let inputs = Inputs::of(&func, &layouts, &[], &releases);
+        assert!(
+            !inputs.after(ValueId(0)),
+            "read later: not given up at its definition"
+        );
+        assert!(!inputs.after(ValueId(1)), "read again later in the block");
+        assert_eq!(
+            inputs.after(ValueId(2)),
+            foreign,
+            "the last operation that reads it, though the terminator reads it too"
+        );
+    }
+}

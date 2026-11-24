@@ -44,7 +44,13 @@ cycle graph's slot and field edges, to a layout holding a handle or an erased
 field is foreign cleanup (`Program::foreign_releases`). Only a managed value
 that leads to none is not; its FinalizationRegistry jobs execute later.
 Retaining a managed value never runs code, so only handles and erased values
-invalidate before a store.
+invalidate before a store. A handle or erased value can be counted after its
+definition and around any read, so every operation that defines or reads one
+charges a native count. A managed value that leads to a handle re-enters only
+when given up, and is never given up before an operation that reads it, so its
+release is charged only to the last operation in its block that defines or
+reads it; a terminator's read is charged to the operation before it, whose
+delayed cleanup ends the block's facts before an edge.
 
 The fixed metadata also covers native counts inserted after value definitions
 and around operand uses, rather than only stores. Copied field results can

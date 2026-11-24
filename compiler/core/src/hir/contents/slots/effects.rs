@@ -22,7 +22,8 @@ impl Inputs {
     /// `before` asks whether retaining a value can run program code, which
     /// only a foreign handle's retain does. `after` and `cleanup` ask whether
     /// giving one up can: a managed object whose layouts lead to a handle
-    /// frees it synchronously ([`ForeignReleases`]).
+    /// frees it synchronously ([`ForeignReleases`]). `after` charges a managed
+    /// value only to its last operation in a block ([`counted_after`]).
     pub(in crate::hir) fn of(
         func: &Func,
         layouts: &[Layout],
@@ -31,6 +32,7 @@ impl Inputs {
     ) -> Self {
         let retained = foreign_values(func, retain_can_reenter);
         let given_up = foreign_values(func, |ty| releases.release_can_reenter(ty));
+        let after = counted_after(func, &retained, &given_up);
         let counts = func
             .values
             .iter()
@@ -38,14 +40,12 @@ impl Inputs {
             .map(|(at, op)| {
                 let (retain, cleanup) =
                     store_effects(func, layouts, globals, &op.kind, &retained, releases);
-                let operands = |families: &[bool]| {
-                    hir::operands_of(&op.kind)
-                        .into_iter()
-                        .any(|value| families[value.0 as usize])
-                };
                 Counts {
-                    before: retain || operands(&retained),
-                    after: given_up[at] || operands(&given_up),
+                    before: retain
+                        || hir::operands_of(&op.kind)
+                            .into_iter()
+                            .any(|value| retained[value.0 as usize]),
+                    after: after[at],
                     cleanup,
                 }
             })
@@ -73,6 +73,44 @@ impl Inputs {
             .iter()
             .any(|count| count.before || count.after || count.cleanup)
     }
+}
+
+/// By operation: whether a native count right after it can run program code.
+/// A value whose retain can re-enter is counted after its definition, when a
+/// copy takes it over, and around any read of it, so every such operation
+/// charges one. A managed value that leads to a handle re-enters only when
+/// given up, and a release never precedes a read of the value: only the last
+/// operation in its block that defines or reads it can be followed by its
+/// release. A terminator's read is no operation, so a value a terminator reads
+/// is charged to its last operation before it, and the delayed cleanup that
+/// charge sets ends the block's facts before an edge can give the value up.
+fn counted_after(func: &Func, retained: &[bool], given_up: &[bool]) -> Vec<bool> {
+    let reads = |at: usize| hir::operands_of(&func.values[at].kind);
+    let retains = |at: usize, operands: &[ValueId]| {
+        retained[at] || operands.iter().any(|value| retained[value.0 as usize])
+    };
+    // An operation in no block runs nowhere; any answer is sound for it.
+    let mut after: Vec<bool> = (0..func.values.len())
+        .map(|at| {
+            let operands = reads(at);
+            given_up[at] || operands.iter().any(|value| given_up[value.0 as usize])
+        })
+        .collect();
+    let mut later = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        later.clear();
+        for &op in block.ops.iter().rev() {
+            let at = op.0 as usize;
+            let operands = reads(at);
+            after[at] = retains(at, &operands)
+                || (given_up[at] && !later.contains(&op))
+                || operands
+                    .iter()
+                    .any(|value| given_up[value.0 as usize] && !later.contains(value));
+            later.extend(operands);
+        }
+    }
+    after
 }
 
 /// Whether retaining a value of this type can run program code: only a
