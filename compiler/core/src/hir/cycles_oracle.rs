@@ -890,22 +890,29 @@ fn handle() -> HirType {
 /// layouts and functions.
 fn releases_foreign(layouts: Vec<Layout>, funcs: Vec<Func>) -> bool {
     Program {
-        layouts,
         funcs,
+        layouts,
         ..Program::default()
     }
     .foreign_releases()
     .release_can_reenter(&object(1))
 }
 
-/// Each edge a cycle follows also carries a foreign release: a plain field,
-/// a container, a base's slot holding a subclass, a structural prefix, an
-/// unerasure and a promise's reactions. Each case's control differs in one
-/// thing and reaches no handle or erased field, so its release runs no code.
+/// A handle when `foreign`, else the control's number in its place.
+fn held(foreign: bool) -> HirType {
+    if foreign { handle() } else { HirType::NUMBER }
+}
+
+fn array(ty: HirType) -> HirType {
+    HirType::Managed(ManagedType::Array(Box::new(ty)))
+}
+
+/// Each edge a cycle follows also carries a foreign release. Here a plain
+/// field and a container; the slot edges are below. Each case's control
+/// differs in one thing and reaches no handle or erased field, so its release
+/// runs no code.
 #[test]
-fn a_release_reaches_a_handle_through_every_edge_a_slot_or_field_follows() {
-    let held = |foreign: bool| if foreign { handle() } else { HirType::NUMBER };
-    let array = |ty| HirType::Managed(ManagedType::Array(Box::new(ty)));
+fn a_release_reaches_a_handle_through_a_field_or_a_container() {
     for foreign in [false, true] {
         // A plain field: `L1 { inner: L2 }`, `L2 { h }`.
         assert_eq!(
@@ -939,6 +946,14 @@ fn a_release_reaches_a_handle_through_every_edge_a_slot_or_field_follows() {
             foreign,
             "container of objects"
         );
+    }
+}
+
+/// A base's slot holding a subclass, a structural prefix, an unerasure and a
+/// promise's reactions carry a foreign release as they carry a cycle.
+#[test]
+fn a_release_reaches_a_handle_through_every_edge_a_slot_follows() {
+    for foreign in [false, true] {
         // A base's slot holds its subclass. `h` comes first, so the subclass
         // is no structural prefix match and only the base edge leads to it.
         let mut derived = layout(
@@ -1003,8 +1018,14 @@ fn a_release_reaches_a_handle_through_every_edge_a_slot_or_field_follows() {
             "reaction edge"
         );
     }
-    // Each edge is what carries it: with the handle present but the edge
-    // removed, the release reaches nothing.
+}
+
+/// Each edge is what carries it: with the handle present but the edge
+/// removed, the release reaches nothing. An erased field can be a handle
+/// itself; a type with no layout here can be any layout, and leads to a
+/// handle exactly when some layout holds one.
+#[test]
+fn a_release_reaches_no_handle_without_an_edge_to_one() {
     assert!(!releases_foreign(
         vec![
             layout(1, vec![field("w", HirType::NUMBER)]),
@@ -1026,8 +1047,6 @@ fn a_release_reaches_a_handle_through_every_edge_a_slot_or_field_follows() {
         ],
         vec![subscribe(object(3), false)],
     ));
-    // An erased field can be a handle itself; a type with no layout here can
-    // be any layout, and leads to a handle exactly when some layout holds one.
     assert!(releases_foreign(
         vec![layout(1, vec![field("e", HirType::Erased)])],
         Vec::new()

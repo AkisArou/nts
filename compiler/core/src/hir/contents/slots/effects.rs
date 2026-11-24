@@ -30,7 +30,7 @@ impl Inputs {
         releases: &ForeignReleases,
     ) -> Self {
         let retained = foreign_values(func, retain_can_reenter);
-        let released = foreign_values(func, |ty| releases.release_can_reenter(ty));
+        let given_up = foreign_values(func, |ty| releases.release_can_reenter(ty));
         let counts = func
             .values
             .iter()
@@ -45,7 +45,7 @@ impl Inputs {
                 };
                 Counts {
                     before: retain || operands(&retained),
-                    after: released[at] || operands(&released),
+                    after: given_up[at] || operands(&given_up),
                     cleanup,
                 }
             })
