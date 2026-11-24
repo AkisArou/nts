@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-addon-built-with-entry-is-prepared-open",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-addon-built-with-entry-is-prepared-open/src/main.ts",
+      "signature": "caa2d4f4369217712efc0d8094e49fff35205e8e3a251a6cf46c1e470a229fd7",
+      "keys": {
+        "c": "79a50d1f8b7463cef8bff4e2bfc1c82c",
+        "jvm": "8e94a03dc05d4227b4bd44a1a063bd74",
+        "llvm": "b2b10b7d73c33dc0883f2558e3099161"
+      },
+      "cases_sha256": "cedacd4581ee1a393db888530a6e1519f01a066548c902f7fe9e3ac0d8c75061",
+      "driver_sha256": "833e51754882e3530e84530238260182790c4784b7ce553027a898ae94ac6b59",
+      "populations": {
+        "lastSeen": {
+          "count": 1,
+          "cases_sha256": "cedacd4581ee1a393db888530a6e1519f01a066548c902f7fe9e3ac0d8c75061"
+        }
+      },
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

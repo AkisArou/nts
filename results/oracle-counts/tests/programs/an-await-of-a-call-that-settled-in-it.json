@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-await-of-a-call-that-settled-in-it",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-await-of-a-call-that-settled-in-it/src/main.ts",
+      "signature": "6102e4375fac6cc0a885eeb7b2cd5698eeaab606a7aac3b4d1d73dbe535bbd4d",
+      "keys": {
+        "c": "b3c7f20a386921db04976ab746c50457",
+        "jvm": "52a4aac85696d1ead2cf1a692a4607b5",
+        "llvm": "bb0cbac0960eb83fddf9072e365957bf"
+      },
+      "cases_sha256": "7ea5fda3553e82f1502799461e32cd342d8070a27d721db1f48ddac72a13fe90",
+      "driver_sha256": "0987ed12c3263308abcf8df811280f1dfcc15745a041dc93e0ab4fb80ef79a89",
+      "populations": {
+        "adoptingOrdering": {
+          "count": 29,
+          "cases_sha256": "87c520d8c6526db1015deb0b16b7d2e7bf01d41028e25adc8f7a0b4a3f778b79"
+        },
+        "awaitedTwice": {
+          "count": 29,
+          "cases_sha256": "6df2ed5928b3fad40aa6f9dfdedff26a5c216a3956d3241c13a0349eadd5ce11"
+        },
+        "otherPayloads": {
+          "count": 29,
+          "cases_sha256": "2575adc85c11c375778996f6bb6d5a31bf06d1d70b765b3214ab8f122dafed98"
+        },
+        "promiseThenSettled": {
+          "count": 29,
+          "cases_sha256": "83354c30d3b8eeec168cb12a56e46f96e2572c7935fe0c13f2a21f6f27e208cc"
+        },
+        "settledInATry": {
+          "count": 29,
+          "cases_sha256": "1e82f494d82f3c73fc97bdf0213ea0032321723803297a423c1b7b6ca9902875"
+        },
+        "settledOrdering": {
+          "count": 29,
+          "cases_sha256": "28b579f9cae9000cc6647aa63a408e99054424b4ac9799eaa5472aad6b2a3a9c"
+        },
+        "summed": {
+          "count": 29,
+          "cases_sha256": "2a868838af809d4678214c70cc853ede1a06ca18c6c80524507a9f28ea8e4b25"
+        },
+        "suspendingOrdering": {
+          "count": 29,
+          "cases_sha256": "92b19f273f8fa85019e76673ef5f3066e2602d62f42a230e63e6a4799db15122"
+        },
+        "throwingOrdering": {
+          "count": 29,
+          "cases_sha256": "5a19b3dbffed894d3dd854bc4f1741d039cd6096580cdb7b02953a427754e791"
+        }
+      },
+      "complete": true,
+      "count": 261
+    }
+  ]
+}

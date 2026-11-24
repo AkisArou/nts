@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 58,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 58,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "derived 0 3ff0000000000000",
+        "node": "derived 0 4024000000000000"
+      },
+      {
+        "compiled": "structural 0 3ff0000000000000",
+        "node": "structural 0 4034000000000000"
+      },
+      {
+        "compiled": "derived 1 3ff0000000000000",
+        "node": "derived 1 4024000000000000"
+      },
+      {
+        "compiled": "structural 1 3ff0000000000000",
+        "node": "structural 1 4034000000000000"
+      },
+      {
+        "compiled": "derived 2 4000000000000000",
+        "node": "derived 2 4026000000000000"
+      },
+      {
+        "compiled": "structural 2 4000000000000000",
+        "node": "structural 2 4035000000000000"
+      },
+      {
+        "compiled": "derived 3 4020000000000000",
+        "node": "derived 3 4031000000000000"
+      },
+      {
+        "compiled": "structural 3 4020000000000000",
+        "node": "structural 3 403b000000000000"
+      },
+      {
+        "compiled": "derived 4 4008000000000000",
+        "node": "derived 4 4028000000000000"
+      },
+      {
+        "compiled": "structural 4 4008000000000000",
+        "node": "structural 4 4036000000000000"
+      },
+      {
+        "compiled": "derived 5 4010000000000000",
+        "node": "derived 5 402a000000000000"
+      },
+      {
+        "compiled": "structural 5 4010000000000000",
+        "node": "structural 5 4037000000000000"
+      },
+      {
+        "compiled": "derived 6 3ff0000000000000",
+        "node": "derived 6 4024000000000000"
+      },
+      {
+        "compiled": "structural 6 3ff0000000000000",
+        "node": "structural 6 4034000000000000"
+      },
+      {
+        "compiled": "derived 7 3ff0000000000000",
+        "node": "derived 7 4024000000000000"
+      },
+      {
+        "compiled": "structural 7 3ff0000000000000",
+        "node": "structural 7 4034000000000000"
+      },
+      {
+        "compiled": "derived 8 4000000000000000",
+        "node": "derived 8 4026000000000000"
+      },
+      {
+        "compiled": "structural 8 4000000000000000",
+        "node": "structural 8 4035000000000000"
+      },
+      {
+        "compiled": "derived 9 4020000000000000",
+        "node": "derived 9 4031000000000000"
+      },
+      {
+        "compiled": "structural 9 4020000000000000",
+        "node": "structural 9 403b000000000000"
+      },
+      {
+        "compiled": "derived 10 4010000000000000",
+        "node": "derived 10 402a000000000000"
+      },
+      {
+        "compiled": "structural 10 4010000000000000",
+        "node": "structural 10 4037000000000000"
+      },
+      {
+        "compiled": "derived 11 4018000000000000",
+        "node": "derived 11 402e000000000000"
+      },
+      {
+        "compiled": "structural 11 4018000000000000",
+        "node": "structural 11 4039000000000000"
+      },
+      {
+        "compiled": "derived 12 4020000000000000",
+        "node": "derived 12 4031000000000000"
+      },
+      {
+        "compiled": "structural 12 4020000000000000",
+        "node": "structural 12 403b000000000000"
+      },
+      {
+        "compiled": "derived 13 4010000000000000",
+        "node": "derived 13 402a000000000000"
+      },
+      {
+        "compiled": "structural 13 4010000000000000",
+        "node": "structural 13 4037000000000000"
+      },
+      {
+        "compiled": "derived 14 4014000000000000",
+        "node": "derived 14 402c000000000000"
+      },
+      {
+        "compiled": "structural 14 4014000000000000",
+        "node": "structural 14 4038000000000000"
+      },
+      {
+        "compiled": "derived 15 4020000000000000",
+        "node": "derived 15 4031000000000000"
+      },
+      {
+        "compiled": "structural 15 4020000000000000",
+        "node": "structural 15 403b000000000000"
+      },
+      {
+        "compiled": "derived 16 3ff0000000000000",
+        "node": "derived 16 4024000000000000"
+      },
+      {
+        "compiled": "structural 16 3ff0000000000000",
+        "node": "structural 16 4034000000000000"
+      },
+      {
+        "compiled": "derived 17 3ff0000000000000",
+        "node": "derived 17 4024000000000000"
+      },
+      {
+        "compiled": "structural 17 3ff0000000000000",
+        "node": "structural 17 4034000000000000"
+      },
+      {
+        "compiled": "derived 18 3ff0000000000000",
+        "node": "derived 18 4024000000000000"
+      },
+      {
+        "compiled": "structural 18 3ff0000000000000",
+        "node": "structural 18 4034000000000000"
+      },
+      {
+        "compiled": "derived 19 4020000000000000",
+        "node": "derived 19 4031000000000000"
+      },
+      {
+        "compiled": "structural 19 4020000000000000",
+        "node": "structural 19 403b000000000000"
+      },
+      {
+        "compiled": "derived 20 4020000000000000",
+        "node": "derived 20 4031000000000000"
+      },
+      {
+        "compiled": "structural 20 4020000000000000",
+        "node": "structural 20 403b000000000000"
+      },
+      {
+        "compiled": "derived 21 3ff0000000000000",
+        "node": "derived 21 4024000000000000"
+      },
+      {
+        "compiled": "structural 21 3ff0000000000000",
+        "node": "structural 21 4034000000000000"
+      },
+      {
+        "compiled": "derived 22 3ff0000000000000",
+        "node": "derived 22 4024000000000000"
+      },
+      {
+        "compiled": "structural 22 3ff0000000000000",
+        "node": "structural 22 4034000000000000"
+      },
+      {
+        "compiled": "derived 23 4020000000000000",
+        "node": "derived 23 4031000000000000"
+      },
+      {
+        "compiled": "structural 23 4020000000000000",
+        "node": "structural 23 403b000000000000"
+      },
+      {
+        "compiled": "derived 24 4020000000000000",
+        "node": "derived 24 4031000000000000"
+      },
+      {
+        "compiled": "structural 24 4020000000000000",
+        "node": "structural 24 403b000000000000"
+      },
+      {
+        "compiled": "derived 25 4000000000000000",
+        "node": "derived 25 4026000000000000"
+      },
+      {
+        "compiled": "structural 25 4000000000000000",
+        "node": "structural 25 4035000000000000"
+      },
+      {
+        "compiled": "derived 26 3ff0000000000000",
+        "node": "derived 26 4024000000000000"
+      },
+      {
+        "compiled": "structural 26 3ff0000000000000",
+        "node": "structural 26 4034000000000000"
+      },
+      {
+        "compiled": "derived 27 4000000000000000",
+        "node": "derived 27 4026000000000000"
+      },
+      {
+        "compiled": "structural 27 4000000000000000",
+        "node": "structural 27 4035000000000000"
+      },
+      {
+        "compiled": "derived 28 3ff0000000000000",
+        "node": "derived 28 4024000000000000"
+      },
+      {
+        "compiled": "structural 28 3ff0000000000000",
+        "node": "structural 28 4034000000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 58 compared, 58 expected, 58 disagreements",
+  "node": null,
+  "measured_with": "3ed2041dbd7db807",
+  "source": "measured"
+}

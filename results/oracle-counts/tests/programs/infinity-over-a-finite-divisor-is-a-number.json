@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/infinity-over-a-finite-divisor-is-a-number",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/infinity-over-a-finite-divisor-is-a-number/src/main.ts",
+      "signature": "b15e6150838b2d3370d7d198b31e11d741fe3a4baff5c8198b60940d3762f665",
+      "keys": {
+        "c": "2f39e6d2a227b5979dfb9c5916c5b156",
+        "jvm": "68d452f3a51dd938502e714b84de1777",
+        "llvm": "dcf6d6193259f3a8babcfc277ea6423a"
+      },
+      "cases_sha256": "a92478eadf5a420164695144af58802f1b8b0a4847905704a5f85363f551eb0a",
+      "driver_sha256": "06135dc8c1ea40316a2591d9362c9218b6976f26c25241eba0cd37b5b80447c8",
+      "populations": {
+        "aModuleScopeListHoldsNoNaN": {
+          "count": 29,
+          "cases_sha256": "111bd54e3bad0c5eee52e3c2dddf58a13334602ba17624ff3c04a8f926bbf9df"
+        },
+        "aPropertyReassignedWithEachQuotient": {
+          "count": 29,
+          "cases_sha256": "4a01c9ccda57c0e04cacd9ee6ff798c57004dfb319852aa8e42762d487e37245"
+        },
+        "noSignedQuotientIsNaN": {
+          "count": 29,
+          "cases_sha256": "321aafcb0540b4d518a664cf6b66cdc07643e73123fc31ba3f0767cae2fe01e5"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

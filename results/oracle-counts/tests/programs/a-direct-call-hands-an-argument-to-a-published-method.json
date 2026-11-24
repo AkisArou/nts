@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-direct-call-hands-an-argument-to-a-published-method",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-direct-call-hands-an-argument-to-a-published-method/src/main.ts",
+      "signature": "50f1e5b4999a3b87f47f56de5a294f74c2bd77a5a13891ece8ce99032c31885d",
+      "keys": {
+        "c": "cf622e82adffb41f5c57bc4c990461e6",
+        "jvm": "f1a5e70f322d193971d482665f98d7ba",
+        "llvm": "e473663d6121f922a4891656bb1a7b1a"
+      },
+      "cases_sha256": "96ac68ecd4d50d0cbe0e30b20a249740d8fba90811b298864ef54fe0ca1f2b83",
+      "driver_sha256": "ef274253c1dc505ee970a0101525cf226e302c21c06f147378c2d811ced238c5",
+      "populations": {
+        "alias": {
+          "count": 29,
+          "cases_sha256": "cbee0113c0e9a8ea7170ff447500eabd3080bc43324dc87e7dd41e1d37b82660"
+        },
+        "callback": {
+          "count": 29,
+          "cases_sha256": "759a7b7b95c1b4b55adff0d15551b52cdc410766b840b176e8eb4a68d84dc74d"
+        },
+        "defaultsOnce": {
+          "count": 29,
+          "cases_sha256": "303dd2d83faaf80e275ea524078d99aca4f7443eb9c318e03c7e90341d0ffa95"
+        },
+        "direct": {
+          "count": 29,
+          "cases_sha256": "3aa32d7d3a8d2988894064aa3f7a826dd0be67d2a0f33e75130562b024fc51eb"
+        },
+        "identity": {
+          "count": 29,
+          "cases_sha256": "df030c58b6c7cfb75bcff5c219e0a24921502f8ce98c29eefadf1232f3bd920e"
+        },
+        "interfaceStore": {
+          "count": 29,
+          "cases_sha256": "5bd2121b60b13f3d689f0dc744e2c1b56ce0cda3e7702cdc68f2fc65bdca84d0"
+        },
+        "recursive": {
+          "count": 29,
+          "cases_sha256": "28554fad6b46692914e603d0d979e2dc46a6431a66f0b11395e4bb5edcaa58d9"
+        },
+        "stillUsed": {
+          "count": 29,
+          "cases_sha256": "e1efb2e912e09988bec00d676c70d85b1e920056eebcaedb0967c93d114f40ed"
+        },
+        "throwing": {
+          "count": 29,
+          "cases_sha256": "eb4d1f3b3575a70f55f05c70b1001b4fd8a95e547be4dec82695be34242d8c86"
+        },
+        "virtual": {
+          "count": 29,
+          "cases_sha256": "0972006f9196f302cee68203e3dc12fabac29e6f2fa08eee1c3e54e41118e46e"
+        }
+      },
+      "complete": true,
+      "count": 290
+    }
+  ]
+}

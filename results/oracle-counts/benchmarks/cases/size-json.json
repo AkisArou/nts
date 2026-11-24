@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/size-json",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "benchmarks/cases/size-json/case.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "b7622873550b3d19b4f4ccda848f38730ee45435a6a2946f90ba43547f38e224",
+      "source_digest": "4ec478740de2f26364722fee64db436b",
+      "stdout_sha256": "0ed52dcc030d8269c977800d62857ed2fb5772865c96574b2d776e3b325f52f4",
+      "stdout_bytes": 50,
+      "exit_code": 0
+    }
+  ]
+}

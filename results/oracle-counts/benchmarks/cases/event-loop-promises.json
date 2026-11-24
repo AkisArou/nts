@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/event-loop-promises",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/event-loop-promises/case.ts",
+      "signature": "a4271ed95027033a8d0026fdbb451c967d903a49926b928d9fe3c037ac5a1d8f",
+      "keys": {
+        "c": "7734749ab81779aec4a04411c56a049b",
+        "jvm": "4d7799d6846779fedbe73ccb8a7153cb",
+        "llvm": "b82dc47d9ecfd9d45e05e5c7254e2170"
+      },
+      "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45",
+      "driver_sha256": "d842747d8006f617ba8a228415e71eb5d515aa0442b0140e2d7687747e28f75b",
+      "populations": {
+        "work": {
+          "count": 29,
+          "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

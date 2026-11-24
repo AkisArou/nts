@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-of-an-acyclic-class-beside-an-unknown-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-of-an-acyclic-class-beside-an-unknown-field/src/main.ts",
+      "signature": "a9a28680dfc938516a56032360f7ac65fb1951582d1fb657dc3efde568650b6b",
+      "keys": {
+        "c": "c0d916611bdca7c523ad7a5fd04d8f00",
+        "jvm": "94789f6b550b8eed4b4c480734b3df43",
+        "llvm": "80caa3b0b41e02e96bdfb2b610520e51"
+      },
+      "cases_sha256": "324586064b8138306bb595c7011af8092aee5b813ead3108563c048ea88f6526",
+      "driver_sha256": "d76da54f153955b165d59112c511343179c4ad03504a06fe666e33c13c6b9793",
+      "populations": {
+        "holders": {
+          "count": 29,
+          "cases_sha256": "4454139c6f981e17260e28bf7ff6fb003000063a5342de1705940c1401edd9f2"
+        },
+        "leaves": {
+          "count": 29,
+          "cases_sha256": "c2e625904aa59877ce4ff564998b9359664c541d976f8503d22dcf22d1d03842"
+        },
+        "weighted": {
+          "count": 29,
+          "cases_sha256": "00e10ebc66c868b9ec6a42339b9e889b49a5e5434a19d9cca1d4c304657b0fcf"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

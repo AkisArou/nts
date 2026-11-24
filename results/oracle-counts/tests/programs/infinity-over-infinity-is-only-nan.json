@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/infinity-over-infinity-is-only-nan",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/infinity-over-infinity-is-only-nan/src/main.ts",
+      "signature": "fe1d67af24dccc92ca64e629b6b7046b26c34b31e77699b268c0ef97447ddd2c",
+      "keys": {
+        "c": "adca1b9b04ca99960a18360b3f1826ed",
+        "jvm": "90b967577c9d5466b022db681c3a84ea",
+        "llvm": "ea6ee594013a707a0d84be9ed6c03650"
+      },
+      "cases_sha256": "e6af568c8b9dc8c7d1a90476834bd7e4da32021422339289417bc07656f0110e",
+      "driver_sha256": "f1f0f52afe0c42faaaadff26021a80c87d9e4d3d067e0282d2fc06f5b7363b86",
+      "populations": {
+        "aModuleScopeListHoldsOnlyNaN": {
+          "count": 29,
+          "cases_sha256": "2525408ea33cfaee9a6b50032f4d90a211bd6a18c29b100201b1e9b8322de743"
+        },
+        "aPropertyReassignedWithEachNaN": {
+          "count": 29,
+          "cases_sha256": "9de4416c46c68a5fbe092075587cb330dfb49d043e0028631449243cfd90e23a"
+        },
+        "everySignedQuotientIsNaN": {
+          "count": 29,
+          "cases_sha256": "9423dde8c5a92baa12d7acbc6cc2a4875c33b478ba5b1408bef897deeade7256"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

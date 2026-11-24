@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-addon-export-named-like-a-libc-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-addon-export-named-like-a-libc-function/src/main.ts",
+      "signature": "f4cad466dfd43a01162f6b5b34ce92a72d25d0965205d23af505cfef6d2d250b",
+      "keys": {
+        "c": "c770112522b1fb7c0101f5e87a330197",
+        "jvm": "d7c32652ff94db7f495b48d7b0cbf6c2",
+        "llvm": "be346dfa6d98427be9f19c495309d289"
+      },
+      "cases_sha256": "2a44aca0bc0f15f10750c9ab154c76d7a12dd31a1b9a7cb2ab305addf72bc3a2",
+      "driver_sha256": "7b3b71e0bad88c6001be58fe8444e949af57146c309411155c25bcc9ddf83474",
+      "populations": {
+        "error": {
+          "count": 29,
+          "cases_sha256": "ee8926552e4f067f528cddf37fd6894bd6b692619f6f0c5be531e04d07782a1c"
+        },
+        "exit": {
+          "count": 29,
+          "cases_sha256": "9cc56995b5e762f4aacf7b43f0fa5ec0e0f28f5d30aa41c9bc15b75b3e6afe20"
+        },
+        "leave": {
+          "count": 29,
+          "cases_sha256": "106aeacd3a30b942ad5d0ab6b14b38960db606c343c1452a93cc7675b759df7d"
+        },
+        "throwError": {
+          "count": 29,
+          "cases_sha256": "cb243896c74656c237c35ed1578a49779f7c04b7d8f8b10193712950403043fa"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}

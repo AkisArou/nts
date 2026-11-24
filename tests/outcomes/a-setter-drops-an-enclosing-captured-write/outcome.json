@@ -1,8 +1,9 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: ordinary=10;fraction=10;",
+  "category": "refused",
+  "nts": "NTS1001 `value`, a name from an enclosing scope",
+  "ran": "exit 1; nts: uncaught Observed: ",
   "node": "exit 1; nts: uncaught Observed: ordinary=11;fraction=10.5;",
-  "measured_with": "09997fca5eb9efeb",
+  "measured_with": "3ed2041dbd7db807",
   "source": "measured"
 }

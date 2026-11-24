@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/size-flight-planner",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "benchmarks/cases/size-flight-planner/case.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "93de7d1e16ee4028d0dd462025e1c49c3339b0430a07f399144cfd9f9899b944",
+      "source_digest": "a2f931b2e959414ce1703a38f8a3ae3f",
+      "stdout_sha256": "27c41d06a0da9a211b806c2aaccefcf8499c505204d1a8453d14a409f89e347c",
+      "stdout_bytes": 11,
+      "exit_code": 0
+    }
+  ]
+}
