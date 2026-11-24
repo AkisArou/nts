@@ -627,3 +627,56 @@ within the 64 MiB cap and logged the cap. Copied evidence remains in issue scrat
 | `identity-adoption-here-v2-records.log` | `636b880419b440edcf0e9a9be0e45df7f69701140c86ad1e7d7cd9af69f1c532` |
 | `identity-adoption-here-v2-temporary.log` | `cc97d63d77cb1555c34cc7709c1f1bc001d87190b93c14497d920761d0913bb9` |
 | `identity-adoption-here-v2-tooling-tests.raw.log` | `b133bb4a44b412c1ec2c3d84d7715eb4c13f102b58fb60f53d5ca73b4f4bb7a4` |
+
+V10 again refused before preparation: 44,557,570,048 free bytes and
+534,155,264 available against 4,682,612,736 bytes of working headroom. The
+control's repeated source staging consumed space before its preflight. Its log
+is `~/.cache/nts-scratch/841/b/identity-adoption-verified-controller-v10.log`,
+SHA-256 `94bf839d987f87c1605a781017851c102f188a858645ac2eb2f2edc8ebf54a60`.
+
+The coordinator authorized removing this task's regenerable failed-preflight
+staging and reusing v10's inputs. Only `source/`, `controller/`,
+`candidate-input/` and `controller.tar` where present in the following scratch
+folders were removed. Actual run directories, logs, hashes and results stayed.
+The manifest lists each individual removed path and allocated size; these are
+staging footprints, not a claim of equal filesystem free-space gain.
+
+| Folder under `~/.cache/nts-scratch/841/b/` | Removed allocated bytes |
+| --- | ---: |
+| `verified-controller-control-1795494509312` | 1,364,172,800 |
+| `verified-controller-control-1795494844692` | 1,516,494,848 |
+| `verified-controller-control-1795494978579` | 2,220,359,680 |
+| `verified-controller-control-1795497347536` | 3,081,039,872 |
+| `verified-controller-control-1795554434758` | 3,081,011,200 |
+| `verified-controller-control-1795554599763` | 3,080,974,336 |
+
+Manifest: `~/.cache/nts-scratch/841/b/removed-preflight-staging.json`, SHA-256
+`5ca8a673ea2900debd3879b9b0de9190b74380722363f3a3f72d39434bff9d78`.
+
+V11 reused v10's staging in `verified-controller-control-1795556520470`.
+Before reuse it checked all tracked bytes against the original Git commits,
+and separately checked and hashed the controller entry modules and candidate
+runner, shell driver, build owner and temporary owner. Its preflight had
+12,758,585,344 available bytes above the standing floor. The unchanged old
+controller at `2017bf23a3de7f0d28da263d6403b519735517cd` then ran the real
+`pinnedGate`, setup, release `prepare_compiler` and `all.sh` route at candidate
+`e68e5c81cf64262b14377b3a524cfe22a8b80f73` through the warm pin owner.
+
+The runner was green and `rustfmt` passed. `prepare.cpu` exists, the lifetime
+receipt is closed, its backstop is inactive, `scope_cleanup` is complete,
+`temporary.state` is `removed after green`, and the exact `tmp/` is absent.
+The controller wrapper correctly returned **held** with
+`the run was not in the canonical environment`. Explicit fixture observations
+and caches make this a recorded experiment, never canonical landing evidence.
+The scratch harness's original green-wrapper assertion was wrong; a separate
+read-only verification asserted the held verdict and exact reason, the exact
+experiment-variable population, and all the lifetime facts above. The result
+retains those variable names and receipt identities. No product handoff fix was
+made for this expected classification.
+
+| Path under `~/.cache/nts-scratch/841/b/` | SHA-256 |
+| --- | --- |
+| `verified-controller-reuse.mjs` | `db9e3facfb2aec49d8ae85796eb4bacefc4ccb4b5c1c6fa2b453e84e0513cffc` |
+| `verified-controller-control-1795556520470/v11-staging-reuse.json` | `088a3ab6a07d2fe3cd816b6c48487ef61e8e24de85fb7dc230e80b43fa756783` |
+| `identity-adoption-verified-controller-v11.log` | `0168e85f41053e620e1139f447b68cfa6bf0268590e1877f42c823aabe772bc1` |
+| `verified-controller-control-1795556520470/v11-lifetime-result.json` | `f7e1afede43c2524591da513b5b5679016baec8047a7aec62a42b1ff98b3f93e` |
