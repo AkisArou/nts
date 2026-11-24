@@ -537,3 +537,23 @@ the compiler build and all backend tests. Tests took 656 seconds; the reported
 Clippy and build phases include their admission waits. Raw output is
 `~/.cache/nts-scratch/841/b/adoption-rebased-inner-v1.log`, SHA-256
 `227ac098060b0c9b02b3ed22f04401de4a11f1986d036c5a7479283c5dd76490`.
+
+Review of `a2e631418996fed7dee6ae38c89acaa6cc3321df` identified a further
+cross-version boundary: the verified controller's `pinnedGate` runs setup,
+compiler preparation and `all.sh` before entering the candidate runner. The
+earlier direct-launch control did not exercise those producers. The reviewed
+allowlist could reject harmless setup or compiler scratch inside the run's
+own authenticated temporary.
+
+The coordinator ruled that adoption takes the whole directory by identity.
+Its root must be the gate uid's physical `tmp` directly under this run, its
+parent must be the run, and no lifetime receipt may exist. Contents no longer
+decide adoption. Close retains the existing holder and unit checks, identity
+rechecks and bounded diagnostic publication. Refusal controls now map each
+root alias, foreign uid identity, wrong parent, wrong run, replaced inode or
+existing receipt to its own exact diagnostic and preserve the refused path.
+
+The adoption shim retires once both services and the verified controller run
+the #841 lifetime-owning code. Follow-up [#1009](https://github.com/akisArou/nts/issues/1009)
+was created through `tooling/tasks/new.ts` under #545 and remains held until
+that condition is proved.

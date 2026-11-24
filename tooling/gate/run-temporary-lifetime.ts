@@ -43,21 +43,17 @@ const identity=(path:string):Identity=>{
 function sameParent(receipt:Receipt):void{
   if(JSON.stringify(identity(receipt.parent.path))!==JSON.stringify(receipt.parent))throw Error('run temporary parent identity changed: '+receipt.run);
 }
-/** The running gate may acquire its launcher's prepared root. Older landing
- * services mkdir tmp before entering the candidate, without creation metadata.
- * This is an explicit handoff for this run, never historical discovery. Only
- * the empty canonical resolution directory may precede lifetime acquisition. */
+/** The running gate may acquire its old launcher's entire prepared root by
+ * identity, including setup and compiler scratch. This explicit handoff is
+ * never historical discovery. Remove it once both services and the verified
+ * controller run the #841 lifetime-owning code (follow-up #1009). */
 export function adoptPreparedRunTemporary(temporary:RunTemporary,run:string,home:string):RunTemporary&{creation:NonNullable<RunTemporary['creation']>}{
   assertRunTemporaryOpen(run,home);assertRunTemporary(temporary,home);
   if(temporary.creation)throw Error('run temporary already has creation authority: '+temporary.path);
   if(temporary.path!==join(resolve(run),'tmp')||temporary.parent!==resolve(run))throw Error('prepared run temporary path differs from its run: '+temporary.path);
   const parent=identity(temporary.parent);
-  for(const name of readdirSync(temporary.path,{encoding:'buffer'})){
-    const path=join(temporary.path,name.toString());
-    if(!name.equals(Buffer.from('oracle-resolution')))throw Error('prepared run temporary has unowned contents: '+path);
-    identity(path);
-    if(readdirSync(path).length)throw Error('prepared run temporary resolution directory is not empty: '+path);
-  }
+  const receipt=readdirSync(parent.path).sort().find(name=>name.startsWith('temporary-owner-'));
+  if(receipt)throw Error('prepared run temporary already has a lifetime receipt: '+join(parent.path,receipt));
   assertRunTemporary(temporary,home);
   if(JSON.stringify(identity(temporary.parent))!==JSON.stringify(parent))throw Error('prepared run temporary parent identity changed: '+run);
   return {...temporary,creation:{token:randomUUID(),parentDev:parent.dev,parentIno:parent.ino}};

@@ -4721,3 +4721,17 @@ reclamation owner. The closer alone applies its existing unit guards, so
 resource observations do not add reclamation dependencies to every consumer.
 
 The contract is in [workflow](../../workflow.md#the-machine).
+
+## Prepared run temporaries are adopted by identity (11-24)
+
+An older landing service or verified full-check controller may prepare a run's
+temporary before its candidate lifetime owner starts. Adoption authenticates
+the owned physical `run/tmp`, its parent and device/inode identities, and the
+absence of an existing lifetime receipt. The owner takes the whole directory,
+including setup and compiler scratch. Its contents do not decide adoption;
+the normal holder, identity and diagnostic guards govern terminal disposal.
+
+The compatibility path retires once both services and the verified controller
+run the #841 lifetime-owning code. Follow-up #1009 tracks that removal.
+The contract is in [workflow](../../workflow.md#the-machine).
+

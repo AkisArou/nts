@@ -1490,11 +1490,14 @@ the tooling strict checker owns the source's type checking.
   partial evidence. Replaced publications refuse removal.
   A runner handed a prepared root by a launcher without lifetime metadata
   explicitly adopts it before arming its owner. The root must be the owned
-  physical `tmp` directly under this run, empty except for an owned, empty
-  canonical `oracle-resolution` directory. Adoption logs the run and directory
+  physical `tmp` directly under this run, with the run as its parent and no
+  existing lifetime receipt. The owner takes the entire directory, including
+  setup and compiler scratch; its contents do not decide adoption. Adoption logs the run and directory
   identities and forwards the new creation token through the canonical handoff.
-  Unknown contents, aliases and changed identities refuse adoption; no historical
-  temporary population is discovered.
+  Root aliases, foreign ownership, a wrong parent, changed identities and existing
+  receipts refuse adoption; no historical temporary population is discovered.
+  This compatibility path is removed once both services and the verified controller
+  run the lifetime-owning launcher code (#1009).
   Links and sockets are never followed. Core dumps
   remain disabled. The normal owner requests backstop shutdown without waiting
   behind its own unit's stop; a closed receipt makes that later callback inert.

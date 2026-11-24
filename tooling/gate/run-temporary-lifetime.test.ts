@@ -30,27 +30,40 @@ function fixture(t:Parameters<typeof testScratch>[0]){
   const close=(green=false,options:Parameters<typeof closeRunTemporary>[5]={})=>closeRunTemporary(file,token,home,green,host,{log:line=>log.push(line),...options});
   return {home,run,temporary,token,file,r,env,host,log,close};
 }
-test('explicit adoption binds an empty prepared root and its canonical setup to this run',t=>{
+test('explicit adoption binds the whole prepared root by identity regardless of its contents',t=>{
   for(const setup of [false,true]){
     const home=testScratch(t,'prepared-temporary'),run=join(home,'.cache/run'),path=join(run,'tmp');
-    mkdirSync(path,{recursive:true});if(setup)mkdirSync(join(path,'oracle-resolution'));
+    mkdirSync(path,{recursive:true});if(setup){
+      mkdirSync(join(path,'oracle-resolution'));writeFileSync(join(path,'oracle-resolution/setup'),'resolved');
+      writeFileSync(join(path,'compiler-scratch'),'compiler');symlinkSync(home,join(path,'setup-alias'));
+    }
     const prior=captureRunTemporary(run,undefined,home);assert.equal(prior.creation,undefined);
     const adopted=adoptPreparedRunTemporary(prior,run,home),parent=lstatSync(run);
     assert.equal(adopted.dev,prior.dev);assert.equal(adopted.ino,prior.ino);
     assert.equal(adopted.creation!.parentDev,parent.dev);assert.equal(adopted.creation!.parentIno,parent.ino);
     assert.match(adopted.creation!.token,/^[a-f0-9-]{36}$/);
+    if(setup)assert.equal(readFileSync(join(path,'compiler-scratch'),'utf8'),'compiler');
   }
 });
-test('prepared adoption refuses unknown contents, resolution aliases, occupied setup and replaced identities',t=>{
-  for(const change of ['contents','alias','occupied','wrong-run','replaced'] as const){
+test('prepared adoption refuses root aliases, foreign uid identities, wrong parents and existing receipts by name',t=>{
+  for(const change of ['alias','foreign-uid','wrong-parent','wrong-run','replaced','receipt'] as const){
     const home=testScratch(t,'invalid-prepared-temporary'),run=join(home,'.cache/run'),path=join(run,'tmp');
     mkdirSync(path,{recursive:true});const prior=captureRunTemporary(run,undefined,home);
-    if(change==='contents')writeFileSync(join(path,'historical-input.ts'),'keep');
-    if(change==='alias')symlinkSync(home,join(path,'oracle-resolution'));
-    if(change==='occupied'){mkdirSync(join(path,'oracle-resolution'));writeFileSync(join(path,'oracle-resolution/keep'),'keep');}
-    if(change==='replaced'){renameSync(path,path+'-original');mkdirSync(path);}
-    assert.throws(()=>adoptPreparedRunTemporary(prior,change==='wrong-run'?run+'-other':run,home),/unowned contents|physical directory|not empty|differs from its run|replaced/);
+    const receipt=join(run,'temporary-owner-'+randomUUID()+'.json');
+    if(change==='alias'||change==='replaced'){renameSync(path,path+'-original');if(change==='alias')symlinkSync(path+'-original',path);else mkdirSync(path);}
+    if(change==='receipt')writeFileSync(receipt,'existing authority');
+    const handed=change==='foreign-uid'?{...prior,uid:prior.uid+1}:change==='wrong-parent'?{...prior,parent:home}:prior;
+    const expected={
+      alias:'run temporary directory was replaced: '+path,
+      'foreign-uid':'run temporary directory was replaced: '+path,
+      'wrong-parent':'run temporary directory was replaced: '+path,
+      'wrong-run':'prepared run temporary path differs from its run: '+path,
+      replaced:'run temporary directory was replaced: '+path,
+      receipt:'prepared run temporary already has a lifetime receipt: '+receipt,
+    }[change];
+    assert.throws(()=>adoptPreparedRunTemporary(handed,change==='wrong-run'?run+'-other':run,home),{message:expected});
     assert.equal(existsSync(path),true);
+    if(change==='receipt')assert.equal(readFileSync(receipt,'utf8'),'existing authority');
   }
 });
 test('a candidate runner adopts the current service prepared tmp, runs a step and closes its lifetime',t=>{
@@ -69,6 +82,9 @@ test('a candidate runner adopts the current service prepared tmp, runs a step an
   // Main's pre-lifetime creator makes tmp before candidate environment setup.
   // Keep that actual on-disk preparation: no creation record or lifetime token.
   mkdirSync(join(run,'tmp'),{recursive:true});
+  mkdirSync(join(run,'tmp/oracle-resolution'));writeFileSync(join(run,'tmp/oracle-resolution/setup'),'setup');
+  writeFileSync(join(run,'tmp/compiler-scratch'),'compiler');
+  const sentinel=join(home,'outside-sentinel');writeFileSync(sentinel,'keep');symlinkSync(sentinel,join(run,'tmp/setup-alias'));
   const launcher:NodeJS.ProcessEnv={...hostEnvironment(parent.env),...caches,HOME:home};
   assert.equal(launcher.NTS_GATE_ENV_CONTEXT,undefined);
   const planned=gateEnvironment(launcher,{run,owned:{...caches,NTS_GATE_STEPS:'rustfmt',CARGO_TARGET_DIR:join(root,'target'),...gateFixtureMemory(join(home,'observations'),root)}});
@@ -83,6 +99,7 @@ test('a candidate runner adopts the current service prepared tmp, runs a step an
   const summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8'));
   assert.equal(summary.verdict,'green');assert.equal(summary.steps[0].verdict,'PASS');assert.equal(summary.temporary.state,'removed after green');
   assert.equal(existsSync(join(run,'tmp')),false);assert.match(readFileSync(join(run,'temporary.log'),'utf8'),/adopted pre-lifetime launcher temporary/);
+  assert.equal(readFileSync(sentinel,'utf8'),'keep','disposal never follows an adopted entry link');
   const observed=JSON.parse(readFileSync(join(run,'observed-context.json'),'utf8'));
   assert.ok(observed.temporary.creation,'steps receive the adopted lifetime authority');
   const receipt=JSON.parse(readFileSync(join(run,'temporary-owner-'+observed.temporary.creation.token+'.json'),'utf8'));
