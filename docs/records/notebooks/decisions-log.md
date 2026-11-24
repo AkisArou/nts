@@ -4647,6 +4647,12 @@ outside `__nts_` and `_` followed by an uppercase letter. Raw emit commands,
 apps, executables, addons and shared libraries keep their current names.
 The shared-library policy is tracked separately in #1005.
 
+The default normalizes nonidentifier characters to `_`, escapes an empty name,
+an invalid initial character or a reserved namespace with `product_`, then
+applies the C keyword/header escaping. `probe-llvm` and `probe_llvm` both give
+`probe_llvm`; the mapping is deliberately not injective, and an explicit
+prefix distinguishes products whose defaults collide.
+
 The regression builds default and explicit prefixes on C and LLVM, inspects
 the archive with nm, links a host through the generated header, compares the
 library's `error`/`throwError` pair and exported state with node, and observes

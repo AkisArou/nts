@@ -8,8 +8,10 @@ source symbol plan shared by C and LLVM. Header declarations, publication
 lists, definitions, references and the library constructor consume that plan.
 
 An explicit prefix is validated with its value in the refusal. The default
-is the product name escaped by the existing C identifier owner:
-`probe-llvm` gives `probe_llvm`. The resulting public name is
+normalizes product-name punctuation to `_`, escapes an empty/invalid initial
+or reserved namespace with `product_`, then uses the existing C keyword/header
+escaping. `probe-llvm` and `probe_llvm` both give `probe_llvm`; explicit
+prefixes distinguish this deliberate default collision. The resulting public name is
 `<prefix>_<existing C spelling>`. Raw emissions and other product kinds keep
 their names; shared-library prefix support is tracked by #1005.
 
@@ -53,6 +55,6 @@ The paused Chromium runtime has separate consumers outside this inventory.
 `runtime/chromium/embedder/probe.c` spells generated calls directly,
 `embedder/program/check.ts` checks their old spellings, and
 `tooling/chromium/app.ts` recognizes the old initializer spelling in its
-module-state guard. These files remain untouched pending the coordinator's
-coverage decision. The owed rule names their standalone `verify.ts` workflow;
+module-state guard. The coordinator deferred their migration to #1006 under
+the paused Chromium group #581. The owed rule names their standalone `verify.ts` workflow;
 the full-check executable step list contains no Chromium execution step.

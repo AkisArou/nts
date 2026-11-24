@@ -39,7 +39,27 @@ impl<'a> SourceSymbols<'a> {
         prefix: Option<&str>,
     ) -> Result<Self, String> {
         let Some(prefix) = prefix else {
-            return Ok(Self::build(source, Some(&c_identifier(product))));
+            let mut name: String = product
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '_' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            if !name
+                .as_bytes()
+                .first()
+                .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
+                || name.starts_with("__nts_")
+                || (name.starts_with('_')
+                    && name.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
+            {
+                name.insert_str(0, "product_");
+            }
+            return Ok(Self::build(source, Some(&c_identifier(&name))));
         };
         if !crate::symbols::is_native_c_identifier(prefix)
             || prefix.starts_with("__nts_")
@@ -185,9 +205,19 @@ mod tests {
     fn product_default_is_escaped_but_explicit_invalid_prefixes_refuse() {
         let mut program = model(2, false);
         program.funcs[0].exported = true;
-        let symbols = SourceSymbols::for_product(&program, "probe-llvm", None).expect("default");
-        assert_eq!(symbols.function("register"), "probe_llvm_register_");
-        assert_eq!(symbols.global(0), "probe_llvm_g0");
+        for (product, prefix) in [
+            ("probe-llvm", "probe_llvm"),
+            ("probe_llvm", "probe_llvm"),
+            ("9probe", "product_9probe"),
+            ("", "product_"),
+            ("__nts_probe", "product___nts_probe"),
+            ("_Reserved", "product__Reserved"),
+            ("int", "int_"),
+        ] {
+            let symbols = SourceSymbols::for_product(&program, product, None).expect("default");
+            assert_eq!(symbols.function("register"), format!("{prefix}_register_"));
+            assert_eq!(symbols.global(0), format!("{prefix}_g0"));
+        }
         for prefix in ["", "probe-llvm", "9bad", "__nts_private", "_Reserved"] {
             let error = SourceSymbols::for_product(&program, "probe-llvm", Some(prefix))
                 .expect_err("invalid explicit prefix");
