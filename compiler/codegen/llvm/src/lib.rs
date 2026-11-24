@@ -1407,7 +1407,9 @@ fn descriptors(
     if let Err(diagnostic) = typed_releases(&mut out, program, platform) {
         diagnostics.push(diagnostic);
     }
-    typed_array_descriptors(&mut out, program);
+    if let Err(diagnostic) = typed_array_descriptors(&mut out, program, platform) {
+        diagnostics.push(diagnostic);
+    }
     out
 }
 
@@ -1579,7 +1581,11 @@ fn typed_array_descriptor(layout: &nts_core::hir::Layout) -> String {
 /// releases each slot through the element's typed release, as the C
 /// backend's `emit_typed_array_descriptors`. One per element layout an
 /// `ArrayNew` names.
-fn typed_array_descriptors(out: &mut String, program: &Emission<'_>) {
+fn typed_array_descriptors(
+    out: &mut String,
+    program: &Emission<'_>,
+    platform: Platform,
+) -> Result<(), Diagnostic> {
     let mut wanted = std::collections::BTreeMap::new();
     for func in program.native_funcs() {
         for op in &func.values {
@@ -1596,7 +1602,7 @@ fn typed_array_descriptors(out: &mut String, program: &Emission<'_>) {
         }
     }
     if wanted.is_empty() {
-        return;
+        return Ok(());
     }
     let _ = writeln!(
         out,
@@ -1605,7 +1611,15 @@ fn typed_array_descriptors(out: &mut String, program: &Emission<'_>) {
     for (at, element) in wanted {
         let layout = &program.layouts[at];
         let tag = descriptor_name(layout);
-        let release = typed_release_symbol(layout);
+        let release = runtime_call::direct(
+            "void",
+            &DirectCallee::global(
+                Site::synthetic(program, "typed array descriptors"),
+                platform,
+                typed_release_symbol(layout),
+            )?,
+            Operand::new("ptr", "%child"),
+        );
         let length = nts_core::hir::layout::LENGTH_OFFSET;
         let items = nts_core::hir::layout::ELEMENTS_OFFSET;
         let _ = writeln!(
@@ -1623,7 +1637,7 @@ fn typed_array_descriptors(out: &mut String, program: &Emission<'_>) {
              \x20 %child = load ptr, ptr %slot\n\
              \x20 %live = icmp ne ptr %child, null\n\
              \x20 br i1 %live, label %release, label %step\nrelease:\n\
-             \x20 call void {release}(ptr %child)\n\
+             \x20 {release}\n\
              \x20 br label %step\nstep:\n\
              \x20 %next = add nuw i32 %index, 1\n\
              \x20 %more = icmp ult i32 %next, %length\n\
@@ -1639,6 +1653,7 @@ fn typed_array_descriptors(out: &mut String, program: &Emission<'_>) {
             element
         );
     }
+    Ok(())
 }
 
 /// `NTS_KIND_VIEW`: a typed array's view, whose descriptor is an

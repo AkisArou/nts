@@ -659,7 +659,7 @@ fn graph_source() -> String {
     let last = length - 1;
     let _ = writeln!(
         source,
-        "class C{last} {{ value: number; constructor(value: number) {{ this.value = value; }} }}"
+        "class C{last} {{ depth: number; constructor(depth: number) {{ this.depth = depth; }} }}"
     );
     let mut chain = format!("new C{last}(x)");
     for at in (0..last).rev() {
