@@ -462,6 +462,19 @@ fn static_library_exports_use_the_product_prefix() {
             "import {{defineConfig,library,target}} from '@nts/config';\nexport default defineConfig({{products:{{{products}}}}});\n"
         ),
     );
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository root");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":{:?},"compilerOptions":{{"noEmit":false}},"include":["src",{:?}]}}"#,
+            repo.join("tsconfig.fixtures.json").to_string_lossy(),
+            repo.join("runtime/native/libc.d.ts").to_string_lossy(),
+        ),
+    )
+    .expect("tsconfig");
     std::fs::write(
         project.join("src/main.ts"),
         "import { helper } from './internal.js';\n\
