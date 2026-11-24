@@ -26,10 +26,10 @@ fn bigint_constants_cross_c_without_a_floating_point_step() {
             "{:?}",
             prepared.diagnostics
         );
-        let c = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+        let (c, llvm, _) =
+            super::emit_fixture(&prepared.program, "native-bigint-constants", Some("c"));
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm =
-            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         for file in c.support_files() {
             file.write(dir.as_std_path()).unwrap();

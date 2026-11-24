@@ -468,6 +468,7 @@ name = "nts-codegen-llvm"
 version = "0.0.0"
 dependencies = [
  "camino",
+ "nts-build",
  "nts-codegen-c",
  "nts-codegen-common",
  "nts-core",

@@ -5,9 +5,10 @@ use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;
+use nts_codegen_common::source_symbols::SourceSymbols;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
-use std::{fmt::Write, process::Command};
+use std::{fmt::Write, process::Command, rc::Rc};
 
 #[path = "native/dispatch.rs"]
 mod dispatch;
@@ -47,6 +48,39 @@ use crate::c_function_symbol::function_symbol;
 
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with_provider(name, source, hir::Memory::NoGc)
+}
+
+/// Reuse an interop caller under the ABI its real static product publishes.
+/// Config evaluation and product selection are the build's owners; both
+/// emitters and any extra caller share one frozen source-symbol plan.
+fn emit_fixture<'p>(
+    program: &'p hir::Program,
+    fixture: &str,
+    named: Option<&str>,
+) -> (
+    nts_codegen_c::Emitted,
+    nts_codegen_llvm::Emitted,
+    Rc<SourceSymbols<'p>>,
+) {
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../tests/interop")
+        .join(fixture)
+        .join(nts_build::config::FILE_NAME);
+    let resolved = nts_build::config::resolve(&config).unwrap();
+    let (name, product) = nts_build::config::product(&resolved, named)
+        .unwrap()
+        .unwrap();
+    assert_eq!(product.kind, "static-library");
+    let symbols =
+        Rc::new(SourceSymbols::for_product(program, name, product.prefix.as_deref()).unwrap());
+    let plan = nts_codegen_c::EntryAbi::with_source_symbols(program, Rc::clone(&symbols));
+    let c = nts_codegen_c::emit_planned(&plan, hir::native::NativeAbi::LP64);
+    let llvm = nts_codegen_llvm::emit_with_source_symbols(
+        program,
+        nts_codegen_llvm::Platform::SYSV_X86_64,
+        Rc::clone(&symbols),
+    );
+    (c, llvm, symbols)
 }
 
 fn prepare_with_provider(
@@ -1604,10 +1638,9 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
             "{:?}",
             prepared.diagnostics
         );
-        let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+        let (c, llvm, symbols) = emit_fixture(&prepared.program, "native-closure", None);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm =
-            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1629,7 +1662,7 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
             include_str!("../../../../tests/interop/native-closure/consumer/caller.c"),
         )
         .unwrap();
-        std::fs::write(dir.join("cycles.c"), SIGNAL_CYCLES).unwrap();
+        std::fs::write(dir.join("cycles.c"), signal_cycles(&symbols)).unwrap();
         let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
             &["-DNTS_PROVIDER_RC"]
         } else {
@@ -2070,10 +2103,9 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
             "{:?}",
             prepared.diagnostics
         );
-        let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+        let (c, llvm, _) = emit_fixture(&prepared.program, "native-string", None);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm =
-            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         assert!(
             llvm.text.contains("@nts_string_to_cstring("),
@@ -2549,10 +2581,9 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
             "{:?}",
             prepared.diagnostics
         );
-        let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+        let (c, llvm, _) = emit_fixture(&prepared.program, "native-poll", None);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm =
-            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -2626,10 +2657,9 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
             "{:?}",
             prepared.diagnostics
         );
-        let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+        let (c, llvm, _) = emit_fixture(&prepared.program, "native-fd", None);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm =
-            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -2830,10 +2860,9 @@ fn c_calls_a_typescript_function_through_a_bridge() {
             "{:?}",
             prepared.diagnostics
         );
-        let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+        let (c, llvm, _) = emit_fixture(&prepared.program, "native-callback", None);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm =
-            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -3258,26 +3287,34 @@ void drop_all(void) {
 
 /// Fifty connect/emit/release cycles, then the live count before and after
 /// and what the handlers added up; any argument skips the release.
-const SIGNAL_CYCLES: &str = r#"
+fn signal_cycles(symbols: &SourceSymbols<'_>) -> String {
+    let initializer = symbols.function(hir::lower::MODULE_INIT);
+    let start = symbols.function("start");
+    let send = symbols.function("send");
+    let stop = symbols.function("stop");
+    format!(
+        r#"
 #include <stdio.h>
 #include <stdlib.h>
 #include "closures.h"
 #include "program.h"
-int main(int argc, char **argv) {
-    module__init();
+int main(int argc, char **argv) {{
+    {initializer}();
     (void)argv;
     closures_skip_notify = argc > 1;
     size_t before = nts_live_count();
-    for (int cycle = 0; cycle < 50; cycle++) {
-        start();
-        send_(1);
-        stop();
-    }
+    for (int cycle = 0; cycle < 50; cycle++) {{
+        {start}();
+        {send}(1);
+        {stop}();
+    }}
     size_t after = nts_live_count();
     printf("%zu %zu\n", before, after);
     return 0;
+}}
+"#
+    )
 }
-"#;
 
 /// A `GObject` signal, as `nts bind-gir` declares one: a typed view of
 /// `g_signal_connect_data` per signal, each naming the one C symbol with

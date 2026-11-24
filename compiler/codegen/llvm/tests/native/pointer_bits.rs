@@ -61,13 +61,17 @@ fn pointer_bits_are_c_uintptr_with_no_load_or_count() {
                 }
             }
         }
-        let c = nts_codegen_c::emit(program, hir::native::NativeAbi::LP64);
+        let (c, llvm, symbols) = super::emit_fixture(program, "native-pointer-bits", Some("c"));
         assert!(c.is_complete(), "{:?}", c.diagnostics);
         assert!(c.writer.text().contains("(uint64_t)(uintptr_t)"));
-        let llvm = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         assert!(llvm.text.contains("= ptrtoint ptr "));
-        let win = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::WIN64_X86_64);
+        let win = nts_codegen_llvm::emit_with_source_symbols(
+            program,
+            nts_codegen_llvm::Platform::WIN64_X86_64,
+            symbols,
+        );
         assert!(win.diagnostics.is_empty(), "{:?}", win.diagnostics);
         for file in c.support_files() {
             file.write(dir.as_std_path()).unwrap();

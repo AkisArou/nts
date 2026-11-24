@@ -67,12 +67,17 @@ fn pointer_constants_keep_exact_bits_and_native_equality() {
                 }
             }
         }
-        let c = nts_codegen_c::emit(program, hir::native::NativeAbi::LP64);
+        let (c, llvm, symbols) =
+            super::emit_fixture(program, "native-pointer-constants", Some("c"));
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
+
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         assert!(llvm.text.contains("inttoptr i64 9007199254740993 to ptr"));
-        let win = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::WIN64_X86_64);
+        let win = nts_codegen_llvm::emit_with_source_symbols(
+            program,
+            nts_codegen_llvm::Platform::WIN64_X86_64,
+            symbols,
+        );
         assert!(win.diagnostics.is_empty(), "{:?}", win.diagnostics);
         assert!(
             win.text

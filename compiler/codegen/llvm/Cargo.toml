@@ -16,6 +16,7 @@ nts-codegen-common.workspace = true
 workspace = true
 
 [dev-dependencies]
+nts-build.workspace = true
 nts-frontend-ts.workspace = true
 nts-semantic-schema.workspace = true
 nts-codegen-c.workspace = true

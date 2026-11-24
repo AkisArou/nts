@@ -52,6 +52,16 @@ such as `pollfd_size` are unrelated and retain their native names.
 | windows-resource-atoms/overloads | explicit `lib`, both backends | generated function names |
 | tests/workspace/apps/linux-brownfield | default `sdkStatic` | static config uses its default; shared config unchanged |
 
+Eight LLVM native-ABI tests reuse these same C callers: native-closure,
+native-string, native-callback, native-poll, native-fd,
+native-pointer-constants, native-bigint-constants and native-pointer-bits.
+They now resolve each fixture's real config through `nts_build::config::resolve`
+and select its product through `config::product` (the named `c` product for
+the three dual-product fixtures). SourceSymbols resolves that product's
+namespace, and one frozen plan supplies C, LLVM and the closure-cycle caller.
+The hosts are not duplicated. Native-private-names retains its separate raw
+caller because that control specifically tests raw emission.
+
 The paused Chromium runtime has separate consumers outside this inventory.
 `runtime/chromium/embedder/probe.c` spells generated calls directly,
 `embedder/program/check.ts` checks their old spellings, and
