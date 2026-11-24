@@ -629,6 +629,7 @@ fn throwing_and_rejecting_a_function_does_not_report_its_captured_message() {
 /// `TYPED_RELEASE_DEPTH + 2` classes, each holding the next, beside a subtype
 /// in a base-typed field, an erased field and a cyclic class.
 fn graph_source() -> String {
+    use std::fmt::Write as _;
     let length = nts_codegen_common::release::TYPED_RELEASE_DEPTH + 2;
     let mut source = String::from(
         "class Note { size: number; constructor(size: number) { this.size = size; } }\n\
@@ -650,21 +651,24 @@ fn graph_source() -> String {
     );
     for at in 0..length - 1 {
         let next = at + 1;
-        source.push_str(&format!(
-            "class C{at} {{ next: C{next}; constructor(next: C{next}) {{ this.next = next; }} }}\n"
-        ));
+        let _ = writeln!(
+            source,
+            "class C{at} {{ next: C{next}; constructor(next: C{next}) {{ this.next = next; }} }}"
+        );
     }
     let last = length - 1;
-    source.push_str(&format!(
-        "class C{last} {{ value: number; constructor(value: number) {{ this.value = value; }} }}\n"
-    ));
+    let _ = writeln!(
+        source,
+        "class C{last} {{ value: number; constructor(value: number) {{ this.value = value; }} }}"
+    );
     let mut chain = format!("new C{last}(x)");
     for at in (0..last).rev() {
         chain = format!("new C{at}({chain})");
     }
-    source.push_str(&format!(
-        "export function makeChain(x: number): C0 {{ return {chain}; }}\n"
-    ));
+    let _ = writeln!(
+        source,
+        "export function makeChain(x: number): C0 {{ return {chain}; }}"
+    );
     source
 }
 
@@ -734,42 +738,9 @@ fn assuming_the_static_layout(source: &str, llvm: bool) -> String {
     lines.join("\n") + "\n"
 }
 
-#[test]
-fn typed_releases_follow_the_proved_layout_graph() {
+/// What the shared plan decides for `graph_source`'s layouts.
+fn check_graph_plan(program: &hir::Program) {
     use nts_codegen_common::release::{TYPED_RELEASE_DEPTH, TypedReleases};
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .canonicalize_utf8()
-        .unwrap();
-    let dir = ScratchDir::new(&root.join("target/typed-release-tests"), "graph");
-    std::fs::write(dir.join("main.ts"), graph_source()).unwrap();
-    std::fs::write(
-        dir.join("tsconfig.json"),
-        format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
-    )
-    .unwrap();
-    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
-        .with_checkers(std::num::NonZeroU16::MIN)
-        .snapshot(&dir.join("tsconfig.json"))
-        .unwrap();
-    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options {
-            provider: hir::Memory::ReferenceCounting,
-            ..hir::Options::new(
-                nts_core::hir::backend::Backend::Llvm,
-                nts_core::hir::EntryUnwind::Terminal,
-            )
-        },
-    )
-    .unwrap();
-    assert!(
-        prepared.diagnostics.is_empty(),
-        "{:?}",
-        prepared.diagnostics
-    );
-    let program = &prepared.program;
     let cycles = program.cycles();
     let plan = TypedReleases::plan(program, &cycles);
     let layout = |name: &str| {
@@ -811,6 +782,46 @@ fn typed_releases_follow_the_proved_layout_graph() {
         plan.of(layout("C3")).unwrap().children,
         [Some(layout("C4"))]
     );
+}
+
+#[test]
+fn typed_releases_follow_the_proved_layout_graph() {
+    use nts_codegen_common::release::TYPED_RELEASE_DEPTH;
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = ScratchDir::new(&root.join("target/typed-release-tests"), "graph");
+    std::fs::write(dir.join("main.ts"), graph_source()).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
+    )
+    .unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Memory::ReferenceCounting,
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::Llvm,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+        },
+    )
+    .unwrap();
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let program = &prepared.program;
+    let length = TYPED_RELEASE_DEPTH + 2;
+    check_graph_plan(program);
 
     let c = nts_codegen_c::emit(program, hir::native::NativeAbi::LP64);
     let llvm = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
