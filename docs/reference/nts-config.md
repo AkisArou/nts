@@ -108,7 +108,8 @@ is refused before anything is written, naming the backend it belongs to.
 | `backend` | `app.cli`, `app.linux` | `"c" \| "llvm"` | `"c"` | passed to the target |
 | `cpu` | `app.cli`, `app.linux` | `"baseline"` | x86-64-v3 | passed to the target |
 | `soname` | native libraries | `string` | `lib<name>.so` etc. | the shared library's file name, its ELF `soname` and its Mach-O install name (`@rpath/<file>`) |
-| `header`, `prefix` | native libraries | `string` | product name | the installed header and the prefix on exported C symbols. Typed, and not read by the build |
+| `header` | native libraries | `string` | product name | the installed header name. Typed, and not read by the build |
+| `prefix` | native libraries | `string` | product name | static libraries name exported C symbols `<prefix>_<C name>`, including exported values and the module initializer; `program.h` declares those names. Must be a nonempty C identifier outside `__nts_` and `_` followed by an uppercase letter. Shared libraries do not read it yet (#1005) |
 | `apiVersion` | `library.node` | `number` | `8` | the Node-API version, which is the target's id |
 | `platforms` | `library.node` | `{ os, arch }[]` | Linux x86-64 | one target per machine |
 | `javaPackage` | `jar`, `aar` | `string` | required | the package the generated classes are in, in place of `nts.gen` |
@@ -300,6 +301,14 @@ SDK and set of inputs**, by the platform's binder, and kept in a shared store,
   [builtins](../foundations/builtins.md#profiles), not built.
 
 ## Decisions
+
+- **Static native libraries namespace their source-owned public C symbols.**
+  `prefix`, or the product name by default, is resolved before native emission.
+  The shared symbol owner supplies C, LLVM, the header and publication lists;
+  constructors call the same frozen initializer name. Bare emissions, apps,
+  executables, addons and shared libraries retain their existing names. Shared
+  library prefixes are pending #1005
+  ([log](../records/notebooks/decisions-log.md#static-libraries-read-their-c-symbol-prefix-11-24)).
 
 - **x86-64 builds default to x86-64-v3,** with a clear error on an older CPU and
   `cpu: "baseline"` as the portable opt-out

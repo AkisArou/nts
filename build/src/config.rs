@@ -112,6 +112,9 @@ pub struct Product {
     /// nothing reaches.
     #[serde(default)]
     pub soname: Option<String>,
+    /// Namespace for a static library's exported C symbols.
+    #[serde(default)]
+    pub prefix: Option<String>,
 }
 
 /// Build settings a root config carries.
@@ -545,6 +548,7 @@ mod tests {
                             java_package: None,
                             application_id: None,
                             soname: None,
+                            prefix: None,
                         },
                     )
                 })

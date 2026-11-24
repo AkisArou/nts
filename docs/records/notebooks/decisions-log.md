@@ -4630,3 +4630,26 @@ protected before adoption. This brings the existing starved controller under
 the same next-start bound immediately after the change lands.
 
 The contract is in [workflow](../../workflow.md#benchmarks).
+## Static libraries read their C symbol prefix (11-24)
+
+Approved by the coordinator for #978. A static archive's unprefixed source
+exports entered its host executable's namespace, where `error` could preempt
+libc throughout the process. The documented `prefix` field was never parsed.
+
+Static products now resolve `prefix`, defaulting to their product name, before
+emission. SourceSymbols freezes `<prefix>_<C name>` for public source functions
+and globals, including the module initializer and retained sibling exports.
+Both native backends, the C header and the publication list consume those
+names; the load-time constructor calls the same frozen initializer. Invalid
+prefixes refuse with their value: the namespace must be a nonempty C identifier
+outside `__nts_` and `_` followed by an uppercase letter. Raw emit commands,
+apps, executables, addons and shared libraries keep their current names.
+The shared-library policy is tracked separately in #1005.
+
+The regression builds default and explicit prefixes on C and LLVM, inspects
+the archive with nm, links a host through the generated header, compares the
+library's `error`/`throwError` pair and exported state with node, and observes
+libc's `error()` from both that host and another library. Host-owned helper
+names coexist with the archive's source functions.
+
+The contract is in [nts-config](../../reference/nts-config.md#decisions).

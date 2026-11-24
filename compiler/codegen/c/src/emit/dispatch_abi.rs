@@ -56,17 +56,41 @@ pub struct Plan<'a> {
 impl<'a> Plan<'a> {
     #[must_use]
     pub fn new(program: &'a Program) -> Self {
-        Self::build(program, false)
+        Self::with_source_symbols(
+            program,
+            Rc::new(nts_codegen_common::source_symbols::SourceSymbols::new(
+                program,
+            )),
+        )
+    }
+
+    /// Share the frozen source ABI with another native backend.
+    #[must_use]
+    pub fn with_source_symbols(
+        program: &'a Program,
+        symbols: Rc<nts_codegen_common::source_symbols::SourceSymbols<'a>>,
+    ) -> Self {
+        Self::build(program, false, symbols)
     }
 
     /// Request readers consumed by a separately emitted addon. Ordinary
     /// native products do not pay for readers they never use.
     #[must_use]
     pub fn for_addon(program: &'a Program) -> Self {
-        Self::build(program, true)
+        Self::build(
+            program,
+            true,
+            Rc::new(nts_codegen_common::source_symbols::SourceSymbols::new(
+                program,
+            )),
+        )
     }
 
-    fn build(program: &'a Program, value_readers: bool) -> Self {
+    fn build(
+        program: &'a Program,
+        value_readers: bool,
+        source_symbols: Rc<nts_codegen_common::source_symbols::SourceSymbols<'a>>,
+    ) -> Self {
         let functions: FxHashMap<_, _> = program
             .funcs
             .iter()
@@ -147,9 +171,7 @@ impl<'a> Plan<'a> {
             }),
             value_readers,
             parameters,
-            source_symbols: Rc::new(nts_codegen_common::source_symbols::SourceSymbols::new(
-                program,
-            )),
+            source_symbols,
             native_symbols: Rc::new(nts_codegen_common::native_symbols::NativeSymbols::new(
                 program,
             )),

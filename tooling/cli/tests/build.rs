@@ -246,6 +246,16 @@ fn compiler_product_shapes(compiler: &str) {
             String::from_utf8_lossy(&built.stderr)
         );
         let artifact = project.join(".nts/build/probe").join(artifact);
+        let header = std::fs::read_to_string(artifact.parent().expect("output").join("program.h"))
+            .expect("product header");
+        assert!(
+            header.contains("C symbol: answer."),
+            "{compiler} {shape}: {header}"
+        );
+        assert!(
+            !header.contains("probe_answer"),
+            "{compiler} {shape}: {header}"
+        );
         let output = match shape {
             "shared" => {
                 assert_eq!(exported(&artifact), BTreeSet::from(["answer".to_owned()]));
@@ -422,15 +432,208 @@ export default defineConfig({
 });
 "#;
 
+/// #978: the archive, its header and its callers share one prefixed ABI.
+/// Both collision arms agree with node; libc and host-owned names still answer.
+#[test]
+fn static_library_exports_use_the_product_prefix() {
+    if !cfg!(all(target_os = "linux", target_env = "gnu")) || !available() {
+        skip("Linux with glibc, node, clang and nm");
+        return;
+    }
+    let mut products = String::new();
+    for backend in ["c", "llvm"] {
+        for explicit in [false, true] {
+            let name = format!(
+                "{backend}_{}",
+                if explicit { "explicit" } else { "default" }
+            );
+            let prefix = if explicit { "prefix: 'chosen'," } else { "" };
+            products.push_str(&format!("{name}: library.staticNative({{ {prefix} entry:'./src/main.ts', targets:[target.linux({{backend:'{backend}'}})] }}),\n"));
+        }
+    }
+    let project = fixture(
+        "build-static-prefix",
+        &format!(
+            "import {{defineConfig,library,target}} from '@nts/config';\nexport default defineConfig({{products:{{{products}}}}});\n"
+        ),
+    );
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { helper } from './internal.js';\n\
+         export let value = helper(2);\n\
+         export function error(n: number): number { return helper(n) * 3; }\n\
+         export function throwError(n: number): number { return helper(n) * 3; }\n",
+    )
+    .expect("entry");
+    let oracle_source = project.join("oracle.ts");
+    std::fs::write(
+        &oracle_source,
+        std::fs::read_to_string(project.join("src/main.ts"))
+            .expect("entry")
+            .replace("./internal.js", "./src/internal.ts"),
+    )
+    .expect("oracle entry");
+    let oracle = Command::new("node").args(["--no-warnings", "-e",
+        "import(require('node:url').pathToFileURL(process.argv[1]).href).then(a=>console.log([a.error(4.5),a.throwError(4.5),a.value].join(' ')))"
+    ]).arg(&oracle_source).output().expect("node oracle");
+    assert!(oracle.status.success(), "{oracle:?}");
+    let run = build(&project, &[]);
+    assert!(run.ok, "{}{}", run.stdout, run.stderr);
+    let hosts = project.join("hosts");
+    std::fs::create_dir(&hosts).expect("hosts");
+    compile_host(
+        &hosts,
+        "other",
+        OTHER_LIBRARY,
+        &[
+            "-shared".as_ref(),
+            "-fPIC".as_ref(),
+            "-o".as_ref(),
+            hosts.join("libother.so").as_os_str(),
+        ],
+    );
+    for backend in ["c", "llvm"] {
+        for explicit in [false, true] {
+            let product = format!(
+                "{backend}_{}",
+                if explicit { "explicit" } else { "default" }
+            );
+            let prefix = if explicit { "chosen" } else { &product };
+            static_prefix_consumer(&project, &hosts, &product, prefix, &oracle.stdout);
+        }
+    }
+}
+
+fn static_prefix_consumer(
+    project: &Path,
+    hosts: &Path,
+    product: &str,
+    prefix: &str,
+    oracle: &[u8],
+) {
+    let directory = project.join(format!(".nts/build/{product}/linux-gnu-x86_64"));
+    let archive = directory.join(format!("lib{product}.a"));
+    let listed = Command::new("nm")
+        .args(["--defined-only", "--format=posix"])
+        .arg(&archive)
+        .output()
+        .expect("nm archive");
+    assert!(listed.status.success(), "{listed:?}");
+    let symbols: BTreeSet<_> = String::from_utf8_lossy(&listed.stdout)
+        .lines()
+        .filter_map(|line| line.split_whitespace().next().map(str::to_owned))
+        .collect();
+    for raw in ["error", "throwError", "helper", "value", "module__init"] {
+        assert!(
+            symbols.contains(&format!("{prefix}_{raw}")),
+            "{product}: missing {raw}: {symbols:?}"
+        );
+        assert!(!symbols.contains(raw), "{product}: leaked {raw}");
+    }
+    let header = std::fs::read_to_string(directory.join("program.h")).expect("header");
+    for raw in ["error", "throwError", "value", "module__init"] {
+        assert!(
+            header.contains(&format!("{prefix}_{raw}")),
+            "{product}: header omits {raw}: {header}"
+        );
+    }
+    let executable = hosts.join(product);
+    compile_host(
+        hosts,
+        product,
+        &format!(
+            r#"
+#include "program.h"
+#include <error.h>
+#include <stdio.h>
+void other_reports(void);
+double throwError(double n) {{ return n - 2; }}
+double helper(double n) {{ return n - 100; }}
+int main(void) {{
+    printf("%g %g %g\n", {prefix}_error(4.5), {prefix}_throwError(4.5), {prefix}_value);
+    if (throwError(4.5) != 2.5 || helper(4.5) != -95.5) return 2;
+    error(0, 0, "host reached libc error()");
+    other_reports();
+    return 0;
+}}
+"#
+        ),
+        &[
+            "-I".as_ref(),
+            directory.as_os_str(),
+            archive.as_os_str(),
+            format!("-L{}", hosts.display()).as_ref(),
+            "-lother".as_ref(),
+            format!("-Wl,-rpath,{}", hosts.display()).as_ref(),
+            "-lm".as_ref(),
+            "-o".as_ref(),
+            executable.as_os_str(),
+        ],
+    );
+    let ran = Command::new(executable).output().expect("host");
+    assert!(ran.status.success(), "{product}: {ran:?}");
+    assert_eq!(ran.stdout, oracle, "{product}: differs from node");
+    let stderr = String::from_utf8_lossy(&ran.stderr);
+    assert!(
+        stderr.contains("host reached libc error()")
+            && stderr.contains("glibc error() reached from another library"),
+        "{product}: {stderr}"
+    );
+}
+
+#[test]
+fn static_library_refuses_invalid_prefixes_by_value() {
+    if !available() {
+        skip("node, clang and nm");
+        return;
+    }
+    for prefix in ["", "9bad", "two-words", "__nts_private", "_Reserved"] {
+        let project = fixture(
+            "build-invalid-prefix",
+            &STATIC.replace("entry:", &format!("prefix: {prefix:?}, entry:")),
+        );
+        let ran = build(&project, &[]);
+        assert!(!ran.ok, "accepted prefix `{prefix}`");
+        assert!(
+            ran.stderr
+                .contains(&format!("invalid C symbol prefix `{prefix}`")),
+            "{}",
+            ran.stderr
+        );
+    }
+}
+
+/// A static product in the config does not rename a bare emission.
+#[test]
+fn raw_emission_keeps_its_names_beside_a_static_product() {
+    if !available() {
+        skip("node, clang and nm");
+        return;
+    }
+    let project = fixture("emit-beside-static-prefix", STATIC);
+    let out = project.join("emitted");
+    let ran = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("emit-c")
+        .arg(project.join("tsconfig.json"))
+        .arg("--out")
+        .arg(&out)
+        .output()
+        .expect("emit-c");
+    assert!(ran.status.success(), "{ran:?}");
+    let header = std::fs::read_to_string(out.join("program.h")).expect("header");
+    assert!(header.contains("C symbol: published."), "{header}");
+    assert!(!header.contains("acme_published"), "{header}");
+}
+
 /// A plugin built from a static archive: its own entry calls an export and
 /// the runtime's embedding API, and it is linked with no version script, as
 /// a host's own build would.
 const PLUGIN: &str = r"
-double published(double);
+double acme_published(double);
 void nts_checkpoint(void);
 double plugin_entry(double n) {
     nts_checkpoint();
-    return published(n);
+    return acme_published(n);
 }
 ";
 
@@ -474,11 +677,11 @@ fn a_static_archive_linked_into_a_plugin_keeps_its_runtime_inside() {
     // visibility the program gave them; nothing of the runtime.
     let defined = defined_dynamic(&plugin);
     let expected: BTreeSet<String> = [
-        "helper",
-        "label",
-        "module__init",
+        "acme_helper",
+        "acme_label",
+        "acme_module__init",
         "plugin_entry",
-        "published",
+        "acme_published",
     ]
     .into_iter()
     .map(str::to_owned)
@@ -1118,12 +1321,11 @@ export default defineConfig({
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let consumer = project.join("caller.c");
-    std::fs::write(
-        &consumer,
-        "double total(void);\nint main(void) { return (int)total(); }\n",
-    )
-    .expect("consumer");
     for product in ["viaC", "viaLlvm"] {
+        std::fs::write(
+            &consumer,
+            format!("double {product}_total(void);\nint main(void) {{ return (int){product}_total(); }}\n"),
+        ).expect("consumer");
         let archive = project.join(format!(
             ".nts/build/{product}/linux-gnu-x86_64/lib{product}.a"
         ));

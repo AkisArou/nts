@@ -192,17 +192,20 @@ struct Emission<'a> {
     source: &'a Program,
     callback_abi: nts_codegen_common::callback_abi::Callbacks<'a>,
     entry_parameters: nts_codegen_common::entry_parameters::EntryParameters<'a>,
-    source_symbols: nts_codegen_common::source_symbols::SourceSymbols<'a>,
+    source_symbols: std::rc::Rc<nts_codegen_common::source_symbols::SourceSymbols<'a>>,
     native_symbols: nts_codegen_common::native_symbols::NativeSymbols<'a>,
 }
 
 impl<'program> Emission<'program> {
-    fn new(source: &'program Program) -> Self {
+    fn new(
+        source: &'program Program,
+        source_symbols: std::rc::Rc<nts_codegen_common::source_symbols::SourceSymbols<'program>>,
+    ) -> Self {
         Self {
             source,
             callback_abi: nts_codegen_common::callback_abi::Callbacks::new(source),
             entry_parameters: nts_codegen_common::entry_parameters::EntryParameters::new(source),
-            source_symbols: nts_codegen_common::source_symbols::SourceSymbols::new(source),
+            source_symbols,
             native_symbols: nts_codegen_common::native_symbols::NativeSymbols::new(source),
         }
     }
@@ -243,8 +246,24 @@ impl std::ops::Deref for Emission<'_> {
 /// the first place the answer exists, and it is required so that no caller
 /// gets the host's by omission.
 #[must_use]
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn emit(program: &Program, platform: Platform) -> Emitted {
+    emit_with_source_symbols(
+        program,
+        platform,
+        std::rc::Rc::new(nts_codegen_common::source_symbols::SourceSymbols::new(
+            program,
+        )),
+    )
+}
+
+/// Render using the same frozen source ABI as the C header and publication list.
+#[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub fn emit_with_source_symbols<'a>(
+    program: &'a Program,
+    platform: Platform,
+    symbols: std::rc::Rc<nts_codegen_common::source_symbols::SourceSymbols<'a>>,
+) -> Emitted {
     let mut text = String::new();
     let mut diagnostics = Vec::new();
     if let Err(why) = nts_codegen_common::native::layouts(program)
@@ -266,7 +285,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
             diagnostics: refusals,
         };
     }
-    let emission = Emission::new(program);
+    let emission = Emission::new(program, symbols);
     let program = &emission;
     let public_errors = program.source_symbols.reserved_public_names();
     if !public_errors.is_empty() {

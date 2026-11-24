@@ -1096,11 +1096,12 @@ fn published_symbols(program: &Emission<'_>) -> (Vec<String>, Vec<String>) {
     for (emitted, published) in &program.public_api {
         if program.native_funcs().any(|func| func.name == *emitted) {
             symbols.push(program.function(emitted));
-        } else if program.globals.iter().any(|global| global.name == *emitted) {
-            symbols.push(c_global(
-                emitted,
-                program.funcs.iter().map(|func| func.name.as_str()),
-            ));
+        } else if let Some(at) = program
+            .globals
+            .iter()
+            .position(|global| global.name == *emitted)
+        {
+            symbols.push(program.source_symbols.global(at));
         } else if !refused_by_lowering(program, emitted) {
             without.push(published.clone());
         }
@@ -1575,7 +1576,8 @@ fn native_preamble(writer: &mut CodeWriter, origin: &Origin, program: &Emission<
             program
                 .globals
                 .iter()
-                .map(|g| c_global(&g.name, program.funcs.iter().map(|f| f.name.as_str()))),
+                .enumerate()
+                .map(|(at, _)| program.source_symbols.global(at)),
         )
     {
         writer.line(origin, format!("#undef {name}"));

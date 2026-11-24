@@ -27,6 +27,27 @@ impl std::fmt::Debug for SourceSymbols<'_> {
 impl<'a> SourceSymbols<'a> {
     #[must_use]
     pub fn new(source: &'a Program) -> Self {
+        Self::build(source, None)
+    }
+
+    /// A product's C namespace, resolved before either backend freezes names.
+    /// Native callees and private source symbols retain their own namespaces.
+    pub fn prefixed(source: &'a Program, prefix: &str) -> Result<Self, String> {
+        if !crate::symbols::is_native_c_identifier(prefix)
+            || prefix.starts_with("__nts_")
+            || (prefix.starts_with('_')
+                && prefix.as_bytes().get(1).is_some_and(u8::is_ascii_uppercase))
+        {
+            return Err(format!(
+                "invalid C symbol prefix `{prefix}`: expected a nonempty C identifier outside `__nts_` and `_` followed by an uppercase letter"
+            ));
+        }
+        Ok(Self::build(source, Some(prefix)))
+    }
+
+    fn build(source: &'a Program, prefix: Option<&str>) -> Self {
+        let qualify =
+            |name: String| prefix.map_or_else(|| name.clone(), |prefix| format!("{prefix}_{name}"));
         let mut public: rustc_hash::FxHashSet<&str> = source
             .public_api
             .iter()
@@ -57,7 +78,7 @@ impl<'a> SourceSymbols<'a> {
                 let spelled = c_identifier(&func.name);
                 original_functions.insert(spelled.clone());
                 let name = if func.exported || public.contains(func.name.as_str()) {
-                    spelled
+                    qualify(spelled)
                 } else {
                     format!(
                         "__nts_fn_{}_{at}",
@@ -73,7 +94,7 @@ impl<'a> SourceSymbols<'a> {
             .enumerate()
             .map(|(at, global)| {
                 if global.exported || public.contains(global.name.as_str()) {
-                    c_global_indexed(&global.name, &original_functions)
+                    qualify(c_global_indexed(&global.name, &original_functions))
                 } else {
                     format!(
                         "__nts_global_{}_{at}",

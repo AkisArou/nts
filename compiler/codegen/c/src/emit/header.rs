@@ -2,9 +2,8 @@
 //! typedefs preserve their identity without making callers name internal `TypeN` tags.
 
 use super::{
-    CodeWriter, Diagnostic, Emission as Program, HirType, ManagedType, Origin, c_global,
-    c_identifier, c_member_at, format_signature, layout_of, object_type_name, return_c_type,
-    signature,
+    CodeWriter, Diagnostic, Emission as Program, HirType, ManagedType, Origin, c_identifier,
+    c_member_at, format_signature, layout_of, object_type_name, return_c_type, signature,
 };
 use rustc_hash::FxHashSet;
 
@@ -71,12 +70,9 @@ pub(super) fn empty() -> String {
 /// symbol. An export borrows every parameter, so there is no handover to name:
 /// a C caller keeps and releases its own references (`own::summarize` puts the
 /// entry surface under the borrowed-input, owned-result convention).
-fn export_comment(published: &str, internal: &str) -> String {
+fn export_comment(published: &str, symbol: &str) -> String {
     let display = published.escape_default().to_string().replace("*/", "* /");
-    format!(
-        "/* Export: {display}. C symbol: {}. */",
-        c_identifier(internal)
-    )
+    format!("/* Export: {display}. C symbol: {symbol}. */")
 }
 
 pub(super) fn emit(
@@ -122,7 +118,8 @@ pub(super) fn emit(
         program
             .globals
             .iter()
-            .map(|g| c_global(&g.name, program.funcs.iter().map(|f| f.name.as_str()))),
+            .enumerate()
+            .map(|(at, _)| program.source_symbols.global(at)),
     );
     names.extend(program.layouts.iter().map(object_type_name));
     let next_entries = next_exports(program, defined, &mut names);
@@ -160,7 +157,10 @@ pub(super) fn emit(
                 };
                 params.push(format!("{ty} __nts_v{index}"));
             }
-            writer.line(&func.origin, export_comment(published, internal));
+            writer.line(
+                &func.origin,
+                export_comment(published, &program.function(internal)),
+            );
             writer.line(
                 &func.origin,
                 format!(
@@ -318,11 +318,13 @@ fn published_values(
         let Some(global) = program
             .globals
             .iter()
-            .find(|global| global.name == *internal)
+            .enumerate()
+            .find(|(_, global)| global.name == *internal)
         else {
             continue;
         };
-        let symbol = c_global(&global.name, program.funcs.iter().map(|f| f.name.as_str()));
+        let (at, global) = global;
+        let symbol = program.source_symbols.global(at);
         let result = (|| -> Result<(), Diagnostic> {
             let ty = boundary_type(
                 writer,
