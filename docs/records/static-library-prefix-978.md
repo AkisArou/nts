@@ -174,3 +174,53 @@ fresh compiler explicitly; the canonical landing check remains separate.
 | `review-interop.log` | `66e806de61465bdae80cb4096942470eb93b55196655794343cc42c112469cba` |
 | `review-interop-run/interop.log` | `97ba77446d9bb6206aabace0388fa997ec1b09ead2b876acf147e72beab9d0cb` |
 | `review-interop-run/summary.json` | `224bb32aaf1c4b0801b54d68ae0cfe8e192b127342f9d51aaace43f5be518b5d` |
+
+## Native-call namespace controls
+
+LLVM's foreign declaration check still compared native callees with each
+compiled function's original C spelling. It did not consume the frozen
+SourceSymbols plan, so it rejected a prefixed `abs` export calling libc's
+`abs`, while missing a native call colliding with the prefixed spelling.
+The check now receives the emission and compares the frozen function names
+over the same native-function set C checks.
+
+The static-product matrix now exports `abs(n: c_int)` calling `c:stdlib`'s
+`abs`. Its fixture includes the native ambient declarations. Both default
+and explicit prefixes on C and LLVM pass the archive/header checks and the
+linked hosts. The hosts call both the generated export and libc's `abs`, the
+latter through a volatile function pointer; their answers agree with Node's
+`Math.abs` oracle. The existing libc `error` and host-owned-name controls
+also pass.
+
+Two direct emitter tests compare the same prepared program on C and LLVM,
+so C-first product emission cannot hide LLVM's collision policy:
+
+| Export / native callee | Prefix | C and LLVM |
+|---|---|---|
+| `abs` / `abs` | raw emission | refuse collision |
+| `abs` / `abs` | `lib` | accept |
+| `twice` / `lib_twice` | raw emission | accept |
+| `twice` / `lib_twice` | `lib` | refuse collision |
+
+All six focused tests passed. The counterfactual ran after committing the
+fix and fixture and separately reading the commit: the immutable compiler
+pin from the green check of
+`a509a6b0192a316816d00a641190ab7f34f96bd0` (SHA-256
+`7b5cef2e04d451fed5275301c755a760d5dcb8bb0ac618587e56411ec5bebc39`)
+failed the extended product matrix with the foreign `abs` collision on
+LLVM. With only `native.rs` copied from that revision, both direct tests
+failed on LLVM: the legal prefixed wrapper was refused and the real
+prefixed collision was accepted. Backups restored the compiler and source
+byte for byte; no checkout or stash was used.
+
+The complete `inner.ts --no-agree` run on
+`55672c14412c7d08020740d2958b6c2334b4531f` passed formatting, Clippy, the
+fresh compiler build, all selected Rust/backend tests and the native frontend
+check. Its LLVM integration harness passed all 222 tests, including both
+new controls. The frontend phase's duration includes its admission wait.
+
+| Native-call evidence, under the same scratch directory | SHA-256 |
+|---|---|
+| `native-focused-2.log` | `e034822eaf81d4869beb473631401c72b0d9264cd7094ac7bf78c13f83e670d5` |
+| `native-counterfactual.log` | `feaa433bda6e3bdfc945038c927ef17be1e511b8272945a52b3f5d66cbbd593d` |
+| `native-inner.log` | `a451d65a8a0149d62502b81548f068facce9ae3636e3360138070416320ca398` |
