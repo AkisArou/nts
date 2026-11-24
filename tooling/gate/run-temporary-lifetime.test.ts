@@ -69,7 +69,7 @@ test('a candidate runner adopts the current service prepared tmp, runs a step an
   // Main's pre-lifetime creator makes tmp before candidate environment setup.
   // Keep that actual on-disk preparation: no creation record or lifetime token.
   mkdirSync(join(run,'tmp'),{recursive:true});
-  const launcher={...hostEnvironment(parent.env),...caches,HOME:home};
+  const launcher:NodeJS.ProcessEnv={...hostEnvironment(parent.env),...caches,HOME:home};
   assert.equal(launcher.NTS_GATE_ENV_CONTEXT,undefined);
   const planned=gateEnvironment(launcher,{run,owned:{...caches,NTS_GATE_STEPS:'rustfmt',CARGO_TARGET_DIR:join(root,'target'),...gateFixtureMemory(join(home,'observations'),root)}});
   assert.equal(planned.temporary.creation,undefined);

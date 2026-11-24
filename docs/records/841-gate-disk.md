@@ -495,3 +495,22 @@ Inner passed formatting, Clippy, build and backend tests (907 seconds for the
 tests, after a 328-second oracle-capture admission wait). Raw output is
 `~/.cache/nts-scratch/841/b/adoption-inner-v1.log`, SHA-256
 `ab18412a90c273e2de66a0af60ab72e90ddb27f5e8c46c469806af4c856980da`.
+
+The subsequent local check completed in 2,246 seconds with two red steps.
+The prepared-root fixture had inherited its enclosing gate context, contradicting
+its assertion of the old service's independent launcher shape. The fixture now
+always creates a nested harness, then passes only host tools and explicit owned
+cache and memory packets to its independent launcher. Its exact legacy-shape
+assertion remains. This exercises the same boundary in focused and full runs.
+
+The records step also encountered accepted-main memory-census rows advancing
+while the check ran. The branch was rebased onto the records update
+`dc669ade6118337d888403188e4956bf095044b8`; no observations were deleted or
+rewritten by this task. The red run's cleanup completed, removed 512,774,144
+allocated bytes, left no temporary, and logged its 64 MiB diagnostic cap.
+
+| Copied control | SHA-256 |
+| --- | --- |
+| `~/.cache/nts-scratch/841/b/adoption-here-v1-summary.json` | `db16f9143a6f95823fcd196ffb62da9a119673367f3b0261504e7c9ed52e3f86` |
+| `~/.cache/nts-scratch/841/b/adoption-here-v1-tooling.raw.log` | `c2ec0a0fed33bcdaf55a6db7769e4f925c9c81f69401c8d81bdfff5b96bf5e96` |
+| `~/.cache/nts-scratch/841/b/adoption-here-v1-records.log` | `b4e8089de45af911f07102ddaf767e2843f947b4deb273d7bd15b27b3c863834` |
