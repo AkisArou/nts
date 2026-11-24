@@ -82,7 +82,7 @@ test('a candidate runner adopts the current service prepared tmp, runs a step an
   // Main's pre-lifetime creator makes tmp before candidate environment setup.
   // Keep that actual on-disk preparation: no creation record or lifetime token.
   mkdirSync(join(run,'tmp'),{recursive:true});
-  mkdirSync(join(run,'tmp/oracle-resolution'));writeFileSync(join(run,'tmp/oracle-resolution/setup'),'setup');
+  mkdirSync(join(run,'tmp/oracle-resolution'),{mode:0o700});writeFileSync(join(run,'tmp/oracle-resolution/setup'),'setup');
   writeFileSync(join(run,'tmp/compiler-scratch'),'compiler');
   const sentinel=join(home,'outside-sentinel');writeFileSync(sentinel,'keep');symlinkSync(sentinel,join(run,'tmp/setup-alias'));
   const launcher:NodeJS.ProcessEnv={...hostEnvironment(parent.env),...caches,HOME:home};
