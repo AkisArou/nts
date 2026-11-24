@@ -1,5 +1,6 @@
 //! Slot contents at a program point. This is the shared initialization owner
-//! for fields and array elements; ownership and read initialization consume it.
+//! for fields and array elements. Today only ownership consumes it, through
+//! `initializing_stores`; read initialization (`initialized.rs`) does not yet.
 
 use crate::hir::{self, BlockId, Func, Layout, OpKind, ValueId};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -25,8 +26,11 @@ mod tests;
 /// before initialization queries and caller vouching; returned facts precede
 /// after effects. A may-have-foreign-cleanup bit survives edges and writers,
 /// joins with OR and invalidates at block exits before return summaries.
-/// Managed releases run no user code synchronously; their finalization jobs
-/// run later.
+/// A managed release can run program code too: freeing an object gives up
+/// the handles its layouts lead to, so a managed value or old slot value
+/// whose type leads to a handle or an erased field counts as foreign cleanup
+/// ([`hir::ForeignReleases`]). A managed value that leads to none frees
+/// nothing that runs code; its finalization jobs run later.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(in crate::hir) struct Fresh {
     foreign_cleanup: bool,

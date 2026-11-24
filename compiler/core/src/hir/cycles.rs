@@ -30,6 +30,17 @@
 //! would narrow the node is a typed `awaited` slot (one per element type the
 //! frame awaits) and a model of those moves; with both, a promise could reach
 //! only the reactions subscribed to promises of its own type.
+//!
+//! # What a release can give up
+//!
+//! The same graph answers a second question: whether giving up a reference
+//! can free a foreign handle. Freeing an object gives up what its fields hold
+//! (`nts_free` calls `nts_give_up_foreign`), and a foreign release can enter
+//! program code synchronously. So a release can run program code when some
+//! layout it can lead to -- through what a slot holds and where fields lead,
+//! exactly the edges a cycle follows -- has a field that holds a handle or an
+//! erased value, which is the question a C descriptor's `release_foreign`
+//! answers for one layout. See [`ForeignReleases`].
 
 use super::{
     Cycles, Field, HirType, ManagedType, Program, SlotSources, is_closure_type, native,
@@ -381,6 +392,42 @@ impl<'a> Graph<'a> {
         }
     }
 
+    /// Every node from which a layout holding a foreign handle is reachable.
+    fn foreign(self) -> ForeignReleases {
+        let count = self.program.layouts.len();
+        let mut backwards = vec![Vec::new(); self.edges.len()];
+        for (from, edges) in self.edges.iter().enumerate() {
+            for &to in edges {
+                backwards[to].push(from);
+            }
+        }
+        let mut reaches = vec![false; self.edges.len()];
+        let mut work: Vec<usize> = (0..count)
+            .filter(|&at| {
+                self.program.layouts[at]
+                    .fields
+                    .iter()
+                    .any(|field| holds_foreign(&field.ty))
+            })
+            .collect();
+        let any = !work.is_empty();
+        for &at in &work {
+            reaches[at] = true;
+        }
+        while let Some(at) = work.pop() {
+            for &from in &backwards[at] {
+                if !std::mem::replace(&mut reaches[from], true) {
+                    work.push(from);
+                }
+            }
+        }
+        ForeignReleases {
+            layout_of: self.layout_of,
+            slot: reaches[count..2 * count].to_vec(),
+            any,
+        }
+    }
+
     fn answer(self) -> Cycles {
         let count = self.program.layouts.len();
         let component = strongly_connected(&self.edges);
@@ -421,4 +468,105 @@ impl<'a> Graph<'a> {
 
 pub(super) fn analyze(program: &Program) -> Cycles {
     Graph::build(program).answer()
+}
+
+pub(super) fn foreign_releases(program: &Program) -> ForeignReleases {
+    Graph::build(program).foreign()
+}
+
+/// Which references, given up, can free a foreign handle and so run program
+/// code before the release returns. Built once per program from the cycle
+/// graph ([`Program::foreign_releases`]).
+#[derive(Debug, Default)]
+pub struct ForeignReleases {
+    /// The first layout naming each object type.
+    layout_of: FxHashMap<TypeId, usize>,
+    /// By layout index: whether a slot of that layout's type can lead to a
+    /// layout holding a handle or an erased value, itself included.
+    slot: Vec<bool>,
+    /// Whether any layout holds one: what a type with no layout here, or a
+    /// promise's reactions, can lead to.
+    any: bool,
+}
+
+impl ForeignReleases {
+    /// Whether giving up a value of this type can free a foreign handle.
+    /// Exhaustive, so a new HIR type must decide what its release gives up.
+    #[must_use]
+    pub fn release_can_reenter(&self, ty: &HirType) -> bool {
+        match ty {
+            HirType::PossiblyUndefined(payload) => self.release_can_reenter(payload),
+            // An uncounted pointer view can keep a foreign-counted owner
+            // alive, and an erased value can be a handle itself.
+            HirType::Erased | HirType::NativePointer(_) => true,
+            HirType::Managed(ManagedType::Object(id)) => {
+                self.layout_of.get(id).map_or(self.any, |&at| self.slot[at])
+            }
+            // A pending promise holds its reactions' states, which can be any
+            // layout a subscription names.
+            HirType::Managed(ManagedType::Promise(_)) => self.any,
+            HirType::Managed(
+                ManagedType::Array(element)
+                | ManagedType::View(element)
+                | ManagedType::Set(element),
+            ) => self.release_can_reenter(element),
+            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+                self.release_can_reenter(key) || self.release_can_reenter(value)
+            }
+            HirType::Managed(
+                ManagedType::String
+                | ManagedType::BoxedBigInt
+                | ManagedType::Template
+                | ManagedType::Date
+                | ManagedType::Region
+                | ManagedType::Buffer
+                | ManagedType::AnyView
+                | ManagedType::DataView
+                | ManagedType::Symbol,
+            )
+            | HirType::Void
+            | HirType::Never
+            | HirType::Bool
+            | HirType::Int { .. }
+            | HirType::Float { .. }
+            | HirType::BigInt => false,
+        }
+    }
+}
+
+/// Whether a field of this type gives up a foreign handle when its object is
+/// freed, before following any edge to another layout: a handle or an erased
+/// value, held directly or by a container the field owns.
+fn holds_foreign(ty: &HirType) -> bool {
+    match ty {
+        HirType::PossiblyUndefined(payload)
+        | HirType::Managed(
+            ManagedType::Array(payload)
+            | ManagedType::View(payload)
+            | ManagedType::Set(payload)
+            | ManagedType::Promise(payload),
+        ) => holds_foreign(payload),
+        HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+            holds_foreign(key) || holds_foreign(value)
+        }
+        HirType::Erased | HirType::NativePointer(_) => true,
+        HirType::Managed(
+            ManagedType::Object(_)
+            | ManagedType::String
+            | ManagedType::BoxedBigInt
+            | ManagedType::Template
+            | ManagedType::Date
+            | ManagedType::Region
+            | ManagedType::Buffer
+            | ManagedType::AnyView
+            | ManagedType::DataView
+            | ManagedType::Symbol,
+        )
+        | HirType::Void
+        | HirType::Never
+        | HirType::Bool
+        | HirType::Int { .. }
+        | HirType::Float { .. }
+        | HirType::BigInt => false,
+    }
 }

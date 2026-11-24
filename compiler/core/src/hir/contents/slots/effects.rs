@@ -1,7 +1,9 @@
 //! Fixed transfer inputs, built once per function before the CFG fixpoint.
 
 use super::{Aliases, Effect, effect};
-use crate::hir::{self, Func, Global, HirType, Layout, ManagedType, OpKind, ValueId};
+use crate::hir::{
+    self, ForeignReleases, Func, Global, HirType, Layout, ManagedType, OpKind, ValueId,
+};
 
 #[derive(Debug)]
 pub(in crate::hir) struct Inputs {
@@ -17,21 +19,33 @@ struct Counts {
 }
 
 impl Inputs {
-    pub(in crate::hir) fn of(func: &Func, layouts: &[Layout], globals: &[Global]) -> Self {
-        let families = foreign_values(func);
+    /// `before` asks whether retaining a value can run program code, which
+    /// only a foreign handle's retain does. `after` and `cleanup` ask whether
+    /// giving one up can: a managed object whose layouts lead to a handle
+    /// frees it synchronously ([`ForeignReleases`]).
+    pub(in crate::hir) fn of(
+        func: &Func,
+        layouts: &[Layout],
+        globals: &[Global],
+        releases: &ForeignReleases,
+    ) -> Self {
+        let retained = foreign_values(func, retain_can_reenter);
+        let released = foreign_values(func, |ty| releases.release_can_reenter(ty));
         let counts = func
             .values
             .iter()
             .enumerate()
             .map(|(at, op)| {
-                let (retain, cleanup) = store_effects(func, layouts, globals, &op.kind, &families);
-                let operands = hir::operands_of(&op.kind)
-                    .into_iter()
-                    .any(|value| families[value.0 as usize]);
-                let foreign = families[at];
+                let (retain, cleanup) =
+                    store_effects(func, layouts, globals, &op.kind, &retained, releases);
+                let operands = |families: &[bool]| {
+                    hir::operands_of(&op.kind)
+                        .into_iter()
+                        .any(|value| families[value.0 as usize])
+                };
                 Counts {
-                    before: retain || operands,
-                    after: foreign || operands,
+                    before: retain || operands(&retained),
+                    after: released[at] || operands(&released),
                     cleanup,
                 }
             })
@@ -61,9 +75,12 @@ impl Inputs {
     }
 }
 
-fn foreign(ty: &HirType) -> bool {
+/// Whether retaining a value of this type can run program code: only a
+/// foreign handle's retain can, and an erased value can be one. Retaining a
+/// managed object counts it and nothing else.
+fn retain_can_reenter(ty: &HirType) -> bool {
     match ty {
-        HirType::PossiblyUndefined(payload) => foreign(payload),
+        HirType::PossiblyUndefined(payload) => retain_can_reenter(payload),
         // An uncounted pointer view can keep a foreign-counted owner alive.
         // Its eventual cleanup is not represented by the view's own type.
         HirType::Erased | HirType::NativePointer(_) => true,
@@ -73,13 +90,15 @@ fn foreign(ty: &HirType) -> bool {
 
 /// rc reads the declared slot type, which can be wider than the new value.
 /// An erased slot may previously have held a foreign handle even when the
-/// value now being stored is a managed object or null.
+/// value now being stored is a managed object or null, and a managed old
+/// value can lead to one.
 fn store_effects(
     func: &Func,
     layouts: &[Layout],
     globals: &[Global],
     kind: &OpKind,
-    families: &[bool],
+    retained: &[bool],
+    releases: &ForeignReleases,
 ) -> (bool, bool) {
     let (stored, old) = match effect(kind) {
         Effect::FieldWrite {
@@ -113,13 +132,16 @@ fn store_effects(
         _ => return (false, false),
     };
     let new = &func.value(stored).ty;
-    (families[stored.0 as usize], foreign(old.unwrap_or(new)))
+    (
+        retained[stored.0 as usize],
+        releases.release_can_reenter(old.unwrap_or(new)),
+    )
 }
 
 /// Resolve explicit erasures once, including chains whose definitions are not
 /// in value-table order. Every value is visited once; an invalid cycle can only
 /// lose authority, never claim a managed-only payload.
-fn foreign_values(func: &Func) -> Vec<bool> {
+fn foreign_values(func: &Func, foreign: impl Fn(&HirType) -> bool) -> Vec<bool> {
     let mut known = vec![None; func.values.len()];
     let mut visiting = vec![false; func.values.len()];
     let mut path = Vec::new();

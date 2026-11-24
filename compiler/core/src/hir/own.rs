@@ -245,13 +245,14 @@ pub(super) fn settled_globals(program: &Program) -> rustc_hash::FxHashSet<u32> {
 /// Read every function once, before any of them is counted.
 #[must_use]
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
+    let releases = program.foreign_releases();
     let inputs: rustc_hash::FxHashMap<_, _> = program
         .funcs
         .iter()
         .map(|func| {
             (
                 func.name.clone(),
-                slots::Inputs::of(func, layouts, &program.globals),
+                slots::Inputs::of(func, layouts, &program.globals, &releases),
             )
         })
         .collect();
@@ -4348,7 +4349,16 @@ mod tests {
             &rustc_hash::FxHashSet::default(),
             &rustc_hash::FxHashSet::default(),
             &super::slots::Returned::default(),
-            &super::slots::Inputs::of(func, layouts, &[]),
+            &super::slots::Inputs::of(
+                func,
+                layouts,
+                &[],
+                &super::Program {
+                    layouts: layouts.to_vec(),
+                    ..super::Program::default()
+                }
+                .foreign_releases(),
+            ),
         )
         .entering
     }

@@ -81,6 +81,7 @@ pub mod written_storage;
 mod bridges;
 pub mod cse;
 mod cycles;
+pub use cycles::ForeignReleases;
 #[cfg(test)]
 mod cycles_oracle;
 mod dispatch;
@@ -4278,6 +4279,14 @@ impl Program {
     #[must_use]
     pub fn cycles(&self) -> Cycles {
         cycles::analyze(self)
+    }
+
+    /// Which releases can free a foreign handle, from the same graph as
+    /// [`Self::cycles`]. Ownership asks it of every released value and old
+    /// slot value: such a release can run program code that writes a slot.
+    #[must_use]
+    pub fn foreign_releases(&self) -> ForeignReleases {
+        cycles::foreign_releases(self)
     }
 
     /// [`Self::cycles`]'s answer for layouts alone, by layout index.

@@ -1,5 +1,5 @@
 use super::{Aliases, Fresh, Inputs, Returned, Slot, freshness};
-use crate::hir::{self, Func, OpKind, ValueId};
+use crate::hir::{self, ForeignReleases, Func, OpKind, ValueId};
 use crate::hir::{Absent, Block, Callee, HirType, Op, Param, Terminator};
 use nts_diagnostics::{Location, SourceId, Span};
 use nts_semantic_schema::{Origin, TypeId};
@@ -97,7 +97,7 @@ fn observe(state: &mut Fresh, func: &Func, id: u32) {
         &func.value(id).kind,
         &FxHashSet::default(),
         &Returned::default(),
-        &Inputs::of(func, &[], &[]),
+        &Inputs::of(func, &[], &[], &ForeignReleases::default()),
     );
 }
 
@@ -299,7 +299,7 @@ fn a_branch_allocation_meeting_an_occupied_older_alias_keeps_its_release() {
         &field_write(0),
         &FxHashSet::default(),
         &Returned::default(),
-        &Inputs::of(&func, &[], &[]),
+        &Inputs::of(&func, &[], &[], &ForeignReleases::default()),
     );
     let mut allocated = older.clone();
     observe(&mut allocated, &func, 1);
@@ -404,7 +404,7 @@ fn block_storage_order_does_not_make_a_conditional_store_dominate_a_return() {
         &FxHashSet::default(),
         &FxHashSet::default(),
         &Returned::default(),
-        &Inputs::of(&func, &[], &[]),
+        &Inputs::of(&func, &[], &[], &ForeignReleases::default()),
     );
     assert!(!analysis.entering[1].known_zero(ValueId(5), Slot::Field(0)));
     // One difference: both paths run the clear before joining.
@@ -423,7 +423,7 @@ fn block_storage_order_does_not_make_a_conditional_store_dominate_a_return() {
         &FxHashSet::default(),
         &FxHashSet::default(),
         &Returned::default(),
-        &Inputs::of(&func, &[], &[]),
+        &Inputs::of(&func, &[], &[], &ForeignReleases::default()),
     );
     assert!(analysis.entering[1].known_zero(ValueId(5), Slot::Field(0)));
 }
@@ -513,7 +513,7 @@ fn an_unattributable_writer_kills_the_null(kind: OpKind) {
         &func.value(id).kind,
         &FxHashSet::default(),
         &Returned::default(),
-        &Inputs::of(&func, &[], &[]),
+        &Inputs::of(&func, &[], &[], &ForeignReleases::default()),
     );
     assert!(!state.known_zero(ValueId(0), Slot::Field(0)));
 }
@@ -608,7 +608,10 @@ fn a_foreign_retain_before_store_invalidates_its_old_null_proof() {
     let mut state = Fresh::default();
     observe(&mut state, &func, 3);
     assert!(state.initializing(&func, &func.values[4].kind));
-    state.before(ValueId(4), &Inputs::of(&func, &[], &[]));
+    state.before(
+        ValueId(4),
+        &Inputs::of(&func, &[], &[], &ForeignReleases::default()),
+    );
     assert!(!state.initializing(&func, &func.values[4].kind));
 }
 
@@ -639,7 +642,7 @@ fn an_erased_globals_old_type_can_reenter_when_the_new_value_is_managed() {
         deferred: true,
         origin: func.origin.clone(),
     }];
-    let inputs = Inputs::of(&func, &[], &globals);
+    let inputs = Inputs::of(&func, &[], &globals, &ForeignReleases::default());
     assert!(!inputs.before(ValueId(8)));
     assert!(inputs.cleanup(ValueId(8)));
     let mut state = Fresh::default();
@@ -686,7 +689,7 @@ fn post_call_foreign_cleanup_invalidates_the_new_return_fact() {
             frame: None,
         };
         func.values[7].ty = func.values[0].ty.clone();
-        let inputs = Inputs::of(&func, &[], &[]);
+        let inputs = Inputs::of(&func, &[], &[], &ForeignReleases::default());
         let returned = FxHashMap::from_iter([("clear".into(), FxHashSet::from_iter([0]))]);
         let mut state = Fresh::default();
         state.observe(
@@ -764,7 +767,7 @@ fn delayed_foreign_cleanup_survives_a_writer_and_a_cfg_join() {
                 terminator: Terminator::Return(Some(ValueId(0))),
             },
         ];
-        let inputs = Inputs::of(&func, &[], &[]);
+        let inputs = Inputs::of(&func, &[], &[], &ForeignReleases::default());
         let analysis = freshness(
             &func,
             &[],

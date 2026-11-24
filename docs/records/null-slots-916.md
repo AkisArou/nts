@@ -37,8 +37,14 @@ what cleanup can release. A potentially foreign retain invalidates facts before
 the initialization answer is consumed. A potentially foreign old-value cleanup
 invalidates them after publication and the write, unless the slot was already
 proved empty. Erased values conservatively include foreign handles; an explicit
-erasure retains its payload's known family. Managed releases do not run user
-code synchronously: FinalizationRegistry jobs execute later.
+erasure retains its payload's known family. A managed release can run user
+code synchronously too: `nts_free` gives up the foreign handles of what it
+frees. So a released value or old slot value whose type leads, through the
+cycle graph's slot and field edges, to a layout holding a handle or an erased
+field is foreign cleanup (`Program::foreign_releases`). Only a managed value
+that leads to none is not; its FinalizationRegistry jobs execute later.
+Retaining a managed value never runs code, so only handles and erased values
+invalidate before a store.
 
 The fixed metadata also covers native counts inserted after value definitions
 and around operand uses, rather than only stores. Copied field results can

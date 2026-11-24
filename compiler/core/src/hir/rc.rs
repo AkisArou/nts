@@ -2759,6 +2759,9 @@ mod tests {
         } else {
             string()
         };
+        // The managed twin holds no handle anywhere: a cell that held one
+        // could free it when released, which re-enters as well.
+        program.layouts[0].fields[1].ty = held_type.clone();
         let func = &mut program.funcs[0];
         let cell = func.params[0].ty.clone();
         func.name = "clear".into();
@@ -2830,6 +2833,211 @@ mod tests {
             )),
             foreign,
             "refill must keep its old-value release after clear's native exit cleanup can re-enter"
+        );
+    }
+
+    /// `Cell { next: string, holder: Holder }` beside `Holder { h }`, where
+    /// `h` is a foreign handle or, for the managed-only twin, a string. Freeing
+    /// a `Holder` gives up `h`, and a foreign release can enter program code
+    /// that writes `next`.
+    fn managed_holder_program(foreign: bool) -> Program {
+        let mut program = foreign_slot_program();
+        let holder = HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(2)));
+        program.layouts[0].fields[1].ty = holder;
+        program.layouts.push(Layout {
+            types: vec![nts_semantic_schema::TypeId(2)],
+            name: "Holder".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![
+                crate::hir::Field {
+                    name: "h".to_owned().into(),
+                    ty: if foreign {
+                        objc_handle("Element")
+                    } else {
+                        string()
+                    },
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                },
+                crate::hir::Field {
+                    name: "n".to_owned().into(),
+                    ty: number(),
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                },
+            ],
+            methods: Vec::new(),
+            base: None,
+        });
+        program
+    }
+
+    /// Whether the store `id` still loads its old `next` to release it,
+    /// after the operation `after`.
+    fn loads_next_between(func: &crate::hir::Func, after: u32, id: u32) -> bool {
+        let ops = &func.blocks[0].ops;
+        let at = |id| {
+            ops.iter()
+                .position(|value| *value == ValueId(id))
+                .expect("the operation remains after RC insertion")
+        };
+        ops[at(after) + 1..at(id)].iter().any(|value| {
+            matches!(
+                func.value(*value).kind,
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0
+                }
+            )
+        })
+    }
+
+    #[test]
+    fn releasing_an_old_object_that_holds_a_handle_ends_a_null_field_fact() {
+        old_holder_null_fact(true);
+    }
+
+    #[test]
+    fn releasing_an_old_managed_only_object_keeps_a_null_field_fact() {
+        old_holder_null_fact(false);
+    }
+
+    /// `o.next = null; o.holder = null; o.next = "replacement"`: the second
+    /// store releases the old holder, whose handle's release can write
+    /// `o.next`, so the third store must not be an initializing one.
+    fn old_holder_null_fact(foreign: bool) {
+        let mut program = managed_holder_program(foreign);
+        let holder = program.layouts[0].fields[1].ty.clone();
+        let func = &mut program.funcs[0];
+        func.return_type = HirType::Void;
+        func.values = vec![
+            op(OpKind::Param(0), func.params[0].ty.clone()),
+            op(OpKind::ConstNull, string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(1),
+                },
+                HirType::Void,
+            ),
+            op(OpKind::ConstNull, holder),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 1,
+                    value: ValueId(3),
+                },
+                HirType::Void,
+            ),
+            op(OpKind::ConstString("replacement".into()), string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(5),
+                },
+                HirType::Void,
+            ),
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: (0..7).map(ValueId).collect(),
+            terminator: Terminator::Return(None),
+        }];
+        insert(&mut program).expect("complete RC analysis");
+        let func = &program.funcs[0];
+        assert!(
+            func.blocks[0].ops.iter().any(|value| matches!(
+                func.value(*value).kind,
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 1
+                }
+            )),
+            "the second store actually releases the old holder"
+        );
+        assert_eq!(
+            loads_next_between(func, 2, 6),
+            foreign,
+            "the third store must load and release `next` after a holder's release can re-enter"
+        );
+    }
+
+    #[test]
+    fn a_last_use_release_of_an_object_that_holds_a_handle_ends_a_null_field_fact() {
+        last_use_holder_null_fact(true);
+    }
+
+    #[test]
+    fn a_last_use_release_of_a_managed_only_object_keeps_a_null_field_fact() {
+        last_use_holder_null_fact(false);
+    }
+
+    /// `h = make(); o.next = null; h.n; o.next = "replacement"`: `h` is
+    /// released after its last use, between the two stores. Its last use
+    /// reads a number, so only `h`'s own release can reach the handle.
+    fn last_use_holder_null_fact(foreign: bool) {
+        let mut program = managed_holder_program(foreign);
+        let holder = program.layouts[0].fields[1].ty.clone();
+        let func = &mut program.funcs[0];
+        func.return_type = HirType::Void;
+        func.values = vec![
+            op(OpKind::Param(0), func.params[0].ty.clone()),
+            call("make", Vec::new(), holder),
+            op(OpKind::ConstNull, string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(2),
+                },
+                HirType::Void,
+            ),
+            op(
+                OpKind::FieldGet {
+                    object: ValueId(1),
+                    field: 1,
+                },
+                number(),
+            ),
+            op(OpKind::ConstString("replacement".into()), string()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(5),
+                },
+                HirType::Void,
+            ),
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: (0..7).map(ValueId).collect(),
+            terminator: Terminator::Return(None),
+        }];
+        insert(&mut program).expect("complete RC analysis");
+        let func = &program.funcs[0];
+        let ops = &func.blocks[0].ops;
+        let store = ops
+            .iter()
+            .position(|value| *value == ValueId(6))
+            .expect("the third store remains");
+        assert!(
+            ops[..store]
+                .iter()
+                .any(|value| matches!(func.value(*value).kind, OpKind::Release(ValueId(1)))),
+            "the holder is actually released before the second `next` store: {:?}",
+            ops.iter()
+                .map(|value| &func.value(*value).kind)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            loads_next_between(func, 3, 6),
+            foreign,
+            "the store must load and release `next` after the holder's last-use release can re-enter"
         );
     }
 }

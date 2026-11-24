@@ -97,7 +97,10 @@ fn open_towers_keeps_the_old_field_release_for_unknown_published_callers() {
 }
 
 fn towers_at_the_memory_minimum(closed: bool) {
-    let output = counted_program(
+    let Counted {
+        output,
+        entry_decisions,
+    } = counted_program(
         "compiler/codegen/c/tests/programs/published-consuming-towers/tsconfig.json",
         closed,
     );
@@ -114,6 +117,14 @@ fn towers_at_the_memory_minimum(closed: bool) {
     // source with open roots retains its borrowed entry and cannot promise
     // that an unknown external caller supplied an empty disk.next.
     if closed {
+        // #902's guard: the closed roots select pushDisk's consuming entry.
+        assert!(
+            entry_decisions.iter().any(|decision| {
+                decision.function == "Towers#pushDisk"
+                    && decision.kind == nts_core::hir::own::EntryDecisionKind::Selected
+            }),
+            "{entry_decisions:?}"
+        );
         assert_eq!(value("retains="), 3, "{output}");
         assert_eq!(value("releases="), 19, "{output}");
         assert_eq!(value("null-releases="), 4, "{output}");
@@ -135,7 +146,8 @@ fn conditional_and_aliased_null_field_controls_do_not_leak_under_poison() {
     let output = counted_program(
         "tests/programs/a-field-cleared-before-a-call-keeps-no-old-reference/tsconfig.json",
         false,
-    );
+    )
+    .output;
     assert!(
         output.split_whitespace().any(|part| part == "leaked=0"),
         "{output}"
@@ -163,7 +175,7 @@ fn current_phi_identities_meet_their_minima_under_poison_and_collection() {
                     .map(|number| number.parse::<i64>().unwrap())
             })
         };
-        let output = counted_program(&format!("tests/memory/{name}/tsconfig.json"), true);
+        let output = counted_program(&format!("tests/memory/{name}/tsconfig.json"), true).output;
         let observed = |key: &str| {
             output
                 .split_whitespace()
@@ -190,7 +202,13 @@ fn current_phi_identities_meet_their_minima_under_poison_and_collection() {
     }
 }
 
-fn counted_program(config: &str, closed: bool) -> String {
+/// What a counted run printed, and the entry decisions its preparation made.
+struct Counted {
+    output: String,
+    entry_decisions: Vec<nts_core::hir::own::EntryDecision>,
+}
+
+fn counted_program(config: &str, closed: bool) -> Counted {
     use camino::Utf8Path;
     use nts_core::hir::{self, reachable::Roots};
     use nts_frontend_ts::Frontend;
@@ -273,7 +291,10 @@ fn counted_program(config: &str, closed: bool) -> String {
         "{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    String::from_utf8(ran.stdout).unwrap()
+    Counted {
+        output: String::from_utf8(ran.stdout).unwrap(),
+        entry_decisions: prepared.entry_decisions,
+    }
 }
 
 fn observe_effective_counts(path: &std::path::Path) {

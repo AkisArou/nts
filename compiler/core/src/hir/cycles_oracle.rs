@@ -874,3 +874,172 @@ fn a_promise_leads_to_the_state_of_its_reactions() {
     let answer = equivalent(&program(None, false));
     assert_eq!(answer.cyclic, [false; 4]);
 }
+
+/// A counted Objective-C handle, which a freed object gives up.
+fn handle() -> HirType {
+    HirType::NativePointer(super::native::Pointee::Opaque(super::native::Handle {
+        tag: "Element".to_owned(),
+        ancestors: vec!["NSObject".to_owned()],
+        family: super::native::Family::Objc,
+        interface: false,
+        spelling: super::native::Spelling::Tag,
+    }))
+}
+
+/// Whether releasing an `L1` can free a foreign handle, in a program of these
+/// layouts and functions.
+fn releases_foreign(layouts: Vec<Layout>, funcs: Vec<Func>) -> bool {
+    Program {
+        layouts,
+        funcs,
+        ..Program::default()
+    }
+    .foreign_releases()
+    .release_can_reenter(&object(1))
+}
+
+/// Each edge a cycle follows also carries a foreign release: a plain field,
+/// a container, a base's slot holding a subclass, a structural prefix, an
+/// unerasure and a promise's reactions. Each case's control differs in one
+/// thing and reaches no handle or erased field, so its release runs no code.
+#[test]
+fn a_release_reaches_a_handle_through_every_edge_a_slot_or_field_follows() {
+    let held = |foreign: bool| if foreign { handle() } else { HirType::NUMBER };
+    let array = |ty| HirType::Managed(ManagedType::Array(Box::new(ty)));
+    for foreign in [false, true] {
+        // A plain field: `L1 { inner: L2 }`, `L2 { h }`.
+        assert_eq!(
+            releases_foreign(
+                vec![
+                    layout(1, vec![field("inner", object(2))]),
+                    layout(2, vec![field("h", held(foreign))]),
+                ],
+                Vec::new(),
+            ),
+            foreign,
+            "field edge"
+        );
+        // Through a container the field owns, and a container of objects.
+        assert_eq!(
+            releases_foreign(
+                vec![layout(1, vec![field("hs", array(held(foreign)))])],
+                Vec::new()
+            ),
+            foreign,
+            "container of handles"
+        );
+        assert_eq!(
+            releases_foreign(
+                vec![
+                    layout(1, vec![field("items", array(object(2)))]),
+                    layout(2, vec![field("h", held(foreign))]),
+                ],
+                Vec::new(),
+            ),
+            foreign,
+            "container of objects"
+        );
+        // A base's slot holds its subclass. `h` comes first, so the subclass
+        // is no structural prefix match and only the base edge leads to it.
+        let mut derived = layout(
+            2,
+            vec![field("h", held(foreign)), field("a", HirType::NUMBER)],
+        );
+        derived.base = Some(TypeId(1));
+        assert_eq!(
+            releases_foreign(
+                vec![layout(1, vec![field("a", HirType::NUMBER)]), derived],
+                Vec::new()
+            ),
+            foreign,
+            "subclass edge"
+        );
+        // A structural prefix: an `L1 { a }` slot holds an `L2 { a, h }`.
+        assert_eq!(
+            releases_foreign(
+                vec![
+                    layout(1, vec![field("a", HirType::NUMBER)]),
+                    layout(
+                        2,
+                        vec![field("a", HirType::NUMBER), field("h", held(foreign))]
+                    ),
+                ],
+                Vec::new(),
+            ),
+            foreign,
+            "prefix edge"
+        );
+        // An unerasure: an erased `L2 { h, w }` read back as an `L1 { w }`.
+        assert_eq!(
+            releases_foreign(
+                vec![
+                    layout(1, vec![field("w", HirType::NUMBER)]),
+                    layout(
+                        2,
+                        vec![field("h", held(foreign)), field("w", HirType::NUMBER)]
+                    ),
+                ],
+                vec![cast(object(2), object(1), true)],
+            ),
+            foreign,
+            "unerasure edge"
+        );
+        // A promise's reactions: `L1` awaits, and `L2` is subscribed state.
+        assert_eq!(
+            releases_foreign(
+                vec![
+                    layout(
+                        1,
+                        vec![field(
+                            "awaited",
+                            HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+                        )],
+                    ),
+                    layout(2, vec![field("h", held(foreign))]),
+                ],
+                vec![subscribe(object(2), false)],
+            ),
+            foreign,
+            "reaction edge"
+        );
+    }
+    // Each edge is what carries it: with the handle present but the edge
+    // removed, the release reaches nothing.
+    assert!(!releases_foreign(
+        vec![
+            layout(1, vec![field("w", HirType::NUMBER)]),
+            layout(2, vec![field("h", handle()), field("w", HirType::NUMBER)]),
+        ],
+        Vec::new(),
+    ));
+    assert!(!releases_foreign(
+        vec![
+            layout(
+                1,
+                vec![field(
+                    "awaited",
+                    HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+                )],
+            ),
+            layout(2, vec![field("h", handle())]),
+            layout(3, vec![field("n", HirType::NUMBER)]),
+        ],
+        vec![subscribe(object(3), false)],
+    ));
+    // An erased field can be a handle itself; a type with no layout here can
+    // be any layout, and leads to a handle exactly when some layout holds one.
+    assert!(releases_foreign(
+        vec![layout(1, vec![field("e", HirType::Erased)])],
+        Vec::new()
+    ));
+    for foreign in [false, true] {
+        let releases = Program {
+            layouts: vec![layout(2, vec![field("h", held(foreign))])],
+            ..Program::default()
+        }
+        .foreign_releases();
+        assert_eq!(releases.release_can_reenter(&object(99)), foreign);
+        assert!(!releases.release_can_reenter(&HirType::Managed(ManagedType::String)));
+        assert!(releases.release_can_reenter(&HirType::Erased));
+    }
+}
