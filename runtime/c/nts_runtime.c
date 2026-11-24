@@ -271,6 +271,9 @@ struct NtsEnvironment {
   size_t reclaimed;
   size_t permanent;
   size_t allocations;
+  /* Deaths a generated typed release finished itself (`nts_object_reclaim`).
+     Counted only with `NTS_COUNT_OPERATIONS`, like `releases`. */
+  size_t typed_deaths;
 
   /* -- destruction and cycle collection -- */
   NtsHeader *dying;
@@ -506,6 +509,17 @@ static void nts_note_allocation(void) {
 
 size_t nts_counted_retains(void) { return NTS_TOTAL(retains); }
 size_t nts_counted_releases(void) { return NTS_TOTAL(releases); }
+size_t nts_counted_typed_deaths(void) { return NTS_TOTAL(typed_deaths); }
+
+/* A generated typed release's arrival, counted as `nts_release` counts its
+ * own: once, before anything it decides. A typed release that hands the
+ * object to `nts_release` does not call this, so each release the compiler
+ * emitted is counted exactly once, whichever path it takes. */
+void nts_count_release(void) {
+#ifdef NTS_COUNT_OPERATIONS
+  nts_env->releases++;
+#endif
+}
 
 /* Zeroed between phases, so a measurement can exclude set-up it did not mean to
  * charge the program for. */
@@ -514,6 +528,7 @@ void nts_counting_reset(void) {
     e->retains = 0;
     e->releases = 0;
     e->allocations = 0;
+    e->typed_deaths = 0;
   }
 }
 
@@ -1435,6 +1450,30 @@ static inline __attribute__((always_inline)) void nts_free(NtsHeader *object) {
   nts_free_block(object);
 }
 
+/* The end of a death a generated typed release ran itself (see the header).
+ * What `nts_free` does for such a layout, without asking its descriptor:
+ * `release_foreign` is NULL and the kind keeps no storage outside the block,
+ * which is what made the layout eligible. `nts_free_block` keeps its
+ * `NTS_POISON` checks: a heap death inside a region's call, and a block still
+ * buffered as a candidate, which an acyclic layout never is. */
+void nts_object_reclaim(NtsHeader *object) {
+  nts_env->reclaimed++;
+#ifdef NTS_COUNT_OPERATIONS
+  nts_env->typed_deaths++;
+#endif
+#if NTS_POISON
+  if ((object->flags & NTS_DYING) == 0 || object->reserved != 0 ||
+      object->descriptor->cyclic || object->descriptor->release_foreign ||
+      (object->descriptor->kind != NTS_KIND_OBJECT &&
+       object->descriptor->kind != NTS_KIND_TUPLE)) {
+    fprintf(stderr, "nts: a typed release reclaimed %s, which it cannot own\n",
+            object->descriptor->name ? object->descriptor->name : "(unnamed)");
+    abort();
+  }
+#endif
+  nts_free_block(object);
+}
+
 /* A fixed-layout object: the descriptor knows its whole size, and `length` is
  * not a count of anything. Zeroed, so a field is never read before it is
  * written -- the compiler emits a store for every field of a literal, but a
@@ -1629,6 +1668,26 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
    * kind of storage -- one concept here, against a parallel tag slot in object
    * layout, array layout, globals and closure captures. */
   nts_each_erased_slot(object, nts_visit_managed, visit);
+}
+
+/* The collector's walks over one object's traced edges. A fixed layout with
+ * a generated `trace_fields`, no foreign slot and no holder is the common
+ * case, and it goes straight to its generated walk; that is the same edges in
+ * the same order that `nts_each_reference` reaches for it, past checks that
+ * cannot apply. An emptied shell is not that case, so the generic walk still
+ * stops it by name. Everything else -- arrays, maps, holders, foreign slots --
+ * is the generic walk. */
+static inline __attribute__((always_inline)) void
+nts_each_traced(NtsHeader *object, void (*visit)(NtsHeader *)) {
+  const NtsDescriptor *descriptor = object->descriptor;
+  if (descriptor->trace_fields && descriptor->foreign == 0 &&
+      (object->flags & (NTS_DYING | NTS_BUFFERED)) !=
+          (NTS_DYING | NTS_BUFFERED) &&
+      !nts_is_holder(object)) {
+    descriptor->trace_fields(object, visit);
+    return;
+  }
+  nts_each_reference(object, visit, NTS_EDGES_TRACED);
 }
 
 /* The out-of-line half of erased strict equality. Declared beside the inline
@@ -2332,7 +2391,7 @@ static void nts_mark_gray(NtsHeader *root) {
       continue;
     }
     nts_paint(object, NTS_GRAY);
-    nts_each_reference(object, nts_mark_gray_child, NTS_EDGES_TRACED);
+    nts_each_traced(object, nts_mark_gray_child);
   }
 }
 
@@ -2356,7 +2415,7 @@ static void nts_scan_black(NtsHeader *root) {
   nts_work_push(root);
   while (nts_env->work_len > floor) {
     NtsHeader *object = nts_env->work[--nts_env->work_len];
-    nts_each_reference(object, nts_scan_black_child, NTS_EDGES_TRACED);
+    nts_each_traced(object, nts_scan_black_child);
   }
 }
 
@@ -2377,7 +2436,7 @@ static void nts_scan(NtsHeader *root) {
       continue;
     }
     nts_paint(object, NTS_WHITE);
-    nts_each_reference(object, nts_scan_child, NTS_EDGES_TRACED);
+    nts_each_traced(object, nts_scan_child);
   }
 }
 
@@ -2405,7 +2464,7 @@ static void nts_gather_white(NtsHeader *root) {
       continue;
     }
     nts_paint(object, NTS_BLACK);
-    nts_each_reference(object, nts_collect_white_child, NTS_EDGES_TRACED);
+    nts_each_traced(object, nts_collect_white_child);
     nts_push(&nts_env->dead, &nts_env->dead_len, &nts_env->dead_cap, object);
   }
 }

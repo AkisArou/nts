@@ -18,7 +18,10 @@ use nts_codegen_common::publication::{
 };
 pub use nts_codegen_common::publication::{class_instance_name, object_type_name};
 pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
-use nts_codegen_common::{CodeWriter, Copy, block_order, destruct, release::Action};
+use nts_codegen_common::{
+    CodeWriter, Copy, block_order, destruct,
+    release::{Action, TypedReleases},
+};
 use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, FunctionName, HirType, ManagedType, OpKind, Printed, Program,
@@ -647,6 +650,8 @@ struct Context<'a> {
     /// program: the descriptor an allocation names is the answer the collector
     /// acts on, so every allocation has to ask the same one.
     cycles: &'a nts_core::hir::Cycles,
+    /// Which layouts' objects die through a release specialized by type.
+    typed: &'a TypedReleases,
     /// The target's C ABI, which decides every size and offset emitted.
     abi: NativeAbi,
     literals: &'a Literals,
@@ -1203,10 +1208,11 @@ pub fn emit_planned(plan: &EntryAbi<'_>, abi: NativeAbi) -> Emitted {
     let literals = Literals::default();
 
     let cycles = program.cycles();
+    let typed = TypedReleases::plan(program, &cycles);
     let mut bodies = emit_bodies(
         program,
         abi,
-        &cycles,
+        (&cycles, &typed),
         &literals,
         &mut diagnostics,
         &mut refused,
@@ -1321,11 +1327,12 @@ pub fn emit_planned(plan: &EntryAbi<'_>, abi: NativeAbi) -> Emitted {
         .map(|(_, _, func, _)| func.name.as_str())
         .collect();
     let mut data = CodeWriter::new();
+    let typed_arrays = typed_array_elements(&bodies, &typed, &cycles);
     let published_layouts = emit_object_descriptors(
         &mut data,
         &origin,
         program,
-        &cycles,
+        (&cycles, &typed, &typed_arrays),
         &defined,
         &literals,
         &mut diagnostics,
@@ -1892,7 +1899,7 @@ fn literal_name(literals: &Literals, text: &JsText) -> String {
 fn emit_bodies<'a>(
     program: &'a Emission<'a>,
     abi: NativeAbi,
-    cycles: &nts_core::hir::Cycles,
+    (cycles, typed): (&nts_core::hir::Cycles, &TypedReleases),
     literals: &Literals,
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
@@ -1917,6 +1924,7 @@ fn emit_bodies<'a>(
             program,
             layouts: &layouts,
             cycles,
+            typed,
             abi,
             literals: &body_literals,
             templates,
@@ -1966,6 +1974,7 @@ const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_environment_install_platform", 0),
     ("nts_function_to_string", 0),
     ("nts_number_to_string_into", 0),
+    ("nts_object_reclaim", 0),
     ("nts_object_to_string", 0),
     ("nts_presence_clear", 0),
     ("nts_presence_clear_fn", 0),
@@ -3488,6 +3497,13 @@ fn emit_object_types(
     writer.line(
         origin,
         format!(
+            "_Static_assert(NTS_DYING == {}u, \"NTS_DYING is not what nts writes\");",
+            nts_core::hir::layout::DYING
+        ),
+    );
+    writer.line(
+        origin,
+        format!(
             "_Static_assert(NTS_ARRAY_IMMUTABLE == {}u, \"template immutability flag differs\");",
             nts_core::hir::layout::TEMPLATE_IMMUTABLE
         ),
@@ -3785,13 +3801,14 @@ fn emit_object_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
     program: &Emission<'_>,
-    cycles: &nts_core::hir::Cycles,
+    (cycles, typed, typed_arrays): (&nts_core::hir::Cycles, &TypedReleases, &[usize]),
     defined: &rustc_hash::FxHashSet<String>,
     literals: &Literals,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> rustc_hash::FxHashSet<usize> {
     let mut published_layouts = rustc_hash::FxHashSet::default();
     let cyclic_layouts = &cycles.cyclic;
+    emit_typed_release_prototypes(writer, origin, program, typed);
     let needed = layouts_needing_descriptors(program);
     let published = published_class_layouts(program);
     let mut emitted_rows = rustc_hash::FxHashSet::default();
@@ -3956,7 +3973,7 @@ fn emit_object_descriptors(
             writer,
             origin,
             program,
-            layout,
+            (layout, typed),
             &name,
             &release,
             Action::Release,
@@ -3966,7 +3983,7 @@ fn emit_object_descriptors(
                 writer,
                 origin,
                 program,
-                layout,
+                (layout, typed),
                 &name,
                 &release,
                 Action::Trace,
@@ -4056,6 +4073,8 @@ fn emit_object_descriptors(
         writer.blank(origin);
     }
     emit_view_class_descriptors(writer, origin, program);
+    emit_typed_releases(writer, origin, program, typed);
+    emit_typed_array_descriptors(writer, origin, program, typed_arrays);
     published_layouts
 }
 
@@ -4123,7 +4142,7 @@ fn emit_reference_fields(
     writer: &mut CodeWriter,
     origin: &Origin,
     program: &Emission<'_>,
-    layout: &nts_core::hir::Layout,
+    (layout, typed): (&nts_core::hir::Layout, &TypedReleases),
     name: &str,
     fields: &nts_codegen_common::release::Fields,
     action: nts_codegen_common::release::Action,
@@ -4152,6 +4171,14 @@ fn emit_reference_fields(
     );
     for at in &fields.managed {
         let field = c_member_at(layout, *at);
+        // A field whose static type has a typed release gives its object up
+        // through it; the release itself checks the object's layout.
+        let visit = match action {
+            Action::Release => typed
+                .for_type(&layout.fields[*at].ty)
+                .map_or_else(|| visit.to_owned(), |child| typed_release_name(program, child)),
+            Action::Trace => visit.to_owned(),
+        };
         writer.line(
             origin,
             format!("    if ({receiver}->{field}) {visit}((NtsHeader *){receiver}->{field});"),
@@ -4173,6 +4200,198 @@ fn emit_reference_fields(
     }
     writer.line(origin, "}");
     callback
+}
+
+/// A layout's release specialized by type (`nts_runtime.h`, "A release
+/// specialized by type").
+fn typed_release_name(program: &Emission<'_>, layout: usize) -> String {
+    format!(
+        "__nts_typed_release_{}",
+        object_type_name(&program.layouts[layout])
+    )
+}
+
+/// The release a value of this static type is given up with: its layout's
+/// typed release, or the runtime's.
+fn release_for(program: &Emission<'_>, typed: &TypedReleases, ty: &HirType) -> String {
+    typed
+        .for_type(ty)
+        .map_or_else(|| "nts_release".to_owned(), |at| typed_release_name(program, at))
+}
+
+/// Declared before every descriptor, so a contents callback and a body can
+/// call any of them. `static inline`, so one no site reaches is not
+/// `-Wunused-function`.
+fn emit_typed_release_prototypes(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Emission<'_>,
+    typed: &TypedReleases,
+) {
+    let [object] = program.helper_scope([HelperName::Object]);
+    for at in 0..program.layouts.len() {
+        if typed.of(at).is_some() {
+            writer.line(
+                origin,
+                format!(
+                    "static inline void {}(NtsHeader *{object});",
+                    typed_release_name(program, at)
+                ),
+            );
+        }
+    }
+}
+
+/// The typed releases themselves, after every descriptor they compare.
+fn emit_typed_releases(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Emission<'_>,
+    typed: &TypedReleases,
+) {
+    let [object, receiver] = program.helper_scope([HelperName::Object, HelperName::Receiver]);
+    for (at, layout) in program.layouts.iter().enumerate() {
+        let Some(plan) = typed.of(at) else {
+            continue;
+        };
+        let shape = object_type_name(layout);
+        let name = typed_release_name(program, at);
+        let mine: Vec<String> = layout_descriptor_symbols(program, layout, &shape)
+            .iter()
+            .map(|symbol| format!("{object}->descriptor != &{symbol}"))
+            .collect();
+        writer.line(
+            origin,
+            format!("static inline void {name}(NtsHeader *{object}) {{"),
+        );
+        // Another layout, null included, is the runtime's to release.
+        let other = if mine.is_empty() {
+            "1".to_owned()
+        } else {
+            mine.join(" && ")
+        };
+        writer.line(origin, format!("    if (!{object} || ({other})) {{"));
+        writer.line(origin, format!("        nts_release({object});"));
+        writer.line(origin, "        return;");
+        writer.line(origin, "    }");
+        writer.line(origin, "#ifdef NTS_COUNT_OPERATIONS");
+        writer.line(origin, "    nts_count_release();");
+        writer.line(origin, "#endif");
+        writer.line(origin, format!("    if ({object}->reserved == 1u) {{"));
+        writer.line(
+            origin,
+            format!("        {shape} *{receiver} = ({shape} *){object};"),
+        );
+        writer.line(origin, format!("        {object}->reserved = 0;"));
+        writer.line(origin, format!("        {object}->flags |= NTS_DYING;"));
+        let fields = nts_codegen_common::release::Fields::of(layout);
+        for (field, child) in fields.managed.iter().zip(&plan.children) {
+            let member = c_member_at(layout, *field);
+            let release = child.map_or_else(
+                || "nts_release".to_owned(),
+                |child| typed_release_name(program, child),
+            );
+            writer.line(
+                origin,
+                format!(
+                    "        if ({receiver}->{member}) {release}((NtsHeader *){receiver}->{member});"
+                ),
+            );
+        }
+        writer.line(origin, format!("        nts_object_reclaim({object});"));
+        writer.line(origin, "        return;");
+        writer.line(origin, "    }");
+        writer.line(
+            origin,
+            format!(
+                "    if ({object}->reserved == NTS_IMMORTAL || ({object}->flags & NTS_DYING)) return;"
+            ),
+        );
+        writer.line(origin, format!("    {object}->reserved--;"));
+        writer.line(origin, "}");
+    }
+}
+
+/// The element layouts whose arrays this program allocates with a typed
+/// array descriptor, from the bodies that survived: `element_descriptor`'s
+/// answer for each `ArrayNew` they run.
+fn typed_array_elements(
+    bodies: &[(String, CodeWriter, &Func, UnicodeNeeds)],
+    typed: &TypedReleases,
+    cycles: &nts_core::hir::Cycles,
+) -> Vec<usize> {
+    let mut found = Vec::new();
+    for func in bodies.iter().map(|(_, _, func, _)| *func) {
+        for op in &func.values {
+            if let (OpKind::ArrayNew { .. }, HirType::Managed(ManagedType::Array(element))) =
+                (&op.kind, &op.ty)
+                && let Some(at) = typed_array_element(typed, cycles, element)
+                && !found.contains(&at)
+            {
+                found.push(at);
+            }
+        }
+    }
+    found.sort_unstable();
+    found
+}
+
+/// An array of references whose element type has a typed release, where the
+/// array is proved acyclic: the runtime's `nts_desc_ref_acyclic` in every
+/// field but its contents callback, which releases each slot through the
+/// element's typed release. Nothing compares an array's descriptor by
+/// identity, and each slot's object is still checked before it is assumed.
+fn typed_array_element(
+    typed: &TypedReleases,
+    cycles: &nts_core::hir::Cycles,
+    element: &HirType,
+) -> Option<usize> {
+    typed.for_type(element).filter(|_| !cycles.array(element))
+}
+
+fn typed_array_descriptor_name(program: &Emission<'_>, element: usize) -> String {
+    format!(
+        "__nts_typed_array_{}",
+        object_type_name(&program.layouts[element])
+    )
+}
+
+fn emit_typed_array_descriptors(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Emission<'_>,
+    elements: &[usize],
+) {
+    let [object, slot, out] =
+        program.helper_scope([HelperName::Object, HelperName::Slot, HelperName::Out]);
+    for &element in elements {
+        let shape = object_type_name(&program.layouts[element]);
+        let callback = format!("__nts_typed_slots_{shape}");
+        writer.line(origin, format!("static void {callback}(NtsHeader *{object}) {{"));
+        writer.line(
+            origin,
+            format!("    NtsHeader **{slot} = NTS_ITEMS((NtsArray *){object}, NtsHeader *);"),
+        );
+        writer.line(
+            origin,
+            format!("    NtsHeader **{out} = {slot} + {object}->length;"),
+        );
+        writer.line(
+            origin,
+            format!(
+                "    for (; {slot} != {out}; {slot}++) if (*{slot}) {}(*{slot});",
+                typed_release_name(program, element)
+            ),
+        );
+        writer.line(origin, "}");
+        writer.line(
+            origin,
+            format!(
+                "static const NtsDescriptor {} = {{ NTS_KIND_ARRAY, sizeof(void *), 1u, 0u, 0, 0, \"reference\", 0u, 0, NTS_ARRAY_REFERENCE, 0u, 0, nts_array_to_string, NULL, {callback}, NULL, 0u, NULL }};",
+                typed_array_descriptor_name(program, element)
+            ),
+        );
+    }
 }
 
 /// A layout's foreign slots: the fields holding a counted foreign object, each
@@ -4453,6 +4672,7 @@ fn emit_layout_descriptors(
     let sharing = program.distinct_identities(layout);
     // The shape has a constant only while something can use its identity.
     // A named class alone on it does not keep an unread static alive.
+    // `layout_descriptor_symbols` names the same set, for the typed release.
     if program.uses_layout_identity(layout) {
         writer.line(
             origin,
@@ -4479,6 +4699,29 @@ fn emit_layout_descriptors(
             ),
         );
     }
+}
+
+/// Every descriptor `emit_layout_descriptors` defines for a layout: the
+/// shape's, while its identity is used, and one per class sharing it. An
+/// object of the layout carries one of these and nothing else, which is what
+/// its typed release compares.
+fn layout_descriptor_symbols(
+    program: &Emission<'_>,
+    layout: &nts_core::hir::Layout,
+    shape: &str,
+) -> Vec<String> {
+    let sharing = program.distinct_identities(layout);
+    let mut symbols = Vec::new();
+    if program.uses_layout_identity(layout) {
+        symbols.push(format!("__nts_desc_{shape}"));
+    }
+    for class in &sharing {
+        symbols.push(format!(
+            "__nts_desc_{shape}__{}",
+            identity_suffix(&sharing, class)
+        ));
+    }
+    symbols
 }
 
 /// `new C(...)`, on the heap or in the frame.
@@ -4646,6 +4889,9 @@ fn element_descriptor(
             origin.location,
         ));
     };
+    if let Some(at) = typed_array_element(context.typed, context.cycles, element) {
+        return Ok(typed_array_descriptor_name(context.program, at));
+    }
     if element.is_managed() {
         // The acyclic twin is never buffered as a candidate. See `Cycles::array`.
         return Ok(if context.cycles.array(element) {
@@ -6578,7 +6824,10 @@ fn emit_op(
                 .map_err(|why| Diagnostic::error("NTS2007", why, op.origin.location))?
             {
                 Counter::Runtime if retain => format!("nts_retain((NtsHeader *){operand});"),
-                Counter::Runtime => format!("nts_release((NtsHeader *){operand});"),
+                Counter::Runtime => format!(
+                    "{}((NtsHeader *){operand});",
+                    release_for(context.program, context.typed, &func.value(*object).ty)
+                ),
                 Counter::Tagged if retain => format!("nts_value_retain({operand});"),
                 Counter::Tagged => format!("nts_value_release({operand});"),
                 Counter::Foreign(counting) => {

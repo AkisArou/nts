@@ -1653,6 +1653,39 @@ void nts_region_end_call(NtsHeader *box);
 void nts_region_keep(NtsHeader *box, NtsHeader *value);
 void nts_region_hold(const NtsHeader *box);
 void nts_release(NtsHeader *object);
+/* # A release specialized by type
+ *
+ * Where a release's static type is a fixed layout the cycle graph proves
+ * acyclic, with no erased and no foreign slot, C and LLVM emit
+ * `__nts_typed_release_<layout>` from one plan (`nts_codegen_common::release`).
+ * The static type is a lower bound on the layout, so it first compares the
+ * object's descriptor with that layout's own; any other answer, null
+ * included, is `nts_release`'s. For its own layout it is the death
+ * `nts_release` would run, minus every question the layout already answers:
+ *
+ *   immortal or dying    return, as `nts_release` does
+ *   a count above one    one less, and nothing else: an acyclic layout is
+ *                        never a cycle candidate (`nts_possible_root`)
+ *   a count of one       zero and `NTS_DYING`, as `nts_destroy` marks one;
+ *                        each managed field released, through its own typed
+ *                        release where it has one; then `nts_object_reclaim`
+ *
+ * It frees on the C stack rather than through the dying list, and is bounded:
+ * a typed release calls another only along the acyclic layout graph, and the
+ * plan stops inlining past a fixed depth, handing the field to
+ * `nts_release`. A field of any other type takes `nts_release` as before, and
+ * so does every cyclic layout: the collector's candidate rules are unchanged.
+ * The cycle collector never calls these; trial deletion's frees are its own.
+ *
+ * `nts_object_reclaim` is the block's return: the reclaimed count and the
+ * block, which is all `nts_free` does for such a layout. It is never called on
+ * anything else, and `NTS_POISON` stops by name if it is. `nts_count_release`
+ * counts the typed release's arrival in an `NTS_COUNT_OPERATIONS` build, once,
+ * exactly where `nts_release` would have counted it, and does nothing in any
+ * other; `nts_counted_typed_deaths` says how many deaths took this path. */
+void nts_object_reclaim(NtsHeader *object);
+void nts_count_release(void);
+size_t nts_counted_typed_deaths(void);
 NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,
                                       double length);
 

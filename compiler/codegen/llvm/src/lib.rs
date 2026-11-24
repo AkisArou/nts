@@ -194,6 +194,11 @@ struct Emission<'a> {
     entry_parameters: nts_codegen_common::entry_parameters::EntryParameters<'a>,
     source_symbols: std::rc::Rc<nts_codegen_common::source_symbols::SourceSymbols<'a>>,
     native_symbols: nts_codegen_common::native_symbols::NativeSymbols<'a>,
+    /// Which objects and arrays can be in a cycle, decided once: every
+    /// descriptor and allocation must name the answer the collector acts on.
+    cycle_graph: nts_core::hir::Cycles,
+    /// Which layouts' objects die through a release specialized by type.
+    typed: nts_codegen_common::release::TypedReleases,
 }
 
 impl<'program> Emission<'program> {
@@ -201,12 +206,16 @@ impl<'program> Emission<'program> {
         source: &'program Program,
         source_symbols: std::rc::Rc<nts_codegen_common::source_symbols::SourceSymbols<'program>>,
     ) -> Self {
+        let cycle_graph = source.cycles();
+        let typed = nts_codegen_common::release::TypedReleases::plan(source, &cycle_graph);
         Self {
             source,
             callback_abi: nts_codegen_common::callback_abi::Callbacks::new(source),
             entry_parameters: nts_codegen_common::entry_parameters::EntryParameters::new(source),
             source_symbols,
             native_symbols: nts_codegen_common::native_symbols::NativeSymbols::new(source),
+            cycle_graph,
+            typed,
         }
     }
 
@@ -487,12 +496,12 @@ pub fn emit_with_source_symbols<'a>(
     let templates = nts_core::hir::templates::present(program);
     // Decided once: every allocation must name the descriptor the same answer
     // chose, and the C backend asks the same `Cycles`.
-    let cycles = program.cycles();
+    let cycles = &program.cycle_graph;
     let mut bodies = String::new();
     let mut kept = std::collections::BTreeSet::new();
     for func in program.native_funcs() {
         let body_pool = pool.for_body(&func.name);
-        match function(program, &cycles, func, platform, templates, &body_pool) {
+        match function(program, cycles, func, platform, templates, &body_pool) {
             Ok(rendered) => {
                 kept.insert(func.name.as_str());
                 let _ = writeln!(bodies, "\n{rendered}");
@@ -1230,7 +1239,7 @@ fn descriptors(
 ) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
-    let cyclic = program.cyclic_layouts();
+    let cyclic = &program.cycle_graph.cyclic;
     let mut emitted_rows = std::collections::BTreeSet::new();
     no_methods_row(&mut out, program);
     for (index, layout) in program.layouts.iter().enumerate() {
@@ -1269,11 +1278,24 @@ fn descriptors(
         let erased_table = offsets("erased", &erased);
         let (foreign, foreign_table) = foreign_slots(&mut out, layout, &placed.offsets, &tag);
         let fields = (&tag[..], &references[..], &erased[..]);
+        // Each pointer field's release: its static type's typed release where
+        // that layout has one, which still checks the object it is given.
+        let children: Vec<Option<String>> = release
+            .managed
+            .iter()
+            .filter(|at| placed.offsets.get(**at).is_some())
+            .map(|at| {
+                program
+                    .typed
+                    .for_type(&layout.fields[*at].ty)
+                    .map(|child| typed_release_symbol(&program.layouts[child]))
+            })
+            .collect();
         let release_fields = match reference_fields(
             &mut out,
             (program.source, platform),
             fields,
-            Action::Release,
+            (Action::Release, &children),
         ) {
             Ok(fields) => fields,
             Err(diagnostic) => {
@@ -1282,7 +1304,12 @@ fn descriptors(
             }
         };
         let trace_fields = if program.provider == nts_core::hir::Memory::ReferenceCounting {
-            match reference_fields(&mut out, (program.source, platform), fields, Action::Trace) {
+            match reference_fields(
+                &mut out,
+                (program.source, platform),
+                fields,
+                (Action::Trace, &[]),
+            ) {
                 Ok(fields) => fields,
                 Err(diagnostic) => {
                     diagnostics.push(diagnostic);
@@ -1377,7 +1404,209 @@ fn descriptors(
     }
     array_descriptors(&mut out, program);
     view_class_descriptors(&mut out, program);
+    if let Err(diagnostic) = typed_releases(&mut out, program, platform) {
+        diagnostics.push(diagnostic);
+    }
+    typed_array_descriptors(&mut out, program);
     out
+}
+
+/// A layout's release specialized by type (`nts_runtime.h`, "A release
+/// specialized by type"), as the C backend names its own.
+fn typed_release_symbol(layout: &nts_core::hir::Layout) -> String {
+    format!("@__nts_typed_release_{}", descriptor_name(layout))
+}
+
+/// Every typed release, from the shared plan: the same tests and the same
+/// fields, in the same order, as the C backend's `emit_typed_releases`.
+fn typed_releases(
+    out: &mut String,
+    program: &Emission<'_>,
+    platform: Platform,
+) -> Result<(), Diagnostic> {
+    use nts_core::hir::layout::{DYING, IMMORTAL};
+    let site = || Site::synthetic(program, "typed releases");
+    for (at, layout) in program.layouts.iter().enumerate() {
+        let Some(plan) = program.typed.of(at) else {
+            continue;
+        };
+        let Some(placed) = nts_core::hir::layout::place(&layout.fields) else {
+            continue;
+        };
+        let tag = descriptor_name(layout);
+        let mut text = String::new();
+        let _ = writeln!(
+            text,
+            "define internal void {}(ptr %object) {{\nentry:",
+            typed_release_symbol(layout)
+        );
+        let _ = writeln!(text, "  %null = icmp eq ptr %object, null");
+        let _ = writeln!(text, "  br i1 %null, label %other, label %check\ncheck:");
+        let _ = writeln!(text, "  %descriptor = load ptr, ptr %object");
+        // Every descriptor an object of this layout can carry: the shape's,
+        // and one per class sharing it (`class_descriptors`).
+        let sharing = program.distinct_identities(layout);
+        let mut symbols = vec![format!("@nts_desc_{tag}")];
+        symbols.extend(
+            sharing
+                .iter()
+                .map(|class| format!("@nts_desc_{tag}__{}", identity_suffix(&sharing, class))),
+        );
+        let mut mine = String::from("false");
+        for (index, symbol) in symbols.iter().enumerate() {
+            let _ = writeln!(text, "  %is{index} = icmp eq ptr %descriptor, {symbol}");
+            let _ = writeln!(text, "  %mine{index} = or i1 {mine}, %is{index}");
+            mine = format!("%mine{index}");
+        }
+        let _ = writeln!(text, "  br i1 {mine}, label %mine, label %other\nother:");
+        let _ = writeln!(
+            text,
+            "  {}",
+            runtime_call::call(site(), platform, "nts_release", &[Operand::new("ptr", "%object")])?
+        );
+        let _ = writeln!(text, "  ret void\nmine:");
+        let _ = writeln!(text, "  %count.at = getelementptr inbounds i8, ptr %object, i64 8");
+        let _ = writeln!(text, "  %flags.at = getelementptr inbounds i8, ptr %object, i64 16");
+        let _ = writeln!(text, "  %count = load i64, ptr %count.at");
+        let _ = writeln!(text, "  %flags = load i32, ptr %flags.at");
+        let _ = writeln!(text, "  %last = icmp eq i64 %count, 1");
+        let _ = writeln!(text, "  br i1 %last, label %dies, label %lives\ndies:");
+        let _ = writeln!(text, "  store i64 0, ptr %count.at");
+        let _ = writeln!(text, "  %dying = or i32 %flags, {DYING}");
+        let _ = writeln!(text, "  store i32 %dying, ptr %flags.at");
+        let fields = nts_codegen_common::release::Fields::of(layout);
+        for (index, (field, child)) in fields.managed.iter().zip(&plan.children).enumerate() {
+            let Some(offset) = placed.offsets.get(*field) else {
+                return Err(site().refuse("a typed release of a field with no placement"));
+            };
+            let _ = writeln!(
+                text,
+                "  %f{index}.at = getelementptr inbounds i8, ptr %object, i64 {offset}"
+            );
+            let _ = writeln!(text, "  %f{index} = load ptr, ptr %f{index}.at");
+            let _ = writeln!(text, "  %f{index}.live = icmp ne ptr %f{index}, null");
+            let _ = writeln!(
+                text,
+                "  br i1 %f{index}.live, label %f{index}.release, label %f{index}.next\nf{index}.release:"
+            );
+            let call = match child {
+                Some(child) => runtime_call::direct(
+                    "void",
+                    &DirectCallee::global(
+                        site(),
+                        platform,
+                        typed_release_symbol(&program.layouts[*child]),
+                    )?,
+                    Operand::new("ptr", format!("%f{index}")),
+                ),
+                None => runtime_call::call(
+                    site(),
+                    platform,
+                    "nts_release",
+                    &[Operand::new("ptr", format!("%f{index}"))],
+                )?,
+            };
+            let _ = writeln!(text, "  {call}");
+            let _ = writeln!(text, "  br label %f{index}.next\nf{index}.next:");
+        }
+        let _ = writeln!(
+            text,
+            "  {}",
+            runtime_call::call(
+                site(),
+                platform,
+                "nts_object_reclaim",
+                &[Operand::new("ptr", "%object")]
+            )?
+        );
+        let _ = writeln!(text, "  ret void\nlives:");
+        let _ = writeln!(text, "  %immortal = icmp eq i64 %count, {IMMORTAL}");
+        let _ = writeln!(text, "  %marked = and i32 %flags, {DYING}");
+        let _ = writeln!(text, "  %dead = icmp ne i32 %marked, 0");
+        let _ = writeln!(text, "  %kept = or i1 %immortal, %dead");
+        let _ = writeln!(text, "  br i1 %kept, label %done, label %less\nless:");
+        let _ = writeln!(text, "  %fewer = sub i64 %count, 1");
+        let _ = writeln!(text, "  store i64 %fewer, ptr %count.at");
+        let _ = writeln!(text, "  br label %done\ndone:");
+        let _ = writeln!(text, "  ret void\n}}");
+        out.push_str(&text);
+    }
+    Ok(())
+}
+
+/// The element layouts whose arrays get a typed array descriptor: the
+/// answer `ArrayNew` gives for an acyclic array of a typed-release layout.
+fn typed_array_element(program: &Emission<'_>, element: &HirType) -> Option<usize> {
+    program
+        .typed
+        .for_type(element)
+        .filter(|_| !program.cycle_graph.array(element))
+}
+
+fn typed_array_descriptor(layout: &nts_core::hir::Layout) -> String {
+    format!("@__nts_typed_array_{}", descriptor_name(layout))
+}
+
+/// `nts_desc_ref_acyclic` in every field but its contents callback, which
+/// releases each slot through the element's typed release, as the C
+/// backend's `emit_typed_array_descriptors`. One per element layout an
+/// `ArrayNew` names.
+fn typed_array_descriptors(out: &mut String, program: &Emission<'_>) {
+    let mut wanted = std::collections::BTreeMap::new();
+    for func in program.native_funcs() {
+        for op in &func.values {
+            if let (OpKind::ArrayNew { .. }, HirType::Managed(nts_core::hir::ManagedType::Array(element))) =
+                (&op.kind, &op.ty)
+                && let Some(at) = typed_array_element(program, element)
+            {
+                wanted.entry(at).or_insert_with(|| nts_codegen_common::counting::array_element(element));
+            }
+        }
+    }
+    if wanted.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "@__nts_typed_array.name = internal constant [10 x i8] c\"reference\\00\""
+    );
+    for (at, element) in wanted {
+        let layout = &program.layouts[at];
+        let tag = descriptor_name(layout);
+        let release = typed_release_symbol(layout);
+        let length = nts_core::hir::layout::LENGTH_OFFSET;
+        let items = nts_core::hir::layout::ELEMENTS_OFFSET;
+        let _ = writeln!(
+            out,
+            "define internal void @__nts_typed_slots_{tag}(ptr %object) {{\nentry:\n\
+             \x20 %length.at = getelementptr inbounds i8, ptr %object, i64 {length}\n\
+             \x20 %length = load i32, ptr %length.at\n\
+             \x20 %items.at = getelementptr inbounds i8, ptr %object, i64 {items}\n\
+             \x20 %items = load ptr, ptr %items.at\n\
+             \x20 %empty = icmp eq i32 %length, 0\n\
+             \x20 br i1 %empty, label %done, label %loop\nloop:\n\
+             \x20 %index = phi i32 [ 0, %entry ], [ %next, %step ]\n\
+             \x20 %wide = zext i32 %index to i64\n\
+             \x20 %slot = getelementptr inbounds ptr, ptr %items, i64 %wide\n\
+             \x20 %child = load ptr, ptr %slot\n\
+             \x20 %live = icmp ne ptr %child, null\n\
+             \x20 br i1 %live, label %release, label %step\nrelease:\n\
+             \x20 call void {release}(ptr %child)\n\
+             \x20 br label %step\nstep:\n\
+             \x20 %next = add nuw i32 %index, 1\n\
+             \x20 %more = icmp ult i32 %next, %length\n\
+             \x20 br i1 %more, label %loop, label %done\ndone:\n\
+             \x20 ret void\n}}"
+        );
+        let _ = writeln!(
+            out,
+            "{} = internal constant %NtsDescriptor {{ i32 0, i32 8, i32 1, i32 0, ptr null, ptr null, \
+             ptr @__nts_typed_array.name, i32 0, ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, \
+             ptr null, ptr @__nts_typed_slots_{tag}, ptr null, i32 0, ptr null }}",
+            typed_array_descriptor(layout),
+            element
+        );
+    }
 }
 
 /// `NTS_KIND_VIEW`: a typed array's view, whose descriptor is an
@@ -1478,17 +1707,30 @@ fn reference_fields(
     out: &mut String,
     (program, platform): (&Program, Platform),
     (tag, managed, erased): (&str, &[u32], &[u32]),
-    action: nts_codegen_common::release::Action,
+    (action, children): (nts_codegen_common::release::Action, &[Option<String>]),
 ) -> Result<String, Diagnostic> {
-    // Release calls the runtime's checked `nts_release`; trace calls the
-    // collector's visitor, an SSA value.
+    // Release calls the runtime's checked `nts_release`, or a pointer field's
+    // typed release; trace calls the collector's visitor, an SSA value. The
+    // pointer fields are visited first and in order, then the erased slots.
+    let mut visited = 0;
     let visit = |field: String| match action {
-        nts_codegen_common::release::Action::Release => runtime_call::call(
-            Site::synthetic(program, "descriptors"),
-            platform,
-            "nts_release",
-            &[Operand::new("ptr", field)],
-        ),
+        nts_codegen_common::release::Action::Release => {
+            let child = children.get(visited).cloned().flatten();
+            visited += 1;
+            match child {
+                Some(symbol) => Ok(runtime_call::direct(
+                    "void",
+                    &DirectCallee::global(Site::synthetic(program, "descriptors"), platform, symbol)?,
+                    Operand::new("ptr", field),
+                )),
+                None => runtime_call::call(
+                    Site::synthetic(program, "descriptors"),
+                    platform,
+                    "nts_release",
+                    &[Operand::new("ptr", field)],
+                ),
+            }
+        }
         nts_codegen_common::release::Action::Trace => Ok(runtime_call::direct(
             "void",
             &runtime_call::DirectCallee::value("%visit"),
@@ -3466,6 +3708,8 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_index_fn",
     "nts_is_class",
     "nts_object_new",
+    // The end of a typed release's death (`typed_releases`).
+    "nts_object_reclaim",
     "nts_max_fn",
     "nts_min_fn",
     "nts_release",
@@ -4798,7 +5042,9 @@ fn allocation(
             } else {
                 "@nts_array_new_uninitialized"
             };
-            let descriptor = if element.is_managed() {
+            let descriptor = if let Some(at) = typed_array_element(program, element) {
+                typed_array_descriptor(&program.layouts[at])
+            } else if element.is_managed() {
                 // The acyclic twin is never buffered. See `Cycles::array`.
                 if cycles.array(element) {
                     "@nts_desc_ref".to_owned()
@@ -5196,12 +5442,23 @@ fn counting_or_global(
                     "nts_retain",
                     &[Operand::new("ptr", operand.as_str())],
                 )?,
-                _ => runtime_call::call(
-                    Site::function(func),
-                    platform,
-                    "nts_release",
-                    &[Operand::new("ptr", operand.as_str())],
-                )?,
+                _ => match program.typed.for_type(&func.values[object.0 as usize].ty) {
+                    Some(at) => runtime_call::direct(
+                        "void",
+                        &DirectCallee::global(
+                            Site::function(func),
+                            platform,
+                            typed_release_symbol(&program.layouts[at]),
+                        )?,
+                        Operand::new("ptr", operand.as_str()),
+                    ),
+                    None => runtime_call::call(
+                        Site::function(func),
+                        platform,
+                        "nts_release",
+                        &[Operand::new("ptr", operand.as_str())],
+                    )?,
+                },
             }
         }
         OpKind::GlobalGet(global) => {

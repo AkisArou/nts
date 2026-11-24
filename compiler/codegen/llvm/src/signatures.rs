@@ -883,6 +883,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_count_release",
+        returns: "void",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_counted_allocations",
         returns: "i64",
         params: &[],
@@ -896,6 +902,12 @@ pub const SIGNATURES: &[Signature] = &[
     },
     Signature {
         name: "nts_counted_retains",
+        returns: "i64",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_counted_typed_deaths",
         returns: "i64",
         params: &[],
         attributes: &[],
@@ -1773,6 +1785,12 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_object_new",
         returns: "noalias nonnull ptr",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_object_reclaim",
+        returns: "void",
         params: &["ptr"],
         attributes: &[],
     },

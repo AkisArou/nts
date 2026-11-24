@@ -798,9 +798,11 @@ static SIGNATURES: &[Declared] = &[
         None,
         Raising::NoRaise,
     ),
+    ("nts_count_release", None, None, Raising::NoRaise),
     ("nts_counted_allocations", None, None, Raising::NoRaise),
     ("nts_counted_releases", None, None, Raising::NoRaise),
     ("nts_counted_retains", None, None, Raising::NoRaise),
+    ("nts_counted_typed_deaths", None, None, Raising::NoRaise),
     ("nts_counting_reset", None, None, Raising::NoRaise),
     (
         "nts_cstring_release",
@@ -1525,6 +1527,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_objc_register_class", None, None, Raising::NoRaise),
     ("nts_objc_state", None, None, Raising::NoRaise),
     ("nts_object_new", None, None, Raising::NoRaise),
+    ("nts_object_reclaim", None, None, Raising::NoRaise),
     ("nts_object_to_string", None, None, Raising::NoRaise),
     ("nts_parse_float", None, None, Raising::NoRaise),
     (

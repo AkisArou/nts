@@ -67,6 +67,12 @@ pub const HEADER: Shape = Shape {
 /// backend so clang checks it against the macro.
 pub const IMMORTAL: u64 = u32::MAX as u64;
 
+/// The header flag `nts_destroy` sets before an object's count word stops
+/// being a count (`NTS_DYING`). A typed release (`nts_runtime.h`) sets it as
+/// it gives an object's fields up; asserted from the C backend like
+/// [`IMMORTAL`], so the LLVM backend writes the macro's number.
+pub const DYING: u32 = 8;
+
 /// Array-only immutability flag, checked against the native header by C.
 pub const TEMPLATE_IMMUTABLE: u32 = 1 << 6;
 
