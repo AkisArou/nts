@@ -25,6 +25,7 @@ import { removable } from "./run-temporary.ts";
 import { randomUUID } from "node:crypto";
 import { hostObservations } from "./host-observations.ts";
 import { ownMemory } from "./test-memory.ts";
+import { readProcessStat } from "../differential/process-stat/main.ts";
 import { gateCpus, inheritedCpus } from "./affinity.ts";
 import { newToolingSlice, stopToolingSlice, toolingSlice, toolingSliceArgs } from "./tooling-slice.ts";
 import type { Priority } from "./ranks.ts";
@@ -260,24 +261,24 @@ export { stepTableProblem };
   const counters = live ? { cpu: { kind: "live" as const }, pressure: { kind: "live" as const } } : advance ? { clock: { kind: "fixed" as const, now: 0 } } : {};
   const memory = gateFixtureMemory(join(own, "memory"), root, counters);
   writeFileSync(join(gate, "payload.mjs"), `
-import { existsSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { durableRecord } from ${JSON.stringify(pathToFileURL(join(source, "durable-record.ts")).href)};
 const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)};
 const observations = ${JSON.stringify(memory.NTS_HOST_OBSERVATIONS)};
 const release = () => new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
 if (process.env.NTS_GATE_STEP === "format" && advance) {
-  // The step's slice is the component of its own cgroup that names the slice its runner gave it.
-  const cgroup = /^0::(.+)$/m.exec(readFileSync("/proc/self/cgroup", "utf8"))[1].split("/"), at = cgroup.indexOf(process.env.NTS_TOOLING_SLICE);
-  if (at < 1) throw new Error("the step's cgroup " + cgroup.join("/") + " does not name its slice " + process.env.NTS_TOOLING_SLICE);
-  const group = cgroup.slice(0, at + 1).join("/"), us = seconds => Math.round(seconds * 1e6), value = JSON.parse(readFileSync(observations, "utf8"));
+  // The step's slice, the one its runner gave it, as the user manager names its cgroup.
+  const shown = spawnSync("systemctl", ["--user", "show", process.env.NTS_TOOLING_SLICE, "-p", "ControlGroup", "--value"], { encoding: "utf8" }), group = shown.stdout.trim();
+  if (shown.status !== 0 || !group.endsWith("/" + process.env.NTS_TOOLING_SLICE)) throw new Error("the step's slice " + process.env.NTS_TOOLING_SLICE + " has no cgroup: " + shown.stderr);
+  const us = seconds => Math.round(seconds * 1e6), value = JSON.parse(readFileSync(observations, "utf8"));
   value.clock = { kind: "fixed", now: value.clock.now + advance.clockS * 1000 };
   value.cpu.cgroups = { ...value.cpu.cgroups, [group]: { usageUsec: us(advance.usageS), userUsec: us(advance.usageS), systemUsec: 0 } };
   const reading = structuredClone(value.pressure.default);
   reading.identity = group + ":fixture";
   reading.resources.cpu.some.totalUsec = reading.resources.cpu.full.totalUsec = us(advance.fullS);
   value.pressure.cgroups = { ...value.pressure.cgroups, [group]: reading };
-  writeFileSync(observations + ".advance", JSON.stringify(value) + "\\n");
-  renameSync(observations + ".advance", observations);
+  durableRecord(observations, value, { compact: true });
   console.log("format advanced its observations: " + JSON.stringify(advance));
   if (advance.then === "wait") await release();
 } else if (process.env.NTS_GATE_STEP === "format" && format) {
@@ -398,7 +399,7 @@ test("a task alone in its cgroup and always runnable on one CPU is either runnin
   const cpu = lastGateCpu(), dir = newTestScratch("step-bound-psi");
   t.after(() => { removable(dir); rmSync(dir, { recursive: true, force: true }); });
   assert.ok(cpu !== "4" && cpu !== "5", `the loop's CPU ${cpu} is a measurement CPU`);
-  const host = hostObservations(ownMemory(dir, { cpu: { kind: "live" }, pressure: { kind: "live" }, clock: { kind: "live" } }));
+  const host = hostObservations(ownMemory(dir, { cpu: { kind: "live" }, pressure: { kind: "live" }, clock: { kind: "live" }, resident: { kind: "live" } }));
   const spinner = `nts-test-step-bound-spinner-${randomUUID()}`, looper = `nts-test-step-bound-loop-${randomUUID()}`;
   // Runaway bounds only: nothing in the arm waits on them.
   const start = (unit: string, rank: Priority) => spawnTest("systemd-run", ["--user", `--unit=${unit}`, ...toolingSliceArgs({}, rank), "--collect", "--quiet",
@@ -410,16 +411,15 @@ test("a task alone in its cgroup and always runnable on one CPU is either runnin
     assert.equal(looped.status, 0, looped.stderr);
     const group = spawnTest("systemctl", ["--user", "show", looper, "-p", "ControlGroup", "--value"], { encoding: "utf8" }).stdout.trim();
     assert.match(group, /^\/.+\.service$/, `the loop's unit ${looper} has no cgroup`);
-    const procs = readFileSync(`/sys/fs/cgroup${group}/cgroup.threads`, "utf8").trim().split("\n");
+    const procs = host.cgroupMembers(group), pid = procs[0]!;
     assert.equal(procs.length, 1, `the loop's cgroup ${group} holds only the loop, not ${procs.join(" ")}`);
-    const allowed = /^Cpus_allowed_list:\s*(\S+)$/m.exec(readFileSync(`/proc/${procs[0]}/status`, "utf8"))?.[1];
+    const allowed = inheritedCpus(pid);
     assert.equal(allowed, cpu, `the kernel did not hold the loop to CPU ${cpu} (its cpuset allows ${allowed})`);
     const first = host.cgroupCpuSample(group);
     await new Promise(resolve => setTimeout(resolve, 2000)); // the measured interval
     const at = host.now(), second = host.cgroupCpuSample(group);
-    // /proc/<pid>/stat's 39th field, the CPU it last ran on; fields 3 on follow the command's closing parenthesis.
-    const stat = readFileSync(`/proc/${procs[0]}/stat`, "utf8"), ranOn = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[36];
-    assert.equal(ranOn, cpu, `the loop last ran on CPU ${ranOn}, not its CPU ${cpu}`);
+    const ranOn = readProcessStat(pid)?.processor;
+    assert.equal(String(ranOn), cpu, `the loop last ran on CPU ${ranOn}, not its CPU ${cpu}`);
     const interval = (at - first.atMs) / 1000, ran = (second.cpu.usageUsec - first.cpu.usageUsec) / 1e6;
     const waited = (second.pressure.resources.cpu.full.totalUsec - first.pressure.resources.cpu.full.totalUsec) / 1e6;
     const seen = `on CPU ${cpu}, ${group} ran ${ran.toFixed(3)} s and lost ${waited.toFixed(3)} s to other work (cpu.pressure full) in ${interval.toFixed(3)} s`;
