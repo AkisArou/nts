@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdirSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {testScratch} from './test-scratch.ts';
 import {rustRuntimeInputGraph} from './rust-runtime-inputs.ts';
+import {rustSelectorRoles} from './rust-selector-roles.ts';
 import type {RustRuntimeManifest,RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import type {CargoRuntimeLinkage} from './cargo-inputs.ts';
 
@@ -71,7 +72,21 @@ test('all-target batches preserve composed roles and read changed roots on the n
       assert.deepEqual(row.candidates,expected[index]!.candidates);assert.deepEqual(row.composition,expected[index]!.composition);
       assert.equal(row.composition.readerCount,3);
     }
+    const consume=(row:ReturnType<typeof owner.describe>)=>({target:row.target,roles:rustSelectorRoles(root,row.snapshot,row.byteInputs),candidates:row.candidates,composition:row.composition});
+    const sources=new Map<string,string>();
+    const projected=owner.mapAll(row=>{for(const input of row.sourceInputs)sources.set(input.path,input.sha256);return consume(row);});
+    assert.deepEqual(projected,actual.map(consume),'all roles, target provenance, module candidates and composition agree with the full canonical batch');
+    const expectedSources=new Map(expected.flatMap(row=>row.sourceInputs.map(input=>[input.path,input.sha256] as const)));
+    assert.deepEqual([...sources].sort(),[...expectedSources].sort(),'projection retains every captured source identity');
     owner.assertComplete();
+    const source=join(root,'shared/lib.rs'),before=readFileSync(source,'utf8');let staged=0,published=false;
+    try{
+      assert.throws(()=>{
+        owner.mapAll(row=>{if(++staged===1)writeFileSync(source,before+'\n// concurrent source edit\n');return consume(row);});
+        published=true;
+      },/changed/,'structural source identities are revalidated after the projecting body');
+      assert.ok(staged>0);assert.equal(published,false);
+    }finally{writeFileSync(source,before);}
     put('shared/later.txt','new');put('shared/lib.rs','mod child; mod added;');put('shared/added.rs','');
     // A genuinely new reader still needs a row: the earlier batch is not a
     // source/result cache which could silently keep the old module graph.

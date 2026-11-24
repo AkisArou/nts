@@ -236,9 +236,13 @@ facts once. A compiled-program request also captures the emitter's nearest-confi
 lookups; other project roles keep their declared config semantics. Snapshots
 compose these detached facts under their own reader and namespace context,
 unioning causes and refusing conflicting answers. Composition performs no new
-physical identity capture. Scope-end validation still replays every distinct
-answer and checks project matches, source ownership and populations before
-returning. A later scope constructs fresh Programs and captures fresh identities.
+physical identity capture. Projecting consumers retain their compact roles as
+each target arrives. The batch retains distinct replay answers and authority
+descriptors instead of complete target snapshots. Scope-end validation still
+replays every distinct answer under each authority and checks project matches,
+source ownership and populations before returning any projection. Failed scopes
+release their validation state. Full-snapshot callers retain independent mutable
+results. A later scope constructs fresh Programs and captures fresh identities.
 Only a declared config or generated Program can retain an absent `node_modules`
 on a strict ancestor of the source root as a host-environment observation.
 Its descriptor names the request, config and Program's unresolved imports and
@@ -1840,6 +1844,13 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- Composed Rust selectors project targets inside one validated batch. Only
+  replay answers, authority and metadata facts survive a projection; full
+  snapshots do not. Every fact is revalidated before publication, and a later
+  call starts fresh. Step discovery releases its inference cache before Rust
+  selection; the final detached input graph remains memoized
+  ([log](records/notebooks/decisions-log.md#composed-selectors-project-within-one-validation-boundary-11-23)).
 
 - **A pending whole program still declines at compile time.** Its module
   evaluation cuts and host dependence are checked before its pending answer,

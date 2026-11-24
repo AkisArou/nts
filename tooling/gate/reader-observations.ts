@@ -220,10 +220,13 @@ function nameIn(root:string,path:string):string{
 }
 /** Capability replay stays at the authenticated installed paths. It never
  * maps a package fact into a copied root or substitutes private source bytes. */
+type ReplayObservation=Pick<ReaderObservation,'protocol'|'observation'|'capability'|'environment'|'dependency'>;
+type ReplayProjectMatch=Pick<InputSnapshot['projectMatches'][number],'request'|'files'|'reader'>;
+
 function derivedReaderValidator(source?:string){
   const captures=new Map<string,Capture>();
   const dependencies=new Map<string,ReturnType<typeof projectDependencies>>();
-  return (row:ReaderObservation):boolean=>{
+  return (row:ReplayObservation):boolean=>{
     if(row.dependency){
       const descriptor=row.dependency;
       if(row.protocol!=='project'||descriptor.kind!=='installed-project-dependency'||source!==undefined&&descriptor.source!==resolve(source))throw Error('installed project dependency has no declared source');
@@ -253,33 +256,71 @@ function derivedReaderValidator(source?:string){
     validateHostObservations([row.observation]);return true;
   };
 }
-/** One explicit batch validates every distinct answer before returning any
- * snapshot. Deduplication changes only the number of identical replay reads;
- * conflicting answers refuse, and no fact supplies ownership to another row. */
-export function validateReaderBatchObservations(snapshots:readonly InputSnapshot[],source:string):void{
-  const installed=derivedReaderValidator(),facts=new Map<string,string>();
-  const authorityKeys=new WeakMap<object,string>(),authorities=new Map<string,Set<string>>();
-  for(const snapshot of snapshots)for(const row of snapshot.observations){
-    const key=JSON.stringify([row.observation.kind,row.observation.path]),answer=JSON.stringify(row.observation.value);
-    const previous=facts.get(key);
-    if(previous!==undefined&&previous!==answer)throw Error('reader batch observation changed during discovery: '+row.observation.kind+' '+row.observation.path);
-    // Equal answers share a replay only under equal authority. A different
-    // SDK or Program descriptor must still pass its own provenance check.
-    const authority=row.dependency??row.environment??row.capability;
-    if(authority){
-      let identity=authorityKeys.get(authority);if(identity===undefined){identity=JSON.stringify(authority);authorityKeys.set(authority,identity);}
-      const checked=authorities.get(identity)??new Set<string>(),subject=JSON.stringify([row.protocol,key]);
-      if(!checked.has(subject)){installed(row);checked.add(subject);authorities.set(identity,checked);}
-    }else if(previous===undefined){
-      validateHostObservations([row.observation]);
+/** A batch retains replay answers and authority, not the snapshots or callback
+ * provenance which its consumer has already projected. Answers are compared at
+ * acquisition and replayed only after the complete synchronous body has ended. */
+export function readerBatchValidation(source:string){
+  const facts=new Map<string,{observation:HostObservation;answer:string;ordinary:boolean}>();
+  const authorityKeys=new WeakMap<object,string>();
+  const authorities=new Map<string,{descriptor:Pick<ReplayObservation,'capability'|'environment'|'dependency'>;
+    rows:Map<string,{protocol:ReplayObservation['protocol'];key:string}>}>();
+  const projects=new Map<string,{row:ReplayProjectMatch;answer:string}>();
+  let closed=false;
+  const open=()=>{if(closed)throw Error('reader batch validation is closed');};
+  return {add(snapshot:Pick<InputSnapshot,'observations'|'projectMatches'>):void{
+    open();
+    for(const row of snapshot.observations){
+      const key=JSON.stringify([row.observation.kind,row.observation.path]),answer=JSON.stringify(row.observation.value);
+      const authority=row.dependency??row.environment??row.capability,previous=facts.get(key);
+      if(previous){
+        if(previous.answer!==answer)throw Error('reader batch observation changed during discovery: '+row.observation.kind+' '+row.observation.path);
+        if(!authority)previous.ordinary=true;
+      }else facts.set(key,{observation:row.observation,answer,ordinary:!authority});
+      if(!authority)continue;
+      let identity=authorityKeys.get(authority);
+      if(identity===undefined){identity=JSON.stringify(authority);authorityKeys.set(authority,identity);}
+      let retained=authorities.get(identity);
+      if(!retained){
+        retained={descriptor:structuredClone({...(row.capability?{capability:row.capability}:{}),...(row.environment?{environment:row.environment}:{}),...(row.dependency?{dependency:row.dependency}:{})}),rows:new Map()};
+        authorities.set(identity,retained);
+      }
+      const subject=JSON.stringify([row.protocol,key]);
+      if(!retained.rows.has(subject))retained.rows.set(subject,{protocol:row.protocol,key});
     }
-    facts.set(key,answer);
-  }
-  validateProjectMatches(snapshots.flatMap(snapshot=>snapshot.projectMatches),source);
+    for(const match of snapshot.projectMatches){
+      const key=JSON.stringify(match.request),answer=JSON.stringify(match.files),previous=projects.get(key);
+      if(previous){if(previous.answer!==answer)throw Error('project discovery changed during capture: '+match.request.path);}
+      else projects.set(key,{row:{reader:match.reader,request:structuredClone(match.request),files:[...match.files]},answer});
+    }
+  },validate():void{
+    open();
+    const installed=derivedReaderValidator();
+    for(const [key,fact]of facts){
+      const {kind,path,value}=fact.observation;
+      if(JSON.stringify([kind,path])!==key||JSON.stringify(value)!==fact.answer)
+        throw Error('reader batch observation changed during discovery: '+kind+' '+path);
+      // Read the captured value again only after the body closes, including
+      // accessor-based phase controls, then detach it before any replay.
+      fact.observation={kind,path,value:JSON.parse(fact.answer) as HostObservation['value']};
+    }
+    for(const fact of facts.values())if(fact.ordinary)validateHostObservations([fact.observation]);
+    for(const {descriptor,rows}of authorities.values())for(const {key,protocol}of rows.values())
+      installed({observation:facts.get(key)!.observation,protocol,...descriptor});
+    validateProjectMatches([...projects.values()].map(({row})=>row),source);
+  },close():void{
+    closed=true;facts.clear();authorities.clear();projects.clear();
+  }};
+}
+/** Returning full snapshots remains supported; replay uses the same bounded
+ * transaction as projecting consumers and never borrows another row's authority. */
+export function validateReaderBatchObservations(snapshots:readonly InputSnapshot[],source:string):void{
+  const validation=readerBatchValidation(source);
+  try{for(const snapshot of snapshots)validation.add(snapshot);validation.validate();}
+  finally{validation.close();}
 }
 /** Matching is replayed by the pinned parser; raw acquisition facts above
  * still guard races and grant no cross-tree selection meaning. */
-function validateProjectMatches(matches:InputSnapshot['projectMatches'],source:string):void{
+function validateProjectMatches(matches:readonly ReplayProjectMatch[],source:string):void{
   if(!matches.length)return;
   const owner=projectDiscoveryOwner(source),seen=new Map<string,string>();
   try{for(const match of matches){

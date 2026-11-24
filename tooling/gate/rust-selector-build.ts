@@ -66,8 +66,7 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
     }
   };
   try{
-    const targetOrder=new Map(inventory.map((target,index)=>[target.source,index]));
-    for(const described of owner.describeAll().sort((a,b)=>targetOrder.get(a.target.source)!-targetOrder.get(b.target.source)!)){
+    owner.mapAll(described=>{
       const {snapshot,byteInputs}=described;
       options.composition?.(described.target.source,described.composition);
       for(const source of described.sourceInputs){
@@ -106,7 +105,7 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
         populations.set(JSON.stringify([population.directory,population.member??null]),population);
       }
       targets.push({target:described.target,roles:rustSelectorRoles(root,snapshot,byteInputs)});
-    }
+    });
     owner.assertComplete();
   }finally{owner.close();}
   const capturedFiles=[...files].sort().map(path=>selectorFile(roots,join(root,path)));

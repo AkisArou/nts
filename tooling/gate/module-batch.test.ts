@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdirSync,readdirSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {chmodSync,mkdirSync,readFileSync,readdirSync,statSync,writeFileSync} from 'node:fs';
+import {dirname,join} from 'node:path';
+import {queryObjects} from 'node:v8';
 import {pathToFileURL} from 'node:url';
 import {testScratch} from './test-scratch.ts';
-import {moduleGraph,type ModuleDescriptionRequest,type ByteInputDeclaration} from './module-closure.ts';
+import {moduleGraph,type ModuleDescriptionRequest,type ByteInputDeclaration,type ReaderObservation} from './module-closure.ts';
 import {fixtureInput,type ModuleDeclarations} from './reader-inputs/main.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {createRequire} from 'node:module';
+import {rustSelectorRoles} from './rust-selector-roles.ts';
+import {readerBatchValidation} from './reader-observations.ts';
+import {captureToolchain,toolchainDescriptor} from '../differential/oracle-toolchain.ts';
+import {readHostObservation} from '../differential/oracle-filesystem.ts';
+import {selectorInstalledSdk} from './rust-selector-inputs.ts';
 
 test('Program identity capture belongs to its transaction, independently of reader and target count',t=>{
   const root=testScratch(t,'module-batch-capture-count');
@@ -143,6 +149,15 @@ test('generated batch discoveries key the full recipe and namespace and retain p
     assert.equal(results[2]!.snapshot.observations[0]!.context.entry,'reader.rs');
     assert.deepEqual(readdirSync(parent),[],'every generated transaction is closed');
     const next=roots(owner.describeBatch(requests));assert.notEqual(next[0],paths[0],'no discovery survives a call');
+    const projected=owner.mapDescriptions(requests,({snapshot,byteInputs})=>({
+      root:roots([{snapshot,byteInputs}])[0]!,roles:rustSelectorRoles(root,snapshot,byteInputs)}));
+    assert.equal(projected[0]!.root,projected[1]!.root);
+    assert.notEqual(projected[0]!.root,projected[2]!.root,'projected fixture and production contexts never alias');
+    assert.notEqual(projected[0]!.root,projected[3]!.root,'projected recipes never alias');
+    assert.notEqual(projected[0]!.root,paths[0],'projection has a fresh transaction');
+    assert.deepEqual(projected.map(row=>row.roles),results.map(({snapshot,byteInputs})=>rustSelectorRoles(root,snapshot,byteInputs)));
+    assert.deepEqual(readdirSync(parent),[]);
+
   }finally{owner.close();}
 });
 
@@ -324,4 +339,131 @@ test('caller row-list processing cannot hide a later input change from the scope
     }),/changed/);
     assert.ok(graph.withDescriptions(describe=>describe(['reader.rs'])).files.includes('main.ts'));
   }finally{graph.close();}
+});
+
+
+test('projecting batches retain only the current full snapshot and preserve every consumed role',t=>{
+  const root=testScratch(t,'module-projection-lifetime');
+  writeFileSync(join(root,'main.ts'),'export const value=1;');
+  writeFileSync(join(root,'tsconfig.json'),'{"compilerOptions":{"types":[],"noLib":true},"files":["main.ts"]}');
+  const declarations=new Map<string,ModuleDeclarations>();
+  const requests=Array.from({length:8},(_,index)=>{
+    const reader='reader-'+index+'.rs';writeFileSync(join(root,reader),'');
+    declarations.set(reader,{imports:[],assets:[{kind:'project-config',role:'compiled-program',path:'./tsconfig.json'}]});
+    return {entries:[reader]};
+  });
+  class RetainedObservation {}
+  const graph=moduleGraph({sourceRoot:root,declarations});
+  try{
+    const expected=graph.describeBatch(requests).map(({snapshot,byteInputs})=>rustSelectorRoles(root,snapshot,byteInputs));
+    const actual=graph.mapDescriptions(requests,({snapshot,byteInputs})=>{
+      assert.ok(snapshot.observations.length);
+      Object.setPrototypeOf(snapshot.observations[0]!,RetainedObservation.prototype);
+      assert.equal(queryObjects(RetainedObservation,{format:'count'}),1,'a projecting batch retains only its current complete snapshot');
+      return rustSelectorRoles(root,snapshot,byteInputs);
+    });
+    assert.deepEqual(actual,expected,'every selector-consumed role and its reader/context provenance matches the canonical visitor');
+    assert.equal(queryObjects(RetainedObservation,{format:'count'}),0,'the completed transaction retains no full snapshot');
+    const before=structuredClone(actual[1]);actual[0]!.files.push('mutated');assert.deepEqual(actual[1],before,'projected targets remain independently mutable');
+  }finally{graph.close();}
+});
+
+test('projecting batches refuse source, package, membership and negative changes before publishing',t=>{
+  for(const change of ['source','package','membership','negative'] as const){
+    const root=testScratch(t,'module-projection-race-'+change);mkdirSync(join(root,'src'));
+    const put=(name:string,body:string)=>writeFileSync(join(root,name),body);
+    put('package.json','{"name":"self","type":"module","exports":{".":"./first.ts"}}');
+    put('first.ts','export const value=1;');put('second.ts','export const value=2;');
+    put('entry.ts',"import './src/missing.js';import {value} from 'self';export {value};");
+    put('tsconfig.json','{"compilerOptions":{"module":"nodenext","moduleResolution":"nodenext","types":[],"noLib":true},"include":["*.ts"]}');
+    put('reader.rs','');
+    const declarations=new Map<string,ModuleDeclarations>([['reader.rs',{imports:[],assets:[{kind:'project-config',role:'compiled-program',path:'./tsconfig.json'}]}]]);
+    const graph=moduleGraph({sourceRoot:root,declarations});let published=false,visited=0;
+    try{
+      assert.throws(()=>{
+        graph.mapDescriptions([{entries:['reader.rs']},{entries:['reader.rs']}],({snapshot,byteInputs},index)=>{
+          visited++;
+          if(index===0){
+            if(change==='source')put('entry.ts','export const changed=2;');
+            if(change==='package')put('package.json','{"name":"self","type":"module","exports":{".":"./second.ts"}}');
+            if(change==='membership')put('appeared.ts','export {};');
+            if(change==='negative'){
+              assert.ok(snapshot.observations.some(row=>row.observation.kind==='fileExists'&&row.observation.path===join(root,'src/missing.ts')&&row.observation.value===false));
+              put('src/missing.ts','export {};');
+            }
+          }
+          return rustSelectorRoles(root,snapshot,byteInputs);
+        });
+        published=true;
+      },/changed/,change);
+      assert.ok(visited>0);assert.equal(published,false,'a projection has no authority before the whole scope validates');
+      const fresh=graph.mapDescriptions([{entries:['reader.rs']}],row=>row.snapshot.moduleFiles);
+      if(change==='negative')assert.ok(fresh[0]!.includes('src/missing.ts'));
+      if(change==='membership')assert.ok(fresh[0]!.includes('appeared.ts'));
+    }finally{graph.close();}
+  }
+});
+
+test('batch replay refuses a private SDK edit before publication',t=>{
+  const root=testScratch(t,'module-projection-sdk'),installed=selectorInstalledSdk();
+  const sdk=join(root,'node_modules/typescript'),native=join(root,'node_modules',installed.nativePackage);
+  for(const [destination,source,files]of [[sdk,installed.root,installed.files],[native,installed.nativeRoot,installed.nativeFiles]] as const)
+    for(const [path,bytes]of files){const file=join(destination,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,bytes);chmodSync(file,statSync(join(source,path)).mode&0o777);}
+  const captured=captureToolchain(sdk),file=join(sdk,'package.json');
+  const row:ReaderObservation={reader:'reader.rs',protocol:'project',context:{entry:'<entry>',dataNamespaces:{}},
+    observation:{kind:'file',path:file,value:readHostObservation('file',file)},capability:toolchainDescriptor(captured),causes:[]};
+  const validation=readerBatchValidation(root);let published=false;
+  try{
+    validation.add({observations:[row],projectMatches:[]});validation.validate();
+    const foreign=readerBatchValidation(root);
+    try{
+      foreign.add({observations:[row,{...row,capability:{...toolchainDescriptor(captured),root:join(root,'absent-sdk')}}],projectMatches:[]});
+      assert.throws(()=>foreign.validate(),/absent-sdk|package\.json/,'equal answers never borrow a different authority');
+    }finally{foreign.close();}
+    writeFileSync(file,readFileSync(file,'utf8')+' ');
+    assert.throws(()=>{validation.validate();published=true;},/TypeScript root package hash mismatch/);
+    assert.equal(published,false);
+  }finally{validation.close();}
+  assert.throws(()=>validation.add({observations:[row],projectMatches:[]}),/closed/);
+});
+
+test('projection, validation and close failures release every parser, Program and generated owner',t=>{
+  const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
+  type Api=import('typescript/sync').API;
+  const acquired=new Set<Api>(),closed=new Map<Api,number>();let injectCloseFailure=false,closeFailed=false;
+  for(const method of ['createSourceFile','parseConfigFile'] as const){
+    const getter=Object.getOwnPropertyDescriptor(API.prototype,method)!.get!;
+    t.mock.getter(API.prototype,method,function(this:Api){acquired.add(this);return getter.call(this);});
+  }
+  const acquireClose=Object.getOwnPropertyDescriptor(API.prototype,'close')!.get!;
+  t.mock.getter(API.prototype,'close',function(this:Api){
+    const native=acquireClose.call(this) as Api['close'];
+    const counted=Object.assign(()=>{
+      closed.set(this,(closed.get(this)??0)+1);native();
+      if(injectCloseFailure&&!closeFailed){closeFailed=true;throw Error('supplied SDK close failure');}
+    },native);
+    Object.defineProperty(this,'close',{value:counted,configurable:true});return counted;
+  });
+  for(const failure of ['projection','validation','close'] as const){
+    const root=testScratch(t,'module-projection-cleanup-'+failure),parent=testScratch(t,'module-projection-generated-'+failure);
+    mkdirSync(join(root,'case'));writeFileSync(join(root,'case/main.ts'),'export {};');writeFileSync(join(root,'host.ts'),'export {};');
+    writeFileSync(join(root,'base.json'),'{"compilerOptions":{"types":[],"noLib":true}}');writeFileSync(join(root,'reader.rs'),'');
+    const declarations=new Map<string,ModuleDeclarations>([['reader.rs',{imports:[],assets:[{kind:'generated-project',role:'compiled-program',path:'./base.json',directory:'./case/',include:'directory'}]}]]);
+    const graph=moduleGraph({sourceRoot:root,declarations,generatedTemporaryParent:parent});
+    const run=()=>graph.mapDescriptions([{entries:['reader.rs','host.ts']}],({snapshot,byteInputs})=>{
+      if(failure==='projection')throw Error('supplied projection failure');
+      if(failure==='validation')writeFileSync(join(root,'case/main.ts'),'export const changed=1;');
+      return rustSelectorRoles(root,snapshot,byteInputs);
+    });
+    try{
+      if(failure==='close')run();else assert.throws(run,failure==='projection'?/supplied projection failure/:/changed/);
+      assert.deepEqual(readdirSync(parent),[],'generated private contexts drain even when projection or validation refuses');
+    }finally{
+      injectCloseFailure=failure==='close';
+      if(injectCloseFailure)assert.throws(()=>graph.close(),/module graph cleanup failed/);else graph.close();
+      graph.close();injectCloseFailure=false;
+    }
+  }
+  assert.ok(acquired.size>=6);assert.ok(closeFailed);
+  for(const owner of acquired)assert.equal(closed.get(owner),1,'each acquired native owner closes once on every exceptional path');
 });

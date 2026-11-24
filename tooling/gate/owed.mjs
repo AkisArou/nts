@@ -1782,7 +1782,7 @@ function stepInputGraph(options) {
     /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'|'projectMatches'>}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
-    try {return modules.withDescriptions(describe=>{for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
+    try {return modules.withDescriptions(describe=>{try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1], rawCommand = m[2];
       if(!step||rawCommand===undefined)throw new Error("canonical gate step has no name or command");
       const command = rawCommand.trim();
@@ -1890,6 +1890,9 @@ function stepInputGraph(options) {
         queue.push(...references.named, ...references.other);
       }
     }
+    // Reuse ends with the step loop. Detached facts belong to the final
+    // graph; Rust selection has no further use for inference snapshots.
+    }finally{inferred.clear();}
     // Cargo routes consume the same canonical graph roles as post-run
     // validation. Accepted records replace only their expensive discovery.
     const catalogue=new Set(allSteps());

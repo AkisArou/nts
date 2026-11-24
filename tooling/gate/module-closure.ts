@@ -17,7 +17,7 @@ import {projectRole,executableModuleSource,fixtureNamespaces,moduleMemberName,pr
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
-import {captureReaderObservations,projectObservationCapture,validateReaderBatchObservations} from './reader-observations.ts';
+import {captureReaderObservations,projectObservationCapture,readerBatchValidation} from './reader-observations.ts';
 import type {ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
 import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
@@ -544,13 +544,24 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       return result;
     };
     let active=true;
-    const snapshots:InputSnapshot[]=[];
+    const validation=readerBatchValidation(root);
+    const optionalFiles=new Map<string,boolean>(),memberships=new Map<string,MembershipDeclaration['entries']>();
     const scoped:typeof describe=(entries,reportDirectory=options.directory,reportByteInput=options.byteInput,buildModules)=>{
       if(!active)throw Error('module graph description scope is closed');
       const snapshot=describeUsing(entries,reportDirectory,reportByteInput,buildModules,batchRead);
-      // Retain independent row lists without duplicating the large facts.
-      snapshots.push({...snapshot,observations:[...snapshot.observations],
-        optionalFiles:[...snapshot.optionalFiles],memberships:[...snapshot.memberships]});
+      // Consumers can project and release this complete snapshot immediately.
+      // The fence owns only distinct replay answers, never its target payload.
+      validation.add(snapshot);
+      for(const row of snapshot.optionalFiles){
+        if(optionalFiles.has(row.path)&&optionalFiles.get(row.path)!==row.present)
+          throw Error('reader batch optional file changed: '+row.path);
+        optionalFiles.set(row.path,row.present);
+      }
+      for(const row of snapshot.memberships){
+        const previous=memberships.get(row.directory);
+        if(previous&&JSON.stringify(previous)!==JSON.stringify(row.entries))throw Error('reader batch membership changed: '+row.directory);
+        if(!previous)memberships.set(row.directory,row.entries.map(entry=>({...entry})));
+      }
       return snapshot;
     };
     try{
@@ -559,20 +570,18 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(result!==null&&(typeof result==='object'||typeof result==='function')&&'then' in result&&typeof result.then==='function')
         throw Error('module graph description scope requires a synchronous body');
       const validate=()=>{
-        validateReaderBatchObservations(snapshots,root);
-        for(const snapshot of snapshots){
-          for(const row of snapshot.optionalFiles){
-            const path=resolve(root,row.path);metadataParents(root,path,'reader batch optional file');
-            let stat:ReturnType<typeof lstatSync>|undefined;
-            try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-            if(stat&&(!stat.isFile()||stat.isSymbolicLink())||!!stat!==row.present)throw Error('reader batch optional file changed: '+row.path);
-          }
-          for(const row of snapshot.memberships){
-            const path=resolve(root,row.directory);metadataParents(root,path,'reader batch membership');
-            const stat=lstatSync(path);
-            if(!stat.isDirectory()||stat.isSymbolicLink()||JSON.stringify(directoryEntries(path))!==JSON.stringify(row.entries))
-              throw Error('reader batch membership changed: '+row.directory);
-          }
+        validation.validate();
+        for(const [name,present]of optionalFiles){
+          const path=resolve(root,name);metadataParents(root,path,'reader batch optional file');
+          let stat:ReturnType<typeof lstatSync>|undefined;
+          try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+          if(stat&&(!stat.isFile()||stat.isSymbolicLink())||!!stat!==present)throw Error('reader batch optional file changed: '+name);
+        }
+        for(const [directory,entries]of memberships){
+          const path=resolve(root,directory);metadataParents(root,path,'reader batch membership');
+          const stat=lstatSync(path);
+          if(!stat.isDirectory()||stat.isSymbolicLink()||JSON.stringify(directoryEntries(path))!==JSON.stringify(entries))
+            throw Error('reader batch membership changed: '+directory);
         }
         for(const [path,sha256]of sourceInputs)if(createHash('sha256').update(readFileSync(resolve(root,path))).digest('hex')!==sha256)
           throw Error('reader batch source changed after parse: '+path);
@@ -582,17 +591,25 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       };
       validate();
       return result;
-    }finally{active=false;discoveries.clear();batching=false;}
+    }finally{active=false;validation.close();optionalFiles.clear();memberships.clear();discoveries.clear();batching=false;}
   }
   function describeBatch(requests:readonly ModuleDescriptionRequest[]):ModuleDescription[]{
-    return withDescriptions(describe=>requests.map(request=>{
+    return mapDescriptions(requests,description=>description);
+  }
+  /** Project inside the transaction, retaining only the callback's result.
+   * No result returns to the caller until every captured answer is replayed. */
+  function mapDescriptions<T>(requests:readonly ModuleDescriptionRequest[],project:(description:ModuleDescription,index:number)=>T):T[]{
+    return withDescriptions(describe=>requests.map((request,index)=>{
       const byteInputs:ByteInputDeclaration[]=[];
       const snapshot=describe(request.entries,()=>{},row=>byteInputs.push({...row}),request.buildModules);
-      return {snapshot,byteInputs};
+      const result=project({snapshot,byteInputs},index);
+      if(result!==null&&(typeof result==='object'||typeof result==='function')&&'then' in result&&typeof result.then==='function')
+        throw Error('module graph projection requires a synchronous callback');
+      return result;
     }));
   }
   const nameInRoot=(path:string)=>relative(root,path).split(sep).join('/');
-  return {describe,describeBatch,withDescriptions,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,
+  return {describe,describeBatch,mapDescriptions,withDescriptions,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,
     sourceInputs:()=>{if(closed)throw Error('module graph is closed');return [...sourceInputs].map(([path,sha256])=>({path,sha256}));},
     membershipIndex:()=>{if(closed)throw Error('module graph is closed');return metadataIndex??=membershipIndex(sourceFiles());},close:()=>{
       if(batching)throw Error('module graph cannot close an active batch');

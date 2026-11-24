@@ -10,9 +10,9 @@ import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 export function liveRustSelectorTargets(options:{sourceRoot:string;manifest:RustRuntimeManifest;inventory:readonly RustRuntimeTarget[];linkage?:CargoRuntimeLinkage;dependencyCatalog?:DependencyCatalogTrust|null}):RustSelectorTarget[]{
   const owner=rustRuntimeInputGraph({...options,nodeMajor:26}),targets:RustSelectorTarget[]=[];
   try{
-    for(const {target,snapshot,byteInputs}of owner.describeAll()){
+    owner.mapAll(({target,snapshot,byteInputs})=>{
       targets.push({target:structuredClone(target),roles:rustSelectorRoles(options.sourceRoot,snapshot,byteInputs)});
-    }
+    });
     owner.assertComplete();return targets;
   }finally{owner.close();}
 }

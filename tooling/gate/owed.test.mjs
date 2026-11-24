@@ -8,6 +8,7 @@ import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // where it matters, must not): a mapping that loses one owes too little
 // silently, which is the failure owed.mjs exists to prevent.
 import { test } from "node:test";
+import {queryObjects} from "node:v8";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -25,8 +26,49 @@ import {testScratch} from './test-scratch.ts';
 import {rustSelectorTrust} from './rust-selector-selection.ts';
 import {readDependencyCatalog} from '../inputs/dependency-catalog.ts';
 
-test('the real selector self-test preserves ordinary order with an explicit missing-catalog fallback',()=>{
-  assert.equal(selfTest({acceptedRustRecordBlob:null,dependencyCatalog:null}),null);
+test('the real selector self-test preserves ordinary order with an explicit missing-catalog fallback',t=>{
+  class InferenceSnapshot {}
+  /** @type {WeakRef<Map<unknown,unknown>>|undefined} */
+  let inference;
+  let snapshots=0,phaseSeen=false,refuse=false;
+  const set=Map.prototype.set,error=console.error;
+  // Observe the actual inference cache, rather than a second fixture cache.
+  // Its metadata is a complete snapshot; the final memo stores detached facts.
+  // MockTracker retains call arguments, including the snapshots being measured.
+  // This plain wrapper owns no call history and is restored even on failure.
+  t.after(()=>{Map.prototype.set=set;});
+  Map.prototype.set=function(key,value){
+    const result=set.call(this,key,value),snapshot=value?.metadata;
+    if(snapshot&&Array.isArray(snapshot.observations)&&Array.isArray(snapshot.moduleFiles)){
+      inference=new WeakRef(this);
+      if(snapshots===0||refuse)Object.setPrototypeOf(snapshot,InferenceSnapshot.prototype);
+      snapshots++;
+      if(refuse)throw Error('inference lifetime injected discovery failure');
+    }
+    return result;
+  };
+  t.mock.method(console,'error',
+    /** @param {...unknown} args */
+    (...args)=>{
+    if(typeof args[0]==='string'&&args[0].startsWith('Rust selector ')){
+      assert.ok(inference,'the ordinary step-discovery cache was exercised');
+      assert.equal(queryObjects(InferenceSnapshot),0,'the first completed inference snapshot is released before the Rust phase');
+      assert.equal(inference.deref()?.size??0,0,'step inference is empty before Rust selection/projection');
+      phaseSeen=true;
+    }
+    error(...args);
+  });
+  const trust={acceptedRustRecordBlob:null,dependencyCatalog:null};
+  assert.equal(selfTest(trust),null);
+  assert.ok(phaseSeen);assert.ok(snapshots>0);
+  const inputs=stepInputs(trust),captured=snapshots;
+  assert.equal(selfTest(trust),null);
+  assert.equal(stepInputs(trust),inputs,'a later call reuses the same memoized final graph');
+  assert.equal(snapshots,captured,'clearing transaction state causes no later recomputation');
+  refuse=true;
+  assert.throws(()=>stepInputs({acceptedRustRecordBlob:'0'.repeat(40),dependencyCatalog:null}),/inference lifetime injected discovery failure/);
+  assert.equal(inference?.deref()?.size??0,0,'an exceptional discovery also clears its inference cache');
+  assert.equal(queryObjects(InferenceSnapshot),0,'exceptional discovery releases completed snapshots');
 });
 
 test('the current-catalog selector self-test rejects lost LLVM benches reach',()=>{

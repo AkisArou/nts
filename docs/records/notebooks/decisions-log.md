@@ -4537,3 +4537,66 @@ published surface. The measurements are in
 
 The contract is in [native](../../targets/native.md#decisions) and
 [node-addon](../../targets/node-addon.md#decisions).
+
+## A step's bound spends no CPU that other work takes (11-24)
+
+Approved by the coordinator for #889. A gate step's execution bound counted
+every second outside the runner's declared admission waits. A full-check step
+runs at CPU weight 10, so when outranked it spent its bound while it barely
+ran. The runner now samples the step slice's `cpu.stat` and `cpu.pressure`
+`full` on the bound's 500 ms tick and at the step's end. `ProgressBound`
+divides the undeclared time between two samples at the second one. Lost CPU
+spends nothing, and declared waits stay exact.
+
+`full` was chosen over `some` by measurement: a self-oversubscribed step had
+58% of its time excused under `some` and 15% under `full`. The excuse is a stated
+lower bound: the kernel averages a cgroup's stall over the CPUs it was busy
+on, so a step spread over several CPUs has roughly a third to a half of its
+real loss still counted. It is not scaled by any estimate. The full check's
+run bound keeps `some` and under-counts in the same, safe direction. A CPU
+bound of the bound times the step's width backs the execution bound, and the
+bound has no separate stall limit. The measurements and controls are in
+[step-bound-lost-cpu-889](../step-bound-lost-cpu-889.md).
+
+The contract is in [the workflow](../../workflow.md#decisions).
+
+## Composed selectors project within one validation boundary (11-23)
+
+Approved by the coordinator for #857 and #780. A composed Rust selector consumes
+each target's complete snapshot into its existing compact roles before visiting
+the next target. Its batch owns only the distinct observation answers, authority
+descriptors, project matches and physical membership facts required for final
+replay. Callback causes and complete target snapshots do not survive solely for
+validation. Every captured answer is revalidated before any result is published;
+failed scopes release their validation state. Full-snapshot APIs keep their
+independent return values and later calls construct fresh transactions.
+
+The role/provenance, mutation, private generated-context, native-owner cleanup and
+snapshot-lifetime controls guard the boundary. The measurements and the retained
+#761 evidence are in [the record](../857-tooling-retention.md).
+
+The contract is in [workflow](../../workflow.md#landing-the-landing-check).
+
+## Step inference ends before Rust selection (11-24)
+
+Approved by the coordinator for #857. The step-discovery loop alone reuses
+its per-module inference snapshots. It clears that cache on success and failure
+before entering Rust selection, after every step has consumed its facts. The
+final detached graph and its memoized identity remain; a later selector call
+reuses that graph without repeating discovery. The lifetime control observes
+the actual cache, before the Rust phase, and releases its first completed
+snapshot and any failed discovery's snapshot.
+
+The contract is in [workflow](../../workflow.md#decisions), with measured
+retainers and the committed-source counterfactual in [the record](../857-tooling-retention.md).
+
+## Keep parser residency until the owner can avoid repeated parsing (11-24)
+
+The coordinator dropped #857's experimental parser retirement when its stop
+rule found 223 parser starts and 168 one-source sessions in a partial heavy
+entry. The batch and inference lifetime fixes remain. About 770 MB of idle
+parser residency is recorded as a remaining holder; #1003 owns its removal
+through existing Program ASTs or a measured reuse design, with facts equality
+and bounded starts. No native retirement is part of #857.
+
+The evidence is in [the record](../857-tooling-retention.md).

@@ -46,15 +46,15 @@ export function rustRuntimeInputGraph(options:{sourceRoot:string;manifest:RustRu
       if(file.endsWith('.rs')&&!declarations.has(file))throw Error('Rust runtime inputs: traversed Rust reader has no declaration: '+file);
       entered.add(file);
     }
-    described.add(target.source);return {target:structuredClone(target),snapshot,byteInputs,candidates:structuredClone(buildModules.candidates),sourceInputs:[...structuredClone(buildModules.sources),...graph.sourceInputs()],
+    described.add(target.source);return {target:structuredClone(target),snapshot,byteInputs,candidates:structuredClone(buildModules.candidates),
+      // Progressive capture evidence, not this target's source closure: graph
+      // reads include earlier targets and omit targets not visited yet. Only
+      // the union over the complete batch describes its graph-wide inputs.
+      sourceInputs:[...structuredClone(buildModules.sources),...graph.sourceInputs()],
       composition:{roots:roots.map(row=>({...structuredClone(row),readerCount:counts.get(row.target.source)!})),readerCount:files.size,
         structuralPolicy:'including-cfg-test' as const}};
   }
-  return {graph,describe(source:string,directory?:ModuleClosureOptions['directory'],byteInput?:ModuleClosureOptions['byteInput']){
-    const prepared=prepare(source,buildRoot),byteInputs:ModuleDescription['byteInputs']=[];
-    const snapshot=graph.describe(prepared.sources,directory,row=>{byteInputs.push({...row});byteInput?.(row);},prepared.buildModules);
-    return finish(prepared,{snapshot,byteInputs});
-  },describeAll(){
+  function mapAll<T>(project:(description:ReturnType<typeof finish>)=>T):T[]{
     // Unique Cargo roots are described once within this explicit call. Per-
     // target canonical visitors still retain their own context and provenance.
     const builds=new Map<string,BuildModuleInputs>();
@@ -62,11 +62,17 @@ export function rustRuntimeInputGraph(options:{sourceRoot:string;manifest:RustRu
       const prepared=[...targets.keys()].map(source=>prepare(source,entry=>{
         let build=builds.get(entry);if(!build){build=buildRoot(entry);builds.set(entry,build);}return build;
       }));
-      const results=graph.describeBatch(prepared.map(row=>({entries:row.sources,buildModules:row.buildModules})));
+      const results=graph.mapDescriptions(prepared.map(row=>({entries:row.sources,buildModules:row.buildModules})),
+        (result,index)=>project(finish(prepared[index]!,result)));
       for(const build of builds.values())validateRustBuildModules(options.sourceRoot,build);
-      return prepared.map((row,index)=>finish(row,results[index]!));
+      return results;
     }finally{builds.clear();}
-  },assertComplete(){
+  }
+  return {graph,describe(source:string,directory?:ModuleClosureOptions['directory'],byteInput?:ModuleClosureOptions['byteInput']){
+    const prepared=prepare(source,buildRoot),byteInputs:ModuleDescription['byteInputs']=[];
+    const snapshot=graph.describe(prepared.sources,directory,row=>{byteInputs.push({...row});byteInput?.(row);},prepared.buildModules);
+    return finish(prepared,{snapshot,byteInputs});
+  },describeAll:()=>mapAll(description=>description),mapAll,assertComplete(){
     for(const source of targets.keys())if(!described.has(source))throw Error('Rust runtime inputs: Cargo target was not described: '+source);
     for(const row of options.manifest.readers??[])if(!entered.has(row.source))throw Error('Rust runtime inputs: shared reader has no traversed Cargo owner: '+row.source);
   },close:()=>graph.close()};
