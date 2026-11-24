@@ -357,7 +357,7 @@ impl Fresh {
     ) {
         let aliases = &inputs.aliases;
         self.before(value, inputs);
-        self.foreign_cleanup |= inputs.foreign(value);
+        self.foreign_cleanup |= inputs.after(value);
         let cleanup = inputs.cleanup(value) && !self.initializing(func, kind);
         // A call that only initializes leaves its argument as fresh as it
         // arrived. See `initializing_only`.

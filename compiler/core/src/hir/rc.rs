@@ -2718,7 +2718,11 @@ mod tests {
         insert(&mut program).expect("complete RC analysis");
         let func = &program.funcs[0];
         let ops = &func.blocks[0].ops;
-        let at = |id| ops.iter().position(|value| *value == ValueId(id)).unwrap();
+        let at = |id| {
+            ops.iter()
+                .position(|value| *value == ValueId(id))
+                .expect("the source operation remains after RC insertion")
+        };
         assert!(
             ops[at(3) + 1..at(5)]
                 .iter()
@@ -2805,7 +2809,10 @@ mod tests {
         insert(&mut program).expect("complete RC analysis");
         let clear = &program.funcs[0];
         let ops = &clear.blocks[0].ops;
-        let store = ops.iter().position(|id| *id == ValueId(3)).unwrap();
+        let store = ops
+            .iter()
+            .position(|id| *id == ValueId(3))
+            .expect("clear's null store remains after RC insertion");
         assert!(
             ops[if foreign { store + 1 } else { 0 }..]
                 .iter()

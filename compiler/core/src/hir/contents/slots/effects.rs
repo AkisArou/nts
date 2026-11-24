@@ -14,7 +14,6 @@ struct Counts {
     before: bool,
     after: bool,
     cleanup: bool,
-    foreign: bool,
 }
 
 impl Inputs {
@@ -34,7 +33,6 @@ impl Inputs {
                     before: retain || operands,
                     after: foreign || operands,
                     cleanup,
-                    foreign,
                 }
             })
             .collect();
@@ -52,10 +50,6 @@ impl Inputs {
         self.counts[value.0 as usize].after
     }
 
-    pub(super) fn foreign(&self, value: ValueId) -> bool {
-        self.counts[value.0 as usize].foreign
-    }
-
     pub(in crate::hir) fn cleanup(&self, value: ValueId) -> bool {
         self.counts[value.0 as usize].cleanup
     }
@@ -69,11 +63,10 @@ impl Inputs {
 
 fn foreign(ty: &HirType) -> bool {
     match ty {
-        HirType::Erased => true,
         HirType::PossiblyUndefined(payload) => foreign(payload),
         // An uncounted pointer view can keep a foreign-counted owner alive.
         // Its eventual cleanup is not represented by the view's own type.
-        HirType::NativePointer(_) => true,
+        HirType::Erased | HirType::NativePointer(_) => true,
         _ => false,
     }
 }
