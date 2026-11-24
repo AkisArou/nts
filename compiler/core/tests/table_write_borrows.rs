@@ -128,8 +128,8 @@ fn a_table_write_borrows_a_key_whose_slot_nothing_overwrites() {
     }
 }
 
-/// Whether, in the block that calls `helper`, the holder read out of a table
-/// (`unerase(nts_map_get(..))`) is released only after the call.
+/// Whether the holder read out of a table (`unerase(nts_map_get(..))`) is
+/// released, and not before `helper` in the block that calls it.
 fn holder_outlives(func: &Func, helper: &str) -> bool {
     let holder = |value: ValueId| {
         matches!(func.value(value).kind, OpKind::Unerase { value: read, .. }
@@ -146,10 +146,15 @@ fn holder_outlives(func: &Func, helper: &str) -> bool {
         let before = block.ops[..at]
             .iter()
             .any(|id| matches!(func.value(*id).kind, OpKind::Release(value) if holder(value)));
-        let after = block.ops[at..]
+        // Released at all, and after the write: in its block or a later one,
+        // since the write's block is where the holder was read and nothing
+        // released it there first.
+        let released = func
+            .blocks
             .iter()
+            .flat_map(|block| &block.ops)
             .any(|id| matches!(func.value(*id).kind, OpKind::Release(value) if holder(value)));
-        !before && after
+        !before && released
     })
 }
 
