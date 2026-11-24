@@ -436,6 +436,7 @@ export default defineConfig({
 /// Both collision arms agree with node; libc and host-owned names still answer.
 #[test]
 fn static_library_exports_use_the_product_prefix() {
+    use std::fmt::Write as _;
     if !cfg!(all(target_os = "linux", target_env = "gnu")) || !available() {
         skip("Linux with glibc, node, clang and nm");
         return;
@@ -448,7 +449,7 @@ fn static_library_exports_use_the_product_prefix() {
                 if explicit { "explicit" } else { "default" }
             );
             let prefix = if explicit { "prefix: 'chosen'," } else { "" };
-            products.push_str(&format!("{name}: library.staticNative({{ {prefix} entry:'./src/main.ts', targets:[target.linux({{backend:'{backend}'}})] }}),\n"));
+            writeln!(products, "{name}: library.staticNative({{ {prefix} entry:'./src/main.ts', targets:[target.linux({{backend:'{backend}'}})] }}),").expect("product config");
         }
     }
     let project = fixture(

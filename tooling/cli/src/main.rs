@@ -9319,6 +9319,28 @@ struct Emission<'a> {
 }
 
 impl Emission<'_> {
+    /// Only a static product selects a source namespace. Bare emissions and
+    /// other products keep the ABI their consumers already use.
+    fn source_symbols<'p>(
+        &self,
+        program: &'p hir::Program,
+    ) -> Result<nts_codegen_common::source_symbols::SourceSymbols<'p>> {
+        match self.product {
+            Some((name, product)) if product.kind == "static-library" => {
+                nts_codegen_common::source_symbols::SourceSymbols::for_product(
+                    program,
+                    name,
+                    product.prefix.as_deref(),
+                )
+                .map_err(anyhow::Error::msg)
+                .with_context(|| format!("product `{name}`"))
+            }
+            _ => Ok(nts_codegen_common::source_symbols::SourceSymbols::new(
+                program,
+            )),
+        }
+    }
+
     /// The C data models the program is checked against: a value stored into
     /// a written scalar kind must fit it on every one (`docs/records/notebooks/scalar-numbers.md`,
     /// S6). The product's targets, all of them -- each target's build checks
@@ -9910,18 +9932,7 @@ fn emit_c_prepared(
     };
     let program = prepared.program;
 
-    let symbols = std::rc::Rc::new(match emission.product {
-        Some((name, product)) if product.kind == "static-library" => {
-            nts_codegen_common::source_symbols::SourceSymbols::for_product(
-                &program,
-                name,
-                product.prefix.as_deref(),
-            )
-            .map_err(anyhow::Error::msg)
-            .with_context(|| format!("product `{name}`"))?
-        }
-        _ => nts_codegen_common::source_symbols::SourceSymbols::new(&program),
-    });
+    let symbols = std::rc::Rc::new(emission.source_symbols(&program)?);
     let plan = nts_codegen_c::EntryAbi::with_source_symbols(&program, std::rc::Rc::clone(&symbols));
     let emitted = nts_codegen_c::emit_planned(&plan, emission.abi);
     for diagnostic in &emitted.diagnostics {
