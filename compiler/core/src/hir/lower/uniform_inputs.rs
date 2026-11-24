@@ -661,12 +661,24 @@ impl FuncBuilder<'_> {
         } else {
             self.require_uniform_comparison((BinOp::Eq, number, number), names, origin);
         }
-        for (op, bound) in [(BinOp::Ge, known.lo), (BinOp::Le, known.hi)] {
-            if bound.is_infinite() {
-                continue;
+        if known.lo > known.hi {
+            // A NaN-only fact has no numeric member. Its NaN arm above is
+            // still admitted, but no ordered value may reach the body.
+            let valid = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+            self.require_uniform(valid, names, origin);
+        } else {
+            for (op, bound, unbounded) in [
+                (BinOp::Ge, known.lo, f64::NEG_INFINITY),
+                (BinOp::Le, known.hi, f64::INFINITY),
+            ] {
+                // Only the outward-facing infinity is unconstrained. A
+                // singleton infinity must still enforce its other side.
+                if bound == unbounded {
+                    continue;
+                }
+                let limit = self.push(OpKind::ConstFloat(bound), HirType::NUMBER, origin.clone());
+                self.require_uniform_comparison((op, number, limit), names, origin);
             }
-            let limit = self.push(OpKind::ConstFloat(bound), HirType::NUMBER, origin.clone());
-            self.require_uniform_comparison((op, number, limit), names, origin);
         }
         if known.whole {
             let truncated = self.push(
@@ -712,5 +724,145 @@ impl FuncBuilder<'_> {
         ).into()), HirType::Managed(ManagedType::String), origin.clone());
         self.runtime_call("nts_refused", vec![reason], HirType::Void, origin.clone());
         self.terminate(Terminator::Unreachable);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Facts, LoweringSnapshot};
+    use super::*;
+    use crate::hir::BlockId;
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::SemanticSnapshot;
+
+    fn with_guard<R>(known: Facts, inspect: impl FnOnce(&FuncBuilder<'_>) -> R) -> R {
+        let snapshot = SemanticSnapshot::default();
+        let lowering = LoweringSnapshot::new(&snapshot);
+        let mut builder = FuncBuilder::probe(&lowering);
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let number = builder.push(OpKind::Param(0), HirType::NUMBER, origin.clone());
+        builder.check_uniform_number(number, known, ("body", "number"), &origin);
+        inspect(&builder)
+    }
+
+    // Execute the emitted guard's branches. This evaluates HIR operations,
+    // rather than reimplementing the interval predicate under test.
+    fn admits(builder: &FuncBuilder<'_>, input: f64) -> bool {
+        fn number(builder: &FuncBuilder<'_>, value: ValueId, input: f64) -> f64 {
+            match builder.values[value.0 as usize].kind {
+                OpKind::Param(0) => input,
+                OpKind::ConstFloat(value) => value,
+                OpKind::Unary {
+                    op: UnOp::Trunc,
+                    operand,
+                } => number(builder, operand, input).trunc(),
+                OpKind::Binary {
+                    op: BinOp::Div,
+                    lhs,
+                    rhs,
+                } => number(builder, lhs, input) / number(builder, rhs, input),
+                ref other => panic!("unexpected guard number: {other:?}"),
+            }
+        }
+        let mut block = BlockId(0);
+        for _ in 0..=builder.blocks.len() {
+            match &builder.blocks[block.0 as usize].terminator {
+                None => return true,
+                Some(Terminator::Unreachable) => return false,
+                Some(Terminator::Jump { target, args }) => {
+                    assert!(args.is_empty());
+                    block = *target;
+                }
+                Some(Terminator::Branch {
+                    cond,
+                    then_target,
+                    else_target,
+                    ..
+                }) => {
+                    let valid = match builder.values[cond.0 as usize].kind {
+                        OpKind::ConstBool(valid) => valid,
+                        OpKind::Binary { op, lhs, rhs } => {
+                            let lhs = number(builder, lhs, input);
+                            let rhs = number(builder, rhs, input);
+                            match op {
+                                BinOp::Eq => lhs == rhs,
+                                BinOp::Ne => lhs != rhs,
+                                BinOp::Ge => lhs >= rhs,
+                                BinOp::Le => lhs <= rhs,
+                                other => panic!("unexpected guard comparison: {other:?}"),
+                            }
+                        }
+                        ref other => panic!("unexpected guard condition: {other:?}"),
+                    };
+                    block = if valid { *then_target } else { *else_target };
+                }
+                other => panic!("unexpected guard terminator: {other:?}"),
+            }
+        }
+        panic!("a uniform guard must be acyclic");
+    }
+
+    #[test]
+    fn nan_only_uniform_guard_admits_no_number() {
+        with_guard(Facts::constant(f64::NAN), |guard| {
+            assert!(admits(guard, f64::NAN));
+            for input in [f64::NEG_INFINITY, -1.0, -0.0, 0.0, 0.5, 1.0, f64::INFINITY] {
+                assert!(!admits(guard, input), "admitted {input:?}");
+            }
+        });
+    }
+
+    #[test]
+    fn uniform_guard_preserves_infinite_endpoints() {
+        for expected in [f64::NEG_INFINITY, f64::INFINITY] {
+            with_guard(Facts::constant(expected), |guard| {
+                assert!(admits(guard, expected));
+                for input in [f64::NEG_INFINITY, -1.0, 0.0, 1.0, f64::INFINITY, f64::NAN] {
+                    assert_eq!(
+                        admits(guard, input),
+                        input == expected,
+                        "{expected:?}: {input:?}"
+                    );
+                }
+            });
+        }
+    }
+
+    #[test]
+    fn uniform_guard_checks_finite_bounds_nan_wholeness_and_zero() {
+        for maybe_nan in [false, true] {
+            with_guard(Facts::new(-1.0, 1.0, true, maybe_nan, false), |guard| {
+                assert_eq!(admits(guard, f64::NAN), maybe_nan);
+                for input in [-1.0, 0.0, 1.0] {
+                    assert!(admits(guard, input), "rejected {input:?}");
+                }
+                for input in [f64::NEG_INFINITY, -2.0, -0.0, 0.5, 2.0, f64::INFINITY] {
+                    assert!(!admits(guard, input), "admitted {input:?}");
+                }
+            });
+        }
+    }
+
+    #[test]
+    fn unbounded_uniform_guard_emits_no_interval_comparison() {
+        with_guard(
+            Facts::new(f64::NEG_INFINITY, f64::INFINITY, false, false, true),
+            |guard| {
+                assert!(!guard.values.iter().any(|value| matches!(
+                    value.kind,
+                    OpKind::Binary {
+                        op: BinOp::Ge | BinOp::Le,
+                        ..
+                    }
+                )));
+                assert!(!admits(guard, f64::NAN));
+                for input in [f64::NEG_INFINITY, -1.0, -0.0, 0.0, 0.5, 1.0, f64::INFINITY] {
+                    assert!(admits(guard, input), "rejected {input:?}");
+                }
+            },
+        );
     }
 }
