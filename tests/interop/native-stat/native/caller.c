@@ -33,19 +33,19 @@ int main(void) {
   struct stat mine;
   assert(stat(path, &mine) == 0);
 
-  double size = sizeOf(path);
+  double size = lib_sizeOf(path);
   printf("sizeOf = %d (C says %lld)\n", (int)size, (long long)mine.st_size);
   assert(size == (double)mine.st_size);
 
   // `st_mtim` is 88 bytes in, past three 64-bit members and two nested
   // structs. An offset wrong by one member lands in `st_ctim` or `st_blocks`
   // and disagrees with C.
-  double seconds = modifiedSeconds(path);
+  double seconds = lib_modifiedSeconds(path);
   printf("modifiedSeconds = %lld (C says %lld)\n", (long long)seconds,
          (long long)mine.st_mtim.tv_sec);
   assert(seconds == (double)mine.st_mtim.tv_sec);
 
-  double links = linkCount(path);
+  double links = lib_linkCount(path);
   printf("linkCount = %d (C says %lu)\n", (int)links, (unsigned long)mine.st_nlink);
   assert(links == (double)mine.st_nlink);
 

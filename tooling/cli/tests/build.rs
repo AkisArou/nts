@@ -628,14 +628,13 @@ fn raw_emission_keeps_its_names_beside_a_static_product() {
 /// A plugin built from a static archive: its own entry calls an export and
 /// the runtime's embedding API, and it is linked with no version script, as
 /// a host's own build would.
-const PLUGIN: &str = r"
-double acme_published(double);
-void nts_checkpoint(void);
+const PLUGIN: &str = r#"
+#include "program.h"
 double plugin_entry(double n) {
     nts_checkpoint();
     return acme_published(n);
 }
-";
+"#;
 
 /// #977: a static archive's runtime stays inside whatever links it.
 ///
@@ -663,6 +662,8 @@ fn a_static_archive_linked_into_a_plugin_keeps_its_runtime_inside() {
         "plugin",
         PLUGIN,
         &[
+            "-I".as_ref(),
+            archive.parent().expect("output directory").as_os_str(),
             "-shared".as_ref(),
             "-fPIC".as_ref(),
             archive.as_os_str(),
@@ -1324,13 +1325,18 @@ export default defineConfig({
     for product in ["viaC", "viaLlvm"] {
         std::fs::write(
             &consumer,
-            format!("double {product}_total(void);\nint main(void) {{ return (int){product}_total(); }}\n"),
-        ).expect("consumer");
+            format!(
+                "#include \"program.h\"\nint main(void) {{ return (int){product}_total(); }}\n"
+            ),
+        )
+        .expect("consumer");
         let archive = project.join(format!(
             ".nts/build/{product}/linux-gnu-x86_64/lib{product}.a"
         ));
         let exe = project.join(format!("caller-{product}"));
         let linked = Command::new("clang")
+            .arg("-I")
+            .arg(archive.parent().expect("output directory"))
             .arg(&consumer)
             .arg(&archive)
             .args(["-lm", "-o"])

@@ -25,7 +25,7 @@ int main(void) {
   // Without it both are zero, `epoll_ctl` is asked to perform operation 0, and
   // it fails with EINVAL -- which reads exactly like a layout bug and is not
   // one. `program.h` says so next to the declaration now.
-  module__init();
+  lib_module__init();
 
   // The values the program spells as `CTL_ADD` and `READABLE`. One is a macro
   // and the other an enumerator, so no binding can name either.
@@ -44,13 +44,13 @@ int main(void) {
   // struct and comes back out of the kernel's copy of it. A struct of the
   // natural 16 bytes, or a union laid out after padding, puts the
   // subscription somewhere the kernel does not read.
-  double got = waitForOne((double)fds[0]);
+  double got = lib_waitForOne((double)fds[0]);
   printf("waitForOne(%d) = %d\n", fds[0], (int)got);
   assert(got == (double)fds[0]);
 
   // Two members of one union, written then read. C says the bytes are
   // whatever the write left; on this target `fd` is the low half of `u64`.
-  double low = aliasedLowHalf(0x2A);
+  double low = lib_aliasedLowHalf(0x2A);
   printf("aliasedLowHalf(42) = %d\n", (int)low);
   assert(low == 42.0);
 

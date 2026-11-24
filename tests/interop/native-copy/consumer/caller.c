@@ -19,13 +19,13 @@ int main(void) {
 
   // Copies, then changes the source, then asks about the destination. A
   // pointer assignment passes every check before that and fails this one.
-  double whole = copyThenDivergeSource(5);
+  double whole = lib_copyThenDivergeSource(5);
   printf("copyThenDivergeSource(5) = %d\n", (int)whole);
   assert(whole == 1);
 
   // One nested member copied out of the middle of one object into the middle
   // of another, leaving what surrounds it alone.
-  double member = copyOneMember(11);
+  double member = lib_copyOneMember(11);
   printf("copyOneMember(11) = %d\n", (int)member);
   assert(member == 0);
 

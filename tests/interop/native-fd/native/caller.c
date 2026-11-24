@@ -26,21 +26,21 @@ static double through_pipe(const char *payload, double (*call)(int32_t, uint32_t
 
 int main(void) {
   // Five bytes written, five bytes read.
-  if (through_pipe("hello", readCount, 5) != 5) return 1;
+  if (through_pipe("hello", lib_readCount, 5) != 5) return 1;
 
   // The same bytes summed out of the buffer TS filled -- a count alone cannot
   // tell a buffer that received the bytes from one that was never written.
-  if (through_pipe("hello", readSum, 5) != (double)('h' + 'e' + 'l' + 'l' + 'o')) return 2;
+  if (through_pipe("hello", lib_readSum, 5) != (double)('h' + 'e' + 'l' + 'l' + 'o')) return 2;
 
   // End of file is zero and is not an error.
-  if (through_pipe("", readCount, 5) != 0) return 3;
+  if (through_pipe("", lib_readCount, 5) != 0) return 3;
 
   // A closed descriptor takes the negative outcome through the same path.
-  if (readCount(-1, 5) >= 0) return 4;
+  if (lib_readCount(-1, 5) >= 0) return 4;
 
   // The capacity guard is TS's own, refused before the call rather than by the
   // kernel: 65 never reaches `read`.
-  if (readCount(0, 65) != -1) return 5;
+  if (lib_readCount(0, 65) != -1) return 5;
 
   // The other direction, through `const void *`: TS fills a buffer it owns and
   // hands it out for reading only. The bytes are checked on the way back, so a
@@ -48,7 +48,7 @@ int main(void) {
   {
     int fds[2];
     if (pipe(fds) != 0) return 6;
-    if (writeBytes(fds[1], 'o', 'k') != 2) return 7;
+    if (lib_writeBytes(fds[1], 'o', 'k') != 2) return 7;
     close(fds[1]);
     char got[2] = {0, 0};
     if (read(fds[0], got, 2) != 2) return 8;

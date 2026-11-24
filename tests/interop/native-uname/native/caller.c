@@ -27,14 +27,14 @@ int main(void) {
   // The length of `sysname`, counted by TypeScript walking an inline array one
   // byte at a time. A binding whose first member is at the wrong offset, or
   // whose element type is wrong, lands somewhere else and disagrees here.
-  double length = sysnameLength();
+  double length = uname_sysnameLength();
   assert(length == (double)strlen(theirs.sysname));
 
   // `machine` is the fifth member, 260 bytes in. It is here because a struct
   // described with one member too few, or with a 64-byte array where the real
   // one is 65, has every earlier offset right and this one wrong -- the arms
   // that pass a size check and fail a field check.
-  double first = machineFirstByte();
+  double first = uname_machineFirstByte();
   assert(first == (double)(unsigned char)theirs.machine[0]);
 
   printf("uname: sysname=%s (%d) machine=%s (first byte %d)\n", theirs.sysname,

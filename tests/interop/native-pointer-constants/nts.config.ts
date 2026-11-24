@@ -2,11 +2,11 @@ import { defineConfig, library, sources, target } from "@nts/config";
 
 export default defineConfig({
   products: {
-    c: library.staticNative({
+    c: library.staticNative({ prefix: "lib",
       entry: "./src/main.ts",
       targets: [target.linux({ backend: "c" })],
     }),
-    llvm: library.staticNative({
+    llvm: library.staticNative({ prefix: "lib",
       entry: "./src/main.ts",
       targets: [target.linux({ backend: "llvm" })],
     }),

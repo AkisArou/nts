@@ -47,7 +47,6 @@ export default defineConfig({
       targets: [target.linux()],
       entry: "./nts/sdk.ts",
       header: "acme.h",
-      prefix: "acme_",
     }),
   },
   // An `add_custom_command` plus a generated CMake config package, so a

@@ -18,30 +18,30 @@ int main(void) {
   };
   for (size_t i = 0; i < sizeof odd / sizeof odd[0]; i++) {
     const uint16_t *p = AT(odd[i]);
-    assert(bits(p) == (uintptr_t)p);
-    assert(isIntResource(p) == IS_INTRESOURCE(p));
-    assert(atom(p) == (double)((uintptr_t)p & 0xffff));
+    assert(lib_bits(p) == (uintptr_t)p);
+    assert(lib_isIntResource(p) == IS_INTRESOURCE(p));
+    assert(lib_atom(p) == (double)((uintptr_t)p & 0xffff));
   }
-  assert(isIntResource(NULL) && atom(NULL) == 0.0);
-  assert(isIntResource(AT(65535)) && !isIntResource(AT(65536)));
+  assert(lib_isIntResource(NULL) && lib_atom(NULL) == 0.0);
+  assert(lib_isIntResource(AT(65535)) && !lib_isIntResource(AT(65536)));
 
   uint16_t stack[4] = {0};
-  assert(mutableBits(stack) == (uintptr_t)stack);
-  assert(mutableBits(&stack[3]) - mutableBits(stack) == 3 * sizeof stack[0]);
-  assert(!isIntResource(stack));
+  assert(lib_mutableBits(stack) == (uintptr_t)stack);
+  assert(lib_mutableBits(&stack[3]) - lib_mutableBits(stack) == 3 * sizeof stack[0]);
+  assert(!lib_isIntResource(stack));
 
   void *heap = malloc(32);
   assert(heap != NULL);
-  assert(itemBits((struct Item *)heap) == (uintptr_t)heap);
+  assert(lib_itemBits((struct Item *)heap) == (uintptr_t)heap);
   free(heap);
 
-  assert(windowBits((struct Window *)(uintptr_t)UINTPTR_MAX) == UINTPTR_MAX);
-  assert(windowBits(NULL) == 0);
-  assert(nullBits() == 0);
-  assert(textBits() == (uintptr_t)bits_text());
-  assert(bits(bits_text()) == (uintptr_t)bits_text());
-  assert(stride() == 4.0);
-  assert(heapStride() == 2.0);
+  assert(lib_windowBits((struct Window *)(uintptr_t)UINTPTR_MAX) == UINTPTR_MAX);
+  assert(lib_windowBits(NULL) == 0);
+  assert(lib_nullBits() == 0);
+  assert(lib_textBits() == (uintptr_t)bits_text());
+  assert(lib_bits(bits_text()) == (uintptr_t)bits_text());
+  assert(lib_stride() == 4.0);
+  assert(lib_heapStride() == 2.0);
   puts("native pointer bits: exact bits, no load, agree with C's (uintptr_t)p");
   return 0;
 }

@@ -32,7 +32,14 @@ impl<'a> SourceSymbols<'a> {
 
     /// A product's C namespace, resolved before either backend freezes names.
     /// Native callees and private source symbols retain their own namespaces.
-    pub fn prefixed(source: &'a Program, prefix: &str) -> Result<Self, String> {
+    pub fn for_product(
+        source: &'a Program,
+        product: &str,
+        prefix: Option<&str>,
+    ) -> Result<Self, String> {
+        let Some(prefix) = prefix else {
+            return Ok(Self::build(source, Some(&c_identifier(product))));
+        };
         if !crate::symbols::is_native_c_identifier(prefix)
             || prefix.starts_with("__nts_")
             || (prefix.starts_with('_')
@@ -170,6 +177,20 @@ mod tests {
     use super::*;
     use nts_core::hir::{Global, HirType};
     use nts_diagnostics::{Location, SourceId, Span};
+
+    #[test]
+    fn product_default_is_escaped_but_explicit_invalid_prefixes_refuse() {
+        let mut program = model(2, false);
+        program.funcs[0].exported = true;
+        let symbols = SourceSymbols::for_product(&program, "probe-llvm", None).expect("default");
+        assert_eq!(symbols.function("register"), "probe_llvm_register_");
+        assert_eq!(symbols.global(0), "probe_llvm_g0");
+        for prefix in ["", "probe-llvm", "9bad", "__nts_private", "_Reserved"] {
+            let error = SourceSymbols::for_product(&program, "probe-llvm", Some(prefix))
+                .expect_err("invalid explicit prefix");
+            assert!(error.contains(&format!("`{prefix}`")), "{error}");
+        }
+    }
 
     fn model(n: usize, collision: bool) -> Program {
         let origin = Origin::source(Location {

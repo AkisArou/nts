@@ -42,7 +42,7 @@ for backend in c llvm; do
   "$cc" -std=c11 -Werror -I"$built" -fsyntax-only "$built/native_witness.c"
   if [ "$backend" = c ]; then input="$built/program.c"; else input="$built/program.ll"; fi
   "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$built" \
-    -c "$source/consumer/caller.c" -o "$out/caller-nogc-$backend.o"
+    -c "$source/consumer/caller-raw.c" -o "$out/caller-nogc-$backend.o"
   "$cc" -O2 -I"$built" "$input" "$out/caller-nogc-$backend.o" \
     "$built/nts_runtime.c" -lm -o "$out/caller-nogc-$backend"
   "$out/caller-nogc-$backend" > "$out/nogc-$backend.stdout"

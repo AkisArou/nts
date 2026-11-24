@@ -12,7 +12,7 @@
 #include "program.h"
 
 int main(void) {
-  module__init();
+  lib_module__init();
 
   // The values the program spells as `CREATE_WRITE` and `OWNER_READ_WRITE`.
   // Macros, so no binding can carry them.
@@ -22,7 +22,7 @@ int main(void) {
   char path[] = "/tmp/nts-native-open-example";
   unlink(path);
 
-  double written = createAndWrite(path, 'k');
+  double written = lib_createAndWrite(path, 'k');
   printf("createAndWrite = %d\n", (int)written);
   assert(written == 1);
 
@@ -41,10 +41,10 @@ int main(void) {
   close(fd);
 
   // The same C function, called with no tail at all.
-  assert(openExisting(path) == 0);
-  assert(openExisting("/tmp/nts-native-open-absent") == -1);
+  assert(lib_openExisting(path) == 0);
+  assert(lib_openExisting("/tmp/nts-native-open-absent") == -1);
 
-  assert(remove(path) == 0);
+  assert(lib_remove_(path) == 0);
   printf("native open: one variadic prototype, two arities\n");
   return 0;
 }

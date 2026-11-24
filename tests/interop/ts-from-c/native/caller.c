@@ -9,20 +9,20 @@
 /* The generated header declares the exact C symbols and checked layouts. */
 
 int main(void) {
-  printf("add(2, 3)         = %g\n", add(2.0, 3.0));
-  printf("clamp(42, 0, 10)  = %g\n", clamp(42.0, 0.0, 10.0));
-  printf("bool_(false)      = %d\n", (int)bool_(false));
-  printf("greetLength(7)    = %g\n", greetLength(7.0));
+  printf("add(2, 3)         = %g\n", lib_add(2.0, 3.0));
+  printf("clamp(42, 0, 10)  = %g\n", lib_clamp(42.0, 0.0, 10.0));
+  printf("bool_(false)      = %d\n", (int)lib_bool_(false));
+  printf("greetLength(7)    = %g\n", lib_greetLength(7.0));
 
   NtsString *name = nts_string_from_utf8("\xce\xb1\xf0\x9f\x98\x80", 6);
-  NtsString *greeting = greet(name);
+  NtsString *greeting = lib_greet(name);
   if (greeting->length != 6 || nts_str_code_point_at(greeting, 3) != 945 ||
       nts_str_code_point_at(greeting, 4) != 128512) return 1;
   printf("greet: UTF-16 length = %u\n", greeting->length);
   nts_release((NtsHeader *)greeting);
   nts_release((NtsHeader *)name);
 
-  counted_return_t *generator = counted(3);
+  counted_return_t *generator = lib_counted(3);
   double value = -1;
   printf("counted(3)       =");
   for (int i = 0; i < 3; i++) {
@@ -33,11 +33,11 @@ int main(void) {
   printf("; done\n");
   nts_release((NtsHeader *)generator);
 
-  makePoint_return_t *point = makePoint(7.0);
+  makePoint_return_t *point = lib_makePoint(7.0);
   printf("makePoint(7)     = (%g, %g)\n", point->x, point->y);
 
   /* SPOT 5, driven: call, checkpoint, then read. */
-  NtsPromise *p = later(41.0);
+  NtsPromise *p = lib_later(41.0);
   printf("later: state before checkpoint = %g\n", nts_promise_state(p));
   nts_checkpoint();
   printf("later: state after  checkpoint = %g\n", nts_promise_state(p));
@@ -45,7 +45,7 @@ int main(void) {
          nts_value_number(nts_promise_value(p)));
 
   nts_release((NtsHeader *)p);
-  p = later(41.0);
+  p = lib_later(41.0);
   if (nts_promise_join(p) != NTS_JOIN_FULFILLED || nts_promise_number(p) != 42) return 4;
   printf("later: joined value            = %g\n", nts_promise_number(p));
   nts_release((NtsHeader *)p);

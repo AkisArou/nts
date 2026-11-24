@@ -9912,9 +9912,10 @@ fn emit_c_prepared(
 
     let symbols = std::rc::Rc::new(match emission.product {
         Some((name, product)) if product.kind == "static-library" => {
-            nts_codegen_common::source_symbols::SourceSymbols::prefixed(
+            nts_codegen_common::source_symbols::SourceSymbols::for_product(
                 &program,
-                product.prefix.as_deref().unwrap_or(name),
+                name,
+                product.prefix.as_deref(),
             )
             .map_err(anyhow::Error::msg)
             .with_context(|| format!("product `{name}`"))?

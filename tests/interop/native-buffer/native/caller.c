@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
   // A direct correctness control, including embedded NUL and a non-ASCII byte.
   uint8_t sample[] = {'a', 0, 'z', 0xc3, 'Q'};
   const uint8_t expected[] = {'A', 0, 'Z', 0xc3, 'Q'};
-  if (uppercaseAscii(sample, sizeof sample) != 2 ||
+  if (lib_uppercaseAscii(sample, sizeof sample) != 2 ||
       memcmp(sample, expected, sizeof sample) != 0)
     return 1;
   if (argc == 1) {
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
   size_t length;
   int failed = 0;
   while ((length = fread(buffer, 1, sizeof buffer, input)) != 0) {
-    uppercaseAscii(buffer, (double)length);
+    lib_uppercaseAscii(buffer, (double)length);
     if (fwrite(buffer, 1, length, output) != length) {
       failed = 1;
       break;

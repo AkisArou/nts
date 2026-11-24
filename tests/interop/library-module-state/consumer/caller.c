@@ -5,7 +5,7 @@
 #include "program.h"
 
 int main(void) {
-  double got = total();
+  double got = lib_total();
   printf("total=%g\n", got);
   if (got != 12.0) {
     fprintf(stderr, "module evaluation did not run: expected 12, got %g\n", got);

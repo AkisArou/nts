@@ -4636,12 +4636,13 @@ Approved by the coordinator for #978. A static archive's unprefixed source
 exports entered its host executable's namespace, where `error` could preempt
 libc throughout the process. The documented `prefix` field was never parsed.
 
-Static products now resolve `prefix`, defaulting to their product name, before
+Static products now resolve `prefix`, defaulting to their product name escaped
+as a C identifier, before
 emission. SourceSymbols freezes `<prefix>_<C name>` for public source functions
 and globals, including the module initializer and retained sibling exports.
 Both native backends, the C header and the publication list consume those
 names; the load-time constructor calls the same frozen initializer. Invalid
-prefixes refuse with their value: the namespace must be a nonempty C identifier
+explicit prefixes refuse with their value: the namespace must be a nonempty C identifier
 outside `__nts_` and `_` followed by an uppercase letter. Raw emit commands,
 apps, executables, addons and shared libraries keep their current names.
 The shared-library policy is tracked separately in #1005.

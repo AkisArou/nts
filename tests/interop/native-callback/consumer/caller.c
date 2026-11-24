@@ -16,7 +16,7 @@ static int fork_and_check(void) {
     NtsLanding landing;
     if (setjmp(landing.frame) == 0) {
       nts_landing_push(&landing);
-      throwThrough(1);
+      lib_throwThrough(1);
       nts_landing_pop(&landing);
       _exit(8); /* returned normally: the throw vanished */
     }
@@ -31,14 +31,14 @@ static int fork_and_check(void) {
 
 int main(void) {
   // C calls the TypeScript function twice: 10 + 3 + 3.
-  if (twiceThrough(10) != 16)
+  if (lib_twiceThrough(10) != 16)
     return 1;
   // Twice again from a different start, so a bridge returning a constant fails.
-  if (twiceThrough(-1) != 5)
+  if (lib_twiceThrough(-1) != 5)
     return 2;
   // The same callback, never entered: the argument comes back untouched, which
   // a bridge called anyway would change.
-  if (neverThrough(10) != 10)
+  if (lib_neverThrough(10) != 10)
     return 3;
   // A callback that throws must not travel through C. An embedder landing is
   // installed here deliberately: that is the case where the two behaviours
@@ -51,46 +51,46 @@ int main(void) {
   // The context shape: C drives the loop and hands our storage back each time.
   // 1+2+3+4+5. A bridge that dropped the context, or passed a copy, gives
   // something else.
-  if (sumTo(5) != 15)
+  if (lib_sumTo(5) != 15)
     return 4;
-  if (sumTo(0) != 0)
+  if (lib_sumTo(0) != 0)
     return 5;
 
   // Retained: the library holds the callback and calls it from `deliver`,
   // which is not on the stack of the call that subscribed. 3 + 4, accumulated
   // into a heap context across two separate events.
-  if (retainedTotal(3, 4) != 7)
+  if (lib_retainedTotal(3, 4) != 7)
     return 10;
   // And again, to show the context was released and re-taken rather than
   // accumulating into whatever the first run left behind.
-  if (retainedTotal(1, 1) != 2)
+  if (lib_retainedTotal(1, 1) != 2)
     return 11;
 
   // A callback stored in a struct and called by C through it. The first arm is
   // the control: `local` zeroes the storage, so with the member unset
   // `dispatch` takes the fallback -- a store that did nothing would return -1
   // there and the TypeScript would answer -2 rather than 42.
-  double table = throughTable(21);
+  double table = lib_throughTable(21);
   printf("throughTable(21) = %d\n", (int)table);
   assert(table == 42);
 
   // Reentrancy: C -> TS -> C -> TS. `apply_twice` calls its callback twice and
   // that callback calls `apply_twice` again, so each of the four entries
   // brackets itself. 1 -> ((1+1)+1) -> (((3)+1)+1) = 5.
-  double nested = reentrant(1);
+  double nested = lib_reentrant(1);
   printf("reentrant(1) = %d\n", (int)nested);
   assert(nested == 5);
 
   // Both directions at 64 bits, with the one value that separates an exact
   // path from a `double` one: 2^53 + 1 is the smallest integer a double cannot
   // hold. Through a double this comes back 9007199254740994, not ...93.
-  long long wide = (long long)wideRoundTrip(9007199254740993LL);
+  long long wide = (long long)lib_wideRoundTrip(9007199254740993LL);
   printf("wideRoundTrip(2^53+1) = %lld\n", wide);
   assert(wide == 9007199254740994LL);
 
   // A promise job queued inside the callbacks has not run when the export
   // returns: no foreign loop, so no checkpoint at a callback's return.
-  double ran = aJobStaysQueued();
+  double ran = lib_aJobStaysQueued();
   printf("aJobStaysQueued() = %d\n", (int)ran);
   assert(ran == 0);
 

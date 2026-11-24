@@ -15,7 +15,7 @@ int main(void) {
   // constant is zero, `inet_pton` is asked for address family 0, and every
   // byte comes back -1 -- which reads exactly like a layout bug and is not
   // one. `program.h` says so next to the declaration; I did not read it.
-  module__init();
+  lib_module__init();
 
   // The value the program spells as `INET6`. A macro, so no binding can carry
   // it.
@@ -32,11 +32,11 @@ int main(void) {
   assert(inet_pton(AF_INET6, text, &mine) == 1);
 
   for (int i = 0; i < 16; i++) {
-    double got = byteAt(text, i);
+    double got = lib_byteAt(text, i);
     assert(got == (double)mine.s6_addr[i]);
   }
-  printf("byteAt: 16 of 16 agree, first=%d last=%d\n", (int)byteAt(text, 0),
-         (int)byteAt(text, 15));
+  printf("byteAt: 16 of 16 agree, first=%d last=%d\n", (int)lib_byteAt(text, 0),
+         (int)lib_byteAt(text, 15));
 
   // The other member of the same union: the same storage, read four bytes at a
   // time. A binding that had described only the first member would still pass
@@ -44,7 +44,7 @@ int main(void) {
   uint32_t words[4];
   memcpy(words, &mine, sizeof words);
   for (int i = 0; i < 4; i++) {
-    double got = wordAt(text, i);
+    double got = lib_wordAt(text, i);
     assert(got == (double)words[i]);
   }
   printf("wordAt: 4 of 4 agree\n");
