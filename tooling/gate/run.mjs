@@ -1342,7 +1342,7 @@ function start(step, slots, rider = false) {
   const cpuBound = stepCpuBound(bound, width(step.name));
   const boundStarted = host.now(), boundClock = new ProgressBound({ execution_s: bound.seconds, cpu_s: cpuBound, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
   let boundState = boundClock.observe(boundStarted, undefined, firstCpu), boundFailure;
-  owned.observeBound = (now, u, cpu) => {
+  owned.observeBound = (now, u, /** @type {import("./step-bound.ts").CpuSample | undefined} */ cpu) => {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
       requests: tok.waiting.filter(request => request.step === step.name).map(request => request.bytes ?? tokenBytes(step)),
       freeSlots: SLOTS - u.slots - withhold, freeFrontends: step.fe ? FRONTENDS - u.fe : Infinity,
