@@ -7,6 +7,8 @@ import {fileURLToPath} from 'node:url';
 import {captureRunTemporary,createRunOracleImage} from './run-temporary.ts';
 import {adoptPreparedRunTemporary,closeRunTemporary,ownRunTemporary} from './run-temporary-lifetime.ts';
 import {gateEnvironment} from './canonical-environment.ts';
+import {hostEnvironment} from './host-environment.ts';
+import {contentCacheEnvironment,FIXTURE_ENVIRONMENT} from './cache-environment.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.ts';
 import {treeProcessFixture} from '../landing/tree-users-fixture.ts';
@@ -52,7 +54,14 @@ test('prepared adoption refuses unknown contents, resolution aliases, occupied s
   }
 });
 test('a candidate runner adopts the current service prepared tmp, runs a step and closes its lifetime',t=>{
-  const home=testScratch(t,'queued-temporary'),root=join(home,'repo'),gate=join(root,'tooling/gate'),run=join(home,'.cache/runs/queued');
+  const scope=testScratch(t,'queued-temporary'),base=fixtureEnvironment(t);
+  const caches={...contentCacheEnvironment(base),[FIXTURE_ENVIRONMENT]:base[FIXTURE_ENVIRONMENT]};
+  // Always exercise a nested test harness, including in the focused route.
+  // The old service's launcher carries host tools and owned grants, without
+  // inheriting the harness's run, dependency image or execution policy.
+  const parent=gateEnvironment({...base,HOME:scope},{run:join(scope,'.cache/harness'),owned:{...caches,...ownMemory(join(scope,'harness-observations'))}});
+  const home=join(parent.temporary.path,'creator'),root=join(home,'repo'),gate=join(root,'tooling/gate'),run=join(home,'.cache/runs/queued');
+  mkdirSync(home,{recursive:true});
   copyModuleClosure(['tooling/gate/run.mjs'],root);
   const source=fileURLToPath(new URL('./',import.meta.url));
   const listed=spawnTest('sh',[join(source,'all.sh'),'--list'],{encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
@@ -60,7 +69,9 @@ test('a candidate runner adopts the current service prepared tmp, runs a step an
   // Main's pre-lifetime creator makes tmp before candidate environment setup.
   // Keep that actual on-disk preparation: no creation record or lifetime token.
   mkdirSync(join(run,'tmp'),{recursive:true});
-  const planned=gateEnvironment({...fixtureEnvironment(t),HOME:home},{run,owned:{NTS_GATE_STEPS:'rustfmt',CARGO_TARGET_DIR:join(root,'target'),...gateFixtureMemory(join(home,'observations'),root)}});
+  const launcher={...hostEnvironment(parent.env),...caches,HOME:home};
+  assert.equal(launcher.NTS_GATE_ENV_CONTEXT,undefined);
+  const planned=gateEnvironment(launcher,{run,owned:{...caches,NTS_GATE_STEPS:'rustfmt',CARGO_TARGET_DIR:join(root,'target'),...gateFixtureMemory(join(home,'observations'),root)}});
   assert.equal(planned.temporary.creation,undefined);
   assert.deepEqual(Object.keys(JSON.parse(planned.env.NTS_GATE_ENV_CONTEXT!).temporary).sort(),['dev','ino','parent','path','uid']);
   durableRecord(join(home,'environment.json'),planned.env);
