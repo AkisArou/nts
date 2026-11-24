@@ -205,7 +205,7 @@ fn compiler_product_shapes(compiler: &str) {
     for (shape, product, artifact) in [
         (
             "shared",
-            "library.native({entry:'./src/main.ts',targets:[target.linux({backend:'c'})]})",
+            "library.native({entry:'./src/main.ts',prefix:'ignored',targets:[target.linux({backend:'c'})]})",
             "linux-gnu-x86_64/libprobe.so",
         ),
         (
@@ -460,7 +460,9 @@ fn static_library_exports_use_the_product_prefix() {
     std::fs::write(
         project.join("src/main.ts"),
         "import { helper } from './internal.js';\n\
-         export let value = helper(2);\n\
+         const values: number[] = [];\n\
+         for (let i = 0; i < 3; i++) { values.push(i); }\n\
+         export let value = values.length;\n\
          export function error(n: number): number { return helper(n) * 3; }\n\
          export function throwError(n: number): number { return helper(n) * 3; }\n",
     )
@@ -610,7 +612,10 @@ fn raw_emission_keeps_its_names_beside_a_static_product() {
         skip("node, clang and nm");
         return;
     }
-    let project = fixture("emit-beside-static-prefix", STATIC);
+    let project = fixture(
+        "emit-beside-static-prefix",
+        &STATIC.replace("entry:", "prefix: 'chosen', entry:"),
+    );
     let out = project.join("emitted");
     let ran = Command::new(env!("CARGO_BIN_EXE_nts"))
         .arg("emit-c")

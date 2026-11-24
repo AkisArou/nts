@@ -1,6 +1,7 @@
 //! One ordered authority for source-owned native symbols. Runtime/native
 //! declarations never enter this map; their authenticated callees keep their
-//! literal boundary names. Public source ABI names remain literal C spellings.
+//! literal boundary names. Public source ABI names use C spellings, optionally
+//! qualified by their static product's namespace.
 
 use crate::symbols::{c_global_indexed, c_identifier, c_private_source_spelled};
 use nts_core::hir::{Callee, Func, Program};
@@ -53,8 +54,10 @@ impl<'a> SourceSymbols<'a> {
     }
 
     fn build(source: &'a Program, prefix: Option<&str>) -> Self {
-        let qualify =
-            |name: String| prefix.map_or_else(|| name.clone(), |prefix| format!("{prefix}_{name}"));
+        let qualify = |name: String| match prefix {
+            Some(prefix) => format!("{prefix}_{name}"),
+            None => name,
+        };
         let mut public: rustc_hash::FxHashSet<&str> = source
             .public_api
             .iter()
