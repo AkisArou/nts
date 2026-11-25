@@ -65,7 +65,7 @@ export function pruneRawCosts(options:Options):CostRetention{
     try{
       let rootIdentity:Stats;
       try{rootIdentity=directory(root);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')continue;throw error;}
-      lock=GateResource.tryAcquire(join(root,'.cost-retention.lock'));
+      lock=GateResource.tryAcquire(root+'.cost-retention.lock');
       if(!lock){result.kept.push({run:root,reason:'raw-cost collector lock held'});continue;}
       const completed:{run:string;identity:Stats;terminal:ReturnType<typeof terminal>}[]=[];
       for(const name of readdirSync(root)){

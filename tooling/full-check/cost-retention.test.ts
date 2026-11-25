@@ -67,7 +67,7 @@ test('retains '+control,t=>{
 for(const guard of ['holder','replacement','summary change','symlink','lock'])test('retains raw costs at '+guard+' boundary',t=>{
   const f=fixture(t),run=f.make('1');f.newer();
   const path=join(run,'costs');let lock:GateResource|null=null;
-  if(guard==='lock')lock=GateResource.tryAcquire(join(f.runs,'.cost-retention.lock'));
+  if(guard==='lock')lock=GateResource.tryAcquire(f.runs+'.cost-retention.lock');
   if(guard==='symlink'){renameSync(path,join(f.root,'saved'));symlinkSync(join(f.root,'saved'),path);}
   try{
     const result=pruneRawCosts({...f.options,ownership:()=>{

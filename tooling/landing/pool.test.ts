@@ -783,7 +783,7 @@ for(const blocked of [false,true])test('take reclaims the oldest surplus Cargo p
     for(const profile of ['nts-dev','clippy'] as const){const path=join(tree.path,'target',profile);mkdirSync(path,{recursive:true});completeBuild(tree.path,profile,path);}
     f.freedAt(tree.name,(3-index)*DAY);
   }
-  const evidence=join(old,'target/test-scratch/evidence');mkdirSync(join(old,'target/test-scratch'));writeFileSync(evidence,'keep');
+  const evidence=join(old,'target/unowned-scratch/evidence');mkdirSync(join(old,'target/unowned-scratch'));writeFileSync(evidence,'keep');
   const host={...f.p.capacity.host,disk:(path:string)=>({...f.p.capacity.host.disk(path),freeBytes:DISK_MARGIN_BYTES-1+(existsSync(join(old,'target/nts-dev'))?0:16*GB)}),
     allocatedBytes:(path:string)=>path===join(old,'target/nts-dev')&&existsSync(path)?16*GB:0};
   const p=new Pool(f.p.dir,f.p.git,()=>{},{host,users:()=>[],reclamation:{services:[],ownership:()=>{if(blocked)throw Error('unit build-owner.service owns profile');}}});
@@ -791,7 +791,7 @@ for(const blocked of [false,true])test('take reclaims the oldest surplus Cargo p
     assert.throws(()=>p.take('919'),error=>{
       assert.ok(error instanceof PoolFull);
       for(const tree of f.p.trees())assert.ok(error.message.includes(tree.path),error.message);
-      assert.match(error.message,/two warm free targets retained/);assert.match(error.message,/test-scratch/);assert.match(error.message,/build-owner.service/);
+      assert.match(error.message,/one warm free target retained under pressure/);assert.match(error.message,/test-scratch/);assert.match(error.message,/build-owner.service/);
       return true;
     });
     assert.equal(p.trees().some(tree=>tree.branch==='919'),false);
@@ -812,8 +812,8 @@ test('a reclaimed free tree is taken and Cargo rebuilds its removed profile',t=>
     for(const name of ['nts-dev','clippy'] as const){const path=join(tree.path,'target',name);mkdirSync(path,{recursive:true});completeBuild(tree.path,name,path);}
     f.freedAt(tree.name,(3-index)*DAY);
   }
-  const old=join(f.p.dir,'1'),evidence=join(old,'target/test-scratch/evidence');
-  mkdirSync(join(old,'target/test-scratch'));writeFileSync(evidence,'preserve');
+  const old=join(f.p.dir,'1'),evidence=join(old,'target/unowned-scratch/evidence');
+  mkdirSync(join(old,'target/unowned-scratch'));writeFileSync(evidence,'preserve');
   const release=f.p.capacity.beginBuild({root:old,target:join(old,'target'),outputs:['nts-dev']});
   try{const result=cargoSync(['build','--offline','--profile','nts-dev'],{cwd:old,env:f.s.env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);completeBuild(old,'nts-dev',join(old,'target/nts-dev'));}finally{release();}
   const host={...f.p.capacity.host,disk:(path:string)=>({...f.p.capacity.host.disk(path),freeBytes:44*GB+(existsSync(join(old,'target/nts-dev'))?0:16*GB)}),allocatedBytes:(path:string)=>path===join(old,'target/nts-dev')&&existsSync(path)?16*GB:0};
