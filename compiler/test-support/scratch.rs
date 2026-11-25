@@ -36,6 +36,7 @@ impl ScratchDir {
     }
 
     pub(crate) fn new(parent: &Utf8Path, name: &str) -> Self {
+        assert_target_parent(parent);
         Self::create(parent, name, std::convert::identity, true)
     }
 
@@ -52,7 +53,10 @@ fn target_parent() -> Utf8PathBuf {
     std::env::var("NTS_TEST_SCRATCH_ROOT").map_or_else(
         |_| {
             if let Some(parent) = option_env!("CARGO_TARGET_TMPDIR") {
-                parent.into()
+                Utf8Path::new(parent)
+                    .parent()
+                    .expect("Cargo target temporary has a parent")
+                    .join("test-scratch")
             } else {
                 // Cargo sets CARGO_TARGET_TMPDIR only for integration targets.
                 // Library tests still own scratch inside their pool tree.
@@ -64,11 +68,32 @@ fn target_parent() -> Utf8PathBuf {
                             .is_ok_and(|text| text.lines().any(|line| line.trim() == "[workspace]"))
                     })
                     .unwrap_or(manifest);
-                workspace.join("target/tmp")
+                workspace.join("target/test-scratch")
             }
         },
         Utf8PathBuf::from,
     )
+}
+
+/// Explicit custom fixture parents may be outside a target, or beneath its
+/// owner root. A spelled-out top-level target path is never silently moved.
+fn assert_target_parent(parent: &Utf8Path) {
+    if std::env::var("NTS_TEST_SCRATCH_ROOT")
+        .is_ok_and(|root| parent.starts_with(Utf8Path::new(&root)))
+    {
+        return;
+    }
+    let components: Vec<_> = parent.components().collect();
+    for (at, component) in components.iter().enumerate() {
+        if component.as_str() == "target" {
+            assert!(
+                components
+                    .get(at + 1)
+                    .is_some_and(|part| part.as_str() == "test-scratch"),
+                "test scratch parent {parent} bypasses target/test-scratch; use ScratchDir::in_target"
+            );
+        }
+    }
 }
 
 /// The same owner for tests that use standard-library paths.

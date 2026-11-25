@@ -63,10 +63,7 @@ fn global_window_overloads_use_the_selected_binding_argument_contract() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(
-        &root.join("target/native-c-tests"),
-        "window-argument-contract",
-    );
+    let dir = ScratchDir::in_target("window-argument-contract");
     // Keep the complete original guard, including its nested createElement
     // call and other globals. Add the two-argument neighbour and the fixture's
     // explicit-module control; no original fixture bytes are changed.

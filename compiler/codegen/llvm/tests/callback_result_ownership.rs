@@ -75,7 +75,7 @@ fn execute(case: &str, source: &str) -> Vec<String> {
         .canonicalize_utf8()
         .unwrap();
     let mut failures = Vec::new();
-    let dir = scratch::ScratchDir::new(&root.join("target/callback-result-ownership"), case);
+    let dir = scratch::ScratchDir::in_target(case);
     std::fs::write(dir.join("main.ts"), source).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

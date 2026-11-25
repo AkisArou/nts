@@ -125,8 +125,7 @@ fn command(path: &Utf8Path, name: &str, cmd: &mut Command) {
 #[test]
 fn projected_callable_keeps_old_plain_virtual_override() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir =
-        scratch::ScratchDir::new(&root.join("target/callable-override-tests"), "old-subclass");
+    let dir = scratch::ScratchDir::in_target("old-subclass");
     let old = dir.join("old");
     let new = dir.join("new");
     preserve(&old, CONTROL, false, &root);

@@ -1,3 +1,5 @@
+import {targetScratch} from '../full-check/keep.ts';
+import {rustTokens,type RustToken} from './rust-test-paths.ts';
 import {cargoSync} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 // Cargo targets own harnesses; each harness owns its case files. Test bodies
@@ -93,6 +95,27 @@ export function checkTestLayout(root:string,packages:readonly CargoPackage[]):Te
   return {harnesses,problems};
 }
 
+/** Extra source guard, never a deletion declaration. Actual deletion grants
+ * come only from keep.json and the two owner roots. Raw source snippets and
+ * comments are not paths the test constructs. */
+export function inspectTargetScratch(file:string,source:string):string[]{
+  const policy=targetScratch(),problems:string[]=[];
+  const walk=(tokens:readonly RustToken[])=>{
+    for(const token of tokens){
+      if(token.children)walk(token.children);
+      if(!token.literal||!token.text.startsWith('"'))continue;
+      const path=/^"(?:\.\.\/)*target\/([^"/]+)(?:\/|"$)/.exec(token.text);
+      if(!path)continue;
+      const name=path[1]!;
+      if(policy.names[name]===file)continue;
+      // A test has no raw top-level scratch path: even a known owner root
+      // is reached by its constructor, so changing that owner cannot drift.
+      if(['nts-dev','clippy','debug','release'].includes(name))continue;
+      problems.push(file+':'+source.slice(0,token.start).split('\n').length+': raw target scratch path; use ScratchDir::in_target');
+    }
+  };walk(rustTokens(source));return problems;
+}
+
 export function assertTestLayout(root:string,packages:readonly CargoPackage[]=cargoPackages(root)):TestLayout{
   const layout=checkTestLayout(root,packages);
   const listed=spawnSync('git',gitArguments(['ls-files','-z','--','*.rs']),{cwd:root,encoding:'utf8'});
@@ -101,6 +124,7 @@ export function assertTestLayout(root:string,packages:readonly CargoPackage[]=ca
   const sources=new Map(listed.stdout.split('\0').filter(file=>file&&owned.some(directory=>file.startsWith(directory))).map(file=>[file,readFileSync(join(root,file),'utf8')]));
   const tests=publicationTestFiles(sources,new Set(layout.harnesses.flatMap(harness=>[harness.file,...harness.cases.map(row=>row.file),...harness.helpers.map(row=>row.file)])));
   for(const file of listed.stdout.split('\0').filter(Boolean)){
+    if(tests.has(file)||file==='compiler/test-support/scratch.rs')layout.problems.push(...inspectTargetScratch(file,readFileSync(join(root,file),'utf8')));
     if(['compiler/test-support/scratch.rs','compiler/test-support/self_test.rs'].includes(file)||(!file.includes('/test-support/')&&!owned.some(directory=>file.startsWith(directory))))continue;
     const source=readFileSync(join(root,file),'utf8');
     layout.problems.push(...inspectRustPublication(file,source,tests.has(file)));

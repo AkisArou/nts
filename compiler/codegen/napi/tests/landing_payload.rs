@@ -18,7 +18,7 @@ fn the_landing_releases_moved_and_borrowed_payloads_once() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/landing-payload"), "addon");
+    let dir = scratch::ScratchDir::in_target("addon");
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
     let config = dir.join("tsconfig.json");
     std::fs::write(

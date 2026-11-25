@@ -13,7 +13,7 @@ fn snapshot(name: &str, source: &str) -> nts_semantic_schema::SemanticSnapshot {
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-bigint-constants"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/scalars.d.ts"]}}"#),

@@ -61,7 +61,7 @@ fn materialise(shared_alias: bool) -> ScratchDir {
     } else {
         "inline-subject"
     };
-    let dir = ScratchDir::new(&root.join("target/native-c-tests"), label);
+    let dir = ScratchDir::in_target(label);
     let original = include_str!(
         "../../../../tests/refusals/an-overload-whose-callback-is-its-own-type/types/ticker.d.ts"
     );

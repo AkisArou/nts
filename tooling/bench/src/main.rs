@@ -3332,10 +3332,7 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .expect("workspace");
-        let dir = super::scratch::ScratchDir::new(
-            &root.join("target/bench-symbol-tests"),
-            "private-symbols",
-        );
+        let dir = super::scratch::ScratchDir::in_target("private-symbols");
         std::fs::write(
             dir.join("tsconfig.json"),
             format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

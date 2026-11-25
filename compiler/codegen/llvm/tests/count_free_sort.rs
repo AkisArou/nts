@@ -136,7 +136,7 @@ fn native_sort_case(source: &str, driver: &str, expected_script: &str, numeric_o
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/count-free-sort-tests"), "collections");
+    let dir = ScratchDir::in_target("collections");
     std::fs::write(dir.join("main.ts"), source).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

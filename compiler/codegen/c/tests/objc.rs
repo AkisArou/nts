@@ -25,7 +25,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepare
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/objc-c-tests"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(
@@ -297,7 +297,7 @@ export function run(): number {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/objc-c-tests"), "block");
+    let dir = ScratchDir::in_target("block");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(

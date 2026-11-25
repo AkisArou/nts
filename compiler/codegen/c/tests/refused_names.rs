@@ -29,7 +29,7 @@ fn a_refused_nested_function_leaves_no_unread_immortal_name() {
         ("control", control.as_str(), false),
         ("refused", SOURCE, true),
     ] {
-        let dir = ScratchDir::new(&root.join("target/refused-name-tests"), label);
+        let dir = ScratchDir::in_target(label);
         std::fs::write(
             dir.join("tsconfig.json"),
             format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

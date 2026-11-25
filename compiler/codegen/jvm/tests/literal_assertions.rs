@@ -30,7 +30,7 @@ fn erased_literal_membership_is_checked_from_a_foreign_caller() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/literal-assertions"), "jvm");
+    let dir = scratch::ScratchDir::in_target("jvm");
     std::fs::write(
         dir.join("main.ts"),
         include_str!("../../common/test-support/literal-assertions/main.ts"),

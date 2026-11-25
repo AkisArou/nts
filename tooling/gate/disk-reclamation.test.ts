@@ -25,8 +25,64 @@ import {durableRecord} from './durable-record.ts';
 import {DiskState,DiskTransactions,type DiskTransaction} from './disk-transaction.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {pathToFileURL} from 'node:url';
+import {declaredTargets,readKeep} from '../full-check/keep.ts';
 const GiB=2**30;
 const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
+
+test('pressure keeps one compatible free target; ordinary idle upkeep keeps two',t=>{
+  for(const pressure of [true,false]){
+    const f=fixture(t),trees=['1','2','3'].map(f.tree);trees.forEach(tree=>f.output(tree));
+    if(!pressure)f.setFree(100*GiB);
+    const report=reclaimDisk({...f.options,maintenance:{before:Infinity,keep:2}});
+    assert.equal(trees.filter(tree=>existsSync(join(tree,'target'))).length,pressure?1:2,JSON.stringify(report));
+    assert.equal(report.removed.filter(row=>row.kind==='free-build-output').length,pressure?2:1);
+  }
+});
+
+test('every declared non-pool target offers obsolete debug, preserving its own current generation',t=>{
+  const f=fixture(t),cache=join(f.s.dir,'cache');f.setFree(0);
+  const keep=Object.fromEntries(Object.entries(readKeep()).filter(([,rule])=>rule.kind!=='pool'));
+  const targets=declaredTargets(cache,keep);
+  assert.ok(targets.some(row=>row.target===join(cache,'nts-gate/target')));
+  assert.ok(targets.some(row=>row.target===join(cache,'nts-pins/target')));
+  for(const {tree,target} of targets){
+    mkdirSync(tree,{recursive:true});writeFileSync(join(tree,'Cargo.toml'),'[workspace]\n[profile.nts-dev]\ndebug=1\n');
+    for(const profile of ['debug','nts-dev']){mkdirSync(join(target,profile),{recursive:true});writeFileSync(join(target,profile,'artifact'),'rebuildable');}
+    completeBuild(tree,'nts-dev',join(target,'nts-dev'));
+  }
+  const report=reclaimDisk({...f.options,services:targets.map(row=>({...row,service:true}))});
+  assert.deepEqual(report.removed.map(row=>row.root).sort(),targets.map(row=>join(row.target,'debug')).sort(),JSON.stringify(report));
+  assert.ok(report.removed.every(row=>row.kind==='obsolete-profile'));
+  for(const row of targets)assert.ok(existsSync(join(row.target,'nts-dev')),'current service generation differs from main');
+});
+
+for(const name of ['test-scratch','interop','tmp','accumulator-tests','interop-example'])test('free trees reclaim declared or legacy scratch: '+name,t=>{
+  const f=fixture(t),tree=f.tree('1'),path=join(tree,'target',name);
+  mkdirSync(path,{recursive:true});writeFileSync(join(path,'leftover'),'rebuildable scratch');
+  mkdirSync(join(tree,'target/unowned-scratch'));writeFileSync(join(tree,'target/unowned-scratch/keep'),'unknown writer');
+  const report=reclaimDisk(f.options);
+  assert.deepEqual(report.removed.map(row=>[row.root,row.kind]),[[path,['test-scratch','interop'].includes(name)?'test-scratch':'legacy-scratch']],JSON.stringify(report));
+  assert.equal(existsSync(path),false);assert.equal(readFileSync(join(tree,'target/unowned-scratch/keep'),'utf8'),'unknown writer');
+  assert.equal(JSON.parse(readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8')).kind,report.removed[0]!.kind);
+});
+
+for(const guard of ['branch','service','claim','unit','tracked','lock','replacement'])test('scratch retained at '+guard+' boundary',t=>{
+  const f=fixture(t),tree=f.tree('1'),path=join(tree,'target/test-scratch');mkdirSync(path,{recursive:true});
+  writeFileSync(join(path,'leftover'),'retained');
+  if(guard==='branch')f.s.git(['switch','-q','-c','841-test'],tree);
+  if(guard==='tracked')f.s.git(['add','-f','target/test-scratch/leftover'],tree);
+  const lock=guard==='lock'?GateResource.tryAcquire(tree+'.lock'):null;
+  try{
+    const report=reclaimDisk({...f.options,
+      ...(guard==='service'?{pool:{...f.options.pool,dir:join(f.s.dir,'unused')},services:[{tree,target:join(tree,'target'),service:true}]}:{}),
+      protectedRoots:()=>guard==='claim'?[{root:tree,target:join(tree,'target')}]:[],
+      ownership:()=>{
+        if(guard==='unit')throw Error('unit scratch-reader.service owns root');
+        if(guard==='replacement'){renameSync(path,join(f.s.dir,'saved'));mkdirSync(path);writeFileSync(join(path,'replacement'),'new owner');}
+      }});
+    assert.deepEqual(report.removed,[],JSON.stringify(report));assert.ok(existsSync(path));
+  }finally{lock?.close();}
+});
 
 function fixture(t:TestContext){
   const s=scratchRepo(t,'disk-reclamation');
@@ -296,7 +352,7 @@ for(const cacheTag of [true,false])test('detached held profiles are reclaimed be
   assert.equal(report.removed.reduce((sum,row)=>sum+row.allocatedBytes,0),12*GiB);
   assert.ok(report.removed.every(row=>row.kind==='detached-build-output'&&row.tree===tree&&row.task==='938'));
   assert.equal(readFileSync(stray,'utf8'),'private experiment');assert.ok(lstatSync(scratch).isDirectory());
-  for(const [root,writer] of [[stray,'historical issue #696'],[scratch,'compiler integration tests']]){
+  for(const [root,writer] of [[stray,'historical issue #696'],[scratch,'compiler test scratch']]){
     assert.ok(report.kept.some(row=>row.root===root&&row.reason.includes(writer!)),JSON.stringify(report));
   }
   const log=readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8').trim().split('\n').map(line=>JSON.parse(line));
@@ -326,16 +382,16 @@ test('a reclaimed held profile rebuilds after task resume while its stray siblin
   assert.equal(readFileSync(stray,'utf8'),'retained');
 });
 
-test('free targets precede detached targets, keeping two warm, then oldest detached first',t=>{
+test('free targets precede detached targets, keeping one warm, then oldest detached first',t=>{
   const f=fixture(t),free=['1','2','3'].map(f.tree),newer=f.tree('4'),older=f.tree('5');
   free.forEach(tree=>f.output(tree));
   for(const [tree,branch,at] of [[newer,'884',20],[older,'885',10]] as const){
     f.s.git(['switch','-q','-c',branch],tree);f.output(tree);writeWorkerPresence(tree,branch,'detached',at);
   }
   const report=reclaimDisk(f.options),kinds=report.removed.map(row=>row.kind);
-  assert.deepEqual(kinds,['free-build-output','detached-build-output','detached-build-output'],JSON.stringify(report));
-  assert.deepEqual(report.removed.slice(1).map(row=>row.tree),[older,newer]);
-  assert.equal(free.filter(tree=>existsSync(join(tree,'target'))).length,2);
+  assert.deepEqual(kinds,['free-build-output','free-build-output','detached-build-output'],JSON.stringify(report));
+  assert.deepEqual(report.removed.slice(2).map(row=>row.tree),[older]);
+  assert.equal(free.filter(tree=>existsSync(join(tree,'target'))).length,1);
 });
 
 test('attached, absent, corrupt, future and mismatched presence records retain task targets by name',t=>{
@@ -403,16 +459,16 @@ test('detached targets recheck attachment and build claims after measuring',t=>{
   }
 });
 
-test('free build output keeps the checkout and two warm targets; unbuilt removal uses Git',t=>{
+test('free build output keeps the checkout and one warm target; unbuilt removal uses Git',t=>{
   const f=fixture(t),trees=['1','2','3'].map(f.tree),unbuilt=f.tree('4');
   for(const tree of trees)f.output(tree);
   const report=reclaimDisk(f.options);
   assert.equal(report.removed.filter(row=>row.kind==='unbuilt-checkout').length,1,JSON.stringify(report?.kept));
   assert.equal(existsSync(unbuilt),false,JSON.stringify(report?.kept));
   assert.ok(!f.s.git(['worktree','list','--porcelain']).includes(unbuilt),JSON.stringify(report?.kept));
-  assert.equal(report.removed.filter(row=>row.kind==='free-build-output').length,1,JSON.stringify(report?.kept));
+  assert.equal(report.removed.filter(row=>row.kind==='free-build-output').length,2,JSON.stringify(report?.kept));
   assert.ok(trees.every(path=>existsSync(path)),( 'built checkouts remain registered')+'; kept='+JSON.stringify(report?.kept));
-  assert.equal(trees.filter(path=>existsSync(join(path,'target'))).length,2,JSON.stringify(report?.kept));
+  assert.equal(trees.filter(path=>existsSync(join(path,'target'))).length,1,JSON.stringify(report?.kept));
 });
 
 test('unbuilt checkout removal ends stale presence but keeps a future record and its tree',t=>{
@@ -730,7 +786,7 @@ for(const cacheTag of [true,false])test('build admission reclaims surplus proven
     const saved=f.s.env.GIT_COMMITTER_DATE;f.s.env.GIT_COMMITTER_DATE='@'+(1000000000+index)+' +0000';
     try{f.s.git(['switch','-q','-c','clock-'+index],tree);f.s.git(['switch','-q','--detach','main'],tree);}finally{if(saved===undefined)delete f.s.env.GIT_COMMITTER_DATE;else f.s.env.GIT_COMMITTER_DATE=saved;}
   }
-  const evidence=join(old,'target','test-scratch','evidence');mkdirSync(join(old,'target','test-scratch'));writeFileSync(evidence,'preserve this evidence');
+  const evidence=join(old,'target','unowned-scratch','evidence');mkdirSync(join(old,'target','unowned-scratch'));writeFileSync(evidence,'preserve this evidence');
   if(!cacheTag)rmSync(join(old,'target/CACHEDIR.TAG'));
   f.setFree(46*GiB);
   const root=join(f.s.dir,'builder');mkdirSync(root);writeFileSync(join(root,'Cargo.toml'),'[workspace]\n');
@@ -749,7 +805,7 @@ for(const cacheTag of [true,false])test('build admission reclaims surplus proven
 test('a disk refusal lists every retained warm target, unknown sibling and ownership guard',t=>{
   const f=fixture(t),trees=['1','2','3'].map(f.tree);
   for(const tree of trees){f.output(tree,'nts-dev');f.output(tree,'clippy',GiB);}
-  const extra=join(trees[2]!,'target/test-scratch');mkdirSync(extra);writeFileSync(join(extra,'evidence'),'kept');
+  const extra=join(trees[2]!,'target/unowned-scratch');mkdirSync(extra);writeFileSync(join(extra,'evidence'),'kept');
   f.setFree(40*GiB-1);
   const root=join(f.s.dir,'builder');mkdirSync(root);
   const capacity=new DiskCapacity({env:f.s.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:()=>{throw Error('unit protected-build.service owns WorkingDirectory');}}});
@@ -757,8 +813,8 @@ test('a disk refusal lists every retained warm target, unknown sibling and owner
     assert.ok(error instanceof DiskBuildAdmissionError);
     assert.equal(error.disk.shortBytes,7*GiB+1);
     for(const tree of trees)assert.ok(error.message.includes(tree),error.message);
-    assert.match(error.message,/two warm free targets retained/);
-    assert.match(error.message,/test-scratch: unrecognized target content; writer: unknown/);
+    assert.match(error.message,/one warm free target retained under pressure/);
+    assert.match(error.message,/unowned-scratch: unrecognized target content; writer: unknown/);
     assert.match(error.message,/protected-build.service owns WorkingDirectory/);
     return true;
   });
@@ -768,7 +824,7 @@ test('a disk refusal lists every retained warm target, unknown sibling and owner
 for(const detached of [false,true])for(const guard of ['claim','marker','tracked','lock','unit'])test('granular profile deletion rechecks '+guard+' beside removal; detached '+detached,t=>{
   const f=fixture(t),trees=['1','2','3'].map(f.tree),old=trees[2]!;
   for(const tree of trees){f.output(tree);f.output(tree,'clippy',GiB);}
-  const profile=join(old,'target/nts-dev');mkdirSync(join(old,'target/test-scratch'));
+  const profile=join(old,'target/nts-dev');mkdirSync(join(old,'target/unowned-scratch'));
   if(detached){f.s.git(['switch','-q','-c','938'],old);writeWorkerPresence(old,'938','detached',10);}
   // Equal fixture recency retains trees 1 and 2. Tree 3 offers both profiles.
   let claimed=false;
@@ -792,9 +848,10 @@ for(const detached of [false,true])test('unproved profiles and unknown siblings 
   const f=fixture(t),a=f.tree('1'),b=f.tree('2'),unproved=f.tree('3');
   for(const tree of [a,b]){f.output(tree);f.output(tree,'clippy',GiB);}
   const profile=f.output(unproved);rmSync(join(profile,'.nts-complete.json'));rmSync(join(unproved,'target/CACHEDIR.TAG'));
-  mkdirSync(join(unproved,'target/test-scratch'));
+  mkdirSync(join(unproved,'target/unowned-scratch'));
   if(detached){f.s.git(['switch','-q','-c','938'],unproved);writeWorkerPresence(unproved,'938','detached',10);}
-  const report=reclaimDisk(f.options);
+  f.setFree(100*GiB);
+  const report=reclaimDisk({...f.options,maintenance:{before:Infinity,keep:2}});
   assert.deepEqual(report.removed,[],JSON.stringify(report));
   assert.ok(report.kept.some(row=>row.root===profile&&row.reason.includes('neither Cargo cache identity nor a completion marker')),JSON.stringify(report));
   for(const tree of [a,b])assert.ok(report.kept.some(row=>row.root===join(tree,'target')&&row.reason==='two warm free targets retained'));

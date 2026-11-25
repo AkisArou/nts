@@ -2364,7 +2364,7 @@ interop() {
   one() {
     script=$1
     project=$(basename "$(dirname "$script")")
-    out="$PWD/target/interop-$project"
+    out="$PWD/target/interop/$project"
     rm -rf "$out"
     began=$(date +%s)
     # One token per project build (token.sh; see "Tokens" in run.mjs).

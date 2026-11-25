@@ -451,7 +451,7 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/typed-release-tests"), "callbacks");
+    let dir = ScratchDir::in_target("callbacks");
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -552,7 +552,7 @@ fn throwing_and_rejecting_a_function_does_not_report_its_captured_message() {
             "Promise.reject(f)",
             "Promise.resolve(0).then(()=>{throw f})",
         ] {
-            let dir = ScratchDir::new(&root.join("target/typed-release-tests"), "thrown-capture");
+            let dir = ScratchDir::in_target("thrown-capture");
             std::fs::write(
                 dir.join("main.ts"),
                 format!("function make({capture}:string):()=>string{{return ()=>{capture}}} export function run():void{{const f=make('captured-secret'); if(f()!=='captured-secret')throw 'bad capture'; {action};}}"),
@@ -803,7 +803,7 @@ fn typed_releases_follow_the_proved_layout_graph() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/typed-release-tests"), "graph");
+    let dir = ScratchDir::in_target("graph");
     std::fs::write(dir.join("main.ts"), graph_source()).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

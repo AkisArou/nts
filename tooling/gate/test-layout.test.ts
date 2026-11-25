@@ -1,3 +1,4 @@
+import {inspectTargetScratch} from './test-layout.ts';
 import assert from'node:assert/strict';
 import{mkdirSync,writeFileSync,appendFileSync}from'node:fs';
 import{join}from'node:path';
@@ -60,4 +61,12 @@ test('compiled listings retain the original case path, nested names and package 
   assert.equal(compareInventories(before,{version:1,rows:[...rows,rows[0]!]}).length,1);
   assert.equal(compareInventories(before,{version:1,rows:rows.map(row=>({...row,crate:'other'}))}).length,4);
   assert.throws(()=>listedTestRows(f.root,f.pkg,target,'unowned::same_name: test\n',layout),/no case owner/);
+});
+
+test('new top-level target scratch refuses, including drift inside the declared Rust owner',()=>{
+  assert.equal(inspectTargetScratch('compiler/core/tests/example.rs','let p = root.join("target/unowned-tests");').length,1);
+  assert.equal(inspectTargetScratch('compiler/test-support/scratch.rs','workspace.join("target/unowned-tests")').length,1);
+  assert.deepEqual(inspectTargetScratch('compiler/test-support/scratch.rs','workspace.join("target/test-scratch")'),[]);
+  assert.deepEqual(inspectTargetScratch('compiler/core/tests/example.rs','ScratchDir::in_target("topic")'),[]);
+  assert.deepEqual(inspectTargetScratch('compiler/core/tests/example.rs','// root.join("target/unowned-tests")\nlet source = r#"root.join("target/unowned-tests")"#;'),[]);
 });

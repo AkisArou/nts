@@ -1,3 +1,4 @@
+import {targetScratch} from '../full-check/keep.ts';
 import {DiskState,DiskTransactions,type DiskIntent} from './disk-transaction.ts';
 import {ClaimReceipt,GitReceipt,DetachRecord,linkMovedCheckout,prepareCheckoutRepair,readCheckoutMove,syncDiskDirectory,type CheckoutMove} from './disk-preparation.ts';
 import type {TreePin} from '../landing/tree-pin.ts';
@@ -15,13 +16,13 @@ import {assertNoProcessUsers} from '../landing/tree-users.ts';
 import {GateResource} from './gate-resource.ts';
 import {gitArguments} from './git-arguments/main.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
-import {buildGenerationFromInputs,type BuildOutputName} from './build-completion.ts';
+import {buildGeneration,buildGenerationFromInputs,type BuildOutputName} from './build-completion.ts';
 import {assertStateVersion} from './state-version.ts';
 import {workerPresence,assertWorkerPresenceWritable,removeWorkerPresence} from '../landing/pool-presence.ts';
 import type {HostObservations} from './host-observations.ts';
 
 export type ReclaimTarget={tree:string;target:string;service:boolean};
-export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output'|'detached-build-output';
+export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output'|'detached-build-output'|'test-scratch'|'legacy-scratch';
 export type ReclaimRemoval={root:string;kind:ReclaimKind;allocatedBytes:number;freeBytesChange:number;facts:string[];tree?:string;task?:string};
 export type ReclaimReport={triggered:boolean;lockHeldMs:number;maxLockHeldMs:number;before:number;after:number;triggerBytes:number;goalBytes:number;
   removed:ReclaimRemoval[];kept:{root:string;reason:string;routine:boolean}[]};
@@ -187,6 +188,7 @@ export const liveReclaimOwnership:ReclaimOwnership=(tree,target,ownPin)=>{
   assertNoUnitUsers([tree,target]);return assertNoProcessUsers([tree,target],{ownPin});
 };
 
+const scratchPolicy=()=>targetScratch();
 const cargoProfiles=['nts-dev','clippy','debug','release'] as const;
 const cargoMetadata=/^(?:CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json|\.rustdoc_fingerprint\.json)$/;
 /** Inventory only: these siblings have no deletion grant. Writer attribution
@@ -194,14 +196,17 @@ const cargoMetadata=/^(?:CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json|\.rustdoc_fin
 export function targetLeftovers(tree:string):{root:string;writer:string}[]{
   const target=join(tree,'target');
   if(!isDirectory(target))return [];
+  const policy=scratchPolicy();
   return readdirSync(target).filter(name=>!cargoProfiles.some(profile=>profile===name)&&!cargoMetadata.test(name)).sort().map(name=>({
-    root:join(target,name),writer:name==='tmp'?'compiler/test-support/scratch.rs (test scratch)':
+    root:join(target,name),writer:policy.names[name]??(policy.legacy.includes(name)?'legacy compiler test scratch via compiler/test-support/scratch.rs':
+      name.startsWith('interop-')?'legacy interop scratch via tooling/gate/all.sh':
+      name==='tmp'?'compiler/test-support/scratch.rs (test scratch)':
       name.endsWith('-tests')?'compiler integration tests via compiler/test-support/scratch.rs':
       name==='gate-costs'?'tooling/gate/step-scheduling.ts':
       name==='gate-scope-owner.json'||name==='gate-scope-owner.json.lock'?'tooling/gate/run.mjs; tooling/landing/run.ts':
       name==='.gate-run.lock'?'tooling/gate/run.mjs':
       name==='tooling-types.tsbuildinfo'?'tooling/tsconfig.json':
-      /^\d+-/.test(name)?'historical issue #'+name.split('-')[0]+' probe/log; writer unknown':'unknown',
+      /^\d+-/.test(name)?'historical issue #'+name.split('-')[0]+' probe/log; writer unknown':'unknown'),
   }));
 }
 /** A completion marker that exists but cannot be judged: unparseable, of a
@@ -269,7 +274,7 @@ export function describeReclamation(...reports:(ReclaimReport|null|undefined)[])
 
 export const DISK_TRASH='.disk-trash';
 const trashId=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const reclaimKinds:readonly ReclaimKind[]=['obsolete-profile','unbuilt-checkout','free-build-output','detached-build-output'];
+const reclaimKinds:readonly ReclaimKind[]=['obsolete-profile','unbuilt-checkout','free-build-output','detached-build-output','test-scratch','legacy-scratch'];
 type TrashManifest={version:1;id:string;at:number;state:'prepared'|'detached';identity:{dev:number;ino:number;uid:number};removal:ReclaimRemoval;checkout?:CheckoutMove};
 export type TrashEntry={path:string;allocatedBytes:number|null;ageMs:number;kind:ReclaimKind|null;diagnostic?:string};
 function trashRoot(pool:string):string{return join(pool,DISK_TRASH);}
@@ -457,7 +462,9 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     if(presence.state!=='detached')throw new TaskBranch('branch remains owned by an attached worker: '+branch);
     return presence.detachedAt!;
   };
-  const marker=(path:string,name:BuildOutputName)=>profileMarker(path,generations[name]);
+  const marker=(path:string,name:BuildOutputName,tree?:string)=>profileMarker(path,tree?(existsSync(join(tree,'Cargo.toml'))?buildGeneration(tree,name):null):generations[name]);
+  const scratch=scratchPolicy();
+  const scratchKind=(name:string):'test-scratch'|'legacy-scratch'|null=>scratch.names[name]?'test-scratch':scratch.legacy.includes(name)||/^interop-[a-zA-Z0-9_-]+$/.test(name)?'legacy-scratch':null;
   const assertUnclaimed=(root:string):void=>{
     const owner=options.protectedRoots().flatMap(owner=>[owner.root,owner.target]).find(path=>under(resolve(path),root)||under(root,resolve(path)));
     if(owner)throw Error('live lease or build claim: '+owner);
@@ -502,17 +509,23 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
         if(!target.service&&!existsSync(target.target))add(target,target.tree,'unbuilt-checkout',movedAt);
         continue;
       }
-      for(const row of targetProfiles(target.target,name=>generations[name]))if(row.state==='obsolete')add(target,row.root,'obsolete-profile',movedAt);
+      if(!target.service)for(const name of readdirSync(target.target)){
+        const kind=scratchKind(name);
+        if(kind&&isDirectory(join(target.target,name)))add(target,join(target.target,name),kind,movedAt);
+      }
+      for(const row of targetProfiles(target.target,name=>target.service?(existsSync(join(target.tree,'Cargo.toml'))?buildGeneration(target.tree,name):null):generations[name]))if(row.state==='obsolete')add(target,row.root,'obsolete-profile',movedAt);
       if(!target.service)offerBuildOutput(target,'free-build-output',movedAt);
     }catch(error){candidates.length=start;if(!missing(error))keep(target.tree,error);}
   }
-  // Keep two useful free targets. Stale markers and mere empty folders cannot
+  // Keep one useful free target under pressure, two during idle upkeep. Stale markers and mere empty folders cannot
   // displace a current completed generation; recent use breaks equal warmth.
   const warmTargets=poolTargets.filter(target=>candidates.some(row=>row.target===target.target&&row.kind==='free-build-output'));
   const warmth=(target:ReclaimTarget)=>['nts-dev','clippy'].filter(name=>isDirectory(join(target.target,name))&&marker(join(target.target,name),name as BuildOutputName)==='current').length;
   warmTargets.sort((a,b)=>warmth(b)-warmth(a)||(candidates.find(row=>row.target===b.target)?.movedAt??0)-(candidates.find(row=>row.target===a.target)?.movedAt??0)||a.tree.localeCompare(b.tree));
-  const retained=new Set(warmTargets.filter(target=>warmth(target)>0).slice(0,Math.max(2,options.maintenance?.keep??2)).map(row=>row.target));
-  const rank:Record<ReclaimKind,number>={'obsolete-profile':0,'unbuilt-checkout':1,'free-build-output':2,'detached-build-output':3};
+  const warmMinimum=report.triggered?1:Math.max(2,options.maintenance?.keep??2);
+  const warmReason=warmMinimum===1?'one warm free target retained under pressure':'two warm free targets retained';
+  const retained=new Set(warmTargets.filter(target=>warmth(target)>0).slice(0,warmMinimum).map(row=>row.target));
+  const rank:Record<ReclaimKind,number>={'obsolete-profile':0,'test-scratch':1,'legacy-scratch':1,'unbuilt-checkout':2,'free-build-output':3,'detached-build-output':4};
   candidates.sort((a,b)=>rank[a.kind]-rank[b.kind]||a.movedAt-b.movedAt||a.root.localeCompare(b.root));
   for(const candidate of candidates){
     const {root,tree,kind}=candidate;
@@ -520,7 +533,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     const goal=snapshot.floorBytes+snapshot.reservedBytes+2*coldBytes;
     if(report.triggered&&snapshot.freeBytes>=goal)break;
     if(!report.triggered&&options.maintenance&&candidate.movedAt>=options.maintenance.before)continue;
-    if(kind==='free-build-output'&&retained.has(candidate.target)){if(!report.kept.some(row=>row.root===candidate.target&&row.reason==='two warm free targets retained'))keep(candidate.target,'two warm free targets retained',true);continue;}
+    if(kind==='free-build-output'&&retained.has(candidate.target)){if(!report.kept.some(row=>row.root===candidate.target&&row.reason===warmReason))keep(candidate.target,warmReason,true);continue;}
     // A previous obsolete-profile removal may have consumed this candidate.
     if(!existsSync(root))continue;
     const held:{lock:GateResource|null;drainer:GateResource|null;entry:string|undefined;intent:DiskIntent|undefined}={lock:null,drainer:null,entry:undefined,intent:undefined};
@@ -545,6 +558,9 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
             if(!lstatSync(join(tree,path)).isSymbolicLink()||realpathSync(join(tree,path))!==realpathSync(join(pool.git.root,path)))throw Error('ignored local data: '+path);
           }
           if(existsSync(join(tree,'target')))throw Error('checkout acquired build output');
+        }else if(kind==='test-scratch'||kind==='legacy-scratch'){
+          if(candidate.service||candidate.branch||dirname(root)!==candidate.target||scratchKind(basename(root))!==kind)throw Error('scratch is not in a free tree or declared namespace');
+          if(gitRead(pool.git,['ls-files','--','target/'+basename(root)],tree))throw Error('tracked target scratch');
         }else if((kind==='free-build-output'||kind==='detached-build-output')&&root!==candidate.target){
           const name=basename(root);
           if(dirname(root)!==candidate.target||!cargoProfiles.some(profile=>profile===name))throw Error('unrecognized Cargo profile');
@@ -557,7 +573,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
           const allowed=(name:string)=>cargoProfiles.some(profile=>profile===name)||cargoMetadata.test(name);
           for(const name of readdirSync(root))if(!allowed(name))throw Error('unrecognized target content: '+name);
           if(!cargoCache(root))throw Error('target lacks Cargo cache identity');
-        }else if(basename(root)!=='debug'&&marker(root,basename(root) as BuildOutputName)!=='obsolete')throw Error('profile is no longer obsolete');
+        }else if(basename(root)!=='debug'&&marker(root,basename(root) as BuildOutputName,candidate.service?tree:undefined)!=='obsolete')throw Error('profile is no longer obsolete');
       };
       const trash=trashRoot(pool.dir);mkdirSync(trash,{recursive:true});physical(trash);
       if(lstatSync(trash).dev!==candidate.identity[0]!.dev)throw Error('disk trash is on a different filesystem: '+root);

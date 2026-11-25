@@ -45,7 +45,7 @@ fn a_remainder_answered_from_its_integers_compiles_warning_free() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/remainder-tests"), "unread");
+    let dir = ScratchDir::in_target("unread");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

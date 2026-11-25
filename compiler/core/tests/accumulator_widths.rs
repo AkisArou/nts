@@ -62,7 +62,7 @@ fn an_accumulator_bounded_by_a_32_bit_count_is_an_integer() {
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/accumulator-tests"), "widths");
+    let dir = ScratchDir::in_target("widths");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

@@ -59,7 +59,7 @@ fn physical_type_names_keep_keyword_constructors_distinct() {
             "{:?}",
             addon.skipped
         );
-        let dir = scratch::ScratchDir::new(&root.join("target/class-export-tests"), first);
+        let dir = scratch::ScratchDir::in_target(first);
         std::fs::write(dir.join("program.c"), program.writer.text()).unwrap();
         addon.write_into(dir.as_std_path()).unwrap();
         let mut sources = vec![

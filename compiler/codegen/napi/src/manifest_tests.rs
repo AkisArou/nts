@@ -11,7 +11,7 @@ use nts_frontend_ts::Frontend;
 fn exported_aliases_share_the_completed_wrapper_signature() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for count in [16, 64, 256] {
-        let dir = scratch::ScratchDir::new(&root.join("target/manifest-cost"), "aliases");
+        let dir = scratch::ScratchDir::in_target("aliases");
         let parameters = (0..count)
             .map(|i| format!("p{i}: number"))
             .collect::<Vec<_>>()

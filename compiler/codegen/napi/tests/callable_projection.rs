@@ -34,7 +34,7 @@ export function readIdentity(n: number): boolean {
 #[test]
 fn callable_source_transport_does_not_publish_function_value_storage() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = scratch::ScratchDir::new(&root.join("target/callable-crossing-tests"), "calls-only");
+    let dir = scratch::ScratchDir::in_target("calls-only");
     let source = dir.join("main.ts");
     std::fs::write(&source, SOURCE).unwrap();
     std::fs::write(

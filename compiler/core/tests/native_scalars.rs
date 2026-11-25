@@ -11,8 +11,7 @@ use nts_frontend_ts::Frontend;
 
 #[test]
 fn test_scratch_is_removed_when_its_owner_returns() {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch-tests");
-    let parent = ScratchDir::new(&root, "return");
+    let parent = ScratchDir::in_target("return");
     let dir = ScratchDir::new(&parent, "artifacts");
     let path = dir.to_path_buf();
     std::fs::write(dir.join("result"), "partial compiler output").unwrap();
@@ -23,8 +22,7 @@ fn test_scratch_is_removed_when_its_owner_returns() {
 
 #[test]
 fn test_scratch_is_removed_when_its_owner_unwinds() {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch-tests");
-    let parent = ScratchDir::new(&root, "unwind");
+    let parent = ScratchDir::in_target("unwind");
     let dir = ScratchDir::new(&parent, "artifacts");
     let path = dir.to_path_buf();
     let result = std::panic::catch_unwind(move || {
@@ -38,8 +36,7 @@ fn test_scratch_is_removed_when_its_owner_unwinds() {
 
 #[test]
 fn test_scratch_with_the_same_label_has_independent_owners() {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch-tests");
-    let parent = ScratchDir::new(&root, "separate");
+    let parent = ScratchDir::in_target("separate");
     let first = ScratchDir::new(&parent, "same");
     let second = ScratchDir::new(&parent, "same");
     assert_ne!(first.as_std_path(), second.as_std_path());
@@ -52,7 +49,7 @@ fn snapshot(name: &str, source: &str) -> nts_semantic_schema::SemanticSnapshot {
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-scalar-tests"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();
@@ -1297,7 +1294,7 @@ fn snapshot_allowing_errors(
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-scalar-tests"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(

@@ -10,7 +10,7 @@ fn publication_requires_the_exact_plan_body_and_descriptor() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/entry-publication-tests"), "closures");
+    let dir = scratch::ScratchDir::in_target("closures");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

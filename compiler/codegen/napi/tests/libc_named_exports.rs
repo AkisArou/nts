@@ -39,7 +39,7 @@ fn an_addon_calls_its_own_libc_named_exports_on_both_backends() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/libc-named-exports"), "addon");
+    let dir = scratch::ScratchDir::in_target("addon");
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

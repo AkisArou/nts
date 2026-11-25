@@ -770,3 +770,10 @@ test("keep.json declares every cargo target the services' layouts, pin.ts and pi
   for(const spelling of ['join(homedir(), ".cache/nts-pins")','const TREE = join(PINS, "tree");','const TARGET = join(PINS, "target");'])assert.ok(pin.includes(spelling),spelling);
   for(const spelling of ['tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}','target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}'])assert.ok(pinned.includes(spelling),spelling);
 });
+
+test('scratch declarations name the owner roots and bound the legacy migration',()=>{
+  const policy=readKeep()['nts-pool']!;
+  assert.deepEqual(policy.targetScratch,{'test-scratch':'compiler/test-support/scratch.rs',interop:'tooling/gate/all.sh'});
+  assert.ok(policy.legacyTargetScratch?.includes('accumulator-tests'));
+  assert.ok(!policy.legacyTargetScratch?.includes('unowned-scratch'));
+});

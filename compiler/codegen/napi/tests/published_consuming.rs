@@ -91,7 +91,7 @@ fn a_published_call_borrows_through_return_and_throw() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/published-consuming"), "addon");
+    let dir = scratch::ScratchDir::in_target("addon");
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

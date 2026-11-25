@@ -167,10 +167,7 @@ fn build(provider: hir::Memory) -> ScratchDir {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(
-        &root.join("target/com-failure-tests"),
-        &format!("{provider:?}"),
-    );
+    let dir = ScratchDir::in_target(&format!("{provider:?}"));
     std::fs::write(dir.join("main.ts"), PROGRAM).unwrap();
     std::fs::write(dir.join("binding.d.ts"), BINDING).unwrap();
     std::fs::write(dir.join("tsconfig.json"), format!(

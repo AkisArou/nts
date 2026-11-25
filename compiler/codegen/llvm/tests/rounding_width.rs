@@ -77,15 +77,8 @@ fn program(dir: &Utf8Path, signed: bool, rounding: Option<UnOp>) -> hir::Program
 
 #[test]
 fn integer_rounding_agrees_with_explicit_conversion_and_c() {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .canonicalize_utf8()
-        .unwrap();
     for signed in [true, false] {
-        let dir = ScratchDir::new(
-            &root.join("target/rounding-width-tests"),
-            if signed { "signed" } else { "unsigned" },
-        );
+        let dir = ScratchDir::in_target(if signed { "signed" } else { "unsigned" });
         for file in nts_codegen_c::support_files(nts_codegen_c::UnicodeNeeds::ALL) {
             file.write(dir.as_std_path()).unwrap();
         }

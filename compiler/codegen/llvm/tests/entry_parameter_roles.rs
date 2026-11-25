@@ -11,7 +11,7 @@ fn fixture(source: &str) -> (scratch::ScratchDir, nts_semantic_schema::SemanticS
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/entry-parameter-tests"), "roles");
+    let dir = scratch::ScratchDir::in_target("roles");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

@@ -26,8 +26,7 @@ import {TEMP_DISK_FLOOR_BYTES} from './run-temporary.ts';
 import {assertStateVersion,assertWritableState} from './state-version.ts';
 import {durableRecord} from './durable-record.ts';
 import {describeReclamation,reclaimDisk,liveReclaimOwnership,type ReclaimReport,type ReclaimTarget,type ReclaimOwnership} from './disk-reclamation.ts';
-import {landingLayout} from '../landing/layout.ts';
-import {layout as fullCheckLayout} from '../full-check/layout.ts';
+import {declaredTargets,readKeep} from '../full-check/keep.ts';
 import {DiskBuildAdmissionError,ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 
 export const DISK_CAPACITY='NTS_DISK_CAPACITY';
@@ -119,11 +118,10 @@ export class DiskCapacity {
     this.host=options.host??hostObservations(env);this.forecast=options.forecast??coldBuildForecast();
     this.pool=options.pool===undefined?poolSource(env):options.pool;
     this.stateFile=this.pool?join(this.pool.dir,'.disk-builds.json'):env[DISK_CAPACITY]?env[DISK_CAPACITY]+'.builds.json':join(homedir(),'.cache/nts-pool/.disk-builds.json');
-    const landing=landingLayout(),full=fullCheckLayout();
     // A private/fixture pool cannot discover the account's service trees.
     const services=this.pool?.dir===join(homedir(),'.cache/nts-pool')&&env[FIXTURE_ENVIRONMENT]===undefined
-      ? [{tree:landing.tree,target:landing.target,service:true},{tree:full.tree,target:full.target,service:true},
-        ...[full.bench,...Object.values(full.records)].map(tree=>({tree,target:join(tree,'target'),service:true}))]:[];
+      ? declaredTargets(join(homedir(),'.cache'),Object.fromEntries(Object.entries(readKeep()).filter(([,rule])=>rule.kind!=='pool')))
+        .map(row=>({...row,service:true})):[];
     this.reclamation=options.reclamation??{services,ownership:liveReclaimOwnership};
     // Older build owners retain their own schema and cannot overwrite a
     // temporary claim. Both files are governed by the same capacity lock.

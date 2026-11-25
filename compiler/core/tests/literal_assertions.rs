@@ -12,7 +12,7 @@ fn erased_literal_checks_survive_and_typed_claims_remain_unchecked() {
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/literal-assertions"), "core");
+    let dir = scratch::ScratchDir::in_target("core");
     std::fs::write(
         dir.join("main.ts"),
         include_str!("../../codegen/common/test-support/literal-assertions/main.ts"),

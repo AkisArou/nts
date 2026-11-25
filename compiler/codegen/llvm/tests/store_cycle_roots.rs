@@ -51,7 +51,7 @@ fn checked(command: &mut Command) -> Vec<u8> {
 #[test]
 fn abandoned_callback_cycles_leave_no_live_storage() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = ScratchDir::new(&root.join("target/store-cycle-roots-tests"), "native");
+    let dir = ScratchDir::in_target("native");
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

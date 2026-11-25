@@ -4912,3 +4912,28 @@ The bound in the count makes a stopped retention red. Pool trees and pins are
 out of scope. The contract is in [workflow](../../workflow.md#the-machine); the
 owner is `tooling/gate/incremental-retention.ts`. Measurement:
 `~/.cache/nts-scratch/1022/measurement-20261125.md`.
+
+
+## Gate disk deletion policies (11-25)
+
+#841 slice (d). The owner approved older green raw-cost deletion on 2026-11-20:
+keep the newest three completed runs and every red, held, unfinished or unknown
+run; prune only `costs/` after complete `summary.json.case_costs` exists, keeping
+summaries and logs. All targets declared in `tooling/full-check/keep.json`,
+including pins, hand gates, records and benchmarks, join the existing guarded
+obsolete-profile reclamation, judged against their own trees' generations.
+
+On 2026-11-25 the owner answered Signalbox question
+`disk-warm-trees-20261125`: retain **one** compatible warm free tree under disk
+pressure, with two retained during ordinary idle upkeep. The same day's owner
+decision authorizes deletion of leftover compiler-test and interop scratch in
+clean free trees. Writers now own `target/test-scratch` and `target/interop`;
+the inventory declares those roots and names `compiler/test-support/scratch.rs`
+and `tooling/gate/all.sh`. Explicit custom fixture parents outside target and
+scoped test scratch retain their existing lifetimes. The source guard rejects
+raw top-level compiler scratch paths. A temporary `legacy-scratch` removal kind
+covers the old declared compiler namespaces and `interop-*` only in free trees;
+remove this migration once no free tree carries the old layout. Unknown siblings
+and held/service scratch remain protected. The workflow's machine contract
+states these policies; all removals retain identity, locks, claims and live
+process/unit guards. No node compile-cache policy changes.

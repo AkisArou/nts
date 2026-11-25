@@ -46,7 +46,7 @@ fn an_or_of_two_booleans_converts_neither() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/bitwise-tests"), "bool-or");
+    let dir = ScratchDir::in_target("bool-or");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

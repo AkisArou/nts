@@ -10,7 +10,7 @@ fn class_project() -> (scratch::ScratchDir, Program) {
     use camino::Utf8Path;
     use nts_frontend_ts::Frontend;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = scratch::ScratchDir::new(&root.join("target/member-name-tests"), "class-owner");
+    let dir = scratch::ScratchDir::in_target("class-owner");
     for module in ["left", "right"] {
         std::fs::create_dir_all(dir.join(module)).unwrap();
         std::fs::write(

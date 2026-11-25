@@ -22,7 +22,7 @@ fn refused_function_names_do_not_leave_unreferenced_private_data() {
         ("control", control.as_str(), false),
         ("refused", SOURCE, true),
     ] {
-        let dir = ScratchDir::new(&root.join("target/refused-name-tests"), label);
+        let dir = ScratchDir::in_target(label);
         std::fs::write(
             dir.join("tsconfig.json"),
             format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
@@ -76,7 +76,7 @@ fn discarded_native_bodies_publish_neither_literals_nor_templates() {
         .join("../../..")
         .canonicalize_utf8()
         .expect("repository root");
-    let dir = ScratchDir::new(&root.join("target/refused-name-tests"), "late-refusal");
+    let dir = ScratchDir::in_target("late-refusal");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

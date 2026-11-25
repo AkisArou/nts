@@ -129,8 +129,7 @@ fn launcher(path: &Utf8Path, jar: &Utf8Path, runtime: &Utf8Path, init: &str, exp
 #[test]
 fn every_android_initializer_emitter_resolves_without_a_device() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let scratch =
-        scratch::ScratchDir::new(&root.join("target/member-name-tests"), "android-emitters");
+    let scratch = scratch::ScratchDir::in_target("android-emitters");
     for (case, invocation, expected) in [
         ("absent", "", &b"1.0\n"[..]),
         (

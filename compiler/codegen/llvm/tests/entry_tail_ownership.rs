@@ -48,7 +48,7 @@ fn execute(kind: &str) -> Vec<String> {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/entry-tail-ownership"), kind);
+    let dir = scratch::ScratchDir::in_target(kind);
     std::fs::write(dir.join("main.ts"), source(kind)).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

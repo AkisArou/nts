@@ -56,8 +56,7 @@ fn an_internal_numeric_specialization_emits_no_borrowed_adapter() {
     );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    let dir =
-        crate::scratch::ScratchDir::new(&root.join("target/published-specialization"), "warnings");
+    let dir = crate::scratch::ScratchDir::in_target("warnings");
     for file in emitted.support_files() {
         file.write(dir.as_std_path()).unwrap();
     }
@@ -245,7 +244,7 @@ fn counted_program(config: &str, closed: bool) -> Counted {
     assert!(prepared.rejected.is_empty(), "{:?}", prepared.rejected);
     let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    let dir = crate::scratch::ScratchDir::new(&root.join("target/published-towers"), "minimum");
+    let dir = crate::scratch::ScratchDir::in_target("minimum");
     std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
     let mut sources = vec![dir.join("program.c").into_std_path_buf()];
     for file in emitted.support_files() {

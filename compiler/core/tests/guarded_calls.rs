@@ -74,7 +74,7 @@ fn a_call_that_passes_the_guard_calls_the_whole_copy() {
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/guarded-call-tests"), "direct");
+    let dir = ScratchDir::in_target("direct");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

@@ -142,10 +142,7 @@ fn agree(name: &str, source: &str, arms: &[Arm], provider: hir::Memory) {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(
-        &root.join("target/llvm-addon-class"),
-        &format!("{name}-{provider:?}"),
-    );
+    let dir = scratch::ScratchDir::in_target(&format!("{name}-{provider:?}"));
     std::fs::write(dir.join("main.ts"), source).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

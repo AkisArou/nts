@@ -126,7 +126,7 @@ fn snapshot_of(
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-llvm-tests"), name);
+    let dir = ScratchDir::in_target(name);
     let mut files = String::new();
     for (name, contents) in declarations {
         std::fs::write(dir.join(name), contents).unwrap();
@@ -221,7 +221,7 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-llvm-tests"), "async-callback");
+    let dir = ScratchDir::in_target("async-callback");
     std::fs::write(
         dir.join("closures.d.ts"),
         include_str!("../../../../tests/interop/native-closure/types/closures.d.ts"),
@@ -275,7 +275,7 @@ fn checker_messages(name: &str, source: &str) -> Vec<String> {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-llvm-tests"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();

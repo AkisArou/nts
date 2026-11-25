@@ -28,7 +28,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepare
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/by-value-tests"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(

@@ -1408,7 +1408,7 @@ the tooling strict checker owns the source's type checking.
   directory and manifest-backed UUID/payload worktrees, and never deletes them. Below the floor plus live promises and one measured cold build, it
   removes in cost order until another cold build of headroom is free: obsolete
   whole profile generations, clean unbuilt pool checkouts, then free pool build
-  output while keeping two compatible warm targets, then held trees' Cargo `target/`
+  output while keeping one compatible warm target under pressure (two at idle), then held trees' Cargo `target/`
   whose workers are explicitly detached, oldest detachment first. This last
   kind runs only under pressure, never from elapsed idleness. Free and
   detached held targets containing unknown siblings offer their recognized
@@ -1427,7 +1427,9 @@ the tooling strict checker owns the source's type checking.
   target files; each independent profile grant requires its own provenance
   and no tracked files inside that profile.
   The landing and full-check trees offer
-  only obsolete generations, never their current build output. Unknown or corrupt
+  only obsolete generations, never their current build output. Pins, hand gates,
+  records and benchmark targets declared by `keep.json` use the same rule, judged
+  against their own trees' build generations. Unknown or corrupt
   generation markers keep the candidate. A removed checkout must be Git-detached, clean,
   registered and have no unpublished commits; ignored local data also keeps it.
   Git moves an unbuilt checkout into trash while its intent and tree fence
@@ -1730,6 +1732,14 @@ the tooling strict checker owns the source's type checking.
   and group interleaved sessions before deriving `summary.json.case_costs`.
   A failed process-file write disables that file for every session, preserving
   a partial final row without appending other records to it.
+  The hourly upkeep retains raw `costs/` for the newest three completed runs
+  in each declared run root and every red, held, unfinished or unknown run.
+  An older green run loses raw events only after `case_costs` is completely
+  materialized. Known terminal schemas, closed lifecycle and any outer
+  measurement state, unchanged records and physical identities, a collector
+  lock and absent process/unit holders authorize that removal. A durable
+  identity receipt allows an interrupted detachment to resume. Summaries and
+  logs keep their existing retention.
 - **Census phase CPU explains the retained step total.** TypeScript and
   test262 backend steps publish disjoint materialization, native capture and
   checking, lowering and preparation, emission, host compilation and linking,
@@ -2035,6 +2045,15 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Gate disk reclamation follows declared writers.** Older green raw costs
+  can go only after their complete summary, beyond the newest three completed
+  runs. Every declared target uses its own generation for obsolete profiles;
+  current output stays. Pressure keeps one compatible warm free tree, idle
+  upkeep two. Compiler tests and interop write into explicit scratch roots;
+  only clean free trees offer those roots and the bounded legacy migration
+  ([log](records/notebooks/decisions-log.md#gate-disk-deletion-policies-11-25)).
+
 
 - **Service incremental state is an LRU counted in builds.** No current-unit
   set can be read back from a target (the directory name is a hash of
@@ -2428,7 +2447,7 @@ death; an absent timestamp remains explicit after forced termination.
 
 - **Pressure reclamation uses ownership provenance**: only approved rebuildable
   outputs and clean unbuilt pool checkouts may be removed under the capacity
-  lock. Current service builds and two warm free targets remain. Non-dumpable
+  lock. Current service builds remain; one warm free target remains under pressure and two at idle. Non-dumpable
   processes outside nts are recorded by cgroup provenance; unreadable tool
   processes or cgroups refuse
   ([log](records/notebooks/decisions-log.md#pressure-reclamation-uses-ownership-provenance-11-14)).

@@ -67,7 +67,7 @@ fn check(fixture: &str, public: bool) {
                 "LLVM call body missing: {symbol}"
             );
         }
-        let dir = scratch::ScratchDir::new(&root.join("target/exported-closure-values"), fixture);
+        let dir = scratch::ScratchDir::in_target(fixture);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
         for file in c.support_files() {

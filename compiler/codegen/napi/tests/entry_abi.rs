@@ -12,7 +12,7 @@ fn addon_method_prototypes_match_the_c_definitions_and_call_them() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/napi-entry-abi"), "method");
+    let dir = scratch::ScratchDir::in_target("method");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

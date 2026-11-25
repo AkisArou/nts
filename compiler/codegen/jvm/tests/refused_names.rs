@@ -14,7 +14,7 @@ fn a_discarded_jvm_body_keeps_no_literal_from_its_unwritten_code() {
         .join("../../..")
         .canonicalize_utf8()
         .expect("repository root");
-    let dir = ScratchDir::new(&root.join("target/refused-name-tests"), "jvm-late-refusal");
+    let dir = ScratchDir::in_target("jvm-late-refusal");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

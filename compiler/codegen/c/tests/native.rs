@@ -160,7 +160,7 @@ fn prepare_with_binding(name: &str, binding: &str, source: &str) -> (ScratchDir,
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-c-tests"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(
@@ -212,7 +212,7 @@ fn snapshot_with_types(
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/native-c-tests"), name);
+    let dir = ScratchDir::in_target(name);
     // Keep isolated-brand controls free of unrelated ambient declarations.
     // `libc.d.ts` brings `@nts/scalars` with it.
     let declarations =
@@ -1831,10 +1831,7 @@ export function handedOn(n: number): number {
             .join("../../..")
             .canonicalize_utf8()
             .unwrap();
-        let dir = ScratchDir::new(
-            &root.join("target/native-c-tests"),
-            &format!("held-record-{provider:?}"),
-        );
+        let dir = ScratchDir::in_target(&format!("held-record-{provider:?}"));
         std::fs::write(
             dir.join("tsconfig.json"),
             format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts"]}}"#),
@@ -1984,7 +1981,7 @@ export function size(): number {
             .join("../../..")
             .canonicalize_utf8()
             .unwrap();
-        let dir = ScratchDir::new(&root.join("target/native-c-tests"), name);
+        let dir = ScratchDir::in_target(name);
         std::fs::write(
             dir.join("tsconfig.json"),
             format!(

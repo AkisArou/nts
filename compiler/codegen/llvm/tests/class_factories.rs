@@ -60,10 +60,7 @@ fn every_published_class_has_an_llvm_construction_entry() {
         // addon's does; the caller allocates each class through its factory.
         let c = nts_codegen_c::emit(program, hir::native::NativeAbi::LP64);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let dir = scratch::ScratchDir::new(
-            &root.join("target/llvm-class-factory-tests"),
-            &format!("{provider:?}"),
-        );
+        let dir = scratch::ScratchDir::in_target(&format!("{provider:?}"));
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
         let mut sources = vec![dir.join("program.ll").into_std_path_buf()];
         for file in c.support_files() {

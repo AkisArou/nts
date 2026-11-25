@@ -18,7 +18,7 @@ fn source_fixture(source: &str) -> (ScratchDir, hir::Program) {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/runtime-call-tests"), "argument-types");
+    let dir = ScratchDir::in_target("argument-types");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#),
@@ -202,11 +202,7 @@ fn erased_runtime_arguments_match_each_targets_abi() {
                 .contains(&format!("@nts_value_truthy_fn({argument}"))
         );
     }
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = ScratchDir::new(
-        &root.join("target/runtime-call-tests"),
-        "windows-arm-assembly",
-    );
+    let dir = ScratchDir::in_target("windows-arm-assembly");
     let module = nts_codegen_llvm::emit(&prepared.program, Platform::WINDOWS_ARM64);
     std::fs::write(dir.join("program.ll"), module.text).unwrap();
     // Clang's C caller is an independent ABI control of the same sixteen bytes.

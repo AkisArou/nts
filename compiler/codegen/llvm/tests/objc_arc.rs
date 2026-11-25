@@ -190,7 +190,7 @@ fn prepare(name: &str, provider: hir::Memory) -> (ScratchDir, hir::Prepared) {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/objc-arc-tests"), name);
+    let dir = ScratchDir::in_target(name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(
@@ -367,7 +367,7 @@ fn arc_reserved_selectors_and_uncounted_ownership_are_refused() {
             .join("../../..")
             .canonicalize_utf8()
             .unwrap();
-        let dir = ScratchDir::new(&root.join("target/objc-arc-tests"), &format!("refuse-{at}"));
+        let dir = ScratchDir::in_target(&format!("refuse-{at}"));
         std::fs::write(
             dir.join("tsconfig.json"),
             format!(

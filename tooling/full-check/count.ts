@@ -1,3 +1,5 @@
+import {readKeep,declaredTargets,type Keep,type DeclaredTarget} from './keep.ts';
+export {readKeep,declaredTargets,KEEP_FILE,type Keep,type DeclaredTarget} from './keep.ts';
 import {DISK_TRASH,ProfileMarkerError,targetLeftovers,targetProfiles,type TargetProfile} from '../gate/disk-reclamation.ts';
 import {buildGeneration} from '../gate/build-completion.ts';
 import {binaryPinDiagnostics,type PinOwnerObservation} from '../gate/binary-pins.ts';
@@ -236,38 +238,6 @@ function folders(dir: string, stat: FolderStat = lstatSync): Entry[] {
  * relative to the folder. A pool declares each slot's `<n>/target` by its
  * kind. The count judges every declared target's profiles (targetInventory).
  */
-export type Keep = (
-  | { kind: "kept" | "pool" | "pins"; why: string; writer?: string }
-  | { kind: "runs" | "logs"; who: string; why: string; writer?: string }
-  | { kind: "scratch"; writer: string; days?: number }
-  | { kind: "folders" | "issue-scratch"; why: string; folders: Record<string, Keep> }
-) & { targets?: Record<string, string> };
-
-export const KEEP_FILE = fileURLToPath(new URL("keep.json", import.meta.url));
-
-export function readKeep(file = KEEP_FILE): Record<string, Keep> {
-  const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, Keep>;
-  const inside = (path: string) => path !== "" && !isAbsolute(path) && path.split("/").every(part => part !== "" && part !== "." && part !== "..");
-  const check = (name: string, keep: Keep, top = false) => {
-    if (keep.targets !== undefined) {
-      if (!top) throw new Error(`${file}: ${name} declares targets; only a top-level rule does`);
-      if (keep.kind === "pool") throw new Error(`${file}: ${name} is a pool, whose kind declares each slot's target`);
-      if (typeof keep.targets !== "object" || keep.targets === null || Array.isArray(keep.targets)) throw new Error(`${file}: ${name}'s targets are not a map of target to tree`);
-      for (const [target, tree] of Object.entries(keep.targets)) {
-        if (!inside(target) || typeof tree !== "string" || !inside(tree)) throw new Error(`${file}: ${name} declares target ${target} of tree ${String(tree)}; both must be relative paths inside its folder`);
-      }
-    }
-    if (!["kept", "pool", "pins", "runs", "logs", "scratch", "folders", "issue-scratch"].includes(keep.kind)) throw new Error(`${file}: ${name} has an unknown kind ${String(keep.kind)}`);
-    if (keep.kind === "scratch" && !keep.writer) throw new Error(`${file}: the scratch root ${name} names no writer`);
-    if (keep.kind !== "scratch" && !keep.why) throw new Error(`${file}: ${name} does not say why it is kept`);
-    if (keep.kind === "folders" || keep.kind === "issue-scratch") for (const [child, inner] of Object.entries(keep.folders)) {
-      if(keep.kind==='issue-scratch'&&/^[0-9]+$/.test(child))throw Error(`${file}: ${name}/${child} is kept by issue state or committed record citation, not a keep.json row`);
-      check(`${name}/${child}`, inner);
-    }
-  };
-  for (const [name, keep] of Object.entries(value)) check(name, keep, true);
-  return value;
-}
 
 export type Context = { cache: string; main: string | null; verified: string | null; held: readonly string[]; now: number; root: string; plan: string; folderStat?: FolderStat;
   issues:CountInput['issues'];recordCitations:CountInput['recordCitations'] };
@@ -428,14 +398,6 @@ function issueScratch(entry:Entry,issue:number,context:Context,red:string[],note
   red.push(`${display(entry.path,context)}: issue #${issue} is not open and no committed record cites it; ${days(context.now-entry.mtimeMs)} days old; deletion awaits the user's decision`);
 }
 
-/** A declared cargo target and the tree whose builds write it. */
-export type DeclaredTarget = { target: string; tree: string };
-/** Every cargo target keep.json declares under `cache`, pool slots' included, whether or not it exists. */
-export function declaredTargets(cache: string, keep: Record<string, Keep>, stat?: FolderStat): DeclaredTarget[] {
-  return Object.entries(keep).flatMap(([name, rule]) => rule.kind === "pool"
-    ? folders(join(cache, name), stat).filter(slot => /^\d+$/.test(slot.name)).map(slot => ({ target: join(slot.path, "target"), tree: slot.path }))
-    : Object.entries(rule.targets ?? {}).map(([target, tree]) => ({ target: join(cache, name, target), tree: join(cache, name, tree) })));
-}
 /** One declared target as the count judges it: its profiles, or why they could not be judged. */
 export type TargetInventory = DeclaredTarget & ({ profiles: TargetProfile[]; release: boolean } | { error: string; corrupt: boolean });
 /**

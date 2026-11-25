@@ -309,9 +309,7 @@ fn run_java(emitted: &nts_codegen_jvm::Emitted, source: &str) {
 }
 
 fn java_source(emitted: &nts_codegen_jvm::Emitted, source: &str, accepted: bool) {
-    let root =
-        Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../target/jvm-unsigned-entry-tests");
-    let dir = scratch::ScratchDir::new(&root, "unsigned-entries");
+    let dir = scratch::ScratchDir::in_target("unsigned-entries");
     for class in &emitted.classes {
         let path = dir.join(class.path());
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();

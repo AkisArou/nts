@@ -221,10 +221,7 @@ fn build(case: &Case, provider: hir::Memory) -> ScratchDir {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(
-        &root.join("target/com-output-tests"),
-        &format!("{}-{provider:?}", case.name),
-    );
+    let dir = ScratchDir::in_target(&format!("{}-{provider:?}", case.name));
     let binding = format!(
         r#"declare module "winrt:OutputProbe" {{
   import type {{ ByValue, Struct }} from "c:types";

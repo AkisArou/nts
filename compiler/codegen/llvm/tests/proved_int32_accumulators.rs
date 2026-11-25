@@ -189,7 +189,7 @@ fn proved_operands_remove_executed_conversions_on_both_native_emitters() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/proved-int32-tests"), "native");
+    let dir = ScratchDir::in_target("native");
     let mut source = SOURCE.to_owned();
     source.push_str("\nexport function dense(n: number): number { const values = new Map<string, number>(); values.set('key', n | 0); const held = values.get('key') ?? 0; let total = n | 0;\n");
     for _ in 0..96 {

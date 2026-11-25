@@ -41,7 +41,7 @@ fn execute(case: &str, source: &str, provider: hir::Memory) -> Vec<String> {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/task-receiver-roles"), case);
+    let dir = scratch::ScratchDir::in_target(case);
     std::fs::write(dir.join("main.ts"), source).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

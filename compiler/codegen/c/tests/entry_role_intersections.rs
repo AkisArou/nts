@@ -48,7 +48,7 @@ fn different_unused_role_tails_preserve_the_actual_function_type() {
 
 fn execute(selector: &str) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = scratch::ScratchDir::new(&root.join("target/role-intersection-tests"), selector);
+    let dir = scratch::ScratchDir::in_target(selector);
     std::fs::write(dir.join("main.ts"), source(selector)).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

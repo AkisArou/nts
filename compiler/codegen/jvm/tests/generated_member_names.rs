@@ -38,7 +38,7 @@ fn project(path: &Utf8Path, root: &Utf8Path, source: &str) -> Utf8PathBuf {
 #[test]
 fn runtime_protocol_members_are_not_typescript_identifiers() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = scratch::ScratchDir::new(&root.join("target/member-name-tests"), "identifier");
+    let dir = scratch::ScratchDir::in_target("identifier");
     for (index, member) in nts_codegen_jvm::generated_members::SPECIMENS
         .iter()
         .enumerate()
@@ -67,7 +67,7 @@ fn runtime_protocol_members_are_not_typescript_identifiers() {
 #[test]
 fn internal_body_names_keep_source_identity_across_function_order() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = scratch::ScratchDir::new(&root.join("target/member-name-tests"), "body-identity");
+    let dir = scratch::ScratchDir::in_target("body-identity");
     let config = project(
         &dir,
         &root,
@@ -131,7 +131,7 @@ fn run(path: &Utf8Path, label: &str, command: &mut Command) -> Vec<u8> {
 #[test]
 fn an_unallocated_family_face_declares_the_catalogued_member() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = scratch::ScratchDir::new(&root.join("target/member-name-tests"), "family");
+    let dir = scratch::ScratchDir::in_target("family");
     let source = "interface Point { readonly x: number; }\n\
         export class Holder { padding: number = -1; x: number = 42; }\n\
         export function project(value: Point): number { return value.x; }\n\
@@ -228,7 +228,7 @@ fn an_unallocated_family_face_declares_the_catalogued_member() {
 #[test]
 fn authored_and_inherited_protocol_lookalikes_keep_their_facades() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let dir = scratch::ScratchDir::new(&root.join("target/member-name-tests"), "facade");
+    let dir = scratch::ScratchDir::in_target("facade");
     for (case, member) in [("control", "ordinary"), ("subject", "nts$print")] {
         let path = dir.join(case);
         let source = SOURCE.replace("nts$print", member).replace(

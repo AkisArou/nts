@@ -11,7 +11,7 @@ fn value_readers_require_addon_demand_identity_and_producer_survival() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/value-publication"), "closure");
+    let dir = scratch::ScratchDir::in_target("closure");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

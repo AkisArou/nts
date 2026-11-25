@@ -74,8 +74,7 @@ fn definitions(program: &hir::Program, id: nts_semantic_schema::TypeId) -> (Stri
 }
 
 fn directory(label: &str) -> scratch::ScratchDir {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    scratch::ScratchDir::new(&root.join("target/member-source-tests"), label)
+    scratch::ScratchDir::in_target(label)
 }
 
 #[test]

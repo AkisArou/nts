@@ -45,7 +45,7 @@ fn recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/export-kind-tests"), "kinds");
+    let dir = ScratchDir::in_target("kinds");
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(

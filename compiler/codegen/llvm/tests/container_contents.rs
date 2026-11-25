@@ -284,7 +284,7 @@ fn actual_writers_and_executed_cleanup_agree_on_both_native_emitters() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = ScratchDir::new(&root.join("target/content-fact-tests"), "native");
+    let dir = ScratchDir::in_target("native");
     std::fs::write(dir.join("main.ts"), format!("{SOURCE}\n{SIZE_SOURCE}")).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

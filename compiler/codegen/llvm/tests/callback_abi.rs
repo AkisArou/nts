@@ -116,7 +116,7 @@ fn timer_columns_only_publish_void_pointer_entries_in_the_ir() {
         ("value", source.to_owned(), 1),
         ("void", source.replace("return n+1;", "return;"), 0),
     ] {
-        let dir = ScratchDir::new(&root.join("target/callback-abi-tests"), name);
+        let dir = ScratchDir::in_target(name);
         std::fs::write(dir.join("main.ts"), code).unwrap();
         std::fs::write(
             dir.join("tsconfig.json"),

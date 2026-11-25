@@ -29,10 +29,7 @@ fn recorded_gap_direct_hresult_status_long_is_rejected_on_llp64() {
         .canonicalize_utf8()
         .unwrap();
     for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
-        let dir = ScratchDir::new(
-            &root.join("target/com-status-tests"),
-            &format!("{provider:?}"),
-        );
+        let dir = ScratchDir::in_target(&format!("{provider:?}"));
         std::fs::write(
             dir.join("main.ts"),
             r#"

@@ -1891,6 +1891,7 @@ function counting(repo: Repository, options: Partial<CountEffects> = {}): CountE
     sweep: () => [],
     stopSlices: () => [],
     prunePool: () => [],
+    pruneCosts: () => ({removed:[],kept:[]}),
     pruneNodeCache: () => ({root:"private fixture",state:"missing",removed:0,removedBytes:0,kept:0,keptBytes:0,changed:0,skipped:0,errors:[]}),
     file: repo.layout.count,
     now: () => new Date(2026, 10, 6, 12, 0),

@@ -81,7 +81,7 @@ fn two_addons_loaded_globally_each_keep_their_own_runtime() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = scratch::ScratchDir::new(&root.join("target/two-addons"), "pair");
+    let dir = scratch::ScratchDir::in_target("pair");
     let alpha = addon(&root, &dir.join("alpha"), ALPHA, Backend::C);
     let beta = addon(&root, &dir.join("beta"), BETA, Backend::Llvm);
 

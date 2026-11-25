@@ -1,3 +1,5 @@
+import {pruneRawCosts,type CostRetention} from './cost-retention.ts';
+import {declaredRunRoots,readKeep} from './keep.ts';
 // The full check after landing (docs/workflow.md, "After landing: the full
 // check"): one service, run by the systemd user unit nts-full-check (unit.ts),
 // at low priority in its own tree and target under ~/.cache/nts-full-check.
@@ -1247,6 +1249,7 @@ export type CountEffects = {
   prunePool: () => string[];
   /** Recomputable cache upkeep, report-only. */
   pruneNodeCache: () => NodeCacheRetention;
+  pruneCosts: () => CostRetention;
   /** The count's own file (the layout's `count`). */
   file: string;
   now: () => Date;
@@ -1262,6 +1265,11 @@ export type CountEffects = {
  */
 export function countOnce(fx: CountEffects): CountRecord {
   upkeepPool(fx);
+  try {
+    const costs=fx.pruneCosts();
+    for(const row of costs.removed)fx.log(`raw costs: removed ${row.run}/costs, ${row.allocatedBytes} allocated bytes`);
+    for(const row of costs.kept)if(!/newest three|non-green/.test(row.reason))fx.log(`raw costs: kept ${row.run}: ${row.reason}`);
+  } catch(error){fx.log(`raw costs upkeep warning: ${String(error)}`);}
   try {
     const cache = fx.pruneNodeCache();
     fx.log(`Node compile cache: ${cache.state}, removed ${cache.removed} entries / ${cache.removedBytes} bytes, kept ${cache.keptBytes} bytes`);
@@ -1476,6 +1484,7 @@ function countEffects(layout: Layout): CountEffects {
     stopSlices: stoppable => stopCountedSlices(stoppable),
     prunePool: () => pruneLines(new Pool(POOL_HOME, { root: sharedCheckout(ROOT) }).prune()),
     pruneNodeCache: () => pruneNodeCompileCache(),
+    pruneCosts: () => pruneRawCosts({roots:declaredRunRoots(join(homedir(),'.cache'),readKeep())}),
     file: layout.count,
     now: () => new Date(),
     log: stamp,
