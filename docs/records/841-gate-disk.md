@@ -1089,3 +1089,26 @@ Its run's `tmp/` was absent after completion. Source remained unchanged.
 Raw log `~/.cache/nts-scratch/841/review/inner-v1.log`, SHA-256
 `0917d153e9b4b28f92c061b088ab8bc8bb2c2112c300d2e8b304479192a8e8c6`; compact proof `review/inner-v1-proof.json`, SHA-256
 `0122aac0ee43033e2dbf29dec293469b4976aa27acfb46571390d34142339b61`.
+
+
+The first review `--here` attempt at `a2d4651a1c7e09e9611f5642e75d9f31be919e49`
+found one environment audit error in the count's new reservation: directly
+spreading `process.env` outside its owner. Its named unit
+`nts-841-review-here-v1` was stopped, cancelled and drained (225 s of gate
+execution); lifecycle running was empty and `tmp/` absent. This was not a green
+proof. Logs were archived in `review/here-v1-source/` with their manifest.
+
+The reservation now reuses the service's existing `launcherEnvironment()`
+owner packet before assigning its own target/history and full-check rank.
+No audit allowance was added. Host audit passes 2,211 sources, 366 entry
+closures and 418 reads; all 123 service controls and six strict type projects
+(1,238 modules) pass. This is a TypeScript environment handoff correction;
+compiler source is unchanged from the green review inner proof.
+
+| Path under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `review/here-v1.log` | `b2eb6db82be186f9560e432272a98b4037dcfb436ee2f5e076e12266ef97f58d` |
+| `review/here-v1-source/manifest.json` | `75471ece72e886a0b4aa69121b1261b873cf96e28886f72cf3938a26450e2036` |
+| `review/environment-audit-v1.log` | `97f7197964c1cd10533f494543dcb26a6519654b179e67c570356635ec432181` |
+| `review/environment-service-v1.log` | `84cd7a266c32b3f2512e959bb298a068af334624632080086a2067b3decf60ae` |
+| `review/environment-types-v1.log` | `e2a8283c40989e4acbf782988f234508be06967808625614ba9c057b35359513` |

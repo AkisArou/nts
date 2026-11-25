@@ -1836,7 +1836,7 @@ async function main(argv: readonly string[]): Promise<number> {
   // The hourly count, beside the controller: it takes no lock of the controller's.
   if (options.count) {
     const job=await reserveJob({key:'full-check-count',what:'hourly full-check count'},
-      {env:{...process.env,CARGO_TARGET_DIR:layout.target,NTS_MEMORY_PRIORITY:'full-check'},report:stamp});
+      {env:{...launcherEnvironment(),CARGO_TARGET_DIR:layout.target,NTS_MEMORY_PRIORITY:'full-check'},report:stamp});
     try{countOnce(countEffects(layout));}
     finally{job.release();await job.closed;}
     return 0;
