@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
 import {ownMemory} from '../gate/test-memory.ts';
+import {fixtureToolingSlice} from '../gate/tooling-slice-fixture.ts';
 import {hostEnvironment} from '../gate/host-environment.ts';
 import { nodeInstallation } from "../gate/toolchain-fixture.ts";
 import { scratchRepo } from "../landing/scratch-repo.ts";
@@ -42,7 +43,8 @@ writeFileSync(process.env.NTS_GATE_RUN_DIR+'/summary.json',JSON.stringify({
 }));\n`,
   }, "private receipt consumer");
   const tree = repo.git(["rev-parse", commit + "^{tree}"]);
-  const gate = pinnedGate(paths, repo.root, () => {}, { nodeInstallations: installations, env: hostEnvironment(repo.env), owned: ownMemory(join(repo.dir,"observations")), landingHome: home });
+  const { slice } = fixtureToolingSlice(t);
+  const gate = pinnedGate(paths, repo.root, () => {}, { nodeInstallations: installations, env: { ...hostEnvironment(repo.env), NTS_TOOLING_SLICE: slice }, owned: { ...ownMemory(join(repo.dir,"observations")), NTS_TOOLING_SLICE: slice }, landingHome: home });
   const requested = ["build", "tests", "rustfmt"];
   const run = (label: string) => {
     const result = gate.run(commit, requested, label, undefined, { reuseLanding: true });

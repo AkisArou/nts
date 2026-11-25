@@ -21,6 +21,7 @@ import {hostEnvironment} from '../gate/host-environment.ts';
 import {removable} from "../gate/run-temporary.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
 import {ownMemory} from "../gate/test-memory.ts";
+import {fixtureToolingSlice} from "../gate/tooling-slice-fixture.ts";
 import {spawnTest} from "../gate/test-wait.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {provenanceOf,publishPin} from "../conformance/pin.ts";
@@ -165,7 +166,7 @@ test('the real full-check recordPending candidate route seals and removes finish
       return ${status};
   }`));
   git(root,'add','-f','tooling/records/record-pending.ts');git(root,'commit','-qm','observe only the sealed recorder handoff');
-  const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env,owned:ownMemory(join(scratch,'full-check-memory'))});
+  const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env,owned:{...ownMemory(join(scratch,'full-check-memory')),NTS_TOOLING_SLICE:fixtureToolingSlice(t).slice}});
   assert.equal(result.status,status,readFileSync(join(run,RECORDER_LOG),'utf8'));
   const value=JSON.parse(readFileSync(observed,'utf8'));
   assert.equal(value.sealed,true);assert.equal(value.canonical,true);

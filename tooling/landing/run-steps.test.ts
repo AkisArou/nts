@@ -116,7 +116,7 @@ else for(const name of ['nts','nts-suite'])fs.writeFileSync(path.join(target,'re
   const base=launcherEnvironment(withoutHanded(f.options([]).env!));
   assignTestValues(base,{NTS_GATE_STEP:undefined,NTS_GATE_STEP_ATTEMPT:undefined,NTS_GATE_STEP_RESULT:undefined,
     NTS_GATE_STEP_MEMORY_BYTES:undefined,NTS_GATE_CASE_COSTS_DIR:undefined,NTS_MEMORY_HANDOVER:undefined});
-  const planned=gateEnvironment(base,{run:f.run,owned:{...f.memory,NTS_GATE_STEPS:'build doctests',
+  const planned=gateEnvironment(base,{run:f.run,owned:{...f.memory,NTS_TOOLING_SLICE:f.slice,NTS_GATE_STEPS:'build doctests',
     NTS_GATE_SLOTS:'4',CARGO_TARGET_DIR:f.target,PATH:bin+':'+base.PATH,NTS_MEMORY_PRIORITY:'agent'}});
   const ran=spawnTest(process.execPath,[join(f.tree,'tooling/gate/run.mjs')],{cwd:f.tree,env:planned.env,encoding:'utf8'});
   assert.equal(ran.status,0,ran.stdout+ran.stderr);

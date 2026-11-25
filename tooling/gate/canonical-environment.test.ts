@@ -25,7 +25,8 @@ import {FIXED_AMBIENT,measuredCompileEnvironment,oracleToolchainLocation,ownTemp
 import {nodeResolutionDirectory,nodeProcessBirth} from '../differential/oracle-runtime.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {newTestScratch} from "./test-scratch.ts";
-import {toolingSliceArgs} from "./tooling-slice.ts";
+import {fixtureToolingSlice} from "./tooling-slice-fixture.ts";
+import {hostObservations} from "./host-observations.ts";
 import {ownMemory} from "./test-memory.ts";
 import {historyFile,writeCostHistory} from './step-scheduling.ts';
 import {readLedger,reserve} from "./memory-ledger.ts";
@@ -380,6 +381,18 @@ test("a run's memory: a step's reservation is a parent handoff, a shell's priori
   assert.equal(gateEnvironment(base,{run,owned:{NTS_MEMORY_LEDGER:join(run,"ledger")}}).report.canonical,true);
 });
 
+test("a fixture that names a memory priority names the slice its runs nest in",t=>{
+  const {run,base}=fixture(t),memory=ownMemory(join(run,"observations"));
+  // Its priority orders only its own ledger: unplaced, its run's slices would
+  // be rank roots at that rank's real CPU weight.
+  for(const rank of ["full-check","landing"])assert.throws(()=>gateEnvironment(base,{run,owned:{...memory,NTS_MEMORY_PRIORITY:rank}}),
+    new RegExp(`a fixture's owned NTS_MEMORY_PRIORITY=${rank} needs an owned NTS_TOOLING_SLICE`));
+  const {slice}=fixtureToolingSlice(t);
+  assert.equal(gateEnvironment(base,{run,owned:{...memory,NTS_MEMORY_PRIORITY:"full-check",NTS_TOOLING_SLICE:slice}}).env.NTS_TOOLING_SLICE,slice);
+  // A real launcher's rank takes the machine's live observations and its rank's own place.
+  assert.equal(gateEnvironment(base,{run,owned:{NTS_MEMORY_PRIORITY:"full-check"}}).env.NTS_MEMORY_PRIORITY,"full-check");
+});
+
 test("the explicit old-environment comparison is never landing evidence",t=>{
   const {run,base}=fixture(t);
   const launcher={...base,[ENVIRONMENT_EXPERIMENT]:"today",LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",UNRELATED_SECRET:"not for the report"};
@@ -516,8 +529,11 @@ fi
 /**
  * A gate runner started at its test's startup arm: its tree copied, its one
  * step a stand-in, a memory reading of `availableKiB` and a ledger of its own,
- * in a unit of its own inside the tooling run's slice -- stopped with that
- * slice, and with this test, however the test itself ends.
+ * in a unit of its own inside a slice of its own -- stopped with that slice,
+ * and with this test, however the test itself ends. The runner gets that
+ * slice as its tooling slice, so every slice it starts nests there at this
+ * test's rank: its own `NTS_MEMORY_PRIORITY` orders only its private ledger,
+ * never the machine's CPU.
  */
 function startupRunner(t:{after(fn:()=>void):void},availableKiB:number,oracle?:"priority"|"lost"){
   const {run,base}=fixture(t),root=join(run,'repo'),gate=join(root,'tooling/gate');
@@ -573,43 +589,73 @@ child.release();
     {key:'oracle-dependency-capture',basis:'job',width:1,peak:Math.floor(2*2**30/1.25)},
   ]}),undefined);
   const compiler=join(run,'compiler');writeFileSync(compiler,'startup fixture compiler');
+  const {slice,group}=fixtureToolingSlice(t);
   const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{
-    NTS_BIN:compiler,NTS_GATE_STEPS:oracle?'program-oracles':'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target'),
+    NTS_BIN:compiler,NTS_GATE_STEPS:oracle?'program-oracles':'rustfmt',...memory,NTS_TOOLING_SLICE:slice,CARGO_TARGET_DIR:join(run,'target'),
     ...(oracle==='priority'?{NTS_MEMORY_PRIORITY:'full-check'}:{}),
   }});
   const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
-  const child=spawn('systemd-run',['--user',...toolingSliceArgs(process.env,"agent"),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','Nice=19','-p','RuntimeMaxSec=120s','-p','TimeoutStopSec=2',
+  const child=spawn('systemd-run',['--user','--slice='+slice,'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','Nice=19','-p','RuntimeMaxSec=120s','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
     '-p','WorkingDirectory='+root,...fixedMembersUnitCommand(['taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')])],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
+  const phases=phaseTrace(group,join(run,'trace'));phases.mark('unit started');
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
   child.on('close',(code,signal)=>{terminal={code,signal};});
-  return {root,directory,memory,looked,unit,child,pins:join(base.HOME,'.cache/nts-gate/bin-v2'),output:()=>output,terminal:()=>terminal};
+  return {root,directory,memory,looked,unit,group,phases,child,pins:join(base.HOME,'.cache/nts-gate/bin-v2'),output:()=>output,terminal:()=>terminal};
+}
+/**
+ * Where a startup case's wall time went: each phase's arrival, with what the
+ * fixture's slice had run by then, waited for CPU (some of its tasks
+ * runnable, none running) and stalled on memory and IO, through an owned live
+ * observation. It is reported with every result and decides nothing.
+ */
+function phaseTrace(group:string,dir:string){
+  const host=hostObservations(ownMemory(dir,{clock:{kind:'live'},cpu:{kind:'live'},pressure:{kind:'live'}}));
+  const first=host.cgroupCpuSample(group),marks:string[]=[];
+  const seconds=(usec:number)=>(usec/1e6).toFixed(1);
+  return {
+    mark(name:string){
+      const now=host.cgroupCpuSample(group),stalled=(resource:'cpu'|'memory'|'io')=>seconds(now.pressure.resources[resource].some.totalUsec-first.pressure.resources[resource].some.totalUsec);
+      marks.push(`${((now.atMs-first.atMs)/1000).toFixed(1)} s: ${name}; fixture CPU ${seconds(now.cpu.usageUsec-first.cpu.usageUsec)} s, waited for CPU ${stalled('cpu')} s, memory ${stalled('memory')} s, IO ${stalled('io')} s`);
+    },
+    text:()=>'\nphases:\n  '+marks.join('\n  ')+'\n',
+  };
 }
 function pinLeases(root:string):string[]{
   return readdirSync(root).filter(name=>/^[0-9a-f]{64}$/.test(name)).flatMap(name=>readdirSync(join(root,name,'holders')));
 }
 test("a priority recheck during oracle capture leaves the run live for its first token",async t=>{
-  const f=startupRunner(t,4*2**20,"priority");
-  const stopped=()=>f.terminal()?f.output():undefined;
+  const f=startupRunner(t,4*2**20,"priority"),phases=f.phases;
+  t.after(()=>{t.diagnostic(phases.text());});
+  const stopped=()=>f.terminal()?f.output()+phases.text():undefined;
   await waitFor("the oracle capture to wait for memory",()=>readLedger(f.memory.NTS_MEMORY_LEDGER).waiting.some(row=>row.what==="oracle dependency capture"),{stopped});
+  phases.mark("capture waits for memory");
   const controller=new AbortController();
   const pressure=reserve({bytes:2*2**30,priority:"landing",what:"startup priority control"},{env:f.memory,signal:controller.signal})
     .catch(error=>{if(!controller.signal.aborted)throw error;});
   t.after(async()=>{controller.abort();(await pressure)?.release();});
   await waitFor("the priority recheck to reach the scheduler",()=>existsSync(f.looked),{stopped});
+  phases.mark("priority recheck reached the scheduler");
   const before=readLedger(f.memory.NTS_MEMORY_LEDGER);
   const earlySummary=existsSync(join(f.directory,"summary.json"));
   controller.abort();
   (await pressure)?.release();
   ownMemory(dirname(f.memory.NTS_MEMINFO),{availableKiB:32*2**20,totalKiB:64_000_000});
+  phases.mark("pressure released, memory raised");
   const log=join(f.directory,"program-oracles.log");
   await waitFor("the oracle step to start or the run to finish",()=>existsSync(log)||!!f.terminal());
+  phases.mark(existsSync(log)?"oracle step started":"run ended before its oracle step");
   assert.equal(earlySummary,false,"the gate summarized before sealing and left no reservation for its oracle step");
   assert.equal(before.admitted.filter(row=>row.what.startsWith("gate run ")).length,1);
   await waitFor("the oracle run to finish",()=>!!f.terminal());
-  assert.equal(f.terminal()!.code,0,f.output()+(existsSync(log)?readFileSync(log,"utf8"):'\nprogram-oracles.log was not created'));
+  phases.mark("run ended");
+  assert.equal(f.terminal()!.code,0,f.output()+(existsSync(log)?readFileSync(log,"utf8"):'\nprogram-oracles.log was not created')+phases.text());
+  // The run's own full-check rank must not reach the machine: its step ran
+  // inside the fixture's slice, never as a rank root beside every rank's work.
+  const step=JSON.parse(readFileSync(join(f.directory,"summary.json"),"utf8")).steps[0];
+  assert.ok(step.scope.group.startsWith(f.group+"/"),`the oracle step ran in ${step.scope.group}, outside the fixture's slice ${f.group}`);
   assert.deepEqual(pinLeases(f.pins),[],"successful gate drained its pin lease");
   assert.match(readFileSync(log,"utf8"),/oracle case entered/);
   assert.doesNotMatch(readFileSync(log,"utf8"),/reservation .* has ended/);

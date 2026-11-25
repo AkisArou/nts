@@ -11,7 +11,7 @@ import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,Cas
 import {captureRunTemporary,pruneRunTemporaries,runTemporaryIdentity,discardRunTemporary,removable,assertRunTemporary,assertRunTemporaryOpen} from "./run-temporary.ts";
 import {nodeProcessBirth,nodeResolutionDirectory,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
-import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
+import {hostObservations,HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession,closeNodeResolutionSession} from '../differential/oracle-resolution.ts';
 import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
 import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
@@ -124,6 +124,12 @@ export function gateEnvironment(
   const owned: Record<string,string> = { ...prior?.owned, ...strings(options.owned ?? {}), NTS_GATE_RUN_DIR: resolve(options.run) };
   for (const name of CONSUMED) {
     if (launcher[name] === undefined && options.owned?.[name] === undefined) delete owned[name];
+  }
+  // A fixture's memory priority orders only its own ledger. Without a slice
+  // of its own, its run's slices become rank roots under nts.slice at that
+  // rank's real CPU weight: full-check's starved a fixture on a busy machine.
+  if (owned[HOST_OBSERVATIONS] !== undefined && owned.NTS_MEMORY_PRIORITY !== undefined && owned.NTS_TOOLING_SLICE === undefined) {
+    throw new Error(`gate environment: a fixture's owned NTS_MEMORY_PRIORITY=${owned.NTS_MEMORY_PRIORITY} needs an owned NTS_TOOLING_SLICE to run in; without one its run's slices take that rank's CPU weight among every rank's work`);
   }
   const selected = options.experiment ?? (!prior && options.standalone ? launcher[ENVIRONMENT_EXPERIMENT] : undefined);
   if (selected && selected !== "today") throw new Error(`unknown environment experiment: ${selected}`);

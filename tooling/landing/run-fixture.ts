@@ -1,5 +1,6 @@
 import {gateFixtureMemory,writeGateFixtureScript} from '../gate/fixed-members-fixture.ts';
 import {declareOwnMembers} from '../gate/test-cgroup-members.ts';
+import {fixtureToolingSlice} from '../gate/tooling-slice-fixture.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Running a landing's steps: the build first, the rest through the gate's own
@@ -78,6 +79,7 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   const commit = git("rev-parse", "HEAD");
   const memory = gateFixtureMemory(join(own, "memory"),tree);
   declareOwnMembers(memory,[process.pid]);
+  const {slice}=fixtureToolingSlice(t);
   const build = join(own, "build.sh");
   writeFileSync(build, `#!/bin/sh\n[ "$(cat ${JSON.stringify(join(controls, "build"))} 2>/dev/null)" = fail ] && { echo "error[E0308]: mismatched types"; exit 101; }\nif [ "$1" != --no-compiler ]; then\nmkdir -p "$CARGO_TARGET_DIR/${PROFILE}" && echo "nts $CARGO_INCREMENTAL" > "$CARGO_TARGET_DIR/${PROFILE}/nts" && chmod +x "$CARGO_TARGET_DIR/${PROFILE}/nts"\nfi\necho "   Compiling nts-core"\n`);
   chmodSync(build, 0o755);
@@ -96,9 +98,9 @@ fi
   const control = (step: string, what: string) => writeFileSync(join(controls, step), what);
   const options = (steps: string[], extra: Partial<RunOptions> = {}): RunOptions => ({
     tree, target, run, commit, steps, build: [build,...(steps.includes('build')?[]:['--no-compiler'])], env: { ...fixtureEnvironment(t), HOME: home },
-    owned: { NTS_GATE_SLOTS: "4", ...memory }, ...extra,
+    owned: { NTS_GATE_SLOTS: "4", ...memory, NTS_TOOLING_SLICE: slice }, ...extra,
   });
-  return { own, tree, target, run, controls, control, options, memory, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
+  return { own, tree, target, run, controls, control, options, memory, slice, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
 }
 
 // A job that holds the ledger's room until a request waits behind it.

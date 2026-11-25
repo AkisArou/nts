@@ -5,7 +5,22 @@ import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {generatedJavaScript} from './generated-javascript.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
-import {stopToolingSlice,toolingSliceArgs,unitComponent} from './tooling-slice.ts';
+import {newToolingSlice,stopToolingSlice,toolingSliceArgs,unitComponent} from './tooling-slice.ts';
+import {requireOwnUnit,startBoundSlice} from './scopes/bound-slice.ts';
+
+/**
+ * A slice of a fixture's own for the gate runs it starts: inside a tooling
+ * run, a child of that run's slice; alone, a root at an agent's rank, bound to
+ * this test's unit. Given to the fixture as its owned `NTS_TOOLING_SLICE`,
+ * every slice its runs start nests there at this test's rank, so a priority
+ * the fixture names orders only its private ledger, never the machine's CPU.
+ * Stopped, with everything in it, when the test ends.
+ */
+export function fixtureToolingSlice(t:{after(fn:()=>void):void}):{slice:string;group:string}{
+  const slice=newToolingSlice(true,process.env),group=startBoundSlice(slice,requireOwnUnit(),{rank:'agent'});
+  t.after(()=>{stopToolingSlice(slice);});
+  return {slice,group};
+}
 
 const ENTRY=new URL('../differential/command-entry/main.ts',import.meta.url),PUBLISH=new URL('./durable-record.ts',import.meta.url);
 

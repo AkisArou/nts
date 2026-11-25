@@ -12,6 +12,7 @@ import {ownMemory,ownMemoryEnv} from './test-memory.ts';
 import {fixtureEnvironment,testEnvironment,testEnvironmentHandoff} from './test-environment.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation,contentCacheEnvironment} from './cache-environment.ts';
 import {testScratch} from './test-scratch.ts';
+import {fixtureToolingSlice} from './tooling-slice-fixture.ts';
 import {assertNoProcessUsers} from '../landing/tree-users.ts';
 import {hostObservations,HostObservationError} from './host-observations.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
@@ -108,8 +109,8 @@ test('declared Node, JDK and rustup directories precede HOME-dependent shims',t=
 });
 
 test('a fixture retains canonical compiler and resource capabilities with a nested temporary',t=>{
-  const root=testScratch(t,'environment-context'),memory=ownMemory(join(root,'memory'));
-  const parent=gateEnvironment({PATH:process.env.PATH},{run:join(root,'run'),owned:{NTS_BIN:'/fixture/compiler',...memory,NTS_MEMORY_RESERVATION:'parent',NTS_MEMORY_PRIORITY:'landing',NTS_GATE_SLOTS:'1'}}).env;
+  const root=testScratch(t,'environment-context'),memory=ownMemory(join(root,'memory')),{slice}=fixtureToolingSlice(t);
+  const parent=gateEnvironment({PATH:process.env.PATH},{run:join(root,'run'),owned:{NTS_BIN:'/fixture/compiler',...memory,NTS_TOOLING_SLICE:slice,NTS_MEMORY_RESERVATION:'parent',NTS_MEMORY_PRIORITY:'landing',NTS_GATE_SLOTS:'1'}}).env;
   const child=testEnvironment({},parent),context=JSON.parse(child[ENVIRONMENT_CONTEXT]!);
   assert.equal(child.NTS_BIN,'/fixture/compiler');assert.equal(child.NTS_HOST_OBSERVATIONS,memory.NTS_HOST_OBSERVATIONS);
   assert.equal(child.NTS_MEMORY_RESERVATION,'parent');assert.equal(child.NTS_MEMORY_PRIORITY,'landing');assert.equal(child.NTS_GATE_SLOTS,undefined);

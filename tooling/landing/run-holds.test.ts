@@ -88,7 +88,7 @@ test("a --here run at the agent priority yields its unused reservation to a serv
   const workers = STEPS.find(row => row.name === "build")!.slots, history = historyFile(here.memory);
   mkdirSync(here.memory.NTS_GATE_COSTS_DIR, { recursive: true });
   assert.equal(writeCostHistory(history,{jobs:[{key:"landing-build",basis:"worker",width:workers,peak:Math.floor(56*2**30/workers/1.25)*workers}]}),undefined);
-  const shared = { NTS_GATE_SLOTS: "4", ...here.memory };
+  const shared = { NTS_GATE_SLOTS: "4", ...here.memory, NTS_TOOLING_SLICE: service.slice };
   const entryOf = (path: string) => `import {copyFileSync} from "node:fs";import {join} from "node:path";copyFileSync(join(process.env.NTS_MEMORY_LEDGER,"admitted",process.env.NTS_MEMORY_RESERVATION+".json"),${JSON.stringify(path)});`;
   const hereEntry = join(here.own, "here-entry.json"), serviceEntry = join(here.own, "service-entry.json");
   const started = join(here.own, "here-started"), release = join(here.own, "here-release");
@@ -103,7 +103,7 @@ test("a --here run at the agent priority yields its unused reservation to a serv
     `import {runLanding} from ${JSON.stringify(new URL("./run.ts", import.meta.url).href)};` +
     `import {durableRecord} from ${JSON.stringify(new URL("../gate/durable-record.ts",import.meta.url).href)};` +
     `const ran=await runLanding({tree:${JSON.stringify(here.tree)},target:${JSON.stringify(here.target)},run:${JSON.stringify(here.run)},commit:${JSON.stringify(commit)},steps:["build"],priority:"agent",` +
-    `env:{...${testEnvironmentHandoff()},HOME:${JSON.stringify(join(here.own, "home"))}},owned:{NTS_GATE_SLOTS:"4",...${JSON.stringify(here.memory)}},build:[process.execPath,"--input-type=module","-e",${JSON.stringify(holding)}]});` +
+    `env:{...${testEnvironmentHandoff()},HOME:${JSON.stringify(join(here.own, "home"))}},owned:{NTS_GATE_SLOTS:"4",...${JSON.stringify(here.memory)},NTS_TOOLING_SLICE:${JSON.stringify(here.slice)}},build:[process.execPath,"--input-type=module","-e",${JSON.stringify(holding)}]});` +
     `durableRecord(${JSON.stringify(hereResult)},{state:ran.state});`],
     { env: { ...fixtureEnvironment(t) }, stdio: ["ignore", "ignore", "pipe"] });
   let childStderr = "";

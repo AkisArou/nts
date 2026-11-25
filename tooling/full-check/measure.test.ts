@@ -31,6 +31,7 @@ import {hostEnvironment} from '../gate/host-environment.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 import {ownMemory} from '../gate/test-memory.ts';
+import {fixtureToolingSlice} from '../gate/tooling-slice-fixture.ts';
 
 const COMMIT = "1234567890ab".padEnd(40, "c");
 
@@ -357,7 +358,8 @@ export function toolingSlice(env=process.env){const value=env.NTS_TOOLING_SLICE;
   repo.git(['add','-f','tooling']);repo.git(['commit','-qm','private environment']);
   const old=repo.commit({".tool-versions":"nodejs 99.1.0\n","tooling/gate/pinned.sh":script},"first pin");
   const next=repo.commit({".tool-versions":"nodejs 99.2.0\n"},"next pin");
-  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,owned:ownMemory(join(repo.dir,'machine')),env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  const {slice}=fixtureToolingSlice(t);
+  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,owned:{...ownMemory(join(repo.dir,'machine')),NTS_TOOLING_SLICE:slice},env:{...hostEnvironment(process.env),HOME:repo.dir}});
   for(const [commit,pin] of [[old,"99.1.0"],[next,"99.2.0"]]){
     const result=gate.run(commit!,["tooling"],pin!);
     assert.equal(result.verdict,"green",JSON.stringify(result.reasons)+"\n"+readFileSync(join(result.run,"full-check.log"),"utf8"));
@@ -374,7 +376,7 @@ export function toolingSlice(env=process.env){const value=env.NTS_TOOLING_SLICE;
   assert.equal(readFileSync(join(historical.run,"observed-rank"),"utf8"),"full-check","a run the controller names no rank for is the full check's");
   // A probe runs at the rank the controller names where the candidate's own
   // table knows it, and at the full check's where the candidate predates it.
-  const lines:string[]=[],ranked=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,owned:ownMemory(join(repo.dir,'machine')),env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  const lines:string[]=[],ranked=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,owned:{...ownMemory(join(repo.dir,'machine')),NTS_TOOLING_SLICE:slice},env:{...hostEnvironment(process.env),HOME:repo.dir}});
   // The fixture's candidates carry this tree's own table.
   const table=readFileSync(fileURLToPath(new URL("../gate/ranks.ts",import.meta.url)),"utf8");
   assert.equal(repo.git(["show",`${next}:tooling/gate/ranks.ts`]),table.trimEnd());
@@ -407,7 +409,8 @@ exec node "$NTS_GATE_TREE/subject.ts" "$1"
 `;
   repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','measured environment']);
   const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject},'red measured command');
-  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,owned:ownMemory(join(repo.dir,'machine')),env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  const {slice}=fixtureToolingSlice(t);
+  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,owned:{...ownMemory(join(repo.dir,'machine')),NTS_TOOLING_SLICE:slice},env:{...hostEnvironment(process.env),HOME:repo.dir,NTS_TOOLING_SLICE:slice}});
   for(const label of ['core','core-probe','wide']){
     const measured=gate.run(commit,['tooling'],label);
     assert.equal(measured.verdict,'red',JSON.stringify(measured.reasons));
@@ -467,7 +470,8 @@ durableRecord(process.env.NTS_GATE_RUN_DIR+'/summary.json',{identities:{commit:p
 mkdirSync(dirname(${JSON.stringify(config)}),{recursive:true});writeFileSync(${JSON.stringify(config)},'');writeFileSync(${JSON.stringify(marker)},'drained');\n`);
   repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private historical environment']);
   const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject},'historical command');
-  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,owned:ownMemory(join(repo.dir,'machine')),env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  const {slice}=fixtureToolingSlice(t);
+  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,owned:{...ownMemory(join(repo.dir,'machine')),NTS_TOOLING_SLICE:slice},env:{...hostEnvironment(process.env),HOME:repo.dir,NTS_TOOLING_SLICE:slice}});
   mkdirSync(join(paths.home,'.cargo'),{recursive:true});writeFileSync(config,'');
   const before=gate.run(commit,['tooling'],'before');assert.equal(before.verdict,'held');assert.ok(before.reasons.tooling?.includes(config),JSON.stringify(before.reasons));
   assert.equal(existsSync(marker),false);rmSync(config);

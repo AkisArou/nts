@@ -23,7 +23,7 @@ import {hostEnvironment} from '../gate/host-environment.ts';
 import { readLedger } from "../gate/memory-ledger.ts";
 import { gateEnvironment } from "../gate/canonical-environment.ts";
 import { ownMemory } from "../gate/test-memory.ts";
-import { toolingSliceArgs } from "../gate/tooling-slice.ts";
+import { fixtureToolingSlice } from "../gate/tooling-slice-fixture.ts";
 import { COLUMNS, COMPARATORS, POLICY, renderFull, sealRun, type Cell } from "../bench/run-record.ts";
 import { OWN_BEST_REGRESSION } from '../bench/own-best-marker.ts';
 import { removable } from "../gate/run-temporary.ts";
@@ -42,11 +42,11 @@ function scratch(t: TestContext, prefix: string): string {
 function inUnit(t: TestContext, root: string, body: (unit: string) => string) {
   const unit = `nts-test-bench-session-${randomUUID()}`, script = join(root, "unit.ts");
   writeFileSync(script, body(unit));
-  const memory = ownMemory(join(root, "own-memory"));
-  const env = gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: memory }).env;
+  const memory = ownMemory(join(root, "own-memory")), { slice } = fixtureToolingSlice(t);
+  const env = gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: { ...memory, NTS_TOOLING_SLICE: slice } }).env;
   const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
   t.after(() => { spawnSync("systemctl", ["--user", "stop", unit], {env:fixtureEnvironment(t), stdio: "ignore" }); });
-  const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(process.env,"agent"), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
+  const ran = spawnSync("systemd-run", ["--user", `--slice=${slice}`, `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
     "--property=RuntimeMaxSec=300s", "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31",
     ...setenv, ...fixedMembersUnitCommand([process.execPath, script])], {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);
