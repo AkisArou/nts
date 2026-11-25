@@ -11,7 +11,8 @@ import {declaredRunRoots,readKeep} from './keep.ts';
 
 function fixture(t:TestContext){
   const root=testScratch(t,'cost-retention'),runs=join(root,'runs');mkdirSync(runs);
-  const host=hostObservations(ownMemory(join(root,'observations')));
+  const observations=hostObservations(ownMemory(join(root,'observations')));
+  const host={...observations,allocatedBytes:()=>4096};
   const make=(name:string,verdict='green')=>{
     const run=join(runs,name);mkdirSync(join(run,'costs'),{recursive:true});
     writeFileSync(join(run,'costs','events.jsonl'),'raw events\n');writeFileSync(join(run,'step.log'),'kept log\n');

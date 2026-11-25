@@ -794,11 +794,12 @@ for(const cacheTag of [true,false])test('build admission reclaims surplus proven
   const release=capacity.beginBuild({root,target:join(root,'target')});
   try{
     assert.equal(existsSync(join(old,'target/nts-dev')),false);
-    assert.ok([newer,newest].every(tree=>existsSync(join(tree,'target/nts-dev'))));
+    assert.ok(existsSync(join(newest,'target/nts-dev')));
+    assert.equal(existsSync(join(newer,'target')),false,'pressure restores cold-build headroom while keeping one warm target');
     assert.equal(readFileSync(evidence,'utf8'),'preserve this evidence');
     assert.ok(capacity.snapshot(f.dir).availableBytes>=0);
     const log=readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8').trim().split('\n').map(line=>JSON.parse(line));
-    assert.deepEqual(log.map(row=>row.root),[join(old,'target/clippy'),join(old,'target/nts-dev')]);assert.ok(log.every(row=>row.kind==='free-build-output'));
+    assert.deepEqual(log.map(row=>row.root),[join(old,'target/clippy'),join(old,'target/nts-dev'),join(newer,'target')]);assert.ok(log.every(row=>row.kind==='free-build-output'));
   }finally{release();}
 });
 
@@ -853,7 +854,7 @@ for(const detached of [false,true])test('unproved profiles and unknown siblings 
   f.setFree(100*GiB);
   const report=reclaimDisk({...f.options,maintenance:{before:Infinity,keep:2}});
   assert.deepEqual(report.removed,[],JSON.stringify(report));
-  assert.ok(report.kept.some(row=>row.root===profile&&row.reason.includes('neither Cargo cache identity nor a completion marker')),JSON.stringify(report));
+  assert.ok(report.kept.some(row=>detached?row.root===unproved&&row.reason.includes('branch remains owned'):row.root===profile&&row.reason.includes('neither Cargo cache identity nor a completion marker')),JSON.stringify(report));
   for(const tree of [a,b])assert.ok(report.kept.some(row=>row.root===join(tree,'target')&&row.reason==='two warm free targets retained'));
 });
 

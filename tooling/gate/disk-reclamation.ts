@@ -191,8 +191,8 @@ export const liveReclaimOwnership:ReclaimOwnership=(tree,target,ownPin)=>{
 const scratchPolicy=()=>targetScratch();
 const cargoProfiles=['nts-dev','clippy','debug','release'] as const;
 const cargoMetadata=/^(?:CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json|\.rustdoc_fingerprint\.json)$/;
-/** Inventory only: these siblings have no deletion grant. Writer attribution
- * names the current owner where known, never a grant to remove its output. */
+/** Inventory only. Writer attribution alone grants no deletion; the scratch
+ * owner separately checks declared namespaces and free-tree ownership. */
 export function targetLeftovers(tree:string):{root:string;writer:string}[]{
   const target=join(tree,'target');
   if(!isDirectory(target))return [];
@@ -476,7 +476,10 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   };
   const offerBuildOutput=(target:ReclaimTarget,kind:'free-build-output'|'detached-build-output',movedAt:number,branch?:string):void=>{
     const leftovers=targetLeftovers(target.tree),cache=cargoCache(target.target);
-    for(const row of leftovers)keep(row.root,'unrecognized target content; writer: '+row.writer,true);
+    for(const row of leftovers){
+      if(kind==='free-build-output'&&scratchKind(basename(row.root)))continue;
+      keep(row.root,'unrecognized target content; writer: '+row.writer,true);
+    }
     if(!leftovers.length&&cache)add(target,target.target,kind,movedAt,branch);
     else for(const name of cargoProfiles){
       if(name==='debug'&&kind==='free-build-output')continue; // The obsolete-profile owner already offered it.
