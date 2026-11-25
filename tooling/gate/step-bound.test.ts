@@ -14,11 +14,13 @@ import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
 import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, ProgressBound, landingCeiling, progressSummary, stepBound, stepBoundReason, stepBoundWait, stepCpuBound, stepCpuBoundReason, unmeasuredSteps } from "./step-bound.ts";
-import { instrumentPolicy } from "./step-result.ts";
+import { instrumentPolicy, publishToolingFailure, readStepInstrument } from "./step-result.ts";
+import { HostStateError } from "./host-state.ts";
+import { completedHostFault } from "./tooling-test-runner.ts";
 import { readRunLifecycle } from "./run-lifecycle.ts";
 import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
-import { spawnTest } from "./test-wait.ts";
+import { spawnTest, waitFor } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import { removable } from "./run-temporary.ts";
@@ -26,7 +28,7 @@ import { randomUUID } from "node:crypto";
 import { hostObservations } from "./host-observations.ts";
 import { ownMemory } from "./test-memory.ts";
 import { readProcessStat } from "../differential/process-stat/main.ts";
-import { gateCpus, inheritedCpus } from "./affinity.ts";
+import { cpuList, effectiveCeiling, gateCpus, inheritedCpus } from "./affinity.ts";
 import { newToolingSlice, stopToolingSlice, toolingSlice, toolingSliceArgs } from "./tooling-slice.ts";
 import type { Priority } from "./ranks.ts";
 
@@ -388,6 +390,78 @@ test("a step whose slice is observed to lose CPU to other work spends none of th
 const lastGateCpu = () => gateCpus(inheritedCpus()).split(",").at(-1)!.split("-").at(-1)!;
 const loop = (iterations: number) => `i=0; while [ $i -lt ${iterations} ]; do i=$((i+1)); done`;
 
+type LoopPlacement = { group: string; pids: number[]; cpuset?: string; mask?: string; comm?: string; state?: string; processor?: number };
+
+function placementFault(unit: string, cpu: string, reading: LoopPlacement, why: string): HostStateError {
+  return new HostStateError("tooling-setup", `kernel CPU control ${unit} in slice nts.slice (${reading.group || "no cgroup"}): ${why}; requested CPU ${cpu}, slice effective cpuset ${reading.cpuset ?? "unavailable (no process)"}, mask ${reading.mask ?? "unavailable"}, image ${reading.comm ?? "unavailable"}, members ${reading.pids.join(" ") || "none"}`);
+}
+
+function loopSample<T>(unit: string, cpu: string, placement: LoopPlacement, read: () => T): T {
+  try { return read(); }
+  catch (error) { throw placementFault(unit, cpu, placement, `cannot sample the loop's cgroup: ${String(error)}`); }
+}
+
+async function waitForLoop(unit: string, cpu: string, observe: () => LoopPlacement): Promise<LoopPlacement> {
+  let reading: LoopPlacement = { group: "", pids: [] };
+  try {
+    await waitFor(`${unit}'s exec'd sh alone and runnable on CPU ${cpu}`, () => {
+      reading = observe();
+      if (reading.cpuset && !cpuList(reading.cpuset).includes(Number(cpu))) throw placementFault(unit, cpu, reading, "slice excludes the requested CPU");
+      return reading.pids.length === 1 && reading.comm === "sh" && reading.mask === cpu && reading.state === "R" && String(reading.processor) === cpu;
+    }, { stopped: () => reading.state === "Z" || !reading.group || reading.pids.length === 0 ? "unit has no live loop" : undefined });
+    return reading;
+  } catch (error) {
+    if (error instanceof HostStateError) throw error;
+    throw placementFault(unit, cpu, reading, String(error));
+  }
+}
+
+test("the kernel control waits past the pre-exec child and broad mask before sampling", async () => {
+  const base: LoopPlacement = { group: "/nts.slice/control.service", pids: [123], cpuset: "0-3,6-31", mask: "0-3,6-31", comm: "(sh)", state: "R", processor: 30 };
+  const ready = { ...base, mask: "31", comm: "sh", processor: 31 };
+  const observations = [base, { ...base, mask: "31", processor: 31 }, { ...ready, mask: "0-3,6-31" }, { ...ready, state: "S" }, ready];
+  let reads = 0, samples = 0;
+  const reading = await waitForLoop("control.service", "31", () => {
+    assert.equal(samples, 0, "no PSI baseline before placement is ready");
+    return observations[reads++]!;
+  });
+  samples++;
+  assert.equal(reads, observations.length);
+  assert.equal(reading, ready);
+  assert.equal(samples, 1);
+});
+
+test("an impossible kernel-control placement is an instrument refusal naming the slice cpuset", async t => {
+  const dir = newTestScratch("step-bound-placement");
+  t.after(() => { removable(dir); rmSync(dir, { recursive: true, force: true }); });
+  const reading: LoopPlacement = { group: "/nts.slice/control.service", pids: [123], cpuset: "0-3,6-30", mask: "0-3,6-30", comm: "sh", state: "R", processor: 30 };
+  assert.throws(() => loopSample("control.service", "31", reading, () => { throw Error("loop cgroup disappeared"); }), error => {
+    assert.ok(error instanceof HostStateError);
+    assert.match(error.message, /cannot sample the loop's cgroup: Error: loop cgroup disappeared/);
+    assert.match(error.message, /slice effective cpuset 0-3,6-30, mask 0-3,6-30/);
+    return true;
+  });
+  for (const observation of [reading, { group: "", pids: [] }]) {
+    let fault: HostStateError | undefined;
+    await assert.rejects(waitForLoop("control.service", "31", () => observation), error => {
+      assert.ok(error instanceof HostStateError); fault = error; return true;
+    });
+    assert.ok(fault);
+    assert.match(fault.message, /control.service in slice nts.slice/);
+    assert.match(fault.message, /slice effective cpuset/);
+    if (observation === reading) assert.match(fault.message, /slice effective cpuset 0-3,6-30, mask 0-3,6-30/);
+    // This exact marker, rather than an ordinary ToolingInstrumentError,
+    // is what the tooling entry recognizes as a host fault, not a FAIL.
+    assert.equal(completedHostFault({ details: { error: { failureType: "testCodeFailure", cause: fault } } }), fault);
+    const env = { NTS_GATE_STEP: "tooling", NTS_GATE_STEP_ATTEMPT: "placement", NTS_GATE_STEP_RESULT: join(dir, "instrument.json") };
+    publishToolingFailure(fault, env);
+    const frame = readStepInstrument(env.NTS_GATE_STEP_RESULT, "tooling", "placement");
+    assert.equal(frame?.verdict, "INSTRUMENT");
+    assert.equal(frame?.kind, "tooling-setup");
+    assert.equal(frame?.reason, fault.message);
+  }
+});
+
 test("a task alone in its cgroup and always runnable on one CPU is either running or counted in cpu.pressure full, whatever else holds that CPU", async t => {
   // The premise: the loop is its cgroup's only task, always runnable, on one
   // CPU. Every moment of it is then either on the CPU (cpu.stat usage) or
@@ -402,24 +476,51 @@ test("a task alone in its cgroup and always runnable on one CPU is either runnin
   const host = hostObservations(ownMemory(dir, { cpu: { kind: "live" }, pressure: { kind: "live" }, clock: { kind: "live" }, resident: { kind: "live" } }));
   const spinner = `nts-test-step-bound-spinner-${randomUUID()}`, looper = `nts-test-step-bound-loop-${randomUUID()}`;
   // Runaway bounds only: nothing in the arm waits on them.
-  const start = (unit: string, rank: Priority) => spawnTest("systemd-run", ["--user", `--unit=${unit}`, ...toolingSliceArgs({}, rank), "--collect", "--quiet",
-    "-p", "LimitCORE=0", "-p", "RuntimeMaxSec=120s", "-p", `CPUAffinity=${cpu}`, "sh", "-c", "while :; do :; done"], { encoding: "utf8" });
+  const observe = (unit: string): LoopPlacement => {
+    let reading: LoopPlacement = { group: "", pids: [] };
+    try {
+      const shown = spawnTest("systemctl", ["--user", "show", unit, "-p", "ControlGroup", "--value"], { encoding: "utf8" });
+      if (shown.status !== 0) throw Error(shown.stderr);
+      const group = shown.stdout.trim();
+      if (!/^\/.+\.service$/.test(group)) return reading;
+      reading.group = group;
+      reading.pids = host.cgroupMembers(group);
+      const pid = reading.pids[0];
+      if (pid !== undefined) {
+        reading.cpuset = effectiveCeiling(pid);
+        reading.mask = inheritedCpus(pid);
+        const stat = readProcessStat(pid);
+        reading.comm = stat?.comm;
+        reading.state = stat?.state;
+        reading.processor = stat?.processor;
+      }
+      return reading;
+    } catch (error) { throw placementFault(unit, cpu, reading, `cannot observe placement: ${String(error)}`); }
+  };
+  const start = async (unit: string, rank: Priority) => {
+    // simple reports the fork, while its '(sh)' child still has the
+    // manager's mask. exec reports successful execution setup instead.
+    try {
+      const started = spawnTest("systemd-run", ["--user", `--unit=${unit}`, ...toolingSliceArgs({}, rank), "--collect", "--quiet",
+        "-p", "Type=exec", "-p", "LimitCORE=0", "-p", "RuntimeMaxSec=120s", "-p", `CPUAffinity=${cpu}`, "sh", "-c", "while :; do :; done"], { encoding: "utf8" });
+      if (started.status !== 0) throw Error(started.stderr || String(started.error));
+    } catch (error) {
+      let reading: LoopPlacement = { group: "", pids: [] };
+      try { reading = observe(unit); } catch { /* The launch diagnostic still names the unavailable placement. */ }
+      throw placementFault(unit, cpu, reading, `launch failed: ${String(error)}`);
+    }
+    return waitForLoop(unit, cpu, () => observe(unit));
+  };
   try {
-    const spun = start(spinner, "landing");
-    assert.equal(spun.status, 0, spun.stderr);
-    const looped = start(looper, "full-check");
-    assert.equal(looped.status, 0, looped.stderr);
-    const group = spawnTest("systemctl", ["--user", "show", looper, "-p", "ControlGroup", "--value"], { encoding: "utf8" }).stdout.trim();
-    assert.match(group, /^\/.+\.service$/, `the loop's unit ${looper} has no cgroup`);
-    const procs = host.cgroupMembers(group), pid = procs[0]!;
-    assert.equal(procs.length, 1, `the loop's cgroup ${group} holds only the loop, not ${procs.join(" ")}`);
-    const allowed = inheritedCpus(pid);
-    assert.equal(allowed, cpu, `the kernel did not hold the loop to CPU ${cpu} (its cpuset allows ${allowed})`);
-    const first = host.cgroupCpuSample(group);
+    await start(spinner, "landing");
+    const placement = await start(looper, "full-check"), { group } = placement, pid = placement.pids[0]!;
+    const sample = () => loopSample(looper, cpu, placement, () => host.cgroupCpuSample(group));
+    const first = sample();
     await new Promise(resolve => setTimeout(resolve, 2000)); // the measured interval
-    const at = host.now(), second = host.cgroupCpuSample(group);
-    const ranOn = readProcessStat(pid)?.processor;
-    assert.equal(String(ranOn), cpu, `the loop last ran on CPU ${ranOn}, not its CPU ${cpu}`);
+    const at = host.now(), second = sample();
+    const final = observe(looper);
+    if (final.pids.length !== 1 || final.pids[0] !== pid || final.mask !== cpu || final.comm !== "sh" || String(final.processor) !== cpu)
+      throw placementFault(looper, cpu, final, "loop placement changed during measurement");
     const interval = (at - first.atMs) / 1000, ran = (second.cpu.usageUsec - first.cpu.usageUsec) / 1e6;
     const waited = (second.pressure.resources.cpu.full.totalUsec - first.pressure.resources.cpu.full.totalUsec) / 1e6;
     const seen = `on CPU ${cpu}, ${group} ran ${ran.toFixed(3)} s and lost ${waited.toFixed(3)} s to other work (cpu.pressure full) in ${interval.toFixed(3)} s`;
