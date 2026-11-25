@@ -51,12 +51,18 @@ function terminal(run:string){
   const state=terminalState(run),summary=readSummaryFacts(join(run,'summary.json'));
   const scalar=(path:string)=>{const fact=summary.facts.get(path);return fact?.kind==='scalar'?fact.value:undefined;};
   if(scalar('schema')!==1)throw Error('unknown summary schema');
-  const started=typeof scalar('started')==='string'?Date.parse(scalar('started') as string):NaN,wall=scalar('wall_s');
-  const finished=started+Number(wall)*1000;
-  if(!Number.isFinite(started)||typeof wall!=='number'||!Number.isFinite(wall)||wall<0||!Number.isFinite(finished)||
-    scalar('scope_cleanup.state')!=='complete'||scalar('interrupted')!==null)throw Error('missing or unfinished terminal summary');
   const verdict=scalar('verdict');
   if(verdict!=='green'&&verdict!=='red')throw Error('unknown terminal verdict');
+  const started=typeof scalar('started')==='string'?Date.parse(scalar('started') as string):NaN,wall=scalar('wall_s');
+  const finished=started+Number(wall)*1000;
+  if(!Number.isFinite(started)||typeof wall!=='number'||!Number.isFinite(wall)||wall<0||!Number.isFinite(finished)){
+    if(verdict==='red')throw new RoutineKeep('non-green run without an ordering timestamp');
+    throw Error('missing or invalid terminal timestamp');
+  }
+  // A readable known red summary is a policy keep even after interruption or
+  // failed cleanup. Only green deletion candidates need these completion facts.
+  if(verdict==='green'&&(scalar('scope_cleanup.state')!=='complete'||scalar('interrupted')!==null))
+    throw Error('interrupted or incomplete green cleanup');
   // summarizeCosts sets partial for errors.length || missingChecks ||
   // checks.some(c => !c.complete). Coverage gaps and incomplete cases are
   // materialized too; reader failures alone require raw evidence.

@@ -1744,12 +1744,18 @@ the tooling strict checker owns the source's type checking.
   a partial final row without appending other records to it.
   Only `runs` rules and log rules explicitly marked as gate-run roots in
   `keep.json` supply raw-cost inventory roots. The hourly count reserves its
-  measured memory through the ledger. It skips summaries without raw costs or
+  measured memory for all upkeep through the ledger at full-check rank. Pool
+  upkeep, the aged-scratch sweep and stray-slice stopping can therefore wait
+  behind higher-rank work; disk-pressure reclamation remains independent in
+  `DiskCapacity`. It skips summaries without raw costs or
   a detach receipt, validates JSON in bounded chunks retaining only decision
   facts, and rechecks the original byte digest before deletion. Ranking only
   payload-bearing runs conservatively preserves at least the newest three
   completed runs overall. Non-run files and directories without summaries
-  are routine; lock, identity, terminal and reader refusals remain logged.
+  are routine. Known red summaries are routine non-green keeps even when
+  interrupted or cleanup failed. Unknown/unreadable verdicts, invalid green
+  completion facts, and lock, identity, lifecycle, hold and reader refusals
+  remain logged.
   The hourly upkeep retains raw `costs/` for the newest three completed runs
   in each declared run root and every red, held, unfinished or unknown run.
   An older green run loses raw events only after known `case_costs` is materialized with zero reader errors.
@@ -2068,8 +2074,12 @@ the first node task.
 - **Gate disk reclamation follows declared writers.** Older green raw costs
   can go only after a known materialized summary with zero reader errors,
   beyond the newest three completed runs. Only declared gate-run roots are
-  inventoried; routine non-runs stay quiet. Summary validation streams bounded
-  decision facts, and the hourly count reserves its measured memory. Cargo
+  inventoried; routine non-runs and known red policy keeps stay quiet, while
+  invalid green completion and unknown/lifecycle/hold refusals remain visible.
+  Summary validation streams bounded
+  decision facts, and the hourly count reserves its measured memory for all
+  upkeep at full-check rank; higher-rank work can delay hourly maintenance,
+  independently of pressure reclamation. Cargo
   `target/tmp` is metadata, outside legacy scratch retirement. Pin waits and
   pidless-lock grace use the shared monotonic clock capability. Every declared target uses its own generation for obsolete profiles;
   current output stays. Pressure keeps one compatible warm free tree, idle

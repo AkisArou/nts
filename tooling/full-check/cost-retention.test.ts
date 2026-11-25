@@ -144,3 +144,35 @@ test('malformed ignored case population retains the only raw evidence',t=>{
   const report=pruneRawCosts(f.options);assert.deepEqual(report.removed,[]);
   assert.ok(report.kept.some(row=>row.run===run&&!row.routine));
 });
+
+
+for(const control of ['red interrupted','red cleanup error','red both','red missing timestamp',
+  'green interrupted','green cleanup error','unknown verdict','missing verdict','unreadable summary',
+  'red future schema','red running lifecycle','red held','red live measurement'])
+test('policy keep classification: '+control,t=>{
+  const f=fixture(t),run=f.make('1',control.startsWith('red')?'red':'green');f.newer();
+  const file=join(run,'summary.json'),summary=JSON.parse(readFileSync(file,'utf8'));
+  if(control.endsWith('interrupted')||control==='red both')summary.interrupted='signal SIGTERM';
+  if(control.endsWith('cleanup error')||control==='red both')summary.scope_cleanup.state='error';
+  if(control==='red missing timestamp')delete summary.started;
+  if(control==='unknown verdict')summary.verdict='future-verdict';
+  if(control==='missing verdict')delete summary.verdict;
+  if(control==='red future schema')summary.schema=99;
+  writeFileSync(file,control==='unreadable summary'?'{':JSON.stringify(summary));
+  if(control==='red running lifecycle')writeFileSync(join(run,'run-lifecycle.json'),JSON.stringify({version:1,events:1,running:['test']}));
+  if(control==='red held')writeFileSync(join(run,'measurement-hold.txt'),'held');
+  if(control==='red live measurement')writeFileSync(join(run,'measurement-progress.json'),JSON.stringify({version:1,live:true}));
+  const report=pruneRawCosts(f.options),row=report.kept.find(row=>row.run===run);
+  assert.ok(row,JSON.stringify(report));assert.deepEqual(report.removed,[]);
+  assert.equal(row.routine,['red interrupted','red cleanup error','red both','red missing timestamp'].includes(control),JSON.stringify(row));
+  assert.ok(existsSync(join(run,'costs/events.jsonl')));
+});
+
+test('a red cleanup failure with a valid timestamp still participates in newest-three ordering',t=>{
+  const f=fixture(t),old=f.make('1');f.make('10');f.make('11');const red=f.make('12','red');
+  const file=join(red,'summary.json'),summary=JSON.parse(readFileSync(file,'utf8'));
+  summary.interrupted='signal SIGTERM';summary.scope_cleanup.state='error';writeFileSync(file,JSON.stringify(summary));
+  const report=pruneRawCosts(f.options);
+  assert.deepEqual(report.removed.map(row=>row.run),[old]);assert.ok(existsSync(join(red,'costs/events.jsonl')));
+  assert.ok(report.kept.find(row=>row.run===red)?.routine);
+});

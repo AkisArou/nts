@@ -2637,3 +2637,24 @@ test('the hourly raw-cost log omits non-runs but names a held collector lock',t=
   try{countOnce(fx);assert.ok(fx.lines.some(line=>line.includes('collector lock held')),fx.lines.join('\n'));}
   finally{lock.close();}
 });
+
+
+test('the hourly raw-cost log keeps a stopped red run quiet and names incomplete green cleanup',t=>{
+  const repo=repository(t),runs=join(repo.root,'terminal-policy-runs');mkdirSync(runs);
+  const make=(name:string,verdict:string)=>{
+    const run=join(runs,name);mkdirSync(join(run,'costs'),{recursive:true});
+    writeFileSync(join(run,'costs/events.jsonl'),'raw evidence');
+    writeFileSync(join(run,'run-lifecycle.json'),JSON.stringify({version:1,events:2,running:[]}));
+    writeFileSync(join(run,'summary.json'),JSON.stringify({schema:1,started:'2026-11-25T00:00:00Z',wall_s:1,
+      verdict,interrupted:'signal SIGTERM',scope_cleanup:{state:'error'}}));
+    return run;
+  };
+  const red=make('red','red'),green=make('green','green');
+  const host=hostObservations(ownMemory(join(repo.root,'terminal-policy-observations')));
+  const fx=counting(repo,{pruneCosts:()=>pruneRawCosts({roots:[runs],host,ownership:()=>{}})});
+  countOnce(fx);
+  const lines=fx.lines.filter(line=>line.startsWith('raw costs:'));
+  assert.equal(lines.length,1,lines.join('\n'));
+  assert.ok(lines[0]!.includes(green)&&lines[0]!.includes('green cleanup'),lines.join('\n'));
+  for(const run of [red,green])assert.equal(readFileSync(join(run,'costs/events.jsonl'),'utf8'),'raw evidence');
+});

@@ -1069,8 +1069,11 @@ fixed-size chunk reader removes allocation proportional to case population,
 including the whole-string ceiling, and the hourly owner now reserves memory.
 After normal collection, summaries without payloads are skipped entirely.
 The revised rows include 75 routine non-run/no-summary/no-payload entries,
-16 unfinished terminal summaries and six held measurements. The collector
-continues to report the latter guards; the routine entries no longer log.
+16 summaries rejected by the interruption/cleanup check and six held
+measurements. The old check included closed red runs: its message did not
+establish that these runs were unfinished. The collector reported these
+refusals at that revision; routine entries did not log. The review correction
+below makes known red policy keeps routine too.
 No additional real-run payload was deleted or copied.
 
 | Path under `~/.cache/nts-scratch/841/` | SHA-256 |
@@ -1112,3 +1115,54 @@ compiler source is unchanged from the green review inner proof.
 | `review/environment-audit-v1.log` | `97f7197964c1cd10533f494543dcb26a6519654b179e67c570356635ec432181` |
 | `review/environment-service-v1.log` | `84cd7a266c32b3f2512e959bb298a068af334624632080086a2067b3decf60ae` |
 | `review/environment-types-v1.log` | `e2a8283c40989e4acbf782988f234508be06967808625614ba9c057b35359513` |
+
+
+### Review: known red policy keeps
+
+Review of `a5e9928b481c7da101e1fec37625277b27b2342e` found that the cleanup
+check preceded verdict classification, so stopped or cleanup-failed red runs
+were logged as if their terminal state were unknown. These are closed red
+runs whose raw evidence policy already keeps, not unfinished runs. The review
+observed 21 such payload-bearing red runs in the current roots; the earlier
+inventory row's 16 interruption/cleanup refusals above was misdescribed.
+
+The owner now validates the known verdict before requiring complete cleanup
+and no interruption for green deletion candidates. Known red runs are routine
+keeps regardless of interruption/cleanup state. A valid red timestamp still
+participates in the same ordering; a red without one is routinely kept outside
+it. Unknown/unreadable verdicts/schema, invalid green completion, and terminal
+lifecycle/measurement/hold refusals remain nonroutine. Digest/identity guards,
+receipts and deletion grants are unchanged. No production data deletion or
+new before/after measurement is needed for this classification correction.
+
+The all-count reservation remains intentional: its full-check rank can delay
+pool upkeep, aged-scratch sweeping and stray-slice stopping behind higher-rank
+work. Pressure reclamation remains independent in DiskCapacity.
+
+
+The preceding revision's exact `--here` at
+`a5e9928b481c7da101e1fec37625277b27b2342e` was green in 898 s, with all 21
+selected rows passing, canonical environment, complete scope cleanup, empty
+terminal running set and no `tmp/`. Its archived hand log is
+`~/.cache/nts-scratch/841/review/here-v2.log`, SHA-256
+`2317fa4cf74b3be77174625d3e5d1ee2edf3c2b9e7c9b3551560a5385b198028`;
+the step log/summary manifest is `review/here-v2-source/manifest.json`, SHA-256
+`28dcb8db03d8a76670273d3c8e93039e2402e39053493f0619e853ee32098cb7`.
+These prove the preceding revision; new classification proof follows separately.
+
+
+The review classification proof passed all 318 focused tests: the 13-arm
+classification matrix keeps red interruption/cleanup routine while green,
+unknown/read failures and lifecycle/hold cases remain visible; a valid red
+timestamp still contributes to newest-three ordering. The countOnce control
+keeps the stopped red run's raw bytes without a log and logs the equally
+interrupted green cleanup failure. Strict types pass six projects/1,238 modules
+with no increase; host audit passes 2,211 sources, 366 entry closures and 418
+reads. The batch used named unit `nts-841-review2-focused-v1`, Node 26.13.0 and
+the required environment; admission waits are preserved in its raw logs.
+
+| Path under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `review2/focused-v1.log` | `f70841ad929234cf0392b518ca92d31a1e981d1b2088aea0979a9c404c561506` |
+| `review2/types-v1.log` | `c9adac67402024ad3d9773fedf7d000ebe61f160affeeb1d7421f761c8993592` |
+| `review2/audit-v1.log` | `4bc2f306cb1ef602d180781d27c9e41c5600e326aa477c84b929444124c7e161` |

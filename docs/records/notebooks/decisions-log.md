@@ -5005,3 +5005,20 @@ Pin wait bounds and unchanged pidless-lock grace use the monotonic capability,
 with wall time still recognising old pidless locks immediately. A fixture that
 freezes monotonic time must advance it for a positive wait, or use wait zero.
 There remains one pin mutex and no change to pin writer paths or output.
+
+
+## Known red raw-cost keeps are routine (11-25)
+
+2026-11-25, #841 review of a5e9928b. Once the terminal lifecycle/measurement
+and a known summary schema/verdict are readable, red is a routine non-green
+policy keep even after interruption or cleanup failure. Valid red timestamps
+still participate in newest-three ordering; a red without an ordering timestamp
+is routinely kept outside that ordering. Green interruption/incomplete cleanup,
+unknown/unreadable verdicts, and lifecycle/hold refusals remain visible. Every
+such run keeps its raw evidence. The earlier inventory's interruption/cleanup
+refusals included closed red runs; describing them as unfinished was incorrect.
+
+The memory reservation deliberately covers all hourly count upkeep at
+full-check rank. Pool upkeep, the aged-scratch sweep and stray-slice stopping
+may wait behind higher-rank ledger work. Pressure reclamation has its separate
+DiskCapacity route and does not depend on the hourly timer being admitted.
