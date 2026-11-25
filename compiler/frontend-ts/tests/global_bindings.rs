@@ -228,6 +228,39 @@ fn an_exported_ambient_value_retains_its_module_supplier() {
 }
 
 #[test]
+fn namespace_ambient_values_do_not_link_past_enclosing_source_bindings() {
+    let project = Project::new(
+        "namespace-ambient",
+        r"const Math = { floor: (n: number): number => n + 100 };
+const NaN = 5;
+namespace Inner {
+    declare const Math: typeof globalThis.Math;
+    declare const NaN: number;
+    export function floor(n: number): number { return Math.floor(n); }
+    export function constant(): number { return NaN; }
+}
+export function control(n: number): number { return Math.floor(n) + NaN; }
+export function shadowed(n: number): number { return Inner.floor(n) + Inner.constant(); }",
+    );
+    let snapshot = project.capture();
+    for name in ["Math", "NaN"] {
+        let local: Vec<_> = symbols(&snapshot, name)
+            .into_iter()
+            .filter(|symbol| !symbol.declarations.is_empty())
+            .collect();
+        assert_eq!(local.len(), 2, "the source binding and its erased namesake");
+        for binding in local {
+            assert_eq!(scope(binding), (false, false));
+            assert!(binding.value_provenance.is_none());
+            assert!(
+                binding.builtin.is_none(),
+                "{name} has no proved global supplier"
+            );
+        }
+    }
+}
+
+#[test]
 fn emitting_script_bindings_are_not_library_constants_or_namespaces() {
     let project = Project::new(
         "script-values",

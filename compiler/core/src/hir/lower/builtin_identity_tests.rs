@@ -360,6 +360,56 @@ fn type_augmentation_and_compatible_ambient_declarations_keep_global_values() {
 }
 
 #[test]
+fn a_namespace_ambient_cannot_skip_an_enclosing_runtime_binding() {
+    with_source(
+        r"const Math = { floor: (n: number): number => n + 100 };
+const NaN = 5;
+namespace Inner {
+    declare const Math: typeof globalThis.Math;
+    declare const NaN: number;
+    export function floor(n: number): number { return Math.floor(n); }
+    export function constant(): number { return NaN; }
+}
+export function shadowedAmbient(n: number): number { return Inner.floor(n); }
+export function shadowedConstant(): number { return Inner.constant(); }
+export function control(n: number): number { return Math.floor(n); }
+export function constantControl(): number { return NaN; }",
+        |semantic| {
+            let snapshot = LoweringSnapshot::new(semantic);
+            let probe = FuncBuilder::probe(&snapshot);
+            for (index, node) in snapshot.nodes.iter().enumerate() {
+                if node.kind == super::NodeKind::Syntax(syntax::CALL_EXPRESSION) {
+                    let callee = probe.children(NodeId(u32::try_from(index).unwrap()))[0];
+                    assert!(probe.builtin_global_member(callee).is_none());
+                }
+            }
+            let lowered = super::lower(semantic);
+            assert!(lowered.program.refused_bodies().next().is_some());
+            assert!(lowered.program.funcs.iter().all(|function| {
+                function.values.iter().all(|value| {
+                    !matches!(
+                        value.kind,
+                        OpKind::Unary {
+                            op: UnOp::Floor,
+                            ..
+                        }
+                    )
+                })
+            }));
+            for name in ["control", "constantControl"] {
+                let control = lowered
+                    .program
+                    .funcs
+                    .iter()
+                    .find(|f| f.name == name)
+                    .unwrap();
+                assert!(!control.values.is_empty(), "{name} remains compiled");
+            }
+        },
+    );
+}
+
+#[test]
 fn incompatible_ambient_bindings_and_missing_value_provenance_refuse_by_name() {
     with_source(
         r"declare const Math: { floor(n: number): number };

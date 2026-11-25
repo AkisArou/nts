@@ -212,8 +212,9 @@ impl<'p> File<'p> {
 }
 
 impl<'p> Symbol<'p> {
-    /// A separate ambient value can name a real global at runtime. The native
-    /// checker supplies both the global identity and exact checked type equality.
+    /// A separate source-file ambient value can name a real global at runtime.
+    /// Nested containers may have an enclosing lexical runtime supplier instead.
+    /// The checker supplies the global identity and exact checked type equality.
     #[must_use]
     pub fn ambient_global(self) -> Option<(Self, bool)> {
         let class = self.classification();
@@ -232,6 +233,19 @@ impl<'p> Symbol<'p> {
         for declaration in self.declarations() {
             if let Some(emits) = declaration.value_declaration() {
                 if emits {
+                    return None;
+                }
+                let container =
+                    std::iter::successors(declaration.native.parent(), |node| node.parent()).find(
+                        |node| {
+                            !matches!(
+                                node.kind(),
+                                tsrs_ast::Kind::VariableDeclarationList
+                                    | tsrs_ast::Kind::VariableStatement
+                            )
+                        },
+                    )?;
+                if container.kind() != tsrs_ast::Kind::SourceFile {
                     return None;
                 }
                 value = true;
