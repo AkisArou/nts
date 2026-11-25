@@ -43,16 +43,15 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-export const PINS = process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins");
+import {PINS,withBuildLock} from "./pin-lock.ts";
+export {PINS,withBuildLock};
 const TREE = join(PINS, "tree");
 const TARGET = join(PINS, "target");
-const LOCK = join(PINS, "build.lock");
 
 const git = (args: string[], cwd = ROOT, input?: string) => execFileSync("git", gitArguments(args), { cwd, encoding: "utf8", input, maxBuffer: 1 << 28, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
@@ -170,62 +169,6 @@ function appliedDiff(sha, opts) {
     return text.trim() === "" ? null : { text, source: "worktree" };
   }
   return null;
-}
-
-const alive = (pid) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-};
-
-/**
- * **One build at a time in the one pin tree.** Every pin shares `TREE` and
- * `TARGET`, and a build checks out, applies, compiles, and checks out again
- * to undo. On 2026-09-29 two pins built minutes apart: one pin's closing
- * checkout reverted the other's patch in the middle of its `cargo build`, and
- * that pin shipped a binary without its patch, beside an `applied.diff` and a
- * provenance record naming it. A provenance record is trusted, so it was the
- * worst failure this tool can have.
- *
- * The lock is a directory, because `mkdir` is atomic, holding the holder's
- * pid. A holder that no longer runs is stale, and so is a lock with no pid
- * file after a minute (a crash between the two writes). A waiter says so once
- * and polls. `lock` and `wait` are parameters for the self-test.
- */
-export function withBuildLock(fn, { lock = LOCK, wait = 60 * 60 * 1000 } = {}) {
-  const started = Date.now();
-  let said = false;
-  const nap = new Int32Array(new SharedArrayBuffer(4));
-  for (;;) {
-    try {
-      mkdirSync(lock);
-      writeFileSync(join(lock, "pid"), String(process.pid));
-      break;
-    } catch (error) {
-      if (error.code !== "EEXIST") throw error;
-      const pidFile = join(lock, "pid");
-      const holder = existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0;
-      const orphaned = holder === 0 && Date.now() - (lstatSync(lock, { throwIfNoEntry: false })?.mtimeMs ?? 0) > 60_000;
-      if ((holder !== 0 && !alive(holder)) || orphaned) {
-        rmSync(lock, { recursive: true, force: true });
-        continue;
-      }
-      if (Date.now() - started >= wait) throw new Error(`the pin tree is held by pid ${holder || "(unknown)"} (${lock}); waited ${Math.round((Date.now() - started) / 1000)} s`);
-      if (!said) {
-        console.error(`  waiting: pin.ts pid ${holder || "(starting)"} is building in ${TREE}`);
-        said = true;
-      }
-      Atomics.wait(nap, 0, 0, 1000);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    rmSync(lock, { recursive: true, force: true });
-  }
 }
 
 /** Build `rev` (plus what `opts` applies) and return the pinned binary's path. */

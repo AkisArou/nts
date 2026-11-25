@@ -31,7 +31,7 @@ export function readKeep(file = KEEP_FILE): Record<string, Keep> {
         const tree=typeof declaration==='string'?declaration:declaration?.tree;
         if(typeof declaration!=='string'){
           const lock=declaration?.lock;
-          if(!lock||!inside(lock.path)||lock.owner!=='tooling/conformance/pin.ts')throw Error(`${file}: ${name}/${target} has an unknown target lock owner or path`);
+          if(!lock||!inside(lock.path)||lock.owner!=='tooling/conformance/pin-lock.ts')throw Error(`${file}: ${name}/${target} has an unknown target lock owner or path`);
         }
         if (!inside(target) || typeof tree !== "string" || !inside(tree)) throw new Error(`${file}: ${name} declares target ${target} of tree ${String(tree)}; both must be relative paths inside its folder`);
       }

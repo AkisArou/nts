@@ -767,7 +767,9 @@ test("keep.json declares every cargo target the services' layouts, pin.ts and pi
   for(const [target,tree] of expected)assert.equal(declared.get(target),tree,target);
   // The writers still spell the pin and hand-gate paths this way.
   const repo=fileURLToPath(new URL('../..',import.meta.url)),pin=readFileSync(join(repo,'tooling/conformance/pin.ts'),'utf8'),pinned=readFileSync(join(repo,'tooling/gate/pinned.sh'),'utf8');
-  for(const spelling of ['join(homedir(), ".cache/nts-pins")','const TREE = join(PINS, "tree");','const TARGET = join(PINS, "target");','const LOCK = join(PINS, "build.lock");'])assert.ok(pin.includes(spelling),spelling);
+  for(const spelling of ['const TREE = join(PINS, "tree");','const TARGET = join(PINS, "target");'])assert.ok(pin.includes(spelling),spelling);
+  const lock=readFileSync(new URL('../conformance/pin-lock.ts',import.meta.url),'utf8');
+  for(const spelling of ['join(homedir(), ".cache/nts-pins")','const LOCK = join(PINS, "build.lock");'])assert.ok(lock.includes(spelling),spelling);
   for(const spelling of ['tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}','target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}'])assert.ok(pinned.includes(spelling),spelling);
 });
 
@@ -793,5 +795,5 @@ test('the interop writer uses its declared target root, so changing the writer a
 
 test('pin target declarations bind the writer mutex to its production owner',()=>{
   const pins=declaredTargets('/private/cache',{'nts-pins':readKeep()['nts-pins']!});
-  assert.deepEqual(pins,[{target:'/private/cache/nts-pins/target',tree:'/private/cache/nts-pins/tree',lock:{path:'/private/cache/nts-pins/build.lock',owner:'tooling/conformance/pin.ts'}}]);
+  assert.deepEqual(pins,[{target:'/private/cache/nts-pins/target',tree:'/private/cache/nts-pins/tree',lock:{path:'/private/cache/nts-pins/build.lock',owner:'tooling/conformance/pin-lock.ts'}}]);
 });

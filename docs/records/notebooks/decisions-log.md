@@ -4969,3 +4969,18 @@ free pool trees, while retirement waits until **every** pool tree, held trees
 included, is free of the old layout and no `legacy-scratch` trash entry remains.
 The earlier wording about no free tree carrying it was too narrow: a held tree
 can become free later, and an interrupted detachment still owes its drain.
+
+
+## Pin mutex is a small shared owner (11-25)
+
+#841 clarification of "Pin reclamation shares the writer mutex" above. The
+coordinator approved extracting the existing mutex and its holder-liveness
+helper into `tooling/conformance/pin-lock.ts`. `pin.ts` uses and re-exports the
+same `PINS` and `withBuildLock` API, with its production defaults and diagnostic
+preserved; the reclaimer imports that small owner. `keep.json` names
+`pin-lock.ts` as the lock owner and `pin.ts` remains its writer user. There is
+one mutex implementation. Wall time is supplied by `HostObservations.wallNow`,
+with the reclaimer forwarding its existing capability; production retains the
+same wall clock and fixtures own their observations. No clock-debt allowance
+was added. Importing the whole builder had unnecessarily pulled build/linker
+inputs into every gate environment and exposed its legacy type diagnostics.

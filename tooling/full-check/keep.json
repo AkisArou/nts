@@ -7,7 +7,7 @@
   "nts-full-check": { "kind": "runs", "who": "the full check", "writer": "tooling/full-check/layout.ts", "why": "the full check's trees, target, state and runs",
     "targets": { "target": "tree", "tree/target": "tree", "bench/target": "bench", "records/core/target": "records/core", "records/wide/target": "records/wide" } },
   "nts-pins": { "kind": "pins", "writer": "tooling/conformance/pin.ts", "why": "pin.ts's tree, target and lock, and the pins main uses",
-    "targets": { "target": { "tree": "tree", "lock": { "path": "build.lock", "owner": "tooling/conformance/pin.ts" } } } },
+    "targets": { "target": { "tree": "tree", "lock": { "path": "build.lock", "owner": "tooling/conformance/pin-lock.ts" } } } },
   "nts-chromium-checkpoint1": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
   "nts-chromium-checkpoint2": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
   "nts-chromium": { "kind": "kept", "why": "the Chromium task's own caches, kept while the user has it paused" },

@@ -1,4 +1,4 @@
-import {withBuildLock} from '../conformance/pin.ts';
+import {withBuildLock} from '../conformance/pin-lock.ts';
 import {targetScratch,type TargetLock} from '../full-check/keep.ts';
 import {DiskState,DiskTransactions,type DiskIntent} from './disk-transaction.ts';
 import {ClaimReceipt,GitReceipt,DetachRecord,linkMovedCheckout,prepareCheckoutRepair,readCheckoutMove,syncDiskDirectory,type CheckoutMove} from './disk-preparation.ts';
@@ -639,10 +639,10 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     };
     try{
       if(candidate.lock){
-        if(candidate.lock.owner!=='tooling/conformance/pin.ts')throw Error('unknown reclamation lock owner: '+candidate.lock.owner);
+        if(candidate.lock.owner!=='tooling/conformance/pin-lock.ts')throw Error('unknown reclamation lock owner: '+candidate.lock.owner);
         // The pin writer owns this mutex. Never hold the pool transaction
         // while acquiring it; wait zero so a live writer is a named keep.
-        withBuildLock(removeCandidate,{lock:candidate.lock.path,wait:0});
+        withBuildLock(removeCandidate,{lock:candidate.lock.path,wait:0,host:options.host});
       }else removeCandidate();
     }catch(error){keep(root,error);}
 

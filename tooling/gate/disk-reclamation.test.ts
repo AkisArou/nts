@@ -27,10 +27,12 @@ import {copyModuleClosure} from './module-closure-fixture.ts';
 import {pathToFileURL} from 'node:url';
 import {declaredTargets,readKeep} from '../full-check/keep.ts';
 import {withBuildLock} from '../conformance/pin.ts';
+import {withBuildLock as sharedPinLock} from '../conformance/pin-lock.ts';
 const GiB=2**30;
 const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
 
 test('a declared pin target takes its writer mutex outside the pool lock, or keeps a held target by name',t=>{
+  assert.equal(withBuildLock,sharedPinLock,'pin writer and reclaimer export the same lock owner');
   const f=fixture(t),cache=join(f.s.dir,'cache'),keep=readKeep();f.setFree(0);
   const declared=declaredTargets(cache,{'nts-pins':keep['nts-pins']!})[0]!;
   mkdirSync(declared.tree,{recursive:true});writeFileSync(join(declared.tree,'Cargo.toml'),'[workspace]\n');

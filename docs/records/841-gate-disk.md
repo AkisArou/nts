@@ -937,3 +937,40 @@ the inner and three-arm standalone proof above.
 | `discovery-focused.log` | `4709b530e07fd2bcc1eaf4d3c49a752f54258bc2e257a0b6da6cff4dd665cde6` |
 | `discovery-types.log` | `0dafde3feb67e630b378dfd0c62cbdf9799c5f66f682b932c6cfafa5921db4aa` |
 | `discovery-host-audit-v2.log` | `5d5bde205d5116b9863a2bca791070999e3361cfc09d1b8e08a7992151c3da48` |
+
+### Pin lock owner boundary
+
+The second exact-commit check reached the tooling suite. Its direct lock
+import from `pin.ts` unnecessarily entered the entire builder: an emitted
+runtime-owner test encountered the builder's legacy strict diagnostics, and
+six full-check measurement fixtures collided with their own `link.sh` input.
+The named unit was stopped after those observed failures and drained with a
+held verdict. Its temporary is absent; its logs and terminal records are
+preserved in the source manifest below. This attempt is not green evidence.
+
+The coordinator approved a small shared lock owner. The existing mutex body
+and holder-liveness helper now live in typed `pin-lock.ts`; `pin.ts` imports
+and re-exports the same API, defaults and diagnostic. The reclaimer and the
+`keep.json` lock declaration name that small owner. The held-lock control also
+asserts function identity between the writer API and shared owner. Clock reads
+use the existing `HostObservations.wallNow` capability: normal production uses
+the same wall clock, and reclamation forwards its supplied observation. No
+host-audit allowance or second mutex was introduced.
+
+All 194 controls across reclamation, count, oracle-emission ownership and
+full-check measurement passed after extraction. A final capability-wiring run
+passed all 84 reclamation controls and pin's self-test (take, live-holder
+refusal, release after return and throw). Strict types passed six projects and
+1,235 modules with no increase, including zero diagnostics in the new module.
+The final host audit passed 2,208 sources, 364 entry closures and 418 reads.
+The compiler source remains the source proved by inner above.
+
+| Path under `~/.cache/nts-scratch/841/d/` | SHA-256 |
+| --- | --- |
+| `here-v2.log` | `b488252151ee55561c1db6459b70a5402a6f63dd85429cf9892bfe0724fbc46e` |
+| `here-v2-source/manifest.json` | `cfca186dcd3f61f0373db8092ec9dd5d7f5cdab72892a61fc77ca174cad6f838` |
+| `pin-owner-focused-v2.log` | `b2f12217b34e280775abddc0205565cc6b975b9ea7fea101d9ec5f6077523f3b` |
+| `pin-self-test-v4.log` | `64148be386e877c727c1bd2c04969fc3f7d4184e54087d9d5d796c125dd120ba` |
+| `pin-clock-focused-v2.log` | `b65128befeedf769e76c037a1586ed75c176e21674821c74a2783679bf1a9ef6` |
+| `pin-clock-types-v2.log` | `8c0bcab58b002e44a3f0657326000224356c3d7744ea8fccf40d63a8f2da165c` |
+| `pin-clock-audit-v2.log` | `4960250042812b4e55dfcd4655454ac85504eca9faa20984139afa899fe1bdd3` |

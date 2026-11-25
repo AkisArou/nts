@@ -1430,8 +1430,8 @@ the tooling strict checker owns the source's type checking.
   only obsolete generations, never their current build output. Pins, hand gates,
   records and benchmark targets declared by `keep.json` use the same rule, judged
   against their own trees' build generations. A declared writer mutex is also
-  held outside the pool transaction: pin targets reuse `pin.ts`'s `withBuildLock`
-  with zero wait, so a held pin is retained by name. Unknown or corrupt
+  held outside the pool transaction: pin targets reuse `pin-lock.ts`'s
+  `withBuildLock` (also re-exported by `pin.ts`) with zero wait, so a held pin is retained by name. Unknown or corrupt
   generation markers keep the candidate. A removed checkout must be Git-detached, clean,
   registered and have no unpublished commits; ignored local data also keeps it.
   Git moves an unbuilt checkout into trash while its intent and tree fence
