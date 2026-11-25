@@ -637,7 +637,8 @@ test('the count names retained pool target siblings and known writers without de
   const cache=cacheFixture(t),tree=join(cache,'nts-pool/1');
   for(const name of ['nts-dev','clippy','test-scratch','tmp','919-probe.log','gate-costs','gate-scope-owner.json','gate-scope-owner.json.lock','.gate-run.lock','tooling-types.tsbuildinfo'])mkdirSync(join(tree,'target',name),{recursive:true});
   const result=count(input(t,{cache}),KEEP),lines=(result.notices??[]).join('\n');
-  for(const name of ['test-scratch','tmp','919-probe.log','gate-costs'])assert.ok(lines.includes('nts-pool/1/target/'+name),lines);
+  assert.ok(!lines.includes('nts-pool/1/target/tmp'),'Cargo owns target/tmp');
+  for(const name of ['test-scratch','919-probe.log','gate-costs'])assert.ok(lines.includes('nts-pool/1/target/'+name),lines);
   assert.match(lines,/compiler\/test-support\/scratch.rs/);assert.match(lines,/historical issue #919/);assert.match(lines,/tooling\/gate\/step-scheduling.ts/);
   for(const [name,writer] of [['gate-scope-owner.json','tooling/gate/run.mjs; tooling/landing/run.ts'],['gate-scope-owner.json.lock','tooling/gate/run.mjs; tooling/landing/run.ts'],['.gate-run.lock','tooling/gate/run.mjs'],['tooling-types.tsbuildinfo','tooling/tsconfig.json']])assert.ok(lines.includes('target/'+name+': retained target sibling; writer: '+writer),lines);
   assert.ok(result.removable.every(row=>!row.path.startsWith(join(tree,'target'))));
@@ -778,6 +779,7 @@ test('scratch declarations name the owner roots and bound the legacy migration',
   assert.deepEqual(policy.targetScratch,{'test-scratch':'compiler/test-support/scratch.rs',interop:'tooling/gate/all.sh'});
   assert.ok(policy.legacyTargetScratch?.includes('accumulator-tests'));
   assert.ok(!policy.legacyTargetScratch?.includes('unowned-scratch'));
+  assert.ok(!policy.legacyTargetScratch?.includes('tmp'),'Cargo metadata is not legacy scratch');
 });
 
 

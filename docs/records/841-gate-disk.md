@@ -1005,3 +1005,52 @@ audit passed 2,208 sources, 364 entry closures and 418 reads.
 | `members-focused.log` | `428a1c38b7fc9566b0bcf45b527c7aef45190a019eea9de19842739eebfc6a4e` |
 | `members-types.log` | `8c0bcab58b002e44a3f0657326000224356c3d7744ea8fccf40d63a8f2da165c` |
 | `members-audit.log` | `4960250042812b4e55dfcd4655454ac85504eca9faa20984139afa899fe1bdd3` |
+
+
+### Review: quiet roots and bounded inventory
+
+Review of `bf9906ee3633ff8a3b60b951b38992bcc3c064e7` found that treating every
+logs rule as a gate-run root produced routine noise, and whole-summary parsing
+made the hourly inventory allocate gigabytes. Only `runs` rules and the explicit
+`gateRunRoot` log declaration now supply roots. Files and absent summaries or
+payloads are routine; locks, identity changes, terminal changes and reader
+failures remain named refusals. A countOnce control proves a non-run file and a
+summary-less directory log nothing while a held collector lock still logs.
+
+The reader validates all JSON and UTF-8 in bounded chunks and stores only fixed
+decision facts plus an original-byte digest. The final guard hashes bytes
+without parsing again. A malformed ignored case population still refuses
+removal; a synthetic ignored string larger than V8's whole-string ceiling is
+validated without constructing that string. A run with neither costs nor a
+detach receipt is skipped before summary access. Ranking remaining payloads
+conservatively retains at least the newest three completed runs overall, so
+skipped payload-less runs can only retain extra older evidence. The production
+hourly count now reserves and records memory through the ledger.
+
+Pin timeouts and unchanged pidless grace use monotonic observations, retaining
+wall time for immediate recognition of old orphans. Fixed-wall controls prove
+both paths. Fixtures freezing monotonic time must advance it or use wait zero.
+Cargo's recreated `target/tmp` is metadata, excluded from the legacy scratch
+migration and its retirement condition; a warm-tree control preserves it.
+
+The focused review suite passed all 303 tests; strict types passed six projects
+and 1,238 modules with no increase, including the new modules at zero diagnostics;
+pin's self-test passed. The first focused attempt refused the new reader's
+constructor parameter property in Node's strip-only mode; the corrected form
+passed on the second attempt.
+
+Before changing the owner, its committed production inventory was run read-only
+with `onlyRun` outside every root, preventing any deletion. On the live cache it
+reported 617 kept rows, 0 removed, 36.87 s wall, 24.36 s user plus 11.54 s system,
+and 2,007,648 KiB maximum RSS. This includes the original overly broad roots.
+No raw payload was copied or removed during this review measurement.
+
+| Path under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `review/focused-v1.log` | `018be35f67d0224e2bcd6c336dba9ea70bcabb6584d4eb75ed630b18d70114e5` |
+| `review/focused-v2.log` | `86f700e3f40cf69d1eb72a2105c89b892cc32062bbd8da4fcf53ae55a3fbdc3c` |
+| `review/types-v1.log` | `05ecc49245add8653e33536764fb6735511a0d236b958fb9d3d0f9a945214561` |
+| `review/pin-self-v1.log` | `64148be386e877c727c1bd2c04969fc3f7d4184e54087d9d5d796c125dd120ba` |
+| `review/inventory-before.mjs` | `4fb583fa3a428277de71bb648d84069a4708a50fec7a1aba1bd76aab8002f421` |
+| `review/inventory-before.log` | `7eb58275181b613d4a94abc8c7ed3bd123a514e5d8f1c2962f36f69b147d1c1e` |
+| `review/inventory-before.time` | `b96d6df1332cfb68b91ab9a40bedc76d5ec49c82cd4fe259c11fe8bf66951279` |

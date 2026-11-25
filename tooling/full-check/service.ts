@@ -83,7 +83,7 @@ import {launcherEnvironment} from '../landing/run.ts';
 import {nodePin} from '../bootstrap/node.ts';
 import { gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { GateResource } from "../gate/gate-resource.ts";
-import { readLedger, type Priority } from "../gate/memory-ledger.ts";
+import { readLedger, reserveJob, type Priority } from "../gate/memory-ledger.ts";
 import {nodeToolchain} from '../gate/toolchain.ts';
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
@@ -1268,7 +1268,7 @@ export function countOnce(fx: CountEffects): CountRecord {
   try {
     const costs=fx.pruneCosts();
     for(const row of costs.removed)fx.log(`raw costs: removed ${row.run}/costs, ${row.allocatedBytes} allocated bytes`);
-    for(const row of costs.kept)if(!/newest three|non-green/.test(row.reason))fx.log(`raw costs: kept ${row.run}: ${row.reason}`);
+    for(const row of costs.kept)if(!row.routine)fx.log(`raw costs: kept ${row.run}: ${row.reason}`);
   } catch(error){fx.log(`raw costs upkeep warning: ${String(error)}`);}
   try {
     const cache = fx.pruneNodeCache();
@@ -1835,7 +1835,10 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   // The hourly count, beside the controller: it takes no lock of the controller's.
   if (options.count) {
-    countOnce(countEffects(layout));
+    const job=await reserveJob({key:'full-check-count',what:'hourly full-check count'},
+      {env:{...process.env,CARGO_TARGET_DIR:layout.target,NTS_MEMORY_PRIORITY:'full-check'},report:stamp});
+    try{countOnce(countEffects(layout));}
+    finally{job.release();await job.closed;}
     return 0;
   }
   mkdirSync(layout.home, { recursive: true });

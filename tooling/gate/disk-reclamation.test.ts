@@ -79,7 +79,7 @@ test('every declared non-pool target offers obsolete debug, preserving its own c
   for(const row of targets)assert.ok(existsSync(join(row.target,'nts-dev')),'current service generation differs from main');
 });
 
-for(const name of ['test-scratch','interop','tmp','accumulator-tests','interop-example'])test('free trees reclaim declared or legacy scratch: '+name,t=>{
+for(const name of ['test-scratch','interop','accumulator-tests','interop-example'])test('free trees reclaim declared or legacy scratch: '+name,t=>{
   const f=fixture(t),tree=f.tree('1'),path=join(tree,'target',name);
   mkdirSync(path,{recursive:true});writeFileSync(join(path,'leftover'),'rebuildable scratch');
   mkdirSync(join(tree,'target/unowned-scratch'));writeFileSync(join(tree,'target/unowned-scratch/keep'),'unknown writer');
@@ -1057,4 +1057,13 @@ test('the classifier names a corrupt or future marker with its reader\'s own mes
     assert.throws(()=>profileMarker(current,null),(error:unknown)=>error instanceof ProfileMarkerError&&error.file===file&&message.test(error.message));
     assert.throws(()=>[...targetProfiles(join(tree,'target'),()=>null)],ProfileMarkerError);
   }
+});
+
+
+test('Cargo target/tmp is metadata and cannot keep the legacy scratch migration alive',t=>{
+  const f=fixture(t),tree=f.tree('1'),path=join(tree,'target/tmp');
+  mkdirSync(path,{recursive:true});writeFileSync(join(path,'metadata'),'Cargo integration scratch');
+  const report=reclaimDisk(f.options);
+  assert.ok(!report.removed.some(row=>row.kind==='legacy-scratch'));
+  assert.ok(existsSync(path),'warm target retains Cargo metadata');
 });

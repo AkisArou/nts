@@ -10,7 +10,7 @@ export type Keep = (
   | { kind: "runs" | "logs"; who: string; why: string; writer?: string }
   | { kind: "scratch"; writer: string; days?: number }
   | { kind: "folders" | "issue-scratch"; why: string; folders: Record<string, Keep> }
-) & { targets?: Record<string, TargetDeclaration>; targetScratch?: Record<string,string>; legacyTargetScratch?: string[] };
+) & { targets?: Record<string, TargetDeclaration>; targetScratch?: Record<string,string>; legacyTargetScratch?: string[]; gateRunRoot?:true };
 
 export const KEEP_FILE = fileURLToPath(new URL("keep.json", import.meta.url));
 
@@ -18,6 +18,7 @@ export function readKeep(file = KEEP_FILE): Record<string, Keep> {
   const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, Keep>;
   const inside = (path: string) => path !== "" && !isAbsolute(path) && path.split("/").every(part => part !== "" && part !== "." && part !== "..");
   const check = (name: string, keep: Keep, top = false) => {
+    if(keep.gateRunRoot!==undefined&&(keep.gateRunRoot!==true||keep.kind!=='logs'))throw Error(`${file}: ${name} gateRunRoot requires a logs rule and true`);
     if(keep.targetScratch!==undefined||keep.legacyTargetScratch!==undefined){
       if(!top||keep.kind!=='pool')throw Error(`${file}: ${name} scratch declarations require a top-level pool`);
       for(const [child,writer] of Object.entries(keep.targetScratch??{}))if(!inside(child)||child.includes('/')||typeof writer!=='string'||!writer)throw Error(`${file}: invalid target scratch declaration ${child}`);
@@ -74,7 +75,7 @@ export function declaredRunRoots(cache:string,keep:Record<string,Keep>):string[]
   const roots:string[]=[];
   const visit=(path:string,rule:Keep)=>{
     if(rule.kind==='runs')roots.push(join(path,'runs'));
-    else if(rule.kind==='logs')roots.push(path);
+    else if(rule.kind==='logs'&&rule.gateRunRoot)roots.push(path);
     else if(rule.kind==='folders')for(const [name,child] of Object.entries(rule.folders))visit(join(path,name),child);
   };
   for(const [name,rule] of Object.entries(keep))visit(join(cache,name),rule);

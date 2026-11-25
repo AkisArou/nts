@@ -1,3 +1,5 @@
+import {pruneRawCosts} from './cost-retention.ts';
+import {hostObservations} from '../gate/host-observations.ts';
 import {censusReport, recordedCensus} from "./census-log-fixture.ts";
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
@@ -2622,4 +2624,16 @@ test("a newer main on another case confirms the original red and holds without r
   assert.equal(state.culprits.length, 0); assert.equal(fx.submitted.length, 0);
   assert.ok(gate.measured.some(p => p.label === "core-probe" && p.commit === bad));
   assert.match(state.core.last_run?.search?.result ?? "", /old .*case-x.*current .*case-y/);
+});
+
+
+test('the hourly raw-cost log omits non-runs but names a held collector lock',t=>{
+  const repo=repository(t),runs=join(repo.root,'raw-cost-runs');mkdirSync(runs);
+  writeFileSync(join(runs,'service.log'),'not a run');mkdirSync(join(runs,'probe/costs'),{recursive:true});
+  const host=hostObservations(ownMemory(join(repo.root,'raw-cost-observations')));
+  const fx=counting(repo,{pruneCosts:()=>pruneRawCosts({roots:[runs],host,ownership:()=>{}})});
+  countOnce(fx);assert.ok(!fx.lines.some(line=>line.includes('raw costs')),fx.lines.join('\n'));
+  const lock=GateResource.tryAcquire(runs+'.cost-retention.lock');assert.ok(lock);
+  try{countOnce(fx);assert.ok(fx.lines.some(line=>line.includes('collector lock held')),fx.lines.join('\n'));}
+  finally{lock.close();}
 });

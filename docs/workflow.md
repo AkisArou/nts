@@ -1458,7 +1458,8 @@ the tooling strict checker owns the source's type checking.
   `target/interop` roots offer rebuildable scratch through those same guards,
   independently of warm profiles. The temporary `legacy-scratch` migration
   covers the explicit old compiler namespaces in `keep.json` and `interop-*`;
-  it retires once no pool tree carries that layout and no legacy trash remains. Unknown siblings and held
+  it retires once no pool tree carries that layout and no legacy trash remains.
+  Cargo owns `target/tmp`; it is metadata, outside that migration. Unknown siblings and held
   or service scratch stay. Evidence, shared corpora and unknown cache roots
   have no deletion grant.
 - **Git observers preserve the owner's index.** Git arguments run through
@@ -1741,6 +1742,14 @@ the tooling strict checker owns the source's type checking.
   and group interleaved sessions before deriving `summary.json.case_costs`.
   A failed process-file write disables that file for every session, preserving
   a partial final row without appending other records to it.
+  Only `runs` rules and log rules explicitly marked as gate-run roots in
+  `keep.json` supply raw-cost inventory roots. The hourly count reserves its
+  measured memory through the ledger. It skips summaries without raw costs or
+  a detach receipt, validates JSON in bounded chunks retaining only decision
+  facts, and rechecks the original byte digest before deletion. Ranking only
+  payload-bearing runs conservatively preserves at least the newest three
+  completed runs overall. Non-run files and directories without summaries
+  are routine; lock, identity, terminal and reader refusals remain logged.
   The hourly upkeep retains raw `costs/` for the newest three completed runs
   in each declared run root and every red, held, unfinished or unknown run.
   An older green run loses raw events only after known `case_costs` is materialized with zero reader errors.
@@ -2058,7 +2067,11 @@ the first node task.
 
 - **Gate disk reclamation follows declared writers.** Older green raw costs
   can go only after a known materialized summary with zero reader errors,
-  beyond the newest three completed runs. Every declared target uses its own generation for obsolete profiles;
+  beyond the newest three completed runs. Only declared gate-run roots are
+  inventoried; routine non-runs stay quiet. Summary validation streams bounded
+  decision facts, and the hourly count reserves its measured memory. Cargo
+  `target/tmp` is metadata, outside legacy scratch retirement. Pin waits and
+  pidless-lock grace use the shared monotonic clock capability. Every declared target uses its own generation for obsolete profiles;
   current output stays. Pressure keeps one compatible warm free tree, idle
   upkeep two. Compiler tests and interop write into explicit scratch roots;
   only clean free trees offer those roots and the bounded legacy migration

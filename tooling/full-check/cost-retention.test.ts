@@ -84,7 +84,7 @@ for(const guard of ['holder','replacement','summary change','lifecycle change','
 test('run roots come from the same keep declarations as the count',()=>{
   const roots=declaredRunRoots('/private/cache',readKeep());
   for(const name of ['nts-full-check/runs','nts-landing/runs','nts-gate/runs'])assert.ok(roots.includes('/private/cache/'+name));
-  assert.ok(!roots.some(root=>root.includes('nts-scratch')));
+  assert.deepEqual(roots.sort(),['nts-full-check/runs','nts-landing/runs','nts-gate/runs'].map(name=>'/private/cache/'+name).sort());
 });
 
 
@@ -106,4 +106,41 @@ test('partial coverage without reader errors has a materialized summary and is p
   row.case_costs.steps={example:{coverage:{missing_program_checks:['absent'],incomplete:1},cases:[{complete:false,phases:[]}]}};
   writeFileSync(file,JSON.stringify(row));
   assert.deepEqual(pruneRawCosts(f.options).removed.map(row=>row.run),[run]);
+});
+
+
+test('routine non-runs stay quiet while a held collector remains a refusal',t=>{
+  const f=fixture(t);writeFileSync(join(f.runs,'service.log'),'not a run');
+  mkdirSync(join(f.runs,'probe/costs'),{recursive:true});
+  const report=pruneRawCosts(f.options);
+  assert.equal(report.kept.length,2);assert.ok(report.kept.every(row=>row.routine));
+  const lock=GateResource.tryAcquire(f.runs+'.cost-retention.lock');assert.ok(lock);
+  try{assert.ok(pruneRawCosts(f.options).kept.some(row=>!row.routine&&row.reason.includes('lock held')));}
+  finally{lock.close();}
+});
+
+test('runs without raw costs or a detach receipt never read their summaries',t=>{
+  const f=fixture(t),old=f.make('1');f.newer();
+  for(const name of ['20','21','22']){
+    const run=f.make(name);rmSync(join(run,'costs'),{recursive:true});
+    rmSync(join(run,'summary.json'));mkdirSync(join(run,'summary.json'));
+  }
+  const report=pruneRawCosts(f.options);
+  assert.deepEqual(report.removed.map(row=>row.run),[old]);
+  assert.ok(report.kept.filter(row=>/no raw costs/.test(row.reason)).every(row=>row.routine));
+});
+
+test('inventory-only exercises final guards without detaching or removing evidence',t=>{
+  const f=fixture(t),run=f.make('1');f.newer();
+  const report=pruneRawCosts({...f.options,inventoryOnly:true});
+  assert.deepEqual(report.removed,[]);assert.ok(existsSync(join(run,'costs/events.jsonl')));
+  assert.equal(existsSync(join(run,'.cost-retention.json')),false);
+  assert.ok(report.kept.some(row=>row.run===run&&row.reason.includes('inventory only')));
+});
+
+test('malformed ignored case population retains the only raw evidence',t=>{
+  const f=fixture(t),run=f.make('1');f.newer();const file=join(run,'summary.json');
+  writeFileSync(file,readFileSync(file,'utf8').slice(0,-1)+',"ignored":[1,]}');
+  const report=pruneRawCosts(f.options);assert.deepEqual(report.removed,[]);
+  assert.ok(report.kept.some(row=>row.run===run&&!row.routine));
 });

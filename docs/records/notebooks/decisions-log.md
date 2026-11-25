@@ -4984,3 +4984,24 @@ with the reclaimer forwarding its existing capability; production retains the
 same wall clock and fixtures own their observations. No clock-debt allowance
 was added. Importing the whole builder had unnecessarily pulled build/linker
 inputs into every gate environment and exposed its legacy type diagnostics.
+
+
+## Gate disk inventory stays bounded and quiet (11-25)
+
+2026-11-25, #841 review of bf9906ee. Raw-cost roots come only from `runs`
+rules and logs explicitly marked `gateRunRoot` in `keep.json`; `nts-inner`
+is not a run root. Non-run files, absent summaries and absent raw payloads
+are routine keeps; collector, identity, terminal and reader refusals remain
+visible. The count reserves measured memory through the existing ledger.
+Summary JSON is validated and hashed in bounded chunks, retaining only fixed
+decision facts; the final guard hashes bytes without a second parse. Runs
+with neither costs nor a detach receipt are skipped before summary reads;
+ranking the remaining completed runs preserves at least the newest three
+overall, possibly retaining additional older raw evidence.
+
+Cargo recreates `target/tmp` for integration-test builds: it is Cargo metadata,
+not legacy compiler scratch, and cannot delay legacy-layout retirement.
+Pin wait bounds and unchanged pidless-lock grace use the monotonic capability,
+with wall time still recognising old pidless locks immediately. A fixture that
+freezes monotonic time must advance it for a positive wait, or use wait zero.
+There remains one pin mutex and no change to pin writer paths or output.

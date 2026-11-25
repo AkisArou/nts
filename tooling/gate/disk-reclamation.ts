@@ -191,7 +191,7 @@ export const liveReclaimOwnership:ReclaimOwnership=(tree,target,ownPin)=>{
 
 const scratchPolicy=()=>targetScratch();
 const cargoProfiles=['nts-dev','clippy','debug','release'] as const;
-const cargoMetadata=/^(?:CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json|\.rustdoc_fingerprint\.json)$/;
+const cargoMetadata=/^(?:tmp|CACHEDIR\.TAG|\.rustc_info(?:[^/]*)\.json|\.rustdoc_fingerprint\.json)$/;
 /** Inventory only. Writer attribution alone grants no deletion; the scratch
  * owner separately checks declared namespaces and free-tree ownership. */
 export function targetLeftovers(tree:string):{root:string;writer:string}[]{
@@ -201,7 +201,6 @@ export function targetLeftovers(tree:string):{root:string;writer:string}[]{
   return readdirSync(target).filter(name=>!cargoProfiles.some(profile=>profile===name)&&!cargoMetadata.test(name)).sort().map(name=>({
     root:join(target,name),writer:policy.names[name]??(policy.legacy.includes(name)?'legacy compiler test scratch via compiler/test-support/scratch.rs':
       name.startsWith('interop-')?'legacy interop scratch via tooling/gate/all.sh':
-      name==='tmp'?'compiler/test-support/scratch.rs (test scratch)':
       name.endsWith('-tests')?'compiler integration tests via compiler/test-support/scratch.rs':
       name==='gate-costs'?'tooling/gate/step-scheduling.ts':
       name==='gate-scope-owner.json'||name==='gate-scope-owner.json.lock'?'tooling/gate/run.mjs; tooling/landing/run.ts':
