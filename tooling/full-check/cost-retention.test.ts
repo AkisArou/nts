@@ -168,10 +168,32 @@ test('policy keep classification: '+control,t=>{
   assert.ok(existsSync(join(run,'costs/events.jsonl')));
 });
 
-test('a red cleanup failure with a valid timestamp still participates in newest-three ordering',t=>{
-  const f=fixture(t),old=f.make('1');f.make('10');f.make('11');const red=f.make('12','red');
+for(const state of ['interrupted','cleanup error','both'])test('a red without completion facts does not displace a green: '+state,t=>{
+  const f=fixture(t),greens=['1','10','11'].map(name=>f.make(name)),red=f.make('12','red');
   const file=join(red,'summary.json'),summary=JSON.parse(readFileSync(file,'utf8'));
-  summary.interrupted='signal SIGTERM';summary.scope_cleanup.state='error';writeFileSync(file,JSON.stringify(summary));
+  if(state!=='cleanup error')summary.interrupted='signal SIGTERM';
+  if(state!=='interrupted')summary.scope_cleanup.state='error';
+  writeFileSync(file,JSON.stringify(summary));
+  const report=pruneRawCosts(f.options);
+  assert.deepEqual(report.removed,[]);
+  for(const run of [...greens,red])assert.ok(existsSync(join(run,'costs/events.jsonl')));
+  const row=report.kept.find(row=>row.run===red);assert.ok(row?.routine);
+  assert.match(row.reason,/without completion facts/);
+});
+
+test('three newer stopped reds cannot push a completed green out of the retained window',t=>{
+  const f=fixture(t),green=f.make('1'),reds=['12','13','14'].map(name=>f.make(name,'red'));
+  for(const red of reds){
+    const file=join(red,'summary.json'),summary=JSON.parse(readFileSync(file,'utf8'));
+    summary.interrupted='signal SIGTERM';summary.scope_cleanup.state='error';writeFileSync(file,JSON.stringify(summary));
+  }
+  const report=pruneRawCosts(f.options);assert.deepEqual(report.removed,[]);
+  for(const run of [green,...reds])assert.ok(existsSync(join(run,'costs/events.jsonl')));
+  assert.ok(report.kept.every(row=>row.routine),JSON.stringify(report));
+});
+
+test('a normally completed red still counts toward the newest three completed runs',t=>{
+  const f=fixture(t),old=f.make('1');f.make('10');f.make('11');const red=f.make('12','red');
   const report=pruneRawCosts(f.options);
   assert.deepEqual(report.removed.map(row=>row.run),[old]);assert.ok(existsSync(join(red,'costs/events.jsonl')));
   assert.ok(report.kept.find(row=>row.run===red)?.routine);

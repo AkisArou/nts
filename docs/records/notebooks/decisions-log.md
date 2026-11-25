@@ -5011,9 +5011,12 @@ There remains one pin mutex and no change to pin writer paths or output.
 
 2026-11-25, #841 review of a5e9928b. Once the terminal lifecycle/measurement
 and a known summary schema/verdict are readable, red is a routine non-green
-policy keep even after interruption or cleanup failure. Valid red timestamps
-still participate in newest-three ordering; a red without an ordering timestamp
-is routinely kept outside that ordering. Green interruption/incomplete cleanup,
+policy keep even after interruption or cleanup failure. The implementation at
+2ded90cd incorrectly let interrupted/cleanup-failed reds with valid timestamps
+occupy the completed window. The original statement that this was unchanged
+was wrong; the completed-window correction below restores their exclusion.
+Only normally completed reds count; a red without an ordering timestamp is
+also routinely kept outside that ordering. Green interruption/incomplete cleanup,
 unknown/unreadable verdicts, and lifecycle/hold refusals remain visible. Every
 such run keeps its raw evidence. The earlier inventory's interruption/cleanup
 refusals included closed red runs; describing them as unfinished was incorrect.
@@ -5022,3 +5025,15 @@ The memory reservation deliberately covers all hourly count upkeep at
 full-check rank. Pool upkeep, the aged-scratch sweep and stray-slice stopping
 may wait behind higher-rank ledger work. Pressure reclamation has its separate
 DiskCapacity route and does not depend on the hourly timer being admitted.
+
+
+## Red policy keeps preserve the completed window (11-25)
+
+2026-11-25, #841 review of 2ded90cd. Routine classification must not widen the
+set of completed runs used by raw-cost retention. Interrupted/cleanup-failed
+reds are routine keeps outside the ordering, matching the behavior before the
+classification fix. Normally completed reds with valid timestamps still count.
+The prior implementation and its inverted ordering test could delete green
+raw evidence early; the record and the earlier decision description now name
+that mistake explicitly. The new controls preserve green D behind three newer
+stopped reds, plus individual completion-failure arms and a normal-red control.

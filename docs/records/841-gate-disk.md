@@ -1128,9 +1128,12 @@ inventory row's 16 interruption/cleanup refusals above was misdescribed.
 
 The owner now validates the known verdict before requiring complete cleanup
 and no interruption for green deletion candidates. Known red runs are routine
-keeps regardless of interruption/cleanup state. A valid red timestamp still
-participates in the same ordering; a red without one is routinely kept outside
-it. Unknown/unreadable verdicts/schema, invalid green completion, and terminal
+keeps regardless of interruption/cleanup state. That revision incorrectly let
+interrupted/cleanup-failed reds with valid timestamps enter ordering, changing
+the previous behavior and allowing early deletion of green evidence. It was
+not preservation of the old ordering. The correction below excludes these
+reds; a normally completed red still counts, and a red without a timestamp
+stays outside ordering. Unknown/unreadable verdicts/schema, invalid green completion, and terminal
 lifecycle/measurement/hold refusals remain nonroutine. Digest/identity guards,
 receipts and deletion grants are unchanged. No production data deletion or
 new before/after measurement is needed for this classification correction.
@@ -1153,8 +1156,9 @@ These prove the preceding revision; new classification proof follows separately.
 
 The review classification proof passed all 318 focused tests: the 13-arm
 classification matrix keeps red interruption/cleanup routine while green,
-unknown/read failures and lifecycle/hold cases remain visible; a valid red
-timestamp still contributes to newest-three ordering. The countOnce control
+unknown/read failures and lifecycle/hold cases remain visible. Its ordering
+control wrongly asserted that an interrupted red should displace a green;
+that passing test proved the regression, not preservation. The countOnce control
 keeps the stopped red run's raw bytes without a log and logs the equally
 interrupted green cleanup failure. Strict types pass six projects/1,238 modules
 with no increase; host audit passes 2,211 sources, 366 entry closures and 418
@@ -1177,3 +1181,48 @@ was absent after completion. No source changes during proof.
 Raw log `~/.cache/nts-scratch/841/review2/inner-v1.log`, SHA-256
 `a3c2064786655c0df3d3257ffd9ae236f2fa510f98c118394ea4d210e3d5d812`; compact proof `review2/inner-v1-proof.json`, SHA-256
 `5fd0f36eb01a2afb282e2092b07b586515cc0b4006825928173bc7bafaf4f5ae`.
+
+
+### Review: preserve the completed-run window
+
+Review of `2ded90cdc66162531e33bf60d6c28905b811c52c` caught a retention
+regression in the routine-classification fix. Before that fix, interrupted or
+cleanup-failed runs never entered `completed`, even with a valid timestamp.
+Letting such red runs enter the ordering displaced completed greens and could
+delete their raw evidence early. The preceding descriptions of this as
+unchanged ordering were incorrect and are corrected above.
+
+Completion facts once again govern ordering for both verdicts. A red missing
+completion facts is a routine keep outside the window; an invalid green still
+logs a refusal. A normally completed red still counts toward the newest three.
+The inverted controls cover interruption, cleanup error and both, plus the
+review's exact three-stopped-reds followed by green D. The normal-red control
+retains the old completed-red behavior. Locks, digest/identity rechecks,
+receipts, holder checks and the deletion path remain unchanged. No production
+raw data is deleted or measured for this correction.
+
+
+The preceding revision's exact `--here` at
+`2ded90cdc66162531e33bf60d6c28905b811c52c` passed all 21 selected rows in
+1,549 s, with complete cleanup, closed lifecycle and no `tmp/`. That green
+run included the incorrect ordering test; it did not prove the window was
+preserved. The archived log is `~/.cache/nts-scratch/841/review2/here-v1.log`,
+SHA-256 `5c87cdaa9a9009a63a154938a8529738cf6bb20204c69871e71a742061d965db`;
+the archive manifest is `review2/here-v1-source/manifest.json`, SHA-256
+`fdefd2898a82a632702af7928ccc4b854bcfc91de6b474a5bcbf4f382a2c6c39`.
+
+
+The completed-window correction passed all 322 focused tests, including the
+three individual missing-completion-fact arms, three newer stopped reds followed
+by green D, and a normally completed red that still counts. The existing quiet
+red versus invalid green logging control and 13-arm refusal matrix also pass.
+Strict types pass six projects/1,238 modules without increase; host audit passes
+2,211 sources, 366 entry closures and 418 reads. Named unit
+`nts-841-review3-focused-v1` used Node 26.13.0 and the required environment;
+admission waits remain in its raw logs.
+
+| Path under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `review3/focused-v1.log` | `f38bfc180c2cdb5df438fbe375b02de5b8cafaadd85424d0bca7c05c2f9d4bc4` |
+| `review3/types-v1.log` | `0182de6e16d8db38c9ff5639f227ee61f3fcb310f90db6a23f37d3f485a883f3` |
+| `review3/audit-v1.log` | `e13ff94e2590bbf4d6454b449a809770860421606c2961bc71d69869b7956dec` |

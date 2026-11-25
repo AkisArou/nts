@@ -59,10 +59,12 @@ function terminal(run:string){
     if(verdict==='red')throw new RoutineKeep('non-green run without an ordering timestamp');
     throw Error('missing or invalid terminal timestamp');
   }
-  // A readable known red summary is a policy keep even after interruption or
-  // failed cleanup. Only green deletion candidates need these completion facts.
-  if(verdict==='green'&&(scalar('scope_cleanup.state')!=='complete'||scalar('interrupted')!==null))
+  // Interrupted or cleanup-failed runs never occupy the completed window.
+  // Red is a routine policy keep; invalid green completion remains a refusal.
+  if(scalar('scope_cleanup.state')!=='complete'||scalar('interrupted')!==null){
+    if(verdict==='red')throw new RoutineKeep('non-green run without completion facts');
     throw Error('interrupted or incomplete green cleanup');
+  }
   // summarizeCosts sets partial for errors.length || missingChecks ||
   // checks.some(c => !c.complete). Coverage gaps and incomplete cases are
   // materialized too; reader failures alone require raw evidence.

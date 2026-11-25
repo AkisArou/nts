@@ -1753,7 +1753,9 @@ the tooling strict checker owns the source's type checking.
   payload-bearing runs conservatively preserves at least the newest three
   completed runs overall. Non-run files and directories without summaries
   are routine. Known red summaries are routine non-green keeps even when
-  interrupted or cleanup failed. Unknown/unreadable verdicts, invalid green
+  interrupted or cleanup failed; these runs do not occupy the completed-run
+  window. Only normally completed reds with valid timestamps count toward it.
+  Unknown/unreadable verdicts, invalid green
   completion facts, and lock, identity, lifecycle, hold and reader refusals
   remain logged.
   The hourly upkeep retains raw `costs/` for the newest three completed runs
@@ -2074,8 +2076,9 @@ the first node task.
 - **Gate disk reclamation follows declared writers.** Older green raw costs
   can go only after a known materialized summary with zero reader errors,
   beyond the newest three completed runs. Only declared gate-run roots are
-  inventoried; routine non-runs and known red policy keeps stay quiet, while
-  invalid green completion and unknown/lifecycle/hold refusals remain visible.
+  inventoried; routine non-runs and known red policy keeps stay quiet.
+  Interrupted/cleanup-failed reds stay outside the completed window; invalid
+  green completion and unknown/lifecycle/hold refusals remain visible.
   Summary validation streams bounded
   decision facts, and the hourly count reserves its measured memory for all
   upkeep at full-check rank; higher-rank work can delay hourly maintenance,
