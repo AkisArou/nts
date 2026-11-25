@@ -767,13 +767,13 @@ test('ordinary upkeep retains task and warm-target facts without kept-line noise
     const tree=join(p.dir,name),target=join(tree,'target');mkdirSync(target);
     writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
     for(const profile of ['nts-dev','clippy'] as const){const output=join(target,profile);mkdirSync(output);completeBuild(tree,profile,output);}
-    mkdirSync(join(target,'test-scratch'));
+    mkdirSync(join(target,'unowned-scratch'));
     freedAt(name,5*DAY);
   }
   const pruned=p.prune({now:NOW}),kept=pruned.reclamation!.kept;
   assert.equal(kept.filter(row=>row.reason.startsWith('branch remains owned:')).length,1);
   assert.equal(kept.filter(row=>row.reason==='two warm free targets retained').length,2);
-  assert.equal(kept.filter(row=>row.root.endsWith('/test-scratch')).length,2,'sibling inventory remains available to refusal reporting');
+  assert.equal(kept.filter(row=>row.root.endsWith('/unowned-scratch')).length,2,'sibling inventory remains available to refusal reporting');
   assert.ok(kept.every(row=>row.routine));assert.deepEqual(pruneLines(pruned),[]);
 });
 
