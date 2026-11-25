@@ -140,6 +140,24 @@ the native dependency cache has no automatic eviction policy.
   it from its `main`.
 - `soname` overrides the shared library's derived name.
 
+An executable's command line is node's for a single executable application,
+since a compiled program is its own entry: `process.argv` is the
+executable's resolved path, then `argv[0]` as it was invoked (where node puts
+a script's path), then every argument verbatim; `process.argv0` is `argv[0]`
+as invoked; `process.execArgv` is empty, because nothing on the line is an
+engine flag. `main` hands `argc` and `argv` to `nts_command_line_capture`
+before module evaluation. Each value is made on its first read, once per
+environment, and every later read answers the same object, so a write to
+`process.argv` is seen by the next read. The environment holds them for its
+life. On Windows the `argv` handed over is advisory: the line is read again
+from `GetCommandLineW` and split by the C runtime's rules, as node's `wmain`
+reads it, so an argument outside the ANSI code page arrives whole. A library
+captures nothing, since its process is its host's: a host may call
+`nts_command_line_capture` itself, and a read with nothing captured is
+refused. TypeScript reaches these through the `node:process` provider, which
+is still to come ([builtins](../foundations/builtins.md), stage 9), so a
+read of `process.argv` is NTS1100 until then.
+
 Every field is in the [`nts.config.ts` reference](../reference/nts-config.md).
 
 ## Calling C
@@ -304,6 +322,13 @@ int main(void) {
 - Intl on native uses ICU4C, with a static C++ standard library only in
   programs that use Intl (D3,
   [log](../records/notebooks/decisions-log.md#unicode-10-27)).
+- An executable's command line follows node's single-executable rule
+  (`FixupArgsForSEA`, then `patchProcessObject` without `expandArgv1`):
+  `argv[0]` is `execPath`, `argv[1]` is `argv[0]` as invoked, and `execArgv`
+  is empty. A compiled program has no script, and this is node's own answer
+  for a program that is its executable; resolving `argv[1]` to a path was
+  rejected because node resolves it only for a script it loads (11-25,
+  [log](../records/notebooks/decisions-log.md#an-executables-command-line-11-25)).
 - `node:*` APIs are native only, for now (decision 8,
   [log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)).
 - An exception escaping a callback is the program's uncaught error: on a

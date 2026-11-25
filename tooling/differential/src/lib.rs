@@ -1787,6 +1787,10 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
          \x20   /* Deterministic: virtual time, one thread, no I/O. Ordering is\n\
          \x20    * reproducible here in a way it is not against a real loop. */\n\
          \x20   if (!nts_check_activity_mark(\"ready\", from)) return 2;\n\
+         \x20   /* The program's own command line is its name alone: the case\n\
+         \x20    * to start from is this driver's, and node's driver is given\n\
+         \x20    * no arguments either. */\n\
+         \x20   nts_command_line_capture(1, argv);\n\
          \x20   nts_test_host_install();\n",
     );
     if initializes {

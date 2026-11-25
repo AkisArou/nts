@@ -865,6 +865,36 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_command_line_argv",
+        returns: "ptr",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_command_line_argv0",
+        returns: "ptr",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_command_line_capture",
+        returns: "void",
+        params: &["i32", "ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_command_line_captured",
+        returns: "zeroext i1",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_command_line_exec_argv",
+        returns: "ptr",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_concat",
         returns: "noalias nonnull ptr",
         params: &["ptr", "ptr"],

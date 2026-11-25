@@ -433,8 +433,11 @@ pub fn main_for(shape: MainShape) -> String {
          \n\
          {declare}\
          {pool_declare}\
-         int main(void) {{\n\
+         int main(int argc, char **argv) {{\n\
          \x20   nts_process_start();\n\
+         \x20   /* `process.argv`'s source: node's single-executable rule, in\n\
+         \x20    * `nts_command_line_capture`. */\n\
+         \x20   nts_command_line_capture(argc, argv);\n\
          {push}\
          \x20   nts_uv_host_install({loop_argument});\n\
          {attach}\

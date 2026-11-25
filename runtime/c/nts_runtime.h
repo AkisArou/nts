@@ -4393,6 +4393,35 @@ void nts_leave(void);
  * would be one library changing the behaviour of every other. */
 void nts_process_start(void);
 
+/* The process's command line, as node gives one to a single executable
+ * application (docs/targets/native.md, Products).
+ *
+ * A standalone program's `main` hands its `argc` and `argv` over once, before
+ * module evaluation; only the pointers are kept, which the C standard says
+ * live as long as the process. A library never captures: its process is its
+ * host's, and a host embedding one may call this itself. On Windows the
+ * passed `argv` is advisory: the line is read again from `GetCommandLineW`,
+ * as node's `wmain` reads it, because the narrow one is in the ANSI code page.
+ *
+ * The readers follow node's SEA rule (`FixupArgsForSEA`, then
+ * `patchProcessObject` with `expandArgv1` off): `argv` is the executable's
+ * resolved path, then `argv[0]` as it was invoked, then every argument
+ * verbatim; `argv0` is `argv[0]` as invoked; `execArgv` is empty, since nothing
+ * on the line is the engine's.
+ *
+ * Each value is made on its first read, once per environment, and every read
+ * after answers the same object, retained for its caller -- node's
+ * `process.argv` is one array, so a write to it is seen by the next read. The
+ * environment holds it for its life, counted in `nts_permanent_count`.
+ *
+ * A read with nothing captured is refused: an empty line would be a wrong
+ * answer that looks right. `nts_command_line_captured` says which. */
+void nts_command_line_capture(int argc, char **argv);
+bool nts_command_line_captured(void);
+NtsArray *nts_command_line_argv(void);
+NtsString *nts_command_line_argv0(void);
+NtsArray *nts_command_line_exec_argv(void);
+
 /* Run a complete checkpoint now -- ticks, then microtasks, to a fixpoint --
  * from *inside* a task.
  *

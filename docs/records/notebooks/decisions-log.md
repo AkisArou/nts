@@ -5059,3 +5059,14 @@ for #1041. The inventory also distinguishes the harness's per-function
 argument pools from source generation. The current contract is in
 [conformance](../../conformance/README.md#decisions); the
 [inventory](../q6-generator-inventory.md) names the concrete C/JVM routes.
+## An executable's command line (11-25)
+
+#871, approved by the coordinator. A compiled executable's `process.argv`,
+`argv0` and `execArgv` follow node's single-executable rule: node's
+`FixupArgsForSEA` (src/node_sea.cc) repeats `argv[0]` in slot 1, and
+`patchProcessObject` (lib/internal/process/pre_execution.js) then sets slot 0
+to `execPath` and, called with `expandArgv1` false by the embedding entry,
+leaves slot 1 as invoked. The runtime captures `main`'s `argc` and `argv`
+(`nts_command_line_capture`); the TypeScript surface waits for the
+`node:process` provider (builtins stage 9), so `process.argv` stays NTS1100.
+The contract is in [native](../../targets/native.md#products).

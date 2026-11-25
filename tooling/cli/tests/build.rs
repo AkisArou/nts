@@ -7310,3 +7310,210 @@ export default defineConfig({ products: {
     );
     assert!(project.join(".nts/build/jvm/java-8/jvm.jar").exists());
 }
+
+/// What `report_command_line` prints: the runtime's `process.argv`,
+/// `argv0` and `execArgv`, read through the `nts_command_line_*` ABI, and
+/// whether a second read of `argv` answers the same array.
+const COMMAND_LINE_REPORT: &str = r#"#include "nts_runtime.h"
+#include "report.h"
+#include <stdio.h>
+
+static void line(const char *label, NtsString *value) {
+    const char *text = nts_string_to_cstring(value);
+    printf("%s [%s]\n", label, text);
+    nts_cstring_release(value, text);
+}
+
+void report_command_line(void) {
+    NtsArray *argv = nts_command_line_argv();
+    NtsArray *again = nts_command_line_argv();
+    for (uint32_t at = 0; at < argv->header.length; at++) {
+        char label[32];
+        snprintf(label, sizeof label, "argv[%u]", at);
+        line(label, NTS_ITEMS(argv, NtsString *)[at]);
+    }
+    NtsString *argv0 = nts_command_line_argv0();
+    line("argv0", argv0);
+    NtsArray *exec_argv = nts_command_line_exec_argv();
+    printf("execArgv %u\nsame %d\n", exec_argv->header.length, argv == again);
+    fflush(stdout);
+    nts_release((NtsHeader *)exec_argv);
+    nts_release((NtsHeader *)argv0);
+    nts_release((NtsHeader *)again);
+    nts_release((NtsHeader *)argv);
+}
+"#;
+
+/// Arguments that a shell would mangle and a careless split would lose: a
+/// space, non-ASCII text, a flag shape and an empty argument.
+const COMMAND_LINE_ARGUMENTS: [&str; 5] = ["a", "b c", "ünï", "--flag", ""];
+
+/// The report node's single-executable rule promises (docs/targets/native.md,
+/// Products): `execPath` first, `argv[0]` as invoked second and as `argv0`,
+/// then each argument verbatim, and no `execArgv`.
+fn command_line_expected(exec_path: &Path, invoked: &str) -> String {
+    use std::fmt::Write as _;
+    let mut expected = format!("argv[0] [{}]\nargv[1] [{invoked}]\n", exec_path.display());
+    for (at, argument) in COMMAND_LINE_ARGUMENTS.iter().enumerate() {
+        writeln!(expected, "argv[{}] [{argument}]", at + 2).expect("expected line");
+    }
+    writeln!(expected, "argv0 [{invoked}]\nexecArgv 0\nsame 1").expect("expected tail");
+    expected
+}
+
+/// Run `program` with the hard arguments, once by its absolute path and once
+/// with `argv[0]` spelled as a shell would leave a relative invocation, and
+/// check both against the rule. Linux only: on Windows the passed `argv` is
+/// advisory and the line is read from `GetCommandLineW`.
+fn command_line_agrees(what: &str, program: &Path) {
+    use std::os::unix::process::CommandExt as _;
+    let exec_path = program.canonicalize().expect("the program's real path");
+    let absolute = program.to_string_lossy().into_owned();
+    let relative = format!(
+        "./{}",
+        program.file_name().expect("a file").to_string_lossy()
+    );
+    for (invoked, renamed) in [(absolute.as_str(), false), (relative.as_str(), true)] {
+        let mut command = Command::new(program);
+        if renamed {
+            command.arg0(invoked);
+        }
+        let ran = output_of(command.args(COMMAND_LINE_ARGUMENTS)).expect("running the program");
+        assert!(ran.status.success(), "{what} invoked as {invoked}: {ran:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&ran.stdout),
+            command_line_expected(&exec_path, invoked),
+            "{what} invoked as {invoked} broke node's single-executable rule"
+        );
+    }
+}
+
+/// An executable's `main` captures its command line, on both native backends,
+/// and the runtime answers node's single-executable rule. The program reads it
+/// through a C source of its own, since the TypeScript `process` global waits
+/// for the `node:process` provider (builtins stage 9).
+#[test]
+fn an_executable_reads_its_command_line_by_node_single_executable_rule() {
+    if !cfg!(all(target_os = "linux", target_env = "gnu")) || !available() {
+        skip("Linux with glibc, node, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-command-line",
+        r#"
+import { app, defineConfig, sources, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    viaC: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({ backend: "c" })] }),
+    viaLlvm: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({ backend: "llvm" })] }),
+  },
+  native: [sources({ dir: "native" })],
+});
+"#,
+    );
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository root");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":{:?},"compilerOptions":{{"noEmit":false}},"include":["src","types"]}}"#,
+            repo.join("tsconfig.fixtures.json").to_string_lossy(),
+        ),
+    )
+    .expect("tsconfig");
+    std::fs::remove_file(project.join("src/internal.ts")).expect("unused sibling");
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { report_command_line } from \"c:report\";\nreport_command_line();\n",
+    )
+    .expect("entry");
+    for (directory, file, text) in [
+        (
+            "types",
+            "report.d.ts",
+            "/** @ntsHeader \"report.h\" */\ndeclare module \"c:report\" {\n  export function report_command_line(): void;\n}\n",
+        ),
+        ("native", "report.h", "void report_command_line(void);\n"),
+        ("native", "report.c", COMMAND_LINE_REPORT),
+    ] {
+        std::fs::create_dir_all(project.join(directory)).expect("fixture directory");
+        std::fs::write(project.join(directory).join(file), text).expect("fixture file");
+    }
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    for product in ["viaC", "viaLlvm"] {
+        command_line_agrees(
+            product,
+            &project.join(format!(".nts/build/{product}/linux-gnu-x86_64/{product}")),
+        );
+    }
+}
+
+/// A host embedding a library hands it the command line through
+/// `nts_command_line_capture`, and gets the same rule; one that never does is
+/// refused at the first read, since a library's process is its host's and an
+/// empty line would be a wrong answer that looks right.
+#[test]
+fn a_library_host_supplies_the_command_line_or_its_read_is_refused() {
+    if !cfg!(all(target_os = "linux", target_env = "gnu")) || !available() {
+        skip("Linux with glibc, node, clang and nm");
+        return;
+    }
+    let project = fixture(
+        "build-command-line-host",
+        "import {defineConfig,library,target} from '@nts/config';\n\
+         export default defineConfig({products:{embedded:library.staticNative({entry:'./src/main.ts',targets:[target.linux({backend:'c'})]})}});\n",
+    );
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let directory = project.join(".nts/build/embedded/linux-gnu-x86_64");
+    let archive = directory.join("libembedded.a");
+    let hosts = project.join("hosts");
+    std::fs::create_dir_all(&hosts).expect("hosts");
+    std::fs::write(hosts.join("report.h"), "void report_command_line(void);\n").expect("header");
+    std::fs::write(hosts.join("report.c"), COMMAND_LINE_REPORT).expect("report");
+    for (name, body) in [
+        (
+            "captures",
+            "int main(int argc, char **argv) { nts_command_line_capture(argc, argv); report_command_line(); return 0; }\n",
+        ),
+        (
+            "forgets",
+            "int main(void) { report_command_line(); return 0; }\n",
+        ),
+    ] {
+        compile_host(
+            &hosts,
+            name,
+            &format!("#include \"nts_runtime.h\"\n#include \"report.h\"\n{body}"),
+            &[
+                "-std=c11".as_ref(),
+                "-I".as_ref(),
+                directory.as_os_str(),
+                "-I".as_ref(),
+                hosts.as_os_str(),
+                hosts.join("report.c").as_os_str(),
+                archive.as_os_str(),
+                "-lm".as_ref(),
+                "-o".as_ref(),
+                hosts.join(name).as_os_str(),
+            ],
+        );
+    }
+    command_line_agrees("the capturing host", &hosts.join("captures"));
+    // The refusal aborts, so no core is kept (AGENTS.md: deliberate crashes).
+    let forgot = Command::new("prlimit")
+        .arg("--core=0")
+        .arg(hosts.join("forgets"))
+        .output()
+        .expect("running the forgetful host");
+    assert!(!forgot.status.success(), "{forgot:?}");
+    assert!(forgot.stdout.is_empty(), "{forgot:?}");
+    assert!(
+        String::from_utf8_lossy(&forgot.stderr)
+            .contains("nts: refused: the command line was read where no `main` captured it"),
+        "{forgot:?}"
+    );
+}

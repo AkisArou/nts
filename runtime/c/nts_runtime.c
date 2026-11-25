@@ -27,6 +27,10 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #endif
+/* `_NSGetExecutablePath`, for `process.execPath` (`nts_command_line_argv`). */
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 
 #include <errno.h>
 #include <stdio.h>
@@ -304,6 +308,13 @@ struct NtsEnvironment {
   uint32_t rejected_len;
   uint32_t rejected_cap;
   NtsMap *symbol_registry;
+  /* `process.argv`, `argv0` and `execArgv`, made on first read and held for
+     the environment's life (`nts_command_line_argv`); `command_line_held` is
+     what making them added to `permanent`. */
+  NtsArray *command_line_argv;
+  NtsString *command_line_argv0;
+  NtsArray *command_line_exec_argv;
+  size_t command_line_held;
   /* The Web-platform runtime, as one managed reference. Not traced by the
      cycle collector: an environment is not an `NtsHeader` and cannot be part
      of a cycle, so this is a root rather than an edge. */
@@ -393,6 +404,8 @@ NtsEnvironment *nts_environment_create(void) {
  *
  * Refuses the current one for the same reason `leave` restores rather than
  * clears: an owner lane must not be left pointing at something closed. */
+static void nts_command_line_release(NtsEnvironment *environment);
+
 void nts_environment_destroy(NtsEnvironment *environment) {
   if (environment == nts_env) {
     fprintf(stderr,
@@ -419,6 +432,7 @@ void nts_environment_destroy(NtsEnvironment *environment) {
       nts_release(environment->platform);
       environment->platform = 0;
     }
+    nts_command_line_release(environment);
     nts_collect_cycles();
     nts_environment_leave(&scope);
   }
@@ -12018,6 +12032,283 @@ void nts_process_start(void) {
 #if !defined(_WIN32)
   nts_name_stack_overflow();
 #endif
+}
+
+/* ---------------------------------------------------------- command line */
+
+/* What `main` handed over, or a negative count when nothing did. Written once
+ * before module evaluation and read after, so it needs no synchronization. */
+static int nts_captured_argc = -1;
+#if !defined(_WIN32)
+static char **nts_captured_argv;
+#endif
+
+void nts_command_line_capture(int argc, char **argv) {
+  nts_captured_argc = argc < 0 || argv == NULL ? 0 : argc;
+#if defined(_WIN32)
+  (void)argv;
+#else
+  nts_captured_argv = argv;
+#endif
+}
+
+bool nts_command_line_captured(void) { return nts_captured_argc >= 0; }
+
+#if defined(_WIN32)
+/* `GetModuleFileNameW`, grown until the path fits: node's `execPath`, which
+ * libuv's `uv_exepath` reads the same way. */
+static NtsString *nts_exec_path(void) {
+  DWORD capacity = MAX_PATH;
+  for (;;) {
+    wchar_t *path = (wchar_t *)malloc(capacity * sizeof(wchar_t));
+    if (path == NULL) {
+      return nts_string_from_utf8("", 0);
+    }
+    DWORD length = GetModuleFileNameW(NULL, path, capacity);
+    if (length == 0) {
+      free(path);
+      return nts_string_from_utf8("", 0);
+    }
+    if (length < capacity) {
+      NtsString *answer = nts_str_alloc((const uint16_t *)path, length);
+      free(path);
+      return answer;
+    }
+    free(path);
+    capacity *= 2;
+  }
+}
+
+/* One argument of a wide command line, by the C runtime's rules (the ones
+ * `CommandLineToArgvW` and the CRT's own `argv` follow): `2n` backslashes
+ * before a quote are `n` and the quote toggles quoting, `2n + 1` are `n` and a
+ * literal quote, any other backslash is itself, and `""` inside quotes is a
+ * literal quote. The first argument, the program name, is quoted but never
+ * escaped. Answers where the next argument starts. */
+static const wchar_t *nts_wide_argument(const wchar_t *at, uint16_t *units,
+                                        uint32_t *length, bool program) {
+  uint32_t used = 0;
+  bool quoted = false;
+  if (program) {
+    if (*at == L'"') {
+      for (at++; *at != 0 && *at != L'"'; at++) {
+        units[used++] = (uint16_t)*at;
+      }
+      if (*at == L'"') {
+        at++;
+      }
+    } else {
+      for (; *at != 0 && *at != L' ' && *at != L'\t'; at++) {
+        units[used++] = (uint16_t)*at;
+      }
+    }
+    *length = used;
+    return at;
+  }
+  while (*at != 0 && (quoted || (*at != L' ' && *at != L'\t'))) {
+    if (*at == L'\\') {
+      uint32_t slashes = 0;
+      while (*at == L'\\') {
+        slashes++;
+        at++;
+      }
+      if (*at == L'"') {
+        for (uint32_t i = 0; i < slashes / 2; i++) {
+          units[used++] = L'\\';
+        }
+        if (slashes % 2 == 1) {
+          units[used++] = L'"';
+          at++;
+        }
+      } else {
+        for (uint32_t i = 0; i < slashes; i++) {
+          units[used++] = L'\\';
+        }
+      }
+    } else if (*at == L'"') {
+      if (quoted && at[1] == L'"') {
+        units[used++] = L'"';
+        at += 2;
+      } else {
+        quoted = !quoted;
+        at++;
+      }
+    } else {
+      units[used++] = (uint16_t)*at++;
+    }
+  }
+  *length = used;
+  return at;
+}
+
+/* The line read again from `GetCommandLineW`, so an argument outside the ANSI
+ * code page arrives whole; the `argv` that was captured is only the sign that
+ * a `main` owns this process. */
+static void nts_command_line_make_arguments(NtsArray **argv,
+                                            NtsString **argv0) {
+  const wchar_t *line = GetCommandLineW();
+  size_t width = wcslen(line);
+  uint16_t *units = (uint16_t *)malloc((width + 1) * sizeof(uint16_t));
+  if (units == NULL) {
+    fprintf(stderr, NTS_REFUSED "no memory to read the command line\n");
+    abort();
+  }
+  uint32_t count = 0;
+  for (const wchar_t *at = line; *at != 0; count++) {
+    uint32_t ignored;
+    at = nts_wide_argument(at, units, &ignored, count == 0);
+    while (*at == L' ' || *at == L'\t') {
+      at++;
+    }
+  }
+  /* A line with no program name still has node's slot 1, empty. */
+  uint32_t length = (count > 0 ? count : 1) + 1u;
+  NtsArray *answer = nts_array_new(&nts_desc_ref, (double)length);
+  NTS_ITEMS(answer, NtsHeader *)[0] = nts_exec_path();
+  if (count == 0) {
+    NTS_ITEMS(answer, NtsHeader *)[1] = nts_string_from_utf8("", 0);
+  }
+  const wchar_t *at = line;
+  for (uint32_t index = 0; index < count; index++) {
+    uint32_t used = 0;
+    at = nts_wide_argument(at, units, &used, index == 0);
+    while (*at == L' ' || *at == L'\t') {
+      at++;
+    }
+    NTS_ITEMS(answer, NtsHeader *)[index + 1] = nts_str_alloc(units, used);
+  }
+  free(units);
+  *argv0 = NTS_ITEMS(answer, NtsString *)[1];
+  nts_retain((NtsHeader *)*argv0);
+  *argv = answer;
+}
+#else
+/* The executable's resolved path, as `uv_exepath` finds it for node's
+ * `execPath`: `/proc/self/exe` on Linux, `_NSGetExecutablePath` resolved on
+ * Darwin. Elsewhere `argv[0]` resolved against the working directory, which is
+ * what libuv falls back to as well. */
+static NtsString *nts_exec_path(void) {
+#if defined(__linux__)
+  size_t capacity = 256;
+  for (;;) {
+    char *path = (char *)malloc(capacity);
+    if (path == NULL) {
+      return nts_string_from_utf8("", 0);
+    }
+    ssize_t length = readlink("/proc/self/exe", path, capacity);
+    if (length < 0) {
+      free(path);
+      return nts_string_from_utf8("", 0);
+    }
+    if ((size_t)length < capacity) {
+      NtsString *answer = nts_string_from_utf8(path, (size_t)length);
+      free(path);
+      return answer;
+    }
+    free(path);
+    capacity *= 2;
+  }
+#else
+  char *resolved = NULL;
+#if defined(__APPLE__)
+  uint32_t size = 0;
+  _NSGetExecutablePath(NULL, &size);
+  char *raw = (char *)malloc(size + 1u);
+  if (raw != NULL && _NSGetExecutablePath(raw, &size) == 0) {
+    resolved = realpath(raw, NULL);
+  }
+  free(raw);
+#else
+  if (nts_captured_argc > 0) {
+    resolved = realpath(nts_captured_argv[0], NULL);
+  }
+#endif
+  if (resolved == NULL) {
+    return nts_string_from_utf8("", 0);
+  }
+  NtsString *answer = nts_string_from_utf8(resolved, strlen(resolved));
+  free(resolved);
+  return answer;
+#endif
+}
+
+/* `[execPath, argv[0], argv[1], ...]`: node's `FixupArgsForSEA` repeats
+ * `argv[0]` in slot 1, where a script's path would be, and the first slot
+ * becomes `execPath`. An `execve` with an empty `argv` still gets both slots,
+ * the second empty. */
+static void nts_command_line_make_arguments(NtsArray **argv,
+                                            NtsString **argv0) {
+  int count = nts_captured_argc;
+  const char *program =
+      count > 0 && nts_captured_argv[0] != NULL ? nts_captured_argv[0] : "";
+  uint32_t length = (uint32_t)(count > 0 ? count : 1) + 1u;
+  NtsArray *answer = nts_array_new(&nts_desc_ref, (double)length);
+  NTS_ITEMS(answer, NtsHeader *)[0] = nts_exec_path();
+  NtsString *invoked = nts_string_from_utf8(program, strlen(program));
+  NTS_ITEMS(answer, NtsHeader *)[1] = invoked;
+  for (int index = 1; index < count; index++) {
+    const char *argument = nts_captured_argv[index];
+    NTS_ITEMS(answer, NtsHeader *)
+    [index + 1] = nts_string_from_utf8(argument, strlen(argument));
+  }
+  nts_retain((NtsHeader *)invoked);
+  *argv0 = invoked;
+  *argv = answer;
+}
+#endif
+
+/* All three at once, on the first read of any: one measurement of what the
+ * environment now holds by design. */
+static void nts_command_line_make(void) {
+  if (nts_env->command_line_argv != NULL) {
+    return;
+  }
+  if (nts_captured_argc < 0) {
+    fprintf(stderr,
+            NTS_REFUSED "the command line was read where no `main` captured "
+                        "it: a library's process is its host's, which may "
+                        "call nts_command_line_capture\n");
+    abort();
+  }
+  size_t before = nts_live_count();
+  nts_command_line_make_arguments(&nts_env->command_line_argv,
+                                  &nts_env->command_line_argv0);
+  nts_env->command_line_exec_argv = nts_array_new(&nts_desc_ref, 0);
+  size_t held = nts_live_count() - before;
+  nts_env->command_line_held = held;
+  nts_env->permanent += held;
+}
+
+static void nts_command_line_release(NtsEnvironment *environment) {
+  if (environment->command_line_argv == NULL) {
+    return;
+  }
+  nts_release((NtsHeader *)environment->command_line_argv);
+  nts_release((NtsHeader *)environment->command_line_argv0);
+  nts_release((NtsHeader *)environment->command_line_exec_argv);
+  environment->command_line_argv = NULL;
+  environment->command_line_argv0 = NULL;
+  environment->command_line_exec_argv = NULL;
+  environment->permanent -= environment->command_line_held;
+  environment->command_line_held = 0;
+}
+
+NtsArray *nts_command_line_argv(void) {
+  nts_command_line_make();
+  nts_retain((NtsHeader *)nts_env->command_line_argv);
+  return nts_env->command_line_argv;
+}
+
+NtsString *nts_command_line_argv0(void) {
+  nts_command_line_make();
+  nts_retain((NtsHeader *)nts_env->command_line_argv0);
+  return nts_env->command_line_argv0;
+}
+
+NtsArray *nts_command_line_exec_argv(void) {
+  nts_command_line_make();
+  nts_retain((NtsHeader *)nts_env->command_line_exec_argv);
+  return nts_env->command_line_exec_argv;
 }
 
 void nts_enter(void) { nts_env->depth++; }

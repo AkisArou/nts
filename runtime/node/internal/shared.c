@@ -128,7 +128,11 @@ static size_t command_line_count(const char *bytes, size_t length) {
 }
 #endif
 
+/* An executable's `main` captured its own command line, by node's
+ * single-executable rule (`nts_command_line_argv`); only a Node addon, whose
+ * process is node's, reads the line the kernel kept. */
 NtsArray *nts_process_argv(void) {
+    if (nts_command_line_captured()) return nts_command_line_argv();
 #if defined(__linux__)
     size_t length = 0;
     char *bytes = linux_command_line(&length);
@@ -154,6 +158,7 @@ NtsArray *nts_process_argv(void) {
 }
 
 NtsString *nts_process_argv0(void) {
+    if (nts_command_line_captured()) return nts_command_line_argv0();
 #if defined(__linux__)
     size_t length = 0;
     char *bytes = linux_command_line(&length);

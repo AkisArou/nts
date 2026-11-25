@@ -790,6 +790,11 @@ static SIGNATURES: &[Declared] = &[
     ("nts_com_state", None, None, Raising::MayRaise),
     ("nts_com_take", None, None, Raising::MayRaise),
     ("nts_com_unlend", Some(&[None]), None, Raising::NoRaise),
+    ("nts_command_line_argv", None, None, Raising::NoRaise),
+    ("nts_command_line_argv0", None, None, Raising::NoRaise),
+    ("nts_command_line_capture", None, None, Raising::NoRaise),
+    ("nts_command_line_captured", None, None, Raising::NoRaise),
+    ("nts_command_line_exec_argv", None, None, Raising::NoRaise),
     ("nts_concat", None, None, Raising::NoRaise),
     ("nts_concat_into", None, None, Raising::NoRaise),
     (
