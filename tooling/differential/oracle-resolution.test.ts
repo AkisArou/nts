@@ -1,14 +1,15 @@
-import {nodeProcessAlive} from './oracle-runtime.ts';
+import {nodeProcessAlive,nodeProcessBirth} from './oracle-runtime.ts';
 import {readProcessStat,type StatReader} from './process-stat/main.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
-import {copyFileSync,chmodSync,constants,mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,statSync,writeFileSync,openSync,closeSync} from 'node:fs';
+import {copyFileSync,chmodSync,constants,existsSync,mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,statSync,writeFileSync,openSync,closeSync} from 'node:fs';
 import {spawn,spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test,type TestContext} from 'node:test';
 import {waitFor} from '../gate/test-wait.ts';
+import {durableRecord} from '../gate/durable-record.ts';
 import {startNodeResolutionSession,queryNodeResolutions,checkNodeResolutionSession,closeNodeResolutionSession,nodeResolutionOptions,type NodeResolutionSession} from './oracle-resolution.ts';
 
 const here=dirname(fileURLToPath(import.meta.url));
@@ -198,4 +199,124 @@ test('completed holder metadata is terminal and cannot be acquired as a live ses
  const before=readFileSync(join(directory,'holder.json'));
  await assert.rejects(startNodeResolutionSession(directory,options,process.env),/oracle Node executable holder changed/);
  assert.deepEqual(readFileSync(join(directory,'holder.json')),before,'terminal metadata is neither deleted nor rewritten');
+});
+
+// Readiness is an event, never a wall bound: a loaded machine may bring a
+// holder up after any delay. The mocked clock passes far beyond any deadline
+// while the starter waits; only holder.json, or a named exit, ends the wait.
+/** Holder flags preloading a gate that keeps the holder unready until the
+ * test releases it: no holder.json can precede the release. */
+function gatedHolder(root:string){
+  const gate=join(root,'gate.mjs'),release=join(root,'release');
+  writeFileSync(gate,`import {existsSync,watch} from 'node:fs';
+if(!existsSync(${JSON.stringify(release)}))await new Promise(done=>{const watcher=watch(${JSON.stringify(root)},()=>{if(existsSync(${JSON.stringify(release)})){watcher.close();done();}});if(existsSync(${JSON.stringify(release)})){watcher.close();done();}});
+`);
+  return {options:nodeResolutionOptions(['--import',pathToFileURL(gate).href],process.env),release:()=>writeFileSync(release,'')};
+}
+test('a starter waits for its holder however long the clock runs before it is ready',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  // The holder stays unready until the test, having run the clock, releases it.
+  const root=fixture(t),directory=join(root,'service'),gated=gatedHolder(root);
+  t.mock.timers.enable({apis:['setTimeout','setInterval']});
+  let advanced=false;
+  const session=(await startNodeResolutionSession(directory,gated.options,process.env,process.pid,undefined,{ready:async waiting=>{
+    assert.equal(existsSync(join(directory,'holder.json')),false,'the gated holder is unready while the clock runs');
+    t.mock.timers.tick(3_600_000);advanced=true;
+    gated.release();
+    return await waiting;
+  }}))!;
+  t.mock.timers.reset();
+  assert.equal(advanced,true);
+  try{checkNodeResolutionSession(session,session.options);}finally{await close(session);}
+});
+
+const settled=(pending:Promise<unknown>)=>Promise.race([pending.then(()=>'resolved',()=>'rejected'),new Promise(done=>setImmediate(()=>done('pending')))]);
+/** A real live session whose readiness record is withdrawn, so a later caller waits on the claim. */
+async function withdrawn(t:TestContext){
+  // The session closes before its directory is removed.
+  const root=mkdtempSync(join(tmpdir(),'nts-resolution-service-')),directory=join(root,'service');
+  let session:NodeResolutionSession|undefined;
+  t.after(async()=>{
+    try{if(session){if(existsSync(join(directory,'holder.saved')))renameSync(join(directory,'holder.saved'),join(directory,'holder.json'));await close(session);}}
+    finally{rmSync(root,{recursive:true,force:true});}
+  });
+  session=(await startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env))!;
+  renameSync(join(directory,'holder.json'),join(directory,'holder.saved'));
+  return {directory,session,claim:join(directory,'starting.json'),restore:()=>renameSync(join(directory,'holder.saved'),join(directory,'holder.json'))};
+}
+const dead={pid:process.pid,birth:'not this process birth'};
+
+test('a waiter whose claim names a dead starter and no holder fails by name at once',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  const {directory,claim}=await withdrawn(t);
+  durableRecord(claim,{version:1,starter:dead});
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env),
+    /oracle Node resolution service did not start: its starter \d+, which recorded no holder, exited before .*holder\.json was published/);
+});
+
+test('a waiter whose live starter recorded no holder yet resolves once holder.json appears',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  const {directory,session,claim,restore}=await withdrawn(t);
+  durableRecord(claim,{version:1,starter:{pid:process.pid,birth:nodeProcessBirth(process.pid)}});
+  const pending=startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env);
+  assert.equal(await settled(pending),'pending','with no holder recorded, the live starter keeps the waiter waiting');
+  restore();
+  assert.deepEqual(await pending,session);
+});
+
+test('a waiter whose starter died after spawning a live holder keeps waiting for that holder',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  const {directory,session,claim,restore}=await withdrawn(t);
+  durableRecord(claim,{version:1,starter:dead,holder:session.holder});
+  const pending=startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env);
+  assert.equal(await settled(pending),'pending','the recorded holder lives, so its readiness may still come');
+  restore();
+  assert.deepEqual(await pending,session);
+});
+
+test('a waiter whose recorded holder is dead fails by name at once, however long its starter lives',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  // Only a recorded holder can publish holder.json: a starter never respawns one.
+  const {directory,claim}=await withdrawn(t);
+  durableRecord(claim,{version:1,starter:{pid:process.pid,birth:nodeProcessBirth(process.pid)},holder:dead});
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env),
+    /oracle Node resolution service did not start: its holder \d+ exited before .*holder\.json was published/);
+});
+
+test('a starter that gives up leaves a terminal claim, and a later waiter fails at once with its error',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  // Its holder never becomes ready, so no holder.json outlives the starter's stop.
+  const root=fixture(t),directory=join(root,'service'),{options}=gatedHolder(root);
+  await assert.rejects(startNodeResolutionSession(directory,options,process.env,process.pid,undefined,{ready:async()=>{throw Error('readiness refused');}}),/readiness refused/);
+  assert.equal(existsSync(join(directory,'holder.json')),false);
+  const claim=JSON.parse(readFileSync(join(directory,'starting.json'),'utf8'));
+  assert.equal(claim.starter.pid,process.pid);assert.equal(nodeProcessAlive(claim.starter),true,'the starter lives on after giving up');
+  assert.deepEqual(claim.failed,{message:'Error: readiness refused'});
+  assert.ok(claim.holder,'its stopped holder stays recorded');
+  await assert.rejects(startNodeResolutionSession(directory,options,process.env),
+    /oracle Node resolution service did not start: its starter \d+ gave up: Error: readiness refused/);
+});
+
+test('a waiter already waiting fails by name once its starter exits',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  const {directory,claim}=await withdrawn(t);
+  // A live claimant in this test's own unit, which lives until it is killed.
+  const claimant=spawn(process.execPath,['-e','process.stdin.resume()'],{stdio:['pipe','ignore','ignore']});
+  const exited=new Promise(done=>claimant.once('exit',done));
+  t.after(async()=>{if(claimant.exitCode===null&&claimant.signalCode===null)claimant.kill('SIGKILL');await exited;});
+  await new Promise((done,fail)=>{claimant.once('spawn',done);claimant.once('error',fail);});
+  durableRecord(claim,{version:1,starter:{pid:claimant.pid!,birth:nodeProcessBirth(claimant.pid!)}});
+  const pending=startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env);
+  assert.equal(await settled(pending),'pending','the live starter keeps the waiter waiting');
+  claimant.kill('SIGKILL');await exited;
+  await assert.rejects(pending,/oracle Node resolution service did not start: its starter \d+, which recorded no holder, exited before .*holder\.json was published/);
+});
+
+test('a half-written claim refuses by name, never reads as a dead starter',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  const {directory,claim}=await withdrawn(t);
+  writeFileSync(claim,'{"version":1,"starter":{"pid":');
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env),/oracle Node resolution claim .*starting\.json is unreadable or incomplete/);
+  writeFileSync(claim,JSON.stringify({pid:process.pid})+'\n');
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env),/oracle Node resolution claim .*starting\.json is not a claim this reader knows/);
 });

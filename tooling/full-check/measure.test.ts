@@ -442,10 +442,14 @@ exec node "$NTS_GATE_TREE/subject.ts" "$1"
   repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','measured environment']);
   const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject},'red measured command');
   const {slice}=fixtureToolingSlice(t);
-  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,owned:{...ownMemory(join(repo.dir,'machine')),NTS_TOOLING_SLICE:slice},env:{...hostEnvironment(process.env),HOME:repo.dir,NTS_TOOLING_SLICE:slice}});
+  const lines:string[]=[];
+  const gate=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,owned:{...ownMemory(join(repo.dir,'machine')),NTS_TOOLING_SLICE:slice},env:{...hostEnvironment(process.env),HOME:repo.dir,NTS_TOOLING_SLICE:slice}});
   for(const label of ['core','core-probe','wide']){
+    lines.length=0;
     const measured=gate.run(commit,['tooling'],label);
-    assert.equal(measured.verdict,'red',JSON.stringify(measured.reasons));
+    // A verdict other than red names its cause: the controller's lines and the run's own log.
+    let log:string;try{log=readFileSync(join(measured.run,'full-check.log'),'utf8');}catch(error){log=`no full-check.log: ${String(error)}`;}
+    assert.equal(measured.verdict,'red',`${label}: ${JSON.stringify(measured.reasons)}\n${lines.join('\n')}\n--- ${join(measured.run,'full-check.log')}\n${log.slice(-8000)}`);
     const value=JSON.parse(readFileSync(observed,'utf8'));assert.equal(value.version,'measured');assert.equal(value.canonical,true);
     await assertSessionClosed(observed);
     // Each run gets a distinct resolution directory just like production.

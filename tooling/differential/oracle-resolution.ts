@@ -4,8 +4,8 @@ import {createHash,randomBytes} from 'node:crypto';
 import {spawn,type ChildProcess} from 'node:child_process';
 import {registerHooks,createRequire} from 'node:module';
 import {createConnection,createServer,type Socket} from 'node:net';
-import {closeSync,constants,createReadStream,existsSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,statSync,unlinkSync,watch,writeFileSync,type FSWatcher} from 'node:fs';
-import {join,resolve} from 'node:path';
+import {closeSync,constants,createReadStream,existsSync,fsyncSync,linkSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,statSync,unlinkSync,watch,writeFileSync,type FSWatcher} from 'node:fs';
+import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {nodeExecutableIdentity,nodeProcessBirth,nodeProcessAlive,checkNodeResolutionSession,type NodeResolutionOptions,type NodeResolutionSession} from './oracle-runtime.ts';
 export {nodeResolutionOptions,checkNodeResolutionSession} from './oracle-runtime.ts';
@@ -51,15 +51,76 @@ function receive(socket:Socket):Promise<Buffer>{
   });
 }
 type ResolutionAcquisition={ready?:(waiting:Promise<NodeResolutionSession>)=>Promise<NodeResolutionSession>;watch?:(directory:string,listener:()=>void)=>FSWatcher};
-function readyFile(directory:string,watchDirectory:NonNullable<ResolutionAcquisition['watch']>=watch):{ready:Promise<NodeResolutionSession>;cancel:()=>void}{
+/** A starter's claim on a resolution directory: the starting process, then
+ * also its spawned holder, or the error with which the starter gave up.
+ * Published complete or not at all. */
+type ResolutionClaim={version:1;starter:{pid:number;birth:string};holder?:{pid:number;birth:string};failed?:{message:string}};
+const identity=(value:unknown):value is {pid:number;birth:string}=>{
+  const candidate=value as {pid?:unknown;birth?:unknown}|null;
+  return typeof candidate==='object'&&candidate!==null&&Number.isSafeInteger(candidate.pid)&&(candidate.pid as number)>0&&typeof candidate.birth==='string'&&candidate.birth.length>0;
+};
+function readClaim(file:string):ResolutionClaim{
+  let value:ResolutionClaim;
+  try{value=JSON.parse(readFileSync(file,'utf8')) as ResolutionClaim;}
+  catch(error){throw Error(`oracle Node resolution claim ${file} is unreadable or incomplete: ${String(error)}`);}
+  if(value?.version!==1||!identity(value.starter)||value.holder!==undefined&&!identity(value.holder)||
+    value.failed!==undefined&&(typeof value.failed!=='object'||value.failed===null||typeof value.failed.message!=='string'))throw Error(`oracle Node resolution claim ${file} is not a claim this reader knows`);
+  return value;
+}
+/** Publish `value` at `file` complete or not at all, and durably: the record
+ * is written and synced under a private name, then linked into place
+ * (`exclusive`, which fails EEXIST when `file` exists) or renamed over it,
+ * and the directory is synced. The oracle's assets are a closed set of
+ * differential files, so this does not import the gate's durable-record. */
+function publishDurably(file:string,value:unknown,exclusive:boolean):boolean{
+  const pending=`${file}.${process.pid}.${randomBytes(8).toString('hex')}`;
+  const fd=openSync(pending,'wx',0o600);
+  try{writeFileSync(fd,JSON.stringify(value)+'\n');fsyncSync(fd);}
+  catch(error){closeSync(fd);unlinkSync(pending);throw error;}
+  closeSync(fd);
+  let placed=false;
+  try{
+    if(exclusive){
+      try{linkSync(pending,file);}
+      catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST')return false;throw error;}
+    }else{renameSync(pending,file);placed=true;}
+  }finally{if(!placed)unlinkSync(pending);}
+  const directory=openSync(dirname(file),'r');
+  try{fsyncSync(directory);}finally{closeSync(directory);}
+  return true;
+}
+/**
+ * Readiness is an event: the holder publishes holder.json. There is no wall
+ * bound, since a loaded machine may take any time to bring a holder up. A
+ * waiter that is not the starter also watches the one process that can still
+ * publish: once the claim records a holder, only that holder can, since a
+ * starter never respawns one; before that, only the starter can. The waiter
+ * fails, by name, once that process is gone and holder.json is still absent,
+ * and at once when the starter recorded that it gave up. A holder alive but
+ * hung is bounded by the enclosing step's CPU and process-state bounds, like
+ * any other hung command.
+ */
+function readyFile(directory:string,watchDirectory:NonNullable<ResolutionAcquisition['watch']>=watch,claim?:string):{ready:Promise<NodeResolutionSession>;cancel:()=>void}{
   const file=join(directory,'holder.json');let cancel=()=>{};
   const ready=new Promise<NodeResolutionSession>((done,fail)=>{
-    let complete=false;
-    const finish=(error?:unknown,value?:NodeResolutionSession)=>{if(complete)return;complete=true;clearTimeout(timer);watcher.close();if(error)fail(error);else done(value!);};
+    let complete=false,liveness:NodeJS.Timeout|undefined,watcher:FSWatcher|undefined;
+    const finish=(error?:unknown,value?:NodeResolutionSession)=>{if(complete)return;complete=true;clearInterval(liveness);watcher?.close();if(error)fail(error);else done(value!);};
     const check=()=>{try{if(existsSync(file))finish(undefined,JSON.parse(readFileSync(file,'utf8')));}catch(error){finish(error);}};
-    const watcher=watchDirectory(directory,check),timer=setTimeout(()=>finish(Error('oracle Node resolution service did not start')),30_000);
+    const writers=()=>{
+      try{
+        const value=readClaim(claim!);
+        // A starter that gave up stops its holder, so its readiness is not one.
+        if(value.failed){finish(Error(`oracle Node resolution service did not start: its starter ${value.starter.pid} gave up: ${value.failed.message}`));return;}
+        if(nodeProcessAlive(value.holder??value.starter))return;
+        // The holder may have published just before it exited.
+        check();
+        if(!complete)finish(Error(`oracle Node resolution service did not start: ${value.holder?`its holder ${value.holder.pid}`:`its starter ${value.starter.pid}, which recorded no holder,`} exited before ${file} was published`));
+      }catch(error){finish(error);}
+    };
     cancel=()=>finish(Error('oracle Node resolution service acquisition cancelled'));
+    watcher=watchDirectory(directory,check);
     watcher.once('error',finish);check();
+    if(claim&&!complete){liveness=setInterval(writers,1000);writers();}
   });
   void ready.catch(()=>{});return {ready,cancel};
 }
@@ -77,12 +138,12 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
     if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');
     checkNodeResolutionSession(session,options);return session;
   }
-  const waiting=readyFile(directory,acquisition.watch),claim=join(directory,'starting.json');
-  let starter=false,child:ChildProcess|undefined,closed:Promise<void>|undefined;
+  const claim=join(directory,'starting.json'),self={pid:process.pid,birth:nodeProcessBirth(process.pid)};
+  const starter=publishDurably(claim,{version:1,starter:self} satisfies ResolutionClaim,true);
+  let waiting:ReturnType<typeof readyFile>|undefined,child:ChildProcess|undefined,closed:Promise<void>|undefined,holder:ResolutionClaim['holder'];
   let exited:Promise<{code:number|null;signal:NodeJS.Signals|null;error?:Error}>|undefined;
   try{
-    try{writeFileSync(claim,JSON.stringify({pid:process.pid})+'\n',{flag:'wx',mode:0o600});starter=true;}
-    catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
+    waiting=readyFile(directory,acquisition.watch,starter?undefined:claim);
     if(starter){
       const owner={pid:ownerPid,birth:nodeProcessBirth(ownerPid)},expected=nodeExecutableIdentity(process.pid);
       const init={version:1,directory,token:randomBytes(24).toString('hex'),nodeVersion:process.versions.node,nodeSha256:await executableHash(),executable:expected,owner,options,helperSha256};
@@ -101,6 +162,10 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
       closed=exited.then(result=>{if(result.error||result.code!==0||result.signal)throw result.error??Error('oracle Node resolution holder stopped: '+(result.signal??result.code));});
       void closed.catch(()=>{});child.unref();
       if(!child.pid)throw Error('oracle Node resolution service launch failed');
+      // A waiter keeps waiting while this holder lives, even if this starter exits.
+      // A holder already gone records nothing; its exit is the starter's to report.
+      let birth:string|undefined;try{birth=nodeProcessBirth(child.pid);}catch{/* exited at once */}
+      if(birth!==undefined){holder={pid:child.pid,birth};publishDurably(claim,{version:1,starter:self,holder} satisfies ResolutionClaim,false);}
     }
     const pending=acquisition.ready?acquisition.ready(waiting.ready):waiting.ready;
     const early=exited?.then(result=>{throw result.error??Error('oracle Node resolution holder stopped before readiness: '+(result.signal??result.code));});
@@ -110,18 +175,24 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
     if(starter&&closed)onStarted?.(session,closed);
     return session;
   }catch(primary){
+    const errors:unknown[]=[primary];
+    // The claim is terminal before the holder is stopped, so a waiter fails
+    // with this starter's error at once, whether or not a holder was recorded.
+    if(starter){
+      try{publishDurably(claim,{version:1,starter:self,...(holder?{holder}:{}),failed:{message:String(primary)}} satisfies ResolutionClaim,false);}
+      catch(error){errors.push(error);}
+    }
     // Never signal a reused holder or discover a PID to stop. Only this call's
     // actual ChildProcess is acquired, and close is joined before throwing.
     if(child&&exited){
       child.ref();
-      const errors:unknown[]=[primary];
       try{if(child.exitCode===null&&child.signalCode===null&&!child.kill('SIGTERM'))throw Error('oracle Node resolution holder termination failed');}
       catch(error){errors.push(error);}
       const result=await exited;if(result.error)errors.push(result.error);
-      if(errors.length>1)throw new AggregateError(errors,'oracle Node resolution acquisition and cleanup failed',{cause:primary});
     }
+    if(errors.length>1)throw new AggregateError(errors,'oracle Node resolution acquisition and cleanup failed',{cause:primary});
     throw primary;
-  }finally{waiting.cancel();}
+  }finally{waiting?.cancel();}
 }
 
 async function exchange(session:NodeResolutionSession,action:Batch['action'],queries:NodeResolutionQuery[]):Promise<Response>{
