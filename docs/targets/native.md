@@ -149,9 +149,10 @@ engine flag. `main` hands `argc` and `argv` to `nts_command_line_capture`
 before module evaluation. Each value is made on its first read, once per
 environment, and every later read answers the same object, so a write to
 `process.argv` is seen by the next read. The environment holds them for its
-life. On Windows the `argv` handed over is advisory: the line is read again
-from `GetCommandLineW` and split by the C runtime's rules, as node's `wmain`
-reads it, so an argument outside the ANSI code page arrives whole. A library
+life. On Windows `main` is `wmain`, node's own entry (linked with
+`-municode`), so the `argv` handed over is the C runtime's wide one and an
+argument outside the ANSI code page arrives whole; a lone surrogate becomes
+U+FFFD, as node's conversion to UTF-8 makes it. A library
 captures nothing, since its process is its host's: a host may call
 `nts_command_line_capture` itself, and a read with nothing captured is
 refused. TypeScript reaches these through the `node:process` provider, which

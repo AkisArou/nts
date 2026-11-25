@@ -7657,6 +7657,11 @@ fn link_c(
                     hide_all_but_the_exports(&mut command, out, wrote, format, &artifact)?;
                 }
                 name_the_library(&mut command, name, product, target, format);
+            } else if format == ObjectFormat::Coff {
+                // An executable's `main.c` defines `wmain` on Windows, as
+                // node's entry is, and mingw's runtime starts that one only
+                // when told to; without it the link wants `main`.
+                command.arg("-municode");
             }
             for object in &objects {
                 command.arg(native_paths::relative(object, out)?);

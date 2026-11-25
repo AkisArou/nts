@@ -433,7 +433,14 @@ pub fn main_for(shape: MainShape) -> String {
          \n\
          {declare}\
          {pool_declare}\
+         /* `wmain` on Windows, node's own entry there: the C runtime's wide\n\
+         \x20* `argv`, where the narrow one is in the ANSI code page. The link\n\
+         \x20* passes `-municode` so the runtime starts it. */\n\
+         #if defined(_WIN32)\n\
+         int wmain(int argc, wchar_t **argv) {{\n\
+         #else\n\
          int main(int argc, char **argv) {{\n\
+         #endif\n\
          \x20   nts_process_start();\n\
          \x20   /* `process.argv`'s source: node's single-executable rule, in\n\
          \x20    * `nts_command_line_capture`. */\n\

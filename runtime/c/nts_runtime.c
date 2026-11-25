@@ -12037,26 +12037,37 @@ void nts_process_start(void) {
 /* ---------------------------------------------------------- command line */
 
 /* What `main` handed over, or a negative count when nothing did. Written once
- * before module evaluation and read after, so it needs no synchronization. */
+ * before module evaluation and read after, so it needs no synchronization.
+ * Wide on Windows, where `main` is `wmain`, as node's is: the CRT splits the
+ * line, and the narrow `argv` would be in the ANSI code page. */
 static int nts_captured_argc = -1;
-#if !defined(_WIN32)
-static char **nts_captured_argv;
-#endif
+static NtsCommandLineChar **nts_captured_argv;
 
-void nts_command_line_capture(int argc, char **argv) {
+void nts_command_line_capture(int argc, NtsCommandLineChar **argv) {
   nts_captured_argc = argc < 0 || argv == NULL ? 0 : argc;
-#if defined(_WIN32)
-  (void)argv;
-#else
   nts_captured_argv = argv;
-#endif
 }
 
 bool nts_command_line_captured(void) { return nts_captured_argc >= 0; }
 
 #if defined(_WIN32)
-/* `GetModuleFileNameW`, grown until the path fits: node's `execPath`, which
- * libuv's `uv_exepath` reads the same way. */
+/* One wide argument as a string. Node's `wmain` converts each with
+ * `WideCharToMultiByte(CP_UTF8)`, which writes U+FFFD for a lone surrogate,
+ * and decodes the UTF-8 again: the well-formed string of the same units, made
+ * here without the UTF-8 in between. */
+static NtsString *nts_command_line_string(const wchar_t *text) {
+  NtsString *units =
+      nts_str_alloc((const uint16_t *)text, (uint32_t)wcslen(text));
+  if (nts_str_is_well_formed(units)) {
+    return units;
+  }
+  NtsString *formed = nts_str_to_well_formed(units);
+  nts_release((NtsHeader *)units);
+  return formed;
+}
+
+/* `GetModuleFileNameW`, grown until the path fits: libuv's `uv_exepath`, which
+ * answers node's `execPath`, reads it the same way. */
 static NtsString *nts_exec_path(void) {
   DWORD capacity = MAX_PATH;
   for (;;) {
@@ -12070,7 +12081,7 @@ static NtsString *nts_exec_path(void) {
       return nts_string_from_utf8("", 0);
     }
     if (length < capacity) {
-      NtsString *answer = nts_str_alloc((const uint16_t *)path, length);
+      NtsString *answer = nts_command_line_string(path);
       free(path);
       return answer;
     }
@@ -12078,115 +12089,15 @@ static NtsString *nts_exec_path(void) {
     capacity *= 2;
   }
 }
-
-/* One argument of a wide command line, by the C runtime's rules (the ones
- * `CommandLineToArgvW` and the CRT's own `argv` follow): `2n` backslashes
- * before a quote are `n` and the quote toggles quoting, `2n + 1` are `n` and a
- * literal quote, any other backslash is itself, and `""` inside quotes is a
- * literal quote. The first argument, the program name, is quoted but never
- * escaped. Answers where the next argument starts. */
-static const wchar_t *nts_wide_argument(const wchar_t *at, uint16_t *units,
-                                        uint32_t *length, bool program) {
-  uint32_t used = 0;
-  bool quoted = false;
-  if (program) {
-    if (*at == L'"') {
-      for (at++; *at != 0 && *at != L'"'; at++) {
-        units[used++] = (uint16_t)*at;
-      }
-      if (*at == L'"') {
-        at++;
-      }
-    } else {
-      for (; *at != 0 && *at != L' ' && *at != L'\t'; at++) {
-        units[used++] = (uint16_t)*at;
-      }
-    }
-    *length = used;
-    return at;
-  }
-  while (*at != 0 && (quoted || (*at != L' ' && *at != L'\t'))) {
-    if (*at == L'\\') {
-      uint32_t slashes = 0;
-      while (*at == L'\\') {
-        slashes++;
-        at++;
-      }
-      if (*at == L'"') {
-        for (uint32_t i = 0; i < slashes / 2; i++) {
-          units[used++] = L'\\';
-        }
-        if (slashes % 2 == 1) {
-          units[used++] = L'"';
-          at++;
-        }
-      } else {
-        for (uint32_t i = 0; i < slashes; i++) {
-          units[used++] = L'\\';
-        }
-      }
-    } else if (*at == L'"') {
-      if (quoted && at[1] == L'"') {
-        units[used++] = L'"';
-        at += 2;
-      } else {
-        quoted = !quoted;
-        at++;
-      }
-    } else {
-      units[used++] = (uint16_t)*at++;
-    }
-  }
-  *length = used;
-  return at;
-}
-
-/* The line read again from `GetCommandLineW`, so an argument outside the ANSI
- * code page arrives whole; the `argv` that was captured is only the sign that
- * a `main` owns this process. */
-static void nts_command_line_make_arguments(NtsArray **argv,
-                                            NtsString **argv0) {
-  const wchar_t *line = GetCommandLineW();
-  size_t width = wcslen(line);
-  uint16_t *units = (uint16_t *)malloc((width + 1) * sizeof(uint16_t));
-  if (units == NULL) {
-    fprintf(stderr, NTS_REFUSED "no memory to read the command line\n");
-    abort();
-  }
-  uint32_t count = 0;
-  for (const wchar_t *at = line; *at != 0; count++) {
-    uint32_t ignored;
-    at = nts_wide_argument(at, units, &ignored, count == 0);
-    while (*at == L' ' || *at == L'\t') {
-      at++;
-    }
-  }
-  /* A line with no program name still has node's slot 1, empty. */
-  uint32_t length = (count > 0 ? count : 1) + 1u;
-  NtsArray *answer = nts_array_new(&nts_desc_ref, (double)length);
-  NTS_ITEMS(answer, NtsHeader *)[0] = nts_exec_path();
-  if (count == 0) {
-    NTS_ITEMS(answer, NtsHeader *)[1] = nts_string_from_utf8("", 0);
-  }
-  const wchar_t *at = line;
-  for (uint32_t index = 0; index < count; index++) {
-    uint32_t used = 0;
-    at = nts_wide_argument(at, units, &used, index == 0);
-    while (*at == L' ' || *at == L'\t') {
-      at++;
-    }
-    NTS_ITEMS(answer, NtsHeader *)[index + 1] = nts_str_alloc(units, used);
-  }
-  free(units);
-  *argv0 = NTS_ITEMS(answer, NtsString *)[1];
-  nts_retain((NtsHeader *)*argv0);
-  *argv = answer;
-}
 #else
-/* The executable's resolved path, as `uv_exepath` finds it for node's
- * `execPath`: `/proc/self/exe` on Linux, `_NSGetExecutablePath` resolved on
- * Darwin. Elsewhere `argv[0]` resolved against the working directory, which is
- * what libuv falls back to as well. */
+static NtsString *nts_command_line_string(const char *text) {
+  return nts_string_from_utf8(text, strlen(text));
+}
+
+/* The executable's resolved path. Linux and Darwin read it as libuv's
+ * `uv_exepath` does for node's `execPath`: `/proc/self/exe`, and
+ * `_NSGetExecutablePath` resolved. Anywhere else the answer is nts's own,
+ * `argv[0]` resolved against the working directory. */
 static NtsString *nts_exec_path(void) {
 #if defined(__linux__)
   size_t capacity = 256;
@@ -12231,31 +12142,30 @@ static NtsString *nts_exec_path(void) {
   return answer;
 #endif
 }
+#endif
 
 /* `[execPath, argv[0], argv[1], ...]`: node's `FixupArgsForSEA` repeats
  * `argv[0]` in slot 1, where a script's path would be, and the first slot
- * becomes `execPath`. An `execve` with an empty `argv` still gets both slots,
+ * becomes `execPath`. An `argv` with no program name still gets both slots,
  * the second empty. */
 static void nts_command_line_make_arguments(NtsArray **argv,
                                             NtsString **argv0) {
   int count = nts_captured_argc;
-  const char *program =
-      count > 0 && nts_captured_argv[0] != NULL ? nts_captured_argv[0] : "";
   uint32_t length = (uint32_t)(count > 0 ? count : 1) + 1u;
   NtsArray *answer = nts_array_new(&nts_desc_ref, (double)length);
   NTS_ITEMS(answer, NtsHeader *)[0] = nts_exec_path();
-  NtsString *invoked = nts_string_from_utf8(program, strlen(program));
+  NtsString *invoked = count > 0 && nts_captured_argv[0] != NULL
+                           ? nts_command_line_string(nts_captured_argv[0])
+                           : nts_string_from_utf8("", 0);
   NTS_ITEMS(answer, NtsHeader *)[1] = invoked;
   for (int index = 1; index < count; index++) {
-    const char *argument = nts_captured_argv[index];
     NTS_ITEMS(answer, NtsHeader *)
-    [index + 1] = nts_string_from_utf8(argument, strlen(argument));
+    [index + 1] = nts_command_line_string(nts_captured_argv[index]);
   }
   nts_retain((NtsHeader *)invoked);
   *argv0 = invoked;
   *argv = answer;
 }
-#endif
 
 /* All three at once, on the first read of any: one measurement of what the
  * environment now holds by design. */

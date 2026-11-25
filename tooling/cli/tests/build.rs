@@ -7324,7 +7324,11 @@ static void line(const char *label, NtsString *value) {
     nts_cstring_release(value, text);
 }
 
+/* Objects the program holds beyond what the runtime holds by design. */
+static size_t held(void) { return nts_live_count() - nts_permanent_count(); }
+
 void report_command_line(void) {
+    size_t before = held();
     NtsArray *argv = nts_command_line_argv();
     NtsArray *again = nts_command_line_argv();
     for (uint32_t at = 0; at < argv->header.length; at++) {
@@ -7336,11 +7340,25 @@ void report_command_line(void) {
     line("argv0", argv0);
     NtsArray *exec_argv = nts_command_line_exec_argv();
     printf("execArgv %u\nsame %d\n", exec_argv->header.length, argv == again);
-    fflush(stdout);
+    uint32_t length = argv->header.length;
     nts_release((NtsHeader *)exec_argv);
     nts_release((NtsHeader *)argv0);
     nts_release((NtsHeader *)again);
     nts_release((NtsHeader *)argv);
+    /* What the runtime made is counted as its own, so once the reader gives
+     * its references back the program holds what it held before. */
+    printf("unchanged %d\n", held() == before);
+    /* Another environment makes its own, and gives it back when destroyed:
+     * one left behind is a leak `nts_environment_destroy` aborts on. */
+    NtsEnvironment *other = nts_environment_create();
+    NtsEnvironmentScope scope = nts_environment_enter(other);
+    NtsArray *there = nts_command_line_argv();
+    printf("other %d %d\n", there != argv, there->header.length == length);
+    nts_release((NtsHeader *)there);
+    nts_environment_leave(&scope);
+    nts_environment_destroy(other);
+    printf("destroyed\n");
+    fflush(stdout);
 }
 "#;
 
@@ -7357,7 +7375,11 @@ fn command_line_expected(exec_path: &Path, invoked: &str) -> String {
     for (at, argument) in COMMAND_LINE_ARGUMENTS.iter().enumerate() {
         writeln!(expected, "argv[{}] [{argument}]", at + 2).expect("expected line");
     }
-    writeln!(expected, "argv0 [{invoked}]\nexecArgv 0\nsame 1").expect("expected tail");
+    writeln!(
+        expected,
+        "argv0 [{invoked}]\nexecArgv 0\nsame 1\nunchanged 1\nother 1 1\ndestroyed"
+    )
+    .expect("expected tail");
     expected
 }
 
@@ -7504,8 +7526,10 @@ fn a_library_host_supplies_the_command_line_or_its_read_is_refused() {
     }
     command_line_agrees("the capturing host", &hosts.join("captures"));
     // The refusal aborts, so no core is kept (AGENTS.md: deliberate crashes).
-    let forgot = Command::new("prlimit")
-        .arg("--core=0")
+    // Through the shell's `ulimit`: setting RLIMIT_CORE in `pre_exec` is
+    // `unsafe`, which the workspace forbids.
+    let forgot = Command::new("sh")
+        .args(["-c", "ulimit -c 0 && exec \"$0\""])
         .arg(hosts.join("forgets"))
         .output()
         .expect("running the forgetful host");

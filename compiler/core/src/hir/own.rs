@@ -4841,10 +4841,6 @@ mod tests {
     /// [`super::RUNTIME_HANDS_BACK`], each for its reason.
     const NOT_HANDED_BACK: &[(&str, &str)] = &[
         (
-            "nts_wide_argument",
-            "a file-local Windows parser: returns a cursor into GetCommandLineW's text, never a managed reference",
-        ),
-        (
             "nts_str_place",
             "writes into the frame buffer it is given, which holds no count",
         ),

@@ -4399,9 +4399,9 @@ void nts_process_start(void);
  * A standalone program's `main` hands its `argc` and `argv` over once, before
  * module evaluation; only the pointers are kept, which the C standard says
  * live as long as the process. A library never captures: its process is its
- * host's, and a host embedding one may call this itself. On Windows the
- * passed `argv` is advisory: the line is read again from `GetCommandLineW`,
- * as node's `wmain` reads it, because the narrow one is in the ANSI code page.
+ * host's, and a host embedding one may call this itself. On Windows `main`
+ * is `wmain`, node's own entry, and `argv` is the C runtime's wide one: the
+ * narrow `argv` would be in the ANSI code page.
  *
  * The readers follow node's SEA rule (`FixupArgsForSEA`, then
  * `patchProcessObject` with `expandArgv1` off): `argv` is the executable's
@@ -4416,7 +4416,12 @@ void nts_process_start(void);
  *
  * A read with nothing captured is refused: an empty line would be a wrong
  * answer that looks right. `nts_command_line_captured` says which. */
-void nts_command_line_capture(int argc, char **argv);
+#if defined(_WIN32)
+typedef wchar_t NtsCommandLineChar;
+#else
+typedef char NtsCommandLineChar;
+#endif
+void nts_command_line_capture(int argc, NtsCommandLineChar **argv);
 bool nts_command_line_captured(void);
 NtsArray *nts_command_line_argv(void);
 NtsString *nts_command_line_argv0(void);
