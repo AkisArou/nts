@@ -1,4 +1,4 @@
-import {inspectionDirectory} from './reader-inputs/main.ts';
+import {directoryCandidates} from './reader-inputs/main.ts';
 import {targetScratch} from '../full-check/keep.ts';
 import {rustTokens,type RustToken} from './rust-test-paths.ts';
 import {cargoSync} from './cargo.ts';
@@ -117,20 +117,25 @@ export function inspectTargetScratch(file:string,source:string):string[]{
   };walk(rustTokens(source));return problems;
 }
 
-const INTEROP_SCRATCH_INPUTS=inspectionDirectory(new URL('../../tests/interop/',import.meta.url));
+// The same shallow project discovery used by gate environment capabilities.
+// Only writer/reader scripts are inputs; framework payloads are not inspected.
+const INTEROP_SCRATCH_INPUTS=directoryCandidates(new URL('../../tests/interop/',import.meta.url),[
+  {kind:'optional-file',name:'build.sh'},
+  {kind:'optional-file',name:'verify.ts'},
+  {kind:'optional-file',name:'bench.sh'},
+]);
 /** Extra drift guard over writer and reader defaults, never a removal grant. */
-export function interopScratchDrift(directory:URL=INTEROP_SCRATCH_INPUTS):string[]{
+export function interopScratchDrift(directory:URL=INTEROP_SCRATCH_INPUTS.url):string[]{
   const problems:string[]=[],root=fileURLToPath(directory);
-  const visit=(at:string)=>{
-    for(const entry of readdirSync(at,{withFileTypes:true})){
-      if(entry.name.startsWith('.')||entry.name==='node_modules')continue;
-      const path=join(at,entry.name);
-      if(entry.isDirectory())visit(path);
-      else if(entry.isFile()&&/\.(?:sh|ts|mjs|js|py|md)$/.test(entry.name)){
-        if(readFileSync(path,'utf8').includes('target/interop-'))problems.push(normalize(relative(root,path))+': legacy interop scratch default; use target/interop/<project>');
-      }
+  for(const project of readdirSync(root,{withFileTypes:true})){
+    if(!project.isDirectory()||project.name.startsWith('.')||project.name==='node_modules')continue;
+    for(const candidate of INTEROP_SCRATCH_INPUTS.candidates){
+      const path=join(root,project.name,candidate.name);
+      if(existsSync(path)&&readFileSync(path,'utf8').includes('target/interop-'))
+        problems.push(normalize(relative(root,path))+': legacy interop scratch default; use target/interop/<project>');
     }
-  };visit(root);return problems;
+  }
+  return problems;
 }
 
 export function assertTestLayout(root:string,packages:readonly CargoPackage[]=cargoPackages(root)):TestLayout{

@@ -1,3 +1,4 @@
+import {moduleGraph} from './module-closure.ts';
 import {pathToFileURL} from 'node:url';
 import {interopScratchDrift} from './test-layout.ts';
 import {inspectTargetScratch} from './test-layout.ts';
@@ -77,11 +78,26 @@ test('new top-level target scratch refuses, including drift inside the declared 
 test('interop writer and reader defaults cannot restore the legacy top-level layout',t=>{
   const f=fixture(t);
   assert.deepEqual(interopScratchDrift(),[]);
-  writeFileSync(join(f.root,'writer.sh'),'out="$root/target/interop-example"');
-  writeFileSync(join(f.root,'reader.ts'),'const out = "target/interop-example";');
+  mkdirSync(join(f.root,'project'));
+  writeFileSync(join(f.root,'project/build.sh'),'out="$root/target/interop-example"');
+  writeFileSync(join(f.root,'project/verify.ts'),'const out = "target/interop-example";');
   const directory=pathToFileURL(f.root+'/');
   assert.equal(interopScratchDrift(directory).length,2);
-  writeFileSync(join(f.root,'writer.sh'),'out="$root/target/interop/example"');
-  writeFileSync(join(f.root,'reader.ts'),'const out = "target/interop/example";');
+  writeFileSync(join(f.root,'project/build.sh'),'out="$root/target/interop/example"');
+  writeFileSync(join(f.root,'project/verify.ts'),'const out = "target/interop/example";');
   assert.deepEqual(interopScratchDrift(directory),[]);
+});
+
+
+test('interop drift discovery owns new project writer and reader candidates without framework payloads',()=>{
+  const graph=moduleGraph();
+  try{
+    const snapshot=graph.describe(['tooling/gate/test-layout.ts']);
+    const reader='tooling/gate/test-layout.ts';
+    assert.ok(snapshot.memberships.some(row=>row.reader===reader&&row.directory==='tests/interop'&&row.entries.some(entry=>entry.name==='macos-pods'&&entry.type==='directory')));
+    for(const name of ['build.sh','verify.ts'])assert.ok(snapshot.optionalFiles.some(row=>row.reader===reader&&row.path==='tests/interop/native-compression/'+name&&row.present));
+    assert.ok(snapshot.optionalFiles.some(row=>row.reader===reader&&row.path==='tests/interop/macos-bench/bench.sh'&&row.present));
+    assert.ok(!snapshot.files.some(path=>path.startsWith('tests/interop/macos-pods/Beep/')));
+    assert.ok(!snapshot.directories.some(row=>row.reader===reader&&row.directory==='tests/interop'));
+  }finally{graph.close();}
 });

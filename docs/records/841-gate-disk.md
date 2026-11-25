@@ -910,3 +910,30 @@ zero failed, and three declared skips. The compiler was the fresh inner
 | `interop-compiler.sha256` | `0c11e0fe1d78d30bacde9c95096495897ee4dcde9613c750b536697b91617b1f` |
 | `interop-result.json` | `e629952179aeca3b44effefad6210a421a616fe476cbe5bed0ee2dd0e2a604eb` |
 | `compiler-path-files.txt` | `169e86f51860efce0f114600deb4e1a46fe8a89786cf7cd87b95f20d1800df07` |
+
+### Discovery declaration correction
+
+The first exact-commit `--here` attempt, at
+`5fbf9c386684fc624fb7dc5bb13c2bcc59466e2c`, refused during selection before
+running any steps. A whole-directory inspection declaration entered an
+existing `macos-pods` framework symlink as an owned source file. The guard now
+uses the existing `directoryCandidates` owner, as gate environment capability
+discovery does: shallow project membership and exact `build.sh`, `verify.ts`
+and standalone `bench.sh` candidates. Runtime reads use those same declared
+candidate names; no framework payload or broad directory authority is needed.
+The reader-input owner and module-closure implementation are unchanged.
+
+The corrected layout suite passed all ten controls. Its new graph control
+proves project membership and writer/reader inputs while excluding framework
+payloads; the drift fixture exercises both scripts in a newly discovered
+project. Strict types again passed six projects and 1,234 modules with no
+increase. The host audit passed 2,207 sources, 364 entry closures and 422 reads.
+The compiler sources and standalone interop scenario remained unchanged from
+the inner and three-arm standalone proof above.
+
+| Path under `~/.cache/nts-scratch/841/d/` | SHA-256 |
+| --- | --- |
+| `here-v1.log` | `2eb2e2acb80420f3917e3ab79ea95dec30f22b6fdddbba2aecb0687569278880` |
+| `discovery-focused.log` | `4709b530e07fd2bcc1eaf4d3c49a752f54258bc2e257a0b6da6cff4dd665cde6` |
+| `discovery-types.log` | `0dafde3feb67e630b378dfd0c62cbdf9799c5f66f682b932c6cfafa5921db4aa` |
+| `discovery-host-audit-v2.log` | `5d5bde205d5116b9863a2bca791070999e3361cfc09d1b8e08a7992151c3da48` |
