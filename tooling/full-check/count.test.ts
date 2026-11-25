@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {fileURLToPath} from 'node:url';
 import { test, type TestContext } from "node:test";
-import { count, poolWorktree, populated, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
+import { count, declaredTargets, targetInventory, poolWorktree, populated, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
 import {scratchRepo} from '../landing/scratch-repo.ts';
 import {acceptedRevision} from '../gate/accepted-revision-data.ts';
 import { spawnTest, waitFor } from "../gate/test-wait.ts";
@@ -21,8 +21,11 @@ import { readFileSync } from "node:fs";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 
 import {CgroupObservations,CgroupDeparted,HostObservationError,type CgroupFiles} from '../gate/host-observations.ts';
-import {DISK_TRASH} from '../gate/disk-reclamation.ts';
+import {DEBUG_PROFILE_REASON,DISK_TRASH} from '../gate/disk-reclamation.ts';
 import {workerPresenceFile,writeWorkerPresence} from '../landing/pool-presence.ts';
+import {completeBuild} from '../gate/build-completion.ts';
+import {landingLayout} from '../landing/layout.ts';
+import {layout as fullCheckLayout} from './layout.ts';
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const DAY = 86_400_000;
@@ -655,4 +658,95 @@ test("a manifest-backed missing trash payload remains the reclamation owner's re
   assert.ok(count(fixture,KEEP).red.some(line=>line.startsWith('worktree '+payload)));
   writeFileSync(join(entry,'manifest.json'),'{}');
   assert.equal(count(fixture,KEEP).red.some(line=>line.startsWith('worktree '+payload)),false);
+});
+
+/** KEEP with a declared non-pool target: pinned.sh's, written from its tree. */
+const TARGET_KEEP:Record<string,Keep>={...KEEP,'nts-gate':{...KEEP['nts-gate']!,targets:{target:'tree'}}};
+const MANIFEST='[workspace]\n[profile.nts-dev]\ndebug=0\n';
+function profile(target:string,name:string,tree?:string):string{
+  const path=join(target,name);mkdirSync(path,{recursive:true});writeFileSync(join(path,'built'),'artifact');
+  if(tree&&(name==='nts-dev'||name==='clippy'))completeBuild(tree,name,path);
+  return path;
+}
+
+test('a declared target outside the pool reports its unbuilt profile by kind; current, unmarked and release profiles stay protected',t=>{
+  const cache=cacheFixture(t),tree=join(cache,'nts-gate/tree'),target=join(cache,'nts-gate/target');
+  writeFileSync(join(tree,'Cargo.toml'),MANIFEST);
+  profile(target,'debug');profile(target,'nts-dev',tree);profile(target,'clippy');profile(target,'release');
+  // Control: the same unbuilt profile in a folder no rule declares a target.
+  profile(join(cache,'nts-landing/target'),'debug');
+  const red=count(input(t,{cache}),TARGET_KEEP).red.filter(line=>line.includes('obsolete-profile'));
+  assert.deepEqual(red,[`~/.cache/nts-gate/target/debug: obsolete-profile (${DEBUG_PROFILE_REASON})`]);
+  const rows=targetInventory(cache,TARGET_KEEP).find(row=>row.target===target);
+  assert.ok(rows&&'profiles' in rows,JSON.stringify(rows));
+  assert.deepEqual(rows.profiles.map(row=>[row.profile,row.state]),[['debug','obsolete'],['nts-dev','current'],['clippy','unknown']]);
+  assert.equal(rows.release,true);
+  // The tree's build policy moves on: its old completed generation is obsolete.
+  writeFileSync(join(tree,'Cargo.toml'),MANIFEST.replace('debug=0','debug=1'));
+  const moved=count(input(t,{cache}),TARGET_KEEP).red.filter(line=>line.includes('obsolete-profile'));
+  assert.deepEqual(moved,[`~/.cache/nts-gate/target/debug: obsolete-profile (${DEBUG_PROFILE_REASON})`,
+    '~/.cache/nts-gate/target/nts-dev: obsolete-profile (completion marker names an older generation than its tree builds now)']);
+  for(const name of ['debug','nts-dev','clippy','release'])assert.ok(existsSync(join(target,name)),'the count deletes nothing: '+name);
+});
+
+test("each pool slot's target is judged against that slot's own build policy; a task's slot is a notice, a free slot red",t=>{
+  const cache=cacheFixture(t),one=join(cache,'nts-pool/1'),two=join(cache,'nts-pool/2');
+  for(const tree of [one,two]){writeFileSync(join(tree,'Cargo.toml'),MANIFEST);profile(join(tree,'target'),'nts-dev',tree);profile(join(tree,'target'),'debug');}
+  writeFileSync(join(one,'Cargo.toml'),MANIFEST.replace('debug=0','debug=1'));
+  const oneLines=[`~/.cache/nts-pool/1/target/debug: obsolete-profile (${DEBUG_PROFILE_REASON})`,
+    '~/.cache/nts-pool/1/target/nts-dev: obsolete-profile (completion marker names an older generation than its tree builds now)'];
+  const twoLines=[`~/.cache/nts-pool/2/target/debug: obsolete-profile (${DEBUG_PROFILE_REASON})`];
+  const judged=(value:CountInput)=>{const result=count(value,KEEP);
+    return {red:result.red.filter(line=>line.includes('obsolete-profile')),notices:(result.notices??[]).filter(line=>line.includes('obsolete-profile'))};};
+  // Slot 1 is compiler/a-task's tree in the fixture; slot 2 is free.
+  assert.deepEqual(judged(input(t,{cache})),{red:twoLines,notices:oneLines.map(line=>line+'; held by task branch compiler/a-task, whose worker alone acts on it')});
+  // Control: the same slot, its task gone, is free and red.
+  const free=input(t,{cache});free.worktrees=free.worktrees.filter(tree=>tree.path!==one);
+  assert.deepEqual(judged(free),{red:[...oneLines,...twoLines],notices:[]});
+});
+
+test('service and pin targets report their obsolete profiles in red',t=>{
+  const cache=cacheFixture(t),keep:Record<string,Keep>={...KEEP,'nts-landing':{...KEEP['nts-landing']!,targets:{target:'tree'}},'nts-pins':{...KEEP['nts-pins']!,targets:{target:'tree'}}};
+  profile(join(cache,'nts-landing/target'),'debug');profile(join(cache,'nts-pins/target'),'debug');profile(join(cache,'nts-pins/target'),'release');
+  const red=count(input(t,{cache}),keep).red.filter(line=>line.includes('obsolete-profile'));
+  assert.deepEqual(red,[`~/.cache/nts-landing/target/debug: obsolete-profile (${DEBUG_PROFILE_REASON})`,`~/.cache/nts-pins/target/debug: obsolete-profile (${DEBUG_PROFILE_REASON})`]);
+});
+
+test('a corrupt marker is a named note that protects its target, and a tree without a build policy protects a valid marker',t=>{
+  const cache=cacheFixture(t),tree=join(cache,'nts-gate/tree'),target=join(cache,'nts-gate/target');
+  writeFileSync(join(tree,'Cargo.toml'),MANIFEST);
+  const dev=profile(target,'nts-dev',tree);profile(target,'debug');
+  writeFileSync(join(dev,'.nts-complete.json'),'{broken');
+  const result=count(input(t,{cache}),TARGET_KEEP);
+  assert.ok(!result.red.some(line=>line.includes('obsolete-profile')),result.red.join('\n'));
+  assert.ok(result.notes.some(line=>line.startsWith('~/.cache/nts-gate/target: corrupt completion marker; its profiles are protected: ')),result.notes.join('\n'));
+  rmSync(join(target,'debug'),{recursive:true});completeBuild(tree,'nts-dev',dev);rmSync(join(tree,'Cargo.toml'));
+  const rows=targetInventory(cache,TARGET_KEEP).find(row=>row.target===target);
+  assert.ok(rows&&'profiles' in rows,JSON.stringify(rows));
+  assert.deepEqual(rows.profiles.map(row=>[row.profile,row.state,row.reason]),[['nts-dev','unknown',"its tree's build generation is unknown"]]);
+});
+
+test('keep.json declares targets only on a top-level rule, inside its folder, and never on a pool',t=>{
+  const root=rootFixture(t),bad=join(root,'bad.json');
+  for(const [rules,message] of [
+    [{'nts-x':{kind:'kept',why:'w',targets:{'../target':'tree'}}},/both must be relative paths inside its folder/],
+    [{'nts-x':{kind:'kept',why:'w',targets:{target:'/tree'}}},/both must be relative paths inside its folder/],
+    [{'nts-x':{kind:'kept',why:'w',targets:['target']}},/not a map of target to tree/],
+    [{'nts-x':{kind:'pool',why:'w',targets:{target:'tree'}}},/whose kind declares each slot's target/],
+    [{'nts-x':{kind:'folders',why:'w',folders:{y:{kind:'kept',why:'z',targets:{target:'tree'}}}}},/nts-x\/y declares targets; only a top-level rule does/],
+  ] as const){writeFileSync(bad,JSON.stringify(rules));assert.throws(()=>readKeep(bad),message);}
+});
+
+test("keep.json declares every cargo target the services' layouts, pin.ts and pinned.sh build into, with the tree that builds it",()=>{
+  const cache='/fixture/.cache',declared=new Map(declaredTargets(cache,readKeep()).map(row=>[row.target,row.tree]));
+  const landing=landingLayout(join(cache,'nts-landing')),full=fullCheckLayout(cache);
+  const expected:[string,string][]=[[landing.target,landing.tree],[join(landing.tree,'target'),landing.tree],
+    [full.target,full.tree],[join(full.tree,'target'),full.tree],[join(full.bench,'target'),full.bench],
+    ...Object.values(full.records).map(tree=>[join(tree,'target'),tree] as [string,string]),
+    [join(cache,'nts-pins/target'),join(cache,'nts-pins/tree')],[join(cache,'nts-gate/target'),join(cache,'nts-gate/tree')]];
+  for(const [target,tree] of expected)assert.equal(declared.get(target),tree,target);
+  // The writers still spell the pin and hand-gate paths this way.
+  const repo=fileURLToPath(new URL('../..',import.meta.url)),pin=readFileSync(join(repo,'tooling/conformance/pin.ts'),'utf8'),pinned=readFileSync(join(repo,'tooling/gate/pinned.sh'),'utf8');
+  for(const spelling of ['join(homedir(), ".cache/nts-pins")','const TREE = join(PINS, "tree");','const TARGET = join(PINS, "target");'])assert.ok(pin.includes(spelling),spelling);
+  for(const spelling of ['tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}','target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}'])assert.ok(pinned.includes(spelling),spelling);
 });

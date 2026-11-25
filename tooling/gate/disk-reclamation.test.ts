@@ -8,10 +8,10 @@ import {once} from 'node:events';
 import {scratchRepo} from '../landing/scratch-repo.ts';
 import {hostObservations} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
-import {completeBuild} from './build-completion.ts';
+import {buildGeneration,completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
 import {DiskBuildAdmissionError} from '../differential/command-entry/instrument.ts';
-import {reclaimDisk,diskTrash,DISK_TRASH,assertNoUnitUsers,assertUnitTreeUnused,parseUnitTreeOwnership,type UnitTreeOwnership,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
+import {reclaimDisk,profileMarker,ProfileMarkerError,targetProfiles,diskTrash,DISK_TRASH,assertNoUnitUsers,assertUnitTreeUnused,parseUnitTreeOwnership,type UnitTreeOwnership,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
 import {GateResource} from './gate-resource.ts';
 import {acquire,processIdentity,withLock} from '../landing/lock.ts';
 import {assertNoProcessUsers,observeTreeProcesses,processCgroup} from '../landing/tree-users.ts';
@@ -727,4 +727,27 @@ test('a listed staging envelope gains its manifest and payload before locking wi
     assert.ok(existsSync(payload));assert.deepEqual(readFileSync(file),manifest);
   }finally{owner.close();}
   assert.equal(reclaimDisk(f.options).removed.length,1,'recovery drains the payload after its owner releases');
+});
+
+test("reclamation offers exactly the shared classifier's obsolete profiles, which the count reads too",t=>{
+  const f=fixture(t),tree=join(f.s.dir,'service');mkdirSync(tree);
+  writeFileSync(join(tree,'Cargo.toml'),'[workspace]\n[profile.nts-dev]\ndebug=0\n');
+  const target=join(tree,'target');
+  f.output(tree);f.output(tree,'debug',4*GiB);const old=f.output(tree,'clippy',4*GiB);f.output(tree,'release',4*GiB);
+  writeFileSync(join(old,'.nts-complete.json'),JSON.stringify({version:1,generation:'0'.repeat(64)}));
+  const expected=[...targetProfiles(target,name=>buildGeneration(tree,name))].filter(row=>row.state==='obsolete').map(row=>row.root);
+  assert.deepEqual(expected,[join(target,'debug'),old]);
+  const report=reclaimDisk({...f.options,services:[{tree,target,service:true}]});
+  assert.deepEqual(report.removed.map(row=>row.root).sort(),[...expected].sort(),JSON.stringify(report.kept));
+  assert.ok(report.removed.every(row=>row.kind==='obsolete-profile'));
+});
+
+test('the classifier names a corrupt or future marker with its reader\'s own message, and never reads it as unknown',t=>{
+  const f=fixture(t),tree=f.tree('1'),current=f.output(tree);
+  const file=join(current,'.nts-complete.json');
+  for(const [body,message] of [['{broken',/JSON/],[JSON.stringify({version:2,generation:'future'}),/unsupported future state version 2/],[JSON.stringify({version:1,generation:42}),/^invalid profile generation /]] as const){
+    writeFileSync(file,body);
+    assert.throws(()=>profileMarker(current,null),(error:unknown)=>error instanceof ProfileMarkerError&&error.file===file&&message.test(error.message));
+    assert.throws(()=>[...targetProfiles(join(tree,'target'),()=>null)],ProfileMarkerError);
+  }
 });

@@ -190,6 +190,55 @@ export function targetLeftovers(tree:string):{root:string;writer:string}[]{
       /^\d+-/.test(name)?'historical issue #'+name.split('-')[0]+' probe/log; writer unknown':'unknown',
   }));
 }
+/** A completion marker that exists but cannot be judged: unparseable, of a
+ * future version, or naming no valid generation. Its message is the reader's
+ * own, so reclamation's retention reason is unchanged. Readers keep the profile. */
+export class ProfileMarkerError extends Error{
+  readonly file:string;
+  constructor(file:string,message:string,cause?:unknown){super(message,cause===undefined?undefined:{cause});this.name='ProfileMarkerError';this.file=file;}
+}
+/** A Cargo profile's completion marker judged against `current`, the
+ * generation its tree builds now; null when that generation is unknown. A
+ * missing marker or an unknown generation is 'unknown', which protects it. */
+export function profileMarker(output:string,current:string|null):'current'|'obsolete'|'unknown'{
+  const file=join(output,'.nts-complete.json');
+  if(!existsSync(file))return 'unknown';
+  const text=readFileSync(file,'utf8');
+  let record:{version:number;generation:unknown};
+  try{record=JSON.parse(text) as typeof record;}catch(error){throw new ProfileMarkerError(file,errorText(error),error);}
+  try{assertStateVersion(record,1,file);}catch(error){throw new ProfileMarkerError(file,errorText(error),error);}
+  if(record.version!==1||typeof record.generation!=='string'||!/^[a-f0-9]{64}$/.test(record.generation))throw new ProfileMarkerError(file,'invalid profile generation '+file);
+  if(current===null)return 'unknown';
+  return record.generation===current?'current':'obsolete';
+}
+export type TargetProfile={root:string;profile:'debug'|BuildOutputName;state:'obsolete'|'current'|'unknown';reason:string};
+/** Top-level `debug` is Cargo's default dev profile. No gate, test or Clippy
+ * route builds it; the test262 protocol's `cargo run` fallback, taken when
+ * NTS_TEST262_PROTOCOL is unset, still rebuilds that one binary there. */
+export const DEBUG_PROFILE_REASON="Cargo's default dev profile; no gate, test or Clippy route builds it; the test262 protocol's cargo-run fallback (NTS_TEST262_PROTOCOL unset) rebuilds it";
+/**
+ * The one obsolete-profile rule, shared by reclamation and the hourly count.
+ * Top-level `debug` (never clippy/debug) is always obsolete: nothing nts
+ * needs is built there (DEBUG_PROFILE_REASON). nts-dev and clippy are
+ * obsolete only when a valid completion marker names another generation
+ * than `generation` gives; a current marker, a missing one and an unknown
+ * generation protect them.
+ * `release` is never judged. Lazy, so a caller acting on each row observes
+ * the filesystem in the order it always did; a corrupt marker throws
+ * ProfileMarkerError and is never read as unknown.
+ */
+export function* targetProfiles(target:string,generation:(name:BuildOutputName)=>string|null):Generator<TargetProfile>{
+  const debug=join(target,'debug');
+  if(isDirectory(debug))yield {root:debug,profile:'debug',state:'obsolete',reason:DEBUG_PROFILE_REASON};
+  for(const name of ['nts-dev','clippy'] as const){
+    const root=join(target,name);
+    if(!isDirectory(root))continue;
+    const current=generation(name),state=profileMarker(root,current);
+    yield {root,profile:name,state,reason:state==='obsolete'?'completion marker names an older generation than its tree builds now'
+      :state==='current'?'completion marker names the generation its tree builds now'
+      :current===null?"its tree's build generation is unknown":'no completion marker'};
+  }
+}
 function cargoCache(target:string):boolean{
   const file=join(target,'CACHEDIR.TAG');
   try{return lstatSync(file).isFile()&&!lstatSync(file).isSymbolicLink()&&readFileSync(file,'utf8').startsWith('Signature: 8a477f597d28d172789f06886806bc55');}
@@ -366,14 +415,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     if(presence.state!=='detached')throw new TaskBranch('branch remains owned by an attached worker: '+branch);
     return presence.detachedAt!;
   };
-  const marker=(path:string,name:BuildOutputName):'current'|'obsolete'|'unknown'=>{
-    const file=join(path,'.nts-complete.json');
-    if(!existsSync(file))return 'unknown';
-    const record=JSON.parse(readFileSync(file,'utf8')) as {version:number;generation:unknown};
-    assertStateVersion(record,1,file);
-    if(record.version!==1||typeof record.generation!=='string'||!/^[a-f0-9]{64}$/.test(record.generation))throw Error('invalid profile generation '+file);
-    return record.generation===generations[name]?'current':'obsolete';
-  };
+  const marker=(path:string,name:BuildOutputName)=>profileMarker(path,generations[name]);
   const assertUnclaimed=(root:string):void=>{
     const owner=options.protectedRoots().flatMap(owner=>[owner.root,owner.target]).find(path=>under(resolve(path),root)||under(root,resolve(path)));
     if(owner)throw Error('live lease or build claim: '+owner);
@@ -418,9 +460,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
         if(!target.service&&!existsSync(target.target))add(target,target.tree,'unbuilt-checkout',movedAt);
         continue;
       }
-      // debug is the retired top-level test profile, never clippy/debug.
-      if(isDirectory(join(target.target,'debug')))add(target,join(target.target,'debug'),'obsolete-profile',movedAt);
-      for(const name of ['nts-dev','clippy'] as const)if(isDirectory(join(target.target,name))&&marker(join(target.target,name),name)==='obsolete')add(target,join(target.target,name),'obsolete-profile',movedAt);
+      for(const row of targetProfiles(target.target,name=>generations[name]))if(row.state==='obsolete')add(target,row.root,'obsolete-profile',movedAt);
       if(!target.service)offerBuildOutput(target,'free-build-output',movedAt);
     }catch(error){candidates.length=start;if(!missing(error))keep(target.tree,error);}
   }

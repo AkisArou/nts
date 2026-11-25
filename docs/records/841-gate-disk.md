@@ -711,3 +711,40 @@ SHA-256 `e6141abaf2a6e8563ed256a73c2c83de70cef2e9900806e333d356a288f0270d`.
 The branch then rebased without conflicts onto the accepted-main record refresh
 `f12c78199d6d` and republished its installation catalog before the final local
 check. No observations were deleted or rewritten by this correction.
+
+## Target inventory slice (c)
+
+`keep.json` now declares the cargo targets inside its rules' folders, each
+with the tree whose builds write it: the landing check's `target` and
+`tree/target`, the full check's `target`, `tree/target`, `bench/target` and
+both records trees' targets, `nts-pins/target` and `nts-gate/target`. The pool
+kind declares every slot's `target/`. `targetProfiles` in
+`tooling/gate/disk-reclamation.ts` is the one obsolete-profile rule:
+reclamation's candidate collection now calls it, and the hourly count judges
+every declared target with it, each against its own tree's build generation.
+Nothing is deleted by this slice.
+
+The live inventory found that top-level `debug` still has a writer. The
+copies in six attached task trees and in both service trees' `tree/target`
+(113–140 MB each, the newest written on the day of the slice) hold only the
+default-profile build of `nts-test262-protocol`. They are built by the
+`cargo run` fallback the census tools and `all.sh` take when
+`NTS_TEST262_PROTOCOL` is unset; the gate sets it. #1027 moves that command
+into `nts-dev`; until then the rule's reason names the fallback. By the
+coordinator's decision, an obsolete profile in a target whose tree is on a
+task's branch is a notice, since only its worker can act on it and
+reclamation never offers it; free pool slots, services and pins stay red.
+
+| Live result | Count |
+| --- | ---: |
+| Declared targets | 22 |
+| Absent (unbuilt pool slots), skipped | 3 |
+| Red obsolete profiles (both service `tree/target/debug`) | 2 |
+| Notices (attached task trees' `target/debug`) | 6 |
+| Protected current markers | 18 |
+| Protected without a marker (`records/core` nts-dev, `nts-gate` clippy) | 2 |
+
+| Path under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `c-live-inventory.log` (every declared target and each profile's state and reason) | `5093e862c50b4495d2eb33d71c18c6aa19f4152efa95248e1b0b9af5fd9f3c54` |
+| `c-live-count.log` (the count's full read-only output on the change) | `93b2a1651ec31c60f173a9546bada27529a9ce1d836fce916ac64a8dd3f5f244` |

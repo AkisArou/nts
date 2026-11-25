@@ -1,4 +1,5 @@
-import {DISK_TRASH,targetLeftovers} from '../gate/disk-reclamation.ts';
+import {DISK_TRASH,ProfileMarkerError,targetLeftovers,targetProfiles,type TargetProfile} from '../gate/disk-reclamation.ts';
+import {buildGeneration} from '../gate/build-completion.ts';
 import {binaryPinDiagnostics,type PinOwnerObservation} from '../gate/binary-pins.ts';
 import {listedCgroupPopulated} from '../gate/host-observations.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
@@ -225,18 +226,32 @@ function folders(dir: string, stat: FolderStat = lstatSync): Entry[] {
  *   folders  each folder in it kept by a rule of its own.
  * `writer` is the file that writes the folder; a writer that no longer names
  * it makes its entry red, so the list cannot outlive the tools it describes.
+ * `targets`, on a top-level rule only, declares the cargo targets inside its
+ * folder: each target's path mapped to the tree whose builds write it, both
+ * relative to the folder. A pool declares each slot's `<n>/target` by its
+ * kind. The count judges every declared target's profiles (targetInventory).
  */
-export type Keep =
+export type Keep = (
   | { kind: "kept" | "pool" | "pins"; why: string; writer?: string }
   | { kind: "runs" | "logs"; who: string; why: string; writer?: string }
   | { kind: "scratch"; writer: string; days?: number }
-  | { kind: "folders" | "issue-scratch"; why: string; folders: Record<string, Keep> };
+  | { kind: "folders" | "issue-scratch"; why: string; folders: Record<string, Keep> }
+) & { targets?: Record<string, string> };
 
 export const KEEP_FILE = fileURLToPath(new URL("keep.json", import.meta.url));
 
 export function readKeep(file = KEEP_FILE): Record<string, Keep> {
   const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, Keep>;
-  const check = (name: string, keep: Keep) => {
+  const inside = (path: string) => path !== "" && !isAbsolute(path) && path.split("/").every(part => part !== "" && part !== "." && part !== "..");
+  const check = (name: string, keep: Keep, top = false) => {
+    if (keep.targets !== undefined) {
+      if (!top) throw new Error(`${file}: ${name} declares targets; only a top-level rule does`);
+      if (keep.kind === "pool") throw new Error(`${file}: ${name} is a pool, whose kind declares each slot's target`);
+      if (typeof keep.targets !== "object" || keep.targets === null || Array.isArray(keep.targets)) throw new Error(`${file}: ${name}'s targets are not a map of target to tree`);
+      for (const [target, tree] of Object.entries(keep.targets)) {
+        if (!inside(target) || typeof tree !== "string" || !inside(tree)) throw new Error(`${file}: ${name} declares target ${target} of tree ${String(tree)}; both must be relative paths inside its folder`);
+      }
+    }
     if (!["kept", "pool", "pins", "runs", "logs", "scratch", "folders", "issue-scratch"].includes(keep.kind)) throw new Error(`${file}: ${name} has an unknown kind ${String(keep.kind)}`);
     if (keep.kind === "scratch" && !keep.writer) throw new Error(`${file}: the scratch root ${name} names no writer`);
     if (keep.kind !== "scratch" && !keep.why) throw new Error(`${file}: ${name} does not say why it is kept`);
@@ -245,7 +260,7 @@ export function readKeep(file = KEEP_FILE): Record<string, Keep> {
       check(`${name}/${child}`, inner);
     }
   };
-  for (const [name, keep] of Object.entries(value)) check(name, keep);
+  for (const [name, keep] of Object.entries(value)) check(name, keep, true);
   return value;
 }
 
@@ -408,6 +423,66 @@ function issueScratch(entry:Entry,issue:number,context:Context,red:string[],note
   red.push(`${display(entry.path,context)}: issue #${issue} is not open and no committed record cites it; ${days(context.now-entry.mtimeMs)} days old; deletion awaits the user's decision`);
 }
 
+/** A declared cargo target and the tree whose builds write it. */
+export type DeclaredTarget = { target: string; tree: string };
+/** Every cargo target keep.json declares under `cache`, pool slots' included, whether or not it exists. */
+export function declaredTargets(cache: string, keep: Record<string, Keep>, stat?: FolderStat): DeclaredTarget[] {
+  return Object.entries(keep).flatMap(([name, rule]) => rule.kind === "pool"
+    ? folders(join(cache, name), stat).filter(slot => /^\d+$/.test(slot.name)).map(slot => ({ target: join(slot.path, "target"), tree: slot.path }))
+    : Object.entries(rule.targets ?? {}).map(([target, tree]) => ({ target: join(cache, name, target), tree: join(cache, name, tree) })));
+}
+/** One declared target as the count judges it: its profiles, or why they could not be judged. */
+export type TargetInventory = DeclaredTarget & ({ profiles: TargetProfile[]; release: boolean } | { error: string; corrupt: boolean });
+/**
+ * The profiles of every declared target that exists, by the obsolete-profile
+ * rule reclamation applies (disk-reclamation.ts's targetProfiles). Each is
+ * judged against the generation its own tree builds now, from that tree's
+ * Cargo.toml and rust-toolchain.toml: a task on an older branch, or a pinned
+ * tree at an old commit, builds what its checkout says. A tree without a
+ * Cargo.toml has an unknown generation, which protects its profiles. A
+ * corrupt marker is named, never read as unknown.
+ */
+export function targetInventory(cache: string, keep: Record<string, Keep>, stat?: FolderStat): TargetInventory[] {
+  return declaredTargets(cache, keep, stat).flatMap((declared): TargetInventory[] => {
+    try {
+      if (!lstatSync(declared.target).isDirectory()) return [{ ...declared, error: "not a folder", corrupt: false }];
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      return [{ ...declared, error: error instanceof Error ? error.message : String(error), corrupt: false }];
+    }
+    try {
+      const manifest = existsSync(join(declared.tree, "Cargo.toml"));
+      const profiles = [...targetProfiles(declared.target, name => manifest ? buildGeneration(declared.tree, name) : null)];
+      return [{ ...declared, profiles, release: existsSync(join(declared.target, "release")) }];
+    } catch (error) {
+      return [{ ...declared, error: error instanceof Error ? error.message : String(error), corrupt: error instanceof ProfileMarkerError }];
+    }
+  });
+}
+
+/**
+ * The count's lines for declared targets: an obsolete profile is red, by
+ * kind; an unjudged target is a note. A target whose tree is on a task's
+ * branch is that task's: only its worker can act on it, and reclamation never
+ * offers its profiles as obsolete, so its obsolete profile is a notice.
+ */
+function targetLines(input: CountInput, keep: Record<string, Keep>, context: Context, red: string[], notes: string[], notices: string[]): void {
+  const branches = new Map(input.worktrees.flatMap(tree => tree.branch ? [[real(tree.path), tree.branch.replace(/^refs\/heads\//, "")] as const] : []));
+  for (const row of targetInventory(input.cache, keep, input.folderStat)) {
+    if ("error" in row) {
+      notes.push(`${display(row.target, context)}: ${row.corrupt ? "corrupt completion marker; its profiles are protected" : "target profile inventory unavailable"}: ${row.error}`);
+      continue;
+    }
+    const task = branches.get(real(row.tree));
+    for (const profile of row.profiles) {
+      if (profile.state !== "obsolete") continue;
+      const line = `${display(profile.root, context)}: obsolete-profile (${profile.reason})`;
+      if (task === undefined) red.push(line);
+      else notices.push(`${line}; held by task branch ${task}, whose worker alone acts on it`);
+    }
+  }
+}
+
 function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[],notes:string[],notices:string[]): void {
   const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan, folderStat: input.folderStat,
     issues:input.issues,recordCitations:input.recordCitations };
@@ -418,6 +493,7 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
     if (!rule) red.push(`${display(entry.path, context)}: an nts folder no rule keeps`);
     else red.push(...judgeFolder(entry, rule, context, removable,notes,notices));
   }
+  targetLines(input, keep, context, red, notes, notices);
   red.push(...nodeTestRoots(input, context));
   // Legacy writers have no leases. No age or absence of a new holder proves
   // that an old runner has ended, so upkeep reports these without sweeping.

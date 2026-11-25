@@ -1515,6 +1515,17 @@ the tooling strict checker owns the source's type checking.
   citation state keeps the folder and names the observation failure. Closed,
   uncited folders are reported after the scratch grace period; they are never
   placed in the automatic removal list. Non-issue exceptions remain explicit.
+  `keep.json` also declares each cargo target inside a rule's folder, with
+  the tree whose builds write it; a pool declares every slot's `target/`. The
+  count is red for each obsolete profile in a declared target, by the one
+  rule reclamation applies (`targetProfiles` in
+  `tooling/gate/disk-reclamation.ts`): top-level `debug`, and an `nts-dev` or
+  `clippy` whose completion marker names another generation than its own
+  tree's `Cargo.toml` and `rust-toolchain.toml` give. Current and unmarked
+  profiles, `release` and an unknown tree generation are protected; a
+  corrupt marker is a note. A target whose tree is on a task's branch is that
+  task's: its obsolete profile is a notice, since only its worker can act on
+  it and reclamation never offers it. The count deletes none of them.
   Rules alone let 1,364 branches, 185
   worktrees and 120 GB of evidence folders pile up by 11-06; a red step does
   not.

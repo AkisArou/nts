@@ -1,8 +1,11 @@
 {
   "nts-pool": { "kind": "pool", "why": "the worktree pool" },
-  "nts-landing": { "kind": "runs", "who": "the landing check", "why": "the landing check's tree, target and runs" },
-  "nts-full-check": { "kind": "runs", "who": "the full check", "writer": "tooling/full-check/layout.ts", "why": "the full check's trees, target, state and runs" },
-  "nts-pins": { "kind": "pins", "writer": "tooling/conformance/pin.ts", "why": "pin.ts's tree, target and lock, and the pins main uses" },
+  "nts-landing": { "kind": "runs", "who": "the landing check", "why": "the landing check's tree, target and runs",
+    "targets": { "target": "tree", "tree/target": "tree" } },
+  "nts-full-check": { "kind": "runs", "who": "the full check", "writer": "tooling/full-check/layout.ts", "why": "the full check's trees, target, state and runs",
+    "targets": { "target": "tree", "tree/target": "tree", "bench/target": "bench", "records/core/target": "records/core", "records/wide/target": "records/wide" } },
+  "nts-pins": { "kind": "pins", "writer": "tooling/conformance/pin.ts", "why": "pin.ts's tree, target and lock, and the pins main uses",
+    "targets": { "target": "tree" } },
   "nts-chromium-checkpoint1": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
   "nts-chromium-checkpoint2": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
   "nts-chromium": { "kind": "kept", "why": "the Chromium task's own caches, kept while the user has it paused" },
@@ -58,7 +61,8 @@
     "worker-memory": { "kind": "scratch", "writer": "tooling/census/worker-memory.ts" }
   } },
   "nts-agree": { "kind": "kept", "writer": "tooling/differential/agree.mjs", "why": "the differential's binaries and objects, by content" },
-  "nts-gate": { "kind": "folders", "why": "the gate's own caches, pinned.sh's tree and target, and the logs of gates run by hand", "folders": {
+  "nts-gate": { "kind": "folders", "why": "the gate's own caches, pinned.sh's tree and target, and the logs of gates run by hand",
+    "targets": { "target": "tree" }, "folders": {
     "bin": { "kind": "kept", "why": "legacy count-only gate pins; reported without automatic deletion because historical runners have no leases" },
     "bin-v2": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the leased binaries a run executes, by content, isolated from legacy pruners" },
     "runs": { "kind": "logs", "who": "gates run by hand (all.sh, pinned.sh)", "writer": "tooling/gate/run.mjs", "why": "their logs" },
