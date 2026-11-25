@@ -1226,3 +1226,15 @@ admission waits remain in its raw logs.
 | `review3/focused-v1.log` | `f38bfc180c2cdb5df438fbe375b02de5b8cafaadd85424d0bca7c05c2f9d4bc4` |
 | `review3/types-v1.log` | `0182de6e16d8db38c9ff5639f227ee61f3fcb310f90db6a23f37d3f485a883f3` |
 | `review3/audit-v1.log` | `e13ff94e2590bbf4d6454b449a809770860421606c2961bc71d69869b7956dec` |
+
+
+Completed-window correction inner proof passed in `nts-841-review3-inner-v1`
+on `7a91412a7fb2db936b6e7ca690c884dcef3402f1` with the required Node/environment/unit properties:
+formatting 3 s, Clippy 3 s, compiler build 3 s,
+selected crates and backend Rust tests 502 s. There were
+2127 passes, zero failures and 1 existing ignored
+case(s) across 32 reported suites. The run's `tmp/` was absent
+after completion; source stayed unchanged during proof.
+Raw log `~/.cache/nts-scratch/841/review3/inner-v1.log`, SHA-256
+`d67864c34278442f7357be8edeaf6d0602d7f303126547e8d8da898889cb389a`; compact proof `review3/inner-v1-proof.json`, SHA-256
+`964a0ae23814f06e2a0906426094a91bfca467deed2c80d5d05995cc9e154a7b`.
