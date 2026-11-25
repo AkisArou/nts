@@ -17,7 +17,7 @@ function fixture(t:TestContext){
     const run=join(runs,name);mkdirSync(join(run,'costs'),{recursive:true});
     writeFileSync(join(run,'costs','events.jsonl'),'raw events\n');writeFileSync(join(run,'step.log'),'kept log\n');
     writeFileSync(join(run,'summary.json'),JSON.stringify({schema:1,started:'2026-11-25T00:00:00Z',wall_s:Number(name),
-      verdict,environment:{canonical:true},interrupted:false,scope_cleanup:{state:'complete'},case_costs:{version:1,status:'complete',error_count:0,errors:[],steps:{example:{checks:3}}}}));
+      verdict,environment:{canonical:true},interrupted:null,scope_cleanup:{state:'complete'},case_costs:{version:1,status:'complete',error_count:0,errors:[],steps:{example:{checks:3}}}}));
     writeFileSync(join(run,'run-lifecycle.json'),JSON.stringify({version:1,events:2,running:[]}));
     return run;
   };
@@ -56,7 +56,7 @@ test('retains '+control,t=>{
     if(control==='missing case_costs')delete row.case_costs;
     if(control==='errored case_costs'){row.case_costs.status='partial';row.case_costs.error_count=1;row.case_costs.errors=['partial JSON'];}
     if(control==='future case_costs')row.case_costs.version=99;
-    if(control==='interrupted')row.interrupted=true;
+    if(control==='interrupted')row.interrupted='signal SIGTERM';
     if(control==='unfinished cleanup')row.scope_cleanup.state='error';
     writeFileSync(summary,JSON.stringify(row));
   }

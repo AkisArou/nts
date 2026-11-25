@@ -50,7 +50,7 @@ function terminal(run:string){
   catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
   const started=typeof summary.started==='string'?Date.parse(summary.started):NaN;
   if(!Number.isFinite(started)||typeof summary.wall_s!=='number'||!Number.isFinite(summary.wall_s)||summary.wall_s<0||
-    (summary.scope_cleanup as {state?:unknown}|undefined)?.state!=='complete'||summary.interrupted!==false)
+    (summary.scope_cleanup as {state?:unknown}|undefined)?.state!=='complete'||summary.interrupted!==null)
     throw Error('missing or unfinished terminal summary');
   const verdict=summary.verdict;
   if(verdict!=='green'&&verdict!=='red')throw Error('unknown terminal verdict');
