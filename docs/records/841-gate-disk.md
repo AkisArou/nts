@@ -1054,3 +1054,27 @@ No raw payload was copied or removed during this review measurement.
 | `review/inventory-before.mjs` | `4fb583fa3a428277de71bb648d84069a4708a50fec7a1aba1bd76aab8002f421` |
 | `review/inventory-before.log` | `7eb58275181b613d4a94abc8c7ed3bd123a514e5d8f1c2962f36f69b147d1c1e` |
 | `review/inventory-before.time` | `b96d6df1332cfb68b91ab9a40bedc76d5ec49c82cd4fe259c11fe8bf66951279` |
+
+
+The revised read-only inventory at
+`9eb28cab72bd90e8034ea1d2644419f5a0eb210d` used the same outside-root candidate
+restriction, returning 379 kept rows and zero removals from the three declared
+roots. Its peak RSS was **168,060 KiB** (91.6% lower); CPU was **91.91 s user +
+2.45 s system**, versus 35.90 s combined before. Wall time was **228.58 s**
+with 41% CPU availability, versus 36.87 s before. Full streaming validation is
+therefore a CPU tradeoff, not a wall-time improvement. These live-cache passes
+had different declared root populations and shared-machine load; they are
+inventory measurements rather than an isolated throughput benchmark. The
+fixed-size chunk reader removes allocation proportional to case population,
+including the whole-string ceiling, and the hourly owner now reserves memory.
+After normal collection, summaries without payloads are skipped entirely.
+The revised rows include 75 routine non-run/no-summary/no-payload entries,
+16 unfinished terminal summaries and six held measurements. The collector
+continues to report the latter guards; the routine entries no longer log.
+No additional real-run payload was deleted or copied.
+
+| Path under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `review/inventory-after.mjs` | `acc49b250584f25da6a3d8189677645d3dd09bf20510f4087609c5211693d1c8` |
+| `review/inventory-after.log` | `4420c5fbc21d2e3cc6f5f58e64279ae45f72c8985007aa211dbc35f93e19557e` |
+| `review/inventory-after.time` | `3dea501ce6c39b66cc00d48da469bae5a602f87860c0666046c54151c9008e7c` |
