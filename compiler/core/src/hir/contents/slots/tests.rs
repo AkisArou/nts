@@ -950,3 +950,146 @@ fn every_read_that_can_be_a_holders_last_is_charged() {
         );
     }
 }
+
+fn index(at: usize) -> u32 {
+    u32::try_from(at).expect("a test-sized function")
+}
+
+fn id(at: usize) -> ValueId {
+    ValueId(index(at))
+}
+
+/// `function f(h: Holder, ...hs: Holder[], t: string)`: `t` concatenated with
+/// itself `chain` times, then `h.s` read once at the end; `holders` more
+/// holders, each one's `s` folded into the chain at its own step when
+/// `holders` is not zero. Every holder's layout leads to a handle.
+fn holder_chain(chain: usize, holders: usize) -> (Func, Vec<hir::Layout>, ForeignReleases) {
+    let mut func = fixture();
+    let holder = HirType::Managed(hir::ManagedType::Object(TypeId(7)));
+    let string = HirType::Managed(hir::ManagedType::String);
+    let field = |name: &str, ty: HirType| hir::Field {
+        name: name.to_owned().into(),
+        ty,
+        readonly: false,
+        declared_by: None,
+        written: None,
+    };
+    let layouts = vec![hir::Layout {
+        types: vec![TypeId(7)],
+        name: "Holder".to_owned(),
+        interfaces: Vec::new(),
+        fields: vec![field("h", foreign_type()), field("s", string.clone())],
+        methods: Vec::new(),
+        base: None,
+    }];
+    let releases = hir::Program {
+        layouts: layouts.clone(),
+        ..hir::Program::default()
+    }
+    .foreign_releases();
+    let origin = func.origin.clone();
+    let mut values: Vec<Op> = Vec::new();
+    let mut push = |kind, ty| {
+        values.push(Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        });
+        id(values.len() - 1)
+    };
+    let first = push(OpKind::Param(0), holder.clone());
+    let more: Vec<ValueId> = (1..=holders)
+        .map(|at| push(OpKind::Param(index(at)), holder.clone()))
+        .collect();
+    let mut s = push(OpKind::Param(index(holders + 1)), string.clone());
+    for step in 0..chain {
+        let rhs = match more.get(step) {
+            Some(&other) => push(
+                OpKind::FieldGet {
+                    object: other,
+                    field: 1,
+                },
+                string.clone(),
+            ),
+            None => s,
+        };
+        s = push(
+            OpKind::Binary {
+                op: hir::BinOp::Concat,
+                lhs: s,
+                rhs,
+            },
+            string.clone(),
+        );
+    }
+    push(
+        OpKind::FieldGet {
+            object: first,
+            field: 1,
+        },
+        string,
+    );
+    func.blocks = vec![Block {
+        params: Vec::new(),
+        ops: (0..values.len()).map(id).collect(),
+        terminator: Terminator::Return(None),
+    }];
+    func.values = values;
+    (func, layouts, releases)
+}
+
+/// Ownership unsettled, every string leans on what it was made from, so each
+/// link of a long chain leans on the whole chain before it. Asked afresh at
+/// every operation that was quadratic beside a single handle holder, though
+/// no link reaches the holder (#916's review: 16,000 links took 11 s and
+/// 1.2 GB). Answered once per function and shared, the chain spends nothing
+/// beyond the holder's own answer, and the only operation charged is the one
+/// that reads the holder.
+#[test]
+fn a_long_derivation_beside_a_handle_holder_costs_no_reads() {
+    let (func, layouts, releases) = holder_chain(20_000, 0);
+    let frame_names =
+        crate::hir::rc::last_use::frame_names(&func, &|_| None).expect("within liveness's budget");
+    let mut marked = vec![false; func.values.len()];
+    marked[0] = true;
+    let mut budget = usize::MAX;
+    assert!(
+        crate::hir::rc::last_use::Reaching::of(&func, &frame_names, &marked, &mut budget).is_some()
+    );
+    assert_eq!(usize::MAX - budget, 1, "the holder's own answer, once");
+    let inputs = Inputs::of(&func, &layouts, &[], &releases);
+    let last = id(func.values.len() - 1);
+    assert!(inputs.after(last), "the read of the holder");
+    assert!(
+        (1..func.values.len() - 1)
+            .map(id)
+            .all(|link| !inputs.after(link) && !inputs.before(link)),
+        "no link of the chain reads the holder"
+    );
+}
+
+/// The bound's control: each link folds in another holder, so link `i`
+/// reaches `i` holders and any exact answer is quadratic. A few fit the
+/// budget and are told apart; thousands exhaust it, and then every operation
+/// is charged rather than the work growing with the product.
+#[test]
+fn many_handle_holders_meeting_many_readers_charge_every_operation() {
+    for (holders, exact) in [(20, true), (3_000, false)] {
+        let (func, layouts, releases) = holder_chain(holders, holders);
+        let inputs = Inputs::of(&func, &layouts, &[], &releases);
+        let before_first_read = id(holders + 1);
+        assert_eq!(
+            !inputs.after(before_first_read),
+            exact,
+            "{holders} holders: the string parameter is charged only past the budget"
+        );
+        if !exact {
+            assert!(
+                func.blocks[0]
+                    .ops
+                    .iter()
+                    .all(|&op| inputs.before(op) && inputs.after(op))
+            );
+        }
+    }
+}

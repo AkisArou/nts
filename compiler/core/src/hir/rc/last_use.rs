@@ -5,11 +5,13 @@
 //! One walk answers both questions. `rc` asks it with ownership settled
 //! ([`Holding::Settled`]), and places each release after the answer. The
 //! slot model runs before ownership exists, so it asks with every choice
-//! ownership could make still open ([`Holding::Unsettled`]); what it is told
-//! is then never earlier than where `rc` will put the release. Each
-//! extension of what a use is -- a borrowed load, a view, a block parameter,
-//! a frame name, a container -- reaches both, so the placement and the
-//! charge cannot drift apart.
+//! ownership could make still open ([`Holding::Unsettled`]), through
+//! [`Reaching`], which answers every operation of a function at once in
+//! linear work; what it is told is then never earlier than where `rc` will
+//! put the release. Both follow one step of the walk ([`Leaning`]'s
+//! `leans_on`), so each extension of what a use is -- a borrowed load, a
+//! view, a block parameter, a frame name, a container -- reaches both, and
+//! the placement and the charge cannot drift apart.
 //!
 //! "Reads it" is wider than an operand. A borrowed load out of the value, an
 //! erased or converted view of it, a raw pointer into its storage: each holds
@@ -239,20 +241,8 @@ impl<'a, 'f> Leaning<'a, 'f> {
     fn walk(&self, mut stack: Vec<ValueId>) -> std::rc::Rc<[ValueId]> {
         let mut seen = rustc_hash::FxHashSet::default();
         while let Some(next) = stack.pop() {
-            if !seen.insert(next) {
-                continue;
-            }
-            if let Some(containers) = self.moved_into.get(&next) {
-                stack.extend(containers.iter().copied());
-            }
-            // And what a frame container holds: reading the container is a use
-            // of everything in it, because the fields are given up when *it*
-            // dies. See `holds`.
-            if let Some(contents) = self.holds.get(&next) {
-                stack.extend(contents.iter().copied());
-            }
-            if self.holds_nothing(next) {
-                stack.extend(self.sources(next));
+            if seen.insert(next) {
+                self.leans_on(next, &mut stack);
             }
         }
         let mut found: Vec<ValueId> = seen.into_iter().collect();
@@ -260,17 +250,27 @@ impl<'a, 'f> Leaning<'a, 'f> {
         found.into()
     }
 
+    /// What reading `value` goes on to read, one step: the containers it was
+    /// moved into, what a frame container holds -- reading the container is a
+    /// use of everything in it, because the fields are given up when *it*
+    /// dies (see `holds`) -- and, where it holds no count, what it was made
+    /// from.
+    fn leans_on(&self, value: ValueId, into: &mut Vec<ValueId>) {
+        if let Some(containers) = self.moved_into.get(&value) {
+            into.extend(containers.iter().copied());
+        }
+        if let Some(contents) = self.holds.get(&value) {
+            into.extend(contents.iter().copied());
+        }
+        if self.holds_nothing(value) {
+            into.extend(self.sources(value));
+        }
+    }
+
     /// What a value was made from: its operation's operands, or what every
     /// edge hands it where it is a block parameter.
     fn sources(&self, value: ValueId) -> Vec<ValueId> {
-        let op = &self.func.values[value.0 as usize];
-        if matches!(op.kind, OpKind::Param(_)) {
-            return Vec::new();
-        }
-        match self.arriving.get(&value) {
-            Some(arguments) => arguments.clone(),
-            None => crate::hir::operands_of(&op.kind),
-        }
+        sources(self.func, self.arriving, value)
     }
 
     /// Whether a value is only valid while something else is: it holds no
@@ -293,6 +293,152 @@ impl<'a, 'f> Leaning<'a, 'f> {
                 }
                 Holding::Unsettled => true,
             }
+    }
+}
+
+fn sources(func: &Func, arriving: &Values, value: ValueId) -> Vec<ValueId> {
+    let op = &func.values[value.0 as usize];
+    if matches!(op.kind, OpKind::Param(_)) {
+        return Vec::new();
+    }
+    match arriving.get(&value) {
+        Some(arguments) => arguments.clone(),
+        None => crate::hir::operands_of(&op.kind),
+    }
+}
+
+/// Which `marked` values each operation of a function can read, with
+/// ownership unsettled: [`reads_of`]'s answer under [`Holding::Unsettled`],
+/// cut to the values the asker cares about, for every operation at once.
+///
+/// Unsettled, every value that is not a scalar copy leans on everything it
+/// was made from, so what one leans on is its whole derivation history:
+/// walking it afresh at each operation, as `rc`'s settled walk does over the
+/// few values that hold no count, is quadratic in a chain (`s = s + "x"`, a
+/// few thousand times, beside one erased value). This walks the graph once,
+/// by strongly connected component, successors first, and keeps per value
+/// only the marked values it reaches; one that reaches none, or the same
+/// ones as the single value it leans on, shares that answer rather than
+/// copying it.
+///
+/// Its stores are the whole function's, not one block's: a superset of what
+/// any one block's walk follows, so what it answers is never narrower.
+///
+/// Merging what several values reach is paid from `budget`, one per value
+/// copied; `None` when that runs out, where many marked values meet many
+/// readers and no answer short of the product exists.
+pub(in crate::hir) struct Reaching {
+    arriving: Values,
+    reached: Vec<std::rc::Rc<[ValueId]>>,
+}
+
+impl Reaching {
+    pub(in crate::hir) fn of(
+        func: &Func,
+        frame_names: &Values,
+        marked: &[bool],
+        budget: &mut usize,
+    ) -> Option<Self> {
+        let arriving = arriving(func);
+        let ops: Vec<ValueId> = func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter().copied())
+            .collect();
+        let leaning = Leaning::new(func, Holding::Unsettled, &arriving, &ops);
+        let values = (0..u32::try_from(func.values.len()).ok()?).map(ValueId);
+        let mut edges: Vec<Vec<usize>> = Vec::with_capacity(func.values.len());
+        let mut next = Vec::new();
+        for value in values {
+            next.clear();
+            leaning.leans_on(value, &mut next);
+            edges.push(next.iter().map(|value| value.0 as usize).collect());
+        }
+        // Tarjan numbers a component only once everything it reaches is
+        // numbered, so in that order each one's successors come first.
+        let component = crate::hir::strongly_connected(&edges);
+        let components = component.iter().map(|&c| c + 1).max().unwrap_or(0);
+        let mut members: Vec<Vec<ValueId>> = vec![Vec::new(); components];
+        for (value, &c) in (0..).map(ValueId).zip(&component) {
+            members[c].push(value);
+        }
+        let empty: std::rc::Rc<[ValueId]> = std::rc::Rc::from([]);
+        let mut by_component: Vec<std::rc::Rc<[ValueId]>> = Vec::with_capacity(components);
+        let mut own: Vec<ValueId> = Vec::new();
+        let mut parts: Vec<std::rc::Rc<[ValueId]>> = Vec::new();
+        for (c, members) in members.iter().enumerate() {
+            own.clear();
+            parts.clear();
+            for &value in members {
+                let at = value.0 as usize;
+                if marked[at] {
+                    own.push(value);
+                }
+                // A name for a frame object reads the object (`reads_of`).
+                own.extend(
+                    frame_names
+                        .get(&value)
+                        .into_iter()
+                        .flatten()
+                        .filter(|root| marked[root.0 as usize]),
+                );
+                for &to in &edges[at] {
+                    // A member of this component reaches what it does.
+                    if component[to] == c {
+                        continue;
+                    }
+                    let part = &by_component[component[to]];
+                    if !part.is_empty()
+                        && !parts.iter().any(|known| std::rc::Rc::ptr_eq(known, part))
+                    {
+                        parts.push(part.clone());
+                    }
+                }
+            }
+            let reached = match (own.is_empty(), parts.as_slice()) {
+                (true, []) => empty.clone(),
+                (true, [only]) => only.clone(),
+                _ => {
+                    let mut merged = std::mem::take(&mut own);
+                    for part in &parts {
+                        merged.extend(part.iter().copied());
+                    }
+                    *budget = budget.checked_sub(merged.len())?;
+                    merged.sort_unstable();
+                    merged.dedup();
+                    let reached = merged.as_slice().into();
+                    own = merged;
+                    reached
+                }
+            };
+            by_component.push(reached);
+        }
+        let reached = component.iter().map(|&c| by_component[c].clone()).collect();
+        Some(Self { arriving, reached })
+    }
+
+    /// The marked values `op` reads, as [`reads_of`] reads them: the op
+    /// itself, what each operand leans on, and a retain's definition.
+    pub(in crate::hir) fn reads_of(
+        &self,
+        func: &Func,
+        marked: &[bool],
+        op: ValueId,
+    ) -> Vec<ValueId> {
+        let mut read = Vec::new();
+        if marked[op.0 as usize] {
+            read.push(op);
+        }
+        let kind = &func.values[op.0 as usize].kind;
+        if let OpKind::Retain(retained) = kind {
+            for source in sources(func, &self.arriving, *retained) {
+                read.extend(self.reached[source.0 as usize].iter().copied());
+            }
+        }
+        for operand in crate::hir::operands_of(kind) {
+            read.extend(self.reached[operand.0 as usize].iter().copied());
+        }
+        read
     }
 }
 

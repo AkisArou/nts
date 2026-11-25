@@ -1,7 +1,7 @@
 //! Fixed transfer inputs, built once per function before the CFG fixpoint.
 
 use super::{Aliases, Effect, effect};
-use crate::hir::rc::last_use::{self, Holding, Leaning};
+use crate::hir::rc::last_use;
 use crate::hir::{
     self, ForeignReleases, Func, Global, HirType, Layout, ManagedType, OpKind, ValueId,
 };
@@ -90,9 +90,11 @@ impl Inputs {
 /// one that defines it or names it as an operand, or reads anything leaning on
 /// it. What leans on what depends on ownership, which is not settled yet, so
 /// this asks the same question with every choice still open
-/// ([`Holding::Unsettled`]): any value that is not a scalar copy may lean on
-/// what it was made from, any store may move, any erasure may repackage, and
-/// any callee may store any argument into another.
+/// ([`last_use::Reaching`]): any value that is not a scalar copy may lean on
+/// what it was made from, any store anywhere in the function may move, any
+/// erasure may repackage, and any callee may store any argument into
+/// another. Where the handle-holding values meet too many readers to tell
+/// apart within a linear budget, every operation is charged.
 ///
 /// Which of those reads is the last one rc sees is not known either, so every
 /// one of them that can be is charged: every operation from the last that
@@ -124,17 +126,13 @@ fn released_around(func: &Func, given_up: &[bool]) -> Released {
     // A callee whose stores are not known stores any argument into any other,
     // which names a superset of what rc's summaries name.
     let Ok(frame_names) = last_use::frame_names(func, &|_| None) else {
-        // Past liveness's budget nothing here is placed, so every operation
-        // in a block may be followed or preceded by a release.
-        for block in &func.blocks {
-            for op in &block.ops {
-                released.before[op.0 as usize] = true;
-                released.after[op.0 as usize] = true;
-            }
-        }
-        return released;
+        // Past liveness's budget nothing here is placed.
+        return released.everywhere(func);
     };
-    let arriving = last_use::arriving(func);
+    let mut budget = func.values.len().saturating_mul(READS_PER_VALUE) + READS_PER_FUNCTION;
+    let Some(reaching) = last_use::Reaching::of(func, &frame_names, given_up, &mut budget) else {
+        return released.everywhere(func);
+    };
     let mut last_named: rustc_hash::FxHashMap<ValueId, usize> = rustc_hash::FxHashMap::default();
     for block in &func.blocks {
         // The last operation that defines or names each value: rc's last read
@@ -146,13 +144,14 @@ fn released_around(func: &Func, given_up: &[bool]) -> Released {
                 last_named.insert(operand, index);
             }
         }
-        let mut leaning = Leaning::new(func, Holding::Unsettled, &arriving, &block.ops);
         for (index, &op) in block.ops.iter().enumerate() {
+            let read = reaching.reads_of(func, given_up, op);
+            let Some(left) = budget.checked_sub(read.len()) else {
+                return released.everywhere(func);
+            };
+            budget = left;
             let operands = hir::operands_of(&func.values[op.0 as usize].kind);
-            for value in last_use::reads_of(&mut leaning, &frame_names, op) {
-                if !given_up[value.0 as usize] {
-                    continue;
-                }
+            for value in read {
                 match last_named.get(&value) {
                     Some(&last) if index < last => continue,
                     Some(_) => {}
@@ -171,9 +170,33 @@ fn released_around(func: &Func, given_up: &[bool]) -> Released {
     released
 }
 
+/// How many handle-holding values the reads of a function may name in all,
+/// per value and once per function, before [`released_around`] stops
+/// telling the reads apart and charges every operation. Each value copied
+/// or visited costs one, so the work stays linear in the function: a chain
+/// of thousands of derived strings beside one erased value shares a single
+/// answer and spends next to nothing, and only many such values each read
+/// by many operations -- where any exact answer is their product -- reach
+/// the bound.
+const READS_PER_VALUE: usize = 64;
+const READS_PER_FUNCTION: usize = 4096;
+
 struct Released {
     before: Vec<bool>,
     after: Vec<bool>,
+}
+
+impl Released {
+    /// Every operation in a block may be followed or preceded by a release.
+    fn everywhere(mut self, func: &Func) -> Self {
+        for block in &func.blocks {
+            for op in &block.ops {
+                self.before[op.0 as usize] = true;
+                self.after[op.0 as usize] = true;
+            }
+        }
+        self
+    }
 }
 
 /// Whether retaining a value of this type can run program code: only a
