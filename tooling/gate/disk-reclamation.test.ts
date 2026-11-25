@@ -685,6 +685,24 @@ test('unit paths follow outside aliases and symlink before parent components',t=
   assert.throws(()=>assertUnitTreeUnused([tree],{...reading,rootDirectory:join(outside,'pool-alias')}),/owns RootDirectory.* -> /);
 });
 
+test('unit arguments with a name too long to exist walk up, and other errors still refuse',t=>{
+  const f=fixture(t),tree=f.tree('1'),outside=join(f.s.dir,'outside');mkdirSync(outside);
+  mkdirSync(join(tree,'nested'));symlinkSync(join(tree,'nested'),join(outside,'jump'));
+  const long='x'.repeat(300),reading:UnitTreeOwnership={unit:'inline.service',workingDirectory:outside,rootDirectory:'',commands:[]};
+  const argument=(value:string):UnitTreeOwnership=>({...reading,commands:[{property:'ExecStart',path:process.execPath,args:['-e',value]}]});
+  // A `node -e` script is read as a relative path past NAME_MAX.
+  for(const value of [long+';process.exit(0)',outside+'/'+long+'/entry',outside+'/missing/'+long])assert.doesNotThrow(()=>assertUnitTreeUnused([tree],argument(value)));
+  assert.throws(()=>assertUnitTreeUnused([tree],argument(outside+'/jump/'+long)),/owns ExecStart argument.* -> /);
+  assert.throws(()=>assertUnitTreeUnused([tree],argument('jump/'+long)),/owns ExecStart argument.* -> /);
+  assert.throws(()=>assertUnitTreeUnused([tree],argument(tree+'/'+long)),/owns ExecStart argument/);
+  symlinkSync('loop',join(outside,'loop'));
+  assert.throws(()=>assertUnitTreeUnused([tree],argument(outside+'/loop/entry')),error=>error instanceof Error&&/unreadable unit inline\.service ExecStart argument/.test(error.message)&&(error.cause as NodeJS.ErrnoException).code==='ELOOP');
+  mkdirSync(join(outside,'closed'));chmodSync(join(outside,'closed'),0);
+  try{
+    assert.throws(()=>assertUnitTreeUnused([tree],argument(outside+'/closed/entry')),error=>error instanceof Error&&/unreadable unit inline\.service ExecStart argument/.test(error.message)&&(error.cause as NodeJS.ErrnoException).code==='EACCES');
+  }finally{chmodSync(join(outside,'closed'),0o700);}
+});
+
 for(const cacheTag of [true,false])test('build admission reclaims surplus proven profiles beside unknown siblings; cache tag '+cacheTag,t=>{
   const f=fixture(t),old=f.tree('1'),newer=f.tree('2'),newest=f.tree('3');
   for(const tree of [old,newer,newest]){

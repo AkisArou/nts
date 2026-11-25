@@ -107,12 +107,17 @@ export function parseUnitTreeOwnership(unit:string,text:string):UnitTreeOwnershi
   return {unit,workingDirectory:rows[0]!.data as string,rootDirectory:rows[1]!.data as string,commands};
 }
 export function assertUnitTreeUnused(roots:readonly string[],reading:UnitTreeOwnership):void{
+  // A component that cannot exist (ENOENT, ENOTDIR, or ENAMETOOLONG for a
+  // name past NAME_MAX, as a `node -e` script argument is) walks up to the
+  // nearest existing ancestor. A whole path past PATH_MAX may still exist,
+  // made by relative operations; its resolvable ancestor and check's lexical
+  // test still find any tree it lies in. Other errors refuse.
   const physicalPath=(path:string,field:string):string=>{
     let ancestor=path;const suffix:string[]=[];
     for(;;){
       try{return resolve(realpathSync.native(ancestor),...suffix);}
       catch(error){
-        if(!['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??'')||dirname(ancestor)===ancestor)
+        if(!['ENOENT','ENOTDIR','ENAMETOOLONG'].includes((error as NodeJS.ErrnoException).code??'')||dirname(ancestor)===ancestor)
           throw Error('unreadable unit '+reading.unit+' '+field+' '+path,{cause:error});
         suffix.unshift(basename(ancestor));ancestor=dirname(ancestor);
       }
