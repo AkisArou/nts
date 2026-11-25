@@ -698,7 +698,8 @@ BUILDING
 EMITTING
   emit         emit --backends c,llvm,jvm into --out/<backend>, sharing raw lowering
   emit-c       render the program as C, to --out or stdout
-  emit-llvm    render the program as textual LLVM IR, to stdout (--os windows)
+  emit-llvm    render the program as textual LLVM IR, to stdout (--os windows;
+               --count-operations for tooling/memory's counting build)
   emit-jvm     render the program as class files, to --out
   emit-wasm    retired; see docs/targets/wasm.md
 
@@ -919,17 +920,27 @@ fn run_command() -> Result<()> {
                 .position(|a| a == "--out")
                 .and_then(|at| rest.get(at + 1))
                 .map(Utf8PathBuf::from);
+            // `tooling/memory`'s counting build: an LLVM module, unlike C,
+            // has no preprocessor to decide it later.
+            let emission = Emission {
+                counting: if rest.iter().any(|arg| arg == "--count-operations") {
+                    nts_codegen_common::release::Counting::Operations
+                } else {
+                    nts_codegen_common::release::Counting::Off
+                },
+                ..Emission::from_flags()
+            };
             match out {
                 Some(out) => emit_c(
                     &project(&rest)?,
                     Some(&out),
                     Emission {
                         llvm: Some(platform),
-                        ..Emission::from_flags()
+                        ..emission
                     },
                 )
                 .map(|_| ()),
-                None => emit_llvm(&project(&rest)?, Emission::from_flags(), platform),
+                None => emit_llvm(&project(&rest)?, emission, platform),
             }
         }
         // The third backend. Not textual, so `--text` renders the listing that
@@ -4299,6 +4310,7 @@ fn build(rest: &[String]) -> Result<()> {
             host: nts_codegen_c::LoopHost::Libuv,
             abi: native_abi(host_os(), host_arch()),
             llvm: None,
+            counting: nts_codegen_common::release::Counting::Off,
         };
         for target in targets_for(name, product, only_os.as_deref())? {
             // **Before anything is written.** A kind whose packaging does not
@@ -9316,6 +9328,11 @@ struct Emission<'a> {
     /// `program.c`. Everything else the C emission writes -- the runtime, the
     /// entry point, the loop host -- is the same files either way.
     llvm: Option<nts_codegen_llvm::Platform>,
+    /// Whether the LLVM module is emitted for a counting build
+    /// (`nts emit-llvm --count-operations`, which only `tooling/memory`
+    /// asks for). C needs no flag: its program counts under the same
+    /// `NTS_COUNT_OPERATIONS` its runtime is compiled with.
+    counting: nts_codegen_common::release::Counting,
 }
 
 impl Emission<'_> {
@@ -9353,6 +9370,23 @@ impl Emission<'_> {
         }
     }
 
+    /// The LLVM module that takes `program.c`'s place, when this emission
+    /// renders one: for its platform, and for a counting build when asked.
+    fn llvm_module<'p>(
+        &self,
+        program: &'p hir::Program,
+        symbols: &std::rc::Rc<nts_codegen_common::source_symbols::SourceSymbols<'p>>,
+    ) -> Option<nts_codegen_llvm::Emitted> {
+        self.llvm.map(|platform| {
+            nts_codegen_llvm::emit_with_source_symbols(
+                program,
+                platform,
+                std::rc::Rc::clone(symbols),
+                self.counting,
+            )
+        })
+    }
+
     /// A bare `emit-*`: the flags are all it has to go on.
     fn from_flags() -> Self {
         Self {
@@ -9368,6 +9402,7 @@ impl Emission<'_> {
             // No target was named, so the program is for this machine.
             abi: native_abi(host_os(), host_arch()),
             llvm: None,
+            counting: nts_codegen_common::release::Counting::Off,
         }
     }
 }
@@ -9610,14 +9645,22 @@ fn emit_llvm(
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
     let (prepared, metadata) =
         input.prepare(emission, nts_codegen_common::Backend::Llvm, &mut report)?;
-    emit_llvm_prepared(&prepared, &metadata.sources, platform, &mut report);
+    emit_llvm_prepared(
+        &prepared,
+        &metadata.sources,
+        (platform, emission.counting),
+        &mut report,
+    );
     Ok(())
 }
 
 fn emit_llvm_prepared(
     prepared: &hir::Prepared,
     sources: &[nts_diagnostics::SourceFile],
-    platform: nts_codegen_llvm::Platform,
+    (platform, counting): (
+        nts_codegen_llvm::Platform,
+        nts_codegen_common::release::Counting,
+    ),
     report: &mut EmissionReport,
 ) {
     let _emission = nts_differential::case_costs::span("llvm.emit");
@@ -9625,7 +9668,14 @@ fn emit_llvm_prepared(
     for diagnostic in &prepared.diagnostics {
         report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
-    let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
+    let emitted = nts_codegen_llvm::emit_with_source_symbols(
+        &prepared.program,
+        platform,
+        std::rc::Rc::new(nts_codegen_common::source_symbols::SourceSymbols::new(
+            &prepared.program,
+        )),
+        counting,
+    );
     for diagnostic in &emitted.diagnostics {
         report.err(format_args!(
             "  declined: {} {}",
@@ -9944,9 +9994,7 @@ fn emit_c_prepared(
             omissions.named("c backend", name, "the backend did not emit this function");
         }
     }
-    let rendered = emission.llvm.filter(|_| out.is_some()).map(|platform| {
-        nts_codegen_llvm::emit_with_source_symbols(&program, platform, std::rc::Rc::clone(&symbols))
-    });
+    let rendered = out.and_then(|_| emission.llvm_module(&program, &symbols));
     if let Some(rendered) = &rendered
         && emission.product.is_some()
     {

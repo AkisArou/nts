@@ -36,6 +36,18 @@ double work(double iterations);
  * needed it, and the first one that did read a null array and segfaulted. */
 __attribute__((weak)) void module__init(void);
 
+/* What a program emitted for counting defines
+ * (`nts_codegen_common::release::Counting`): C's under the same
+ * `NTS_COUNT_OPERATIONS` this harness is built with, an LLVM module only when
+ * emitted with `nts emit-llvm --count-operations`.
+ *
+ * A link-time contract, read weakly so that its absence is a named stop rather
+ * than a link error nobody sees. An LLVM module emitted for an ordinary build
+ * has no counting hooks in its typed releases, and measured here it reported
+ * fewer operations than it ran -- twenty rows below their ideal, with the same
+ * allocations and answers as C (#1039, #1050). */
+extern const char nts_program_counts_operations __attribute__((weak));
+
 /* Run the loop until it is quiet.
  *
  * `nts_checkpoint` is the whole checkpoint rather than a tick drain -- see the
@@ -53,6 +65,13 @@ static void drain(void) {
 }
 
 int main(void) {
+  if (&nts_program_counts_operations == NULL) {
+    fputs("harness: the program was not emitted for counting "
+          "(nts_program_counts_operations is missing; emit LLVM with "
+          "--count-operations)\n",
+          stderr);
+    return 2;
+  }
   if (module__init) {
     module__init();
   }

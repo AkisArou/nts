@@ -77,6 +77,7 @@ fn pointer_constants_keep_exact_bits_and_native_equality() {
             program,
             nts_codegen_llvm::Platform::WIN64_X86_64,
             symbols,
+            nts_codegen_common::release::Counting::Off,
         );
         assert!(win.diagnostics.is_empty(), "{:?}", win.diagnostics);
         assert!(

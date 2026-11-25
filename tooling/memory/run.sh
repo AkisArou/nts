@@ -52,6 +52,17 @@
 # release of null is a call and a branch that ran, and proving a reference
 # non-null is the compiler's job too. So these numbers are larger than the
 # object graph, and they should be.
+#
+# **Both native backends, against one argument.** Every case is measured on C
+# and on LLVM, each against the same `expected`: an `ideal` is a claim about
+# what the program needs, not about a backend. An LLVM row is a counting build
+# (`nts emit-llvm --count-operations`) linked with the same counting runtime
+# and harness, and the harness refuses a program that was not emitted for
+# counting. Until it did, LLVM's typed releases counted nothing, its column
+# read twenty rows below their ideal with the same allocations and answers as
+# C, and nothing ran it (#1039, #1050). Where the two backends count
+# differently a line below the rows says so, since that names the instrument
+# or a backend, not the argument.
 set -eu
 cd "$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -64,16 +75,24 @@ mkdir -p "$out"
 # `target/memory/<case>.*` and the two measurements in a case are compiled from
 # scratch at -O2 -- seventy cases, 140 full runtime compiles -- so the loop was
 # the whole of this step's four to five minutes and the cases share nothing.
-# `--case <dir>` measures one and prints its row; the rows are printed in case
-# order afterwards, so the table reads as it did.
+# `--case <dir> <backend>` measures one on `c` or `llvm` and prints its row;
+# the rows are printed in case order afterwards, so the table reads as it did.
+# With `NTS_MEMORY_COUNTS` set it also writes the measured operations there,
+# for the comparison across backends.
 if [ "${1-}" = --case ]; then
   dir=$2
+  backend=${3:?run.sh --case <dir> <c|llvm>}
+  case "$backend" in
+    c) emit=(emit-c) program=program.c ;;
+    llvm) emit=(emit-llvm --count-operations) program=program.ll ;;
+    *) echo "run.sh: unknown backend $backend" >&2; exit 2 ;;
+  esac
   fail=0
   one_case() {
     name=$(basename "$dir")
 
     measure() { # $1 = subdir, rest = arguments to `env`
-      local where="$out/$name.$1"
+      local where="$out/$name.$backend.$1"
       rm -rf "$where" && mkdir -p "$where"
       # `-u` and not `NTS_RC_NAIVE=`: an empty assignment still *sets* the
       # variable, and the compiler asks whether it is set. Setting it empty made
@@ -82,7 +101,7 @@ if [ "${1-}" = --case ]; then
       # The harness owns a closed executable: it enters work and module init,
       # then drains the runtime. --entry alone would still name an open library
       # surface; --main selects product_roots' closed executable contract.
-      if ! env "${@:2}" "${NTS_BIN:-./target/release/nts}" emit-c "$dir/tsconfig.json" --out "$where" --main --entry work --rc \
+      if ! env "${@:2}" "${NTS_BIN:-./target/release/nts}" "${emit[@]}" "$dir/tsconfig.json" --out "$where" --main --entry work --rc \
            >/dev/null 2>&1; then
         echo "  $name: emit failed" >&2
         return 1
@@ -113,21 +132,22 @@ if [ "${1-}" = --case ]; then
       # name rather than silently linking another loop into the measurement.
       # This single selection serves cached and uncached compilation: every
       # emitted .c is either compiled or accounted for here.
-      emitted_sources=""
+      # An LLVM build writes `program.ll` in `program.c`'s place.
+      emitted_sources="$where/$program"
       for c in "$where"/*.c; do
         case "$(basename "$c")" in
-          main.c|nts_uv_host.c) continue ;;
+          program.c|main.c|nts_uv_host.c) continue ;;
           *_host.c)
             echo "  $name: unknown CLI host source $(basename "$c")" >&2
             return 1 ;;
         esac
         emitted_sources="$emitted_sources $c"
       done
-      sources="$where/program.c"
+      sources="$where/$program"
       if [ -n "${NTS_MEMORY_OBJECTS:-}" ] && ! grep -qs '#include "program.h"' "$where"/nts_*; then
-        inputs=$( { clang --version; echo "-O2 -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS"; (cd "$where" && find . -type f ! -name program.c ! -name program.h ! -name run ! -name main.c ! -name 'nts_uv_host.*' | LC_ALL=C sort | xargs sha256sum); } | sha256sum | cut -c1-32)
+        inputs=$( { clang --version; echo "-O2 -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS"; (cd "$where" && find . -type f ! -name program.c ! -name program.ll ! -name program.h ! -name run ! -name main.c ! -name 'nts_uv_host.*' | LC_ALL=C sort | xargs sha256sum); } | sha256sum | cut -c1-32)
         for c in $emitted_sources; do
-          [ "$c" = "$where/program.c" ] && continue
+          [ "$c" = "$where/$program" ] && continue
           obj="$NTS_MEMORY_OBJECTS/$inputs-$(basename "$c" .c).o"
           if [ ! -f "$obj" ]; then
             clang -O2 -I"$where" -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS -c "$c" -o "$obj.$$" 2>/dev/null && mv -f "$obj.$$" "$obj"
@@ -157,8 +177,8 @@ if [ "${1-}" = --case ]; then
 
     # Every case directory gets a row, whatever happened to it.
     short() {
-      printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
-        "$name" "?" "?" "?" "--" "?" "?" "$1"
+      printf '%-20s %-4s %7s %7s %7s %6s %7s %6s   %s\n' \
+        "$name" "$backend" "?" "?" "?" "--" "?" "?" "$1"
       fail=1
     }
     elided=$(measure elided -u NTS_RC_NAIVE) || { short "DID NOT RUN"; return; }
@@ -223,16 +243,20 @@ if [ "${1-}" = --case ]; then
 
     ratio="--"
     [ "$n" -gt 0 ] && ratio=$(awk -v a="$a" -v n="$n" 'BEGIN { printf "%d%%", (n - a) * 100 / n }')
-    printf '%-20s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
-      "$name" "$n" "$a" "$ideal" "$ratio" "$alloc" "$floor" "${want_cand:+$cand}" "$note"
+    printf '%-20s %-4s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
+      "$name" "$backend" "$n" "$a" "$ideal" "$ratio" "$alloc" "$floor" "${want_cand:+$cand}" "$note"
+    if [ -n "${NTS_MEMORY_COUNTS:-}" ]; then
+      echo "operations=$a naive=$n allocated=$alloc typed=$typed candidates=$cand" > "$NTS_MEMORY_COUNTS"
+    fi
   }
   one_case
   exit "$fail"
 fi
 
 fail=0
-printf '%-20s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
-  case naive actual ideal gone alloc floor cand ''
+printf '%-20s %-4s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
+  case back naive actual ideal gone alloc floor cand ''
+backends="c llvm"
 
 jobs=${NTS_MEMORY_JOBS:-${NTS_GATE_JOBS:-$(n=$(nproc 2>/dev/null || echo 4); [ "$n" -gt 8 ] && echo 8 || echo "$n")}}
 rows=$(mktemp -d)
@@ -247,26 +271,48 @@ self="$PWD/tooling/memory/run.sh"
 # starting work when a worker dies by a signal and `set -e` would end this
 # script silently there; it is reported instead and the accounting decides.
 # Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
-printf '%s\0' tests/memory/*/ | xargs -0 -P "$jobs" -I{} "$PWD/tooling/gate/token.sh" --case {} --backend c -- bash -c '
-  dir=$1; rows=$2
+# One job per case and backend, `<dir> <backend>` on each NUL-separated input.
+for dir in tests/memory/*/; do
+  for backend in $backends; do printf '%s\0%s\0' "$dir" "$backend"; done
+done | xargs -0 -n 2 -P "$jobs" bash -c '
+  self=$0; rows=$1; dir=$2; backend=$3
   name=$(basename "$dir")
-  if "$0" --case "$dir" > "$rows/$name.row.part" 2> "$rows/$name.err"; then :; else : > "$rows/$name.failed"; fi
-  mv "$rows/$name.row.part" "$rows/$name.row"
-' "$self" {} "$rows" || echo "  a worker ended abnormally (xargs exited $?); the cases it held are not measured" >&2
+  at="$rows/$name.$backend"
+  if NTS_MEMORY_COUNTS="$at.counts" "$PWD/tooling/gate/token.sh" --case "$dir" --backend "$backend" -- \
+       "$self" --case "$dir" "$backend" > "$at.row.part" 2> "$at.err"; then :; else : > "$at.failed"; fi
+  mv "$at.row.part" "$at.row"
+' "$self" "$rows" || echo "  a worker ended abnormally (xargs exited $?); the cases it held are not measured" >&2
 seen=0
+differ=""
 for dir in tests/memory/*/; do
   name=$(basename "$dir")
-  [ -f "$rows/$name.row" ] || continue
-  seen=$((seen + 1))
-  cat "$rows/$name.err" >&2
-  cat "$rows/$name.row"
-  [ -f "$rows/$name.failed" ] && fail=1
+  for backend in $backends; do
+    at="$rows/$name.$backend"
+    [ -f "$at.row" ] || continue
+    seen=$((seen + 1))
+    cat "$at.err" >&2
+    cat "$at.row"
+    [ -f "$at.failed" ] && fail=1
+  done
+  # The same program on two backends: a count that differs is the instrument's
+  # or a backend's, never the argument's, so it is named here beside the
+  # floors' own verdict (which the difference has already failed, since both
+  # rows answer to one `expected`).
+  if [ -s "$rows/$name.c.counts" ] && [ -s "$rows/$name.llvm.counts" ] &&
+     ! cmp -s "$rows/$name.c.counts" "$rows/$name.llvm.counts"; then
+    differ="$differ  $name: c $(cat "$rows/$name.c.counts"); llvm $(cat "$rows/$name.llvm.counts")
+"
+  fi
 done
-# An empty loop is not a clean run: every case has a row, or this measured less
-# than it says.
-total=$(ls -d tests/memory/*/ 2>/dev/null | wc -l)
+if [ -n "$differ" ]; then
+  printf '\nThe backends count differently:\n%s' "$differ"
+  fail=1
+fi
+# An empty loop is not a clean run: every case has a row on every backend, or
+# this measured less than it says.
+total=$(( $(ls -d tests/memory/*/ 2>/dev/null | wc -l) * $(echo $backends | wc -w) ))
 if [ "$seen" -eq 0 ] || [ "$seen" -ne "$total" ]; then
-  echo "  measured $seen of $total case(s)" >&2
+  echo "  measured $seen of $total case-backend row(s)" >&2
   fail=1
 fi
 
@@ -275,4 +321,4 @@ if [ "$fail" -ne 0 ]; then
   printf '\n\033[31mFAILED\033[0m: memory\n'
   exit 1
 fi
-printf '\n\033[32mgreen\033[0m: nothing leaked, no answer changed, every case at both floors\n'
+printf '\n\033[32mgreen\033[0m: nothing leaked, no answer changed, every case at both floors on c and llvm\n'

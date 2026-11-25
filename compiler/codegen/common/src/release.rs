@@ -53,6 +53,45 @@ impl Fields {
 /// further, whatever the program declares.
 pub const TYPED_RELEASE_DEPTH: usize = 8;
 
+/// Whether a native module counts the operations `tooling/memory` measures:
+/// the build's choice, made once for every backend.
+///
+/// A typed release counts its arrival through [`ARRIVAL_COUNT`] exactly
+/// where `nts_release` would have counted its own: once, after the
+/// descriptor test has found its own layout, before the count test. A typed
+/// release that hands the object (or a null) to `nts_release` does not count,
+/// since `nts_release` does. So each release the compiler emitted is counted
+/// once, whichever path it takes.
+///
+/// **Where each backend decides.** C defers the choice to the C compiler: its
+/// typed releases call the hook under `#ifdef NTS_COUNT_OPERATIONS`, the same
+/// macro the runtime counts under, so the program and the runtime cannot
+/// disagree. An LLVM module has no preprocessor, so it is emitted for one
+/// build or the other: [`Counting::Operations`] only when asked for
+/// (`nts emit-llvm --count-operations`), and otherwise no hook at all.
+///
+/// **The link-time contract.** A program emitted for counting defines
+/// [`COUNTING_GUARD`] (C: under the same macro; LLVM: under
+/// [`Counting::Operations`]). `tooling/memory/harness.c` reads it as a weak
+/// symbol and stops by name, with exit status 2, when it is absent, so a
+/// module emitted without its hooks cannot be measured as if it had them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Counting {
+    /// An ordinary build: nothing counts.
+    #[default]
+    Off,
+    /// A counting build, linked with a runtime built with
+    /// `NTS_COUNT_OPERATIONS`.
+    Operations,
+}
+
+/// The runtime hook that counts a typed release's arrival.
+pub const ARRIVAL_COUNT: &str = "nts_count_release";
+
+/// What a program emitted for counting defines, for the counting harness to
+/// check that it was (see [`Counting`]).
+pub const COUNTING_GUARD: &str = "nts_program_counts_operations";
+
 /// One layout's release specialized by type (`__nts_release_<layout>` in
 /// `nts_runtime.h`): what it may assume and which fields it releases how.
 #[derive(Debug, PartialEq, Eq)]

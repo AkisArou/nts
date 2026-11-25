@@ -1024,8 +1024,10 @@ test("backend-only changes run counting checks for the backend they change", () 
   superset(c, ["rc", "memory"], "the C backend");
   assert.ok(!c.includes("llvm-rc"), "C output cannot change counted LLVM output");
   const llvm = stepsFor("compiler/codegen/llvm/src/lib.rs");
-  superset(llvm, ["llvm-rc"], "the LLVM backend");
-  for (const step of ["rc", "memory"]) assert.ok(!llvm.includes(step), `LLVM output cannot change the C-only ${step} check`);
+  // memory/run.sh measures every case on both backends (emit-llvm
+  // --count-operations), so an LLVM change owes it too.
+  superset(llvm, ["llvm-rc", "memory"], "the LLVM backend");
+  assert.ok(!llvm.includes("rc"), "LLVM output cannot change the C-only rc check");
 });
 
 test("every HIR pass owes the counting checks, not just files named for ownership", () => {

@@ -1689,8 +1689,12 @@ void nts_release(NtsHeader *object);
  * anything else, and `NTS_POISON` stops by name if it is. `nts_count_release`
  * counts the typed release's arrival in an `NTS_COUNT_OPERATIONS` build, once,
  * exactly where `nts_release` would have counted it, and does nothing in any
- * other. Only the C backend's typed releases call it: an emitted module has no
- * preprocessor, and `tests/memory` counts C programs alone.
+ * other. C's typed releases call it under that macro; an LLVM module, which
+ * has no preprocessor, calls it only when emitted for a counting build
+ * (`nts_codegen_common::release::Counting`, from `nts emit-llvm
+ * --count-operations`), so an ordinary build of either carries no hook. A
+ * program emitted for counting also defines `nts_program_counts_operations`,
+ * which `tooling/memory/harness.c` requires.
  * `nts_counted_typed_deaths` says how many deaths took this path, on either
  * backend, since `nts_object_reclaim` counts them. */
 void nts_object_reclaim(NtsHeader *object);

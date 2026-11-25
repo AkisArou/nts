@@ -216,7 +216,14 @@ pub(crate) const COMMANDS: &[Command] = &[
     command(
         "emit-llvm",
         " [project]",
-        &[PROJECT, OUT, ROOTS, PROVIDER, SHAPE, &[value("--os", "os")]],
+        &[
+            PROJECT,
+            OUT,
+            ROOTS,
+            PROVIDER,
+            SHAPE,
+            &[value("--os", "os"), switch("--count-operations")],
+        ],
     ),
     command(
         "emit-jvm",

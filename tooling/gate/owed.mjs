@@ -712,8 +712,9 @@ export const RULES = [
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    // memory/run.sh emits C with --rc and runs it through clang; it never
-    // selects the LLVM backend.
+    // memory/run.sh emits C with --rc and runs it through clang, and does
+    // the same for LLVM (`emit-llvm --count-operations`): both backends' rules
+    // list it.
     steps: ["examples", "rc", "memory", "outcomes", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "typescript-c", "benches"],
     arms: [COMPARE[0], COMPARE[2]],
   },
@@ -729,8 +730,9 @@ export const RULES = [
     when: (p) => /^compiler\/codegen\/llvm\//.test(p),
     // Every step that selects it through the CLI (see SELECTED_BY_THE_CLI):
     // the differential runs, the IR check, benches.sh's emit-llvm, the interop
-    // projects built with `backend: "llvm"`, and outcomes marked `// backend: llvm`.
-    steps: ["llvm", "llvm-rc", "assembles", "benches", "interop", "outcomes", "test262-llvm", "typescript-llvm"],
+    // projects built with `backend: "llvm"`, outcomes marked `// backend: llvm`,
+    // and memory/run.sh's counting LLVM column (`emit-llvm --count-operations`).
+    steps: ["llvm", "llvm-rc", "assembles", "benches", "interop", "outcomes", "memory", "test262-llvm", "typescript-llvm"],
     arms: [{ kind: "answers", asks: "which code is emitted, on LLVM", run: "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..." }],
   },
   {

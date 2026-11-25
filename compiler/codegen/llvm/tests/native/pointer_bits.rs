@@ -71,6 +71,7 @@ fn pointer_bits_are_c_uintptr_with_no_load_or_count() {
             program,
             nts_codegen_llvm::Platform::WIN64_X86_64,
             symbols,
+            nts_codegen_common::release::Counting::Off,
         );
         assert!(win.diagnostics.is_empty(), "{:?}", win.diagnostics);
         for file in c.support_files() {

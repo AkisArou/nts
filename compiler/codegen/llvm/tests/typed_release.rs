@@ -647,7 +647,8 @@ fn graph_source() -> String {
            return pairs;\n\
          }\n\
          export function makeOpaque(x: number): Opaque { return new Opaque(new Leaf(x)); }\n\
-         export function makeRing(x: number): Ring { const ring = new Ring(x); ring.next = new Ring(x + 1); return ring; }\n",
+         export function makeRing(x: number): Ring { const ring = new Ring(x); ring.next = new Ring(x + 1); return ring; }\n\
+         export function work(x: number): number { return makePairs(x).length; }\n",
     );
     for at in 0..length - 1 {
         let next = at + 1;
@@ -683,8 +684,12 @@ fn graph_source() -> String {
 /// any object laid out like one, and a `Ring` with a leading `value` would
 /// make the pairs' array cyclic. A release that trusted the static type would
 /// also count twelve, and leave the four notes alive.
+///
+/// Each phase also prints the retains and releases it counted, which a
+/// counting build of either backend must agree on.
 const GRAPH_DRIVER: &str = r#"
 #include "nts_runtime.h"
+#include <stdio.h>
 #include <stdlib.h>
 extern NtsHeader *makeChain(double);
 extern NtsHeader *makePairs(double);
@@ -695,18 +700,25 @@ extern NtsHeader *makeRing(double);
 static void expect(int holds, int status) {
   if (!holds) _Exit(status);
 }
+static void counted(const char *phase) {
+  printf("%s retains=%zu releases=%zu\n", phase, nts_counted_retains(),
+         nts_counted_releases());
+}
 int main(void) {
   size_t base = nts_live_count();
   nts_counting_reset();
   nts_release(makeChain(3));
   expect(nts_counted_typed_deaths() == CHAIN_TYPED, 30);
+  counted("chain");
   nts_counting_reset();
   nts_release(makePairs(3));
   expect(nts_counted_typed_deaths() == 12, 31);
+  counted("pairs");
   nts_counting_reset();
   nts_release(makeOpaque(3));
   nts_release(makeRing(3));
   expect(nts_counted_typed_deaths() == 0, 32);
+  counted("generic");
   nts_collect_cycles();
   expect(nts_live_count() == base, 33);
   return 0;
@@ -827,6 +839,7 @@ fn typed_releases_follow_the_proved_layout_graph() {
     let llvm = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    let llvm_counted = counted_module(program, &llvm.text);
     for absent in ["Opaque", "Ring"] {
         assert!(
             !c.writer
@@ -852,19 +865,21 @@ fn typed_releases_follow_the_proved_layout_graph() {
             sources.push(path);
         }
     }
+    let mut counts = Vec::new();
     for (input, text, is_llvm) in [
         ("graph.c", c.writer.text(), false),
-        ("graph.ll", llvm.text.as_str(), true),
+        ("graph.ll", llvm_counted.as_str(), true),
+        ("graph-uncounted.ll", llvm.text.as_str(), true),
     ] {
         std::fs::write(dir.join(input), text).unwrap();
-        run_native(
+        counts.push(run_native(
             &dir,
             hir::Memory::ReferenceCounting,
             input,
             &sources,
             0,
             None,
-        );
+        ));
         // The control: the same program with each typed release trusting the
         // static type. A `Heavy` then dies as a `Leaf`, and its note is never
         // released.
@@ -883,4 +898,129 @@ fn typed_releases_follow_the_proved_layout_graph() {
             None,
         );
     }
+    check_counts_agree(&counts);
+    check_memory_harness(&dir, &sources);
+}
+
+/// The graph's LLVM module emitted for a counting build, checked against the
+/// ordinary one (`check_counting_hooks`).
+fn counted_module(program: &hir::Program, ordinary: &str) -> String {
+    let counted = nts_codegen_llvm::emit_with_source_symbols(
+        program,
+        nts_codegen_llvm::Platform::SYSV_X86_64,
+        std::rc::Rc::new(nts_codegen_common::source_symbols::SourceSymbols::new(
+            program,
+        )),
+        nts_codegen_common::release::Counting::Operations,
+    );
+    assert!(counted.diagnostics.is_empty(), "{:?}", counted.diagnostics);
+    check_counting_hooks(ordinary, &counted.text);
+    counted.text
+}
+
+/// A counting build counts the same operations on both backends: C's
+/// report, then the counting LLVM build's. The control, third: an ordinary
+/// LLVM build in the same counting runtime misses each typed release's
+/// arrival, which is what the memory harness's LLVM column read before its
+/// typed releases had a hook.
+fn check_counts_agree(counts: &[Vec<u8>]) {
+    let [c, counted, ordinary] = counts else {
+        panic!("three reports, got {}", counts.len());
+    };
+    assert_eq!(String::from_utf8_lossy(c), String::from_utf8_lossy(counted));
+    assert_ne!(
+        String::from_utf8_lossy(counted),
+        String::from_utf8_lossy(ordinary)
+    );
+}
+
+/// An ordinary LLVM build carries no counting hook and no guard; a counting
+/// build differs from it by exactly one arrival count per typed release, the
+/// hook's declaration and the guard, and nothing else.
+fn check_counting_hooks(ordinary: &str, counting: &str) {
+    use nts_codegen_common::release::{ARRIVAL_COUNT, COUNTING_GUARD};
+    let releases = ordinary
+        .lines()
+        .filter(|line| line.starts_with("define internal void @__nts_typed_release_"))
+        .count();
+    assert!(releases > 0, "no typed releases to count");
+    assert!(!ordinary.contains(&format!("@{ARRIVAL_COUNT}")));
+    assert!(!ordinary.contains(COUNTING_GUARD));
+    let call = format!("  call void @{ARRIVAL_COUNT}()");
+    let declaration = format!("declare void @{ARRIVAL_COUNT}()");
+    let guard = format!("@{COUNTING_GUARD} = weak constant i8 1");
+    let added: Vec<&str> = counting
+        .lines()
+        .filter(|line| *line == call || line.starts_with(&declaration) || *line == guard)
+        .collect();
+    assert_eq!(added.iter().filter(|line| **line == call).count(), releases);
+    assert_eq!(added.len(), releases + 2, "{added:?}");
+    let rest: Vec<&str> = counting
+        .lines()
+        .filter(|line| !added.contains(line))
+        .collect();
+    assert_eq!(rest, ordinary.lines().collect::<Vec<_>>());
+}
+
+/// `tooling/memory/harness.c` measures a program only if it was emitted for
+/// counting: the C program under `NTS_COUNT_OPERATIONS`, the LLVM module
+/// with `Counting::Operations`. An ordinary LLVM module stops it by name,
+/// with status 2, instead of being measured short.
+fn check_memory_harness(dir: &Utf8Path, sources: &[std::path::PathBuf]) {
+    std::fs::write(
+        dir.join("harness.c"),
+        include_str!("../../../../tooling/memory/harness.c"),
+    )
+    .unwrap();
+    let mut reports = Vec::new();
+    for (input, status) in [
+        ("graph.c", Some(0)),
+        ("graph.ll", Some(0)),
+        ("graph-uncounted.ll", Some(2)),
+    ] {
+        let binary = dir.join(format!("harness-{input}"));
+        let built = Command::new("clang")
+            .current_dir(dir)
+            .args([
+                "-std=c11",
+                "-O1",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-override-module",
+                "-I.",
+                "-DNTS_PROVIDER_RC",
+                "-DNTS_COUNT_OPERATIONS",
+            ])
+            .arg(input)
+            .arg("harness.c")
+            .args(sources)
+            .arg("-lm")
+            .arg("-o")
+            .arg(&binary)
+            .output()
+            .unwrap();
+        assert!(
+            built.status.success(),
+            "{input}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let ran = Command::new(&binary).output().unwrap();
+        assert_eq!(ran.status.code(), status, "{input}: {ran:?}");
+        if status == Some(2) {
+            assert!(ran.stdout.is_empty(), "{input}: {ran:?}");
+            assert!(
+                String::from_utf8_lossy(&ran.stderr).contains(
+                    "the program was not emitted for counting (nts_program_counts_operations"
+                ),
+                "{input}: {ran:?}"
+            );
+        } else {
+            assert!(ran.stderr.is_empty(), "{input}: {ran:?}");
+            reports.push(ran.stdout);
+        }
+    }
+    let report = String::from_utf8_lossy(&reports[0]);
+    assert!(report.contains(" leaked=0 "), "{report}");
+    assert_eq!(report, String::from_utf8_lossy(&reports[1]));
 }

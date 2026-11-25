@@ -1254,6 +1254,17 @@ pub fn emit_planned(plan: &EntryAbi<'_>, abi: NativeAbi) -> Emitted {
     // not <stdlib.h>, which declares `div`, a name a TypeScript program is
     // entitled to use.
     writer.line(&origin, format!("#include \"{RUNTIME_HEADER_NAME}\""));
+    // A counting build says so, for the counting harness to check
+    // (`nts_codegen_common::release::Counting`): under the macro the typed
+    // releases below count under, so C's program and its hooks agree.
+    let guard = nts_codegen_common::release::COUNTING_GUARD;
+    writer.line(&origin, "#ifdef NTS_COUNT_OPERATIONS");
+    writer.line(&origin, format!("extern const char {guard};"));
+    writer.line(
+        &origin,
+        format!("__attribute__((weak)) const char {guard} = 1;"),
+    );
+    writer.line(&origin, "#endif");
     // The Unicode header, where the program reaches one of its helpers.
     //
     // Its helpers are declared there and defined in `nts_unicode.c`, which is
@@ -4283,7 +4294,10 @@ fn emit_typed_releases(
         writer.line(origin, "        return;");
         writer.line(origin, "    }");
         writer.line(origin, "#ifdef NTS_COUNT_OPERATIONS");
-        writer.line(origin, "    nts_count_release();");
+        writer.line(
+            origin,
+            format!("    {}();", nts_codegen_common::release::ARRIVAL_COUNT),
+        );
         writer.line(origin, "#endif");
         writer.line(origin, format!("    if ({object}->reserved == 1u) {{"));
         writer.line(origin, format!("        {object}->reserved = 0;"));

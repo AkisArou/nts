@@ -79,6 +79,7 @@ fn emit_fixture<'p>(
         program,
         nts_codegen_llvm::Platform::SYSV_X86_64,
         Rc::clone(&symbols),
+        nts_codegen_common::release::Counting::Off,
     );
     (c, llvm, symbols)
 }
@@ -1155,6 +1156,7 @@ fn native_call_to_the_unprefixed_export_name_uses_the_frozen_namespace() {
             &prepared.program,
             nts_codegen_llvm::Platform::SYSV_X86_64,
             symbols,
+            nts_codegen_common::release::Counting::Off,
         );
         for (backend, diagnostics) in [("c", &c.diagnostics), ("llvm", &llvm.diagnostics)] {
             if prefix.is_some() {
@@ -1196,6 +1198,7 @@ fn native_call_cannot_redefine_a_prefixed_export() {
             &prepared.program,
             nts_codegen_llvm::Platform::SYSV_X86_64,
             symbols,
+            nts_codegen_common::release::Counting::Off,
         );
         for (backend, diagnostics) in [("c", &c.diagnostics), ("llvm", &llvm.diagnostics)] {
             if prefix.is_none() {
