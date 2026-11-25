@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-cleared-before-a-call-keeps-no-old-reference",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-cleared-before-a-call-keeps-no-old-reference/src/main.ts",
+      "signature": "27b0a1d56a3cef5c98fab8e2af8be5104966ef998a1985018b868a458fed4cd5",
+      "keys": {
+        "c": "4695a2f228345747cdf54a72bf6d0282",
+        "jvm": "21e00d8561e10d24781b8e91c9d2e8f8",
+        "llvm": "2743e1f639da0044ad39577c237ae938"
+      },
+      "cases_sha256": "580e873afe9f8c8346f7af04ddd3308fdf8af30182c718389b868cd14ad97f50",
+      "driver_sha256": "1db6f57c3a2d077940d802e61a3fb49503437fb8de8cdd1877176a8382fb10f7",
+      "populations": {
+        "anAliasingCallInvalidatesTheFact": {
+          "count": 29,
+          "cases_sha256": "d38fe58bd2024eee6faf82ac69e73e3852a6362f337c8dec0fdd1c01c04ef400"
+        },
+        "cleared": {
+          "count": 29,
+          "cases_sha256": "f5cca7d72be593c3e378a7f78f2028912d998f8fd0a60eab7a34313a09158707"
+        },
+        "directPublished": {
+          "count": 29,
+          "cases_sha256": "ffb6cdacd202a7baaa99dc646256f01a32ee2d120cd2940e6260019382f09f13"
+        },
+        "onePathKeepsTheOldReference": {
+          "count": 29,
+          "cases_sha256": "b9e4c4624d15b55e958d6726e8c54a4b71bcdb94c246e99ca555c4479d7c3621"
+        },
+        "twoParametersCanAlias": {
+          "count": 29,
+          "cases_sha256": "078f9ecc3ab027bbe6b3afcd71c78d8e35f57a831bd4841dc5c2034d773b7f4a"
+        },
+        "work": {
+          "count": 29,
+          "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45"
+        }
+      },
+      "complete": true,
+      "count": 174
+    }
+  ]
+}

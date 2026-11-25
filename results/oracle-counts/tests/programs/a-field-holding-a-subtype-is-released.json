@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-holding-a-subtype-is-released",
+  "rows": [
+    {
+      "kind": "program",
+      "source": "tests/programs/a-field-holding-a-subtype-is-released/src/main.ts",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "ec93af34f984cad919618c89d286da4e290b053acc6e1f5f9e586a4d72ac5f16",
+      "source_digest": "baa2273f09812005c1d92fcf44f4d77b",
+      "stdout_sha256": "26de5de9c39e596bfafc04b03bf9c73864298ef101f80d229ea17da1adc243b5",
+      "stdout_bytes": 11,
+      "exit_code": 0
+    }
+  ]
+}
