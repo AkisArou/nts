@@ -4,7 +4,7 @@
 # turns any GTK or Adwaita complaint that is critical into an end.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-adw-hello"}
+out=${1:-"$root/target/interop/adw-hello"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/adw-hello"
 

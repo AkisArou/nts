@@ -8,7 +8,7 @@
 # not match.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-gir"}
+out=${1:-"$root/target/interop/gtk-gir"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-gir"
 

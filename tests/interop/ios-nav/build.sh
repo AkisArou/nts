@@ -22,7 +22,7 @@
 # it says the runs were not made.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-ios-nav"}
+out=${1:-"$root/target/interop/ios-nav"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/ios-nav"
 apple=${NTS_APPLE_ROOT:-"$HOME/.cache/nts/apple"}

@@ -8,7 +8,7 @@
 # and running it.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-uname"}
+out=${1:-"$root/target/interop/native-uname"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-uname"

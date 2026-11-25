@@ -9,7 +9,7 @@
 # `GtkButton`, and `measure 0 0`, since nothing answers GTK's call.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-subclass"}
+out=${1:-"$root/target/interop/gtk-subclass"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-subclass"
 

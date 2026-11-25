@@ -24,7 +24,7 @@
 # says the runs were not made.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-macos-subclass"}
+out=${1:-"$root/target/interop/macos-subclass"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/macos-subclass"
 apple=${NTS_APPLE_ROOT:-"$HOME/.cache/nts/apple"}

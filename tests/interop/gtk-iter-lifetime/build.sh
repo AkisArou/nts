@@ -24,7 +24,7 @@
 # and whichever it was, the expectation here has to change with it.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-iter-lifetime"}
+out=${1:-"$root/target/interop/gtk-iter-lifetime"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-iter-lifetime"
 if ! pkg-config --exists gtk4; then

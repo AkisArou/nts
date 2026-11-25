@@ -10,7 +10,7 @@
 #   host's promises and read what it settled them with.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-promise"}
+out=${1:-"$root/target/interop/native-promise"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-promise"
 

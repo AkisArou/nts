@@ -16,7 +16,7 @@
 # x86_64 System V does, linked with the C build's runtime and main.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-byvalue"}
+out=${1:-"$root/target/interop/native-byvalue"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-byvalue"

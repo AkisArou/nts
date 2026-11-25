@@ -6,7 +6,7 @@
 # stateless `dark` would take `change_action_state` as a critical.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-actions"}
+out=${1:-"$root/target/interop/gtk-actions"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-actions"
 

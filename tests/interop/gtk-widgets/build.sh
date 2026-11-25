@@ -5,7 +5,7 @@
 # `G_DEBUG=fatal-criticals` turns any GTK complaint into an end.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-widgets"}
+out=${1:-"$root/target/interop/gtk-widgets"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-widgets"
 

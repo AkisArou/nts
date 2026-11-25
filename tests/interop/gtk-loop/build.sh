@@ -16,7 +16,7 @@
 #   in 2 s -- and starved GLib's idle sources so the click never came.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-loop"}
+out=${1:-"$root/target/interop/gtk-loop"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-loop"
 

@@ -8,7 +8,7 @@
 # continuations ran, in order, before the program quit.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-async"}
+out=${1:-"$root/target/interop/gtk-async"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-async"
 

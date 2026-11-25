@@ -3,7 +3,7 @@
 # crossed as the integer clang says each is compatible with, on Windows.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-windows-enum-tags"}
+out=${1:-"$root/target/interop/windows-enum-tags"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/windows-enum-tags"
 windows=${NTS_WINDOWS_ROOT:-"$HOME/.cache/nts/windows"}

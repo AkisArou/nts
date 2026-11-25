@@ -6,7 +6,7 @@
 # emitted file went unread for as long as the example existed.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-c-from-ts"}
+out=${1:-"$root/target/interop/c-from-ts"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/c-from-ts"

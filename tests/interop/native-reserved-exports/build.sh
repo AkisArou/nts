@@ -2,7 +2,7 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 source="$root/tests/interop/native-reserved-exports"
-out=${1:-"$root/target/interop-native-reserved-exports"}
+out=${1:-"$root/target/interop/native-reserved-exports"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 mkdir -p "$out"
 for backend in c llvm; do

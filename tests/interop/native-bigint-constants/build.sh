@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-bigint-constants"}
+out=${1:-"$root/target/interop/native-bigint-constants"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-bigint-constants"

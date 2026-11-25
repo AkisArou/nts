@@ -16,7 +16,7 @@
 # out itself, linked with the C build's runtime and main.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-given"}
+out=${1:-"$root/target/interop/native-given"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-given"

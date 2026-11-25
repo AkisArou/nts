@@ -12,7 +12,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
 nts_jvm_flags=$(cat "$root/runtime/jvm/test-vm-flags.txt")
 nts_jdk_flags=$(sed 's/^/-J/' "$root/runtime/jvm/test-vm-flags.txt")
-out=${1:-"$root/target/interop-ts-from-java"}
+out=${1:-"$root/target/interop/ts-from-java"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 
 

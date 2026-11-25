@@ -8,7 +8,7 @@
 # still reach the functions their tags name.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-gi"}
+out=${1:-"$root/target/interop/gtk-gi"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-gi"
 

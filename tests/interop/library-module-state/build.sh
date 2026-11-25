@@ -8,7 +8,7 @@
 # than a link error.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-library-module-state"}
+out=${1:-"$root/target/interop/library-module-state"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/library-module-state"

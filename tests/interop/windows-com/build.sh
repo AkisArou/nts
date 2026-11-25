@@ -4,7 +4,7 @@
 # bind_winmd::map::tests::com_emission_checks_metadata_slots_signatures_and_explicit_out_slots.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-windows-com"}
+out=${1:-"$root/target/interop/windows-com"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/windows-com"
 windows=${NTS_WINDOWS_ROOT:-"$HOME/.cache/nts/windows"}

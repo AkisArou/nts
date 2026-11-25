@@ -6,7 +6,7 @@
 # `temporary` guards the view leaning on the string it lends.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-string-view-lend"}
+out=${1:-"$root/target/interop/native-string-view-lend"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-string-view-lend"

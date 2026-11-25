@@ -6,7 +6,7 @@
 # each msgid, so a pass is a translation and not an echo.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-gettext"}
+out=${1:-"$root/target/interop/gtk-gettext"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-gettext"
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-private-names"}
+out=${1:-"$root/target/interop/native-private-names"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 cc=${CC:-clang}
 source="$root/tests/interop/native-private-names"

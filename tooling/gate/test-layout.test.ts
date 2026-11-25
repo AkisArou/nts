@@ -1,3 +1,5 @@
+import {pathToFileURL} from 'node:url';
+import {interopScratchDrift} from './test-layout.ts';
 import {inspectTargetScratch} from './test-layout.ts';
 import assert from'node:assert/strict';
 import{mkdirSync,writeFileSync,appendFileSync}from'node:fs';
@@ -69,4 +71,17 @@ test('new top-level target scratch refuses, including drift inside the declared 
   assert.deepEqual(inspectTargetScratch('compiler/test-support/scratch.rs','workspace.join("target/test-scratch")'),[]);
   assert.deepEqual(inspectTargetScratch('compiler/core/tests/example.rs','ScratchDir::in_target("topic")'),[]);
   assert.deepEqual(inspectTargetScratch('compiler/core/tests/example.rs','// root.join("target/unowned-tests")\nlet source = r#"root.join("target/unowned-tests")"#;'),[]);
+});
+
+
+test('interop writer and reader defaults cannot restore the legacy top-level layout',t=>{
+  const f=fixture(t);
+  assert.deepEqual(interopScratchDrift(),[]);
+  writeFileSync(join(f.root,'writer.sh'),'out="$root/target/interop-example"');
+  writeFileSync(join(f.root,'reader.ts'),'const out = "target/interop-example";');
+  const directory=pathToFileURL(f.root+'/');
+  assert.equal(interopScratchDrift(directory).length,2);
+  writeFileSync(join(f.root,'writer.sh'),'out="$root/target/interop/example"');
+  writeFileSync(join(f.root,'reader.ts'),'const out = "target/interop/example";');
+  assert.deepEqual(interopScratchDrift(directory),[]);
 });

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const out = resolve(process.argv[2] ?? `${root}/target/interop-native-compression`);
+const out = resolve(process.argv[2] ?? `${root}/target/interop/native-compression`);
 const compiler = process.env.NTS_BIN ?? `${root}/target/release/nts`;
 const provider = fileURLToPath(dataDirectory(new URL("../../../runtime/web-platform/providers/native/compression/",import.meta.url)));
 mkdirSync(out, { recursive: true });

@@ -27,7 +27,7 @@
 # either it prints SKIP; with no Mac reachable it says the runs were not made.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-macos-native-objc"}
+out=${1:-"$root/target/interop/macos-native-objc"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/macos-native-objc"
 apple=${NTS_APPLE_ROOT:-"$HOME/.cache/nts/apple"}

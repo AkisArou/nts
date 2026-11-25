@@ -6,7 +6,7 @@
 # nothing" would mean the factory never ran.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-list"}
+out=${1:-"$root/target/interop/gtk-list"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-list"
 

@@ -1652,6 +1652,7 @@ the tooling strict checker owns the source's type checking.
   inner runs (`~/.cache/nts-inner`)
   past three days, with nothing inside them changed for those three days;
   and an empty nts slice bound to no active unit, stopped by name.
+  Build output and raw cost retention use their separate owners above.
   Everything else the count only reports.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.

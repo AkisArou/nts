@@ -11,7 +11,7 @@
 # the emission arm tested nothing.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-cycles"}
+out=${1:-"$root/target/interop/gtk-cycles"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-cycles"
 

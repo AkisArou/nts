@@ -15,7 +15,7 @@ The build runs a correctness control. To transform a file, use distinct input
 and output paths:
 
 ```sh
-target/interop-native-buffer/caller input.txt output.txt
+target/interop/native-buffer/caller input.txt output.txt
 ```
 
 The C driver owns the buffer and handles file I/O and errors. The TS function

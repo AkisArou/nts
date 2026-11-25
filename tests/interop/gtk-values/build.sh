@@ -4,7 +4,7 @@
 # criticals fatal: a handle released once too often is one.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-values"}
+out=${1:-"$root/target/interop/gtk-values"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-values"
 if ! pkg-config --exists gtk4; then

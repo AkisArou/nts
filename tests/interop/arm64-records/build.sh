@@ -17,7 +17,7 @@
 # Without qemu, zig or clang the arm says so by name.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-arm64-records"}
+out=${1:-"$root/target/interop/arm64-records"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/arm64-records"
 

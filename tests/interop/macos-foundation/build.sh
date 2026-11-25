@@ -29,7 +29,7 @@
 # With no Mac reachable, the run arms say so by name and the rest still count.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-macos-foundation"}
+out=${1:-"$root/target/interop/macos-foundation"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/macos-foundation"
 apple=${NTS_APPLE_ROOT:-"$HOME/.cache/nts/apple"}

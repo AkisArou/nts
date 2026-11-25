@@ -1,3 +1,4 @@
+import {inspectionDirectory} from './reader-inputs/main.ts';
 import {targetScratch} from '../full-check/keep.ts';
 import {rustTokens,type RustToken} from './rust-test-paths.ts';
 import {cargoSync} from './cargo.ts';
@@ -116,6 +117,22 @@ export function inspectTargetScratch(file:string,source:string):string[]{
   };walk(rustTokens(source));return problems;
 }
 
+const INTEROP_SCRATCH_INPUTS=inspectionDirectory(new URL('../../tests/interop/',import.meta.url));
+/** Extra drift guard over writer and reader defaults, never a removal grant. */
+export function interopScratchDrift(directory:URL=INTEROP_SCRATCH_INPUTS):string[]{
+  const problems:string[]=[],root=fileURLToPath(directory);
+  const visit=(at:string)=>{
+    for(const entry of readdirSync(at,{withFileTypes:true})){
+      if(entry.name.startsWith('.')||entry.name==='node_modules')continue;
+      const path=join(at,entry.name);
+      if(entry.isDirectory())visit(path);
+      else if(entry.isFile()&&/\.(?:sh|ts|mjs|js|py|md)$/.test(entry.name)){
+        if(readFileSync(path,'utf8').includes('target/interop-'))problems.push(normalize(relative(root,path))+': legacy interop scratch default; use target/interop/<project>');
+      }
+    }
+  };visit(root);return problems;
+}
+
 export function assertTestLayout(root:string,packages:readonly CargoPackage[]=cargoPackages(root)):TestLayout{
   const layout=checkTestLayout(root,packages);
   const listed=spawnSync('git',gitArguments(['ls-files','-z','--','*.rs']),{cwd:root,encoding:'utf8'});
@@ -134,6 +151,7 @@ export function assertTestLayout(root:string,packages:readonly CargoPackage[]=ca
     for(const site of inspectRustPidPaths(file,source).selfSpawns)if(site.test)layout.problems.push(file+':'+site.line+': use the self_test owner for an exact self-spawn and its libtest count');
     for(const site of inspectRustPidPaths(file,source).paths)if(site.test)layout.problems.push(file+':'+site.line+': test resource is keyed by a process ID; use a per-test scratch owner');
   }
+  layout.problems.push(...interopScratchDrift());
   if(layout.problems.length)throw Error(layout.problems.join('\n'));
   return layout;
 }

@@ -24,7 +24,7 @@
 # count.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-windows-winrt"}
+out=${1:-"$root/target/interop/windows-winrt"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/windows-winrt"
 windows=${NTS_WINDOWS_ROOT:-"$HOME/.cache/nts/windows"}

@@ -4,7 +4,7 @@
 # fatal: a file released once too often is one.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-open"}
+out=${1:-"$root/target/interop/gtk-open"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-open"
 if ! pkg-config --exists gio-2.0; then

@@ -5,7 +5,7 @@
 # into an end.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-cairo"}
+out=${1:-"$root/target/interop/gtk-cairo"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-cairo"
 

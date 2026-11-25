@@ -15,7 +15,7 @@
 #   1,000 and 100,003 blocks lost, against 0 and 3 (the bump arena's chunks).
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-native-string"}
+out=${1:-"$root/target/interop/native-string"}
 cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-string"

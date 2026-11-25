@@ -4949,3 +4949,14 @@ is outside the pool transaction. A held lock keeps the candidate by name,
 and a focused control proves both refusal and later removal under that same
 owner lock. This closes the idle gap between pin writer child commands where
 process and unit path observations alone might see no user.
+
+
+## Standalone interop uses the declared scratch root (11-25)
+
+#841 slice (d). The owner-root rule also covers interop projects invoked
+outside the gate dispatcher. Their standalone writer defaults and verifier
+reader defaults use `target/interop/<project>`, preserving an explicitly
+supplied output argument. The source drift control inspects both writers and
+readers, so a new legacy default cannot keep the migration alive silently.
+The native-buffer README follows the same output location. Scenario logic
+is unchanged.

@@ -3,7 +3,7 @@
 # The DLL is rebuilt from the committed .rc and C sources, never downloaded.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-windows-resource-atoms"}
+out=${1:-"$root/target/interop/windows-resource-atoms"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/windows-resource-atoms"
 windows=${NTS_WINDOWS_ROOT:-"$HOME/.cache/nts/windows"}

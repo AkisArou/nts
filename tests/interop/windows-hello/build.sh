@@ -25,7 +25,7 @@
 # for that as well as its status.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-windows-hello"}
+out=${1:-"$root/target/interop/windows-hello"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/windows-hello"
 windows=${NTS_WINDOWS_ROOT:-"$HOME/.cache/nts/windows"}

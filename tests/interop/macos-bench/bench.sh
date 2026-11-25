@@ -15,7 +15,7 @@ nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/macos-bench"
 apple=${NTS_APPLE_ROOT:-"$HOME/.cache/nts/apple"}
 sdk=${NTS_APPLE_SDK:-"$apple/MacOSX.sdk"}
-out=${NTS_BENCH_OUT:-"$root/target/interop-macos-bench"}
+out=${NTS_BENCH_OUT:-"$root/target/interop/macos-bench"}
 mkdir -p "$out"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$out/build.log" 2>&1 ||
   { cat "$out/build.log" >&2; exit 1; }

@@ -7,7 +7,7 @@
 # GTK complaint into an end.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-journal"}
+out=${1:-"$root/target/interop/gtk-journal"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-journal"
 

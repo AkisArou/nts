@@ -20,7 +20,7 @@
 # says the runs were not made.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-macos-geometry"}
+out=${1:-"$root/target/interop/macos-geometry"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/macos-geometry"
 apple=${NTS_APPLE_ROOT:-"$HOME/.cache/nts/apple"}

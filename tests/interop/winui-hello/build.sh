@@ -21,7 +21,7 @@
 # count.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-winui-hello"}
+out=${1:-"$root/target/interop/winui-hello"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/winui-hello"
 windows=${NTS_WINDOWS_ROOT:-"$HOME/.cache/nts/windows"}

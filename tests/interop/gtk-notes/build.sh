@@ -4,7 +4,7 @@
 # src/main.ts). `G_DEBUG=fatal-criticals` turns any GTK complaint into an end.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-gtk-notes"}
+out=${1:-"$root/target/interop/gtk-notes"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/gtk-notes"
 

@@ -15,7 +15,7 @@
 #   lib.dom delegates to.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-out=${1:-"$root/target/interop-chromium-surface"}
+out=${1:-"$root/target/interop/chromium-surface"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/chromium-surface"
 

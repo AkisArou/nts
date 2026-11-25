@@ -2,7 +2,7 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 source="$root/tests/interop/gtk-template-receiver"
-out=${1:-"$root/target/interop-gtk-template-receiver"}
+out=${1:-"$root/target/interop/gtk-template-receiver"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 if ! pkg-config --exists gtk4 || ! command -v Xvfb >/dev/null 2>&1; then
   echo "SKIP gtk-template-receiver: GTK4 and Xvfb are required"
