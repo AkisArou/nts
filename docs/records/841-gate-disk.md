@@ -1166,3 +1166,14 @@ the required environment; admission waits are preserved in its raw logs.
 | `review2/focused-v1.log` | `f70841ad929234cf0392b518ca92d31a1e981d1b2088aea0979a9c404c561506` |
 | `review2/types-v1.log` | `c9adac67402024ad3d9773fedf7d000ebe61f160affeeb1d7421f761c8993592` |
 | `review2/audit-v1.log` | `4bc2f306cb1ef602d180781d27c9e41c5600e326aa477c84b929444124c7e161` |
+
+
+Review classification inner proof passed in `nts-841-review2-inner-v1` on
+`f5c5c211d83e50dd61307785b86877d1ee2d358e` with the required Node/environment and unit properties:
+formatting 3 s, Clippy 3 s, compiler build 3 s, selected crates and backend
+Rust tests 573 s. Reported suites: 32; 2127 passes,
+zero failures and 1 existing ignored case(s). Its run's `tmp/`
+was absent after completion. No source changes during proof.
+Raw log `~/.cache/nts-scratch/841/review2/inner-v1.log`, SHA-256
+`a3c2064786655c0df3d3257ffd9ae236f2fa510f98c118394ea4d210e3d5d812`; compact proof `review2/inner-v1-proof.json`, SHA-256
+`5fd0f36eb01a2afb282e2092b07b586515cc0b4006825928173bc7bafaf4f5ae`.
