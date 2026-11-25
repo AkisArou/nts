@@ -64,7 +64,7 @@ test('retains '+control,t=>{
   assert.deepEqual(pruneRawCosts(f.options).removed,[]);assert.ok(existsSync(join(run,'costs','events.jsonl')));
 });
 
-for(const guard of ['holder','replacement','summary change','symlink','lock'])test('retains raw costs at '+guard+' boundary',t=>{
+for(const guard of ['holder','replacement','summary change','lifecycle change','progress change','symlink','lock'])test('retains raw costs at '+guard+' boundary',t=>{
   const f=fixture(t),run=f.make('1');f.newer();
   const path=join(run,'costs');let lock:GateResource|null=null;
   if(guard==='lock')lock=GateResource.tryAcquire(f.runs+'.cost-retention.lock');
@@ -73,9 +73,11 @@ for(const guard of ['holder','replacement','summary change','symlink','lock'])te
     const result=pruneRawCosts({...f.options,ownership:()=>{
       if(guard==='holder')throw Error('unit writer.service owns costs');
       if(guard==='replacement'){renameSync(path,join(f.root,'original'));mkdirSync(path);writeFileSync(join(path,'new'),'new owner');}
+      if(guard==='lifecycle change')writeFileSync(join(run,'run-lifecycle.json'),JSON.stringify({version:1,events:4,running:[]}));
+      if(guard==='progress change')writeFileSync(join(run,'measurement-progress.json'),JSON.stringify({version:1,live:false}));
       if(guard==='summary change')writeFileSync(join(run,'summary.json'),'{}');
     }});
-    assert.deepEqual(result.removed,[]);assert.ok(existsSync(path));assert.ok(result.kept.some(row=>/writer.service|identity changed|schema|physical directory|lock held/.test(row.reason)),JSON.stringify(result));
+    assert.deepEqual(result.removed,[]);assert.ok(existsSync(path));assert.ok(result.kept.some(row=>/writer.service|identity changed|schema|terminal record changed|physical directory|lock held/.test(row.reason)),JSON.stringify(result));
   }finally{lock?.close();}
 });
 

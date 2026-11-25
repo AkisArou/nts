@@ -1458,7 +1458,7 @@ the tooling strict checker owns the source's type checking.
   `target/interop` roots offer rebuildable scratch through those same guards,
   independently of warm profiles. The temporary `legacy-scratch` migration
   covers the explicit old compiler namespaces in `keep.json` and `interop-*`;
-  it retires once no free tree carries that layout. Unknown siblings and held
+  it retires once no pool tree carries that layout and no legacy trash remains. Unknown siblings and held
   or service scratch stay. Evidence, shared corpora and unknown cache roots
   have no deletion grant.
 - **Git observers preserve the owner's index.** Git arguments run through

@@ -4960,3 +4960,12 @@ supplied output argument. The source drift control inspects both writers and
 readers, so a new legacy default cannot keep the migration alive silently.
 The native-buffer README follows the same output location. Scenario logic
 is unchanged.
+
+
+## Legacy scratch retirement includes held trees and trash (11-25)
+
+Clarification of #841's gate disk deletion entry: deletion is limited to clean
+free pool trees, while retirement waits until **every** pool tree, held trees
+included, is free of the old layout and no `legacy-scratch` trash entry remains.
+The earlier wording about no free tree carrying it was too narrow: a held tree
+can become free later, and an interrupted detachment still owes its drain.

@@ -235,7 +235,8 @@ function folders(dir: string, stat: FolderStat = lstatSync): Entry[] {
  * it makes its entry red, so the list cannot outlive the tools it describes.
  * `targets`, on a top-level rule only, declares the cargo targets inside its
  * folder: each target's path mapped to the tree whose builds write it, both
- * relative to the folder. A pool declares each slot's `<n>/target` by its
+ * relative to the folder. An entry can carry {tree, lock:{path,owner}} to
+ * declare the writer's existing mutex. A pool declares each slot's `<n>/target` by its
  * kind. The count judges every declared target's profiles (targetInventory).
  */
 

@@ -34,8 +34,8 @@ function record(path:string):Record<string,unknown>{
 function terminal(run:string){
   const summaryText=regular(join(run,'summary.json')),summary=JSON.parse(summaryText) as Record<string,unknown>;
   if(summary?.schema!==1)throw Error('unknown summary schema');
-  const lifecycle=record(join(run,'run-lifecycle.json'));
-  if(lifecycle.version!==1||!Number.isSafeInteger(lifecycle.events)||Number(lifecycle.events)<0||!Array.isArray(lifecycle.running)||lifecycle.running.length)
+  const lifecycleText=regular(join(run,'run-lifecycle.json')),lifecycle=JSON.parse(lifecycleText) as Record<string,unknown>;
+  if(lifecycle?.version!==1||!Number.isSafeInteger(lifecycle.events)||Number(lifecycle.events)<0||!Array.isArray(lifecycle.running)||lifecycle.running.length)
     throw Error('unknown or unfinished terminal lifecycle');
   // The full-check's outer supervisor can hold a green inner runner. An
   // absent supervisor record is normal for hand/landing runs; a present one
@@ -64,7 +64,7 @@ function terminal(run:string){
     costFailure?'case_costs not materialized without reader errors':null;
   // Summaries can contain hundreds of MiB of cases. Keep only decision facts
   // and byte digests while inventorying other runs, never their populations.
-  return {verdict,reason,summaryDigest:createHash('sha256').update(summaryText).digest('hex'),
+  return {verdict,reason,lifecycleDigest:createHash('sha256').update(lifecycleText).digest('hex'),summaryDigest:createHash('sha256').update(summaryText).digest('hex'),
     progressDigest:progressText===null?null:createHash('sha256').update(progressText).digest('hex'),finished:started+summary.wall_s*1000};
 }
 
@@ -113,7 +113,7 @@ export function pruneRawCosts(options:Options):CostRetention{
           ownership(run,path);
           if(!same(rootIdentity,directory(root))||!same(row.identity,directory(run))||!same(identity,directory(path)))throw Error('raw-cost directory identity changed');
           const current=terminal(run);
-          if(current.summaryDigest!==row.terminal.summaryDigest||current.progressDigest!==row.terminal.progressDigest)throw Error('terminal record changed');
+          if(current.summaryDigest!==row.terminal.summaryDigest||current.lifecycleDigest!==row.terminal.lifecycleDigest||current.progressDigest!==row.terminal.progressDigest)throw Error('terminal record changed');
           // A private sibling detachment fixes the deletion grant to the
           // observed directory. A new producer at costs/ is outside it.
           if(path===ordinary){

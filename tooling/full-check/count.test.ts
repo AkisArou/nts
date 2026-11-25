@@ -767,7 +767,7 @@ test("keep.json declares every cargo target the services' layouts, pin.ts and pi
   for(const [target,tree] of expected)assert.equal(declared.get(target),tree,target);
   // The writers still spell the pin and hand-gate paths this way.
   const repo=fileURLToPath(new URL('../..',import.meta.url)),pin=readFileSync(join(repo,'tooling/conformance/pin.ts'),'utf8'),pinned=readFileSync(join(repo,'tooling/gate/pinned.sh'),'utf8');
-  for(const spelling of ['join(homedir(), ".cache/nts-pins")','const TREE = join(PINS, "tree");','const TARGET = join(PINS, "target");'])assert.ok(pin.includes(spelling),spelling);
+  for(const spelling of ['join(homedir(), ".cache/nts-pins")','const TREE = join(PINS, "tree");','const TARGET = join(PINS, "target");','const LOCK = join(PINS, "build.lock");'])assert.ok(pin.includes(spelling),spelling);
   for(const spelling of ['tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}','target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}'])assert.ok(pinned.includes(spelling),spelling);
 });
 
