@@ -1078,3 +1078,14 @@ No additional real-run payload was deleted or copied.
 | `review/inventory-after.mjs` | `acc49b250584f25da6a3d8189677645d3dd09bf20510f4087609c5211693d1c8` |
 | `review/inventory-after.log` | `4420c5fbc21d2e3cc6f5f58e64279ae45f72c8985007aa211dbc35f93e19557e` |
 | `review/inventory-after.time` | `3dea501ce6c39b66cc00d48da469bae5a602f87860c0666046c54151c9008e7c` |
+
+
+Review inner proof passed in `nts-841-review-inner-v1` with Node 26.13.0 first
+on PATH and the required Java/Android/debuginfod environment. `--no-agree`
+passed formatting (3 s), Clippy (14 s), compiler build (3 s), and selected-crate
+plus backend tests (660 s): 2127 passing tests, zero failures,
+1 existing ignored case(s), across 32 reported test binaries/doc suites.
+Its run's `tmp/` was absent after completion. Source remained unchanged.
+Raw log `~/.cache/nts-scratch/841/review/inner-v1.log`, SHA-256
+`0917d153e9b4b28f92c061b088ab8bc8bb2c2112c300d2e8b304479192a8e8c6`; compact proof `review/inner-v1-proof.json`, SHA-256
+`0122aac0ee43033e2dbf29dec293469b4976aa27acfb46571390d34142339b61`.
