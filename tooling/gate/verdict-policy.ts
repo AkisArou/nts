@@ -9,6 +9,7 @@ export const PROGRAM_DISAGREEMENTS: Readonly<Record<string, string>> = Object.fr
   "typed-array-aliasing": "node 26 answers 302 for a resizable ArrayBuffer with maxByteLength 2^31-1 or 2^32-1; nts throws RangeError. The old 2 GiB address-space oracle bound made node fail too",
   "a-quiet-getter-beside-a-raising-one-in-an-access-family": "the JVM declines it (NTS4001: interface field accessor dispatch through getters requires JVM stateful interfaces); C, LLVM and C with rc agree",
   "a-quiet-getter-beside-a-raising-one-in-an-access-family-control": "the JVM declines it, as it does on main (NTS4001: interface field accessor dispatch through getters requires JVM stateful interfaces); C, LLVM and C with rc agree",
+  "an-async-source-returned-through-an-empty-interface": "the JVM declines it (NTS4001: a nominal cast into the empty AsyncIterable target whose shared layout has an unrelated subclass); C and LLVM, with and without RC, agree 58/58; owned by #995",
 });
 
 /** The refusal a listed launch row must still decline with: its diagnostic's code and the start of its message, and the task that removes it. */
