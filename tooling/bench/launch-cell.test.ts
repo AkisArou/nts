@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { COLUMNS, COMPARATORS, POLICY, SESSION_COLUMNS, ownBest, readRuns, renderFull, sealRun, type Cell, type Json, type RunRecord } from "./run-record.ts";
+import { COLUMNS, COMPARATORS, POLICY, SESSION_COLUMNS, benchmarkRecordInputs, ownBest, readRuns, renderFull, sealRun, type Cell, type Json, type RunRecord } from "./run-record.ts";
 import { fromNts, type Metadata } from "./run-producers.ts";
 import {
   LAUNCH_COUNT, LAUNCH_PROTOCOL, LAUNCH_WARMUPS, checkLaunchCell, comparableColdStartups, coldStartupProtocol,
@@ -103,11 +105,21 @@ test("control: a launch cell whose measurement is missing or malformed is an ins
   assert.throws(() => launchRun({ "nts C": good, node: cellOf(40_000) }, "odd", undefined, "warm"), /unknown row kind/);
 });
 
-test("committed runs, without row kinds or cold-startup protocols, still decode", () => {
+test("committed runs still decode, preserving explicit row kinds and their legacy absence", () => {
   const root = fileURLToPath(new URL("../..", import.meta.url));
   const runs = readRuns(root);
   assert.ok(runs.length > 0);
-  for (const run of runs) for (const row of run.rows) assert.equal(row.kind, undefined);
+  let legacyRows = 0, kindRows = 0;
+  for (const run of runs) {
+    const raw = JSON.parse(readFileSync(join(benchmarkRecordInputs(root).runs, run.id + ".json"), "utf8")) as { rows: { kind?: string }[] };
+    for (const [index, row] of run.rows.entries()) {
+      const kind = raw.rows[index]!.kind;
+      assert.equal(row.kind, kind, run.id + "/" + row.name);
+      if (kind === undefined) legacyRows++; else kindRows++;
+    }
+  }
+  assert.ok(legacyRows > 0, "committed legacy rows were exercised");
+  assert.ok(kindRows > 0, "committed rows with explicit kinds were exercised");
 });
 
 test("a launch row's own best never comes from a throughput row of the same name and workload", () => {
