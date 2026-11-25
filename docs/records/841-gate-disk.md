@@ -748,3 +748,165 @@ reclamation never offers it; free pool slots, services and pins stay red.
 | --- | --- |
 | `c-live-inventory.log` (every declared target and each profile's state and reason) | `5093e862c50b4495d2eb33d71c18c6aa19f4152efa95248e1b0b9af5fd9f3c54` |
 | `c-live-count.log` (the count's full read-only output on the change) | `93b2a1651ec31c60f173a9546bada27529a9ce1d836fce916ac64a8dd3f5f244` |
+
+
+## Enabled deletion policies slice (d)
+
+The hourly raw-cost owner retains the newest three completed runs per declared
+run root, and every red, held, unfinished or unknown run. It removes only an
+older green run's `costs/`, after a known materialized cost summary with zero
+reader errors and the normal physical/terminal/process/unit guards. The
+collector mutex sits beside the run root, outside ordinary log-age pruning.
+A durable device/inode/uid and summary-digest receipt resumes an interrupted
+detachment. Inventory retains compact facts and digests, rather than parsed
+case populations; final guards re-read and hash the terminal records.
+
+The cost writer sets `partial` for exactly
+`errors.length || missingChecks || checks.some(c => !c.complete)`. Missing
+checks have no raw observation to recover, and incomplete checks retain their
+ended phases in the summary. A known `partial` with `error_count: 0` and no
+errors is therefore prunable; any reader/parse error retains raw evidence.
+The owner approved this reading of the writer.
+
+Every non-pool target declared by `keep.json` now feeds the existing obsolete
+profile reclaimer, using its own tree's build generation. Pin targets also
+take `pin.ts`'s existing writer mutex with zero wait, outside the pool
+transaction. A held pin is a named keep. Pressure retains one compatible warm
+free tree; ordinary idle upkeep retains two, per owner decision
+`disk-warm-trees-20261125`. Compiler scratch and both dispatched and standalone
+interop use declared roots `target/test-scratch` and `target/interop`. Only
+clean free pool trees offer those roots. A bounded `legacy-scratch` migration
+handles the explicit former compiler namespaces and `interop-*`; retire this
+kind once no pool tree carries that layout and no legacy trash remains. Unknown siblings, held/service
+scratch, active claims and live users remain protected. Source drift controls
+cover compiler constructors and interop writer/reader defaults.
+
+### Real core retention
+
+The production owner was restricted to
+`~/.cache/nts-full-check/runs/core-c7a228948f6f-20261125T001734Z`. The run was
+completed green and older than the newest three completed runs in its root.
+The run producer was `c7a228948f6f6cc0d0d52c14b7e1dc67577f781c`; the
+collector implementation was `720f69081797caccf302aa4d6a0c1c577d734c63`.
+The final lifecycle-digest strengthening is checked separately below.
+No raw costs were copied. The before summary and log hashes, raw byte/inode
+inventory and all observed run states were saved before removal.
+
+| Phase | costs content bytes | costs allocated bytes | Raw files | Raw inodes | summary.json bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before retention | 552,704,866 | 704,290,816 | 66,196 | 66,197 | 214,314,722 |
+| After retention | 0 | 0 | 0 | 0 | 214,314,722 |
+
+The summary and logs are byte-identical. The summary's SHA-256, also that of
+`~/.cache/nts-scratch/841/d/real-core-summary-before.json`, is
+`9be2f6473a6d4b065e4180a51f41c17d6f9c81c3309cbc105a5c7b51b975a509`.
+All 124 other observed runs' cost-directory identities and presence were
+preserved, including the newest completed runs and every red, held or
+unfinished run. The before/after snapshots list them individually. Allocated
+bytes removed are not a claim about concurrent filesystem free-space change.
+
+The summary's own size remains a footprint cost. Slices (e) and (f) include
+`summary.json.case_costs` beside compressed raw streams in their measurement;
+compression or slimming of that population is outside slice (d).
+
+### Coverage retained by partial summaries
+
+| Green core | Reader errors | Missing program checks | Incomplete checks |
+| --- | ---: | ---: | ---: |
+| 08e864d2bef3, 20261125T082738Z | 0 | 0 | 90 |
+| 36edc25876c9, 20261125T022120Z | 0 | 0 | 90 |
+| c7a228948f6f, 20261125T001734Z | 0 | 0 | 90 |
+| f12c78199d6d, 20261124T224237Z | 0 | 0 | 90 |
+
+Each has thirty incomplete checks in each TypeScript backend. The coordinator
+filed this separate telemetry gap as #1034. Per-step coverage is retained in
+the raw artifact below; this slice does not change telemetry collection.
+
+### Controls and raw evidence
+
+The focused suite passed 398 tests with no failures, cancellations or skips.
+After matching normal completion to the writer's actual `interrupted: null`,
+all 26 cost-retention controls passed again. Strict types passed all six
+projects and 1,234 checked modules, with no diagnostic increase. The initial
+host audit passed; the final landing check covers the completed source.
+
+| Path under `~/.cache/nts-scratch/841/d/` | SHA-256 |
+| --- | --- |
+| `focused-v5.log` | `ddccc6347a03dc6785630954e0186e3e9e6e7e37f4ee11bf03398459bcdb382e` |
+| `cost-focused-v6.log` | `6e514199ab0f3705a7481816d6d81d1848d03cd29b88ac4f6db264ece8e0022f` |
+| `types-v4.log` | `0dafde3feb67e630b378dfd0c62cbdf9799c5f66f682b932c6cfafa5921db4aa` |
+| `real-core-retention.mjs` | `ddc3332691044e1d8ea900f30a10e230a6d2dedcc3f4236830a893562f252e30` |
+| `real-core-retention.log` | `bc1546ba4f2451c49cfb12bf8b49b1752062295f6621a2ca9768479dec15419f` |
+| `real-core-before.json` | `2b25b6723bf615ef6248182b98ac80dd7b58e5f46fb02da936e9835bfdc24d89` |
+| `real-core-after.json` | `1decfa8989a36257c3dda57871a6232fecc24dc2d7b9e7e939863c2a211fb960` |
+| `real-core-retention-result.json` | `82701eaa9e54114bdae3645911493e30cb9e88b0b366c240d6a3732d5eae3d79` |
+| `recent-core-coverage.json` | `608270cd7a8edafacd3d6ebf6e283f7a9761f01ee19c9a7dae450da384221019` |
+
+
+Inner passed formatting, Clippy, the fresh compiler build and every selected
+crate plus the backend/frontend tests. The test phase took 697 seconds; the
+Clippy log includes its admission wait. The final post-inner focused cost and
+count run passed 73 controls, including a changed but still closed lifecycle
+and a changed measurement-state receipt. Summary, lifecycle and measurement
+record digests are all rechecked at the final removal guard. The saved real
+run's lifecycle was identical before and after removal (version 1, 58 events,
+no running steps); its measurement was closed and unheld. That independent
+fact check is retained below. No second shared deletion was performed.
+
+### Compiled test inventory
+
+All 2,063 identities in the initial warm binaries remain at exactly their
+previous multiplicity in the fresh inner binaries. The fresh inventory has
+2,121 identities across 27 binaries, with no losses or changed old
+multiplicities. Its 58 additions each have a matching declaration already in
+accepted base `ecbcd1e70866e3551925e72f5bd6ef69e295b222`. This is preservation
+with accepted-base additions: the warm binaries were not a same-revision
+baseline, so exact whole-inventory equality is not claimed. No Rust harness
+or test declaration was added by this task.
+
+Four of the accepted-base additions are in files whose scratch constructors
+this task changed:
+
+| Test path | Added accepted-base identity |
+| --- | --- |
+| `compiler/codegen/c/tests/published_consuming.rs` | `conditional_and_aliased_null_field_controls_do_not_leak_under_poison` |
+| `compiler/codegen/c/tests/published_consuming.rs` | `current_phi_identities_meet_their_minima_under_poison_and_collection` |
+| `compiler/codegen/c/tests/published_consuming.rs` | `open_towers_keeps_the_old_field_release_for_unknown_published_callers` |
+| `compiler/codegen/llvm/tests/typed_release.rs` | `typed_releases_follow_the_proved_layout_graph` |
+
+Every addition is listed by test path in the TSV below. The audit retains
+its accepted-base declaration evidence. The initial exact-comparison failure
+is preserved in `inventory-after.log`; it was not treated as exact equality.
+
+| Path under `~/.cache/nts-scratch/841/d/` | SHA-256 |
+| --- | --- |
+| `inner-v2.log` | `937e7c3c63474d8cf59b443cd2885f3c62e7d0fbd8d9934ea9058deb2bb166c7` |
+| `focused-final.log` | `da131821a163953629247b08eca2fe5f7676a9be4784cecef2c4430bb213f597` |
+| `types-final.log` | `6177c3bda8677a93aa2dc4a1a889023432c3570de87be0ba9476d1fc26db707a` |
+| `host-audit-final.log` | `9b8abefc2d374d67577efb4af5a2b6e3cdb6859f1a26e45ebf22582f7b93d103` |
+| `terminal-facts-confirmation.json` | `e2d59e9d8d1034de293273821e68a5ce4cf8c4863c58c962034623ae869501d9` |
+| `test-inventory-before.json` | `d685fd9aabf63aad6d24f47a1e9a04d4f07f91a1f98f6dbd0241535b44314b1a` |
+| `test-inventory-after.json` | `912a38dc85e1f6e6fa5d4ef8d42bb56c1147b483fe896bc05bd83e18a09d6a2b` |
+| `inventory-after.log` | `9ff682070f8b20f094a4d5e96cbed9a5dc941a4101fa0168b72594e19645cfb1` |
+| `inventory-preservation-audit.py` | `ff37c70c3143bc60b1b11a756dc762a6f1f51175959fbe2ecf68902bda84ad58` |
+| `inventory-preservation-audit.json` | `c292f73b70a85152c743238d5dfaf2cfff42f7a5efc2b28708c3c678d66518dc` |
+| `inventory-base-additions.tsv` | `96ea3d5747a581a568a747607494b9da9e28207897c062de524df7d7f1dee4de` |
+
+### Standalone interop proof
+
+The `native-compression` standalone `build.sh` and direct `verify.ts` both
+used `target/interop/native-compression`; the explicit output argument also
+built and verified in issue scratch. Each arm ran 454 checks: 451 passed,
+zero failed, and three declared skips. The compiler was the fresh inner
+`nts-dev` build. No scenario logic changed.
+
+| Path under `~/.cache/nts-scratch/841/d/` | SHA-256 |
+| --- | --- |
+| `interop-proof.sh` | `66962ef0246076b9977d5bafc604603c629224d14f88e8d2cb94447f31180ef3` |
+| `interop-proof.log` | `434fe6aa0596207215647381b82104ea23262c12197c347ebb8dfe18a5363a50` |
+| `interop-default-build.log` | `ca67522da49625de6cc4b94851c9ded3490877729da4d863745f1ff9276286ff` |
+| `interop-default-reader.log` | `2948396c4589155c2dac60daeec48636c7cbacb7b958567b5695d273fe011909` |
+| `interop-explicit.log` | `30b77b4e9c34b40a2bf70a8fa09499a48841bbc0ffbd0ef48c02d27849bf4106` |
+| `interop-compiler.sha256` | `0c11e0fe1d78d30bacde9c95096495897ee4dcde9613c750b536697b91617b1f` |
+| `interop-result.json` | `e629952179aeca3b44effefad6210a421a616fe476cbe5bed0ee2dd0e2a604eb` |
+| `compiler-path-files.txt` | `169e86f51860efce0f114600deb4e1a46fe8a89786cf7cd87b95f20d1800df07` |

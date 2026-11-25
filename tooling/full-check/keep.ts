@@ -82,7 +82,7 @@ export function declaredRunRoots(cache:string,keep:Record<string,Keep>):string[]
 }
 
 /** Explicit writer-owned namespaces. Legacy names are a bounded migration,
- * removed once free trees no longer carry the old layout. */
+ * removed once no pool tree carries the old layout and no legacy trash remains. */
 export function targetScratch(keep:Record<string,Keep>=readKeep()):{names:Record<string,string>;legacy:readonly string[]}{
   const pools=Object.values(keep).filter(rule=>rule.kind==='pool');
   return {names:Object.assign({},...pools.map(rule=>rule.targetScratch??{})) as Record<string,string>,legacy:pools.flatMap(rule=>rule.legacyTargetScratch??[])};
