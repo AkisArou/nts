@@ -4,7 +4,10 @@ import {ToolingInstrumentError} from './step-result.ts';
 import {lstatSync,readFileSync} from "node:fs";
 import {join} from "node:path";
 
-export type PathChange = {path:string;added:boolean;deleted:boolean;sameMode?:boolean;before?:string;after?:string};
+export type PathChange = {path:string;added:boolean;deleted:boolean;sameMode?:boolean;before?:string;after?:string;contentUninspected?:'oversize'};
+
+/** Content precision is optional; larger bodies retain conservative path checks. */
+export const CONTENT_INSPECTION_LIMIT=8<<20;
 
 /** A rename is both paths, so moving a fixture cannot erase its old reach. */
 export function parseNameStatus(text:string):PathChange[] {
@@ -35,7 +38,7 @@ export function parseNameStatus(text:string):PathChange[] {
 
 export function contentChanges(repo:string,changes:PathChange[],from:string,to:string|null,probe:InfrastructureProbe=infrastructureProbe):PathChange[] {
   const git=(...args:string[])=>{
-    const result=probe({purpose:`selector content git ${args[0]}`,command:'git',args:gitArguments(args),cwd:repo,stdio:['ignore','pipe','pipe'],maxBuffer:8<<20,exits:'classify'});
+    const result=probe({purpose:`selector content git ${args[0]}`,command:'git',args:gitArguments(args),cwd:repo,stdio:['ignore','pipe','pipe'],maxBuffer:CONTENT_INSPECTION_LIMIT,exits:'classify'});
     if(result.status!==0)throw Error(`selector content git ${args[0]} exited ${result.status}: ${(result.stderr??'').trim()}`);
     return result.stdout;
   };
@@ -46,6 +49,16 @@ export function contentChanges(repo:string,changes:PathChange[],from:string,to:s
       const oldMode=mode(from),file=to?null:lstatSync(join(repo,change.path));
       const newMode=to?mode(to):file!.isFile()?file!.mode&0o111?"100755":"100644":"other";
       if(!["100644","100755"].includes(oldMode)||oldMode!==newMode)return change;
+      const size=(rev:string)=>{
+        const answer=git('cat-file','-s',`${rev}:${change.path}`).trim();
+        if(!/^\d+$/.test(answer))throw new ToolingInstrumentError('tooling-setup',`selector content invalid blob size: ${answer}`);
+        return BigInt(answer);
+      };
+      const beforeSize=size(from),afterSize=to?size(to):BigInt(file!.size),limit=BigInt(CONTENT_INSPECTION_LIMIT);
+      if(beforeSize>limit||afterSize>limit){
+        const {before,after,...uninspected}=change;
+        return {...uninspected,sameMode:true,contentUninspected:'oversize'};
+      }
       return {...change,sameMode:true,before:git("show",`${from}:${change.path}`),after:to?git("show",`${to}:${change.path}`):readFileSync(join(repo,change.path),"utf8")};
     } catch(error) {if(error instanceof ToolingInstrumentError)throw error;return change;}
   });
