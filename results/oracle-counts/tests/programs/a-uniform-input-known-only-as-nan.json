@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-uniform-input-known-only-as-nan",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-uniform-input-known-only-as-nan/src/main.ts",
+      "signature": "de0038b8c6366466e529cac08ce917c36030f3856f82c03329fde5a3d0d3380f",
+      "keys": {
+        "c": "24093d3ea4f55e60cb3e055b263d0aaf",
+        "jvm": "a79482a98a91a9a9be594cf3f456d48b",
+        "llvm": "9b9c4ff8f09694b478a802ec57ed863a"
+      },
+      "cases_sha256": "e3415c43e844ca95dbfe2e50abfab3eba2595fab3ee6209af1f81fbf461ed026",
+      "driver_sha256": "c62186b83fb0f87bf5d95dadfda1358caa1dbe10d10efe5dcf47be58cab97333",
+      "populations": {
+        "defaultFinite": {
+          "count": 1,
+          "cases_sha256": "405ceca5c8a28e426e92471c0572eb1ad31926e0158b9f3cc9224b54212fa323"
+        },
+        "defaultNaN": {
+          "count": 1,
+          "cases_sha256": "18ef5db6978348b3e4310094593137bac2bda1c87ba8682ad036f860624df4e5"
+        },
+        "enumNaN": {
+          "count": 1,
+          "cases_sha256": "7a4ca25a8b8c6f09d5ff42cca536636a869c965f3e178b5a3cd29604699fd0d7"
+        },
+        "literalFinite": {
+          "count": 1,
+          "cases_sha256": "345edf80c750dfc2d1157941bcd484dccff2bc4b9dd6cf5ca24a082e73889c6a"
+        },
+        "negativeInfinity": {
+          "count": 1,
+          "cases_sha256": "80284196825ea97b36e721436645e4b0fff4cfa0ee13b2a9188eb4666896690d"
+        },
+        "positiveInfinity": {
+          "count": 1,
+          "cases_sha256": "a0f13c386082b473db4982ff44522ddd194af760028deb23b088b9be6407fee6"
+        },
+        "typeofFinite": {
+          "count": 1,
+          "cases_sha256": "4659a605a0bf5cb09874e5db4a4b8a73ecce854242e61aeb785f2a06f104644e"
+        },
+        "typeofNaN": {
+          "count": 1,
+          "cases_sha256": "71a6bc71f0ab64eef52c44892816b7461e88c3d544573d34bc13ead8da2754c5"
+        }
+      },
+      "complete": true,
+      "count": 8
+    }
+  ]
+}
