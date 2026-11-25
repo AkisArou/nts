@@ -1734,8 +1734,9 @@ the tooling strict checker owns the source's type checking.
   a partial final row without appending other records to it.
   The hourly upkeep retains raw `costs/` for the newest three completed runs
   in each declared run root and every red, held, unfinished or unknown run.
-  An older green run loses raw events only after `case_costs` is completely
-  materialized. Known terminal schemas, closed lifecycle and any outer
+  An older green run loses raw events only after known `case_costs` is materialized with zero reader errors.
+  Partial coverage remains in its summary and does not by itself retain raw;
+  a parse/read failure does. Known terminal schemas, closed lifecycle and any outer
   measurement state, unchanged records and physical identities, a collector
   lock and absent process/unit holders authorize that removal. A durable
   identity receipt allows an interrupted detachment to resume. Summaries and

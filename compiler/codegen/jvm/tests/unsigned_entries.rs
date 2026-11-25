@@ -1,7 +1,6 @@
 //! Java callers pass unsigned values; direct compiled calls retain raw words.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::Utf8Path;
 use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType, OpKind, ValueId};
 use nts_diagnostics::{Location, SourceId, Span};

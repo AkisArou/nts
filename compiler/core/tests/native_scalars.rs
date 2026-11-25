@@ -36,6 +36,8 @@ fn test_scratch_is_removed_when_its_owner_unwinds() {
 
 #[test]
 fn test_scratch_with_the_same_label_has_independent_owners() {
+    let bypass = Utf8Path::new("target").join("outside-owner");
+    assert!(std::panic::catch_unwind(|| ScratchDir::new(&bypass, "refused")).is_err());
     let parent = ScratchDir::in_target("separate");
     let first = ScratchDir::new(&parent, "same");
     let second = ScratchDir::new(&parent, "same");

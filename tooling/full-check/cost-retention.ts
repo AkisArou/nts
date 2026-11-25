@@ -11,7 +11,7 @@ import {hostObservations,type HostObservations} from '../gate/host-observations.
 
 export const RAW_COST_COMPLETED_RUNS=3;
 export type CostRetention={removed:{run:string;allocatedBytes:number}[];kept:{run:string;reason:string}[]};
-type Options={roots:readonly string[];host?:HostObservations;ownership?:ReclaimOwnership;removePayload?:(path:string,remove:()=>void)=>void};
+type Options={roots:readonly string[];onlyRun?:string;host?:HostObservations;ownership?:ReclaimOwnership;removePayload?:(path:string,remove:()=>void)=>void};
 const same=(a:Stats,b:Stats)=>a.dev===b.dev&&a.ino===b.ino&&a.uid===b.uid;
 function directory(path:string):Stats{
   const info=lstatSync(path);
@@ -78,10 +78,15 @@ export function pruneRawCosts(options:Options):CostRetention{
       for(const [index,row] of completed.entries()){
         const {run}=row;
         try{
+          if(options.onlyRun!==undefined&&resolve(run)!==resolve(options.onlyRun))throw Error('outside selected candidate');
           if(index<RAW_COST_COMPLETED_RUNS)throw Error('newest three completed runs');
           if(row.terminal.summary.verdict!=='green')throw Error('non-green run');
-          const costs=row.terminal.summary.case_costs as {version?:unknown;status?:unknown;steps?:unknown}|undefined;
-          if(costs?.version!==1||costs.status!=='complete'||!costs.steps||typeof costs.steps!=='object'||Array.isArray(costs.steps))
+          if((row.terminal.summary.environment as {canonical?:unknown}|undefined)?.canonical!==true)throw Error('noncanonical or unknown environment');
+          const costs=row.terminal.summary.case_costs as {version?:unknown;status?:unknown;steps?:unknown;error_count?:unknown;errors?:unknown}|undefined;
+          // summarizeCosts sets partial for errors.length || missingChecks ||
+          // checks.some(c => !c.complete). Coverage gaps and incomplete cases
+          // are materialized too; reader failures alone require raw evidence.
+          if(costs?.version!==1||!['complete','partial'].includes(String(costs.status))||costs.error_count!==0||!Array.isArray(costs.errors)||costs.errors.length||!costs.steps||typeof costs.steps!=='object'||Array.isArray(costs.steps))
             throw Error('case_costs not completely materialized');
           const receipt=join(run,'.cost-retention.json');
           type Detach={version:1;name:string;dev:number;ino:number;uid:number;summary:string};

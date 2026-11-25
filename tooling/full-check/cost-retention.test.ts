@@ -16,7 +16,7 @@ function fixture(t:TestContext){
     const run=join(runs,name);mkdirSync(join(run,'costs'),{recursive:true});
     writeFileSync(join(run,'costs','events.jsonl'),'raw events\n');writeFileSync(join(run,'step.log'),'kept log\n');
     writeFileSync(join(run,'summary.json'),JSON.stringify({schema:1,started:'2026-11-25T00:00:00Z',wall_s:Number(name),
-      verdict,interrupted:false,scope_cleanup:{state:'complete'},case_costs:{version:1,status:'complete',steps:{example:{checks:3}}}}));
+      verdict,environment:{canonical:true},interrupted:false,scope_cleanup:{state:'complete'},case_costs:{version:1,status:'complete',error_count:0,errors:[],steps:{example:{checks:3}}}}));
     writeFileSync(join(run,'run-lifecycle.json'),JSON.stringify({version:1,events:2,running:[]}));
     return run;
   };
@@ -37,7 +37,7 @@ test('the fourth completed green run loses raw bytes, keeping summaries and logs
 });
 
 for(const control of ['red','held','missing summary','unreadable summary','future summary','missing terminal','unreadable terminal','future terminal',
-  'running terminal','missing case_costs','partial case_costs','future case_costs','live measurement','future measurement','unreadable measurement','interrupted','unfinished cleanup'])
+  'running terminal','missing case_costs','errored case_costs','future case_costs','live measurement','future measurement','unreadable measurement','interrupted','unfinished cleanup'])
 test('retains '+control,t=>{
   const f=fixture(t),run=f.make('1',control==='red'?'red':'green');f.newer();
   const summary=join(run,'summary.json'),lifecycle=join(run,'run-lifecycle.json');
@@ -53,7 +53,7 @@ test('retains '+control,t=>{
   if(control.endsWith('case_costs')||control==='interrupted'||control==='unfinished cleanup'){
     const row=JSON.parse(readFileSync(summary,'utf8'));
     if(control==='missing case_costs')delete row.case_costs;
-    if(control==='partial case_costs')row.case_costs.status='partial';
+    if(control==='errored case_costs'){row.case_costs.status='partial';row.case_costs.error_count=1;row.case_costs.errors=['partial JSON'];}
     if(control==='future case_costs')row.case_costs.version=99;
     if(control==='interrupted')row.interrupted=true;
     if(control==='unfinished cleanup')row.scope_cleanup.state='error';
@@ -94,4 +94,13 @@ test('interrupted detached deletion resumes only the receipt-bound raw directory
   const resumed=pruneRawCosts(f.options);
   assert.deepEqual(resumed.removed.map(row=>row.run),[run]);assert.equal(existsSync(detached),false);
   assert.equal(readFileSync(join(run,'costs/new'),'utf8'),'new producer');
+});
+
+
+test('partial coverage without reader errors has a materialized summary and is prunable',t=>{
+  const f=fixture(t),run=f.make('1');f.newer();
+  const file=join(run,'summary.json'),row=JSON.parse(readFileSync(file,'utf8'));row.case_costs.status='partial';
+  row.case_costs.steps={example:{coverage:{missing_program_checks:['absent'],incomplete:1},cases:[{complete:false,phases:[]}]}};
+  writeFileSync(file,JSON.stringify(row));
+  assert.deepEqual(pruneRawCosts(f.options).removed.map(row=>row.run),[run]);
 });
