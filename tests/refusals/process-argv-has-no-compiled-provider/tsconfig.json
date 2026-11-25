@@ -1,0 +1,6 @@
+{
+  "//": "Node's types, which declare the `process` global this fixture is about.",
+  "extends": "../../../tsconfig.fixtures.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": ["src"]
+}
