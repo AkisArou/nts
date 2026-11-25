@@ -28,6 +28,8 @@ import {DISK_TRASH} from '../gate/disk-reclamation.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 import {cargoSync} from '../gate/cargo.ts';
 import {spawnTest} from '../gate/test-wait.ts';
+import {acquire} from './lock.ts';
+import {TreePin} from './tree-pin.ts';
 
 const GB = 2 ** 30, DAY = 86_400_000;
 /** The tests' "now": git's clock and every idle time are read against it, never the machine's. */
@@ -57,6 +59,66 @@ function pool(t: Parameters<typeof scratchRepo>[0], size = 2, options: PoolOptio
     observe:(disk: {freeBytes:number;freeInodes:number},paths:Record<string,number>={})=>ownMemory(observationRoot,{disk,allocated:{kind:'fixed',defaultBytes:0,paths}}) };
 }
 const names = (p: Pool) => p.trees().map(t => `${t.name} ${t.state}${t.branch ? ` ${t.branch}` : ""}`);
+
+test('pool inventory, input linking and ownership observations do not hold the shared capacity lock',t=>{
+  const f=pool(t,0);let checks=0;
+  const available=()=>{const lock=acquire(join(f.p.dir,'.lock'));assert.ok(lock,'pool work leaves the shared capacity lock available');lock.release();checks++;};
+  const original=f.p.capacity.host.allocatedBytes;
+  f.p.capacity.host.allocatedBytes=path=>{available();return original(path);};
+  const p=new Pool(f.p.dir,f.p.git,()=>available(),{host:f.p.capacity.host,users:()=>{available();return [];},reclamation:{services:[],ownership:()=>available()}});
+  p.init(1);p.take('fix/outside-pool-lock');p.detach('fix/outside-pool-lock');p.attach('fix/outside-pool-lock');p.give('fix/outside-pool-lock');
+  assert.ok(checks>4);assert.equal(p.trees()[0]!.state,'free');
+});
+
+test('a refused cold take retires only its empty pinned placeholder before Git add',t=>{
+  const f=pool(t,0);f.observe({freeBytes:41*GB,freeInodes:1000});
+  assert.throws(()=>f.p.take('pin-refusal'),PoolFull);
+  const path=join(f.p.dir,'1');assert.equal(existsSync(path),false);assert.deepEqual(TreePin.users(path),[]);
+  assert.deepEqual(f.p.trees(),[]);assert.equal(f.s.git(['worktree','list','--porcelain']).includes(path),false);
+});
+
+test('another process admits an unrelated build while a selected-tree pool operation stays active',t=>{
+  const f=pool(t,2),owned=f.observe({freeBytes:1000*GB,freeInodes:1000});let checked=false;
+  const p=new Pool(f.p.dir,f.p.git,tree=>{
+    const other=join(f.p.dir,tree.endsWith('/1')?'2':'1');
+    const intents=f.p.capacity.state.liveIntents();assert.ok(intents.some(intent=>intent.root===tree));assert.ok(intents.every(intent=>intent.root!==f.p.dir));
+    const source=generatedJavaScript(`
+import {DiskCapacity} from ${JSON.stringify(new URL('../gate/disk-capacity.ts',import.meta.url).href)};
+import {DiskBuildAdmissionError} from ${JSON.stringify(new URL('../gate/step-result.ts',import.meta.url).href)};
+const capacity=new DiskCapacity({pool:${JSON.stringify({dir:f.p.dir,git:f.p.git})}});
+const release=capacity.beginBuild({root:${JSON.stringify(other)},target:${JSON.stringify(join(other,'target'))},outputs:['clippy']});release();
+const temporary=capacity.tryTemporary(${JSON.stringify(join(other,'capture'))},1024).lease;if(!temporary)throw Error('unrelated temporary fenced');temporary.release();
+try{capacity.beginBuild({root:${JSON.stringify(tree)},target:${JSON.stringify(join(tree,'target'))}});throw Error('changed target was not fenced');}
+catch(error){if(!(error instanceof DiskBuildAdmissionError)||error.disk.kind!=='target-fenced')throw error;}
+process.stdout.write('unrelated-admitted');`);
+    const child=spawnTest(process.execPath,['--input-type=module','-e',source],{env:{...f.s.env,...owned},encoding:'utf8'});
+    assert.equal(child.status,0,child.stderr);assert.equal(child.stdout,'unrelated-admitted');checked=true;
+  },{host:f.p.capacity.host,processes:{pids:[]},reclamation:{services:[],ownership:()=>{}}});
+  p.take('review-selected-tree');assert.equal(checked,true);
+});
+
+test('pin publication and empty-placeholder retirement change no capacity generation',t=>{
+  const f=pool(t,0);f.observe({freeBytes:41*GB,freeInodes:1000});
+  const run=f.p.capacity.transactions.run.bind(f.p.capacity.transactions),seen:string[]=[];
+  f.p.capacity.transactions.run=(operation,path,body,wait,options)=>{
+    if(!['pool-tree-pin','pool-placeholder-retire'].includes(operation))return run(operation,path,body,wait,options);
+    const before=f.p.capacity.state.read().generation;
+    try{return run(operation,path,body,wait,options);}finally{assert.equal(f.p.capacity.state.read().generation,before);seen.push(operation);}
+  };
+  assert.throws(()=>f.p.take('review-pin-refusal'),PoolFull);assert.deepEqual(seen,['pool-tree-pin','pool-placeholder-retire']);
+});
+
+test('a failed pin observation still closes its FD and retires its empty placeholder',t=>{
+  const f=pool(t,0),run=f.p.capacity.transactions.run.bind(f.p.capacity.transactions),failure=Error('missing pool pin clock observation');
+  f.p.capacity.transactions.run=(operation,path,body,wait,options)=>{
+    if(operation!=='pool-tree-pin')return run(operation,path,body,wait,options);
+    const original=f.p.capacity.host.now;let reads=0;
+    f.p.capacity.host.now=()=>{if(++reads===2)throw failure;return original();};
+    try{return run(operation,path,body,wait,options);}finally{f.p.capacity.host.now=original;}
+  };
+  assert.throws(()=>f.p.take('failed-pin'),error=>error===failure);
+  const path=join(f.p.dir,'1');assert.equal(existsSync(path),false);assert.deepEqual(TreePin.users(path),[]);
+});
 
 test("init prewarms the missing trees, detached at main, each with its inputs", t => {
   const { s, p, linked } = pool(t, 3);
@@ -453,38 +515,45 @@ test("only active cold leases promise the measured build, and take reserves atom
 test('concurrent cold takes cannot spend the same disk promise',async t=>{
   const {p,s,observe}=pool(t,3);
   const observations=observe({freeBytes:54*GB,freeInodes:100});
-  const source=generatedJavaScript(`import {Pool,PoolFull} from ${JSON.stringify(new URL('./pool.ts',import.meta.url).href)};
+  const source=generatedJavaScript(`import {Pool,PoolRetry} from ${JSON.stringify(new URL('./pool.ts',import.meta.url).href)};
 try {new Pool(process.argv[1],{root:process.argv[2]}).take(process.argv[3]);}
-catch(error){console.error(String(error));process.exitCode=error instanceof PoolFull?75:1;}`);
+catch(error){console.error(String(error));process.exitCode=error instanceof PoolRetry?75:1;}`);
   const results=await Promise.all(['parallel/a','parallel/b','parallel/c'].map(branch=>new Promise<{status:number|null;output:string}>(done=>{
     const child=spawn(process.execPath,['--input-type=module','-e',source,p.dir,s.root,branch],{env:{...s.env,...observations},stdio:['ignore','pipe','pipe']});
     let output='';child.stdout.on('data',part=>output+=String(part));child.stderr.on('data',part=>output+=String(part));
     child.once('close',status=>done({status,output}));
   })));
-  assert.deepEqual(results.map(result=>result.status).sort((a,b)=>a!-b!),[0,0,75],JSON.stringify(results));
+  assert.ok(results.every(result=>result.status===0||result.status===75),JSON.stringify(results));
+  assert.ok(results.some(result=>result.status===0),JSON.stringify(results));
+  assert.ok(p.trees().filter(tree=>tree.state==='held').length<=2);
+  // Busy operations refuse without waiting. Retry those requests after the
+  // concurrent owners have all departed; the byte equation still admits two.
+  for(const [index,result] of results.entries())if(result.status===75){
+    try{p.take(['parallel/a','parallel/b','parallel/c'][index]!);}catch(error){assert.ok(error instanceof PoolFull);}
+  }
   assert.equal(p.room().reservedBytes,14*GB);
   assert.equal(p.trees().filter(tree=>tree.state==='held').length,2);
 });
 
-test('a cold take publishes its branch promise before a blocked neighbour decides',async t=>{
+test('a cold take retains its provisional promise while a neighbour refuses without waiting',async t=>{
   const {p,s,observe}=pool(t,2),observations=observe({freeBytes:47*GB,freeInodes:100});
   const stage=join(testScratch(t,'pool-promise-barrier'),'stage');copyModuleClosure(['tooling/landing/pool.ts'],stage);
-  const poolFile=join(stage,'tooling/landing/pool.ts'),lockFile=join(stage,'tooling/landing/lock.ts');
+  const poolFile=join(stage,'tooling/landing/pool.ts');
   let source=readFileSync(poolFile,'utf8');
-  source=replaceOnce(source,'if(!existsSync(path))this.grow(tree);',LOCK_BARRIER+'\n      if(!existsSync(path))this.grow(tree);');
+  source=replaceOnce(source,'if(!registered)this.grow(name,pin);',LOCK_BARRIER+'\n      if(!registered)this.grow(name,pin);');
   writeFileSync(poolFile,"import {readSync as __lockRead} from 'node:fs';let __lockPaused=false;\n"+source);
-  writeFileSync(lockFile,replaceOnce(readFileSync(lockFile,'utf8'),'if(processIdentity(held.pid)===held.text)return null;',
-    "if(processIdentity(held.pid)===held.text){if(process.argv.includes('762-contender'))process.stdout.write('contended\\n');return null;}"));
-  const program=generatedJavaScript(`const {Pool,PoolFull}=await import(process.argv[1]);
-try{new Pool(process.argv[2],{root:process.argv[3]}).take(process.argv[4]);process.stdout.write('taken\\n');}
-catch(error){console.error(String(error));process.exitCode=error instanceof PoolFull?75:1;}`);
+  const program=generatedJavaScript(`const {Pool,PoolRetry}=await import(process.argv[1]);
+try{new Pool(process.argv[2],{root:process.argv[3]},()=>{},{processes:{pids:[]},reclamation:{services:[],ownership:()=>{}}}).take(process.argv[4]);process.stdout.write('taken\\n');}
+catch(error){console.error(String(error));process.exitCode=error instanceof PoolRetry?75:1;}`);
   const args=[pathToFileURL(poolFile).href,p.dir,s.root],env={...s.env,...observations};
   const first=lockChild(t,program,[...args,'first/take','762-pause'],env);await first.wait('barrier');
   assert.equal(p.trees().filter(tree=>tree.state==='held').length,0,'the decision precedes the branch switch');
-  const second=lockChild(t,program,[...args,'second/take','762-contender'],env);await second.wait('contended');
-  assert.equal(second.output().includes('taken'),false);
-  first.child.stdin.write('x');assert.equal(await first.closed,0,first.errors());
+  const second=lockChild(t,program,[...args,'second/take'],env);
   assert.equal(await second.closed,75,second.output()+second.errors());
+  assert.equal(second.output().includes('taken'),false);
+  assert.equal(p.room().reservedBytes,7*GB,'the pre-switch claim already protects the first request');
+  first.child.stdin.write('x');assert.equal(await first.closed,0,first.errors());
+  assert.throws(()=>p.take('second/take'),PoolFull,'after operation contention ends the capacity equation still denies a second cold promise');
   assert.equal(p.room().reservedBytes,7*GB);assert.equal(p.trees().filter(tree=>tree.state==='held').length,1);
 });
 

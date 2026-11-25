@@ -61,7 +61,7 @@ export function readStepInstrument(path: string, step: string, attempt: string):
       || result.step !== step || result.attempt !== attempt || typeof result.reason !== "string" || !result.reason) {
     throw new Error(`invalid instrument result for ${step}`);
   }
-  if(result.kind==='disk-capacity')readDiskBuildRefusal(result.disk);
+  if(result.kind==='disk-capacity')result.disk=readDiskBuildRefusal(result.disk);
   else if(result.disk!==undefined)throw new Error(`unexpected disk refusal for ${step}`);
   return result;
 }

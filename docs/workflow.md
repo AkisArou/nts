@@ -1243,13 +1243,13 @@ the tooling strict checker owns the source's type checking.
 - **One disk capacity owner.** `tooling/gate/disk-capacity.ts` keeps the
   temporary hard floor free beside active build promises. A free checkout
   promises nothing. An attached held tree promises its remaining cold build;
-  a detached worker promises none. Taking a cold tree checks and creates its
-  Git lease under the capacity lock; worker detachment, landing or giving it
+  a detached worker promises none. Taking a cold tree atomically admits a build claim before creating its
+  Git lease; worker detachment, landing or giving it
   back ends that promise. Resuming a detached or landed tree admits any cold
   or partial remainder under the same lock and capacity equation as a new take,
   protecting that target during pressure reclamation. Both take and attach
-  make a landed tree held before releasing the lock, so its admitted promise
-  is counted before another take can spend that capacity. A refusal exits 75 and
+  retain the admitted claim and operation intent until the Git lease and
+  attached presence are published, so another request cannot spend that capacity. A refusal exits 75 and
   leaves its presence and hold unchanged for retry. A take or attach whose tree
   resource lock a gate run or disk reclamation holds refuses the same way,
   exit 75 naming the tree, before any change to its branch, checkout or
@@ -1291,8 +1291,13 @@ the tooling strict checker owns the source's type checking.
   The configured pool outputs and admitted capture temporaries share one
   filesystem; this capacity namespace accounts for that filesystem as a whole.
 - **A denied build measures nothing.** Disk capacity refusal is a typed
-  `disk-capacity` instrument result, with the actual target, outputs, shortage,
-  floor and outstanding promises. Every build route preserves that result;
+  `disk-capacity` instrument result, with the actual target and outputs.
+  Disk-held refusals distinguish an exact
+  positive `shortfall` from `target-fenced`, which carries an intent token and
+  holder birth identity and no byte figures. Encoders and readers reject mixed
+  or unknown variants by name. Readiness rechecks the current capacity and
+  intents, and renders the reason by variant without inventing shortage bytes.
+  Every build route preserves that result;
   missing Cargo artifacts cannot replace its cause. The run drains and releases
   its memory instead of waiting or repeating under the same reservation.
   The full check holds and uses its normal retry, without a culprit search.
@@ -1302,23 +1307,102 @@ the tooling strict checker owns the source's type checking.
   request, the entry returns at its original arrival position. Readiness never
   admits a build, caches a capacity projection, or guesses from elapsed time.
   The service intentionally stays up while a disk-held entry exists; status
-  names it and its last measured shortfall. Withdrawal answers this already
+  names its observed shortfall or target fence. Withdrawal answers this already
   drained entry immediately, and the service exits when no work remains.
+- **Pool transactions publish state, never scan trees.** The shared
+  `nts-pool/.lock` protects only bounded authoritative metadata reads,
+  generation comparisons, claim or intent publication and an atomic detach.
+  Allocation walks, Git commands, process and unit ownership observations,
+  checkout preparation, payload removal and reclamation-log finalization run
+  outside it. Admission
+  captures the monotonic capacity generation, prepares its observation after
+  releasing the lock, then compares the generation before publishing a claim.
+  A changed generation discards the observation and repeats preparation outside
+  the lock, including a change whose bytes were subsequently restored. Exact
+  claim-publication receipts also detect writers that predate the generation:
+  both owners publish v1 claims by atomic rename, and a held descriptor pins
+  every observed publication inode and its complete bytes until validation.
+  Bounded Git, registration, ref and presence receipts cover every registered
+  pool tree, including free trees, so a legacy take that writes no claim still
+  invalidates preparation. Capture and recheck each read the main repository's
+  worktree registration directory once, then its entries' small gitdir, HEAD
+  and optional locked files. Entry names, targets and inode identities must
+  match. Partial registrations remain observed values: disappearing entries or
+  changed initialization state invalidate preparation. A stable missing or empty
+  gitdir names no pool lease, matching Git's worktree listing, and cannot hold
+  unrelated admission indefinitely. Other trees contribute only lease identity:
+  registration, Git pointer, HEAD/ref, landed ref and worker presence. Their
+  index, Cargo/toolchain inputs, completion files and directory sizes do not
+  invalidate an admission. Their admin paths come from the captured registration,
+  so an empty working-tree Git pointer during checkout creation neither throws
+  nor loses the lease's ref observations. A stable empty, missing or unparsable
+  HEAD is an observed value and names no lease, matching Git's listing. A later
+  HEAD write changes the receipt and cancels preparation. Only a disappearing
+  entry or a read race makes the receipt intrinsically unstable. The request's
+  own tree and reclaim candidates retain full receipts. This shallow metadata
+  work scales with registered trees; it never traverses checkout contents or
+  runs Git. Claim and presence schemas remain
+  v1; generation and intents live
+  only in the separate `.lock.state.json`. The
+  final transaction reads current free disk bytes; those bytes alone never
+  validate an observation.
+  A reclamation intent names its root, unique token, PID and process birth.
+  A live intent rejects overlapping new claims; the tree resource fence
+  rejects attachment and switching. Preflight validates current claims,
+  presence, Git and physical identity outside the shared lock. The final
+  transaction rechecks generation, claims, Git/presence receipts and the intent,
+  then detaches with one same-filesystem rename. A linked checkout also updates
+  its two small Git linking files. The detach record is rendered and fsynced
+  during preparation and atomically published in this commit; no tree scan or
+  Git process runs there. An owner admitted afterward gets a fresh target at
+  the old path, outside the trash grant. A cross-filesystem or otherwise
+  unbounded move is retained by name. Changed or unobservable ownership retains the
+  target. Intents expire only when their owner's birth identity proves gone.
+  Pool mutations have a separate nonwaiting operation owner. Once a tree is
+  selected, only that tree gets an intent; unrelated build and temporary
+  admissions remain eligible. Old and prospective leases protect their bytes
+  without fencing other trees while Git work runs.
+  A short `pool-tree-pin` transaction opens a directory FD before that Git
+  work. It remains open through lease, presence and input publication, so
+  older resetters observe the operation through their existing process-user
+  rule. The pin carries one operation's PID, birth and descriptor identity.
+  Its own observations ignore only that validated descriptor and continue
+  checking every other descriptor, including another pin of the same process.
+  All exits close it; process death closes it in the kernel. A new slot's
+  empty placeholder is retired only if this operation created it, its identity
+  still matches, and an atomic rmdir confirms it is still empty.
+  The operation publishes a claim before creating a new promise, and releases
+  it only after publishing its Git lease. Contention refuses for retry; it
+  never lengthens a shared-lock wait.
+  Every shared transaction records its holder's identity, operation, root,
+  phase, elapsed hold and maximum hold. Capture and publish rows also record
+  a preparation ID, attempt, retry count, invalidation cause, outside observation
+  time and elapsed preparation time. Contention can repeat preparation; these
+  records expose its latency even before it finishes. Only a changed claim,
+  intent or lease advances the generation. Opening or closing a pin, retiring
+  an empty placeholder, and repeated releases or identical intent protections
+  do not invalidate preparations. Registration component rows name entry count
+  and belong to their enclosing hold, without charging its duration twice.
+  Advisory current-phase diagnostics
+  publish by temporary file and rename and never decide admission or removal.
+  Missing or malformed diagnostics report an unknown phase; a mismatched
+  birth or lock owner labels the sidecar stale. Diagnostic history appends
+  only after releasing the shared lock. If a required timing observation fails
+  during claim release, the release still writes the claim's removal and
+  unlocks before raising the original named observation error. It never
+  substitutes a clock or invents a held duration. Fixture observations remain
+  alive until their claims have released.
 - **Pressure reclaims rebuildable disk state.** DiskCapacity explicitly reclaims
-  before admission and during upkeep; status reads do not delete. Inventory
-  and recursive allocated-byte measurements run outside the pool lock. Fresh
-  ownership fences, a durable manifest and a same-filesystem rename into
-  `nts-pool/.disk-trash/<uuid>/payload` run under it; permission traversal and
-  recursive deletion run after release, holding only that entry's kernel
+  before admission and during upkeep; status reads do not delete. An intent
+  and tree resource fence cover preflight, durable manifest publication and
+  same-filesystem detachment into `nts-pool/.disk-trash/<uuid>/payload`.
+  Permission traversal and recursive deletion retain only that entry's kernel
   drainer lock. Git's removal child inherits its descriptor, so an exited
   parent cannot expire the lock while that child still removes bytes.
   The manifest preserves the approved removal kind and physical identity.
-  Reclamation rechecks each listed trash entry under the pool lock before
-  classifying it and acquiring its drainer; an entry its owner retired is
-  skipped. It resumes interrupted entries, including partial deletions, before
-  considering new candidates. A rename credits no capacity: only observed disk
-  free bytes enter admission, so undrained trash still consumes space. A grant
-  reacquires the pool lock and recomputes current promises before publication.
+  Listed entries are reclassified before adoption; a retired entry is skipped.
+  Interrupted entries, including partial deletion, resume before new candidates.
+  A rename credits no capacity: only observed free disk bytes enter admission.
   Pool status and its JSON show trash bytes and age; reclamation names drains
   older than an hour as stuck. The count recognizes only the owner's trash
   directory and manifest-backed UUID/payload worktrees, and never deletes them. Below the floor plus live promises and one measured cold build, it
@@ -1332,8 +1416,8 @@ the tooling strict checker owns the source's type checking.
   a Cargo cache tag or a validated owner completion marker proves the profile.
   Unknown siblings remain by path, with their writer where known; they cannot
   veto removal of an independently proven profile. Each profile removal holds
-  both pool and tree locks through detachment and repeats the physical, claim
-  and owner checks; neither lock spans byte deletion.
+  its intent and tree resource fence through detachment and repeats the
+  physical, claim and owner checks; neither spans byte deletion.
   Taking the tree afterwards rebuilds missing output normally. Admission
   refusals include their removal and retention decisions, including the warm
   minimum. The hourly count reports retained target siblings by path and
@@ -1346,8 +1430,8 @@ the tooling strict checker owns the source's type checking.
   only obsolete generations, never their current build output. Unknown or corrupt
   generation markers keep the candidate. A removed checkout must be Git-detached, clean,
   registered and have no unpublished commits; ignored local data also keeps it.
-  Git moves an unbuilt checkout into trash under the pool lock and removes
-  it outside the lock, preserving its worktree registry. A removal refusal
+  Git moves an unbuilt checkout into trash while its intent and tree fence
+  protect it, then removes it under the drainer owner, preserving its worktree registry. A removal refusal
   keeps its registration, payload and manifest; it never falls back to
   recursive filesystem removal of a registered worktree.
   Each removal rechecks physical root identity, the resource lock, leases, build
@@ -1930,6 +2014,31 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Pool preparation validates every registered lease.** Selected-tree
+  intents leave unrelated admissions eligible. Partial Git registrations are
+  observed without turning incomplete non-pool state into a capacity refusal;
+  other trees' receipts cover lease identity without ordinary index/input churn.
+  Shallow registration and per-tree Git/presence receipts catch legacy takes
+  without claim publication;
+  preparation rows expose retries, while metadata-only pins leave the
+  generation unchanged. Legacy disk-held v1 rows normalize before consumption.
+  ([log](records/notebooks/decisions-log.md#stable-broken-heads-are-capacity-observations-11-25)).
+
+- **Disk-held refusals distinguish bytes from target ownership.** Exact,
+  positive shortfalls and identity-bearing target fences have separate variants
+  and invariants. Both use the disk-held retry route, with current ownership
+  checked before retry; mixed or unknown variants refuse by name. The exact
+  v1 shortfall row without a kind is normalized by readers before storage or
+  retry, preserving queued entries across a service restart.
+  ([log](records/notebooks/decisions-log.md#disk-held-refusals-distinguish-bytes-from-target-ownership-11-24)).
+
+- **Pool transactions publish state, never scan trees.** Capacity observations
+  prepare outside the shared pool lock and validate a monotonic generation
+  before granting. Reclamation intents and nonwaiting resource owners protect
+  long work without retaining that lock. Advisory phase records never decide
+  ownership or a verdict.
+  ([log](records/notebooks/decisions-log.md#pool-transactions-publish-state-never-scan-trees-11-24)).
 
 - Composed Rust selectors project targets inside one validated batch. Only
   replay answers, authority and metadata facts survive a projection; full

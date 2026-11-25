@@ -20,6 +20,11 @@ import {generatedJavaScript} from './generated-javascript.ts';
 import {Pool} from '../landing/pool.ts';
 import {cargoSync} from './cargo.ts';
 import {workerPresence,workerPresenceFile,writeWorkerPresence} from '../landing/pool-presence.ts';
+import {DISK_CAPACITY} from './disk-capacity.ts';
+import {durableRecord} from './durable-record.ts';
+import {DiskState,DiskTransactions,type DiskTransaction} from './disk-transaction.ts';
+import {copyModuleClosure} from './module-closure-fixture.ts';
+import {pathToFileURL} from 'node:url';
 const GiB=2**30;
 const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
 
@@ -54,8 +59,194 @@ function fixture(t:TestContext){
   };
   const options={pool:{dir,git:{root:s.root,env:s.env}},host,coldBytes:7*GiB,
     snapshot:()=>({freeBytes:free(),floorBytes:40*GiB,reservedBytes:0}),protectedRoots:()=>[],services:[] as ReclaimTarget[],ownership:((_tree,_target)=>{}) as ReclaimOwnership};
-  return {s,dir,host,tree,output,options,outputs,setFree:(bytes:number)=>{initialFree=bytes;}};
+  return {s,dir,env,host,tree,output,options,outputs,setFree:(bytes:number)=>{initialFree=bytes;}};
 }
+
+test('a second process completes admission before the reclaimer leaves its ownership barrier',t=>{
+  const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);
+  let now=0,entered=0;const rows:DiskTransaction[]=[],events:string[]=[];
+  const host={...f.host,now:()=>now};
+  const state=new DiskState(new DiskTransactions(join(f.dir,'.lock'),host,row=>rows.push(row)));
+  durableRecord(f.env[DISK_CAPACITY]!,{version:1,pool:{dir:f.dir,root:f.s.root}});
+  const target=join(f.s.dir,'independent','target');
+  const source=generatedJavaScript(`
+import {DiskCapacity} from ${JSON.stringify(new URL('./disk-capacity.ts',import.meta.url).href)};
+const capacity=new DiskCapacity();
+const release=capacity.beginBuild({root:${JSON.stringify(join(f.s.dir,'independent'))},target:${JSON.stringify(target)},outputs:['clippy']});
+process.stdout.write('admission-published');release();`);
+  const report=reclaimDisk({...f.options,host,state,ownership:()=>{
+    now+=45_000;
+    if(entered++)return;
+    events.push('ownership-entered');
+    // The parent cannot finish this barrier until the child has published and
+    // released its independent claim. No scheduler deadline decides the test.
+    const child=spawnTest(process.execPath,['--input-type=module','-e',source],{env:{...f.s.env,...f.env},encoding:'utf8'});
+    assert.equal(child.status,0,child.stderr);assert.equal(child.stdout,'admission-published');
+    events.push('admission-published','ownership-released');
+  }});
+  assert.deepEqual(events,['ownership-entered','admission-published','ownership-released']);
+  assert.equal(report.removed.length,1,JSON.stringify(report));
+  assert.equal(report.maxLockHeldMs,0);assert.ok(rows.length>0);assert.equal(Math.max(...rows.map(row=>row.lockHeldMs)),0);
+});
+
+test('allocation and ownership scans use only the tree fence, and a replaced target is retained',t=>{
+  const f=fixture(t),tree=f.tree('1'),profile=f.output(tree,'debug',16*GiB),saved=join(f.s.dir,'original-output');
+  let scans=0;
+  const available=()=>{const lock=acquire(join(f.dir,'.lock'));assert.ok(lock,'slow work does not own the pool lock');lock.release();};
+  const report=reclaimDisk({...f.options,host:{...f.host,allocatedBytes:path=>{available();scans++;return f.host.allocatedBytes(path);}},ownership:()=>{
+    available();renameSync(profile,saved);mkdirSync(profile);writeFileSync(join(profile,'user-data'),'retained');
+  }});
+  assert.ok(scans>0);assert.deepEqual(report.removed,[]);
+  assert.equal(readFileSync(join(profile,'user-data'),'utf8'),'retained');
+  assert.ok(existsSync(saved));assert.match(report.kept.map(row=>row.reason).join('\n'),/identity changed/);
+});
+
+test('an old-style build claim between preparation and commit retains the target without advancing generation',t=>{
+  const f=fixture(t),tree=f.tree('1'),profile=f.output(tree,'debug',16*GiB);
+  const capacity=new DiskCapacity({env:f.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:()=>{}}});
+  const run=capacity.transactions.run.bind(capacity.transactions);let inserted=false,publications=0;
+  capacity.transactions.run=(operation,path,body,wait,options)=>{
+    if(operation==='reclaim-detach-publish'){
+      publications++;
+      if(!inserted){
+        inserted=true;const generation=capacity.state.read().generation;
+        withLock(join(f.dir,'.lock'),()=>durableRecord(capacity.stateFile,{version:1,claims:[{
+          id:'old-build',pid:process.pid,identity:processIdentity(process.pid),root:tree,target:profile,outputs:['clippy'],
+        }]}));
+        assert.equal(capacity.state.read().generation,generation);
+      }
+    }
+    return run(operation,path,body,wait,options);
+  };
+  const report=capacity.reclaim(f.dir)!;
+  assert.equal(inserted,true);assert.ok(publications>0);assert.deepEqual(report.removed,[]);
+  assert.equal(readFileSync(join(profile,'built'),'utf8'),'immutable artifact');
+  assert.match(report.kept.map(row=>row.reason).join('\n'),/live lease or build claim/);
+});
+
+test('a legacy Git move after preparation cancels before the atomic detach',t=>{
+  const f=fixture(t),tree=f.tree('1'),profile=f.output(tree,'debug',16*GiB),moved=join(f.s.dir,'moved');
+  const state=new DiskState(new DiskTransactions(join(f.dir,'.lock'),f.host)),run=state.transactions.run.bind(state.transactions);
+  let changed=false;
+  state.transactions.run=(operation,path,body,wait,options)=>{
+    if(operation==='reclaim-detach-publish'&&!changed){
+      changed=true;const generation=state.read().generation;
+      withLock(join(f.dir,'.lock'),()=>f.s.git(['worktree','move','--',tree,moved]));
+      f.outputs.delete(profile);f.outputs.set(join(moved,'target/debug'),16*GiB);
+      assert.equal(state.read().generation,generation);
+    }
+    return run(operation,path,body,wait,options);
+  };
+  const report=reclaimDisk({...f.options,state});
+  assert.equal(changed,true);assert.deepEqual(report.removed,[]);
+  assert.equal(readFileSync(join(moved,'target/debug/built'),'utf8'),'immutable artifact');
+});
+
+test('a build admitted after the detach gets a fresh target outside the drainer grant',t=>{
+  const f=fixture(t),tree=f.tree('1'),profile=f.output(tree,'debug',16*GiB);
+  const capacity=new DiskCapacity({env:f.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:()=>{}}});
+  let release:(()=>void)|undefined;
+  const report=reclaimDisk({...f.options,removePayload:(payload,_kind,remove)=>{
+    const lock=acquire(join(f.dir,'.lock'));assert.ok(lock);lock.release();
+    assert.equal(existsSync(profile),false,'detach committed before the new admission');
+    f.outputs.delete(profile);f.outputs.set(payload,16*GiB);
+    release=capacity.beginBuild({root:tree,target:profile,outputs:['clippy']});
+    mkdirSync(join(profile,'clippy'),{recursive:true});writeFileSync(join(profile,'clippy','new-build'),'new owner');
+    assert.equal(readFileSync(join(payload,'built'),'utf8'),'immutable artifact');remove();
+  }});
+  try{
+    assert.deepEqual(report.removed.map(row=>row.root),[profile]);
+    assert.equal(readFileSync(join(profile,'clippy','new-build'),'utf8'),'new owner');
+  }finally{release?.();}
+});
+
+test('a crash between rename and the detach record repairs bounded checkout links and drains only its payload',t=>{
+  const f=fixture(t),tree=f.tree('1'),stage=join(f.s.dir,'crash-stage');
+  copyModuleClosure(['tooling/gate/disk-reclamation.ts'],stage);
+  const file=join(stage,'tooling/gate/disk-reclamation.ts'),source=readFileSync(file,'utf8');
+  assert.equal(source.split('renameSync(root,payload);').length,2,'one atomic detach commit point');
+  writeFileSync(file,source.replace('renameSync(root,payload);','renameSync(root,payload);process.exit(79);'));
+  const script=generatedJavaScript(`
+import {reclaimDisk} from ${JSON.stringify(pathToFileURL(join(stage,'tooling/gate/disk-reclamation.ts')).href)};
+import {hostObservations} from ${JSON.stringify(new URL('./host-observations.ts',import.meta.url).href)};
+const host=hostObservations();
+reclaimDisk({pool:${JSON.stringify(f.options.pool)},host,coldBytes:7*2**30,snapshot:()=>({freeBytes:44*2**30,floorBytes:40*2**30,reservedBytes:0}),protectedRoots:()=>[],services:[],ownership:()=>{}});`);
+  const child=spawnTest(process.execPath,['--input-type=module','-e',script],{env:{...f.s.env,...f.env},encoding:'utf8'});
+  assert.equal(child.status,79,child.stderr);assert.equal(existsSync(tree),false);
+  const [entry]=diskTrash(f.dir,f.host.wallNow());assert.ok(entry);assert.ok(existsSync(join(entry.path,'payload','Cargo.toml')));
+  const report=reclaimDisk(f.options);
+  assert.deepEqual(report.removed.map(row=>[row.root,row.kind]),[[tree,'unbuilt-checkout']],JSON.stringify(report));
+  assert.deepEqual(diskTrash(f.dir,f.host.wallNow()),[]);
+  assert.equal(f.s.git(['worktree','list','--porcelain']).includes(entry.path),false,'Git retired the repaired payload registration');
+});
+
+test('ignored author data appearing during ownership inspection keeps an unbuilt checkout',t=>{
+  const f=fixture(t),tree=f.tree('1');
+  const report=reclaimDisk({...f.options,ownership:()=>{
+    mkdirSync(join(tree,'local'));writeFileSync(join(tree,'local','notes'),'author data');
+  }});
+  assert.deepEqual(report.removed,[]);assert.equal(readFileSync(join(tree,'local','notes'),'utf8'),'author data');
+  assert.match(report.kept.map(row=>row.reason).join('\n'),/ignored local data/);
+});
+
+test('a service profile completed during ownership inspection is retained',t=>{
+  const f=fixture(t),tree=join(f.s.dir,'service');mkdirSync(tree);
+  writeFileSync(join(tree,'Cargo.toml'),'[workspace]\n[profile.nts-dev]\ndebug=0\n');
+  const profile=f.output(tree,'clippy',16*GiB);
+  writeFileSync(join(profile,'.nts-complete.json'),JSON.stringify({version:1,generation:'0'.repeat(64)}));
+  const report=reclaimDisk({...f.options,services:[{tree,target:join(tree,'target'),service:true}],ownership:()=>completeBuild(tree,'clippy',profile)});
+  assert.deepEqual(report.removed,[]);assert.ok(existsSync(profile));
+  assert.match(report.kept.map(row=>row.reason).join('\n'),/no longer obsolete/);
+});
+
+test('a service intent fences output beside the checkout, including a builder of its parent target',t=>{
+  const f=fixture(t),tree=join(f.s.dir,'service'),target=join(f.s.dir,'external-target');mkdirSync(tree);
+  writeFileSync(join(tree,'Cargo.toml'),'[workspace]\n');
+  const old=f.output(tree,'debug',16*GiB),profile=join(target,'debug');
+  renameSync(join(tree,'target'),target);f.outputs.delete(old);f.outputs.set(profile,16*GiB);
+  const capacity=new DiskCapacity({env:f.s.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:()=>{}}});
+  let fenced=false,inspections=0;
+  const report=reclaimDisk({...f.options,services:[{tree,target,service:true}],ownership:()=>{
+    assert.equal(++inspections,1,'a refused admission only observes the trash and cannot invalidate its owner');
+    assert.throws(()=>capacity.beginBuild({root:tree,target,outputs:['clippy']}),error=>{
+      assert.ok(error instanceof DiskBuildAdmissionError);assert.equal(error.disk.kind,'target-fenced');
+      assert.equal(error.disk.intent!.root,profile);fenced=true;return true;
+    });
+  }});
+  assert.equal(fenced,true);assert.deepEqual(report.removed.map(row=>row.root),[profile],JSON.stringify(report));
+});
+
+test('every Git preflight question runs outside the shared lock, with supplied slow-work time',t=>{
+  const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);
+  const bin=join(f.s.dir,'git-tools'),clock=join(f.s.dir,'clock.json'),trace=join(f.s.dir,'git-questions.jsonl');mkdirSync(bin);
+  durableRecord(clock,0);
+  const resolved=spawnTest('sh',['-c','command -v git'],{env:f.s.env,encoding:'utf8'});assert.equal(resolved.status,0,resolved.stderr);
+  const shim=generatedJavaScript(`#!${process.execPath}
+import {acquire} from ${JSON.stringify(new URL('../landing/lock.ts',import.meta.url).href)};
+import {gitArguments} from ${JSON.stringify(new URL('./git-arguments/main.ts',import.meta.url).href)};
+import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
+import {readFileSync,appendFileSync} from 'node:fs';import {spawnSync} from 'node:child_process';
+const lock=acquire(${JSON.stringify(join(f.dir,'.lock'))});
+if(!lock){process.stderr.write('Git question owns the shared pool lock');process.exit(91);}lock.release();
+durableRecord(${JSON.stringify(clock)},Number(readFileSync(${JSON.stringify(clock)},'utf8'))+35000);
+appendFileSync(${JSON.stringify(trace)},JSON.stringify(process.argv.slice(2))+'\\n');
+const result=spawnSync(${JSON.stringify(resolved.stdout.trim())},gitArguments(process.argv.slice(2)),{stdio:'inherit'});
+process.exitCode=result.status??1;`);
+  writeFileSync(join(bin,'git'),shim,{mode:0o755});f.s.env.PATH=bin+':'+f.s.env.PATH;
+  const report=reclaimDisk({...f.options,host:{...f.host,now:()=>Number(readFileSync(clock,'utf8'))}});
+  assert.equal(report.removed.length,1,JSON.stringify(report));
+  const questions=readFileSync(trace,'utf8').trim().split('\n');assert.ok(questions.length>5);
+  assert.equal(report.maxLockHeldMs,0);assert.equal(Number(readFileSync(clock,'utf8')),questions.length*35_000);
+});
+
+test('reclamation reports each nonzero transaction once and its maximum',t=>{
+  const f=fixture(t),tree=f.tree('1');f.output(tree,'debug',16*GiB);let now=0;
+  const report=reclaimDisk({...f.options,host:{...f.host,now:()=>++now}});
+  const rows=readFileSync(join(f.dir,'.lock.transactions.'+process.pid+'.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line) as DiskTransaction);
+  assert.ok(rows.length>1);assert.ok(rows.every(row=>row.lockHeldMs>0));
+  assert.equal(report.lockHeldMs,rows.reduce((sum,row)=>sum+row.lockHeldMs,0));
+  assert.equal(report.maxLockHeldMs,Math.max(...rows.map(row=>row.lockHeldMs)));
+});
 
 test('pressure reclaims in cost order to a measured hysteresis goal, then stops',t=>{
   const f=fixture(t),a=f.tree('1'),b=f.tree('2'),c=f.tree('3'),unbuilt=f.tree('4');
@@ -558,7 +749,7 @@ for(const detached of [false,true])for(const guard of ['claim','marker','tracked
     }});
     assert.ok(existsSync(profile),JSON.stringify(report));
     const reason=report.kept.map(row=>row.reason).join('\n');
-    assert.match(reason,guard==='claim'?/live lease/:guard==='marker'?/JSON/:guard==='tracked'?/tracked target content/:guard==='lock'?/resource lock is held/:/profile-builder.service/);
+    assert.match(reason,guard==='claim'?/live lease/:guard==='marker'?/JSON/:guard==='tracked'?detached?/tracked target content/:/uncommitted changes/:guard==='lock'?/resource lock is held/:/profile-builder.service/);
   }finally{lock?.close();}
 });
 

@@ -1,20 +1,392 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
-import {existsSync,mkdirSync,readdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {test,type TestContext} from 'node:test';
+import {existsSync,mkdirSync,readdirSync,readFileSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {join,relative} from 'node:path';
 import {DiskCapacity,coldBuildForecast,DISK_CAPACITY,DISK_BUILD_ADMISSION} from './disk-capacity.ts';
 import {completeBuild,completedBuild} from './build-completion.ts';
-import {hostObservations} from './host-observations.ts';
+import {hostObservations,HOST_OBSERVATIONS} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {TemporaryAdmission} from './admission.ts';
-import {acquire,processIdentity} from '../landing/lock.ts';
+import {acquire,processIdentity,withLock} from '../landing/lock.ts';
 import {spawn} from 'node:child_process';
 import {fixtureEnvironment} from './test-environment.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
 import {DiskBuildAdmissionError,ToolingInstrumentError} from './step-result.ts';
+import {DiskState,DiskTransactions,type DiskTransaction} from './disk-transaction.ts';
+import {ClaimReceipt,GitReceipt,PoolMembershipReceipt} from './disk-preparation.ts';
+import {durableRecord} from './durable-record.ts';
+import {scratchRepo} from '../landing/scratch-repo.ts';
+import {writeWorkerPresence,removeWorkerPresence} from '../landing/pool-presence.ts';
 const GiB=2**30;
+
+test('transaction observations measure a real critical section and report only after release',t=>{
+  const root=testScratch(t,'disk-transaction-observer'),path=join(root,'.lock');let now=0;
+  const rows:DiskTransaction[]=[];
+  const owner=new DiskTransactions(path,{now:()=>now},row=>{
+    const control=acquire(path);assert.ok(control,'observer runs after lock release');control.release();rows.push(row);
+  });
+  owner.run('claim-publish',root,()=>{now+=7;});
+  assert.throws(()=>owner.run('claim-failure',root,()=>{now+=3;throw Error('control');}),/control/);
+  assert.deepEqual(rows.map(row=>[row.operation,row.lockHeldMs,row.maximumLockHeldMs,row.status]),[
+    ['claim-publish',7,7,'completed'],['claim-failure',3,7,'failed'],
+  ]);
+  assert.equal(rows[0]!.identity,processIdentity(process.pid));
+});
+
+test('advisory transaction damage and stale identities cannot change a lock decision',t=>{
+  const root=testScratch(t,'disk-transaction-sidecar'),path=join(root,'.lock');
+  const owner=new DiskTransactions(path,{now:()=>0}),lock=acquire(path);assert.ok(lock);
+  try{
+    assert.equal(owner.describeHolder(),'holder phase unknown');
+    for(const text of ['', '{broken', '{}']){
+      writeFileSync(path+'.transaction.json',text);assert.equal(owner.describeHolder(),'holder phase unknown');
+    }
+    const row={pid:process.pid,identity:processIdentity(process.pid),unit:'fixture.scope',operation:'detach',root,phase:'publish'};
+    writeFileSync(path+'.transaction.json',JSON.stringify(row));assert.match(owner.describeHolder(),/holder transaction detach.*phase publish/);
+    writeFileSync(path+'.transaction.json',JSON.stringify({...row,identity:row.identity+'-old'}));assert.match(owner.describeHolder(),/stale transaction sidecar/);
+  }finally{lock.release();}
+});
+
+for(const kind of ['temporary','build'] as const)for(const failedRead of [1,2])
+test(kind+' release removes its claim before clock read '+failedRead+' raises a missing observation',t=>{
+  const root=testScratch(t,'disk-release-clock'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:(kind==='temporary'?41:47)*GiB,freeInodes:100}});
+  const capacity=new DiskCapacity({env,pool:null});
+  const admit=(name:string):(()=>void)=>{
+    if(kind==='build')return capacity.beginBuild({root:join(root,name),target:join(root,name,'target')});
+    const lease=capacity.tryTemporary(join(root,name),GiB).lease;assert.ok(lease);return ()=>lease.release();
+  };
+  const release=admit('first'),original=capacity.host.now;
+  const brokenEnv=ownMemory(join(root,'missing-clock'),{disk:{freeBytes:60*GiB,freeInodes:100}});
+  const missing=brokenEnv[HOST_OBSERVATIONS]!,broken=hostObservations(brokenEnv);
+  renameSync(missing,missing+'.saved');
+  let reads=0,observationError:unknown;
+  capacity.host.now=()=>{
+    if(++reads!==failedRead)return original();
+    try{return broken.now();}catch(error){observationError=error;throw error;}
+  };
+  try{
+    assert.throws(release,error=>{
+      assert.equal(error,observationError,'the observation error is raised unchanged');
+      assert.match(String(error),/ENOENT/);assert.ok(String(error).includes(missing));return true;
+    });
+    const file=kind==='build'?capacity.stateFile:capacity.temporaryStateFile;
+    assert.deepEqual(JSON.parse(readFileSync(file,'utf8')).claims,[],'removal is durable before the timing error escapes');
+    const lock=acquire(capacity.transactions.path);assert.ok(lock,'release also unlocks before reporting the error');lock.release();
+  }finally{capacity.host.now=original;}
+  const retiredGeneration=capacity.state.read().generation;
+  release();assert.equal(capacity.state.read().generation,retiredGeneration,'retrying an already completed release changes no capacity fact');
+  const next=admit('next');next();
+});
+
+test('duplicate protection and retirement do not invalidate other preparations',t=>{
+  const root=testScratch(t,'disk-idempotent-intents'),state=new DiskState(new DiskTransactions(join(root,'.lock'),{now:()=>0}));
+  const intent=state.begin(root,'control'),lease={root,target:join(root,'target')};
+  state.protect(intent,lease);const protectedGeneration=state.read().generation;
+  state.protect(intent,{...lease,outputs:['clippy']});assert.equal(state.read().generation,protectedGeneration);
+  state.end(intent);const retiredGeneration=state.read().generation;
+  state.end(intent);assert.equal(state.read().generation,retiredGeneration);
+});
+
+test('prepare rejects an ABA mutation by generation even when its bytes are restored',t=>{
+  const root=testScratch(t,'disk-generation-aba'),state=new DiskState(new DiskTransactions(join(root,'.lock'),{now:()=>0}));
+  let observations=0,value='original',publications=0;
+  const result=state.prepared('control',root,()=>{
+    observations++;
+    if(observations===1){const intent=state.begin(root,'change');value='changed';state.end(intent);value='original';}
+    return value;
+  },seen=>{publications++;return seen;});
+  assert.equal(result,'original');assert.equal(observations,2);assert.equal(publications,1);
+});
+
+test('preparation observations expose each retry and cumulative latency under supplied churn',t=>{
+  const root=testScratch(t,'disk-preparation-churn'),rows:DiskTransaction[]=[];let now=0,observations=0;
+  const owner=new DiskTransactions(join(root,'.lock'),{now:()=>now},row=>rows.push(row)),state=new DiskState(owner);
+  const result=state.prepared('churn',root,()=>{
+    observations++;now+=35_000;
+    if(observations<=3){const intent=state.begin(join(root,'other'),'churn-control');state.end(intent);}
+    return 'prepared';
+  },value=>value);
+  assert.equal(result,'prepared');assert.equal(observations,4);
+  const publications=rows.filter(row=>row.operation==='churn-publish');
+  assert.deepEqual(publications.map(row=>[row.preparation?.attempt,row.preparation?.retries,row.preparation?.invalidation,row.preparation?.elapsedMs,row.preparation?.observationMs]),[
+    [1,1,'generation',35_000,35_000],[2,2,'generation',70_000,35_000],[3,3,'generation',105_000,35_000],[4,3,undefined,140_000,35_000],
+  ]);
+  assert.equal(new Set(publications.map(row=>row.preparation?.id)).size,1);
+  assert.equal(Math.max(...rows.map(row=>row.lockHeldMs)),0);
+});
+
+test('shallow membership timing reports its entry count without counting the hold twice',t=>{
+  const root=testScratch(t,'disk-phase-timing'),rows:DiskTransaction[]=[];let now=0;
+  const owner=new DiskTransactions(join(root,'.lock'),{now:()=>now},row=>rows.push(row));
+  owner.run('capture',root,()=>{owner.measure('pool-membership-capture',()=>{now+=7;return 13;},entries=>entries);now+=2;});
+  assert.deepEqual(rows[0]!.phases,[{phase:'pool-membership-capture',entries:13,lockHeldMs:7}]);
+  assert.equal(rows[0]!.lockHeldMs,9);assert.equal(owner.totalLockHeldMs,9);
+});
+
+for(const kind of ['temporary','build'] as const)for(const order of ['old-first','new-first'] as const)
+test('a claim-less legacy pool take cannot double spend with '+kind+' admission: '+order,t=>{
+  const s=scratchRepo(t,'disk-legacy-take');s.commit({'.gitignore':'target/\n','Cargo.toml':'[workspace]\n'},'policy');
+  const dir=join(s.dir,'pool'),tree=join(dir,'1'),root=join(s.dir,'independent');mkdirSync(dir);
+  s.git(['worktree','add','-q','--detach',tree,'main']);
+  const env=ownMemory(join(s.dir,'observations'),{disk:{freeBytes:49*GiB,freeInodes:1000}});
+  const capacity=new DiskCapacity({env,pool:{dir,git:{root:s.root,env:s.env}},reclamation:{services:[],ownership:()=>{throw Error('fixture retains its free checkout');}}});
+  const legacyTake=()=>withLock(join(dir,'.lock'),()=>{
+    const generation=capacity.state.read().generation;
+    const snapshot=capacity.poolSnapshot(dir,[...capacity.activeLeases(),{root:tree,target:join(tree,'target')}]);
+    if(snapshot.availableBytes<0)throw Error('legacy pool room denied');
+    s.git(['switch','-q','-c','legacy-task','main'],tree);writeWorkerPresence(tree,'legacy-task','attached',0);
+    assert.equal(capacity.state.read().generation,generation,'main take writes no generation or claim');
+  });
+  const admit=()=>kind==='temporary'?capacity.tryTemporary(root,4*GiB).lease:capacity.beginBuild({root,target:join(root,'target')});
+  if(order==='new-first'){
+    const held=admit();assert.ok(held);
+    try{assert.throws(legacyTake,/legacy pool room denied/);}finally{if(typeof held==='function')held();else held.release();}
+  }else{
+    const run=capacity.transactions.run.bind(capacity.transactions);let took=false;
+    capacity.transactions.run=(operation,path,body,wait,options)=>{
+      if(operation===(kind==='temporary'?'temporary-admission-publish':'build-admission-publish')&&!took){took=true;legacyTake();}
+      return run(operation,path,body,wait,options);
+    };
+    if(kind==='temporary')assert.equal(admit(),null);else assert.throws(admit,DiskBuildAdmissionError);
+    assert.equal(took,true);assert.equal(capacity.activeLeases().length,1);
+  }
+});
+
+test('Git membership detects add B, add C, give B and reclaim B while C stays attached',t=>{
+  const s=scratchRepo(t,'disk-membership'),dir=join(s.dir,'pool');mkdirSync(dir);
+  s.commit({'.gitignore':'target/\n','Cargo.toml':'[workspace]\n'},'policy');
+  s.git(['worktree','add','-q','--detach',join(dir,'1'),'main']);
+  const receipt=new PoolMembershipReceipt(s.root);assert.equal(receipt.entryCount,1);
+  for(const [name,branch]of [['2','legacy-B'],['3','legacy-C']]){
+    const tree=join(dir,name!);s.git(['worktree','add','-q','-b',branch!,tree,'main']);writeWorkerPresence(tree,branch!,'attached',0);
+  }
+  const b=join(dir,'2');s.git(['switch','-q','--detach','main'],b);removeWorkerPresence(b);s.git(['worktree','remove',b]);
+  assert.equal(existsSync(b),false);assert.equal(receipt.recheck().valid,false);
+  assert.equal(new PoolMembershipReceipt(s.root).roots(dir).length,2);
+});
+
+function registrationPool(t:TestContext){
+  const s=scratchRepo(t,'disk-registration');s.commit({'.gitignore':'target/\n','Cargo.toml':'[workspace]\n'},'policy');
+  const dir=join(s.dir,'pool'),tree=join(dir,'1');mkdirSync(dir);s.git(['worktree','add','-q','--detach',tree,'main']);
+  const env=ownMemory(join(s.dir,'observations'),{disk:{freeBytes:200*GiB,freeInodes:1000}}),rows:DiskTransaction[]=[];
+  const capacity=new DiskCapacity({env,pool:{dir,git:{root:s.root,env:s.env}},observeTransaction:row=>rows.push(row),reclamation:{services:[],ownership:()=>{}}});
+  return {s,dir,tree,capacity,rows,registry:join(s.root,'.git/worktrees')};
+}
+
+test('an initializing-only registration does not hold any pool capacity route',t=>{
+  const f=registrationPool(t),entry=join(f.registry,'interrupted-pin');mkdirSync(entry);writeFileSync(join(entry,'locked'),'initializing');
+  assert.equal(f.s.git(['worktree','list','--porcelain']).includes('interrupted-pin'),false,'Git skips a registration with no gitdir');
+  const request={root:f.tree,target:join(f.tree,'target')};
+  const temporary=f.capacity.tryTemporary(f.dir,GiB).lease;assert.ok(temporary);temporary.release();
+  const build=f.capacity.beginBuild(request);build();
+  assert.ok(f.capacity.buildSnapshot(request).availableBytes>0);
+  assert.ok(f.capacity.snapshot(f.dir).availableBytes>0);
+  assert.equal(f.rows.some(row=>(row.preparation?.retries??0)>0),false,'a persistent irrelevant partial entry cannot cause a retry loop');
+});
+
+test('a registration removed between enumeration and metadata is an invalid receipt, not an exception',t=>{
+  const f=registrationPool(t),entry=join(f.registry,'departing-pin');mkdirSync(entry);writeFileSync(join(entry,'locked'),'initializing');
+  let removed=false;
+  const receipt=new PoolMembershipReceipt(f.s.root,path=>{
+    const names=readdirSync(path);
+    if(!removed){assert.ok(names.includes('departing-pin'));rmSync(entry,{recursive:true});removed=true;}
+    return names;
+  });
+  assert.equal(removed,true);assert.equal(receipt.recheck().valid,false);
+  assert.equal(new PoolMembershipReceipt(f.s.root).recheck().valid,true,'the next capture sees stable membership');
+  const temporary=f.capacity.tryTemporary(f.dir,GiB).lease;assert.ok(temporary);temporary.release();
+});
+
+for(const action of ['add','remove','complete'] as const)
+test('a non-pool registration '+action+' during preparation cancels and retries',t=>{
+  const f=registrationPool(t),outside=join(f.s.dir,'pin-tree'),entry=join(f.registry,'initializing-pin');
+  if(action==='remove')f.s.git(['worktree','add','-q','--detach',outside,'main']);
+  if(action==='complete'){mkdirSync(entry);writeFileSync(join(entry,'locked'),'initializing');}
+  const run=f.capacity.transactions.run.bind(f.capacity.transactions);let changed=false;
+  f.capacity.transactions.run=(operation,path,body,wait,options)=>{
+    if(operation==='capacity-snapshot-publish'&&!changed){
+      changed=true;
+      if(action==='add')f.s.git(['worktree','add','-q','--detach',outside,'main']);
+      if(action==='remove')f.s.git(['worktree','remove',outside]);
+      if(action==='complete'){
+        writeFileSync(join(entry,'gitdir'),join(outside,'.git')+'\n');
+        writeFileSync(join(entry,'HEAD'),f.s.git(['rev-parse','main'])+'\n');
+      }
+    }
+    return run(operation,path,body,wait,options);
+  };
+  assert.ok(f.capacity.snapshot(f.dir).availableBytes>0);assert.equal(changed,true);
+  const publications=f.rows.filter(row=>row.operation==='capacity-snapshot-publish');
+  assert.deepEqual(publications.map(row=>[row.preparation?.attempt,row.preparation?.retries,row.preparation?.invalidation]),[[1,1,'receipt'],[2,1,undefined]]);
+});
+
+for(const changeRef of [false,true])
+test('an empty non-request Git pointer still binds its registered lease, ref change '+changeRef,t=>{
+  const f=registrationPool(t);f.s.git(['switch','-q','-c','worker','main'],f.tree);
+  const next=f.s.commit({'next.txt':'next identity\n'},'next'),path=join(f.tree,'.git'),pointer=readFileSync(path,'utf8');
+  const run=f.capacity.transactions.run.bind(f.capacity.transactions);let changed=false;
+  f.capacity.transactions.run=(operation,root,body,wait,options)=>{
+    if(changeRef&&operation==='capacity-snapshot-publish'&&!changed){changed=true;f.s.git(['update-ref','refs/heads/worker',next]);}
+    return run(operation,root,body,wait,options);
+  };
+  writeFileSync(path,'');
+  try{
+    assert.equal(f.capacity.snapshot(f.dir).leases.length,1,'the missing pointer never drops the registered promise');
+    const publications=f.rows.filter(row=>row.operation==='capacity-snapshot-publish');
+    assert.deepEqual(publications.map(row=>[row.preparation?.attempt,row.preparation?.retries]),changeRef?[[1,1],[2,1]]:[[1,0]]);
+  }finally{writeFileSync(path,pointer);}
+});
+
+test('a pool registration with missing HEAD retries when initialization completes',t=>{
+  const f=registrationPool(t);f.s.git(['switch','-q','-c','worker','main'],f.tree);
+  const path=join(f.s.git(['rev-parse','--absolute-git-dir'],f.tree),'HEAD'),head=readFileSync(path,'utf8');rmSync(path);
+  const run=f.capacity.transactions.run.bind(f.capacity.transactions);let completed=false;
+  f.capacity.transactions.run=(operation,root,body,wait,options)=>{
+    if(operation==='capacity-snapshot-publish'&&!completed){completed=true;writeFileSync(path,head);}
+    return run(operation,root,body,wait,options);
+  };
+  assert.equal(f.capacity.snapshot(f.dir).leases.length,1);
+  assert.deepEqual(f.rows.filter(row=>row.operation==='capacity-snapshot-publish').map(row=>[row.preparation?.attempt,row.preparation?.retries]),[[1,1],[2,1]]);
+});
+
+for(const broken of ['empty','missing','unparsable-ref'] as const)
+test('a persistent '+broken+' HEAD permits every capacity route without retry',t=>{
+  const f=registrationPool(t),other=join(f.dir,'2');f.s.git(['worktree','add','-q','-b','w2',other,'main']);
+  const head=join(f.s.git(['rev-parse','--absolute-git-dir'],other),'HEAD');
+  if(broken==='missing')rmSync(head);else writeFileSync(head,broken==='empty'?'':'ref: refs/heads/../w2\n');
+  assert.doesNotMatch(f.s.git(['worktree','list','--porcelain']),/branch refs\/heads\/w2/,'Git observes no lease for the broken HEAD');
+  const run=f.capacity.transactions.run.bind(f.capacity.transactions),counts=new Map<string,number>();
+  f.capacity.transactions.run=(operation,root,body,wait,options)=>{
+    const kind=operation.replace(/-(capture|publish)$/,'');
+    if(kind!==operation){
+      const count=(counts.get(kind)??0)+1;counts.set(kind,count);
+      assert.ok(count<=4,kind+' repeated a stable broken HEAD instead of returning');
+    }
+    return run(operation,root,body,wait,options);
+  };
+  assert.equal(f.capacity.snapshot(f.dir).leases.length,0);
+  const temporary=f.capacity.tryTemporary(f.dir,GiB).lease;assert.ok(temporary);temporary.release();
+  const request={root:f.tree,target:join(f.tree,'target')},release=f.capacity.beginBuild(request);release();
+  assert.equal(f.capacity.buildSnapshot(request).leases.length,1,'only the healthy explicit request is promised');
+  assert.deepEqual([...counts],[['capacity-snapshot',2],['temporary-admission',2],['build-admission',2],['build-readiness',2]]);
+  assert.equal(f.rows.some(row=>(row.preparation?.retries??0)>0),false);
+});
+
+for(const changed of ['unrelated','request'] as const)
+test('index and input activity in the '+changed+' tree has only its intended admission scope',t=>{
+  const f=registrationPool(t),other=join(f.dir,'2');f.s.git(['worktree','add','-q','-b','other-worker',other,'main']);
+  let now=0;f.capacity.host.now=()=>now;f.capacity.host.allocatedBytes=()=>{now+=35_000;return 0;};
+  const run=f.capacity.transactions.run.bind(f.capacity.transactions);let mutated=false;
+  f.capacity.transactions.run=(operation,path,body,wait,options)=>{
+    if(operation==='build-admission-publish'&&!mutated){
+      mutated=true;const root=changed==='request'?f.tree:other;
+      for(let n=0;n<8;n++){
+        const name='staged-'+n+'.txt';writeFileSync(join(root,name),'ordinary edit\n');f.s.git(['add',name],root);
+      }
+      writeFileSync(join(root,'Cargo.toml'),'[workspace]\n# ordinary edit\n');
+      writeFileSync(join(root,'rust-toolchain.toml'),'# ordinary edit\n');
+      for(let n=0;n<64;n++)writeFileSync(join(root,'untracked-'+n),'ordinary edit\n');
+    }
+    return run(operation,path,body,wait,options);
+  };
+  const release=f.capacity.beginBuild({root:f.tree,target:join(f.tree,'target')});release();assert.equal(mutated,true);
+  const publications=f.rows.filter(row=>row.operation==='build-admission-publish');
+  assert.deepEqual(publications.map(row=>[row.preparation?.attempt,row.preparation?.retries]),changed==='request'?[[1,1],[2,1]]:[[1,0]]);
+  assert.deepEqual(publications.map(row=>row.preparation?.observationMs),changed==='request'?[140_000,140_000]:[140_000]);
+  assert.equal(Math.max(...f.rows.map(row=>row.lockHeldMs)),0,'eight outside-lock edits never add held work');
+});
+
+for(const change of ['head','ref','landed','presence'] as const)
+test('a non-request lease receipt still invalidates a changed '+change,t=>{
+  const f=registrationPool(t);f.s.git(['switch','-q','-c','worker','main'],f.tree);
+  const receipt=new GitReceipt(f.tree,[],'lease');assert.equal(receipt.valid(),true);
+  if(change==='head')f.s.git(['switch','-q','--detach','main'],f.tree);
+  if(change==='ref')f.s.commit({'committed.txt':'new identity\n'},'advance worker',f.tree);
+  if(change==='landed')f.s.git(['update-ref','refs/nts/landed/worker',f.s.git(['rev-parse','HEAD'],f.tree)]);
+  if(change==='presence')writeWorkerPresence(f.tree,'worker','detached',0);
+  assert.equal(receipt.valid(),false);
+});
+
+test('an absent claim publication validates until an old writer creates it',t=>{
+  const root=testScratch(t,'disk-claim-absence'),file=join(root,'claims.json'),receipt=new ClaimReceipt([file]);
+  try{assert.equal(receipt.valid(),true);durableRecord(file,{version:1,claims:[]});assert.equal(receipt.valid(),false);}
+  finally{receipt.close();}
+});
+
+test('claim receipts pin publication identity across a legacy atomic ABA without a generation',t=>{
+  const root=testScratch(t,'disk-claim-receipt'),file=join(root,'claims.json');
+  const before={version:1,claims:[{id:'first',bytes:GiB}]};durableRecord(file,before);
+  const receipt=new ClaimReceipt([file]);
+  try{
+    assert.equal(receipt.valid(),true);
+    durableRecord(file,{version:1,claims:[{id:'second',bytes:2*GiB}]});durableRecord(file,before);
+    assert.equal(receipt.valid(),false,'restored bytes cannot recycle the still-open publication inode');
+  }finally{receipt.close();}
+});
+
+for(const kind of ['temporary','build'] as const)test('a legacy claim without a generation prevents '+kind+' double spend',t=>{
+  const root=testScratch(t,'disk-legacy-claim'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:42*GiB,freeInodes:100}});
+  const capacity=new DiskCapacity({env,pool:null}),run=capacity.transactions.run.bind(capacity.transactions);
+  let inserted=false,attempts=0;
+  capacity.transactions.run=(operation,path,body,wait,options)=>{
+    if(operation===(kind==='temporary'?'temporary-admission-publish':'build-admission-publish')){
+      attempts++;
+      if(!inserted){
+        inserted=true;const generation=capacity.state.read().generation;
+        withLock(capacity.transactions.path,()=>durableRecord(capacity.temporaryStateFile,{version:1,claims:[{
+          id:'legacy',pid:process.pid,identity:processIdentity(process.pid),path:join(root,'legacy'),bytes:kind==='temporary'?2*GiB:GiB,
+        }]}));
+        assert.equal(capacity.state.read().generation,generation,'the old writer did not know the generation');
+      }
+    }
+    return run(operation,path,body,wait,options);
+  };
+  if(kind==='temporary')assert.equal(capacity.tryTemporary(join(root,'next'),GiB).lease,null);
+  else assert.throws(()=>capacity.beginBuild({root:join(root,'next'),target:join(root,'next','target'),outputs:['clippy']}),DiskBuildAdmissionError);
+  assert.ok(attempts>=2,'the stale observation was prepared again before refusal');
+  assert.equal(JSON.parse(readFileSync(capacity.temporaryStateFile,'utf8')).version,1,'main can still read the new publication');
+});
+
+for(const width of [1,4])test('capacity allocation scans never own the pool lock, width '+width,t=>{
+  const root=testScratch(t,'disk-scan-outside'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:100*GiB,freeInodes:100}});
+  let now=0,scans=0;const rows:DiskTransaction[]=[];
+  const original=hostObservations(env);
+  const capacity=new DiskCapacity({env,pool:null,host:{...original,now:()=>now},observeTransaction:row=>rows.push(row)});
+  // The capability's lock is beside its state, not beside the measured output.
+  const actual=capacity.transactions.path;
+  capacity.host.allocatedBytes=()=>{const control=acquire(actual);assert.ok(control);control.release();now+=35_000;scans++;return 0;};
+  capacity.activeLeases=()=>Array.from({length:width},(_,index)=>({root:join(root,String(index)),target:join(root,String(index),'target')}));
+  capacity.snapshot(root);
+  assert.equal(scans,width*2);assert.equal(Math.max(...rows.map(row=>row.lockHeldMs)),0);
+  assert.equal(now,width*70_000);
+});
+
+test('a reclamation intent blocks its target while independent admissions proceed',t=>{
+  const root=testScratch(t,'disk-intent-admission'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:100*GiB,freeInodes:100}});
+  const capacity=new DiskCapacity({env,pool:null}),target=join(root,'old','target');
+  const intent=capacity.state.begin(join(root,'old'),'reclaim');
+  try{
+    const generation=capacity.state.read().generation;
+    assert.throws(()=>capacity.beginBuild({root:join(root,'old'),target}),DiskBuildAdmissionError);
+    assert.equal(capacity.state.read().generation,generation,'denial publishes no claim and cannot invalidate the reclaimer');
+    const independent=capacity.beginBuild({root:join(root,'new'),target:join(root,'new','target')});independent();
+    assert.equal(capacity.tryTemporary(join(target,'capture'),GiB).lease,null);
+  }finally{capacity.state.end(intent);}
+  const build=capacity.beginBuild({root:join(root,'old'),target});build();
+});
+
+test('dead intent births expire and future transaction state is never overwritten',t=>{
+  const root=testScratch(t,'disk-intent-birth'),env=ownMemory(join(root,'observations'),{disk:{freeBytes:100*GiB,freeInodes:100}});
+  const capacity=new DiskCapacity({env,pool:null}),target=join(root,'target');
+  const intent=capacity.state.begin(root,'reclaim'),row=capacity.state.read();
+  writeFileSync(capacity.state.file,JSON.stringify({...row,intents:[{...intent,identity:intent.identity+'-departed'}]}));
+  const build=capacity.beginBuild({root,target});build();
+  const future=JSON.stringify({version:99,generation:row.generation,intents:[]});writeFileSync(capacity.state.file,future);
+  assert.throws(()=>capacity.beginBuild({root,target}),/version/);
+  assert.equal(readFileSync(capacity.state.file,'utf8'),future);
+});
 
 test('the forecast is the tool-written sum of declared peaks, rounded once',()=>{
   const forecast=coldBuildForecast();
@@ -206,7 +578,7 @@ test('capacity refuses before a builder starts and never downgrades future claim
   const env=ownMemory(join(root,'observations'),{disk:{freeBytes:45*GiB,freeInodes:100}}),capacity=new DiskCapacity({env});
   assert.throws(()=>capacity.beginBuild({root,target,outputs:['nts-dev']}),error=>{
     assert.ok(error instanceof DiskBuildAdmissionError);assert.equal(error.kind,'disk-capacity');
-    assert.deepEqual(error.disk,{root,target,outputs:['nts-dev'],shortBytes:GiB,freeBytes:45*GiB,floorBytes:40*GiB,buildReservedBytes:6*GiB,temporaryReservedBytes:0});
+    assert.deepEqual(error.disk,{kind:'shortfall',root,target,outputs:['nts-dev'],shortBytes:GiB,freeBytes:45*GiB,floorBytes:40*GiB,buildReservedBytes:6*GiB,temporaryReservedBytes:0});
     return true;
   });
   assert.equal(existsSync(capacity.stateFile),false,'a refused attempt publishes no build claim');

@@ -1,8 +1,11 @@
+import {DiskState,DiskTransactions,type DiskIntent} from './disk-transaction.ts';
+import {ClaimReceipt,GitReceipt,DetachRecord,linkMovedCheckout,prepareCheckoutRepair,readCheckoutMove,syncDiskDirectory,type CheckoutMove} from './disk-preparation.ts';
+import type {TreePin} from '../landing/tree-pin.ts';
 // Reclaim only rebuildable outputs and clean, unbuilt pool worktrees. The
-// owner fences and detaches under the pool lock, then drains outside it.
+// owner prepares outside the pool lock, commits a bounded detach under it,
+// then drains the detached payload outside it.
 import {appendFileSync,chmodSync,existsSync,lstatSync,readFileSync,readdirSync,realpathSync,rmSync,mkdirSync,renameSync,rmdirSync,unlinkSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
-import {withLock} from '../landing/lock.ts';
 import {durableRecord} from './durable-record.ts';
 import {ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
 import {basename,dirname,join,resolve,sep} from 'node:path';
@@ -20,15 +23,16 @@ import type {HostObservations} from './host-observations.ts';
 export type ReclaimTarget={tree:string;target:string;service:boolean};
 export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output'|'detached-build-output';
 export type ReclaimRemoval={root:string;kind:ReclaimKind;allocatedBytes:number;freeBytesChange:number;facts:string[];tree?:string;task?:string};
-export type ReclaimReport={triggered:boolean;lockHeldMs:number;before:number;after:number;triggerBytes:number;goalBytes:number;
+export type ReclaimReport={triggered:boolean;lockHeldMs:number;maxLockHeldMs:number;before:number;after:number;triggerBytes:number;goalBytes:number;
   removed:ReclaimRemoval[];kept:{root:string;reason:string;routine:boolean}[]};
-export type ReclaimOwnership=(tree:string,target:string)=>readonly string[]|void;
+export type ReclaimOwnership=(tree:string,target:string,ownPin?:TreePin)=>readonly string[]|void;
 export type ReclaimOptions={
-  pool:{dir:string;git:Git};host:HostObservations;coldBytes:number;
+  pool:{dir:string;git:Git};host:HostObservations;coldBytes:number;state?:DiskState;
+  claimReceipt?:()=>ClaimReceipt;
   snapshot:()=>{freeBytes:number;floorBytes:number;reservedBytes:number};
   protectedRoots:()=>readonly {root:string;target:string}[];
   services:readonly ReclaimTarget[];ownership:ReclaimOwnership;
-  locked?:<T>(body:()=>T)=>T;
+  locked?:<T>(body:()=>T,operation?:string,root?:string)=>T;
   /** Fixture deletion barrier; the production remover remains the owner. */
   removePayload?:(path:string,kind:ReclaimKind,remove:()=>void)=>void;
   /** The ordinary idle upkeep uses the same remover and safety checks. */
@@ -169,8 +173,8 @@ export function assertNoUnitUsers(roots:readonly string[],ownedUnits?:readonly s
     assertUnitTreeUnused(roots,parseUnitTreeOwnership(unit,properties.stdout));
   }
 }
-export const liveReclaimOwnership:ReclaimOwnership=(tree,target)=>{
-  assertNoUnitUsers([tree,target]);return assertNoProcessUsers([tree,target]);
+export const liveReclaimOwnership:ReclaimOwnership=(tree,target,ownPin)=>{
+  assertNoUnitUsers([tree,target]);return assertNoProcessUsers([tree,target],{ownPin});
 };
 
 const cargoProfiles=['nts-dev','clippy','debug','release'] as const;
@@ -256,17 +260,21 @@ export function describeReclamation(...reports:(ReclaimReport|null|undefined)[])
 export const DISK_TRASH='.disk-trash';
 const trashId=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const reclaimKinds:readonly ReclaimKind[]=['obsolete-profile','unbuilt-checkout','free-build-output','detached-build-output'];
-type TrashManifest={version:1;id:string;at:number;state:'prepared'|'detached';identity:{dev:number;ino:number;uid:number};removal:ReclaimRemoval};
+type TrashManifest={version:1;id:string;at:number;state:'prepared'|'detached';identity:{dev:number;ino:number;uid:number};removal:ReclaimRemoval;checkout?:CheckoutMove};
 export type TrashEntry={path:string;allocatedBytes:number|null;ageMs:number;kind:ReclaimKind|null;diagnostic?:string};
 function trashRoot(pool:string):string{return join(pool,DISK_TRASH);}
-function readTrash(entry:string):TrashManifest{
+function readTrash(entry:string,name='manifest.json'):TrashManifest{
   physical(entry);
-  const file=join(entry,'manifest.json'),row=JSON.parse(readFileSync(file,'utf8')) as TrashManifest;
+  const file=join(entry,name),row=JSON.parse(readFileSync(file,'utf8')) as TrashManifest;
   assertStateVersion(row,1,file);
   if(row.version!==1||!trashId.test(row.id)||row.id!==basename(entry)||!Number.isSafeInteger(row.at)||row.at<0||!['prepared','detached'].includes(row.state)
     ||!row.identity||[row.identity.dev,row.identity.ino,row.identity.uid].some(value=>!Number.isSafeInteger(value)||value<0)
     ||!row.removal||!reclaimKinds.includes(row.removal.kind)||typeof row.removal.root!=='string'||resolve(row.removal.root)!==row.removal.root
     ||!Number.isSafeInteger(row.removal.allocatedBytes)||row.removal.allocatedBytes<0||!Array.isArray(row.removal.facts))throw Error('invalid disk trash manifest: '+file);
+  if(row.checkout!==undefined){
+    if(row.removal.kind!=='unbuilt-checkout')throw Error('invalid disk trash checkout kind: '+file);
+    readCheckoutMove(row.checkout,row.removal.root);
+  }
   return row;
 }
 /** One current entry observation. A retired entry is absence, not a damaged
@@ -301,13 +309,19 @@ function removeTrashCheckout(options:ReclaimOptions,payload:string,drainer:GateR
 function present(path:string):boolean{try{lstatSync(path);return true;}catch(error){if(missing(error))return false;throw error;}}
 /** Each drainer acquires under the pool lock, but keeps only its entry owner
  * during deletion. A crash at any point leaves a manifest for the next pass. */
-function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>T,owner:GateResource):ReclaimRemoval|null{
+function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T,operation?:string,root?:string)=>T,owner:GateResource):ReclaimRemoval|null{
   let open=true;
   try{
-    const row=readTrash(entry),payload=join(entry,'payload'),before=locked(options.snapshot).freeBytes;
+    const row=readTrash(entry),payload=join(entry,'payload'),before=options.snapshot().freeBytes;
     if(present(payload)){
       payloadIdentity(payload,row);
+      if(row.checkout){
+        const common=gitRead(options.pool.git,['rev-parse','--path-format=absolute','--git-common-dir']);
+        const repair=prepareCheckoutRepair(row.checkout,row.removal.root,payload,common);
+        locked(repair,'trash-checkout-repair',payload);
+      }
       if(row.state==='prepared'){row.state='detached';durableRecord(join(entry,'manifest.json'),row);}
+      rmSync(join(entry,'manifest.detached.json'),{force:true});
       const remove=()=>{
         if(row.removal.kind==='unbuilt-checkout')removeTrashCheckout(options,payload,owner);
         else{writable(payload);rmSync(payload,{recursive:true});}
@@ -315,77 +329,95 @@ function drainTrash(options:ReclaimOptions,entry:string,locked:<T>(body:()=>T)=>
       if(options.removePayload)options.removePayload(payload,row.removal.kind,remove);else remove();
       if(existsSync(payload))throw Error('disk trash remover retained payload: '+payload);
     }
-    if(row.state==='detached'&&row.removal.kind==='unbuilt-checkout')locked(()=>{
+    if(row.state==='detached'&&row.removal.kind==='unbuilt-checkout'){
       // A crash after Git's byte removal but before registry retirement leaves
       // a missing worktree. Force is allowed only for that absent payload;
       // this transaction removes metadata, never unexpected checkout bytes.
       if(present(payload))throw Error('disk trash payload reappeared: '+payload);
       if(worktrees(options.pool.git).some(tree=>resolve(tree.path)===payload))removeTrashCheckout(options,payload,owner,true);
-    });
+    }
     // Prepared but never renamed: the original remains outside our grant.
     const removal=row.state==='detached'?{...row.removal,freeBytesChange:0}:null;
-    locked(()=>{
-      if(removal){
+    if(removal){
         removal.freeBytesChange=options.snapshot().freeBytes-before;
         const log=join(options.pool.dir,'.disk-reclaim.log');
         const seen=existsSync(log)&&readFileSync(log,'utf8').trim().split('\n').filter(Boolean).some(line=>(JSON.parse(line) as {trashId?:string}).trashId===row.id);
         if(!seen)appendFileSync(log,JSON.stringify({at:options.host.wallNow(),trashId:row.id,...removal})+'\n');
-      }
+    }
+    locked(()=>{
       // Only small owner metadata is removed under the pool lock.
       owner.close();open=false;unlinkSync(join(entry,'.drain.lock'));
+      rmSync(join(entry,'manifest.detached.json'),{force:true});
       unlinkSync(join(entry,'manifest.json'));rmdirSync(entry);
-    });
+    },'trash-finalize',entry);
     return removal;
   }finally{if(open)owner.close();}
 }
 
 /** Setup and final metadata cleanup can leave no manifest. Only an empty
  * UUID envelope with its one known lock file is eligible; no payload grant
- * is inferred from a missing manifest. Caller holds the pool lock. */
+ * is inferred from a missing manifest. Its kernel owner excludes publication. */
 function emptyEnvelope(entry:string):boolean{
   if(!trashId.test(basename(entry)))return false;
   physical(entry);
   const children=readdirSync(entry);
-  if(children.some(name=>name!=='.drain.lock'))return false;
+  const pending='manifest.detached.json';
+  if(children.some(name=>name!=='.drain.lock'&&name!==pending))return false;
+  if(children.includes(pending)){
+    const info=lstatSync(join(entry,pending));
+    if(!info.isFile()||info.isSymbolicLink()||info.uid!==process.getuid?.())return false;
+    try{if(readTrash(entry,pending).state!=='detached')return false;}catch{return false;}
+  }
   const file=join(entry,'.drain.lock');
-  if(children.length){const info=lstatSync(file);if(!info.isFile()||info.isSymbolicLink()||info.size!==0||info.uid!==process.getuid?.())return false;}
+  if(children.includes('.drain.lock')){const info=lstatSync(file);if(!info.isFile()||info.isSymbolicLink()||info.size!==0||info.uid!==process.getuid?.())return false;}
   const owner=GateResource.tryAcquire(file);if(!owner)return false;
   try{
-    if(readdirSync(entry).some(name=>name!=='.drain.lock'))return false;
+    if(readdirSync(entry).some(name=>name!=='.drain.lock'&&name!==pending))return false;
+    rmSync(join(entry,pending),{force:true});
   }finally{owner.close();}
   unlinkSync(file);rmdirSync(entry);return true;
 }
 
 export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const {pool,host,coldBytes}=options;
-  const take=options.locked??(<T>(body:()=>T)=>withLock(join(pool.dir,'.lock'),body));
-  let lockHeldMs=0;
-  const locked=<T>(body:()=>T):T=>take(()=>{
-    const start=host.now();try{return body();}finally{lockHeldMs+=host.now()-start;}
-  });
+  const state=options.state??new DiskState(new DiskTransactions(join(pool.dir,".lock"),host));
+  const take=options.locked??(<T>(body:()=>T,operation='reclaim-metadata',root=pool.dir)=>state.transactions.run(operation,root,body));
+  const previousHeldMs=state.transactions.totalLockHeldMs;
+  let lockHeldMs=0,maxLockHeldMs=0;
+  const locked=<T>(body:()=>T,operation="reclaim-metadata",root=pool.dir):T=>take(()=>{
+    const start=host.now();try{return body();}finally{const held=host.now()-start;lockHeldMs+=held;maxLockHeldMs=Math.max(maxLockHeldMs,held);}
+  },operation,root);
   const recovered:ReclaimRemoval[]=[],trashKept:ReclaimReport['kept']=[];
   for(const listed of diskTrash(pool.dir,host.wallNow())){
     // Listing is only a discovery hint. The previous owner may publish or
     // retire this envelope before we acquire the pool lock. Classify afresh
     // and acquire its drainer in one transaction, so no stale diagnostic or
     // second acquisition can race retirement.
-    const pending=locked(()=>{
+    const entry=locked(()=>{
       const entry=observeTrash(listed.path,host.wallNow());
       if(!entry)return null;
-      if(entry.diagnostic&&emptyEnvelope(entry.path))return null;
+
       if(entry.ageMs>3_600_000)trashKept.push({root:entry.path,reason:'stuck disk trash drain (older than one hour)',routine:false});
-      if(entry.diagnostic){trashKept.push({root:entry.path,reason:entry.diagnostic,routine:false});return null;}
-      const owner=GateResource.tryAcquire(join(entry.path,'.drain.lock'));
-      return owner?{entry,owner}:null;
-    });
-    if(!pending)continue;
-    const {entry,owner}=pending;
+      return entry;
+    },"trash-adopt",listed.path);
+    if(!entry)continue;
+    if(entry.diagnostic){
+      try{if(!emptyEnvelope(entry.path))trashKept.push({root:entry.path,reason:entry.diagnostic,routine:false});}
+      catch(error){if(!missing(error))throw error;}
+      continue;
+    }
+    // A kernel drainer acquisition may launch flock: never under the pool lock.
+    let identity:Identity[];
+    try{identity=physical(entry.path);}catch(error){if(missing(error))continue;throw error;}
+    const owner=GateResource.tryAcquire(join(entry.path,'.drain.lock'));if(!owner)continue;
+    try{sameRoot(identity);}catch(error){owner.close();if(!missing(error))trashKept.push({root:entry.path,reason:errorText(error),routine:false});continue;}
+
     try{const row=drainTrash(options,entry.path,locked,owner);if(row)recovered.push(row);}
     catch(error){if(error instanceof ToolingInstrumentError)throw error;trashKept.push({root:entry.path,reason:'disk trash drain retained: '+errorText(error),routine:false});}
   }
 
-  const first=locked(options.snapshot),trigger=first.floorBytes+first.reservedBytes+coldBytes;
-  const report:ReclaimReport={get lockHeldMs(){return lockHeldMs;},triggered:first.freeBytes<trigger,before:first.freeBytes,after:first.freeBytes,
+  const first=options.snapshot(),trigger=first.floorBytes+first.reservedBytes+coldBytes;
+  const report:ReclaimReport={get lockHeldMs(){return (options.locked&&!options.state?lockHeldMs:0)+state.transactions.totalLockHeldMs-previousHeldMs;},get maxLockHeldMs(){return Math.max(maxLockHeldMs,state.transactions.maximumLockHeldMs);},triggered:first.freeBytes<trigger,before:first.freeBytes,after:first.freeBytes,
     triggerBytes:trigger,goalBytes:trigger+coldBytes,removed:recovered,kept:trashKept};
   if(!report.triggered&&!options.maintenance)return report;
   const keep=(root:string,error:unknown,routine=error instanceof TaskBranch)=>report.kept.push({root,reason:errorText(error),routine});
@@ -474,20 +506,22 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   candidates.sort((a,b)=>rank[a.kind]-rank[b.kind]||a.movedAt-b.movedAt||a.root.localeCompare(b.root));
   for(const candidate of candidates){
     const {root,tree,kind}=candidate;
-    const snapshot=locked(options.snapshot);report.after=snapshot.freeBytes;
+    const snapshot=options.snapshot();report.after=snapshot.freeBytes;
     const goal=snapshot.floorBytes+snapshot.reservedBytes+2*coldBytes;
     if(report.triggered&&snapshot.freeBytes>=goal)break;
     if(!report.triggered&&options.maintenance&&candidate.movedAt>=options.maintenance.before)continue;
     if(kind==='free-build-output'&&retained.has(candidate.target)){if(!report.kept.some(row=>row.root===candidate.target&&row.reason==='two warm free targets retained'))keep(candidate.target,'two warm free targets retained',true);continue;}
     // A previous obsolete-profile removal may have consumed this candidate.
     if(!existsSync(root))continue;
-    const held:{lock:GateResource|null;drainer:GateResource|null;entry:string|undefined}={lock:null,drainer:null,entry:undefined};
+    const held:{lock:GateResource|null;drainer:GateResource|null;entry:string|undefined;intent:DiskIntent|undefined}={lock:null,drainer:null,entry:undefined,intent:undefined};
     try{
-      // Recursive allocation measurement is outside the pool lock too.
+      held.lock=GateResource.tryAcquire(tree+'.lock');if(!held.lock)throw Error('tree resource lock is held');
+      // Service output can live beside its checkout. Fence the actual removal
+      // root so admissions to that external target see the same intent.
+      held.intent=state.begin(root,'reclaim');
       const allocatedBytes=host.allocatedBytes(root);
-      const staged=locked(()=>{
+      const certify=()=>{
         sameRoot(candidate.identity);
-        held.lock=GateResource.tryAcquire(tree+'.lock');if(!held.lock)throw Error('tree resource lock is held');
         if(gitRead(pool.git,['rev-parse','refs/heads/main'])!==revision)throw Error('current build policy changed during reclamation');
         assertUnclaimed(root);
         if(candidate.branch)detached(tree,candidate.branch);
@@ -514,49 +548,63 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
           for(const name of readdirSync(root))if(!allowed(name))throw Error('unrecognized target content: '+name);
           if(!cargoCache(root))throw Error('target lacks Cargo cache identity');
         }else if(basename(root)!=='debug'&&marker(root,basename(root) as BuildOutputName)!=='obsolete')throw Error('profile is no longer obsolete');
-        const before=options.snapshot().freeBytes;
-        // Measure first; the fresh process/unit observation is immediately beside
-        // the identity fence and removal, rather than before a possibly large du.
-        const ownerFacts=options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root)??[];
-        // Measurement may be slow. Re-read every mutable lease/presence fact
-        // beside the final physical fence, while both locks are still held.
-        if(candidate.branch)detached(tree,candidate.branch);
-        assertUnclaimed(root);
-        sameRoot(candidate.identity);
-        if((kind==='free-build-output'||kind==='detached-build-output')&&root!==candidate.target){
-          const name=basename(root);
-          if(gitRead(pool.git,['ls-files','--','target/'+name],tree))throw Error('tracked target content');
-          const completed=(name==='nts-dev'||name==='clippy')&&marker(root,name)!=='unknown';
-          if(!cargoCache(candidate.target)&&!completed)throw Error('profile has neither Cargo cache identity nor a completion marker');
-        }
-        if(!candidate.branch&&!candidate.service)free(tree);
-        const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.branch?'explicit detached worker; task checkout retained':candidate.service?'service: obsolete generation only':'detached clean published worktree',...ownerFacts];
-        const removal:ReclaimRemoval={root,kind,allocatedBytes,freeBytesChange:0,facts,...(candidate.branch?{tree,task:candidate.branch}:{})};
-        if(!reclaimKinds.includes(kind))throw Error('unapproved disk reclamation kind: '+kind);
-        const trash=trashRoot(pool.dir);mkdirSync(trash,{recursive:true});physical(trash);
-        if(lstatSync(trash).dev!==candidate.identity[0]!.dev)throw Error('disk trash is on a different filesystem: '+root);
-        held.entry=join(trash,randomUUID());mkdirSync(held.entry);held.drainer=GateResource.tryAcquire(join(held.entry,'.drain.lock'));
-        if(!held.drainer)throw Error('new disk trash entry has an owner: '+held.entry);
-        const {dev,ino,uid}=candidate.identity[0]!;
-        const manifest:TrashManifest={version:1,id:basename(held.entry),at:host.wallNow(),state:'prepared',identity:{dev,ino,uid},removal};
-        durableRecord(join(held.entry,'manifest.json'),manifest);
-        const payload=join(held.entry,'payload');
-        if(kind==='unbuilt-checkout'){
-          assertWorkerPresenceWritable(tree);
-          gitRead(pool.git,['worktree','move','--',root,payload]);removeWorkerPresence(tree);
-        }else renameSync(root,payload);
-        manifest.state='detached';durableRecord(join(held.entry,'manifest.json'),manifest);
-        return {entry:held.entry,drainer:held.drainer,before};
+      };
+      const trash=trashRoot(pool.dir);mkdirSync(trash,{recursive:true});physical(trash);
+      if(lstatSync(trash).dev!==candidate.identity[0]!.dev)throw Error('disk trash is on a different filesystem: '+root);
+      held.entry=join(trash,randomUUID());mkdirSync(held.entry);held.drainer=GateResource.tryAcquire(join(held.entry,'.drain.lock'));
+      if(!held.drainer)throw Error('new disk trash entry has an owner: '+held.entry);
+      const entry=held.entry,drainer=held.drainer,payload=join(entry,'payload');
+      let git:GitReceipt,policy:GitReceipt;
+      const staged=state.prepared('reclaim-detach',root,()=>{
+        const claims=options.claimReceipt?.()??new ClaimReceipt([join(pool.dir,'.disk-builds.json'),join(pool.dir,'.disk-builds.json.temporaries.json')]);
+        try{
+          state.assertIntent(held.intent!);
+          certify();
+          if(kind==='unbuilt-checkout'){
+            if(!git.checkout)throw Error('checkout has no bounded linked-worktree move: '+tree);
+            if(existsSync(join(git.checkout.gitDir,'locked')))throw Error('Git worktree is locked: '+tree);
+            if(gitRead(pool.git,['ls-files','--stage','-z'],tree).split('\0').some(line=>line.startsWith('160000 ')))
+              throw Error('submodule checkout is not a bounded relocation: '+tree);
+          }
+          const before=options.snapshot().freeBytes;
+          const ownerFacts=options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root)??[];
+          // Every provenance check is repeated after slow ownership inspection.
+          certify();
+          const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.branch?'explicit detached worker; task checkout retained':candidate.service?'service: obsolete generation only':'detached clean published worktree',...ownerFacts];
+          const removal:ReclaimRemoval={root,kind,allocatedBytes,freeBytesChange:0,facts,...(candidate.branch?{tree,task:candidate.branch}:{})};
+          if(!reclaimKinds.includes(kind))throw Error('unapproved disk reclamation kind: '+kind);
+          const {dev,ino,uid}=candidate.identity[0]!;
+          const manifest:TrashManifest={version:1,id:basename(entry),at:host.wallNow(),state:'prepared',identity:{dev,ino,uid},removal,
+            ...(kind==='unbuilt-checkout'?{checkout:git.checkout!}:{})};
+          // Preparation and its drainer acquisition are outside the pool lock.
+          durableRecord(join(entry,'manifest.json'),manifest);
+          const record=new DetachRecord(join(entry,'manifest.json'),{...manifest,state:'detached'});
+          return {claims,git,policy,manifest,record,before};
+        }catch(error){claims.close();throw error;}
+      },approved=>{
+        state.assertIntent(held.intent!);sameRoot(candidate.identity);
+        // The shared lock is also the fence that pre-intent owners honor.
+        // This commit contains no scan, Git command, or payload traversal.
+        state.advance();
+        renameSync(root,payload);
+        if(approved.manifest.checkout){linkMovedCheckout(approved.manifest.checkout,payload);removeWorkerPresence(tree);}
+        syncDiskDirectory(dirname(root));approved.record.publish();
+        return {entry,drainer,before:approved.before};
+      },30_000,{
+        capture:()=>{git=new GitReceipt(tree,[join(root,'.nts-complete.json')]);policy=new GitReceipt(pool.git.root);},
+        validate:approved=>approved.claims.valid()&&approved.git.valid()&&approved.policy.valid(),
+        dispose:approved=>{approved.claims.close();approved.record.close();},
       });
+      state.end(held.intent!);held.intent=undefined;
       held.lock?.close();held.lock=null;
       held.drainer=null; // drainTrash owns close, including on failure.
       const removal=drainTrash(options,staged.entry,locked,staged.drainer);
-      report.after=locked(options.snapshot).freeBytes;
+      report.after=options.snapshot().freeBytes;
       if(removal){removal.freeBytesChange=report.after-staged.before;report.removed.push(removal);}
     }catch(error){
       if(error instanceof ToolingInstrumentError)throw error;
-      keep(held.entry??root,error);
-    }finally{held.lock?.close();held.drainer?.close();}
+      keep(held.entry&&present(join(held.entry,'payload'))?held.entry:root,error);
+    }finally{try{if(held.intent)state.end(held.intent);}finally{held.lock?.close();held.drainer?.close();}}
 
   }
   return report;

@@ -68,7 +68,7 @@ test("a held change waits aside until it is retried, at the front", t => {
 
 test('disk readiness restores its original key and cannot resurrect a newer answer',t=>{
   const q=new Queue(home(t)),entry=q.submit(sha('a')),later=q.submit(sha('b'));
-  const disk={root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
+  const disk={kind:'shortfall' as const,root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
   const held=q.answer(q.take()!,{state:'held',message:'disk',retryDisk:[disk]});
   assert.equal(q.retryDiskReady(entry.id,'different answer'),null);
   assert.deepEqual(q.retryDiskReady(entry.id,held.answerNonce!),entry);
@@ -84,7 +84,7 @@ test('a same-timestamp newer disk answer cannot reuse an old readiness observati
   const original=Date.prototype.toISOString;Date.prototype.toISOString=()=> '2026-11-16T00:00:00.000Z';
   try{
     const q=new Queue(home(t)),entry=q.submit(sha('a'));
-    const disk={root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
+    const disk={kind:'shortfall' as const,root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
     const old=q.answer(q.take()!,{state:'held',message:'first shortage',retryDisk:[disk]});
     q.retry(entry.id);
     const newer=q.answer(q.take()!,{state:'held',message:'new shortage',retryDisk:[{...disk,shortBytes:2,buildReservedBytes:2}]});

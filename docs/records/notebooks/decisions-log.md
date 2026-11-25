@@ -4754,3 +4754,144 @@ lifetime-owning launcher and no pre-lifetime landing service can invoke the
 direct runner with a prepared root. Both facts must be proved at deletion;
 the verified-controller route is outside that condition.
 The contract is in [workflow](../../workflow.md#the-machine).
+## Pool transactions publish state, never scan trees (11-24)
+
+Approved by the coordinator for #1013. The shared pool and disk-capacity lock
+protects authoritative generation, claim and intent publication. Allocation,
+Git, unit/process ownership, checkout moves, payload deletion and reclamation
+log finalization run outside it. Admission prepares an observation without the
+lock and compares its monotonic generation before publication, so restoring
+old bytes cannot validate an intervening mutation. Reclamation intents and
+resource fences exclude conflicting ownership until detachment. Pool work
+retains old and prospective promises under a separate nonwaiting owner.
+
+Current-transaction sidecars are advisory: complete temporary-file publication,
+holder birth checks, and unknown/stale diagnostics on damage or mismatch. They
+never grant ownership or decide a verdict. Structural controls use supplied
+clocks and event order; real lock-wait counterfactuals remain private scratch.
+
+The contract is in [workflow](../../workflow.md#the-machine).
+
+## Disk-held refusals distinguish bytes from target ownership (11-24)
+
+Approved by the coordinator for #1013, refining the pool-transaction decision.
+A disk-held refusal is a discriminated union. A `shortfall` carries strictly
+positive byte figures satisfying the capacity equation; `target-fenced`
+carries the intent token, target and holder birth identity with no byte figures.
+Encoders and decoders reject mixed records and unknown variants by name.
+Both variants use the existing disk-held queue route. Readiness rechecks live
+capacity and intents, and status renders the variant it observed. A refused
+attempt publishes no claim and does not advance the capacity generation.
+
+The contract is in [workflow](../../workflow.md#the-machine).
+
+
+## Claim release precedes its timing failure (11-24)
+
+Approved by the coordinator for #1013. A required clock failure cannot prevent
+claim removal: release transactions complete their authoritative mutation and
+unlock, then raise the original named observation error. They substitute no
+clock and report no invented duration. Capture, admission and intent creation
+still refuse before mutation if their initial clock observation fails. Fixtures
+release their leases before removing the supplied observation capability.
+
+The contract is in [workflow](../../workflow.md#the-machine).
+
+
+## Mixed owners commit detachment atomically (11-24)
+
+Approved by the coordinator for #1013 after identifying the interval between
+validation and an outside-lock move. Claims and worker presence retain schema
+v1, so main's code and older trees keep reading and writing the same promises.
+The separate capacity generation is supplemented by immutable claim-publication
+receipts and bounded Git/registration/ref/presence receipts. The old and new
+writers share the pool lock at the detach commit: revalidate, rename the output,
+update the two small checkout linking files where applicable, and publish a
+pre-rendered durable detach record. Scans, Git commands, permissions, deletion
+and log finalization stay outside. A later admission acts on a fresh target;
+a changed preparation is cancelled and repeated. No global protocol activation
+or presence-schema fence is needed.
+
+The contract is in [workflow](../../workflow.md#the-machine); the bounded
+receipt owner is `tooling/gate/disk-preparation.ts`.
+
+
+## A pool operation pins its tree through publication (11-24)
+
+Approved by the coordinator for #1013. A short shared-lock transaction opens a
+directory descriptor before outside-lock Git work and holds it through lease,
+presence and input publication. Main's existing process-user rule observes
+this pin and refuses concurrent reset. An operation's ownership observations
+ignore exactly its own PID/birth/descriptor capability, continuing to other
+FDs of that same process. Every exit closes it, and the kernel closes it on
+process death. A prospective slot's empty placeholder is removed only with
+its created identity and a final atomic emptiness check.
+
+The contract is in [workflow](../../workflow.md#the-machine); the kernel
+capability owner is `tooling/landing/tree-pin.ts`.
+
+
+## Pool preparation validates every registered lease (11-25)
+
+Approved by the coordinator for #1013. A pool operation fences only its selected
+tree; old and prospective leases remain capacity protection without fencing
+unrelated targets. A legacy take may publish a Git lease without a claim or
+capacity generation, so preparation receipts cover every registered pool tree,
+including free slots. Capture and recheck read the shallow worktree registration
+namespace and its small gitdir, HEAD and optional locked files under the shared
+lock, comparing names, targets and inode identities. Per-tree HEAD/ref/presence
+receipts complete validation. Any mismatch cancels and retries; no checkout
+traversal or Git subprocess runs in that transaction.
+
+Only changed claims, intents or leases advance the generation. Pin publication,
+placeholder retirement and duplicate releases/protections do not. Preparation
+rows expose attempts, retries, invalidation causes and elapsed time while churn
+continues. The disk-held reader normalizes main's exact kind-less v1 shortfall
+row before consuming or storing it, while malformed, mixed and unknown variants
+still refuse by name. This preserves queued retry entries across service restart.
+
+The contract is in [workflow](../../workflow.md#the-machine); owners are
+`tooling/gate/disk-capacity.ts`, `disk-preparation.ts`, `disk-transaction.ts`,
+`tooling/landing/pool.ts`, `tooling/differential/command-entry/instrument.ts`
+and `tooling/gate/step-result.ts`.
+
+
+## Capacity receipts tolerate Git initialization and observe lease identity (11-25)
+
+The second review of #1013 found that complete-only registration parsing made
+unrelated partial Git registrations fail every pool admission, while full
+all-tree receipts retried on ordinary index and input changes. Registration
+capture now records missing files and disappearing entries as values, so changes
+cancel and retry. Stable missing/empty gitdir entries name no lease, matching
+Git's worktree listing. No shared registration repair or prune is performed.
+
+Other trees contribute lease-defining metadata only; their directory sizes,
+index and build inputs cannot invalidate an admission. Captured registrations
+supply their admin paths even while a new checkout's Git pointer is empty,
+retaining HEAD/ref validation through that initialization window. The request and reclaim
+candidate retain full provenance receipts. HEAD/ref, landed ref, presence and
+namespace identity still invalidate preparations across legacy writes.
+
+The contract is in [workflow](../../workflow.md#the-machine); the receipt owner
+is `tooling/gate/disk-preparation.ts`, selected by `disk-capacity.ts`.
+
+An identified pool lease whose HEAD is incomplete invalidates preparation until
+its identity can be observed. This differs from an unidentified stable entry
+with no usable gitdir, which names no lease and cannot hold pool admission.
+
+
+## Stable broken HEADs are capacity observations (11-25)
+
+The third review of #1013 corrects the preceding entry's incomplete-HEAD rule.
+A stable empty/missing HEAD or unparsable ref is an observed value, not evidence
+of a read race. Its receipt compares by equality and names no lease, matching
+Git's listing and activeLeases. Later HEAD publication changes the bytes and
+invalidates the preparation once. Only a disappearing entry or a real read race
+marks a receipt intrinsically unstable. Candidate/request provenance retains its
+existing refusal for a missing or invalid HEAD.
+
+Persistent-state controls cover snapshot, temporary admission, build admission
+and readiness, using transaction counts rather than elapsed time; the existing
+completes-during-preparation control remains. The contract is in
+[workflow](../../workflow.md#the-machine); the owner is
+`tooling/gate/disk-preparation.ts`.

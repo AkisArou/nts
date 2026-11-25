@@ -1,3 +1,8 @@
+import {GateResource} from './gate-resource.ts';
+import {ClaimReceipt,GitReceipt,PoolMembershipReceipt} from './disk-preparation.ts';
+import {TreePin} from '../landing/tree-pin.ts';
+import type {DiskIntent} from './disk-transaction.ts';
+import {DiskTransactions,DiskState,DiskIntentBusy,overlaps,type DiskTransaction} from './disk-transaction.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 // One capacity equation for pool leases and temporary admission. Git owns a
 // lease; declared build outputs consume its measured promise. No folder size
@@ -12,7 +17,7 @@ import {fileURLToPath} from 'node:url';
 import {worktrees,type Git} from '../landing/git.ts';
 import {processCgroup} from '../landing/tree-users.ts';
 import {workerPresence} from '../landing/pool-presence.ts';
-import {withLock,processIdentity,LockWaitError} from '../landing/lock.ts';
+import {processIdentity,LockWaitError} from '../landing/lock.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {completedBuild,type BuildOutputName} from './build-completion.ts';
 import {hostObservations,type HostObservations} from './host-observations.ts';
@@ -54,6 +59,7 @@ type TemporaryDiskWaits={version:1;waits:TemporaryDiskWait[]};
 export type DiskWaitRecord={readonly id:string;update(snapshot:CapacitySnapshot):void;end():void};
 export type CapacitySnapshot={freeBytes:number;floorBytes:number;reservedBytes:number;buildReservedBytes:number;temporaryReservedBytes:number;availableBytes:number;
   temporaries:TemporaryDiskClaim[];
+  fencedBy?:DiskIntent;
   leases:{root:string;remainingBytes:number;outputs:{name:BuildOutputName;allocatedBytes:number;remainingBytes:number;complete:boolean}[]}[]};
 export type PoolCapacitySource={dir:string;git:Git};
 
@@ -100,8 +106,13 @@ export class DiskCapacity {
   private readonly reclamation:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};
   private readonly handed:string|undefined;
   private readonly lockWaitMs:number;
+  readonly transactions:DiskTransactions;
+  readonly state:DiskState;
+  private poolOperationActive=false;
+  private readonly poolIntents=new Map<string,DiskIntent>();
+  private readonly poolReleases:(()=>void)[]=[];
   constructor(options:{env?:NodeJS.ProcessEnv;host?:HostObservations;forecast?:BuildForecast;pool?:PoolCapacitySource|null;
-    reclamation?:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};lockWaitMs?:number}={}){
+    reclamation?:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};lockWaitMs?:number;observeTransaction?:(row:DiskTransaction)=>void}={}){
     const env=options.env??process.env;
     this.handed=env[DISK_BUILD_ADMISSION];this.lockWaitMs=options.lockWaitMs??30_000;
     if(env[FIXTURE_ENVIRONMENT]!==undefined&&env[DISK_CAPACITY]===undefined)throw Error('fixture has no '+DISK_CAPACITY+' capability');
@@ -119,6 +130,8 @@ export class DiskCapacity {
     this.temporaryStateFile=this.stateFile+'.temporaries.json';
     // Waiting requests hold no bytes, so no claim reader ever sees them.
     this.waitStateFile=this.stateFile+'.waits.json';
+    this.transactions=new DiskTransactions(join(this.pool?.dir??dirname(this.stateFile),this.pool?'.lock':'.disk-lock'),this.host,options.observeTransaction);
+    this.state=new DiskState(this.transactions,()=>this.signalChange());
   }
   /** A wake hint only. Readiness always re-runs the complete capacity equation. */
   get changesFile():string{return this.stateFile+'.changed.json';}
@@ -127,10 +140,74 @@ export class DiskCapacity {
     assertWritableState(this.changesFile,1);
     durableRecord(this.changesFile,{version:1,event:randomUUID()});
   }
-  /** The same lock take() holds across its capacity check and branch switch. */
-  locked<T>(body:()=>T):T {
-    const dir=this.pool?.dir??dirname(this.stateFile);
-    mkdirSync(dir,{recursive:true});return withLock(join(dir,this.pool?'.lock':'.disk-lock'),body,this.lockWaitMs);
+  private prepared<T,R>(operation:string,root:string,observe:()=>T,publish:(value:T)=>R,gitLeases:readonly BuildLease[]=[]):R{
+    let git:GitReceipt[]=[],membership:PoolMembershipReceipt|undefined;
+    return this.state.prepared(operation,root,()=>{
+      const claims=this.claimReceipt();
+      // A concurrent legacy mutation can make an outside Git question fail.
+      // Validate its receipts before deciding whether that error is current.
+      try{return {claims,git,outcome:{ok:true as const,value:observe()}};}
+      catch(error){return {claims,git,outcome:{ok:false as const,error}};}
+    },prepared=>{
+      if(!prepared.outcome.ok)throw prepared.outcome.error;
+      return publish(prepared.outcome.value);
+    },this.lockWaitMs,{
+      capture:()=>{
+        const capture=()=>{
+          membership=this.pool?new PoolMembershipReceipt(this.pool.git.root):undefined;
+          const registrations=membership?.registrations(this.pool!.dir)??[],requests=new Map(gitLeases.map(lease=>[resolve(lease.root),lease]));
+          git=[...registrations.filter(row=>!requests.has(row.root)).map(row=>new GitReceipt(row.root,[],'lease',row)),
+            ...[...requests.values()].map(lease=>new GitReceipt(lease.root,(lease.outputs??['nts-dev','clippy']).map(name=>join(lease.target,name,'.nts-complete.json'))))];
+          return membership?.entryCount??0;
+        };
+        if(this.pool)this.transactions.measure('pool-membership-capture',capture,entries=>entries);else capture();
+      },
+      validate:prepared=>prepared.claims.valid()&&(membership?this.transactions.measure('pool-membership-recheck',()=>{
+        const seen=membership!.recheck();return {...seen,valid:seen.valid&&prepared.git.every(receipt=>receipt.valid())};
+      },row=>row.entries).valid:prepared.git.every(receipt=>receipt.valid())),
+      dispose:prepared=>prepared.claims.close(),
+    });
+  }
+  claimReceipt():ClaimReceipt{return new ClaimReceipt([this.stateFile,this.temporaryStateFile]);}
+  private fence(root:string):DiskIntent|undefined{return this.state.liveIntents().find(intent=>![...this.poolIntents.values()].some(own=>own.id===intent.id)&&overlaps(intent.root,root));}
+  /** Pool work has a nonwaiting owner; only a selected tree gets an intent. */
+  poolOperation<T>(body:()=>T,busy:()=>never):T{
+    if(!this.pool)throw Error('pool operation has no pool');
+    mkdirSync(this.pool.dir,{recursive:true});
+    const owner=GateResource.tryAcquire(join(this.pool.dir,'.operations.lock'));if(!owner)return busy();
+    try{
+      this.poolOperationActive=true;
+      try{return body();}
+      catch(error){if(error instanceof DiskIntentBusy)return busy();throw error;}
+      finally{
+        try{for(const release of this.poolReleases.splice(0))release();}
+        finally{this.poolOperationActive=false;this.signalChange();}
+      }
+    }finally{owner.close();}
+  }
+  /** Select the changed tree before publishing any fence. Other trees' old
+   * and prospective leases remain capacity promises, never fence roots. */
+  poolTarget<T>(tree:string,body:()=>T):T{
+    if(!this.poolOperationActive)throw Error('pool target has no operation owner');
+    tree=resolve(tree);
+    if(!this.pool||dirname(tree)!==resolve(this.pool.dir)||!/^[1-9][0-9]*$/.test(tree.slice(resolve(this.pool.dir).length+1)))throw Error('pool operation target is not a selected slot: '+tree);
+    if(this.poolIntents.has(tree))return body();
+    const leases=this.activeLeases().filter(lease=>overlaps(tree,lease.root));
+    const intent=this.state.begin(tree,'pool-operation',this.lockWaitMs,leases);
+    this.poolIntents.set(tree,intent);
+    try{return body();}
+    finally{try{this.state.end(intent,this.lockWaitMs);}finally{this.poolIntents.delete(tree);}}
+  }
+  protectPoolLease(lease:BuildLease):void{
+    const intent=[...this.poolIntents.values()].find(intent=>overlaps(intent.root,lease.root));
+    if(!intent)throw Error('pool lease has no selected-tree intent');
+    this.state.protect(intent,lease);
+  }
+  admitPoolLease(lease:BuildLease):void{this.poolReleases.push(this.beginBuild(lease));}
+  private current(snapshot:CapacitySnapshot,path:string):CapacitySnapshot{
+    const freeBytes=this.host.disk(path).freeBytes;
+    if(!Number.isSafeInteger(freeBytes)||freeBytes<0)throw Error('disk free bytes were not measured: '+path);
+    return {...snapshot,freeBytes,availableBytes:freeBytes-snapshot.floorBytes-snapshot.reservedBytes};
   }
   private claims():BuildClaim[]{
     if(!existsSync(this.stateFile))return [];
@@ -191,10 +268,10 @@ export class DiskCapacity {
       const waits=this.diskWaits().filter(wait=>wait.id!==id);
       assertWritableState(this.waitStateFile,1);durableRecord(this.waitStateFile,{version:1,waits:next?[...waits,next]:waits});
     };
-    this.locked(()=>store(of(snapshot)));
+    this.transactions.run('disk-wait-publish',path,()=>store(of(snapshot)),this.lockWaitMs);
     let ended=false;
     return {id,
-      update:seen=>{if(!ended)this.locked(()=>store(of(seen)));},
+      update:seen=>{if(!ended)this.transactions.run('disk-wait-publish',path,()=>store(of(seen)),this.lockWaitMs);},
       end:()=>{if(ended)return;ended=true;this.releaseClaim(()=>store(null));}};
   }
   activeLeases():BuildLease[]{
@@ -205,20 +282,21 @@ export class DiskCapacity {
     return worktrees(git).filter(tree=>dirname(resolve(tree.path))===resolve(dir)&&/^[1-9][0-9]*$/.test(tree.path.split('/').at(-1)!)
       &&tree.branch!==null&&landed.get(tree.branch)!==tree.head&&workerPresence(tree.path,tree.branch).state==='attached').map(tree=>({root:tree.path,target:join(tree.path,'target')}));
   }
-  /** Caller holds the pool lock. Explicit detach never overrides a live build,
+  /** Caller holds a pool-operation intent. Detach never overrides a live build,
    * temporary claim, unit, or process (including ledger owners and waiters). */
-  assertWorkerAbsent(tree:string):void{
+  assertWorkerAbsent(tree:string,ownPin?:TreePin):void{
+    const pins=TreePin.users(tree,ownPin);if(pins.length)throw Error('live tree pin '+pins[0]!.where+' owns '+tree);
     const under=(a:string,b:string)=>b===a||b.startsWith(a+'/');
     for(const claim of this.claims())if([claim.root,claim.target].some(path=>under(resolve(tree),resolve(path))||under(resolve(path),resolve(tree))))
       throw Error('live build claim '+claim.id+' by pid '+claim.pid+' owns '+tree);
     for(const claim of this.temporaryClaims())if(under(resolve(tree),resolve(claim.path))||under(resolve(claim.path),resolve(tree)))
       throw Error('live temporary claim '+claim.id+' by pid '+claim.pid+' owns '+tree);
-    this.reclamation.ownership(tree,join(tree,'target'));
+    this.reclamation.ownership(tree,join(tree,'target'),ownPin);
   }
   snapshot(path:string,leases?:readonly BuildLease[]):CapacitySnapshot {
-    if(leases===undefined)return this.locked(()=>this.snapshot(path,[...this.activeLeases(),...this.claims()]));
+    if(leases===undefined)return this.prepared("capacity-snapshot",path,()=>this.snapshot(path,[...this.activeLeases(),...this.claims()]),snapshot=>this.current(snapshot,path));
     const merged=new Map<string,BuildLease>();
-    for(const lease of leases){const key=resolve(lease.target),previous=merged.get(key);merged.set(key,{...lease,target:key,
+    for(const lease of [...leases,...this.state.liveIntents().flatMap(intent=>intent.leases??[])]){const key=resolve(lease.target),previous=merged.get(key);merged.set(key,{...lease,target:key,
       outputs:[...new Set([...(previous?.outputs??[]),...(lease.outputs??['nts-dev','clippy'])])]});}
     const rows=[...merged.values()].map(lease=>{
       const outputs=lease.outputs!.map(name=>{
@@ -247,14 +325,16 @@ export class DiskCapacity {
     const pid=process.pid,identity=processIdentity(pid),id=randomUUID();path=resolve(path);
     if(!identity)throw Error('temporary disk owner has no process birth identity');
     this.reclaim(path,bytes);
-    return this.locked(()=>{
-      const leases=[...this.activeLeases(),...this.claims()];
-      const snapshot=this.snapshot(path,leases);
-      if(snapshot.availableBytes<bytes)return {snapshot,lease:null};
+    return this.prepared("temporary-admission",path,()=>this.snapshot(path,[...this.activeLeases(),...this.claims()]),seen=>{
+      const snapshot=this.current(seen,path);
+      if(this.fence(path)||snapshot.availableBytes<bytes)return {snapshot,lease:null};
       const claim:TemporaryDiskClaim={id,pid,identity,path,bytes};
-      this.recordTemporaries([...snapshot.temporaries,claim]);
+      this.state.advance();this.recordTemporaries([...snapshot.temporaries,claim]);
       let released=false;
-      const release=()=>{if(released)return;this.releaseClaim(()=>{this.recordTemporaries(this.temporaryClaims().filter(row=>row.id!==id));this.signalChange();});released=true;};
+      const release=()=>{if(released)return;this.releaseClaim(()=>{
+        const claims=this.temporaryClaims(),next=claims.filter(row=>row.id!==id);if(next.length===claims.length)return;
+        this.state.advance();this.recordTemporaries(next);this.signalChange();
+      });released=true;};
       return {snapshot,lease:Object.freeze({...claim,release})};
     });
   }
@@ -269,7 +349,7 @@ export class DiskCapacity {
    * failure, never a fresh admission. */
   beginBuild(lease:BuildLease):BuildAdmission {
     if(this.handed!==undefined){
-      const id=this.handed,held=this.locked(()=>this.claims().find(claim=>claim.id===id));
+      const id=this.handed,held=this.transactions.run('build-handoff-read',lease.target,()=>this.claims().find(claim=>claim.id===id),this.lockWaitMs);
       if(!held)throw new ToolingInstrumentError('tooling-setup',`disk build admission ${id} is not held by a live build owner`);
       if(resolve(held.target)===resolve(lease.target)&&(lease.outputs??['nts-dev','clippy']).every(name=>(held.outputs??['nts-dev','clippy']).includes(name)))
         return Object.assign(()=>{},{env:{[DISK_BUILD_ADMISSION]:id}});
@@ -278,27 +358,32 @@ export class DiskCapacity {
     if(!identity)throw Error('disk build owner has no process birth identity');
     const next={...lease,id,pid,identity};
     const reclamation=this.reclaim(lease.target,0,undefined,[next]);
-    this.locked(()=>{
-      const claims=this.claims();
-      const snapshot=this.snapshot(lease.target,[...this.activeLeases(),...claims,next]);
-      if(snapshot.availableBytes<0)throw new DiskBuildAdmissionError({root:resolve(lease.root),target:resolve(lease.target),outputs:[...(lease.outputs??['nts-dev','clippy'])],
+    this.prepared("build-admission",lease.target,()=>{const claims=this.claims();return {claims,snapshot:this.snapshot(lease.target,[...this.activeLeases(),...claims,next])};},({claims,snapshot:seen})=>{
+      const snapshot=this.current(seen,lease.target);
+      const request={root:resolve(lease.root),target:resolve(lease.target),outputs:[...(lease.outputs??['nts-dev','clippy'])]};
+      const fence=this.fence(lease.target);
+      if(fence)throw new DiskBuildAdmissionError({...request,kind:'target-fenced',intent:{token:fence.id,root:fence.root,pid:fence.pid,identity:fence.identity}},describeReclamation(reclamation));
+      if(snapshot.availableBytes<0)throw new DiskBuildAdmissionError({...request,kind:'shortfall',
         shortBytes:-snapshot.availableBytes,freeBytes:snapshot.freeBytes,floorBytes:snapshot.floorBytes,buildReservedBytes:snapshot.buildReservedBytes,temporaryReservedBytes:snapshot.temporaryReservedBytes},describeReclamation(reclamation));
-      this.record([...claims,next]);
-    });
+      this.state.advance();this.record([...claims,next]);
+    },[lease]);
     let released=false;
-    const release=()=>{if(released)return;this.releaseClaim(()=>{this.record(this.claims().filter(claim=>claim.id!==id));this.signalChange();});released=true;};
+    const release=()=>{if(released)return;this.releaseClaim(()=>{
+      const claims=this.claims(),next=claims.filter(claim=>claim.id!==id);if(next.length===claims.length)return;
+      this.state.advance();this.record(next);this.signalChange();
+    });released=true;};
     return Object.assign(release,{env:{[DISK_BUILD_ADMISSION]:id}});
   }
   /** Read-only retry readiness: no build attempt, claim, or reclamation. */
   buildSnapshot(lease:BuildLease):CapacitySnapshot{
-    return this.locked(()=>this.snapshot(lease.target,[...this.activeLeases(),...this.claims(),lease]));
+    return this.prepared("build-readiness",lease.target,()=>this.snapshot(lease.target,[...this.activeLeases(),...this.claims(),lease]),seen=>{const snapshot=this.current(seen,lease.target);const fencedBy=this.fence(lease.target);return fencedBy?{...snapshot,fencedBy}:snapshot;},[lease]);
   }
-  /** Pool callers already own this lock and pass Git facts from that instant. */
+  /** A pool observation for display/preflight; grants use beginBuild. */
   poolSnapshot(path:string,leases:readonly BuildLease[]):CapacitySnapshot{return this.snapshot(path,[...leases,...this.claims()]);}
   /** A finished build must not become a failed step because cleanup met a
    * busy pool. The durable claim remains conservative until its birth expires. */
   private releaseClaim(body:()=>void):void{
-    try{this.locked(body);}catch(error){
+    try{this.transactions.run("claim-release",this.stateFile,body,this.lockWaitMs,{completeOnClockFailure:true});}catch(error){
       if(!(error instanceof LockWaitError))throw error;
       console.error('disk claim release deferred until owner exit: '+error.message);
     }
@@ -309,7 +394,11 @@ export class DiskCapacity {
   reclaim(path:string,extraReservedBytes=0,maintenance?:{before:number;keep:number},pending:readonly BuildLease[]=[]):ReclaimReport|null {
     if(!this.pool)return null;
     try{return reclaimDisk({pool:this.pool,host:this.host,coldBytes:this.forecast.bytes,...this.reclamation,maintenance,
-      locked:body=>this.locked(body),
+      // Trash discovery/finalization observes or retires owner metadata. It
+      // must not invalidate a preparation merely by inspecting that owner's
+      // trash; reclamation advances the generation at its actual detach.
+      locked:(body,operation='reclaim-metadata',root=this.pool!.dir)=>this.transactions.run(operation,root,body,this.lockWaitMs),state:this.state,
+      claimReceipt:()=>this.claimReceipt(),
       snapshot:()=>{const snapshot=this.snapshot(path,[...this.activeLeases(),...this.claims(),...pending]);return {...snapshot,reservedBytes:snapshot.reservedBytes+extraReservedBytes};},
       protectedRoots:()=>[...this.activeLeases(),...this.claims(),...pending,...this.temporaryClaims().map(claim=>({root:claim.path,target:claim.path}))]});
     }finally{this.signalChange();}

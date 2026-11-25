@@ -284,7 +284,8 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
   await waitFor('the no-build entry lands past the disk hold',()=>f.queue.result(eb.id)?.state==='landed'&&f.queue.status().message?.startsWith('waiting for disk:')===true,{stopped:()=>finished?'service ended before the release':undefined});
   assert.equal(f.queue.result(ea.id)?.state,'held');assert.equal(attempts,1,'no repeated build under the unchanged shortage');
   assert.equal(f.queue.checking(),null,'the held entry owns no running check');
-  assert.equal(existsSync(f.pool.capacity.stateFile),false,'the refused build owns no claim');
+  assert.deepEqual(existsSync(f.pool.capacity.stateFile)?JSON.parse(readFileSync(f.pool.capacity.stateFile,'utf8')).claims:[],[],
+    'the refused build owns no claim; completed pool operations may leave an empty claim file');
   const status=landingStatus(f.s.root,f.config.home,0);
   assert.equal(status.service.running,true);assert.equal(status.service.state,'held');assert.equal(status.checking,null);
   assert.match(status.service.message!,new RegExp(`waiting for disk: ${ea.id} needs 1073741824 more bytes`));
@@ -300,7 +301,7 @@ test('a disk-held entry lets a no-build landing pass and returns at its original
 
 test('only a run that disk admission alone kept from finishing waits for disk',()=>{
   const tree='/fixture/tree',target='/fixture/target';
-  const disk={root:tree,target,outputs:['nts-dev' as const],shortBytes:92524544,freeBytes:42857148416,floorBytes:40*2**30,buildReservedBytes:0,temporaryReservedBytes:0};
+  const disk={kind:'shortfall' as const,root:tree,target,outputs:['nts-dev' as const],shortBytes:92524544,freeBytes:42857148416,floorBytes:40*2**30,buildReservedBytes:0,temporaryReservedBytes:0};
   const build={name:'build',verdict:'INSTRUMENT' as const,reason:'disk',instrument:{kind:'disk-capacity',verdict:'INSTRUMENT',disk}};
   const after=(needs:string)=>({name:'tests',verdict:'NOT RUN' as const,needs,reason:`needs ${needs} preparation, which is INSTRUMENT`});
   assert.deepEqual(diskRetry({tree,target},{steps:[build,after('build')]}),[disk],'steps that need the refused build wait with it');
@@ -308,6 +309,49 @@ test('only a run that disk admission alone kept from finishing waits for disk',(
   assert.equal(diskRetry({tree,target},{steps:[build,after('doctests')]}),undefined,'a row stopped by another step is held for a person');
   assert.equal(diskRetry({tree,target},{steps:[build,{name:'clippy',verdict:'FAIL'}]}),undefined);
   assert.equal(diskRetry({tree,target},{steps:[{...build,instrument:{kind:'tooling-setup',verdict:'INSTRUMENT'}},after('build')]}),undefined);
+});
+
+test('restart reads main version-1 disk-held results without a kind and returns them to the queue',async t=>{
+  const f=service(t),task=f.task('fix/legacy-disk',{'src/legacy.txt':'build\n'}),entry=f.submit('fix/legacy-disk',task.sha);
+  const disk={root:f.config.tree,target:f.config.target,outputs:['nts-dev' as const],shortBytes:2**30,freeBytes:45*2**30,floorBytes:40*2**30,buildReservedBytes:6*2**30,temporaryReservedBytes:0};
+  const answer=f.queue.answer(entry,{state:'held',message:'main disk refusal',retryDisk:[{...disk,kind:'shortfall'}]});
+  // Main's exact persisted version-1 shape, before this reader acquired the
+  // discriminant. Preserve its durable answer nonce and held entry.
+  writeFileSync(join(f.queue.home,'results',entry.id+'.json'),JSON.stringify({...answer,retryDisk:[disk]})+'\n');
+  assert.equal((await drain(f.config)).state,'drained');
+  assert.equal(f.queue.result(entry.id)?.state,'landed');
+  assert.ok(f.logs.some(line=>line.includes('returns at its original queue arrival')));
+});
+
+test('a target-fenced entry waits by intent identity and retries after retirement without claiming a byte shortfall',async t=>{
+  const f=service(t),task=f.task('fix/fenced',{'src/fenced.txt':'build\n'}),entry=f.submit('fix/fenced',task.sha);
+  const capacity=f.pool.capacity,intent=capacity.state.begin(f.config.target,'reclaim');
+  const green=f.config.runSteps;let attempts=0;
+  f.config.select=()=>({selection:selection(['build']),kind:'other',interop:null,doctests:null});
+  f.config.runSteps=async options=>{
+    attempts++;
+    try{const release=capacity.beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});release();}
+    catch(error){
+      assert.ok(error instanceof DiskBuildAdmissionError);assert.equal(error.disk.kind,'target-fenced');
+      assert.equal('shortBytes' in error.disk,false);
+      return {state:'held',message:error.message,run:options.run,pending:[],refresh:[],wall_s:0,
+        steps:[{name:'build',verdict:'INSTRUMENT',instrument:{kind:error.kind,disk:error.disk}}]};
+    }
+    return green(options);
+  };
+  let finished=false,retired=false;const running=drain(f.config).finally(()=>{finished=true;});
+  // Join the controller before scratchRepo's cleanup hooks remove its inputs.
+  void running.catch(()=>{});
+  const retire=()=>{if(!retired){capacity.state.end(intent);retired=true;}};
+  try{
+    await waitFor('service names the target fence',()=>f.queue.status().message?.includes('target-fenced')===true,
+      {stopped:()=>finished?'service ended before intent retirement':undefined});
+    assert.equal(f.queue.result(entry.id)?.state,'held');assert.equal(attempts,1);
+    assert.ok(f.queue.status().message!.includes(intent.id));assert.ok(f.queue.status().message!.includes(intent.identity));
+    assert.doesNotMatch(f.queue.status().message!,/more bytes/);
+    retire();
+    assert.equal((await running).state,'drained');assert.equal(attempts,2);assert.equal(f.queue.result(entry.id)?.state,'landed');
+  }finally{retire();await running;}
 });
 
 test('withdrawing a disk-held entry answers it immediately and the idle service exits',async t=>{

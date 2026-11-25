@@ -1,3 +1,5 @@
+import {DiskBuildAdmissionError} from '../gate/step-result.ts';
+import {TreePin} from './tree-pin.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // The worktree pool, elastic (docs/workflow.md, "The machine"). A task takes a
 // free tree, warm with the cargo target the task before it built; when every
@@ -183,14 +185,14 @@ export function registeredRunTrees(dir:string,registered:readonly {path:string}[
 
 export class Pool {
   readonly dir: string; readonly git: Git; readonly inputs: Inputs; readonly remote: string | null;
-  readonly capacity:DiskCapacity;private readonly users:(tree:string)=>TreeUser[];private readonly target: (tree: string) => number | null;
+  readonly capacity:DiskCapacity;private readonly users:(tree:string,ownPin?:TreePin)=>TreeUser[];private readonly target: (tree: string) => number | null;
   constructor(dir: string, git: Git, inputs: Inputs = () => {}, options: PoolOptions = {}) {
     this.dir = resolve(dir); this.git = git; this.inputs = inputs; this.remote = options.remote === undefined ? "origin" : options.remote;
     this.capacity=new DiskCapacity({env:git.env,host:options.host,forecast:options.forecast,pool:{dir:this.dir,git},reclamation:options.reclamation});
     this.target = options.targetBytes ?? duTarget;
-    const users=options.users??(tree=>treeUsers(tree,{...options.processes,runTrees:registeredRunTrees(this.dir,worktrees(this.git))}));
-    this.users=tree=>{
-      try{return users(tree);}
+    const users:(tree:string,ownPin?:TreePin)=>TreeUser[]=options.users??((tree,ownPin)=>treeUsers(tree,{...options.processes,self:undefined,ownPin,runTrees:registeredRunTrees(this.dir,worktrees(this.git))}));
+    this.users=(tree,ownPin)=>{
+      try{const pins=TreePin.users(tree,ownPin);return pins.length?pins:users(tree,ownPin);}
       catch(error){if(error instanceof TreeOwnershipUnavailable)throw new PoolOwnershipUnavailable(error);throw error;}
     };
   }
@@ -256,6 +258,7 @@ export class Pool {
    * Existing counted leases are handled idempotently by setPresence. */
   private admitLease(path:string,resuming=false,previous?:ReclaimReport|null):void{
     const pending={root:path,target:join(path,'target')};
+    this.capacity.protectPoolLease(pending);
     const measure=()=>{
       // Decide from one complete hypothetical snapshot. Another builder may
       // consume its promise while snapshots are read; a difference of whole
@@ -268,6 +271,7 @@ export class Pool {
     if(resuming&&measure().treeBytes===0)return;
     const room=measure();
     if(!room.ok)throw new PoolFull({...room,why:room.why+describeReclamation(previous)});
+    try{this.capacity.admitPoolLease(pending);}catch(error){if(error instanceof DiskBuildAdmissionError){const seen=measure();throw new PoolFull({...seen,ok:false,why:error.message});}throw error;}
   }
   private roomFor(freeBytes:number,reservedBytes:number,unbuilt:number,treeBytes:number):Room {
     const floorBytes = treeBytes + DISK_MARGIN_BYTES;
@@ -279,15 +283,31 @@ export class Pool {
   }
 
   private locked<T>(body: () => T): T {
-    return this.capacity.locked(()=>{try{return body();}finally{this.capacity.signalChange();}});
+    return this.capacity.poolOperation(body,()=>{throw new TreeInUse(this.dir);});
+  }
+
+  /** The FD is the ownership fence that pre-intent resetters already read. */
+  private pinned<T>(path:string,create:boolean,body:(pin:TreePin)=>T):T{
+    return this.capacity.poolTarget(path,()=>{
+    let pin:TreePin|undefined;
+    try{
+      this.capacity.transactions.run('pool-tree-pin',path,()=>{pin=TreePin.open(path,create);});
+      return body(pin!);
+    }finally{
+      if(pin)try{
+        if(pin.emptyPlaceholder())this.capacity.transactions.run('pool-placeholder-retire',path,()=>pin!.removePlaceholder());
+      }finally{pin.close();}
+    }
+    });
   }
 
   /** A new tree, detached at main, with its inputs, when the disk can host it. */
-  private grow(name: string): void {
+  private grow(name: string,ownPin?:TreePin): void {
+    const path=join(this.dir,name);
+    if(!ownPin)return this.pinned(path,true,pin=>this.grow(name,pin));
     const snapshot=this.capacity.poolSnapshot(this.dir,this.leases(this.trees()));
     const room=this.roomFor(snapshot.freeBytes,snapshot.reservedBytes,snapshot.leases.filter(lease=>lease.remainingBytes>0).length,0);
     if (!room.ok) throw new PoolFull(room);
-    const path = join(this.dir, name);
     checked(this.git, ["worktree", "add", "-q", "--detach", path, "refs/heads/main"], this.git.root);
     this.inputs(path);
   }
@@ -318,43 +338,46 @@ export class Pool {
     if (!taskBranch(branch)) throw new Error(`not a task branch: ${branch}`);
     const previous=this.prepareAdmission(branch);
     return this.locked(() => {
-      const trees = this.trees();
-      const mine = trees.find(t => t.branch === branch);
-      // Asked for again, a landed task's tree is held: its task goes on there.
-      if (mine) {
-        this.setPresence(mine,'attached');
-        this.inputs(mine.path);
-        return this.trees().find(t=>t.name===mine.name)!;
+      for(;;){
+        const trees=this.trees(),mine=trees.find(tree=>tree.branch===branch);
+        if(mine){
+          const result=this.pinned(mine.path,false,pin=>{
+            // A legacy give already inside the shared lock finishes before
+            // the pin publishes. Select again from the result it left behind.
+            const current=this.trees().find(tree=>tree.name===mine.name&&tree.branch===branch);
+            if(!current)return null;
+            this.setPresence(current,'attached',pin);this.inputs(current.path);
+            return this.trees().find(tree=>tree.name===current.name)!;
+          });
+          if(result)return result;continue;
+        }
+        const available=this.trees(),elsewhere=worktrees(this.git).find(tree=>tree.branch===branch);
+        if(elsewhere)throw new Error(`${branch} is checked out in ${elsewhere.path}, outside the pool`);
+        const name=available.filter(tree=>tree.state==='free').sort((a,b)=>compatible(b)-compatible(a)||Number(a.name)-Number(b.name))[0]?.name??this.nextName();
+        const path=join(this.dir,name),lock=this.treeLock(path);
+        try{
+          const result=this.pinned(path,true,pin=>{
+            const current=this.trees().find(tree=>tree.name===name);
+            if(current&&current.state!=='free'&&current.state!=='missing')return null;
+            const registered=worktrees(this.git).some(tree=>resolve(tree.path)===path);
+            this.admitLease(path,false,previous);
+            if(!registered)this.grow(name,pin);
+            const exists=run(this.git,['rev-parse','--verify','--quiet',`refs/heads/${branch}`],this.git.root).status===0;
+            checked(this.git,exists?['switch','-q',branch]:['switch','-q','-c',branch,'refs/heads/main'],path);
+            this.publishPresence(this.trees().find(tree=>tree.name===name)!,'attached','fresh',pin);
+            this.inputs(path);return this.trees().find(tree=>tree.name===name)!;
+          });
+          if(result)return result;
+        }finally{lock.close();}
       }
-      const reclamation=previous;
-      // Reclamation may remove free unbuilt trees. Refresh before selection.
-      const available=this.trees();
-      const elsewhere = worktrees(this.git).find(t => t.branch === branch);
-      if (elsewhere) throw new Error(`${branch} is checked out in ${elsewhere.path}, outside the pool`);
-      // A warm target saves the task a cold build.
-      let tree = available.filter(t => t.state === "free").sort((a, b) => compatible(b) - compatible(a) || Number(a.name) - Number(b.name))[0]?.name;
-      if (!tree)tree=this.nextName();
-      const path = join(this.dir, tree);
-      // The tree's resource lock is decided before the first change, and held
-      // through the switch until its presence is published.
-      const lock=this.treeLock(path);
-      try{
-        this.admitLease(path,false,reclamation);
-        if(!existsSync(path))this.grow(tree);
-        const exists = run(this.git, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], this.git.root).status === 0;
-        checked(this.git, exists ? ["switch", "-q", branch] : ["switch", "-q", "-c", branch, "refs/heads/main"], path);
-        this.publishPresence(this.trees().find(t=>t.name===tree)!,'attached','fresh');
-      }finally{lock.close();}
-      this.inputs(path);
-      return this.trees().find(t => t.name === tree)!;
     });
   }
 
   private prepareAdmission(branch:string):ReclaimReport|null{
-    const existing=this.capacity.locked(()=>{
+    const existing=(()=>{
       const tree=this.trees().find(tree=>tree.branch===branch);
       return tree?{pending:{root:tree.path,target:join(tree.path,'target')},counted:this.leases([tree]).length>0}:null;
-    });
+    })();
     if(existing?.counted)return null;
     return this.capacity.reclaim(this.dir,0,undefined,existing?[existing.pending]:[]);
   }
@@ -380,7 +403,12 @@ export class Pool {
     assertWorkerPresenceWritable(tree.path);
     return tree.branch;
   }
-  private setPresence(tree:PoolTree,state:WorkerPresence['state']):void{
+  private setPresence(tree:PoolTree,state:WorkerPresence['state'],ownPin?:TreePin):void{
+    if(!ownPin)return this.pinned(tree.path,false,pin=>{
+      const current=this.trees().find(row=>row.path===tree.path&&row.branch===tree.branch);
+      if(!current)throw new TreeInUse(tree.path);
+      return this.setPresence(current,state,pin);
+    });
     this.presenceBranch(tree);
     // Use the lease owner's predicate, including its fail-closed default.
     // No new promise or publication is needed, even while a builder owns the
@@ -390,17 +418,17 @@ export class Pool {
     // refuses it by name, as it refuses every other live owner.
     const lock=state==='attached'?this.treeLock(tree.path):GateResource.tryAcquire(tree.path+'.lock');
     if(!lock)throw Error('tree resource lock is held: '+tree.path);
-    try{this.publishPresence(tree,state,'existing');}finally{lock.close();}
+    try{this.publishPresence(tree,state,'existing',ownPin);}finally{lock.close();}
   }
   /** Publish presence while this operation holds the tree's resource lock. A
    * fresh Git hold publishes its initial presence with no resume admission. */
-  private publishPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh'):void{
+  private publishPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh',ownPin:TreePin):void{
     const branch=this.presenceBranch(tree);
     if(state==='attached'&&transition!=='fresh')this.admitLease(tree.path,true);
     if(state==='detached'){
-      const users=this.users(tree.path);
+      const users=this.users(tree.path,ownPin);
       if(users.length)throw Error('cannot detach '+branch+': '+using(users));
-      this.capacity.assertWorkerAbsent(tree.path);
+      this.capacity.assertWorkerAbsent(tree.path,ownPin);
     }
     writeWorkerPresence(tree.path,branch,state,this.capacity.host.wallNow());
     // Both resume verbs publish the admitted lease before releasing either
@@ -458,7 +486,7 @@ export class Pool {
       let reset: { users: TreeUser[] };
       try { reset = this.resetTree(tree.path, false); }
       catch (error) {
-        if (!(error instanceof PoolOwnershipUnavailable)) throw error;
+        if (!(error instanceof PoolOwnershipUnavailable)&&!(error instanceof TreeInUse)) throw error;
         return kept(`pool tree ${tree.name} stays on its branch: ${error.message}; the next upkeep resets it once a complete observation finds nothing uses it`);
       }
       if (reset.users.length) return kept(`pool tree ${tree.name} stays on its branch while ${using(reset.users)} (a shell or editor with its working directory there counts too); the next upkeep resets it once nothing does`);
@@ -478,7 +506,7 @@ export class Pool {
     if (tree.changes.length) return { why: `it has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}` };
     let reset: { users: TreeUser[] };
     try { reset = this.resetTree(tree.path, false); }
-    catch (error) { if (error instanceof PoolOwnershipUnavailable) return { why: `${error.message}; kept until a complete observation finds nothing uses it` }; throw error; }
+    catch (error) { if (error instanceof PoolOwnershipUnavailable||error instanceof TreeInUse) return { why: `${error.message}; kept until a complete observation finds nothing uses it` }; throw error; }
     if (reset.users.length) return { why: `${using(reset.users)} (a shell or editor with its working directory there counts too)` };
     const outcome = deleteBranch(this.git, tree.branch!, landed, null);
     this.forget(tree.branch);
@@ -489,13 +517,17 @@ export class Pool {
    * Detach a tree at main -- unless a live process uses it: its users then
    * come back, and nothing changed. This is the one observation a reset
    * reads; its callers (give, release, settle) decide from its answer. They
-   * hold the pool's lock throughout, so no take or attach hands the tree out
-   * between the observation and the reset. `PoolOwnershipUnavailable` when no
+   * retain the operation intent and tree resource throughout, so no take or
+   * attach hands the tree out between the observation and the reset. `PoolOwnershipUnavailable` when no
    * complete observation certifies the tree idle.
    */
   private resetTree(path: string, discard: boolean): { users: TreeUser[] } {
-    const users=this.users(path);
+    const resource=this.treeLock(path);
+    try{
+    return this.pinned(path,false,pin=>{
+    const users=this.users(path,pin);
     if(users.length)return {users};
+    this.capacity.assertWorkerAbsent(path,pin);
     assertWorkerPresenceWritable(path);
     if (discard) {
       checked(this.git, ["checkout", "-q", "--detach", "--force", "refs/heads/main"], path);
@@ -506,6 +538,8 @@ export class Pool {
       removeWorkerPresence(path);
     }
     return {users:[]};
+    });
+    }finally{resource.close();}
   }
 
   /**
@@ -513,8 +547,8 @@ export class Pool {
    * nothing is left in it (`settle`). Then free trees idle longer than
    * `idleMs` go, cold ones first, then the longest idle, while more than
    * `keep` trees are free. A held, dirty or missing tree is never touched.
-   * One tree at a time under the pool's lock, so a task taking a tree waits
-   * for one reset or removal at most.
+   * Each operation uses a nonwaiting owner; the shared pool lock never spans
+   * a reset, scan or removal.
    */
   prune({ idleMs = IDLE_LIMIT_MS, keep = WARM_MINIMUM, now = Date.now() }: { idleMs?: number; keep?: number; now?: number } = {}): Pruned {
     if(keep<WARM_MINIMUM)throw Error('pool upkeep must keep at least two warm targets');
@@ -535,7 +569,7 @@ export class Pool {
       const heads = new Map(this.trees().flatMap(t => t.branch ? [[t.branch, t.head] as const] : []));
       for (const [branch, landed] of this.landed()) if (heads.get(branch) !== landed) this.forget(branch);
     });
-    const trees=this.capacity.locked(()=>this.trees());
+    const trees=this.trees();
     out.reclamation=this.capacity.reclaim(this.dir,0,{before:now-idleMs,keep});
     this.locked(()=>{
       for(const removal of out.reclamation?.removed??[]){

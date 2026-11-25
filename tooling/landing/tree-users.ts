@@ -6,10 +6,11 @@ import {cgroupOwnershipIdentity} from '../gate/host-observations.ts';
 import {HostObservationError} from '../gate/host-observation-error.ts';
 import {readProcessStats} from '../differential/process-stat/main.ts';
 import {parseRunOwner} from '../gate/scopes/run-owner.ts';
+import type {TreePin} from './tree-pin.ts';
 
 export type TreeUser={pid:number;command:string;where:string};
 type ObservedUser=TreeUser&{link:string;path:string};
-export type TreeProcessOptions={proc?:string;self?:number;/** A fixture's explicitly owned kernel processes. */pids?:readonly number[];/** Registered pool trees, supplied by their Git owner. */runTrees?:readonly string[];/** Private cgroup filesystem with a supplied proc tree. */cgroups?:string};
+export type TreeProcessOptions={proc?:string;self?:number;ownPin?:TreePin;/** A fixture's explicitly owned kernel processes. */pids?:readonly number[];/** Registered pool trees, supplied by their Git owner. */runTrees?:readonly string[];/** Private cgroup filesystem with a supplied proc tree. */cgroups?:string};
 export type TreeProcessObservation={users:ObservedUser[];ignored:{pid:number;birth:string;command:string;group:string}[];unreadable:Error[]};
 const PROC='/proc';
 const procStat=(pid:number,proc:string)=>readFileSync(join(proc,String(pid),'stat'),'utf8');
@@ -102,7 +103,7 @@ function ownedRun(group:string,{proc=PROC,runTrees=[],cgroups}:TreeProcessOption
   return [...owners.keys()][0];
 }
 
-export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,pids,runTrees,cgroups}:TreeProcessOptions={}):TreeProcessObservation{
+export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,ownPin,pids,runTrees,cgroups}:TreeProcessOptions={}):TreeProcessObservation{
   const uid=process.getuid?.(),normalized=roots.map(root=>resolve(root));
   const reading:TreeProcessObservation={users:[],ignored:[],unreadable:[]};
   const names=pids===undefined?readdirSync(proc).filter(name=>/^[1-9][0-9]*$/.test(name)):pids.map(String);
@@ -129,6 +130,7 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,pid
       // Read cwd and exe before enumerating fds, so a known positive owner
       // remains visible even when another observation would refuse later.
       const inspect=(link:string):boolean=>{
+        if(ownPin?.owns(Number(pid),link,birth))return false;
         let path:string;
         try{path=readlinkSync(join(dir,link)).replace(/ \(deleted\)$/,'');}
         catch(error){if(missing(error))return false;throw error;}

@@ -129,10 +129,12 @@ test("gate policy rejects a replaced registration and outside or escaping captur
   symlinkSync(join(run, "outside"), join(temporary.path, "link"));
   assert.throws(() => new TemporaryAdmission({ ...options, path: join(temporary.path, "link", "capture") }), /ancestor escapes/);
   const admitted = new TemporaryAdmission({ ...options, path });
-  const attempt=await admitted.acquire({what:"test capture"});t.after(()=>attempt.lease.release());
-  renameSync(temporary.path, join(run, "previous-tmp"));mkdirSync(temporary.path);
-  await assert.rejects(admitted.acquire({what:"test capture"}), /temporary directory was replaced/);
-  assert.throws(() => new TemporaryAdmission({ ...options, path }), /temporary directory was replaced/);
+  const attempt=await admitted.acquire({what:"test capture"});
+  try{
+    renameSync(temporary.path, join(run, "previous-tmp"));mkdirSync(temporary.path);
+    await assert.rejects(admitted.acquire({what:"test capture"}), /temporary directory was replaced/);
+    assert.throws(() => new TemporaryAdmission({ ...options, path }), /temporary directory was replaced/);
+  }finally{attempt.lease.release();}
 });
 
 test("token pool: a running case finishes through a hold, and the next waits until the hold ends", async () => {

@@ -1,3 +1,4 @@
+import {describeDiskBuildRefusal} from '../differential/command-entry/instrument.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {withStateWrite} from '../gate/state-file.ts';
 // The landing service: the queue drained one change at a time, against the
@@ -97,7 +98,7 @@ export async function drain(config: Config): Promise<Drained> {
     const capacity=config.pool?.capacity??new DiskCapacity({env:config.env,pool:null});
     diskWake=new DiskReadinessWake(config.home,capacity);
     // Display evidence only; each admission decision still takes a fresh snapshot.
-    const diskShortages=new Map<string,number>();
+    const diskShortages=new Map<string,string>();
     const diskFailed=(error:unknown):Drained=>{
       const message='service held: disk readiness could not be observed: '+String(error)+'; restart nts-landing-check';
       queue.setStatus({state:'held',message});config.log(message);return {state:'held',answered};
@@ -112,8 +113,8 @@ export async function drain(config: Config): Promise<Drained> {
       if(!entry){
         const diskHeld=queue.held().filter(held=>queue.result(held.id)?.retryDisk?.length&&!queue.withdrawRequested(held.id));
         if(diskHeld.length){
-          const details=diskHeld.map(held=>`${held.id} needs ${diskShortages.get(held.id)??Math.max(...queue.result(held.id)!.retryDisk!.map(row=>row.shortBytes))} more bytes`);
-          queue.setStatus({state:'held',id:diskHeld[0]!.id,sha:diskHeld[0]!.sha,message:'waiting for disk: '+details.join('; ')+' (last measured capacity shortfall); automatic retry at original arrival; no run reservation is held'});
+          const details=diskHeld.map(held=>`${held.id} ${diskShortages.get(held.id)??queue.result(held.id)!.retryDisk!.map(value=>{const row=readDiskBuildRefusal(value);return row.kind==='shortfall'?`needs ${row.shortBytes} more bytes (shortfall)`:describeDiskBuildRefusal(row);}).join('; ')}`);
+          queue.setStatus({state:'held',id:diskHeld[0]!.id,sha:diskHeld[0]!.sha,message:'waiting for disk: '+details.join('; ')+' (last measured capacity or target ownership); automatic retry at original arrival; no run reservation is held'});
           try{await diskWake.wait();}catch(error){return diskFailed(error);}continue;
         }
         break;
@@ -147,14 +148,18 @@ function checkedDiskRequests(config:Pick<Config,'tree'|'target'>,requests:readon
   });
 }
 /** No candidate preparation or admission occurs while another entry can pass. */
-function retryDiskHeld(config:Config,queue:Queue,capacity:DiskCapacity):Map<string,number>{
-  const shortages=new Map<string,number>();
+function retryDiskHeld(config:Config,queue:Queue,capacity:DiskCapacity):Map<string,string>{
+  const shortages=new Map<string,string>();
   for(const entry of queue.held()){
     const answer=queue.result(entry.id);if(!answer?.retryDisk?.length||queue.withdrawRequested(entry.id))continue;
     if(typeof answer.answerNonce!=='string'||!answer.answerNonce)throw Error('disk-held answer has no unique identity: '+entry.id);
     const requests=checkedDiskRequests(config,answer.retryDisk);
-    const short=Math.max(0,...requests.map(request=>-capacity.buildSnapshot(request).availableBytes));shortages.set(entry.id,short);
-    if(short===0){
+    const snapshots=requests.map(request=>capacity.buildSnapshot(request));
+    const short=Math.max(0,...snapshots.map(snapshot=>-snapshot.availableBytes));
+    const fences=snapshots.flatMap((snapshot,index)=>snapshot.fencedBy?[{request:requests[index]!,fence:snapshot.fencedBy}]:[]);
+    shortages.set(entry.id,fences.length?fences.map(({request,fence})=>describeDiskBuildRefusal({root:request.root,target:request.target,outputs:request.outputs,kind:'target-fenced',
+      intent:{token:fence.id,root:fence.root,pid:fence.pid,identity:fence.identity}})).join('; '):`needs ${short} more bytes (shortfall)`);
+    if(short===0&&!fences.length){
       if(queue.retryDiskReady(entry.id,answer.answerNonce))config.log(`disk room restored: ${entry.id} returns at its original queue arrival`);
     }
   }
