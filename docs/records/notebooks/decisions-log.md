@@ -5037,3 +5037,25 @@ The prior implementation and its inverted ordering test could delete green
 raw evidence early; the record and the earlier decision description now name
 that mistake explicitly. The new controls preserve green D behind three newer
 stopped reds, plus individual completion-failure arms and a normal-red control.
+## Q-6 names the compiled program generators (11-25)
+
+#1040, under #550. Q-6 is `fuzz-expressions.mjs` plus
+`fuzz-statements.mjs`, sharing `fuzz-runtime.mjs`: node supplies scalar values
+that assertions check after `emit-c`, C compilation and execution. Its current
+route covers C only. The deep-equality and timer fuzzers execute TypeScript
+runtime code under node; `differential-*` generates module API inputs. These
+remain separate instruments. The contract and its gaps are in
+[conformance](../../conformance/README.md#decisions); the
+[inventory](../q6-generator-inventory.md) records grammar, oracle, verdict,
+reduction and routing gaps as input to #1041.
+
+## Q-6 inventory includes the deterministic program sweep (11-25)
+
+#1040 review extends the preceding Q-6 inventory: `tooling/sweep/sweep.mjs`
+generates a fixed cross-product program compared with node on C and the JVM
+through the shared differential harness. It complements Q-6's seeded
+expression/statement fuzzers. Its existing JVM route is part of the inventory
+for #1041. The inventory also distinguishes the harness's per-function
+argument pools from source generation. The current contract is in
+[conformance](../../conformance/README.md#decisions); the
+[inventory](../q6-generator-inventory.md) names the concrete C/JVM routes.

@@ -51,6 +51,22 @@ programs compared with node, refusals, recorded outcomes and memory cases.
   commit (Q-4; 10-28,
   [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
   Not built.
-- A differential program fuzzer, comparing generated programs with node, is
-  built now, as a phase 2 instrument (Q-6; 10-28,
-  [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
+- Q-6 is the combination of
+  [`fuzz-expressions.mjs`](../../tooling/conformance/fuzz-expressions.mjs) and
+  [`fuzz-statements.mjs`](../../tooling/conformance/fuzz-statements.mjs), using
+  [`fuzz-runtime.mjs`](../../tooling/conformance/fuzz-runtime.mjs) to compare
+  generated programs with node through value assertions in compiled C
+  executables. The `divergence` gate step runs both at a fixed seed. These
+  seeded fuzzers cover their expression grammar and statement templates,
+  scalar oracle results, and C; they do not exercise LLVM, JVM or Wasm.
+  Refusals and unusable oracle values leave gaps, and batch summaries do not
+  establish how many value assertions ran. Failure isolation stops at an
+  expression or a statement template, without reducing its syntax. The
+  complementary [`sweep.mjs`](../../tooling/sweep/sweep.mjs) generates a fixed
+  cross-product of value kinds and operations and compares its exported
+  functions with node through the differential harness on C and the JVM.
+  Its deterministic enumeration is separate from Q-6's seeded program
+  fuzzing. Runtime comparisons and `differential-*` API-input generators are
+  also separate instruments
+  ([coverage inventory and gaps](../records/q6-generator-inventory.md);
+  [log](../records/notebooks/decisions-log.md#q-6-names-the-compiled-program-generators-11-25)).
