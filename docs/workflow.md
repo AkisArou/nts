@@ -1451,8 +1451,14 @@ the tooling strict checker owns the source's type checking.
   `.disk-reclaim.log` names each removal, its tree and task for held output,
   allocated footprint, observed free
   space change and checked ownership facts. These byte measures have separate
-  meanings when other jobs or filesystem sharing affect free space. Scratch,
-  evidence, shared corpora and unknown cache roots have no deletion grant.
+  meanings when other jobs or filesystem sharing affect free space.
+  In clean free pool trees only, the declared `target/test-scratch` and
+  `target/interop` roots offer rebuildable scratch through those same guards,
+  independently of warm profiles. The temporary `legacy-scratch` migration
+  covers the explicit old compiler namespaces in `keep.json` and `interop-*`;
+  it retires once no free tree carries that layout. Unknown siblings and held
+  or service scratch stay. Evidence, shared corpora and unknown cache roots
+  have no deletion grant.
 - **Git observers preserve the owner's index.** Git arguments run through
   `tooling/gate/git-arguments/main.ts`, which prepends `--no-optional-locks` for
   observations and mutations alike. Required mutation locks remain enabled.
@@ -2048,8 +2054,8 @@ the first node task.
 ## Decisions
 
 - **Gate disk reclamation follows declared writers.** Older green raw costs
-  can go only after their complete summary, beyond the newest three completed
-  runs. Every declared target uses its own generation for obsolete profiles;
+  can go only after a known materialized summary with zero reader errors,
+  beyond the newest three completed runs. Every declared target uses its own generation for obsolete profiles;
   current output stays. Pressure keeps one compatible warm free tree, idle
   upkeep two. Compiler tests and interop write into explicit scratch roots;
   only clean free trees offer those roots and the bounded legacy migration

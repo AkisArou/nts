@@ -777,3 +777,15 @@ test('scratch declarations name the owner roots and bound the legacy migration',
   assert.ok(policy.legacyTargetScratch?.includes('accumulator-tests'));
   assert.ok(!policy.legacyTargetScratch?.includes('unowned-scratch'));
 });
+
+
+test('the interop writer uses its declared target root, so changing the writer alone drifts',()=>{
+  const policy=readKeep()['nts-pool']!;
+  const root=fileURLToPath(new URL('../..',import.meta.url));
+  for(const [name,writer] of Object.entries(policy.targetScratch??{})){
+    if(writer!=='tooling/gate/all.sh')continue;
+    const source=readFileSync(join(root,writer),'utf8');
+    assert.ok(source.includes('out="$PWD/target/'+name+'/$project"'),'interop output must use the declared root '+name);
+    assert.ok(!source.includes('out="$PWD/target/interop-$project"'),'legacy writer must not return');
+  }
+});
