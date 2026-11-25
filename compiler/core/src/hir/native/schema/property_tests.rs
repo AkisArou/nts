@@ -101,6 +101,7 @@ fn class_symbol(snapshot: &mut SemanticSnapshot, name: &str) -> SymbolId {
         owner: None,
         constructor_value: None,
         library: None,
+        value_provenance: None,
     });
     id
 }

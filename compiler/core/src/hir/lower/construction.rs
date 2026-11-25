@@ -69,6 +69,24 @@ impl ReferenceStep {
 }
 
 impl FuncBuilder<'_> {
+    /// Invalid or incompatible value provenance must survive ordinary lowering
+    /// as a named refusal, even when it disqualifies an intrinsic.
+    pub(super) fn check_value_identity(&self, at: NodeId) -> Result<(), Diagnostic> {
+        let root = self.member_access(at).map_or(at, |(object, _)| object);
+        let root = self.through_assertions(root);
+        if self.kind_of(root) == Some(syntax::IDENTIFIER)
+            && let Some(symbol) = self.node(root).symbol
+            && let Err(error) = super::super::features::global_binding(
+                &self.snapshot.symbols,
+                symbol,
+                super::super::features::GlobalMeaning::Value,
+            )
+        {
+            return Err(self.unsupported(root, &error.to_string()));
+        }
+        Ok(())
+    }
+
     /// The shared identity reader for builtin calls, members and construction.
     /// Constant aliases preserve the checked global identity; their reads still
     /// owe the ordinary initialization checks when lowering consumes this proof.

@@ -474,6 +474,7 @@ mod tests {
             owner: None,
             constructor_value: None,
             library: None,
+            value_provenance: None,
         }
     }
 

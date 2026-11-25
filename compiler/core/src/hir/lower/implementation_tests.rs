@@ -336,6 +336,7 @@ fn query_symbol(
         owner: None,
         constructor_value: None,
         library: None,
+        value_provenance: None,
     });
     id
 }

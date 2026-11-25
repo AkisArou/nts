@@ -18,6 +18,7 @@ fn only_the_typed_receiver_fact_proves_its_class_representation() {
         owner: None,
         constructor_value: None,
         library: None,
+        value_provenance: None,
     });
     snapshot.types.push(TypeRecord {
         kind: TypeKind::Object {
@@ -104,6 +105,7 @@ fn a_private_template_member_needs_equal_source_arguments_and_storage() {
             owner: None,
             constructor_value: None,
             library: None,
+            value_provenance: None,
         });
     }
     for symbol in [0, 0, 1, 0, 0] {

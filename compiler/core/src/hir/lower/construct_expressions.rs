@@ -507,6 +507,7 @@ impl FuncBuilder<'_> {
         let callee = *children
             .first()
             .ok_or_else(|| self.unsupported(id, "a `new` with no callee"))?;
+        self.check_value_identity(callee)?;
         // **A bound Java class is constructed on the other side, and this has
         // to come before the name is required.** Everything below -- the
         // layout, the allocation, the constructor call -- describes building an

@@ -207,6 +207,7 @@ mod tests {
                 owner: None,
                 constructor_value: None,
                 library: None,
+                value_provenance: None,
             });
         }
         let object = |symbol: u32| TypeRecord {

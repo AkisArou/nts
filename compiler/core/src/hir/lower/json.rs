@@ -58,7 +58,7 @@
 use std::fmt::Write as _;
 
 use nts_diagnostics::Diagnostic;
-use nts_semantic_schema::{Library, MemberKind, NodeId, Origin, TypeId, TypeKind, syntax};
+use nts_semantic_schema::{MemberKind, NodeId, Origin, TypeId, TypeKind, syntax};
 
 use super::{
     Absent, BinOp, Callee, Enumerated, Facts, FuncBuilder, HirType, Layout, LayoutCollector,
@@ -277,18 +277,8 @@ impl FuncBuilder<'_> {
     /// Whether `callee` is `JSON.stringify` of the global the language's own
     /// library declares; a `JSON` the program declares is its own.
     pub(super) fn is_json_stringify(&self, callee: NodeId) -> bool {
-        let Some((object, member)) = self.member_access(callee) else {
-            return false;
-        };
-        member == "stringify"
-            && self.kind_of(object) == Some(syntax::IDENTIFIER)
-            && self
-                .node(object)
-                .symbol
-                .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-                .is_some_and(|record| {
-                    record.name.is_name("JSON") && record.library == Some(Library::Es)
-                })
+        self.builtin_global_member(callee)
+            .is_some_and(|(global, member)| global.name == "JSON" && member == "stringify")
     }
 
     /// `JSON.stringify(value)`: the value's writer, appending onto `""`.

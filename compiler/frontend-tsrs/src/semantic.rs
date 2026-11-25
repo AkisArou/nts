@@ -212,6 +212,49 @@ impl<'p> File<'p> {
 }
 
 impl<'p> Symbol<'p> {
+    /// A separate ambient value can name a real global at runtime. The native
+    /// checker supplies both the global identity and exact checked type equality.
+    #[must_use]
+    pub fn ambient_global(self) -> Option<(Self, bool)> {
+        let class = self.classification();
+        // A module export or a member has its own runtime supplier. It is not
+        // an erased free declaration in the importing module's lexical scope.
+        if self.native.parent().is_some()
+            || class.alias
+            || class.function
+            || !(class.variable || class.class || class.module)
+        {
+            return None;
+        }
+        // A program-written ambient function is an external function binding
+        // in nts. Its declaration supplies that route independently of globals.
+        let mut value = false;
+        for declaration in self.declarations() {
+            if let Some(emits) = declaration.value_declaration() {
+                if emits {
+                    return None;
+                }
+                value = true;
+            }
+        }
+        if !value {
+            return None;
+        }
+        let (native, identical) = self.file.with_checker(|checker| {
+            let global =
+                checker.get_global_symbol_exported(self.native.name(), SymbolFlags::Value, None)?;
+            let global = checker.get_merged_symbol_exported(global);
+            (global != self.native).then(|| {
+                (
+                    global,
+                    checker.get_type_of_symbol_exported(self.native)
+                        == checker.get_type_of_symbol_exported(global),
+                )
+            })
+        })?;
+        Some((Self::new(native, self.file), identical))
+    }
+
     /// The declaring owner's checked identity. Inherited accesses retain the
     /// actual member's owner; source members with the same name stay distinct.
     #[must_use]
@@ -284,6 +327,15 @@ impl<'p> Symbol<'p> {
                 checker.get_global_symbol_exported(self.native.name(), SymbolFlags::Value, None)?;
             (checker.get_merged_symbol_exported(global) == self.native).then_some(binding)
         })?;
+        if matches!(
+            binding,
+            BuiltinBinding::NaN | BuiltinBinding::Infinity | BuiltinBinding::GlobalThis
+        ) && self.declarations().any(|declaration| {
+            !declaration.source_file().is_default_library()
+                && declaration.value_declaration() == Some(true)
+        }) {
+            return None;
+        }
         if matches!(binding, BuiltinBinding::NaN | BuiltinBinding::Infinity)
             && !self
                 .declarations()

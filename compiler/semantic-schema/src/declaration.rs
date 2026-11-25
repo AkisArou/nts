@@ -161,7 +161,7 @@ impl SemanticSnapshot {
         self.declaration_identity(self.node_site(node)?)
     }
 
-    fn node_site(&self, node: NodeId) -> Option<DeclarationSite> {
+    pub(crate) fn node_site(&self, node: NodeId) -> Option<DeclarationSite> {
         let node = self.nodes.get(node.0 as usize)?;
         let NodeKind::Syntax(kind) = node.kind else {
             return None;

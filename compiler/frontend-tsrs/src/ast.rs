@@ -55,6 +55,29 @@ impl<S: ViewPhase> Hash for Node<'_, S> {
 }
 
 impl<'p, S: ViewPhase> Node<'p, S> {
+    /// The declaration's value meaning and whether it emits a runtime binding.
+    /// Type declarations and ambient declarations do not emit values; a local
+    /// variable does, even without an initializer.
+    #[must_use]
+    pub fn value_declaration(self) -> Option<bool> {
+        let _scope = self.file.native_scope();
+        if !tsrs_ast::get_meaning_from_declaration(self.native)
+            .intersects(tsrs_ast::SemanticMeaning::Value)
+        {
+            return None;
+        }
+        let ambient = self.file.is_declaration()
+            || std::iter::successors(Some(self.native), |node| node.parent()).any(|node| {
+                node.flags().intersects(NodeFlags::Ambient)
+                    || node.modifier_flags().intersects(ModifierFlags::Ambient)
+            });
+        let signature = matches!(
+            self.native.kind(),
+            Kind::FunctionDeclaration | Kind::MethodDeclaration
+        ) && self.native.body().is_none();
+        Some(!ambient && !signature)
+    }
+
     pub(crate) fn new(native: P<NativeNode>, file: File<'p, S>) -> Self {
         Self { native, file }
     }

@@ -162,24 +162,25 @@ fn a_constructor_value_across_libraries_is_rejected_by_name() {
         PropertyKey::Name("Number".into())
     );
     let mut crossed = snapshot.clone();
-    crossed.symbols[value.0 as usize].library = None;
+    let owner = crossed
+        .symbols
+        .iter_mut()
+        .find(|symbol| symbol.name.is_name("NumberConstructor"))
+        .unwrap();
+    owner.library = Some(nts_semantic_schema::Library::Node);
     let error = crossed.validate().unwrap_err().to_string();
     assert!(
-        error.contains("`NumberConstructor` (a global type, library es, declared in "),
+        error.contains("`NumberConstructor` (a global type, library @types/node, declared in "),
         "{error}"
     );
     assert!(
-        error.contains("`Number` (a global type and value, the program's own, declared in "),
+        error.contains("`Number` (a global type and value, library es, declared in "),
         "{error}"
     );
 }
 
-/// A program that augments the instance interface (`declare global {
-/// interface Number { ... } }`) declares part of `Number` itself, so the
-/// relation would pair the library's owner with the program's value: it is not
-/// recorded, and the snapshot validates. Main refused to capture the program
-/// at all, which stopped the benchmark corpus at three.js's and WSL's
-/// augmentations of `Number` and `String`.
+/// An instance-interface augmentation owns type declarations but emits no
+/// constructor value. The runtime constructor remains the library's.
 #[test]
 fn a_constructor_value_is_recorded_only_within_one_library() {
     let project = Project::new(
@@ -189,10 +190,66 @@ fn a_constructor_value_is_recorded_only_within_one_library() {
     let snapshot = project.capture();
     let owner = only(&snapshot, "NumberConstructor");
     assert_eq!(owner.library, Some(nts_semantic_schema::Library::Es));
-    assert_eq!(owner.constructor_value, None);
+    let value = owner
+        .constructor_value
+        .expect("the value remains the library's constructor");
+    assert_eq!(
+        snapshot.symbols[value.0 as usize].value_library(),
+        Some(&nts_semantic_schema::Library::Es)
+    );
     assert_eq!(
         only(&snapshot, "Number").library,
         None,
         "the augmentation is a declaration of the program's"
     );
+}
+
+#[test]
+fn an_exported_ambient_value_retains_its_module_supplier() {
+    let project = Project::new(
+        "ambient-export",
+        "import { Math } from './provided';\nexport function floor(n: number): number { return Math.floor(n); }\n",
+    );
+    project.write(
+        "provided.ts",
+        "export declare const Math: typeof globalThis.Math;\n",
+    );
+    let snapshot = project.capture();
+    let alias = symbols(&snapshot, "Math")
+        .into_iter()
+        .find(|symbol| symbol.aliased.is_some())
+        .unwrap();
+    let supplier = &snapshot.symbols[alias.aliased.unwrap().0 as usize];
+    assert!(supplier.owner.is_some());
+    assert!(
+        supplier.value_provenance.is_none(),
+        "an ambient module export does not become a free global"
+    );
+}
+
+#[test]
+fn emitting_script_bindings_are_not_library_constants_or_namespaces() {
+    let project = Project::new(
+        "script-values",
+        "var NaN: number = 7;\nvar Math = { floor(n: number): number { return n + 1; } } as Math;\nfunction floor(n: number): number { return Math.floor(n) + NaN; }\n",
+    );
+    let snapshot = project.capture();
+    for name in ["NaN", "Math"] {
+        let symbol = only(&snapshot, name);
+        assert!(scope(symbol).0);
+        assert!(symbol.value_library().is_none());
+        assert!(
+            symbol
+                .value_provenance
+                .as_ref()
+                .unwrap()
+                .declarations
+                .iter()
+                .any(|declaration| declaration.emits && declaration.library.is_none())
+        );
+        assert!(
+            symbol.builtin.is_none(),
+            "{name} creates a source runtime binding"
+        );
+    }
 }

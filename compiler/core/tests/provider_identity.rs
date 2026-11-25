@@ -7,7 +7,7 @@ use nts_core::hir::{
     features::{GlobalMeaning, global_binding},
 };
 use nts_frontend_ts::Frontend;
-use nts_semantic_schema::{Library, NodeId, PropertyKey, SemanticSnapshot, SymbolFlags, SymbolId};
+use nts_semantic_schema::{Library, PropertyKey, SemanticSnapshot, SymbolFlags, SymbolId};
 use std::num::NonZeroU16;
 
 struct Project(crate::scratch::ScratchDir);
@@ -122,7 +122,16 @@ fn both_scope_and_declaration_provenance_are_required() {
             .is_some()
     );
     symbols[date.0 as usize] = snapshot.symbols[date.0 as usize].clone();
-    symbols[date.0 as usize].library = Some(Library::Package("a-decoy-package".into()));
+    for declaration in &mut symbols[date.0 as usize]
+        .value_provenance
+        .as_mut()
+        .unwrap()
+        .declarations
+    {
+        if declaration.is_value {
+            declaration.library = Some(Library::Package("a-decoy-package".into()));
+        }
+    }
     assert!(
         !global_binding(&symbols, date, GlobalMeaning::Value)
             .unwrap()
@@ -130,14 +139,17 @@ fn both_scope_and_declaration_provenance_are_required() {
             .compiler_provided()
     );
     symbols[date.0 as usize] = snapshot.symbols[date.0 as usize].clone();
-    symbols[date.0 as usize].library = None;
+    symbols[date.0 as usize].value_provenance = None;
     assert!(
         global_binding(&symbols, date, GlobalMeaning::Value)
-            .unwrap()
-            .is_none()
+            .unwrap_err()
+            .to_string()
+            .contains("Date")
     );
     symbols[date.0 as usize] = snapshot.symbols[date.0 as usize].clone();
-    symbols[date.0 as usize].declarations.push(NodeId(0));
+    let mut extra = symbols[date.0 as usize].declaration_sites[0];
+    extra.span.start += 1;
+    symbols[date.0 as usize].declaration_sites.push(extra);
     assert!(global_binding(&symbols, date, GlobalMeaning::Value).is_err());
     symbols[date.0 as usize] = snapshot.symbols[date.0 as usize].clone();
     symbols[date.0 as usize].declaration_sites.clear();

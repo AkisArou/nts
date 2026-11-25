@@ -16,6 +16,7 @@ fn snapshot() -> SemanticSnapshot {
         owner: None,
         constructor_value: None,
         library: Some(nts_semantic_schema::Library::Es),
+        value_provenance: None,
     });
     snapshot.types = vec![
         TypeKind::Number,

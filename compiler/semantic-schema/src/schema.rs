@@ -73,7 +73,8 @@ use crate::origin::Origin;
 /// 55: `SourceFile::root`, the program's root files.
 /// 56: `declared_signatures`, an implementation's own signature where its
 /// overloads' first differs.
-pub const SCHEMA_VERSION: u32 = 56;
+/// 57: checked value declaration provenance and compatible ambient-global links.
+pub const SCHEMA_VERSION: u32 = 57;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -539,6 +540,107 @@ pub struct SymbolRecord {
     /// declaration's file by [`Library::of_path`], the one classifier every
     /// frontend calls.
     pub library: Option<Library>,
+    /// Checker-owned value declarations, independently of merged type declarations.
+    /// Required for a global value, and present for a separate ambient binding
+    /// whose runtime supplier is a checked global.
+    pub value_provenance: Option<ValueProvenance>,
+}
+
+/// Value-namespace provenance. A type augmentation does not create a value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValueProvenance {
+    pub declarations: Vec<ValueDeclaration>,
+    /// A separate ambient binding emits no local value. The checker compares
+    /// its type with the actual global's type before it can use that supplier.
+    pub ambient_global: Option<AmbientGlobal>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValueDeclaration {
+    pub site: crate::DeclarationSite,
+    pub library: Option<Library>,
+    pub is_value: bool,
+    pub emits: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AmbientGlobal {
+    pub symbol: SymbolId,
+    pub identical_type: bool,
+}
+
+impl SymbolRecord {
+    /// Check the declaration coverage before a reader consumes value identity.
+    pub fn checked_value_provenance(&self) -> Result<Option<&ValueProvenance>, SnapshotError> {
+        let invalid = |why| {
+            SnapshotError::Project(format!(
+                "invalid value provenance for `{}`: {why}",
+                self.name
+            ))
+        };
+        let Some(provenance) = &self.value_provenance else {
+            return if self.flags.contains(SymbolFlags::GLOBAL_VALUE) {
+                Err(invalid("missing checker value provenance"))
+            } else {
+                Ok(None)
+            };
+        };
+        if provenance.declarations.len() != self.declaration_sites.len()
+            || !provenance
+                .declarations
+                .iter()
+                .zip(&self.declaration_sites)
+                .all(|(value, site)| value.site == *site)
+            || provenance
+                .declarations
+                .iter()
+                .any(|value| match value.site.kind {
+                    crate::syntax::INTERFACE_DECLARATION
+                    | crate::syntax::TYPE_ALIAS_DECLARATION
+                    | crate::syntax::TYPE_PARAMETER
+                    | crate::syntax::TYPE_LITERAL => value.is_value || value.emits,
+                    crate::syntax::VARIABLE_DECLARATION
+                    | crate::syntax::PARAMETER
+                    | crate::syntax::BINDING_ELEMENT
+                    | crate::syntax::FUNCTION_DECLARATION
+                    | crate::syntax::CLASS_DECLARATION => !value.is_value,
+                    _ => value.emits && !value.is_value,
+                })
+        {
+            return Err(invalid("value facts contradict the symbol's declarations"));
+        }
+        if provenance.ambient_global.is_some()
+            && (self.owner.is_some()
+                || self.flags.contains(SymbolFlags::FUNCTION)
+                || self.flags.contains(SymbolFlags::GLOBAL_VALUE)
+                || provenance.declarations.iter().any(|value| value.emits)
+                || !provenance.declarations.iter().any(|value| value.is_value))
+        {
+            return Err(invalid(
+                "an ambient global link has an owned, emitting or non-ambient binding",
+            ));
+        }
+        Ok(Some(provenance))
+    }
+
+    /// The checked global value's library, independently of its type's owners.
+    #[must_use]
+    pub fn value_library(&self) -> Option<&Library> {
+        let provenance = self.value_provenance.as_ref()?;
+        if !self.flags.contains(SymbolFlags::GLOBAL_VALUE)
+            || provenance
+                .declarations
+                .iter()
+                .any(|declaration| declaration.emits && declaration.library.is_none())
+        {
+            return None;
+        }
+        provenance
+            .declarations
+            .iter()
+            .filter(|declaration| declaration.is_value)
+            .find_map(|declaration| declaration.library.as_ref())
+    }
 }
 
 /// Bindings whose meaning the compiler implements directly. A local or a
@@ -1451,6 +1553,53 @@ impl SemanticSnapshot {
     fn validate_symbols(&self) -> Result<(), SnapshotError> {
         for symbol in &self.symbols {
             self.check_key(&symbol.name)?;
+            if let Some(provenance) = symbol.checked_value_provenance()? {
+                if let Some(ambient) = provenance.ambient_global {
+                    check(
+                        ambient.symbol.0,
+                        "ambient global symbol",
+                        self.symbols.len(),
+                    )?;
+                    let global = &self.symbols[ambient.symbol.0 as usize];
+                    if !global.flags.contains(SymbolFlags::GLOBAL_VALUE)
+                        || symbol.name != global.name
+                    {
+                        return Err(SnapshotError::Project(format!(
+                            "invalid ambient global identity for `{}`",
+                            symbol.name
+                        )));
+                    }
+                }
+                for value in &provenance.declarations {
+                    let source = &self.declaration_sources[value.site.source.0 as usize];
+                    if value.library != Library::of_path(source.path.as_str())
+                        || (value.is_value
+                            && matches!(
+                                value.site.kind,
+                                crate::syntax::INTERFACE_DECLARATION
+                                    | crate::syntax::TYPE_ALIAS_DECLARATION
+                            ))
+                    {
+                        return Err(SnapshotError::Project(format!(
+                            "value provenance contradicts the declaration of `{}`",
+                            symbol.name
+                        )));
+                    }
+                    if value.emits
+                        && symbol.declarations.iter().any(|&node| {
+                            self.node_site(node) == Some(value.site)
+                                && self.nodes[node.0 as usize].flags
+                                    & crate::syntax::NODE_FLAGS_AMBIENT
+                                    != 0
+                        })
+                    {
+                        return Err(SnapshotError::Project(format!(
+                            "ambient declaration of `{}` cannot emit a value",
+                            symbol.name
+                        )));
+                    }
+                }
+            }
             for related in [symbol.aliased, symbol.owner, symbol.constructor_value]
                 .into_iter()
                 .flatten()
@@ -1462,7 +1611,7 @@ impl SemanticSnapshot {
                 if !symbol.flags.contains(SymbolFlags::GLOBAL_TYPE)
                     || symbol.flags.contains(SymbolFlags::GLOBAL_VALUE)
                     || !value.flags.contains(SymbolFlags::GLOBAL_VALUE)
-                    || value.library != symbol.library
+                    || value.value_library() != symbol.library.as_ref()
                 {
                     return Err(SnapshotError::Project(format!(
                         "invalid checked constructor-value identity: {} has the constructor \

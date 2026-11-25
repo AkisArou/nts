@@ -308,14 +308,15 @@ fn conversion_inputs(probe: &FuncBuilder<'_>, node: NodeId) -> Vec<NodeId> {
             let Some(callee) = probe.children(node).first().copied() else {
                 return Vec::new();
             };
-            let name = probe.literal_name(callee);
-            let builtin_string = name.as_deref() == Some("String")
+            let global = probe.builtin_global_reference(callee);
+            let name = global.as_ref().map(|global| global.name.as_str());
+            let builtin_string = name == Some("String")
                 && probe
                     .snapshot
                     .call_targets
                     .get(&node)
                     .is_some_and(|target| target.callee.is_none());
-            let error = name.as_deref().is_some_and(crate::hir::builtin::is_error)
+            let error = name.is_some_and(crate::hir::builtin::is_error)
                 && probe
                     .snapshot
                     .call_targets
@@ -342,7 +343,7 @@ fn conversion_inputs(probe: &FuncBuilder<'_>, node: NodeId) -> Vec<NodeId> {
                 None
             };
             if builtin_string || error || error_super.is_some() {
-                let aggregate = name.as_deref() == Some("AggregateError")
+                let aggregate = name == Some("AggregateError")
                     || error_super.as_deref() == Some("AggregateError");
                 return probe
                     .arguments_of(node)

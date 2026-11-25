@@ -162,12 +162,9 @@ pub(super) fn added_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Ad
                 let Some((object, member)) = probe.member_access(*callee) else {
                     continue;
                 };
+                let global = probe.checked_global_reference(object);
                 match (
-                    probe
-                        .node(object)
-                        .text
-                        .as_ref()
-                        .and_then(|text| text.as_utf8()),
+                    global.as_ref().map(|global| global.name.as_str()),
                     member.as_str(),
                 ) {
                     (Some("Object"), "assign") => {

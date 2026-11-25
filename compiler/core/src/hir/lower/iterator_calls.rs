@@ -341,13 +341,9 @@ fn input_of(probe: &FuncBuilder<'_>, at: NodeId) -> Option<NodeId> {
             let [object, member] = parts.as_slice() else {
                 return None;
             };
-            if probe.kind_of(*object) != Some(syntax::IDENTIFIER)
-                || probe
-                    .node(*object)
-                    .text
-                    .as_ref()
-                    .and_then(|text| text.as_utf8())
-                    != Some("Array")
+            if probe
+                .builtin_global_reference(*object)
+                .is_none_or(|global| global.name != "Array")
                 || probe
                     .node(*member)
                     .text

@@ -54,11 +54,8 @@ pub(super) fn settler_symbols(
             continue;
         };
         if probe
-            .node(callee)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
-            != Some("Promise")
+            .builtin_global_reference(callee)
+            .is_none_or(|global| global.name != "Promise")
         {
             continue;
         }
@@ -228,25 +225,10 @@ impl FuncBuilder<'_> {
         if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             return None;
         }
-        let parts = self.children(callee);
-        let object = *parts.first()?;
-        let member = *parts.last()?;
-        if self.kind_of(object) != Some(syntax::IDENTIFIER)
-            || self
-                .node(object)
-                .text
-                .as_ref()
-                .and_then(|text| text.as_utf8())
-                != Some("Promise")
-        {
+        let (global, member) = self.builtin_global_member(callee)?;
+        if global.name != "Promise" {
             return None;
         }
-        let member = self
-            .node(member)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
-            .map(str::to_owned)?;
         Some(match member.as_str() {
             "resolve" => self.settled_promise(id, arguments, false),
             "reject" => self.settled_promise(id, arguments, true),

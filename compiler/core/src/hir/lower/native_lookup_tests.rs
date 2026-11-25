@@ -53,6 +53,7 @@ fn native_classes(depth: u32) -> (SemanticSnapshot, NodeId, NodeId, NodeId) {
             owner: None,
             constructor_value: None,
             library: None,
+            value_provenance: None,
         });
         if at != 0 {
             let clause = node(&mut snapshot, syntax::HERITAGE_CLAUSE, Some(class));

@@ -258,6 +258,7 @@ impl FuncBuilder<'_> {
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     pub(super) fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         if let Some(callee) = self.children(id).first().copied() {
+            self.check_value_identity(callee)?;
             self.check_class_binding(callee)?;
         }
         // `import(...)`: a call whose callee is the keyword, which nothing below
@@ -459,10 +460,21 @@ impl FuncBuilder<'_> {
         // none.
         // Some of those `lib.d.ts` names are builtins this compiler *does*
         // provide, and they are taken before the refusal below.
-        if target.callee.is_none()
-            && let Some(provided) = self.lower_provided_builtin(id, &name, &arguments)
+        // A merged ambient overload can be the selected declaration without
+        // supplying the runtime value. Explicit native bindings keep their own
+        // route; ordinary ambient declarations retain the checked global.
+        if target.callee.is_none_or(|callee| {
+            self.node(callee).native.as_ref().is_none_or(|native| {
+                native.abi.is_none() && native.call.is_none() && native.symbol.is_none()
+            })
+        }) && let Some(global) = self.builtin_global_reference(callee_node)
         {
-            return provided;
+            for binding in &global.bindings {
+                self.check_initialized(callee_node, *binding)?;
+            }
+            if let Some(provided) = self.lower_provided_builtin(id, &global.name, &arguments) {
+                return provided;
+            }
         }
         if let Some(lowered) = self.lower_bound_global_call(id, callee_node, &arguments) {
             return lowered;

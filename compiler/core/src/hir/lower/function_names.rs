@@ -247,18 +247,8 @@ fn computed(probe: &FuncBuilder, expression: NodeId) -> Option<String> {
     // `[Symbol.iterator]`: a well-known symbol, whose description is its own
     // spelling.
     if probe.kind_of(expression) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
-        && let [object, member] = probe.children(expression).as_slice()
-        && probe
-            .node(*object)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
-            == Some("Symbol")
-        && let Some(member) = probe
-            .node(*member)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
+        && let Some((global, member)) = probe.builtin_global_member(expression)
+        && global.name == "Symbol"
     {
         return Some(format!("[Symbol.{member}]"));
     }

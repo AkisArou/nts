@@ -42,11 +42,12 @@ pub use keys::WellKnownSymbol;
 pub use origin::{GeneratedReason, Origin, ScopeId};
 pub use protocol::{ITERATION, is_an_iteration_protocol, iteration_protocol_of};
 pub use schema::{
-    Accessor, BuiltinBinding, CallTarget, ConstantValue, DeclarationModifiers, HeritageKind,
-    ImportPhase, IndexSignature, JvmAttributes, Library, LiteralValue, MemberKind, ModuleId,
-    ModuleRecord, NativeAttributes, NodeData, NodeId, NodeKind, NodeRecord, ParameterRecord,
-    ProjectSemantics, PropertyKey, PropertyRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId,
-    SignatureRecord, SnapshotError, StrictOptionSource, SymbolFlags, SymbolId, SymbolRecord,
-    TupleElementKind, TupleType, TypeId, TypeKind, TypePredicate, TypeRecord, VariableKind,
+    Accessor, AmbientGlobal, BuiltinBinding, CallTarget, ConstantValue, DeclarationModifiers,
+    HeritageKind, ImportPhase, IndexSignature, JvmAttributes, Library, LiteralValue, MemberKind,
+    ModuleId, ModuleRecord, NativeAttributes, NodeData, NodeId, NodeKind, NodeRecord,
+    ParameterRecord, ProjectSemantics, PropertyKey, PropertyRecord, SCHEMA_VERSION,
+    SemanticSnapshot, SignatureId, SignatureRecord, SnapshotError, StrictOptionSource, SymbolFlags,
+    SymbolId, SymbolRecord, TupleElementKind, TupleType, TypeId, TypeKind, TypePredicate,
+    TypeRecord, ValueDeclaration, ValueProvenance, VariableKind,
 };
 pub use text::JsText;

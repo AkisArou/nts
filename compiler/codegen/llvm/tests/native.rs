@@ -3837,6 +3837,26 @@ int length(const char *a) { return (int)strlen(a); }
     }
 }
 
+#[test]
+fn an_ambient_function_named_math_keeps_its_external_binding() {
+    let source = r#"
+import type { c_int } from "@nts/scalars";
+declare function Math(): void;
+declare function calls(): c_int;
+export function run(): number { Math(); Math(); return calls(); }
+"#;
+    let library =
+        "static int count; void Math(void) { count++; } int calls(void) { return count; }";
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let (_, outputs) =
+            run_on_both_backends("ambient-function-math", source, provider, library, &caller);
+        for output in outputs {
+            assert_eq!(output, expect("2", provider), "{provider:?}");
+        }
+    }
+}
+
 /// C's array of strings, `char **`, on both backends.
 const STRINGS_LIBRARY: &str = r"
 #include <stddef.h>

@@ -7025,6 +7025,26 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/lower/builtin_identity_tests.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "file",
+            "path": "../../../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../../runtime/native/libc.d.ts"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../../runtime/native/scalars.d.ts"
+          }
+        ]
+      }
+    },
+    {
       "source": "compiler/core/src/hir/lower/call_expression.rs",
       "declarations": {
         "imports": [],

@@ -628,6 +628,7 @@ impl FuncBuilder<'_> {
     }
 
     pub(super) fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        self.check_value_identity(id)?;
         if let Some(symbol) = self.node(id).symbol
             && let Some(declaration) = self.initialization.uninitialized_local(id, symbol.0)
         {
@@ -785,6 +786,7 @@ impl FuncBuilder<'_> {
         id: NodeId,
         symbol: nts_semantic_schema::SymbolId,
     ) -> Result<ValueId, Diagnostic> {
+        self.check_value_identity(id)?;
         if let Some(value) = self.bindings.get(&symbol.0).copied() {
             let value = self.read_cell(symbol.0, value, id)?.unwrap_or(value);
             return self.narrowed(id, value);

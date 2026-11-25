@@ -165,6 +165,45 @@ pub(super) enum Intrinsic {
 }
 
 impl FuncBuilder<'_> {
+    /// A standard-library global value, proved by the checker's scope and
+    /// declaring library. Capability availability is the selected handler's
+    /// question; Node and DOM globals can share an existing runtime intrinsic.
+    /// The reference retains every const-alias initialization read.
+    pub(super) fn builtin_global_reference(
+        &self,
+        at: NodeId,
+    ) -> Option<super::construction::CheckedGlobalReference> {
+        self.checked_global_reference(at).filter(|global| {
+            matches!(
+                global.library,
+                nts_semantic_schema::Library::Es
+                    | nts_semantic_schema::Library::Dom
+                    | nts_semantic_schema::Library::Node
+            )
+        })
+    }
+
+    /// Both dot and literal-bracket members use the receiver's resolved global,
+    /// never the identifier text. Emitting source bindings remain ordinary
+    /// values even when their names match a compiler-provided namespace.
+    pub(super) fn builtin_global_member(
+        &self,
+        callee: NodeId,
+    ) -> Option<(super::construction::CheckedGlobalReference, String)> {
+        let (object, member) = self.member_access(callee)?;
+        Some((self.builtin_global_reference(object)?, member))
+    }
+
+    pub(super) fn check_global_reference_initialized(
+        &mut self,
+        at: NodeId,
+        global: &super::construction::CheckedGlobalReference,
+    ) -> Result<(), Diagnostic> {
+        for binding in &global.bindings {
+            self.check_initialized(at, *binding)?;
+        }
+        Ok(())
+    }
     /// `Promise.resolve(v)` and `Promise.reject(e)`.
     ///
     /// `None` when the callee is not one of them, which is a different answer
@@ -198,27 +237,9 @@ impl FuncBuilder<'_> {
         if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             return None;
         }
-        let parts = self.children(callee);
-        let [object, member] = parts.as_slice() else {
-            return None;
-        };
-        if self.kind_of(*object) != Some(syntax::IDENTIFIER) {
-            return None;
-        }
-        let global = self
-            .node(*object)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
-            .map(str::to_owned)?;
-        let name = self
-            .node(*member)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
-            .map(str::to_owned)?;
+        let (global, name) = self.builtin_global_member(callee)?;
 
-        match (global.as_str(), name.as_str(), arguments) {
+        match (global.name.as_str(), name.as_str(), arguments) {
             ("Array", "isArray", [argument]) => Some(self.decide_is_array(id, *argument)),
             // `ArrayBuffer.isView(x)`, which is the same question asked of a
             // different family and answered the same way: from the type where
@@ -316,10 +337,6 @@ impl FuncBuilder<'_> {
     ///
     /// `Promise.resolve(v)` and `Promise.reject(e)` are constructors: each
     /// allocates a promise and settles it before anyone can subscribe.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "keep semantic text and key projection beside its existing dispatch"
-    )]
     pub(super) fn lower_special_call(
         &mut self,
         id: NodeId,
@@ -394,53 +411,38 @@ impl FuncBuilder<'_> {
         // wrong answer rather than a missing one. They reach `Number`'s own
         // entries in `intrinsic_of`, which is correct because a `number` is all
         // that can arrive there.
-        if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
-            let parts = self.children(callee);
-            if let [object, member] = parts.as_slice()
-                && self
-                    .node(*object)
-                    .text
-                    .as_ref()
-                    .and_then(|text| text.as_utf8())
-                    == Some("Number")
+        if let Some((global, member)) = self.builtin_global_member(callee) {
+            if let Err(problem) = self.check_global_reference_initialized(callee, &global) {
+                return Some(Err(problem));
+            }
+            if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+                && global.name == "Number"
             {
-                match self
-                    .node(*member)
-                    .text
-                    .as_ref()
-                    .and_then(|text| text.as_utf8())
-                {
-                    Some("parseInt") => return Some(self.lower_parse_int(id, arguments)),
-                    Some("parseFloat") => return Some(self.lower_parse_float(id, arguments)),
+                match member.as_str() {
+                    "parseInt" => return Some(self.lower_parse_int(id, arguments)),
+                    "parseFloat" => return Some(self.lower_parse_float(id, arguments)),
                     _ => {}
                 }
             }
-        }
-        // `Uint8Array.of(…)` and `Uint8Array.from(xs)`, beside the `Number`
-        // block above and before the intrinsic table, which is keyed on a fixed
-        // pair of names and has nowhere to put a class family.
-        if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
-            let parts = self.children(callee);
-            if let [object, member] = parts.as_slice()
-                && let Some(class) = self
-                    .node(*object)
-                    .text
-                    .as_ref()
-                    .and_then(|text| text.as_utf8())
-                    .map(str::to_owned)
-                && let Some(element) = crate::hir::builtin::typed_array_element(&class)
+            if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+                && let Some(element) = crate::hir::builtin::typed_array_element(&global.name)
             {
-                match self
-                    .node(*member)
-                    .text
-                    .as_ref()
-                    .and_then(|text| text.as_utf8())
-                {
-                    Some("of") => {
-                        return Some(self.lower_typed_array_of(id, &class, element, arguments));
+                match member.as_str() {
+                    "of" => {
+                        return Some(self.lower_typed_array_of(
+                            id,
+                            &global.name,
+                            element,
+                            arguments,
+                        ));
                     }
-                    Some("from") => {
-                        return Some(self.lower_typed_array_from(id, &class, element, arguments));
+                    "from" => {
+                        return Some(self.lower_typed_array_from(
+                            id,
+                            &global.name,
+                            element,
+                            arguments,
+                        ));
                     }
                     _ => {}
                 }
@@ -464,31 +466,14 @@ impl FuncBuilder<'_> {
         self.lower_promise_static(id, callee, arguments)
     }
 
-    /// The `Math` or `Number` member a callee names, if it names one.
-    ///
-    /// Recognized by shape rather than by symbol identity, which is a
-    /// simplification: a program that shadowed the global `Math` with its own
-    /// object would be mis-read. It cannot be shadowed by a *function* in the
-    /// compiled program — that call would resolve to a direct target and never
-    /// reach here — so the remaining case is an import named `Math` with
-    /// matching method names.
-    ///
-    /// `docs/records/notebooks/any-unknown.md` describes the principled version: profiles that
-    /// associate trusted *declaration identities* with a closed set of
-    /// compiler-owned semantics, so the core never matches on a name at all.
-    /// This is the shape that becomes.
-    fn intrinsic_of(&self, callee: NodeId) -> Option<(Intrinsic, NumericBuiltin<'static>)> {
-        let (object, member) = self.member_access(callee)?;
-        if self.kind_of(object) != Some(syntax::IDENTIFIER) {
-            return None;
-        }
+    /// The numeric intrinsic belonging to the receiver's checked global.
+    pub(super) fn intrinsic_of(
+        &self,
+        callee: NodeId,
+    ) -> Option<(Intrinsic, NumericBuiltin<'static>)> {
+        let (global, member) = self.builtin_global_member(callee)?;
         let member = member.as_str();
-        match self
-            .node(object)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())?
-        {
+        match global.name.as_str() {
             "Math" => math_member(member).map(|intrinsic| (intrinsic, NumericBuiltin::Math)),
             // `Number`'s four predicates. The first two are `Number` only in
             // spelling: over a `number` they are exactly the global `isNaN`

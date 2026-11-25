@@ -54,8 +54,8 @@ impl<'a> GlobalBinding<'a> {
 }
 
 /// Follow checked aliases, then require the exact global meaning and the
-/// declaration-library fact. Source-owned declarations never acquire a provider
-/// merely because a library also declares the same name.
+/// declaration-library fact. Emitting source value declarations shadow library
+/// globals; type augmentations and compatible ambient declarations do not.
 ///
 /// Invalid identities and alias cycles are errors, not an absent requirement.
 pub fn global_binding(
@@ -73,6 +73,37 @@ pub fn global_binding(
             symbol = target;
             continue;
         }
+        let value = if meaning == GlobalMeaning::Value {
+            record.checked_value_provenance()?
+        } else {
+            None
+        };
+        if let Some(ambient) = value.and_then(|value| value.ambient_global) {
+            let global = symbols.get(ambient.symbol.0 as usize).ok_or_else(|| {
+                SnapshotError::Project(format!(
+                    "invalid ambient global identity for `{}`",
+                    record.name
+                ))
+            })?;
+            global.checked_value_provenance()?;
+            if !global.flags.contains(SymbolFlags::GLOBAL_VALUE) || global.name != record.name {
+                return Err(SnapshotError::Project(format!(
+                    "invalid ambient global identity for `{}`",
+                    record.name
+                )));
+            }
+            if global.value_library().is_none() {
+                return Ok(None);
+            }
+            if !ambient.identical_type {
+                return Err(SnapshotError::Project(format!(
+                    "an ambient re-declaration of builtin `{}` with a different type",
+                    global.name
+                )));
+            }
+            symbol = ambient.symbol;
+            continue;
+        }
         let flag = match meaning {
             GlobalMeaning::Value => SymbolFlags::GLOBAL_VALUE,
             GlobalMeaning::Type => SymbolFlags::GLOBAL_TYPE,
@@ -80,13 +111,20 @@ pub fn global_binding(
         if !record.flags.contains(flag) {
             return Ok(None);
         }
-        let Some(library) = record.library.as_ref() else {
+        let library = match meaning {
+            GlobalMeaning::Value => record.value_library(),
+            GlobalMeaning::Type => record.library.as_ref(),
+        };
+        let Some(library) = library else {
             return Ok(None);
         };
-        if !record.declarations.is_empty() || record.declaration_sites.is_empty() {
-            return Err(SnapshotError::Project(
-                "a library global has contradictory declaration provenance".into(),
-            ));
+        if (meaning == GlobalMeaning::Type && !record.declarations.is_empty())
+            || record.declaration_sites.is_empty()
+        {
+            return Err(SnapshotError::Project(format!(
+                "library global `{}` has contradictory declaration provenance",
+                record.name
+            )));
         }
         let name = record.name.public_name().ok_or_else(|| {
             SnapshotError::Project("a library global has no public binding name".into())

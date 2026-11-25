@@ -614,14 +614,12 @@ impl FuncBuilder<'_> {
         // The constants `Math` and `Number` hold, taken before the object is
         // lowered because neither is a value: both are namespaces, and lowering
         // one would fail on the name rather than on the member.
-        if self.kind_of(*object) == Some(syntax::IDENTIFIER)
-            && let Some(namespace) = self
-                .node(*object)
-                .text
-                .as_ref()
-                .and_then(|text| text.as_utf8())
-            && let Some(constant) = named_constant(namespace, &member_name)
+        if let Some(global) = self.builtin_global_reference(*object)
+            && let Some(constant) = named_constant(&global.name, &member_name)
         {
+            for binding in global.bindings {
+                self.check_initialized(*object, binding)?;
+            }
             let origin = self.origin(id);
             return Ok(self.push(OpKind::ConstFloat(constant), HirType::NUMBER, origin));
         }

@@ -2,7 +2,8 @@
 
 use nts_frontend_tsrs::{InternalName, JsString, Symbol, SymbolClassification, SymbolName};
 use nts_semantic_schema::{
-    Library, PropertyKey, SnapshotError, SymbolFlags, SymbolId, SymbolRecord,
+    AmbientGlobal, Library, PropertyKey, SnapshotError, SymbolFlags, SymbolId, SymbolRecord,
+    ValueDeclaration, ValueProvenance,
 };
 
 use super::{Capture, PathRole, arena_index};
@@ -28,6 +29,41 @@ impl<'p> Capture<'p, '_> {
         captured.sort_unstable();
         captured.dedup();
         let classification = symbol.classification();
+        let global = symbol.global_bindings();
+        let native_supplier = captured.iter().any(|node| {
+            self.snapshot.nodes[node.0 as usize]
+                .native
+                .as_ref()
+                .is_some_and(|native| {
+                    native.abi.is_some()
+                        || native.call.is_some()
+                        || native.symbol.is_some()
+                        || native.bound_by.is_some()
+                })
+        });
+        let value_provenance =
+            if global.value || (!native_supplier && symbol.ambient_global().is_some()) {
+                let mut values = Vec::with_capacity(declarations.len());
+                for &node in &declarations {
+                    if let Some(site) = self.declaration_site(node)? {
+                        let emits = node.value_declaration();
+                        values.push(ValueDeclaration {
+                            site,
+                            library: Library::of_path(node.source_file().path().as_str()),
+                            is_value: emits.is_some(),
+                            emits: emits.unwrap_or(false),
+                        });
+                    }
+                }
+                values.sort_unstable_by_key(|value| value.site);
+                values.dedup_by_key(|value| value.site);
+                Some(ValueProvenance {
+                    declarations: values,
+                    ambient_global: None,
+                })
+            } else {
+                None
+            };
         let module = classification.module;
         let library = if captured.is_empty() {
             declarations
@@ -54,7 +90,7 @@ impl<'p> Capture<'p, '_> {
                 }
             }),
             name: PropertyKey::Name(String::new()),
-            flags: schema_flags(classification, symbol.global_bindings()),
+            flags: schema_flags(classification, global),
             declarations: captured,
             declaration_sites,
             ty: None,
@@ -62,6 +98,7 @@ impl<'p> Capture<'p, '_> {
             owner: None,
             constructor_value: None,
             library,
+            value_provenance,
         });
         self.symbols.insert(symbol, id);
         self.symbol_work.push(symbol);
@@ -125,6 +162,22 @@ impl<'p> Capture<'p, '_> {
     /// syntax or enumerating the checker's globals.
     pub(super) fn resolve_symbol_edges(&mut self) -> Result<(), SnapshotError> {
         while let Some(&symbol) = self.symbol_work.get(self.symbol_edges) {
+            let id = self.symbols[&symbol];
+            let record = &self.snapshot.symbols[id.0 as usize];
+            if record.value_provenance.is_some()
+                && !record.flags.contains(SymbolFlags::GLOBAL_VALUE)
+                && let Some((global, identical_type)) = symbol.ambient_global()
+            {
+                let global = self.intern_symbol(global)?;
+                let id = self.symbols[&symbol];
+                if let Some(provenance) = &mut self.snapshot.symbols[id.0 as usize].value_provenance
+                {
+                    provenance.ambient_global = Some(AmbientGlobal {
+                        symbol: global,
+                        identical_type,
+                    });
+                }
+            }
             if let Some(target) = symbol.alias_target() {
                 let target = self.intern_symbol(target)?;
                 let id = self.symbols[&symbol];
@@ -139,14 +192,10 @@ impl<'p> Capture<'p, '_> {
                     && let Some(value) = native_owner.constructor_value()
                 {
                     let value = self.intern_symbol(value)?;
-                    // The schema holds this identity to one library. A program
-                    // that augments the instance interface (`declare global {
-                    // interface Number { ... } }`) declares part of `Number`, so
-                    // the value is the program's while `NumberConstructor` stays
-                    // the library's: its statics are then no library's builtin,
-                    // and the checked relation is not recorded.
-                    if self.snapshot.symbols[value.0 as usize].library
-                        == self.snapshot.symbols[owner.0 as usize].library
+                    // Type-only augmentation leaves the runtime constructor
+                    // supplied by the library.
+                    if self.snapshot.symbols[value.0 as usize].value_library()
+                        == self.snapshot.symbols[owner.0 as usize].library.as_ref()
                     {
                         self.snapshot.symbols[owner.0 as usize].constructor_value = Some(value);
                     }

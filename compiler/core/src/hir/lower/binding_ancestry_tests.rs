@@ -55,6 +55,7 @@ fn binding(depth: u32, owner: u16, kind: VariableKind) -> SemanticSnapshot {
         owner: None,
         constructor_value: None,
         library: None,
+        value_provenance: None,
     });
     snapshot
 }

@@ -684,14 +684,7 @@ struct Summaries<'a, 'b> {
 
 impl Summaries<'_, '_> {
     fn provided_global(&self, at: NodeId) -> bool {
-        self.probe.kind_of(at) == Some(syntax::IDENTIFIER)
-            && self.probe.node(at).symbol.is_none_or(|symbol| {
-                self.probe
-                    .snapshot
-                    .symbols
-                    .get(symbol.0 as usize)
-                    .is_some_and(|record| record.declarations.is_empty())
-            })
+        self.probe.builtin_global_reference(at).is_some()
     }
 
     fn primitive(&self, at: NodeId) -> bool {
@@ -757,11 +750,8 @@ impl Summaries<'_, '_> {
             return false;
         }
         self.probe
-            .node(callee)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
-            .and_then(super::primitive_builtin)
+            .builtin_global_reference(callee)
+            .and_then(|global| super::primitive_builtin(&global.name))
             .is_some_and(|builtin| {
                 builtin == PrimitiveBuiltin::Boolean
                     || arguments.iter().all(|arg| self.primitive(*arg))
@@ -995,14 +985,9 @@ impl Summaries<'_, '_> {
         let Some((object, member)) = self.probe.member_access(callee) else {
             return false;
         };
-        self.provided_global(object)
-            && self
-                .probe
-                .node(object)
-                .text
-                .as_ref()
-                .and_then(|text| text.as_utf8())
-                == Some("Object")
+        self.probe
+            .builtin_global_reference(object)
+            .is_some_and(|global| global.name == "Object")
             && !matches!(member.as_str(), "create" | "prototype")
             && FuncBuilder::reflection_of_a_layout("Object", &member).is_some()
     }

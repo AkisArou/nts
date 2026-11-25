@@ -2293,6 +2293,9 @@ mod collection_view_tests;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod builtin_identity_tests;
+
 mod absence;
 mod access;
 mod access_families;

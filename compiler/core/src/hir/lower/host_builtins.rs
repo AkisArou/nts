@@ -15,23 +15,8 @@ impl FuncBuilder<'_> {
     /// `console.trace` prints a stack, and `console.table` and `console.dir`
     /// inspect structure, so they stay refused.
     pub(super) fn console_method(&self, callee: NodeId) -> Option<bool> {
-        let (object, member) = self.member_access(callee)?;
-        if self.kind_of(object) != Some(syntax::IDENTIFIER)
-            || self
-                .node(object)
-                .text
-                .as_ref()
-                .and_then(|text| text.as_utf8())
-                != Some("console")
-        {
-            return None;
-        }
-        let global = self
-            .node(object)
-            .symbol
-            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .is_some_and(|record| record.declarations.is_empty());
-        if !global {
+        let (global, member) = self.builtin_global_member(callee)?;
+        if global.name != "console" {
             return None;
         }
         match member.as_str() {

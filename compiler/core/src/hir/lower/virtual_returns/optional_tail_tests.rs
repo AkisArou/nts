@@ -672,6 +672,7 @@ fn overloaded_property() -> (Fixture, Func, NodeId) {
             owner: None,
             constructor_value: None,
             library: None,
+            value_provenance: None,
         });
     let parameter = TypeId(u32::try_from(fixture.snapshot.types.len()).unwrap());
     fixture.snapshot.types.push(TypeRecord {

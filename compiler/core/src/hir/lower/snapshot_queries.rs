@@ -614,10 +614,15 @@ impl<'a> FuncBuilder<'a> {
         if self.kind_of(node) != Some(syntax::IDENTIFIER) {
             return None;
         }
-        self.node(node)
-            .symbol
-            .and_then(|id| self.snapshot.symbols.get(id.0 as usize))
-            .and_then(|symbol| symbol.builtin)
+        let symbol = self.node(node).symbol?;
+        self.snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .builtin
+            .or_else(|| {
+                self.checked_global_identity(symbol)
+                    .and_then(|global| self.snapshot.symbols.get(global.symbol.0 as usize)?.builtin)
+            })
     }
 
     /// `constructor(private x: number)`: the store the modifier implies.
