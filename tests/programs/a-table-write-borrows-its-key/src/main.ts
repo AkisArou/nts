@@ -55,6 +55,38 @@ export function fromAParameter(n: number): number {
   return total;
 }
 
+// Made of four runtime strings, as each replacement is, so the objects the
+// global holds stay as many whichever case replaced it last.
+let unsettled: string[] = [];
+for (let i = 0; i < 4; i++) {
+  unsettled.push("u" + i);
+}
+
+/** Replaces the array `fromUnsettled` reads its keys from. */
+export function replaceUnsettled(n: number): number {
+  const next: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    next.push("v" + ((n | 0) + i));
+  }
+  unsettled = next;
+  return unsettled.length;
+}
+
+/**
+ * Keys read out of a global array that a store may replace: the array is no
+ * anchor across the write, so the key keeps a count of its own.
+ */
+export function fromUnsettled(n: number): number {
+  const counts = new Map<string, number>();
+  for (let i = 0; i < 12; i++) {
+    const w = unsettled[(i + (n | 0)) & 3];
+    counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  let total = 0;
+  for (const [word, count] of counts) total += word.length * 10 + count;
+  return total;
+}
+
 /** The key's slot is overwritten between its read and the write. */
 export function sourceOverwritten(n: number): number {
   const words: string[] = [];

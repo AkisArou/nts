@@ -3386,20 +3386,6 @@ pub const REGION_CALLS: &[&str] = &[
 mod tests {
     use super::SIGNATURES;
 
-    /// The same guard the LLVM backend's table has, and for the same reason it
-    /// was written there: [`declared`] is a binary search, an unsorted entry
-    /// answers `None`, and `None` here does not fail -- it means "the runtime
-    /// does not declare this", which is a sentence about the runtime that is
-    /// simply false.
-    ///
-    /// What it costs is quiet. `parameters` answering `None` makes
-    /// [`into_form`] fall back to the `_into_fn` spelling; `result` answering
-    /// `None` skips a conversion the operation needed. Neither says anything.
-    ///
-    /// It had drifted in six places when this was added -- among them
-    /// `nts_bigint_from_number`, three rows after `nts_bigint_shr` -- and the
-    /// LLVM table's copy of this test had been catching its own version of the
-    /// same mistake for some time. One table had a guard and the other did not.
     /// Each table writer is a table helper the runtime declares, so a rename
     /// fails here rather than leaving a contract that names nothing.
     #[test]
@@ -3420,6 +3406,20 @@ mod tests {
         }
     }
 
+    /// The same guard the LLVM backend's table has, and for the same reason it
+    /// was written there: [`declared`] is a binary search, an unsorted entry
+    /// answers `None`, and `None` here does not fail -- it means "the runtime
+    /// does not declare this", which is a sentence about the runtime that is
+    /// simply false.
+    ///
+    /// What it costs is quiet. `parameters` answering `None` makes
+    /// [`into_form`] fall back to the `_into_fn` spelling; `result` answering
+    /// `None` skips a conversion the operation needed. Neither says anything.
+    ///
+    /// It had drifted in six places when this was added -- among them
+    /// `nts_bigint_from_number`, three rows after `nts_bigint_shr` -- and the
+    /// LLVM table's copy of this test had been catching its own version of the
+    /// same mistake for some time. One table had a guard and the other did not.
     #[test]
     fn the_table_is_sorted_because_it_is_binary_searched() {
         for pair in SIGNATURES.windows(2) {

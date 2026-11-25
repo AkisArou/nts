@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Callee, Func, OpKind, ValueId};
+use nts_core::hir::{self, BlockId, Callee, Func, OpKind, Terminator, ValueId};
 use nts_frontend_ts::Frontend;
 
 /// The position of the key among a table write's arguments.
@@ -110,13 +110,17 @@ fn a_table_write_borrows_a_key_whose_slot_nothing_overwrites() {
     }
     // The controls: the key's slot is overwritten between its read and the
     // write -- by a store, by a call, and by a call that writes the same table
-    // through a wider alias -- so the key takes a count of its own. And a key
+    // through a wider alias -- or it is read out of a global array a store may
+    // replace, so the key takes a count of its own. And a key
     // the loop makes, which the frame owns rather than borrows: its erasure is
     // carried across the update's join with a count of its own, a different
     // shape from a borrowed key.
     for (name, retains) in [
         ("sourceOverwritten", 1),
         ("sourceOverwrittenByACall", 1),
+        ("fromUnsettled", 1),
+        // Both retains come from the `widen` call, which may overwrite the
+        // key's slot; this arm is not a counterfactual for the `unknown` alias.
         ("widenedAliases", 2),
         ("entriesOf", 1),
     ] {
@@ -128,34 +132,75 @@ fn a_table_write_borrows_a_key_whose_slot_nothing_overwrites() {
     }
 }
 
+/// Whether every path from `block` to a return releases the holder.
+fn every_return_releases(
+    func: &Func,
+    block: BlockId,
+    releases: &dyn Fn(&[ValueId]) -> bool,
+    seen: &mut Vec<BlockId>,
+) -> bool {
+    if seen.contains(&block) {
+        return true;
+    }
+    seen.push(block);
+    let body = &func.blocks[block.0 as usize];
+    if releases(&body.ops) {
+        return true;
+    }
+    if matches!(body.terminator, Terminator::Return(_)) {
+        return false;
+    }
+    body.terminator
+        .successors()
+        .into_iter()
+        .all(|next| every_return_releases(func, next, releases, seen))
+}
+
 /// Whether the holder read out of a table (`unerase(nts_map_get(..))`) is
-/// released, and not before `helper` in the block that calls it.
+/// given up after `helper`, never before it: nothing releases it in the
+/// write's block ahead of the write, and every path from the write to a
+/// return releases it, in the write's block after the write or in a block
+/// that path reaches.
 fn holder_outlives(func: &Func, helper: &str) -> bool {
     let holder = |value: ValueId| {
         matches!(func.value(value).kind, OpKind::Unerase { value: read, .. }
             if matches!(&func.value(read).kind,
                 OpKind::Call { callee: Callee::External(name), .. } if name == "nts_map_get"))
     };
-    func.blocks.iter().any(|block| {
-        let Some(at) = block.ops.iter().position(|id| {
-            matches!(&func.value(*id).kind,
-                OpKind::Call { callee: Callee::External(name), .. } if name == helper)
-        }) else {
-            return false;
-        };
-        let before = block.ops[..at]
-            .iter()
-            .any(|id| matches!(func.value(*id).kind, OpKind::Release(value) if holder(value)));
-        // Released at all, and after the write: in its block or a later one,
-        // since the write's block is where the holder was read and nothing
-        // released it there first.
-        let released = func
-            .blocks
-            .iter()
-            .flat_map(|block| &block.ops)
-            .any(|id| matches!(func.value(*id).kind, OpKind::Release(value) if holder(value)));
-        !before && released
-    })
+    let releases = |ops: &[ValueId]| {
+        ops.iter()
+            .any(|id| matches!(func.value(*id).kind, OpKind::Release(value) if holder(value)))
+    };
+    let writes: Vec<(usize, usize)> = func
+        .blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(block, body)| {
+            body.ops.iter().enumerate().filter_map(move |(at, id)| {
+                matches!(&func.value(*id).kind,
+                    OpKind::Call { callee: Callee::External(name), .. } if name == helper)
+                .then_some((block, at))
+            })
+        })
+        .collect();
+    !writes.is_empty()
+        && writes.iter().all(|&(block, at)| {
+            let body = &func.blocks[block];
+            if releases(&body.ops[..at]) {
+                return false;
+            }
+            if releases(&body.ops[at + 1..]) {
+                return true;
+            }
+            if matches!(body.terminator, Terminator::Return(_)) {
+                return false;
+            }
+            let mut seen = Vec::new();
+            body.terminator
+                .successors()
+                .into_iter()
+                .all(|next| every_return_releases(func, next, &releases, &mut seen))
+        })
 }
 
 /// A write that gives up a holder whose element is still read: the holder the
