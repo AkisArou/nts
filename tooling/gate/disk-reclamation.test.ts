@@ -26,8 +26,29 @@ import {DiskState,DiskTransactions,type DiskTransaction} from './disk-transactio
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {pathToFileURL} from 'node:url';
 import {declaredTargets,readKeep} from '../full-check/keep.ts';
+import {withBuildLock} from '../conformance/pin.ts';
 const GiB=2**30;
 const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
+
+test('a declared pin target takes its writer mutex outside the pool lock, or keeps a held target by name',t=>{
+  const f=fixture(t),cache=join(f.s.dir,'cache'),keep=readKeep();f.setFree(0);
+  const declared=declaredTargets(cache,{'nts-pins':keep['nts-pins']!})[0]!;
+  mkdirSync(declared.tree,{recursive:true});writeFileSync(join(declared.tree,'Cargo.toml'),'[workspace]\n');
+  const debug=join(declared.target,'debug');mkdirSync(debug,{recursive:true});writeFileSync(join(debug,'built'),'rebuildable');f.outputs.set(debug,16*GiB);
+  const options={...f.options,services:[{...declared,service:true}],ownership:()=>{
+    assert.ok(existsSync(declared.lock!.path),'same pin writer mutex is held');
+    const pool=acquire(join(f.dir,'.lock'));assert.ok(pool,'pin mutex and ownership scans are outside pool transaction');pool.release();
+  }};
+  withBuildLock(()=>{
+    const held=reclaimDisk(options);
+    assert.deepEqual(held.removed,[]);assert.ok(existsSync(debug));
+    assert.ok(held.kept.some(row=>row.root===debug&&row.reason.includes('pin tree is held by pid '+process.pid)),JSON.stringify(held));
+  },{lock:declared.lock!.path,wait:0});
+  const removed=reclaimDisk(options);
+  assert.deepEqual(removed.removed.map(row=>row.root),[debug],JSON.stringify(removed));
+  assert.ok(removed.removed[0]!.facts.includes('writer mutex held: '+declared.lock!.path));
+  assert.equal(existsSync(declared.lock!.path),false);
+});
 
 test('pressure keeps one compatible free target; ordinary idle upkeep keeps two',t=>{
   for(const pressure of [true,false]){

@@ -791,7 +791,7 @@ for(const blocked of [false,true])test('take reclaims the oldest surplus Cargo p
     assert.throws(()=>p.take('919'),error=>{
       assert.ok(error instanceof PoolFull);
       for(const tree of f.p.trees())assert.ok(error.message.includes(tree.path),error.message);
-      assert.match(error.message,/one warm free target retained under pressure/);assert.match(error.message,/test-scratch/);assert.match(error.message,/build-owner.service/);
+      assert.match(error.message,/one warm free target retained under pressure/);assert.match(error.message,/unowned-scratch/);assert.match(error.message,/build-owner.service/);
       return true;
     });
     assert.equal(p.trees().some(tree=>tree.branch==='919'),false);

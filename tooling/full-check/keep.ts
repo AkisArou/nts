@@ -3,12 +3,14 @@ import {readFileSync,readdirSync,lstatSync} from 'node:fs';
 import {join,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 export type FolderStat = (path:string)=>{isDirectory():boolean;isSymbolicLink():boolean;mtimeMs:number};
+export type TargetLock={path:string;owner:string};
+export type TargetDeclaration=string|{tree:string;lock:TargetLock};
 export type Keep = (
   | { kind: "kept" | "pool" | "pins"; why: string; writer?: string }
   | { kind: "runs" | "logs"; who: string; why: string; writer?: string }
   | { kind: "scratch"; writer: string; days?: number }
   | { kind: "folders" | "issue-scratch"; why: string; folders: Record<string, Keep> }
-) & { targets?: Record<string, string>; targetScratch?: Record<string,string>; legacyTargetScratch?: string[] };
+) & { targets?: Record<string, TargetDeclaration>; targetScratch?: Record<string,string>; legacyTargetScratch?: string[] };
 
 export const KEEP_FILE = fileURLToPath(new URL("keep.json", import.meta.url));
 
@@ -25,7 +27,12 @@ export function readKeep(file = KEEP_FILE): Record<string, Keep> {
       if (!top) throw new Error(`${file}: ${name} declares targets; only a top-level rule does`);
       if (keep.kind === "pool") throw new Error(`${file}: ${name} is a pool, whose kind declares each slot's target`);
       if (typeof keep.targets !== "object" || keep.targets === null || Array.isArray(keep.targets)) throw new Error(`${file}: ${name}'s targets are not a map of target to tree`);
-      for (const [target, tree] of Object.entries(keep.targets)) {
+      for (const [target, declaration] of Object.entries(keep.targets)) {
+        const tree=typeof declaration==='string'?declaration:declaration?.tree;
+        if(typeof declaration!=='string'){
+          const lock=declaration?.lock;
+          if(!lock||!inside(lock.path)||lock.owner!=='tooling/conformance/pin.ts')throw Error(`${file}: ${name}/${target} has an unknown target lock owner or path`);
+        }
         if (!inside(target) || typeof tree !== "string" || !inside(tree)) throw new Error(`${file}: ${name} declares target ${target} of tree ${String(tree)}; both must be relative paths inside its folder`);
       }
     }
@@ -51,12 +58,15 @@ function targetSlots(dir:string,stat:FolderStat=lstatSync):{name:string;path:str
   });
 }
 /** A declared cargo target and the tree whose builds write it. */
-export type DeclaredTarget = { target: string; tree: string };
+export type DeclaredTarget = { target: string; tree: string; lock?:TargetLock };
 /** Every cargo target keep.json declares under `cache`, pool slots' included, whether or not it exists. */
 export function declaredTargets(cache: string, keep: Record<string, Keep>, stat?: FolderStat): DeclaredTarget[] {
   return Object.entries(keep).flatMap(([name, rule]) => rule.kind === "pool"
     ? targetSlots(join(cache, name), stat).filter(slot => /^\d+$/.test(slot.name)).map(slot => ({ target: join(slot.path, "target"), tree: slot.path }))
-    : Object.entries(rule.targets ?? {}).map(([target, tree]) => ({ target: join(cache, name, target), tree: join(cache, name, tree) })));
+    : Object.entries(rule.targets ?? {}).map(([target, declaration]) => {
+      const tree=typeof declaration==='string'?declaration:declaration.tree;
+      return {target:join(cache,name,target),tree:join(cache,name,tree),...(typeof declaration==='string'?{}:{lock:{owner:declaration.lock.owner,path:join(cache,name,declaration.lock.path)}})};
+    }));
 }
 
 /** Run log roots whose raw cost evidence has the same retention contract. */

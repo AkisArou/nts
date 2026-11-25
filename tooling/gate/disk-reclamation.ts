@@ -1,4 +1,5 @@
-import {targetScratch} from '../full-check/keep.ts';
+import {withBuildLock} from '../conformance/pin.ts';
+import {targetScratch,type TargetLock} from '../full-check/keep.ts';
 import {DiskState,DiskTransactions,type DiskIntent} from './disk-transaction.ts';
 import {ClaimReceipt,GitReceipt,DetachRecord,linkMovedCheckout,prepareCheckoutRepair,readCheckoutMove,syncDiskDirectory,type CheckoutMove} from './disk-preparation.ts';
 import type {TreePin} from '../landing/tree-pin.ts';
@@ -21,7 +22,7 @@ import {assertStateVersion} from './state-version.ts';
 import {workerPresence,assertWorkerPresenceWritable,removeWorkerPresence} from '../landing/pool-presence.ts';
 import type {HostObservations} from './host-observations.ts';
 
-export type ReclaimTarget={tree:string;target:string;service:boolean};
+export type ReclaimTarget={tree:string;target:string;service:boolean;lock?:TargetLock};
 export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output'|'detached-build-output'|'test-scratch'|'legacy-scratch';
 export type ReclaimRemoval={root:string;kind:ReclaimKind;allocatedBytes:number;freeBytesChange:number;facts:string[];tree?:string;task?:string};
 export type ReclaimReport={triggered:boolean;lockHeldMs:number;maxLockHeldMs:number;before:number;after:number;triggerBytes:number;goalBytes:number;
@@ -40,7 +41,7 @@ export type ReclaimOptions={
   maintenance?:{before:number;keep:number};
 };
 type Identity={path:string;dev:number;ino:number;uid:number};
-type Candidate={tree:string;root:string;kind:ReclaimKind;identity:Identity[];service:boolean;target:string;movedAt:number;branch?:string};
+type Candidate={tree:string;root:string;kind:ReclaimKind;identity:Identity[];service:boolean;target:string;movedAt:number;branch?:string;lock?:TargetLock};
 class TaskBranch extends Error{}
 const under=(root:string,path:string)=>path===root||path.startsWith(root+sep);
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
@@ -472,7 +473,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const candidates:Candidate[]=[];
   const poolTargets:ReclaimTarget[]=registered().map(tree=>({tree:resolve(tree.path),target:join(tree.path,'target'),service:false}));
   const add=(target:ReclaimTarget,root:string,kind:ReclaimKind,movedAt:number,branch?:string):void=>{
-    candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,target:target.target,movedAt,...(branch?{branch}:{})});
+    candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,target:target.target,movedAt,...(branch?{branch}:{}),...(target.lock?{lock:target.lock}:{})});
   };
   const offerBuildOutput=(target:ReclaimTarget,kind:'free-build-output'|'detached-build-output',movedAt:number,branch?:string):void=>{
     const leftovers=targetLeftovers(target.tree),cache=cargoCache(target.target);
@@ -539,6 +540,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     if(kind==='free-build-output'&&retained.has(candidate.target)){if(!report.kept.some(row=>row.root===candidate.target&&row.reason===warmReason))keep(candidate.target,warmReason,true);continue;}
     // A previous obsolete-profile removal may have consumed this candidate.
     if(!existsSync(root))continue;
+    const removeCandidate=()=>{
     const held:{lock:GateResource|null;drainer:GateResource|null;entry:string|undefined;intent:DiskIntent|undefined}={lock:null,drainer:null,entry:undefined,intent:undefined};
     try{
       held.lock=GateResource.tryAcquire(tree+'.lock');if(!held.lock)throw Error('tree resource lock is held');
@@ -599,7 +601,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
           const ownerFacts=options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root)??[];
           // Every provenance check is repeated after slow ownership inspection.
           certify();
-          const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.branch?'explicit detached worker; task checkout retained':candidate.service?'service: obsolete generation only':'detached clean published worktree',...ownerFacts];
+          const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.branch?'explicit detached worker; task checkout retained':candidate.service?'service: obsolete generation only':'detached clean published worktree',...(candidate.lock?['writer mutex held: '+candidate.lock.path]:[]),...ownerFacts];
           const removal:ReclaimRemoval={root,kind,allocatedBytes,freeBytesChange:0,facts,...(candidate.branch?{tree,task:candidate.branch}:{})};
           if(!reclaimKinds.includes(kind))throw Error('unapproved disk reclamation kind: '+kind);
           const {dev,ino,uid}=candidate.identity[0]!;
@@ -634,6 +636,16 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       if(error instanceof ToolingInstrumentError)throw error;
       keep(held.entry&&present(join(held.entry,'payload'))?held.entry:root,error);
     }finally{try{if(held.intent)state.end(held.intent);}finally{held.lock?.close();held.drainer?.close();}}
+    };
+    try{
+      if(candidate.lock){
+        if(candidate.lock.owner!=='tooling/conformance/pin.ts')throw Error('unknown reclamation lock owner: '+candidate.lock.owner);
+        // The pin writer owns this mutex. Never hold the pool transaction
+        // while acquiring it; wait zero so a live writer is a named keep.
+        withBuildLock(removeCandidate,{lock:candidate.lock.path,wait:0});
+      }else removeCandidate();
+    }catch(error){keep(root,error);}
+
 
   }
   return report;

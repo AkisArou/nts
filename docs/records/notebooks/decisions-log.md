@@ -4937,3 +4937,15 @@ remove this migration once no free tree carries the old layout. Unknown siblings
 and held/service scratch remain protected. The workflow's machine contract
 states these policies; all removals retain identity, locks, claims and live
 process/unit guards. No node compile-cache policy changes.
+
+
+## Pin reclamation shares the writer mutex (11-25)
+
+#841 slice (d). The coordinator approved taking the pin writer's existing
+`withBuildLock` with zero wait around reclamation of its declared target.
+`keep.json` records the lock path and its owner beside the target mapping;
+no second mutex and no pin writer behavior change is introduced. Acquisition
+is outside the pool transaction. A held lock keeps the candidate by name,
+and a focused control proves both refusal and later removal under that same
+owner lock. This closes the idle gap between pin writer child commands where
+process and unit path observations alone might see no user.

@@ -789,3 +789,9 @@ test('the interop writer uses its declared target root, so changing the writer a
     assert.ok(!source.includes('out="$PWD/target/interop-$project"'),'legacy writer must not return');
   }
 });
+
+
+test('pin target declarations bind the writer mutex to its production owner',()=>{
+  const pins=declaredTargets('/private/cache',{'nts-pins':readKeep()['nts-pins']!});
+  assert.deepEqual(pins,[{target:'/private/cache/nts-pins/target',tree:'/private/cache/nts-pins/tree',lock:{path:'/private/cache/nts-pins/build.lock',owner:'tooling/conformance/pin.ts'}}]);
+});
