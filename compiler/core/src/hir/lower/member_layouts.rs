@@ -127,13 +127,32 @@ pub(super) fn collect_stored_members(
     // Sorted so the field order a layout gets does not depend on hash order.
     forced.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
     for (ty, name) in forced {
-        if !hierarchy.stands_alone(ty) {
-            continue;
+        // **And every record a copy builds the literal at**, where its record
+        // is a form of the generic around it (`instantiate`'s `object_forms`):
+        // `{ pull(c) { .. reader .. } }` inside `transfer<T>` is built at
+        // `Type13` in one copy and `Type14` in another, each laid out on its
+        // own, and the environment `pull` captures is the same in every copy.
+        // Decided once, from the literals, and answered for each record, so a
+        // copy's layout has the slot the form's has and its member is the
+        // closure that fills it rather than a method with no environment.
+        let instances = if crate::hir::instantiate::is_an_anonymous_record(snapshot, ty) {
+            hierarchy
+                .template_instances
+                .get(&ty)
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        for ty in std::iter::once(ty).chain(instances) {
+            if !hierarchy.stands_alone(ty) {
+                continue;
+            }
+            if let Some(declared) = hierarchy.declares.get_mut(&ty) {
+                declared.retain(|declared| declared != &MemberKey::method(name.clone()));
+            }
+            hierarchy.stored.entry(ty).or_default().push(name.clone());
         }
-        if let Some(declared) = hierarchy.declares.get_mut(&ty) {
-            declared.retain(|declared| declared != &MemberKey::method(name.clone()));
-        }
-        hierarchy.stored.entry(ty).or_default().push(name);
     }
 }
 
