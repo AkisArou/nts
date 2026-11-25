@@ -6,6 +6,8 @@ import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 //   node --test tooling/gate/measurement-cpus.test.ts
 import {gateEnvironment,launcherPolicyNames} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
+import {ownMemory} from './test-memory.ts';
+import {HOST_OBSERVATIONS} from './host-observations.ts';
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -111,14 +113,17 @@ test("the real host scope is verified, or the absence is reported before launchi
     assert.match(launch.mechanism, /best-effort; .+/);
     t.diagnostic(`real ceiling not measured: ${launch.mechanism}`);
     // A forged marker must not turn a taskset restriction into cpuset proof.
+    // The launch sheds the fixture's policy, never its observations: its run
+    // closes against its own units, never the machine's.
     const directory=mkdtempSync(join(tmpdir(),"nts-forged-ceiling-"));
     let result;
     try {
       const clean=Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length));
-      result=spawnSync("sh",[PINNED],{env:{...clean,NTS_GATE_RUN_DIR:join(directory,"run"),NTS_GATE_SCOPE_EXPECTED:cpus},encoding:"utf8"});
+      result=spawnSync("sh",[PINNED],{env:{...clean,...ownMemory(join(directory,"machine")),NTS_GATE_RUN_DIR:join(directory,"run"),NTS_GATE_SCOPE_EXPECTED:cpus},encoding:"utf8"});
     } finally {rmSync(directory,{recursive:true,force:true});}
     assert.equal(result.status, 75, result.stderr);
     assert.match(result.stderr, /ceiling is absent/);
+    assert.match(result.stderr, new RegExp(`NON-CANONICAL experiment; .*\\b${HOST_OBSERVATIONS}\\b`), "the run must hold the case's own observations");
     return;
   }
   const result = spawnSync(launch.command, launch.args, {env:fixtureEnvironment(t), encoding: "utf8" });
@@ -163,26 +168,31 @@ test("quiet admission needs a full quiet window after activity", async () => {
 test("pinned.sh restricts its own entry before invoking git or a build", { skip: process.platform !== "linux" }, () => {
   const dir = mkdtempSync(join(tmpdir(), "nts-pinned-affinity-test-"));
   try {
-    const log = join(dir, "mask");
+    const log = join(dir, "mask"), observed = join(dir, "observations");
+    const quote = (path: string) => `'${path.replaceAll("'","'\\''")}'`;
     const git = join(dir, "git");
-    writeFileSync(git, `#!/bin/sh\nawk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status >> '${log.replaceAll("'","'\\''")}'\nexit 23\n`);
+    writeFileSync(git, `#!/bin/sh\nawk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status >> ${quote(log)}\nprintf '%s\\n' "$NTS_HOST_OBSERVATIONS" >> ${quote(observed)}\nexit 23\n`);
     chmodSync(git, 0o755);
     const inherited = inheritedCpus();
     const eCore = cpuList(inherited).find((cpu) => cpu >= 16)!;
     assert.ok(eCore !== undefined);
     for (const mask of [inherited, String(eCore)]) {
-      writeFileSync(log, "");
+      writeFileSync(log, "");writeFileSync(observed, "");
       const run = join(dir, "run-" + mask);
+      // The run's units and processes are this case's own observations, so
+      // its close cannot read another test's unit beside it.
+      const machine = ownMemory(join(dir, "machine-" + mask));
       // Resolve the fixture's input identity before installing its Git stub.
-      const planned = gateEnvironment(hostEnvironment(testEnvironment()), { run });
+      const planned = gateEnvironment(hostEnvironment(testEnvironment()), { run, owned: machine });
       const env = gateEnvironment(planned.env, { run, owned: { PATH: `${dir}:${planned.env.PATH}` } }).env;
       const result = spawnSync("taskset", ["-c", mask, "sh", PINNED], {
         env, encoding: "utf8",
       });
-      assert.notEqual(result.status, 0, "the git stub must prevent any build");
+      assert.equal(result.status, 23, "the git stub, not the gate environment, must end the run: " + result.stderr);
       const lines = readFileSync(log, "utf8").trim().split("\n");
       assert.ok(lines.length > 0);
       assert.ok(lines.every((line) => line === gateCpus(mask)), JSON.stringify({ lines, result }));
+      assert.deepEqual(readFileSync(observed, "utf8").trim().split("\n"), lines.map(() => machine[HOST_OBSERVATIONS]), "the run must hold the case's own observations");
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
