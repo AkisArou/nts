@@ -38,6 +38,12 @@ Terms used below:
   appended is written straight into its destination.
 - **An inline retain/release fast path,** and a cycle collector (Bacon and
   Rajan's trial deletion) that skips every type proved unable to form a cycle.
+- **Releases specialized by type** ([record](../records/memory-typed-release-878.md)):
+  releasing a reference whose static type names an acyclic layout with no
+  erased field calls that layout's own release. It checks the object's
+  descriptor against the layout's (a subtype falls back to the generic
+  release), and at zero releases each field through its own typed release, to
+  a fixed depth. The collector walks a layout's fields through its own trace.
 - **Call regions:** a call whose allocations all stay inside its result runs
   in a region that is reset when the result dies.
 
