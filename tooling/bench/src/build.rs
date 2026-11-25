@@ -414,8 +414,7 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
         assert!(link_output(&own.root, &mut tool)?.status.success());
         let text = std::fs::read_to_string(marker)?;
         let cwd = Utf8PathBuf::from(text.split('|').nth(1).expect("recorded cwd"));
-        let parent = std::env::var("NTS_TEST_SCRATCH_ROOT")
-            .map_or_else(|_| own.root.join("target/tmp"), Utf8PathBuf::from);
+        let parent = crate::scratch::target_parent();
         assert!(cwd.starts_with(parent.canonicalize_utf8()?), "{cwd}");
         assert!(!cwd.exists(), "link cwd must be removed after drain: {cwd}");
         if std::env::var_os("NTS_BENCH_LINK_CWD_FALLBACK_CONTROL").is_none() {

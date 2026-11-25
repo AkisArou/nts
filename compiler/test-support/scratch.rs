@@ -49,7 +49,7 @@ impl ScratchDir {
 }
 
 #[allow(dead_code)]
-fn target_parent() -> Utf8PathBuf {
+pub(crate) fn target_parent() -> Utf8PathBuf {
     std::env::var("NTS_TEST_SCRATCH_ROOT").map_or_else(
         |_| {
             if let Some(parent) = option_env!("CARGO_TARGET_TMPDIR") {
