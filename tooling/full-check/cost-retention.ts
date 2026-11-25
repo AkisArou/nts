@@ -54,7 +54,18 @@ function terminal(run:string){
     throw Error('missing or unfinished terminal summary');
   const verdict=summary.verdict;
   if(verdict!=='green'&&verdict!=='red')throw Error('unknown terminal verdict');
-  return {summary,summaryText,progressText,finished:started+summary.wall_s*1000};
+  const costs=summary.case_costs as {version?:unknown;status?:unknown;steps?:unknown;error_count?:unknown;errors?:unknown}|undefined;
+  // summarizeCosts sets partial for errors.length || missingChecks ||
+  // checks.some(c => !c.complete). Coverage gaps and incomplete cases are
+  // materialized too; reader failures alone require raw evidence.
+  const costFailure=costs?.version!==1||!['complete','partial'].includes(String(costs.status))||costs.error_count!==0||
+    !Array.isArray(costs.errors)||costs.errors.length||!costs.steps||typeof costs.steps!=='object'||Array.isArray(costs.steps);
+  const reason=(summary.environment as {canonical?:unknown}|undefined)?.canonical!==true?'noncanonical or unknown environment':
+    costFailure?'case_costs not materialized without reader errors':null;
+  // Summaries can contain hundreds of MiB of cases. Keep only decision facts
+  // and byte digests while inventorying other runs, never their populations.
+  return {verdict,reason,summaryDigest:createHash('sha256').update(summaryText).digest('hex'),
+    progressDigest:progressText===null?null:createHash('sha256').update(progressText).digest('hex'),finished:started+summary.wall_s*1000};
 }
 
 export function pruneRawCosts(options:Options):CostRetention{
@@ -80,14 +91,8 @@ export function pruneRawCosts(options:Options):CostRetention{
         try{
           if(options.onlyRun!==undefined&&resolve(run)!==resolve(options.onlyRun))throw Error('outside selected candidate');
           if(index<RAW_COST_COMPLETED_RUNS)throw Error('newest three completed runs');
-          if(row.terminal.summary.verdict!=='green')throw Error('non-green run');
-          if((row.terminal.summary.environment as {canonical?:unknown}|undefined)?.canonical!==true)throw Error('noncanonical or unknown environment');
-          const costs=row.terminal.summary.case_costs as {version?:unknown;status?:unknown;steps?:unknown;error_count?:unknown;errors?:unknown}|undefined;
-          // summarizeCosts sets partial for errors.length || missingChecks ||
-          // checks.some(c => !c.complete). Coverage gaps and incomplete cases
-          // are materialized too; reader failures alone require raw evidence.
-          if(costs?.version!==1||!['complete','partial'].includes(String(costs.status))||costs.error_count!==0||!Array.isArray(costs.errors)||costs.errors.length||!costs.steps||typeof costs.steps!=='object'||Array.isArray(costs.steps))
-            throw Error('case_costs not completely materialized');
+          if(row.terminal.verdict!=='green')throw Error('non-green run');
+          if(row.terminal.reason)throw Error(row.terminal.reason);
           const receipt=join(run,'.cost-retention.json');
           type Detach={version:1;name:string;dev:number;ino:number;uid:number;summary:string};
           let parked:Detach|null=null;
@@ -97,7 +102,7 @@ export function pruneRawCosts(options:Options):CostRetention{
               !['dev','ino','uid'].every(key=>Number.isSafeInteger(value[key]))||typeof value.summary!=='string')throw Error('unknown raw-cost detach receipt');
             parked=value as Detach;
           }catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-          const digest=createHash('sha256').update(row.terminal.summaryText).digest('hex');
+          const digest=row.terminal.summaryDigest;
           if(parked&&parked.summary!==digest)throw Error('raw-cost detach summary changed');
           const ordinary=join(run,'costs'),detached=join(run,parked?.name??'.retired-costs-'+randomUUID());
           const path=parked&&lstatExists(detached)?detached:ordinary;
@@ -108,7 +113,7 @@ export function pruneRawCosts(options:Options):CostRetention{
           ownership(run,path);
           if(!same(rootIdentity,directory(root))||!same(row.identity,directory(run))||!same(identity,directory(path)))throw Error('raw-cost directory identity changed');
           const current=terminal(run);
-          if(current.summaryText!==row.terminal.summaryText||current.progressText!==row.terminal.progressText)throw Error('terminal record changed');
+          if(current.summaryDigest!==row.terminal.summaryDigest||current.progressDigest!==row.terminal.progressDigest)throw Error('terminal record changed');
           // A private sibling detachment fixes the deletion grant to the
           // observed directory. A new producer at costs/ is outside it.
           if(path===ordinary){
