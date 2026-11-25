@@ -89,15 +89,16 @@ test('interop writer and reader defaults cannot restore the legacy top-level lay
 });
 
 
-test('interop drift discovery owns new project writer and reader candidates without framework payloads',()=>{
+test('interop drift discovery owns script members without unrelated membership or framework payloads',()=>{
   const graph=moduleGraph();
   try{
     const snapshot=graph.describe(['tooling/gate/test-layout.ts']);
     const reader='tooling/gate/test-layout.ts';
-    assert.ok(snapshot.memberships.some(row=>row.reader===reader&&row.directory==='tests/interop'&&row.entries.some(entry=>entry.name==='macos-pods'&&entry.type==='directory')));
-    for(const name of ['build.sh','verify.ts'])assert.ok(snapshot.optionalFiles.some(row=>row.reader===reader&&row.path==='tests/interop/native-compression/'+name&&row.present));
-    assert.ok(snapshot.optionalFiles.some(row=>row.reader===reader&&row.path==='tests/interop/macos-bench/bench.sh'&&row.present));
+    for(const name of ['build.sh','verify.ts','bench.sh'])assert.ok(snapshot.directories.some(row=>row.reader===reader&&row.directory==='tests/interop'&&row.member===name&&row.kind==='module'));
+    for(const name of ['build.sh','verify.ts'])assert.ok(snapshot.files.includes('tests/interop/native-compression/'+name));
+    assert.ok(snapshot.files.includes('tests/interop/macos-bench/bench.sh'));
     assert.ok(!snapshot.files.some(path=>path.startsWith('tests/interop/macos-pods/Beep/')));
-    assert.ok(!snapshot.directories.some(row=>row.reader===reader&&row.directory==='tests/interop'));
+    assert.ok(!snapshot.memberships.some(row=>row.reader===reader&&row.directory==='tests/interop'));
+
   }finally{graph.close();}
 });

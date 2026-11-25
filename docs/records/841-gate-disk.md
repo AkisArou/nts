@@ -974,3 +974,34 @@ The compiler source remains the source proved by inner above.
 | `pin-clock-focused-v2.log` | `b65128befeedf769e76c037a1586ed75c176e21674821c74a2783679bf1a9ef6` |
 | `pin-clock-types-v2.log` | `8c0bcab58b002e44a3f0657326000224356c3d7744ea8fccf40d63a8f2da165c` |
 | `pin-clock-audit-v2.log` | `4960250042812b4e55dfcd4655454ac85504eca9faa20984139afa899fe1bdd3` |
+
+### Script-member staging
+
+The rebased `--here` attempt at `a61b901f82b1a07f0dbff7b5430ce65534d87e78`
+passed Rust tests, types, gate-input placement and the other selected checks.
+Tooling found six inner CLI fixtures whose staged tree lacked an unrelated
+root membership child, `tests/interop/.gitignore`. The shallow directory
+candidate declaration recorded all child names, beyond the scripts the drift
+guard reads. The named unit was stopped after those observed fixture failures
+and drained; its temporary is absent. This attempt is not green evidence.
+
+The guard now uses the shared `moduleMembers` owner for `build.sh`, `verify.ts`
+and `bench.sh`. Runtime discovery consumes those same member basenames and
+excludes hidden paths and installed dependencies through that owner's rule.
+It declares neither unrelated root membership nor framework payloads. No
+reader-input, module-closure or fixture-copier implementation changed, and no
+fixture was weakened or given a second input catalogue. This supersedes the
+shallow candidate declaration above.
+
+All 22 focused layout/inner tests passed, including the six staged CLI controls
+and the graph control for member files without framework or root membership.
+Strict types passed six projects and 1,235 modules with no increase; the host
+audit passed 2,208 sources, 364 entry closures and 418 reads.
+
+| Path under `~/.cache/nts-scratch/841/d/` | SHA-256 |
+| --- | --- |
+| `here-v4.log` | `d860f91afd3fe4e0d121576393ef12499d6232db27d1645a1eacb7a056912904` |
+| `here-v4-source/manifest.json` | `552d7d2ce85970b1c10bdcd2681945872bbe23ef96484adc190f583f74e7033b` |
+| `members-focused.log` | `428a1c38b7fc9566b0bcf45b527c7aef45190a019eea9de19842739eebfc6a4e` |
+| `members-types.log` | `8c0bcab58b002e44a3f0657326000224356c3d7744ea8fccf40d63a8f2da165c` |
+| `members-audit.log` | `4960250042812b4e55dfcd4655454ac85504eca9faa20984139afa899fe1bdd3` |

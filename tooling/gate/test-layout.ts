@@ -1,4 +1,4 @@
-import {directoryCandidates} from './reader-inputs/main.ts';
+import {moduleMembers,moduleMemberDirectory} from './reader-inputs/main.ts';
 import {targetScratch} from '../full-check/keep.ts';
 import {rustTokens,type RustToken} from './rust-test-paths.ts';
 import {cargoSync} from './cargo.ts';
@@ -117,24 +117,25 @@ export function inspectTargetScratch(file:string,source:string):string[]{
   };walk(rustTokens(source));return problems;
 }
 
-// The same shallow project discovery used by gate environment capabilities.
-// Only writer/reader scripts are inputs; framework payloads are not inspected.
-const INTEROP_SCRATCH_INPUTS=directoryCandidates(new URL('../../tests/interop/',import.meta.url),[
-  {kind:'optional-file',name:'build.sh'},
-  {kind:'optional-file',name:'verify.ts'},
-  {kind:'optional-file',name:'bench.sh'},
-]);
+// Writer and reader scripts share the module-member discovery owner. No
+// unrelated project membership or framework payload is an input to this guard.
+const INTEROP_SCRATCH_INPUTS=[
+  moduleMembers(new URL('../../tests/interop/',import.meta.url),'build.sh'),
+  moduleMembers(new URL('../../tests/interop/',import.meta.url),'verify.ts'),
+  moduleMembers(new URL('../../tests/interop/',import.meta.url),'bench.sh'),
+];
 /** Extra drift guard over writer and reader defaults, never a removal grant. */
-export function interopScratchDrift(directory:URL=INTEROP_SCRATCH_INPUTS.url):string[]{
+export function interopScratchDrift(directory:URL=INTEROP_SCRATCH_INPUTS[0]!.url):string[]{
   const problems:string[]=[],root=fileURLToPath(directory);
-  for(const project of readdirSync(root,{withFileTypes:true})){
-    if(!project.isDirectory()||project.name.startsWith('.')||project.name==='node_modules')continue;
-    for(const candidate of INTEROP_SCRATCH_INPUTS.candidates){
-      const path=join(root,project.name,candidate.name);
-      if(existsSync(path)&&readFileSync(path,'utf8').includes('target/interop-'))
+  const visit=(at:string)=>{
+    for(const entry of readdirSync(at,{withFileTypes:true})){
+      if(!moduleMemberDirectory(entry.name))continue;
+      const path=join(at,entry.name);
+      if(entry.isDirectory())visit(path);
+      else if(entry.isFile()&&INTEROP_SCRATCH_INPUTS.some(input=>input.member===entry.name)&&readFileSync(path,'utf8').includes('target/interop-'))
         problems.push(normalize(relative(root,path))+': legacy interop scratch default; use target/interop/<project>');
     }
-  }
+  };visit(root);
   return problems;
 }
 
