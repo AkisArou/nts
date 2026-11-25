@@ -1503,6 +1503,27 @@ the tooling strict checker owns the source's type checking.
   tree, the gate's tree and target, a records tree for each part, the bench
   tree, its state, the count's file and the runs. A tree's cargo target is its own: two trees
   sharing one run each other's compiled crates.
+- **Service targets keep only the incremental state recent builds use.**
+  rustc keys a unit's incremental directory by a hash of its `-C metadata` and
+  collects sessions only inside it, so a unit whose hash changes leaves its
+  old directory behind for good. The landing service, after each answered
+  change and still under its drain lock, and the full check, after each
+  measured run and still under its gate-tree lock, retain `nts-dev` and
+  `clippy/debug` incremental state in their own targets
+  (`tooling/gate/incremental-retention.ts`). Retention takes cargo's own
+  profile locks without waiting (`.cargo-lock`, `.cargo-build-lock` and
+  `.cargo-artifact-lock`, as cargo 1.99 holds them for a whole build): a
+  build in progress skips it, and a build that arrives during it waits. It
+  removes a crate directory that none of the last 20 compiling builds
+  touched, counted from the high-water marks in the profile's
+  `.nts-incremental.json`, and in a kept one every session but the newest
+  finalized, each only once its own `s-*.lock` is free. A missing or corrupt
+  state knows no builds and evicts nothing. Retention never decides a
+  verdict: a failure is a logged line. The hourly count reports each
+  retained profile's size, crate directories and last retention outcome,
+  red above its bound (`INCREMENTAL_BOUNDS`: 8 GiB for `nts-dev`, 4 GiB for
+  `clippy`). Pool trees and pins are not covered: an agent deletes its own
+  tree's incremental state, and reclamation reclaims free trees' output.
 - **Gate binaries stay while their runs hold them.** `tooling/gate/binary-pins.ts`
   publishes immutable executables in `~/.cache/nts-gate/bin-v2/<sha256>` and records
   each run's holder under that folder's `holders/`. The folder digest covers
@@ -2014,6 +2035,13 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Service incremental state is an LRU counted in builds.** No current-unit
+  set can be read back from a target (the directory name is a hash of
+  rustc's), so the landing and full-check targets evict incremental crate
+  directories none of the last 20 compiling builds touched, under cargo's
+  own profile locks, and report the size against a bound in the hourly count
+  ([log](records/notebooks/decisions-log.md#service-incremental-state-is-retained-by-builds-11-25)).
 
 - **Pool preparation validates every registered lease.** Selected-tree
   intents leave unrelated admissions eligible. Partial Git registrations are

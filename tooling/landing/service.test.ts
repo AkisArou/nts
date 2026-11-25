@@ -205,6 +205,19 @@ test("a landing whose records are all current reports their refresh requests apa
   assert.match(r.message, /; 1 native refresh request\(s\), answered by the full check after landing$/);
 });
 
+test("retention runs between runs, after each answer, and a failing retention never changes a landing", async t => {
+  const order: string[] = [];
+  const f = service(t, { retain: () => { order.push("retain"); throw Error("fixture retention failed"); } });
+  const run = f.config.runSteps;
+  f.config.runSteps = async options => { order.push("run"); return run(options); };
+  const a = f.task("fix/a", { "src/a.txt": "a\n" }), b = f.task("fix/b", { "src/b.txt": "b\n" });
+  f.submit("fix/a", a.sha); f.submit("fix/b", b.sha);
+  const drained = await drain(f.config);
+  assert.deepEqual(drained.answered.map(r => r.state), ["landed", "landed"]);
+  assert.deepEqual(order, ["run", "retain", "run", "retain"]);
+  assert.equal(f.logs.filter(line => /^incremental retention failed: Error: fixture retention failed; [0-9a-f]{12}'s answer stands$/.test(line)).length, 2, f.logs.join("\n"));
+});
+
 test("a revert from the full check is checked before the changes waiting", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" }, { push: false });

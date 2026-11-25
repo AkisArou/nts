@@ -7,7 +7,7 @@ import {generatedJavaScript} from '../gate/generated-javascript.ts';
 // step unless the policy lets that platform stay unrun, and a summary of
 // another commit or from a non-canonical environment vouches for nothing.
 import assert from "node:assert/strict";
-import { chmodSync,existsSync,mkdirSync,mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync,existsSync,mkdirSync,mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -390,6 +390,38 @@ export function toolingSlice(env=process.env){const value=env.NTS_TOOLING_SLICE;
   assert.equal(fallback.verdict,"green",JSON.stringify(fallback.reasons));
   assert.equal(readFileSync(join(fallback.run,"observed-rank"),"utf8"),"full-check");
   assert.ok(lines.includes(`${predates.slice(0,12)} predates the culprit-search rank; measuring it at full-check`),lines.join("\n"));
+});
+
+test("after a measured run, still under its gate-tree lock, the full check retains its target's incremental state and the verdict stands",t=>{
+  const repo=scratchRepo(t,"full-check-retention"),paths=layout(repo.dir),installations=join(repo.dir,"installed");
+  nodeInstallation(installations,"99.1.0",join(repo.dir,"node-launches.jsonl"));
+  // The run's build leaves two sessions of one unit; rustc reads only the newer.
+  const script=`#!/bin/sh
+if [ -n "$NTS_GATE_SETUP_ONLY" ];then
+  mkdir -p "$NTS_GATE_TREE"
+  git archive "$1" | tar -x -C "$NTS_GATE_TREE"
+  exit 0
+fi
+[ "$1" = --environment-ready ] && shift
+profile="$CARGO_TARGET_DIR/nts-dev"
+mkdir -p "$profile/incremental/unit-0abc/s-a-b-c" "$profile/incremental/unit-0abc/s-d-e-f"
+touch "$profile/.cargo-lock" "$profile/incremental/unit-0abc/s-a-b.lock" "$profile/incremental/unit-0abc/s-d-e.lock"
+touch -d @1700000000 "$profile/incremental/unit-0abc/s-a-b-c"
+node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";writeFileSync(join(process.env.NTS_GATE_RUN_DIR,"summary.json"),JSON.stringify({identities:{commit:process.argv[1]},environment:{canonical:true},steps:[{name:"tooling",verdict:"PASS"}]}));' "$1"
+`;
+  candidateEnvironmentFixture(repo.root);
+  repo.git(['add','-f','tooling']);repo.git(['commit','-qm','private environment']);
+  const commit=repo.commit({".tool-versions":"nodejs 99.1.0\n","tooling/gate/pinned.sh":script},"retention run");
+  const {slice}=fixtureToolingSlice(t);
+  const lines:string[]=[],gate=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,owned:{...ownMemory(join(repo.dir,'machine')),NTS_TOOLING_SLICE:slice},env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  const result=gate.run(commit,["tooling"],"retention");
+  assert.equal(result.verdict,"green",JSON.stringify(result.reasons)+"\n"+lines.join("\n"));
+  const unit=join(paths.target,"nts-dev/incremental/unit-0abc");
+  assert.deepEqual(readdirSync(unit).sort(),["s-d-e-f","s-d-e.lock"]);
+  assert.ok(lines.some(line=>line.startsWith(`incremental retention ${join(paths.target,"nts-dev")}: retained: kept 1 crate dirs, removed 0 and 1 older sessions`)),lines.join("\n"));
+  assert.ok(lines.includes(`incremental retention ${join(paths.target,"clippy","debug")}: absent`),lines.join("\n"));
+  // The gate-tree lock its builds ran under is free again once retention is done.
+  const lock=GateResource.tryAcquire(paths.tree+".lock");assert.ok(lock);lock.close();
 });
 
 test('red full-check runs use the measured environment and release resolution sessions while the controller lives',async t=>{

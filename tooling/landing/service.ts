@@ -17,7 +17,10 @@ import {withStateWrite} from '../gate/state-file.ts';
 //   5. push main, give the task's pool tree back at the new main, and delete
 //      the task's branch here and on the remote. A tree something still uses,
 //      or with work left in it, stays on its branch, and the pool's next
-//      upkeep resets it once neither holds (pool.ts's release).
+//      upkeep resets it once neither holds (pool.ts's release);
+//   6. between runs, evict the target's incremental state that the last
+//      builds did not use, under cargo's own profile locks
+//      (gate/incremental-retention.ts).
 //
 // One service drains at a time (the owner lock); a crash puts the change it
 // was checking back in front, or, when main already moved to it, finishes
@@ -48,6 +51,8 @@ import {DiskCapacity} from '../gate/disk-capacity.ts';
 import {readDiskBuildRefusal,type DiskBuildRefusal} from '../gate/step-result.ts';
 import {DiskReadinessWake} from './disk-readiness.ts';
 import {isAbsolute,relative,resolve,sep} from 'node:path';
+import {retainTarget} from '../gate/incremental-retention.ts';
+import {hostObservations} from '../gate/host-observations.ts';
 
 export const KEEP_DAYS = 3;
 
@@ -62,6 +67,8 @@ export type Config = {
   runSteps: (options: RunOptions) => Promise<Ran>;
   watchWithdrawals:typeof createWithdrawalWatch;
   log: (line: string) => void;
+  /** Between runs: keep the target's incremental state to what recent builds use (incremental-retention.ts). */
+  retain?: () => void;
   /** Whether the service should stop after this landing, to run its own new code. */
   restartAfter?: (paths: string[]) => boolean;
 };
@@ -127,6 +134,9 @@ export async function drain(config: Config): Promise<Drained> {
       finally{cancellation.close();currentHold=undefined;}
       answered.push(result);
       config.log(`${result.state.toUpperCase()} ${short(entry.sha)}: ${result.message}`);
+      // Between runs, still under the drain lock every landing build runs in.
+      // Retention never decides a landing: a failure is a log line.
+      try { config.retain?.(); } catch (error) { config.log(`incremental retention failed: ${String(error)}; ${short(entry.sha)}'s answer stands`); }
       if (result.state === "landed" && result.base && result.tip && config.restartAfter?.(changedPaths(git(config), result.base, result.tip))) {
         queue.setStatus({ state: "idle", message: "restarting to run the code that just landed" });
         return { state: "restart", answered };
@@ -405,6 +415,7 @@ export function machineConfig(root: string, select: Config["select"], log: Confi
     home, root, remote: "origin", tree, target, pool: existsSync(POOL_HOME) ? new Pool(POOL_HOME, { root }, linkInputs(root)) : null,
     select, holdSelection: (tip, signal) => holdSelection("service", tip, target, { ...(signal ? { signal } : {}), report: log }),
     prepare: tip => prepareTree(root, tree, tip), runSteps: runLanding,watchWithdrawals:createWithdrawalWatch, log, restartAfter: ownCode,
+    retain: () => { retainTarget(target, { host: hostObservations(process.env), log }); },
   };
 }
 

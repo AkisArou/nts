@@ -47,6 +47,9 @@ import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
 import {acceptedRevisionData,acceptedRevision,type AcceptedRevision} from "../gate/accepted-revision-data.ts";
 import {workerPresence} from '../landing/pool-presence.ts';
+import {landingLayout} from '../landing/layout.ts';
+import {layout as fullCheckLayout} from './layout.ts';
+import {INCREMENTAL_BOUNDS,incrementalUsage,readRetentionState,retainedProfiles,type RetainedProfile,type RetentionOutcome} from '../gate/incremental-retention.ts';
 
 const RECORD_DIRECTORY=acceptedRevisionData(new URL('../../docs/records/',import.meta.url));
 const PLAN=acceptedRevisionData(new URL('../../docs/plan.md',import.meta.url));
@@ -103,6 +106,8 @@ export type CountInput = {
   now: number;
   /** Supplied filesystem observation for deterministic directory-walk controls. */
   folderStat?: FolderStat;
+  /** Supplied incremental bounds for fixture controls; incremental-retention.ts's INCREMENTAL_BOUNDS otherwise. */
+  incrementalBounds?: Readonly<Record<RetainedProfile, number>>;
   /** Complete supplied pin owner observation for deterministic upkeep controls. */
   pinOwnerObservation?:PinOwnerObservation;
 };
@@ -483,6 +488,36 @@ function targetLines(input: CountInput, keep: Record<string, Keep>, context: Con
   }
 }
 
+const gib = (bytes: number) => (bytes / 2 ** 30).toFixed(2);
+function lastRetention(last: RetentionOutcome | undefined): string {
+  if (!last) return "no retention recorded";
+  const at = new Date(last.at).toISOString();
+  if (last.state !== "retained") return `last retention ${at}: ${last.state}${last.reason ? ` (${last.reason})` : ""}`;
+  return `last retention ${at}: kept ${last.keptDirs}, removed ${last.removedDirs} dirs and ${last.removedSessions} sessions (${gib(last.removedBytes)} GiB)`;
+}
+/**
+ * The incremental state of the declared targets whose owners retain it (the
+ * landing service's and the full check's, incremental-retention.ts): its size
+ * against its bound, with the last retention outcome. Over the bound is red,
+ * since it means retention stopped working.
+ */
+function incrementalLines(input: CountInput, keep: Record<string, Keep>, context: Context, red: string[], notes: string[]): void {
+  const retained = new Set([landingLayout(join(input.cache, "nts-landing")).target, fullCheckLayout(input.cache).target]);
+  for (const declared of declaredTargets(input.cache, keep, input.folderStat)) {
+    if (!retained.has(declared.target) || !existsSync(declared.target)) continue;
+    for (const { name, profile } of retainedProfiles(declared.target)) {
+      if (!existsSync(join(profile, "incremental"))) continue;
+      try {
+        const usage = incrementalUsage(profile), bound = (input.incrementalBounds ?? INCREMENTAL_BOUNDS)[name];
+        const line = `${display(join(profile, "incremental"), context)}: ${name} incremental ${gib(usage.bytes)} GiB of its ${gib(bound)} GiB bound, ${usage.dirs} crate dirs; ${lastRetention(readRetentionState(profile).last)}`;
+        (usage.bytes > bound ? red : notes).push(line);
+      } catch (error) {
+        notes.push(`${display(join(profile, "incremental"), context)}: incremental state unmeasured: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+}
+
 function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[],notes:string[],notices:string[]): void {
   const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan, folderStat: input.folderStat,
     issues:input.issues,recordCitations:input.recordCitations };
@@ -494,6 +529,7 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
     else red.push(...judgeFolder(entry, rule, context, removable,notes,notices));
   }
   targetLines(input, keep, context, red, notes, notices);
+  incrementalLines(input, keep, context, red, notes);
   red.push(...nodeTestRoots(input, context));
   // Legacy writers have no leases. No age or absence of a new holder proves
   // that an old runner has ended, so upkeep reports these without sweeping.

@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {fileURLToPath} from 'node:url';
 import { test, type TestContext } from "node:test";
+import {CARGO_PROFILE_LOCKS,retainIncremental} from '../gate/incremental-retention.ts';
 import { count, declaredTargets, targetInventory, poolWorktree, populated, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
 import {scratchRepo} from '../landing/scratch-repo.ts';
 import {acceptedRevision} from '../gate/accepted-revision-data.ts';
@@ -703,6 +704,25 @@ test("each pool slot's target is judged against that slot's own build policy; a 
   // Control: the same slot, its task gone, is free and red.
   const free=input(t,{cache});free.worktrees=free.worktrees.filter(tree=>tree.path!==one);
   assert.deepEqual(judged(free),{red:[...oneLines,...twoLines],notices:[]});
+});
+
+test("the retained service targets' incremental state is reported against its bound, with the last retention, and red over it",t=>{
+  const cache=cacheFixture(t),keep:Record<string,Keep>={...TARGET_KEEP,'nts-landing':{...KEEP['nts-landing']!,targets:{target:'tree'}},'nts-full-check':{...KEEP['nts-full-check']!,targets:{target:'tree'}}};
+  const crate=(target:string,profile:string,bytes:number)=>{const dir=join(cache,target,profile,'incremental','unit-0abc','s-a-b-c');mkdirSync(dir,{recursive:true});writeFileSync(join(dir,'work.o'),'x'.repeat(bytes));};
+  crate('nts-landing/target','nts-dev',64*1024);crate('nts-landing/target','clippy/debug',4096);crate('nts-full-check/target','nts-dev',4096);
+  // Control: a declared target no owner retains has no line, whatever it holds.
+  crate('nts-gate/target','nts-dev',64*1024);
+  for(const name of CARGO_PROFILE_LOCKS)writeFileSync(join(cache,'nts-landing/target/nts-dev',name),'');
+  retainIncremental(join(cache,'nts-landing/target/nts-dev'),{host:{now:()=>0,wallNow:()=>NOW}});
+  const lines=(bound:number)=>{const result=count(input(t,{cache,incrementalBounds:{'nts-dev':bound,clippy:bound}}),keep);
+    const mine=(rows:string[])=>rows.filter(line=>line.includes(' incremental '));return {red:mine(result.red),notes:mine(result.notes)};};
+  const under=lines(2**30);
+  assert.deepEqual(under.red,[]);
+  assert.deepEqual(under.notes.map(line=>line.split(':')[0]),['~/.cache/nts-landing/target/nts-dev/incremental','~/.cache/nts-landing/target/clippy/debug/incremental','~/.cache/nts-full-check/target/nts-dev/incremental']);
+  assert.match(under.notes[0]!,/nts-dev incremental 0\.00 GiB of its 1\.00 GiB bound, 1 crate dirs; last retention .*: kept 1, removed 0 dirs and 0 sessions/);
+  assert.match(under.notes[1]!,/no retention recorded$/);
+  const over=lines(32*1024);
+  assert.deepEqual(over.red.map(line=>line.split(':')[0]),['~/.cache/nts-landing/target/nts-dev/incremental'],'only the profile over its bound is red');
 });
 
 test('service and pin targets report their obsolete profiles in red',t=>{

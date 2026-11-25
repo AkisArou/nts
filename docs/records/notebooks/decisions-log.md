@@ -4895,3 +4895,20 @@ and readiness, using transaction counts rather than elapsed time; the existing
 completes-during-preparation control remains. The contract is in
 [workflow](../../workflow.md#the-machine); the owner is
 `tooling/gate/disk-preparation.ts`.
+
+
+## Service incremental state is retained by builds (11-25)
+
+#1022. On 11-25 the landing target held 29 GB of `nts-dev/incremental` in 1,031
+crate directories and 7.6 GiB of `clippy/debug/incremental` in 1,139, the
+full check's 10.2 and 2.4 GiB; one generation of current units is about 61
+directories (2.3 GiB with one session each). rustc keys each unit's directory
+by its StableCrateId and collects only inside it; cargo 1.99 has no target-dir
+collector, so orphans from metadata changes accumulate. The current set cannot
+be read back from fingerprints or artifacts, so retention is least-recently
+used, counted in compiling builds (20), holding cargo's profile locks, with
+each session's rustc lock taken before removal, rustc's own collection rule.
+The bound in the count makes a stopped retention red. Pool trees and pins are
+out of scope. The contract is in [workflow](../../workflow.md#the-machine); the
+owner is `tooling/gate/incremental-retention.ts`. Measurement:
+`~/.cache/nts-scratch/1022/measurement-20261125.md`.

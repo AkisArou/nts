@@ -17,6 +17,7 @@ import {nodeToolchain} from "../gate/toolchain.ts";
 import {candidateCommand} from '../landing/candidate-environment.ts';
 import {launcherEnvironment} from '../landing/run.ts';
 import {GateResource} from '../gate/gate-resource.ts';
+import {retainTarget} from '../gate/incremental-retention.ts';
 import {fullOwned} from '../census/full-plan.ts';
 import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
 import { LANDING_HOME } from "../landing/queue.ts";
@@ -308,7 +309,14 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(bounds.stall_s), bounds.lifecycle_s === null ? "none" : String(bounds.lifecycle_s),
         bounds.cpu_s === null ? "none" : String(bounds.cpu_s), run, slice, placed] });
       });
-    } finally { if (out !== undefined) closeSync(out); lock.close(); }
+    } finally {
+      // After the run, still under the gate-tree lock its builds ran in:
+      // evict incremental state the last builds did not use. It never
+      // throws, so the run's verdict stands whatever it finds.
+      try { retainTarget(layout.target, { host: hostObservations({ ...options.env ?? process.env, ...options.owned }), log }); }
+      catch (error) { log(`incremental retention failed: ${String(error)}; the run's verdict stands`); }
+      finally { if (out !== undefined) closeSync(out); lock.close(); }
+    }
   };
   const measure = (commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord, rank: Priority = FULL_CHECK_RANK): Measurement => {
     if (!steps.length) throw new Error("no steps to run: an empty NTS_GATE_STEPS is every step");
