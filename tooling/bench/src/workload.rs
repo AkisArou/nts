@@ -405,6 +405,64 @@ mod tests {
         ),
     ];
 
+    /// The producer's serialization, which `workload-identity.ts` encodes.
+    const SERIALIZATION: &str = include_str!("../workload-serialization.json");
+
+    /// Every answer, exhaustively: a new variant fails to compile here, and
+    /// once listed it changes the serialization the identity contract pins.
+    fn every_answer() -> [Answer; 2] {
+        let answers = [Answer::Returned, Answer::Promised];
+        for answer in answers {
+            match answer {
+                Answer::Returned | Answer::Promised => {}
+            }
+        }
+        answers
+    }
+
+    #[test]
+    fn producer_serialization_is_the_identity_contract() -> Result<()> {
+        let contract: serde_json::Value = serde_json::from_str(SERIALIZATION)?;
+        let mut produced = serde_json::Map::new();
+        produced.insert(
+            "whole-program".into(),
+            serde_json::to_value(Workload::whole_program())?,
+        );
+        for answer in every_answer() {
+            // A struct literal: a new field must be given here, and then
+            // appears in the serialization compared below.
+            let workload = Workload {
+                roots: vec!["work".into(), hir::lower::MODULE_INIT.into()],
+                numeric: Some(Numeric {
+                    callee: "work".into(),
+                    seed: 3.0,
+                    answer,
+                }),
+            };
+            produced.insert(format!("{answer:?}"), serde_json::to_value(&workload)?);
+        }
+        assert_eq!(
+            contract["produced"],
+            serde_json::Value::Object(produced),
+            "the Workload serialization changed: update tooling/bench/workload-serialization.json \
+             and decide the new form's identity in tooling/bench/workload-identity.ts"
+        );
+        // Workloads recorded before a defaulted field existed still read as their form.
+        for (name, legacy) in contract["legacy"]
+            .as_object()
+            .context("legacy serializations")?
+        {
+            let read: Workload = serde_json::from_value(legacy["serialized"].clone())?;
+            let form = legacy["reads-as"].as_str().context("legacy form")?;
+            assert_eq!(
+                serde_json::to_value(&read)?,
+                contract["produced"][form],
+                "{name}"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn source_contract_and_driver_controls() -> Result<()> {
         let repository = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

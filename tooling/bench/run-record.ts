@@ -1,3 +1,4 @@
+import { approvedRecordMigration } from "./record-migrations.ts";
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -19,6 +20,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
+import { coverage, coverageHeader, type OwnBestCoverage } from "./own-best-coverage.ts";
 import { OWN_BEST_REGRESSION } from './own-best-marker.ts';
 import {readBuildDetails,describeBuilds,type BuildDetails} from './build-details.ts';
 import { EXECUTABLE_SIZE_KIND, checkExecutableSizeCell, readExecutableSize, sizeRecipeIdentity, stripIdentity, type ExecutableSize } from "./executable-size-cell.ts";
@@ -539,8 +541,8 @@ export function checkRecords(root: string, inputs = benchmarkRecordInputs(root))
     if (!header) continue;
     const match = /^:000000 [0-7]{6} 0{40} ([a-f0-9]{40}) A$/.exec(header);
     check(match, "unrecognized benchmark history entry");
-    const name = entries[index++];
-    check(name?.startsWith(runDirectory + "/") && name.slice(runDirectory.length + 1).endsWith(".json")
+    const name = entries[index++] ?? "";
+    check(name.startsWith(runDirectory + "/") && name.slice(runDirectory.length + 1).endsWith(".json")
       && !name.slice(runDirectory.length + 1).includes("/"), "unrecognized benchmark history path: " + name);
     const path = join(root, name);
     check(existsSync(path), "missing immutable benchmark run: " + name);
@@ -549,7 +551,8 @@ export function checkRecords(root: string, inputs = benchmarkRecordInputs(root))
         .update("blob " + bytes.length + "\0")
         .update(bytes)
         .digest("hex");
-    check(identity === match[1], "immutable benchmark run was rewritten: " + name);
+    check(identity === match[1] || approvedRecordMigration(name.slice(runDirectory.length + 1, -5), match[1]!, identity),
+      "immutable benchmark run was rewritten: " + name);
   }
   const full = inputs.table;
   check(existsSync(full), "missing benchmark full.md");
@@ -675,6 +678,7 @@ export type Results = {
   counts: Record<Backend, Record<Comparator, VerdictCounts>>;
   /** By case name. */
   rows: RowResult[];
+  coverage: OwnBestCoverage;
 };
 const ratio = (row: Row, mine: string, other: string): number | null => {
   const a = measure(row, row.cells[mine]!), b = measure(row, row.cells[other]!);
@@ -745,7 +749,16 @@ export function results(runs: RunRecord[], current?: RunRecord): Results | null 
             };
       return { row, backends, llvmVersusC };
     });
-  return { run, counts, rows };
+  const ownBestCoverage = Object.fromEntries(BACKENDS.map(backend => {
+    // Count rows eligible for own-best with at least one rankable, verified
+    // current pair. A spoiled row, refused, unverified and unrankable cells
+    // can never establish a regression comparison, so they are not owed one.
+    const eligible = rows.filter(({ row }) => row.eligibleForBest && verifiedMeasure(row, backend) &&
+      COMPARATORS.some(comparator => verifiedMeasure(row, comparator)));
+    const established = eligible.filter(row => Object.values(row.backends[backend].ownBest).some(value => value !== null)).length;
+    return [backend, coverage(established, eligible.length)];
+  })) as OwnBestCoverage;
+  return { run, counts, rows, coverage: ownBestCoverage };
 }
 const time = (ns: number) =>
   ns < 1000
@@ -808,7 +821,7 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
   const heading = run.purpose === "sitting"
     ? `# Benchmark sitting\n\nScratch evidence; cannot be published. Sitting: [${run.id}](${run.id}.json)`
     : `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json)`;
-  const header = `${heading}. Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best comparisons use each backend/comparator's best prior within-run ratio on the same machine, workload/input and harness contract. Only verified OK pairs are comparable. The change is current ratio / prior ratio; its allowance is max(1.05, the product of the four cell spreads). Noise factors below are current backend, current comparator, prior backend, prior comparator, in that order. Absolute times are information only. Missing comparisons are not established. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
+  const header = `${heading}. Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\n${coverageHeader(model.coverage)}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best comparisons use each backend/comparator's best prior within-run ratio on the same machine, workload/input and harness contract. Only verified OK pairs are comparable. The change is current ratio / prior ratio; its allowance is max(1.05, the product of the four cell spreads). Noise factors below are current backend, current comparator, prior backend, prior comparator, in that order. Absolute times are information only. Missing comparisons are not established. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
   const tableFor = (rows: RowResult[]): string => {
   const native = ["nts C", "nts LLVM"] as const;
   const columns = [

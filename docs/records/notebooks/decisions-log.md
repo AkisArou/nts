@@ -5168,3 +5168,27 @@ approved #1078's design on 11-27:
 
 Pruning stays a hand-run tool on issues named by number. It is not a sweep
 kind of the full check.
+
+
+## Semantic benchmark identities and visible own-best coverage (11-25)
+
+2026-11-25, #1032. Workload identity is an explicit validated semantic encoding,
+independent of producer field order and the presence of default values. The
+omitted or Returned answer retains the original synchronous encoding; Promised
+has a distinct identity. Unknown fields and answer values refuse until their
+identity semantics are decided. New observations retain the workload declaration.
+
+Own-best coverage is established/total per backend over current verified,
+rankable backend/comparator rows. At least one compatible prior comparison
+establishes a row. Coverage below 80% is red; no eligible rows is unavailable.
+The nightly reader reports missing, red or unavailable coverage independently
+of slower rows, and status preserves the per-backend counts.
+
+The owner approved migrating the published 11-24 record through Signalbox
+question 1032-record-migration ("Yes, migrate the 11-24 record"). The 11-26
+and 11-27 records, published by the unfixed function before the fix landed,
+are migrated the same way (Signalbox bench-identity-migration-1032-20261127). The migration
+recomputes identities from journal-derived workload declarations and the
+record's original source captures, checks the original identities and matching
+journal captures, and re-renders the report. The immutability checker permits
+only the exact original/replacement blob transition recorded in its ledger.

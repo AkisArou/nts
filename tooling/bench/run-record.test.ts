@@ -1,3 +1,4 @@
+import { coverage, readCoverage } from "./own-best-coverage.ts";
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
@@ -505,4 +506,28 @@ test("the real check CLI detects a one-change renderer drift", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+
+test("own-best coverage counts eligible rows per backend and makes identity collapse red", () => {
+  const prior = fixture("coverage-prior"), current = fixture("coverage-current", "2026-10-30T12:00:00Z");
+  const measured = results([prior, current])!;
+  assert.deepEqual(measured.coverage["nts C"], coverage(2, 2));
+  assert.deepEqual(readCoverage(renderFull([prior, current])), measured.coverage);
+  current.rows[0]!.workloadIdentity = "c".repeat(64);
+  assert.deepEqual(results([prior, current])!.coverage["nts C"], coverage(1, 2));
+  current.rows[1]!.workloadIdentity = "d".repeat(64);
+  assert.deepEqual(results([prior, current])!.coverage["nts C"], { established: 0, total: 2, verdict: "red" });
+  // A row ineligible for own-best (spoiled) can never be established, so it is not owed history.
+  const spoiled = structuredClone(current); spoiled.rows[0]!.eligibleForBest = false;
+  assert.deepEqual(results([prior, spoiled])!.coverage["nts C"], { established: 0, total: 1, verdict: "red" });
+  current.rows[0]!.cells["nts C"] = { ...ok(), status: "REFUSED", nanoseconds: null, spread: null, checksum: null, verified: false, reason: "manufactured coverage-control refusal" };
+  assert.deepEqual(results([prior, sealRun(current)])!.coverage["nts C"], coverage(0, 1));
+  assert.deepEqual(results([prior, current])!.coverage["nts LLVM"], coverage(0, 2));
+  current.rows[1]!.cells["nts C"]!.verified = false;
+  assert.deepEqual(results([prior, current])!.coverage["nts C"], { established: 0, total: 0, verdict: "unavailable" });
+  assert.deepEqual(coverage(4, 5), { established: 4, total: 5, verdict: "green" });
+  assert.equal(coverage(79, 100).verdict, "red");
+  assert.equal(readCoverage("historical report without coverage"), null);
+  assert.throws(() => readCoverage(renderFull([prior, current]).replace('"verdict":"red"', '"verdict":"green"')), /coverage verdict/);
 });

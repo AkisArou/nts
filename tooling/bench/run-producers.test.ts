@@ -1,3 +1,6 @@
+import { encodeWorkload, decodeWorkload, semanticWorkload } from "./workload-identity.ts";
+import { readFileSync } from "node:fs";
+import { fileInput } from "../gate/reader-inputs/main.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { COLUMNS, COMPARATORS, POLICY, type RunRecord, type Cell } from "./run-record.ts";
@@ -32,7 +35,7 @@ function raw() {
     measured: [
       {
         shown: "a",
-        workload: { seed: 1 },
+        workload: { numeric: { callee: "work", seed: 1 }, roots: ["work", "module#init"] },
         source_capture: null,
         results: [measurement, null, null, measurement, null, null],
         absences: {
@@ -121,16 +124,16 @@ test("captured identity is order independent, input-bit exact and independent of
     libraries: [{ path: "lib", digest: "c".repeat(32) }],
     drivers: [],
   };
-  const identity = workloadIdentity(capture, { seed: -0 });
+  const identity = workloadIdentity(capture, { numeric: { callee: "work", seed: -0 }, roots: ["work", "module#init"] });
   assert.equal(
     identity,
     workloadIdentity(
       { ...capture, workload: [...capture.workload].reverse(), libraries: [] },
-      { seed: -0 },
+      { numeric: { callee: "work", seed: -0 }, roots: ["work", "module#init"] },
     ),
   );
-  assert.notEqual(identity, workloadIdentity(capture, { seed: 0 }));
-  assert.notEqual(identity, workloadIdentity(capture, { seed: Number.MIN_VALUE }));
+  assert.notEqual(identity, workloadIdentity(capture, { numeric: { callee: "work", seed: 0 }, roots: ["work", "module#init"] }));
+  assert.notEqual(identity, workloadIdentity(capture, { numeric: { callee: "work", seed: Number.MIN_VALUE }, roots: ["work", "module#init"] }));
   assert.notEqual(
     identity,
     workloadIdentity(
@@ -138,7 +141,7 @@ test("captured identity is order independent, input-bit exact and independent of
         ...capture,
         workload: [{ ...capture.workload[0], rewritten_by: "transform-v2" }, capture.workload[1]],
       },
-      { seed: -0 },
+      { numeric: { callee: "work", seed: -0 }, roots: ["work", "module#init"] },
     ),
   );
   assert.equal(workloadIdentity(null, 0), null);
@@ -177,5 +180,54 @@ test("a workload-owned declaration mutation cannot borrow an old own-best", () =
     drivers: [],
   };
   const changed = { ...capture, workload: [{ ...declaration, digest: "b".repeat(32) }] };
-  assert.notEqual(workloadIdentity(capture, { seed: 1 }), workloadIdentity(changed, { seed: 1 }));
+  assert.notEqual(workloadIdentity(capture, { numeric: { callee: "work", seed: 1 }, roots: ["work", "module#init"] }), workloadIdentity(changed, { numeric: { callee: "work", seed: 1 }, roots: ["work", "module#init"] }));
+});
+
+
+test("defaulted answer retains identity while semantic changes and unknown fields cannot hide", () => {
+  const capture = { algorithm: "xxh3-128-le-checked-utf8-v1",
+    workload: [{ path: "nts-workspace:///case.ts", digest: "a".repeat(32), rewritten_by: null }], drivers: [] };
+  const legacy = { roots: ["work", "module#init"], numeric: { callee: "work", seed: -0 } };
+  const explicit = { ...legacy, numeric: { ...legacy.numeric, answer: "Returned" } };
+  const identity = workloadIdentity(capture, legacy);
+  assert.equal(workloadIdentity(capture, explicit), identity, "adding a defaulted answer preserves the old identity");
+  assert.equal(workloadIdentity(capture, { numeric: { answer: "Returned", seed: -0, callee: "work" }, roots: legacy.roots }), identity, "producer field order has no meaning");
+  assert.notEqual(workloadIdentity(capture, { ...legacy, numeric: { ...legacy.numeric, answer: "Promised" } }), identity);
+  assert.notEqual(workloadIdentity(capture, { ...legacy, numeric: { ...legacy.numeric, callee: "different" } }), identity);
+  assert.notEqual(workloadIdentity(capture, { ...legacy, roots: [...legacy.roots].reverse() }), identity);
+  assert.notEqual(workloadIdentity({ ...capture, drivers: [{ path: "driver", digest: "b".repeat(32) }] }, legacy), identity);
+  assert.throws(() => workloadIdentity(capture, { ...legacy, futureDefault: false }), /semantic workload field/);
+  assert.throws(() => workloadIdentity(capture, { ...legacy, numeric: { ...legacy.numeric, futureDefault: false } }), /semantic workload field/);
+  assert.throws(() => workloadIdentity(capture, { ...legacy, numeric: { ...legacy.numeric, answer: "Future" } }), /unknown workload answer/);
+});
+
+
+test("retained workload declarations survive JSON publication with exact input bits", () => {
+  const input = raw(); input.measured[0]!.workload.numeric.seed = -0;
+  const recorded = JSON.parse(JSON.stringify(fromNts(meta(), input)));
+  const retained = recorded.rows[0].conditions.workload;
+  assert.equal(retained, encodeWorkload(input.measured[0]!.workload));
+  assert.deepEqual(decodeWorkload(retained), input.measured[0]!.workload);
+});
+
+/** The producer's own serialization, pinned by tooling/bench/src/workload.rs's identity-contract test. */
+const producerSerialization = fileInput(new URL("./workload-serialization.json", import.meta.url));
+test("every workload form the producer emits has a decided identity", () => {
+  const contract = JSON.parse(readFileSync(producerSerialization, "utf8")) as {
+    produced: Record<string, unknown>; legacy: Record<string, { serialized: unknown; "reads-as": string }>;
+  };
+  // A new producer form is listed here only together with its identity decision below.
+  assert.deepEqual(Object.keys(contract.produced).sort(), ["Promised", "Returned", "whole-program"]);
+  for (const [name, workload] of Object.entries(contract.produced))
+    assert.doesNotThrow(() => semanticWorkload(workload), name);
+  const capture = { algorithm: "xxh3-128-le-checked-utf8-v1",
+    workload: [{ path: "nts-workspace:///case.ts", digest: "a".repeat(32), rewritten_by: null }], drivers: [] };
+  const identity = (workload: unknown) => workloadIdentity(capture, workload);
+  const before = contract.legacy["before-answer"]!;
+  assert.equal(before["reads-as"], "Returned");
+  // Returned keeps the bytes it had before the answer field existed.
+  assert.equal(encodeWorkload(semanticWorkload(contract.produced.Returned)), encodeWorkload(before.serialized));
+  assert.equal(identity(contract.produced.Returned), identity(before.serialized));
+  assert.notEqual(identity(contract.produced.Promised), identity(contract.produced.Returned));
+  assert.notEqual(identity(contract.produced["whole-program"]), identity(contract.produced.Returned));
 });

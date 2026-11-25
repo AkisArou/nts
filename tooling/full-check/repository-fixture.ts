@@ -1,3 +1,4 @@
+import { coverage, coverageHeader, type OwnBestCoverage } from "../bench/own-best-coverage.ts";
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 // A scratch repository with a local bare origin, and a stand-in gate that
 // reads its verdicts from the commit it measures: a step FAILs at a commit
@@ -109,7 +110,7 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
  * measurement lock does not admit the first attempts for, one each;
  * `noRecord` runs and keeps nothing.
  */
-export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?: string[]; noRecord?: boolean } = {}): Bench & { calls: string[] } {
+export function stubBench(options: { slower?: string[]; coverage?: OwnBestCoverage | null; stray?: boolean; refuse?: string[]; noRecord?: boolean } = {}): Bench & { calls: string[] } {
   const calls: string[] = [], refusals = [...options.refuse ?? []];
   const bench = (tree: string, run: string): BenchAttempt => {
     calls.push(tree);
@@ -123,7 +124,7 @@ export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?
     const git = new Git(tree, testEnvironment());
     const id = `2026-11-07-${git.run(["rev-parse", "--short=12", "HEAD"])}-${calls.length}`;
     mkdirSync(join(tree, RUNS), { recursive: true });
-    writeFileSync(join(tree, RUNS, `${id}.json`), `${JSON.stringify({ id, slower: options.slower ?? [] })}\n`);
+    writeFileSync(join(tree, RUNS, `${id}.json`), `${JSON.stringify({ id, slower: options.slower ?? [], coverage: options.coverage === undefined ? { "nts C": coverage(1, 1), "nts LLVM": coverage(1, 1), "nts JVM": coverage(1, 1) } : options.coverage })}\n`);
     renderStandIn(tree);
     const paths = [`${RUNS}/${id}.json`, FULL_MD];
     if (options.stray) { writeFileSync(join(tree, "stray.txt"), "x\n"); paths.push("stray.txt"); }
@@ -137,9 +138,9 @@ export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?
 /** The stand-in renderer: full.md from the tree's run records, the newest one's slower rows marked as the real page marks them. */
 export function renderStandIn(tree: string): void {
   const runs = existsSync(join(tree, RUNS)) ? readdirSync(join(tree, RUNS)).filter(name => name.endsWith(".json")).sort() : [];
-  const newest = runs.length ? JSON.parse(readFileSync(join(tree, RUNS, runs.at(-1)!), "utf8")) as { slower?: string[] } : {};
+  const newest = runs.length ? JSON.parse(readFileSync(join(tree, RUNS, runs.at(-1)!), "utf8")) as { slower?: string[]; coverage?: OwnBestCoverage | null } : {};
   mkdirSync(dirname(join(tree, FULL_MD)), { recursive: true });
-  writeFileSync(join(tree, FULL_MD), ["# Benchmark results", "", `${runs.length} run(s)`, "", "| Case | nts C | nts C own best ratios |", "|---|---|---|",
+  writeFileSync(join(tree, FULL_MD), ["# Benchmark results", "", `${runs.length} run(s)`, "", ...(newest.coverage ? [coverageHeader(newest.coverage), ""] : []), "| Case | nts C | nts C own best ratios |", "|---|---|---|",
     "|fast|1 ns|not established|", ...(newest.slower ?? []).map(name => `|${name}|2 ns|${OWN_BEST_REGRESSION}|`), ""].join("\n"));
 }
 

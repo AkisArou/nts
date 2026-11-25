@@ -1,3 +1,4 @@
+import { parseCoverage, type OwnBestCoverage } from "../bench/own-best-coverage.ts";
 import {assertStateVersion} from '../gate/state-version.ts';
 import {withStateWrite} from '../gate/state-file.ts';
 import {durableRecord} from '../gate/durable-record.ts';
@@ -137,7 +138,7 @@ export type BenchOutcome = "record" | "no-record" | "interrupted" | "not-run" | 
  * `settled` is when it stopped following it.
  */
 export type BenchRun = {
-  commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean; slower?: string[];
+  commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean; slower?: string[]; coverage?: OwnBestCoverage | null;
   outcome?: BenchOutcome;
   /** The run's record, kept in its run's folder. */
   record?: string;
@@ -228,6 +229,10 @@ export function readState(file: string): State {
   if (rest.wide) delete (rest.wide as PartState & { slot?: string }).slot;
   // The count the cycle kept, from before the count had a timer and a file of its own.
   delete (rest as { count?: unknown }).count;
+  if (rest.bench?.coverage !== undefined && rest.bench.coverage !== null) {
+    try { rest.bench.coverage = parseCoverage(rest.bench.coverage); }
+    catch (error) { throw new Error(`${source}: invalid benchmark own-best coverage`, { cause: error }); }
+  }
   const migrated = emptyState(), tasks = migrated.tasks;
   for (const row of rest.tasks ?? []) {
     if (value.version === 1) tasks.push(newTask(migrated,row.at,row.line));

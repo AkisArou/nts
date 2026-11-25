@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { encodeWorkload, workloadIdentity } from "./workload-identity.ts";
+export { workloadIdentity } from "./workload-identity.ts";
 import {readBuildDetails} from './build-details.ts';
 import { EXECUTABLE_SIZE_KIND, checkExecutableSizeCell } from "./executable-size-cell.ts";
 import { LAUNCH_KIND, checkLaunchCell } from "./launch-cell.ts";
@@ -319,6 +320,7 @@ export function fromNts(
         spoiled: values(raw.spoiled).includes(name),
         machine: object(raw.conditions ?? {})[name] ?? null,
         sourceCapture: m?.source_capture ?? null,
+        workload: m?.workload == null ? null : encodeWorkload(m.workload),
         hostProvenance: object(m?.hosts ?? {}).provenance ?? null,
         ...(sizeOracle ? { sizeOracle: clean(sizeOracle) } : {}),
         ...(launch ? { launchFloor: clean(launch.floor), launchProvenance: clean(launch.provenance) } : {}),
@@ -337,33 +339,3 @@ export function fromNts(
   return sealRun({ ...meta, rows });
 }
 
-/** Identity supplied by the exact compiler capture; never resolve or reread a source here. */
-export function workloadIdentity(capture: unknown, input: unknown): string | null {
-  if (capture === null || capture === undefined) return null;
-  const c = object(capture);
-  assert.equal(c.algorithm, "xxh3-128-le-checked-utf8-v1");
-  const files = values(c.workload)
-    .map((raw) => {
-      const f = object(raw),
-        path = string(f.path),
-        digest = string(f.digest);
-      assert.match(digest, /^[a-f0-9]{32}$/);
-      return { path, digest, rewrittenBy: f.rewritten_by ?? null };
-    })
-    .sort((a, b) => a.path.localeCompare(b.path));
-  assert.ok(
-    files.length > 0 && new Set(files.map((f) => f.path)).size === files.length,
-    "empty or duplicate captured workload",
-  );
-  const exact = JSON.stringify(input, (_, v) => {
-    if (typeof v !== "number") return v;
-    const bits = Buffer.alloc(8);
-    bits.writeDoubleBE(v);
-    return { float64Bits: bits.toString("hex") };
-  });
-  return createHash("sha256")
-    .update(
-      JSON.stringify({ algorithm: c.algorithm, files, input: exact, drivers: c.drivers ?? [] }),
-    )
-    .digest("hex");
-}

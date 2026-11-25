@@ -1,3 +1,4 @@
+import { coverageText, readCoverage, type OwnBestCoverage } from "../bench/own-best-coverage.ts";
 import {pruneRawCosts,type CostRetention} from './cost-retention.ts';
 import {declaredRunRoots,readKeep} from './keep.ts';
 // The full check after landing (docs/workflow.md, "After landing: the full
@@ -1223,8 +1224,17 @@ async function publishAndSubmit(fx: Effects, state: State, bench: BenchRun & { r
       bench.submitted = submitted.submitted ? published.commit : null;
       bench.result = `run record ${basename(bench.record, ".json")} published on main ${short(main)} (attempt ${attempt}): ${submitted.line}`;
       bench.outcome = submitted.submitted ? "submitted" : "failed";
+      const page = tree.run(["show", `${published.commit}:${FULL_MD}`]);
+      if (bench.coverage === undefined) {
+        // A missing or malformed marker is reported as unavailable coverage, never thrown past the night.
+        let unreadable: string | null = null;
+        try { bench.coverage = readCoverage(page); }
+        catch (error) { bench.coverage = null; unreadable = error instanceof Error ? error.message : String(error); }
+        if (!bench.coverage || Object.values(bench.coverage).some(c => c.verdict !== "green"))
+          task(fx, state, `- RED benchmark own-best coverage at ${short(bench.commit)}: ${bench.coverage ? coverageText(bench.coverage) : unreadable ? `unavailable (unreadable coverage marker: ${unreadable})` : "unavailable (renderer supplied no coverage)"}; minimum 80%; regression checks lack history (${FULL_MD}).`);
+      }
       if (!bench.slower) {
-        bench.slower = slowerRows(tree.run(["show", `${published.commit}:${FULL_MD}`]));
+        bench.slower = slowerRows(page);
         if (bench.slower.length) task(fx, state, `- ${bench.slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(bench.commit)}: ${bench.slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
       }
     }
@@ -1603,7 +1613,7 @@ export type FullCheckStatus = {
   wide: PartStatus & { waiting: string | null };
   culprits: Culprit[];
   /** The last attempt or night and how it ended, its slower rows, the night still due and what holds it, and when the nightly slot was last answered. */
-  benchmarks: { last: State["bench"] | null; slower: string[]; due: State["benchmarks_due"] | null; slot: string | null };
+  benchmarks: { last: State["bench"] | null; slower: string[]; coverage: OwnBestCoverage | null; due: State["benchmarks_due"] | null; slot: string | null };
   /** What the hourly count last found, from the count's own file. */
   count: CountRecord | null;
   tasks: State["tasks"];
@@ -1643,7 +1653,7 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
     core: part(state.core),
     wide: { ...part(state.wide), waiting: state.wide.waiting ?? null },
     culprits: state.culprits,
-    benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null, slot: state.nightly ?? null },
+    benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], coverage: state.bench?.coverage ?? null, due: state.benchmarks_due ?? null, slot: state.nightly ?? null },
     count: inputs.count,
     tasks: state.tasks.filter(task => !task.answer),
   };
@@ -1703,6 +1713,8 @@ export function statusText(s: FullCheckStatus): string {
       + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}${
         s.benchmarks.due.measuring ? `, measuring from ${s.benchmarks.due.measuring.at}${s.benchmarks.due.measuring.job ? ` in ${s.benchmarks.due.measuring.job.unit}` : ""}`
           : s.benchmarks.due.waiting ? `, waiting: ${s.benchmarks.due.waiting}` : ""}` : ""}`,
+    `own-best coverage (minimum 80%): ${s.benchmarks.coverage ? coverageText(s.benchmarks.coverage)
+      : s.benchmarks.last && s.benchmarks.last.coverage === undefined ? "not recorded for the last night" : "unavailable"}`,
     `count: ${s.count ? `${s.count.verdict} at ${s.count.at}, ${s.count.lines.length} line(s)` : "never"}`,
     ...s.count?.lines.map(line => `  ${line}`) ?? [],
     "tasks for an issue:", ...s.tasks.map(t => `  ${t.id} ${t.at} ${t.line}`),

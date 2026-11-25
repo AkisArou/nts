@@ -1,0 +1,2448 @@
+{
+  "run": "2026-11-24-d9941ea0f4e8-c3770a55231b4a27ad84b26fa0e3fdac",
+  "journal": "/home/akisarou/.cache/nts-full-check/runs/bench-d9941ea0f4e8-1795553364560/bench-36c86ac6-8425-4a74-935b-b028ed746ebd.jsonl",
+  "journalSha256": "090ad8eaa1c4919c25abb79c38f5338946c36fa22631e2ee6a8115991a089965",
+  "declarations": [
+    {
+      "name": "absences",
+      "workload": {
+        "roots": [
+          "absences",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "absences",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "accumulate",
+      "workload": {
+        "roots": [
+          "accumulate",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "accumulate",
+          "seed": 12345,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "ares6-air",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "ares6-babylon",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "ares6-basic",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "ares6-ml",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "array-copying-methods",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "array-from",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "array-methods",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "array-mutations",
+      "workload": {
+        "roots": [
+          "mutations",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "mutations",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "array-predicates",
+      "workload": {
+        "roots": [
+          "predicates",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "predicates",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "arrays",
+      "workload": {
+        "roots": [
+          "convolve",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convolve",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-bounce",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-cd",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 250,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-havlak",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-list",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-mandelbrot",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 500,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-nbody",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-permute",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-queens",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-sieve",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-storage",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "awfy-towers",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "bigint",
+      "workload": {
+        "roots": [
+          "mix",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "mix",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "bytes",
+      "workload": {
+        "roots": [
+          "run",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "run",
+          "seed": 7,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "case-convert",
+      "workload": {
+        "roots": [
+          "convert",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convert",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "case-convert-cjk",
+      "workload": {
+        "roots": [
+          "convert",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convert",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "case-convert-greek",
+      "workload": {
+        "roots": [
+          "convert",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convert",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "case-convert-late-change",
+      "workload": {
+        "roots": [
+          "convert",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convert",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "case-convert-latin1",
+      "workload": {
+        "roots": [
+          "convert",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convert",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "case-convert-unchanged",
+      "workload": {
+        "roots": [
+          "convert",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convert",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "case-convert-unchanged-greek",
+      "workload": {
+        "roots": [
+          "convert",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "convert",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "checksum",
+      "workload": {
+        "roots": [
+          "checksum",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "checksum",
+          "seed": 12345,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-binary-trees",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 12,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-fannkuch-redux",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 8,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-fasta",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 10000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-k-nucleotide",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-mandelbrot",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 256,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-pidigits",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 500,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-regex-redux",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 4000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-reverse-complement",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 10000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "clbg-spectral-norm",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 128,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "closure-merge",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "closures",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "cyclic-churn",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "dispatch",
+      "workload": {
+        "roots": [
+          "run",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "run",
+          "seed": 7,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "elementwise",
+      "workload": {
+        "roots": [
+          "scale",
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "erasure-stored-typed",
+      "workload": {
+        "roots": [
+          "erasureStoredTyped",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "erasureStoredTyped",
+          "seed": 12345,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "erasure-stored-unknown",
+      "workload": {
+        "roots": [
+          "erasureStoredUnknown",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "erasureStoredUnknown",
+          "seed": 12345,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "erasure-typed",
+      "workload": {
+        "roots": [
+          "erasureTyped",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "erasureTyped",
+          "seed": 12345,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "erasure-unknown",
+      "workload": {
+        "roots": [
+          "erasureUnknown",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "erasureUnknown",
+          "seed": 12345,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "event-loop-files",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Promised"
+        }
+      }
+    },
+    {
+      "name": "event-loop-promises",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Promised"
+        }
+      }
+    },
+    {
+      "name": "event-loop-timers",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Promised"
+        }
+      }
+    },
+    {
+      "name": "event-state",
+      "workload": {
+        "roots": [
+          "event",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "event",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "exceptions",
+      "workload": {
+        "roots": [
+          "run",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "run",
+          "seed": 100000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "face-fields",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "fib",
+      "workload": {
+        "roots": [
+          "fib",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "fib",
+          "seed": 27,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "generator",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "generator-dispatched",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "generic-classes",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "growth-fixed",
+      "workload": {
+        "roots": [
+          "scan",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "scan",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "growth-grown",
+      "workload": {
+        "roots": [
+          "scan",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "scan",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "immutable-update",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "in-narrowing",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "instanceof",
+      "workload": {
+        "roots": [
+          "run",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "run",
+          "seed": 100000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-acorn-wtb",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-babylon-wtb",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-bigint-bigdenary",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-bigint-paillier",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-crypto-md5-sp",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-crypto-sha1-sp",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-datetimeformat-intl",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-espree-wtb",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-esprima-next-wtb",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-flight-planner",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-gaussian-blur",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-hash-map",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-json-parse-inspector",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-json-stringify-inspector",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-lazy-collections",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-listformat-intl",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-numberformat-intl",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-pluralrules-intl",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-raytrace-private-class-fields",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-raytrace-public-class-fields",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-regexp-octane",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-relativetimeformat-intl",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-stanford-crypto-pbkdf2",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-stanford-crypto-sha256",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-string-unpack-code-sp",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-sync-fs",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-threejs",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-typescript-octane",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-unipoker",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-validatorjs",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "jetstream-wsl",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-build-append",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-build-join",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-parse",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-parse-typed",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-quote",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-scan",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-serialize",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-stringify-builtin",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-stringify-doc",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-stringify-fused",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-stringify-inline",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "json-stringify-typed",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "logical-assignment",
+      "workload": {
+        "roots": [
+          "run",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "run",
+          "seed": 100000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "loop",
+      "workload": {
+        "roots": [
+          "accumulate",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "accumulate",
+          "seed": 1000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "map-and-set",
+      "workload": {
+        "roots": [
+          "table",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "table",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "map-entries-top-k",
+      "workload": {
+        "roots": [
+          "topWords",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "topWords",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "map-literal-keys",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "map-word-counts",
+      "workload": {
+        "roots": [
+          "mapWordCounts",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "mapWordCounts",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "module-closures",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "module-loop-plain",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "module-loop-retained",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "node-buffer-alloc-small",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "node-buffer-string-small",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "node-utf8",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "number-format",
+      "workload": {
+        "roots": [
+          "format",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "format",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "number-format-double",
+      "workload": {
+        "roots": [
+          "format",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "format",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "objects",
+      "workload": {
+        "roots": [
+          "simulate",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "simulate",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "octane-box2d",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "octane-crypto",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "octane-raytrace",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 4,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "octane-splay",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 2048,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "optional-chain",
+      "workload": {
+        "roots": [
+          "run",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "run",
+          "seed": 100000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "parse-int-decimal",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "parse-int-default",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "parse-int-runtime",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "pipeline",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 7,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "printer-erased",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 1,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "record-word-counts",
+      "workload": {
+        "roots": [
+          "wordCounts",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "wordCounts",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "release-acyclic",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "rss-clbg-binary-trees-10",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-binary-trees-12",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-binary-trees-14",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-fasta-16384",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-fasta-32768",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-fasta-8192",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-k-nucleotide-16384",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-k-nucleotide-32768",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "rss-clbg-k-nucleotide-8192",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "size-flight-planner",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "size-hello",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "size-json",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "sort-objects",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "sort-objects-runs",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "sort-objects-shuffled",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "startup-builtins",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "startup-empty",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "startup-hello",
+      "workload": {
+        "roots": [
+          "module#init"
+        ],
+        "numeric": null
+      }
+    },
+    {
+      "name": "str-append-length",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-append-loop",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-compare",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-concat-pair",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-equal",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-index-of",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-index-read",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-join",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-map-keys",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-search-defaults",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-slice-keep",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-split",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-template",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "str-to-number",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "string-sort-control",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 7,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "strings",
+      "workload": {
+        "roots": [
+          "scan",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "scan",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "substrings",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "symbol-keyed-map",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "symbol-keys",
+      "workload": {
+        "roots": [
+          "keys",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "keys",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "tree-teardown",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 0,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "uniform-callback",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "uniform-callback-arguments",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "uniform-callback-default",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "upcast",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 5,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "user-iterable",
+      "workload": {
+        "roots": [
+          "run",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "run",
+          "seed": 100000,
+          "answer": "Returned"
+        }
+      }
+    },
+    {
+      "name": "utf8-encode",
+      "workload": {
+        "roots": [
+          "work",
+          "module#init"
+        ],
+        "numeric": {
+          "callee": "work",
+          "seed": 3,
+          "answer": "Returned"
+        }
+      }
+    }
+  ]
+}

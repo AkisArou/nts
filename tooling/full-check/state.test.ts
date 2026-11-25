@@ -1,3 +1,4 @@
+import { coverage } from "../bench/own-best-coverage.ts";
 import assert from 'node:assert/strict';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -155,4 +156,23 @@ test('the answer CLI owns only answers and works beside the controller lifetime 
   assert.equal(readFileSync(join(where.lock,'pid'),'utf8'),String(process.pid));
   result=call(['--answer','f'.repeat(16),'--issue','592']);
   assert.notEqual(result.status,0);assert.match(result.stdout+result.stderr,/unknown task/);
+});
+
+
+test('benchmark coverage accepts old state and rejects malformed persisted values by name', t => {
+  const file = join(testScratch(t, 'benchmark-coverage'), 'state-v2.json'), state = emptyState();
+  state.bench = { commit: 'a'.repeat(40), at: AT, run: '/run', result: 'old night', measured: true, submitted: null };
+  writeState(file, state);
+  assert.equal(readState(file).bench?.coverage, undefined);
+  const valid = { 'nts C': coverage(80, 100), 'nts LLVM': coverage(0, 100), 'nts JVM': coverage(0, 0) };
+  for (const value of [null, valid]) {
+    state.bench.coverage = value; writeState(file, state);
+    assert.deepEqual(readState(file).bench?.coverage, value);
+  }
+  for (const malformed of [false, [], {}, { ...valid, 'nts C': null },
+    { ...valid, 'nts C': { established: 101, total: 100, verdict: 'green' } },
+    { ...valid, 'nts LLVM': { established: 0, total: 100, verdict: 'green' } }]) {
+    writeFileSync(file, JSON.stringify({ ...state, bench: { ...state.bench, coverage: malformed } }));
+    assert.throws(() => readState(file), /invalid benchmark own-best coverage/);
+  }
 });

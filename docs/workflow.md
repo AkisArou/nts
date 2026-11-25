@@ -906,6 +906,13 @@ locked session on CPU 4 and keep the wall-time floor below.
   guard) is started once more, then the night is a task; only a run that kept
   a record counts as measured, and the full check's status says what stopped
   one.
+- **Own-best history must cover the current measurements.** The report header
+  and full-check status show established/total per backend. The denominator
+  includes rows eligible for own-best (not spoiled) with a verified, rankable
+  backend/comparator pair in the current run; the numerator includes those with at least one compatible prior pair.
+  Below 80% is red; no eligible rows is unavailable, never green. The nightly
+  reader creates a task for red, unavailable or missing coverage, independently
+  of slower rows.
 - **A record lands on the newest `main`.** The run measures `verified`, which
   `main` has moved past by the time it ends, so its record is published on
   the newest `main` by `main`'s own renderer (`tooling/bench/run-record.ts
@@ -3230,6 +3237,13 @@ death; an absent timestamp remains explicit after forced termination.
   unestablished. A backend regression requires at least one established pair
   and a regression against every established comparator; individual comparator
   flags remain observations. The nightly reader consumes the backend verdict.
+  Workload identity uses an explicit validated semantic encoding: omitted
+  default fields and explicit default values have the same identity, and a
+  new field requires an identity decision before the producer can publish it.
+  The workload declaration is retained beside its source capture. An
+  owner-approved correction to a published record must name
+  its exact original and replacement Git blobs in the migrations ledger;
+  every other byte change remains forbidden.
   The benchmark JSON summary uses this same model, in version 2.
 - **The full check's later additions** (10-28): native instruction counts
   gated per benchmark row against the noise band; a sanitized,

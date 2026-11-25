@@ -1,0 +1,11 @@
+{
+  "contract": "The Workload JSON nts-bench emits (tooling/bench/src/workload.rs), one entry per form it can produce. tooling/bench/workload-identity.ts decides each field's identity. A producer change that alters this file must decide that field's identity there in the same change.",
+  "produced": {
+    "whole-program": { "roots": ["module#init"], "numeric": null },
+    "Returned": { "roots": ["work", "module#init"], "numeric": { "callee": "work", "seed": 3.0, "answer": "Returned" } },
+    "Promised": { "roots": ["work", "module#init"], "numeric": { "callee": "work", "seed": 3.0, "answer": "Promised" } }
+  },
+  "legacy": {
+    "before-answer": { "serialized": { "roots": ["work", "module#init"], "numeric": { "callee": "work", "seed": 3.0 } }, "reads-as": "Returned" }
+  }
+}

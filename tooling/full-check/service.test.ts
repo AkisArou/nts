@@ -1,3 +1,4 @@
+import { coverage, type OwnBestCoverage } from "../bench/own-best-coverage.ts";
 import {pruneRawCosts} from './cost-retention.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import {censusReport, recordedCensus} from "./census-log-fixture.ts";
@@ -27,7 +28,7 @@ import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts"
 import {DELTA_FILE, serializeDelta} from "../records/delta.ts";
 import {refreshLine} from "../records/pending.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
-import {readCount, readState, writeState, newTask, type CountRecord, type Part} from "./state.ts";
+import {emptyState, readCount, readState, writeState, newTask, type CountRecord, type Part} from "./state.ts";
 import {BENCH_UNIT, recordsUnitName} from "./unit.ts";
 import {GateResource} from "../gate/gate-resource.ts";
 import {Git} from "./git.ts";
@@ -2657,4 +2658,44 @@ test('the hourly raw-cost log keeps a stopped red run quiet and names incomplete
   assert.equal(lines.length,1,lines.join('\n'));
   assert.ok(lines[0]!.includes(green)&&lines[0]!.includes('green cleanup'),lines.join('\n'));
   for(const run of [red,green])assert.equal(readFileSync(join(run,'costs/events.jsonl'),'utf8'),'raw evidence');
+});
+
+
+test("nightly own-best coverage collapse is red even with no slower rows and survives controller restart", async t => {
+  // The last case's marker is malformed: it is reported as unreadable, never thrown out of the night or status.
+  const malformed = { "nts C": { established: 5, total: 1, verdict: "green" }, "nts LLVM": coverage(1, 1), "nts JVM": coverage(1, 1) } as OwnBestCoverage;
+  for (const [marker, counts] of [
+    [undefined, { "nts C": coverage(0, 100), "nts LLVM": coverage(79, 100), "nts JVM": coverage(0, 0) }],
+    [undefined, { "nts C": coverage(80, 100), "nts LLVM": coverage(100, 100), "nts JVM": coverage(4, 5) }],
+    [undefined, null],
+    [malformed, null],
+  ] satisfies [OwnBestCoverage | undefined, OwnBestCoverage | null][]) {
+    const repo = repository(t), gate = fakeGate(repo), at = machine(repo, gate, { bench: stubBench({ coverage: marker ?? counts }) });
+    repo.commit({ "a.txt": "coverage control\n" }, "coverage control");
+    await cycle(at(BEFORE));
+    const night = at(NIGHT);
+    await cycle(night); await cycle(night); measureIn(night); await cycle(night);
+    const state = readState(repo.layout.state);
+    assert.deepEqual(state.bench?.slower, []);
+    assert.deepEqual(state.bench?.coverage ?? null, counts);
+    const shouldAlarm = counts === null || Object.values(counts).some(c => c.verdict !== "green");
+    assert.equal(night.lines.some(line => line.includes("RED benchmark own-best coverage")), shouldAlarm);
+    assert.equal(night.lines.some(line => line.includes("unreadable coverage marker")), marker !== undefined);
+    // The route machineStatus takes: the night's recorded coverage, from state alone.
+    const status = fullCheckStatus(state, { main: null, verified: null, unverified: null, landedAt: () => "", controller: null, count: null, now: NIGHT });
+    assert.deepEqual(status.benchmarks.coverage, counts);
+    assert.match(statusText(status), counts ? /own-best coverage .*nts C \d+\/\d+ (green|red); nts LLVM \d+\/\d+ (green|red); nts JVM \d+\/\d+ (green|unavailable)/ : /own-best coverage .*unavailable/);
+    await cycle(night);
+    assert.equal(readState(repo.layout.state).tasks.filter(task => task.line.includes("RED benchmark own-best coverage")).length, shouldAlarm ? 1 : 0);
+  }
+});
+
+test("status says when the last night predates its coverage reading", () => {
+  const state = emptyState();
+  state.bench = { commit: "a".repeat(40), at: NIGHT.toISOString(), run: "/run", result: "old night", measured: true, submitted: null };
+  const status = fullCheckStatus(state, { main: null, verified: null, unverified: null, landedAt: () => "", controller: null, count: null, now: NIGHT });
+  assert.equal(status.benchmarks.coverage, null);
+  assert.match(statusText(status), /own-best coverage \(minimum 80%\): not recorded for the last night/);
+  state.bench.coverage = null;
+  assert.match(statusText(fullCheckStatus(state, { main: null, verified: null, unverified: null, landedAt: () => "", controller: null, count: null, now: NIGHT })), /own-best coverage \(minimum 80%\): unavailable/);
 });
