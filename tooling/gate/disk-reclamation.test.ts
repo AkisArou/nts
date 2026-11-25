@@ -703,6 +703,23 @@ test('unit arguments with a name too long to exist walk up, and other errors sti
   }finally{chmodSync(join(outside,'closed'),0o700);}
 });
 
+test('a unit argument past PATH_MAX through existing components and a symlink into the tree refuses',t=>{
+  const f=fixture(t),tree=f.tree('1'),outside=join(f.s.dir,'outside');mkdirSync(outside);mkdirSync(join(tree,'inner'));
+  // Built relatively, so no single call needs a path past PATH_MAX.
+  const name='d'.repeat(200),depth=25;
+  const built=spawnTest('sh',['-c','cd "$1" && for i in $(seq '+depth+'); do mkdir "$2" && cd "$2" || exit 1; done && ln -s "$3" s','chain',outside,name,join(tree,'inner')],{env:f.s.env,encoding:'utf8'});
+  try{
+    assert.equal(built.status,0,built.stderr);
+    const argument=outside+('/'+name).repeat(depth)+'/s/file';assert.ok(Buffer.byteLength(argument)>4096);
+    const reading:UnitTreeOwnership={unit:'deep.service',workingDirectory:outside,rootDirectory:'',commands:[{property:'ExecStart',path:process.execPath,args:[argument]}]};
+    assert.throws(()=>assertUnitTreeUnused([tree],reading),error=>error instanceof Error&&/unreadable unit deep\.service ExecStart argument/.test(error.message)&&(error.cause as NodeJS.ErrnoException).code==='ENAMETOOLONG');
+    // A component past NAME_MAX after the deep prefix still cannot walk past it.
+    assert.throws(()=>assertUnitTreeUnused([tree],{...reading,commands:[{property:'ExecStart',path:process.execPath,args:[argument+'/'+'x'.repeat(300)]}]}),/unreadable unit deep\.service ExecStart argument/);
+  }finally{
+    const removed=spawnTest('rm',['-rf','--',join(outside,name)],{env:f.s.env,encoding:'utf8'});assert.equal(removed.status,0,removed.stderr);
+  }
+});
+
 for(const cacheTag of [true,false])test('build admission reclaims surplus proven profiles beside unknown siblings; cache tag '+cacheTag,t=>{
   const f=fixture(t),old=f.tree('1'),newer=f.tree('2'),newest=f.tree('3');
   for(const tree of [old,newer,newest]){

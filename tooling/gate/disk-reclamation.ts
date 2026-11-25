@@ -107,18 +107,23 @@ export function parseUnitTreeOwnership(unit:string,text:string):UnitTreeOwnershi
   return {unit,workingDirectory:rows[0]!.data as string,rootDirectory:rows[1]!.data as string,commands};
 }
 export function assertUnitTreeUnused(roots:readonly string[],reading:UnitTreeOwnership):void{
-  // A component that cannot exist (ENOENT, ENOTDIR, or ENAMETOOLONG for a
-  // name past NAME_MAX, as a `node -e` script argument is) walks up to the
-  // nearest existing ancestor. A whole path past PATH_MAX may still exist,
-  // made by relative operations; its resolvable ancestor and check's lexical
-  // test still find any tree it lies in. Other errors refuse.
+  // A path that cannot exist walks up to its nearest existing ancestor:
+  // ENOENT, ENOTDIR, and ENAMETOOLONG only while the ancestor still holds a
+  // component longer than NAME_MAX (as a `node -e` script argument does),
+  // since no such name can exist. Once those are stripped, ENAMETOOLONG means
+  // a prefix past PATH_MAX whose components may all exist, symlinks among
+  // them, which a textual suffix would never follow: that refuses, as every
+  // other error does.
+  const NAME_MAX=255;
   const physicalPath=(path:string,field:string):string=>{
     let ancestor=path;const suffix:string[]=[];
     for(;;){
       try{return resolve(realpathSync.native(ancestor),...suffix);}
       catch(error){
-        if(!['ENOENT','ENOTDIR','ENAMETOOLONG'].includes((error as NodeJS.ErrnoException).code??'')||dirname(ancestor)===ancestor)
-          throw Error('unreadable unit '+reading.unit+' '+field+' '+path,{cause:error});
+        const code=(error as NodeJS.ErrnoException).code;
+        const absent=code==='ENOENT'||code==='ENOTDIR'||
+          code==='ENAMETOOLONG'&&ancestor.split(sep).some(name=>Buffer.byteLength(name)>NAME_MAX);
+        if(!absent||dirname(ancestor)===ancestor)throw Error('unreadable unit '+reading.unit+' '+field+' '+path,{cause:error});
         suffix.unshift(basename(ancestor));ancestor=dirname(ancestor);
       }
     }
