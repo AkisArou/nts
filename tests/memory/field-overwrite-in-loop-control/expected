@@ -1,0 +1,15 @@
+ideal 25
+allocated 7
+because Three fills allocate three Entries and three strings; comparing the
+because kept text allocates one expected string. Both two-slot holders fit
+because their caller frame. Three aliased stores, two read joins and one
+because kept-text read take six retains. Seven initial references plus those
+because six retains require thirteen non-null releases: nineteen operations.
+because All three fills also attempt two null releases each, giving 25
+because operations. The conditional clear and loop join do not prove busy null
+because at every call. The shared fill entry keeps both old-slot releases,
+because since its null-slot contract needs a proof from every caller.
+because #1049 keeps null-slot facts per call shape to reach nineteen operations.
+because #916 (landing 86f1a9b7a602) fixed the overwritten Entry and string leak.
+because Forced collection must leave the live-object count flat for both the
+because loop overwrite and its one-change clear-before-overwrite control.
