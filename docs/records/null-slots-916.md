@@ -52,7 +52,12 @@ operation that reads it or anything leaning on it, such as a borrowed load out
 of it, a view of it, a block parameter it arrives as, a frame name for it or a
 container it was moved into. The slot model asks rc's own walk
 (`rc::last_use`) with ownership left open, so every non-scalar value may lean
-on what it was made from and every store may move. The operation that walk
+on what it was made from and every store in the function may move. Its
+`Reaching` answers every operation at once: one walk of the leaning graph by
+strongly connected component, keeping per value only the handle-holding values
+it reaches and sharing that answer down a chain. Merging answers is paid from
+a linear budget (64 per value plus 4096 per function); past it every operation
+is charged, as past liveness's budget. The operation that walk
 answers is charged after (and after a region call's end that follows it), and
 also before when the value reached it only through an operand made from it,
 because rc's retain of that operand comes before the operation. A value read
@@ -279,6 +284,27 @@ Preparation mode: `nogc`. CPU observations are raw process CPU seconds; the 1.10
 | tests/compile-time/scalar-replacement-scaling | 8.914 | 8.953 | 8.914 | 1.000007 | 0.995641 | 1.041644 | 1.55 / 0.99 / 0.98 |
 
 
+### The unsettled walk's cost
+
+Walking each operation's leaning set afresh, per block, was quadratic with
+ownership left open: every link of `s = s + "x"`, repeated beside one erased
+parameter, leans on the whole chain before it. Instruction counts of `nts
+emit-c --rc` on that function (the review's generator), counted under the
+`perf-count` lock on CPU 4, against main's pin `10fe03ef3a99`:
+
+| links | erased `a` pin | round 3 (`55823f02`) | final | final/pin | `a: number` final/pin |
+|---:|---:|---:|---:|---:|---:|
+| 4,000 | 2.275 G | 10.014 G | 2.292 G | 1.008 | 1.001 |
+| 8,000 | 4.351 G | 35.672 G | 4.385 G | 1.008 | 1.002 |
+| 16,000 | 8.526 G | 135.662 G | 8.589 G | 1.007 | 1.003 |
+| 32,000 | 16.872 G | -- | 17.013 G | 1.008 | 1.002 |
+
+The emitted C is byte-identical to the pin's at every size, and peak memory is
+within 6% of it (16,000 links: 106 MB, against the round-3 owner's 1.22 GB).
+The final owner over the 34-module population, rc and NoGC: every row passes
+its 1.10 tripwire; the largest ratio to the `c63dc686e448` arm above is 1.0134
+(RC `node/async_hooks`), and every NoGC row is at most 0.99994 of it.
+
 ## Mechanism counterfactuals
 
 The committed native-count mechanism was disabled only after the final owner
@@ -453,3 +479,7 @@ pins are deleted. The plain pin is retained.
 | `native-boundaries/summary.json` | `849cdca7c5e15ec90935d7cfb02e828415bad5cceb12dbb4e456f8fd9b4c8b62` |
 | `phi-memory/before/summary.json` | `73046d076d1d76afdf94093c629507dab62538af25f6df709c4f2ec039dc4703` |
 | `phi-memory/after/summary.json` | `1ce34c303e9735c49b487ffa30b088a44c863cbd9a7fda2f3caaf51e2bc6411e` |
+| `c-release/provenance.json` | `2318501833c8694f8cc145f094e8b591ba1e291bf6c9a3f97b7d4e49c4b68a47` |
+| `chain/counts.json` | `10c6b80ff557f25e93f3ef75c49e0d0cbb7a5481acddbcc094ae85a0b5fcba4e` |
+| `chain/summary.json` | `8dc5603c7321558b18e66f7493d6a942f22890233e2700f7c47c81faff028d81` |
+| `compile-cost-c/per-module.json` | `09406d412bb60bfd8503caaf34a773e861e0138f00650bebd0f421b3c39a215d` |
