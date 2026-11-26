@@ -1737,11 +1737,26 @@ the tooling strict checker owns the source's type checking.
   state invalidates the snapshot comparison, so the next poll can restore the
   wait-cause reader's state. The summary names the polling cadence; it does not
   promise periodic raw samples. Token lifecycle events remain
-  complete. Compiler checks append to one process-owned file with a distinct
-  session key on each row. Readers retain the legacy per-session file format
-  and group interleaved sessions before deriving `summary.json.case_costs`.
-  A failed process-file write disables that file for every session, preserving
-  a partial final row without appending other records to it.
+  complete. The runner owns one durable gzip check stream. Compiler processes
+  send complete phase rows over the run's mode-0600 Unix socket, with a distinct
+  session key on each row. A per-step random publication capability authorizes
+  the connection and expires at step reap. Self-reported PID membership in the
+  dispatched scope is a consistency check, not authentication; wrong capabilities,
+  inconsistent PIDs and duplicate live producers are named telemetry errors.
+  The compiler acquires its CLOEXEC socket before measuring, sends nonblocking
+  while any total is active, and retries a bounded queue on later sends. Only
+  after every nested or concurrent total stops may its final flush block.
+  Acceptance, acknowledgement, drain and peer closure end these waits; no local
+  wall deadline turns a loaded runner into missing telemetry. A runner which
+  stops serving is covered by the ordinary step stall and process bounds.
+  Already sent partial phases survive process death. The runner
+  consumes EOF after step drain and names any remaining open connection without
+  a wall-time drain deadline. It joins publication before deriving the summary.
+  Readers accept legacy per-session and per-process files and plain or gzip
+  worker streams, sorting derived cases by their legacy logical names. Truncated
+  gzip and unfinished publication are named errors. Hand invocations without a
+  channel retain the process writer; a supplied broken channel never falls back.
+  A failed process output disables every session sharing it.
   Only `runs` rules and log rules explicitly marked as gate-run roots in
   `keep.json` supply raw-cost inventory roots. The hourly count reserves its
   measured memory for all upkeep through the ledger at full-check rank. Pool
@@ -2169,10 +2184,12 @@ the first node task.
 - **Cost observations retain session identity independently of files.** Pool
   snapshots are written only on a structural change, excluding clock and rusage
   changes, or to resynchronize after an intervening state-bearing event. Compiler
-  cost sessions append to one file per process, with an
-  explicit session key on every row. Readers group sessions in the legacy
-  logical-file order so phase populations and case ordering remain unchanged
-  ([log](records/notebooks/decisions-log.md#cost-telemetry-records-changes-and-process-sessions-11-20)).
+  cost sessions retain explicit session keys. Their runner-owned Unix channel
+  publishes one durable gzip worker stream, with per-step capabilities and
+  nonblocking timed sends. Legacy process files remain available only without
+  a channel. Readers group sessions in the legacy logical-file order so phase
+  populations and case ordering remain unchanged
+  ([log](records/notebooks/decisions-log.md#runner-owned-compiler-cost-publication-11-26)).
 
 - Mutable Node resolution sessions belong to their prepared run, independently
   of reusable dependency images. One shared locator validates the captured

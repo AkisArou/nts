@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {gitArguments} from "./git-arguments/main.ts";
+import {CheckStream} from './check-stream.ts';
 import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
@@ -389,7 +390,10 @@ let finishStartup;
 const runClosed=new Promise(resolve=>{finishRun=()=>resolve(undefined);});
 const startupClosed=new Promise(resolve=>{finishStartup=()=>resolve(undefined);});
 let releaseTreeLock=()=>{};
+/** @type {CaseCosts | null} */
 let caseCosts = null;
+/** @type {CheckStream|undefined} */
+let checkStream;
 let typeScriptOracleReference;
 let programOracleReference;
 const identities = {};
@@ -431,6 +435,7 @@ function stepEnv(step, slots, scope) {
   e.NTS_GATE_RUN_DIR = RUN_DIR;
   delete e.NTS_GATE_CASE_COSTS_DIR;
   if (caseCosts?.available) e.NTS_GATE_CASE_COSTS_DIR = caseCosts.root;
+  if(checkStream)Object.assign(e,checkStream.environment(step.name,()=>host.cgroupMembers(scope.group)));
   if (caseCosts?.available && ["assembles", "jvm-verifies", "dex", "bench-agree", "examples", "rc", "llvm", "llvm-rc", "jvm"].includes(step.name)) {
     e.NTS_GATE_SHADOW_DIR ??= join(homedir(), ".cache/nts-gate/artifact-shadow/v1");
     e.NTS_GATE_SHADOW_HELPER = join(HERE, "artifact-shadow.ts");
@@ -1415,6 +1420,7 @@ function start(step, slots, rider = false) {
       scopeCleanup = { state: "error", reason: cleanupError };
       stop(cleanupError);
     }
+    try{await checkStream?.reaped(step.name);}catch(error){if(isCommandExit(error))throw error;caseCosts?.errors.push(`check telemetry drain: ${String(error)}`);}
     let stepDiagnostics;
     try{stepDiagnostics=diagnostics?.endStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);cleanupError=`step host observation failed: ${error}`;stop(cleanupError);}
     running.delete(step.name);
@@ -1438,6 +1444,7 @@ function start(step, slots, rider = false) {
     let oracleCapture, captureProblem;
     try { oracleCapture = captureCost(step.name, log); } catch (error) {if(isCommandExit(error))throw error; captureProblem = error.message; }
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
+    for(const line of text.split('\n'))if(line.startsWith('check telemetry:'))caseCosts?.errors.push(`${step.name}: ${line}`);
     account();
     // What the step held at most, sampled on the ledger's basis, against the
     // most the run counted it for: its reservation, or one token's for each
@@ -1604,7 +1611,7 @@ function runIsGreen(failures=[]) {
     plan.every(name=>{const row=results.get(name);return row?.verdict==='PASS'||row?.verdict==='SKIPPED'&&ACCEPT_SKIP.has(name);});
 }
 
-function writeSummary() {
+async function writeSummary() {
   if (outrankedNow) memoryRecord.outranked_s += (Date.now() - outrankedSince) / 1000;
   if (!identities.nts) identify(false);
   identities.node = process.version;
@@ -1631,7 +1638,7 @@ function writeSummary() {
   const temporary = temporaryDisposition ?? {path:env.TMPDIR,state:"kept: temporary lifetime did not close"};
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}\n`);
   const wall = (Date.now() - startedAt) / 1000;
-  const costsSummary = caseCosts?.summary(plan.map(name => ({ name, ...results.get(name) }))) ?? { version: 1, status: "unavailable" };
+  const costsSummary = await caseCosts?.summary(plan.map(name => ({ name, ...results.get(name) }))) ?? { version: 1, status: "unavailable" };
   if('steps' in costsSummary)for(const name of plan){
     const phases=costsSummary.steps[name]?.census_phases;
     if(phases)results.get(name).phases=phases;
@@ -1798,9 +1805,9 @@ plan = requested();
 takeTreeLock();
 // Reports and the tree lock outlive the broker, all workers and the ledger.
 registerCommandCloser('gate run report '+RUN_DIR,{
-  close:({failures})=>{
+  close:async({failures})=>{
     if(failures.length)scopeCleanup={state:'error',reason:failures.join('; ')};
-    try{writeSummary();}finally{releaseTreeLock();}
+    try{await writeSummary();}finally{releaseTreeLock();}
   },
 });
 registerCommandCloser('gate run resources '+RUN_DIR,{
@@ -1816,6 +1823,10 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     const failures=[];
     try{tok.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await tok.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    if(checkStream){
+      try{await checkStream.close();}catch(error){if(isCommandExit(error))throw error;caseCosts?.errors.push(`check telemetry close: ${String(error)}`);}
+      caseCosts?.errors.push(...checkStream.errors);
+    }
     try{diagnostics?.close();}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);failures.push(error);}
     try{if(resolutionSession){await closeNodeResolutionSession(resolutionSession);await resolutionClosed;}}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{scopes?.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
@@ -1856,6 +1867,8 @@ try{
   diagnostics.start();
 }catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);}
 caseCosts = new CaseCosts(RUN_DIR);
+try{checkStream=new CheckStream(caseCosts.root,normalized.temporary.path);await checkStream.ready;}
+catch(error){if(isCommandExit(error))throw error;caseCosts.errors.push(`check telemetry unavailable: ${String(error)}`);}
 recordPoolState();
 caseCosts.preparePhases(plan,env);
 identities.commit = git("rev-parse", "HEAD");

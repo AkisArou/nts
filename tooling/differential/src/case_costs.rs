@@ -11,11 +11,40 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+#[path = "check_transport.rs"]
+#[cfg(unix)]
+mod transport;
+
+#[derive(Debug)]
+enum Destination {
+    File(std::fs::File),
+    #[cfg(unix)]
+    Channel {
+        output: transport::Nonblocking<std::os::unix::net::UnixStream>,
+        active: usize,
+    },
+}
+impl Write for Destination {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::File(file) => file.write(bytes),
+            #[cfg(unix)]
+            Self::Channel { output, .. } => {
+                output.record(bytes)?;
+                Ok(bytes.len())
+            }
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 thread_local! {
     static CONTEXT: RefCell<Option<Context>> = const { RefCell::new(None) };
 }
 static CASES: AtomicU64 = AtomicU64::new(0);
-type ProcessFile = Arc<Mutex<ProcessOutput<std::fs::File>>>;
+type ProcessFile = Arc<Mutex<ProcessOutput<Destination>>>;
 static FILES: LazyLock<Mutex<HashMap<std::path::PathBuf, ProcessFile>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -34,6 +63,21 @@ impl<W: Write> ProcessOutput<W> {
         // append to that suffix, even if the underlying writer later recovers.
         self.failed = self.writer.write_all(record).is_err();
         !self.failed
+    }
+
+    #[cfg(any(unix, test))]
+    fn finish_recording(
+        &mut self,
+        finish: impl FnOnce(&mut W) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        if self.failed {
+            return Err(std::io::Error::other(
+                "check telemetry: output already failed",
+            ));
+        }
+        let result = finish(&mut self.writer);
+        self.failed = result.is_err();
+        result
     }
 }
 
@@ -54,11 +98,62 @@ fn process_file(path: std::path::PathBuf) -> Option<ProcessFile> {
         .open(&path)
         .ok()?;
     let file = Arc::new(Mutex::new(ProcessOutput {
-        writer: file,
+        writer: Destination::File(file),
         failed: false,
     }));
     files.insert(path, Arc::clone(&file));
     Some(file)
+}
+
+#[cfg(unix)]
+fn process_channel(path: &std::path::Path, capability: &str, step: &str) -> Option<ProcessFile> {
+    use std::io::Read;
+    let acquire = || -> std::io::Result<ProcessFile> {
+        let mut files = FILES
+            .lock()
+            .map_err(|_| std::io::Error::other("telemetry output lock poisoned"))?;
+        if let Some(file) = files.get(path) {
+            return Ok(Arc::clone(file));
+        }
+        // std's UnixStream opens with CLOEXEC. Acquire before starting the
+        // session timer; no grandchild may inherit the drain's descriptor.
+        // The runner is the peer and parent: acceptance, its acknowledgement
+        // and EOF end setup; its drain or close ends the final flush. There is
+        // no local wall deadline. A live runner which stops serving is a hang
+        // covered by the ordinary step stall and process bounds, not missing
+        // telemetry manufactured by a short timeout under machine load.
+        let mut socket = std::os::unix::net::UnixStream::connect(path)?;
+        let header = serde_json::to_vec(&serde_json::json!({"kind":"check.producer", "step":step,
+            "pid":std::process::id(), "capability":capability}))?;
+        let mut header = header;
+        header.push(b'\n');
+        socket.write_all(&header)?;
+        let mut answer = [0; 6];
+        socket.read_exact(&mut answer)?;
+        if &answer != b"ready\n" {
+            return Err(std::io::Error::other(
+                "check telemetry: registration refused",
+            ));
+        }
+        socket.set_nonblocking(true)?;
+        let output = transport::Nonblocking::new(socket);
+        let file = Arc::new(Mutex::new(ProcessOutput {
+            writer: Destination::Channel { output, active: 0 },
+            failed: false,
+        }));
+        files.insert(path.to_owned(), Arc::clone(&file));
+        Ok(file)
+    };
+    match acquire() {
+        Ok(file) => Some(file),
+        Err(error) => {
+            eprintln!(
+                "check telemetry: channel {} unavailable: {error}",
+                path.display()
+            );
+            None
+        }
+    }
 }
 
 pub(crate) fn project_context() -> Option<String> {
@@ -176,6 +271,7 @@ pub(crate) fn event(mut value: serde_json::Value) {
                 .lock()
                 .is_ok_and(|mut file| file.write_record(&context.record))
             {
+                eprintln!("check telemetry: process output failed; observations are incomplete");
                 context.failed = true;
             }
         }
@@ -273,8 +369,32 @@ pub fn session(project: &camino::Utf8Path) -> Session {
         std::env::var("NTS_GATE_CASE_COSTS_DIR"),
         std::env::var("NTS_GATE_STEP"),
     ) {
-        (Ok(root), Ok(step)) => session_at(std::path::Path::new(&root), project, step),
+        (Ok(root), Ok(step)) => {
+            #[cfg(unix)]
+            if let Ok(channel) = std::env::var("NTS_GATE_CHECK_CHANNEL") {
+                // A supplied channel never falls back to per-PID files.
+                let capability = std::env::var("NTS_GATE_CHECK_CAPABILITY").unwrap_or_default();
+                return channel_session(std::path::Path::new(&channel), &capability, project, step);
+            }
+            session_at(std::path::Path::new(&root), project, step)
+        }
         _ => Session {
+            total: None,
+            previous: None,
+        },
+    }
+}
+
+#[cfg(unix)]
+fn channel_session(
+    path: &std::path::Path,
+    capability: &str,
+    project: &camino::Utf8Path,
+    step: String,
+) -> Session {
+    match process_channel(path, capability, &step) {
+        Some(file) => session_with_output(file, project, step),
+        None => Session {
             total: None,
             previous: None,
         },
@@ -288,24 +408,32 @@ fn observed_command(command: Option<&str>, observation: Option<&str>) -> bool {
 }
 
 fn session_at(root: &std::path::Path, project: &camino::Utf8Path, step: String) -> Session {
-    let opened = || {
-        std::fs::create_dir_all(root).ok()?;
-        let path = process_file_path(root);
-        let file = process_file(path)?;
-        Some(Context {
-            file,
-            session: CASES.fetch_add(1, Ordering::Relaxed),
-            record: Vec::new(),
-            project: project.to_string(),
-            step,
-            failed: false,
-        })
-    };
-    let Some(context) = opened() else {
-        return Session {
+    let file = std::fs::create_dir_all(root)
+        .ok()
+        .and_then(|()| process_file(process_file_path(root)));
+    match file {
+        Some(file) => session_with_output(file, project, step),
+        None => Session {
             total: None,
             previous: None,
-        };
+        },
+    }
+}
+
+fn session_with_output(file: ProcessFile, project: &camino::Utf8Path, step: String) -> Session {
+    #[cfg(unix)]
+    if let Ok(mut output) = file.lock()
+        && let Destination::Channel { active, .. } = &mut output.writer
+    {
+        *active += 1;
+    }
+    let context = Context {
+        file,
+        session: CASES.fetch_add(1, Ordering::Relaxed),
+        record: Vec::new(),
+        project: project.to_string(),
+        step,
+        failed: false,
     };
     let previous = CONTEXT.with_borrow_mut(|current| current.replace(context));
     event(
@@ -322,7 +450,38 @@ impl Drop for Session {
     fn drop(&mut self) {
         if self.total.is_some() {
             drop(self.total.take());
-            CONTEXT.with_borrow_mut(|context| *context = self.previous.take());
+            let finished =
+                CONTEXT.with_borrow_mut(|context| std::mem::replace(context, self.previous.take()));
+            #[cfg(not(unix))]
+            drop(finished);
+            #[cfg(unix)]
+            if let Some(context) = finished
+                && let Ok(mut file) = context.file.lock()
+            {
+                let last = if let Destination::Channel { active, .. } = &mut file.writer {
+                    *active -= 1;
+                    *active == 0
+                } else {
+                    false
+                };
+                if last {
+                    let result = file.finish_recording(|destination| {
+                        if let Destination::Channel { output, .. } = destination {
+                            // Every enclosing/concurrent total has stopped.
+                            // Only this path may wait for backpressure.
+                            output.writer.set_nonblocking(false)?;
+                            let result = output.complete();
+                            output.writer.set_nonblocking(true)?;
+                            result
+                        } else {
+                            Ok(())
+                        }
+                    });
+                    if let Err(error) = result {
+                        eprintln!("check telemetry: final flush failed: {error}");
+                    }
+                }
+            }
         }
     }
 }
@@ -331,6 +490,125 @@ impl Drop for Session {
 #[allow(clippy::unwrap_used, reason = "test assertions")]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_final_flush_cannot_retry_a_partial_prefix_in_a_later_session() {
+        let mut output = ProcessOutput {
+            writer: Vec::new(),
+            failed: false,
+        };
+        assert!(
+            output
+                .finish_recording(|bytes| {
+                    bytes.extend_from_slice(b"partial");
+                    Err(std::io::Error::other("injected final flush failure"))
+                })
+                .is_err()
+        );
+        let mut retried = false;
+        assert!(
+            output
+                .finish_recording(|_| {
+                    retried = true;
+                    Ok(())
+                })
+                .is_err()
+        );
+        assert!(!retried);
+        assert!(!output.write_record(b"next session\n"));
+        assert_eq!(output.writer, b"partial");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_supplied_broken_channel_is_named_and_never_creates_process_files() {
+        const NAME: &str =
+            "case_costs::tests::a_supplied_broken_channel_is_named_and_never_creates_process_files";
+        if let Some(path) = std::env::var_os("NTS_TEST_BROKEN_CHECK_CHANNEL") {
+            let session = channel_session(
+                std::path::Path::new(&path),
+                "capability",
+                camino::Utf8Path::new("fixture"),
+                "examples".into(),
+            );
+            assert!(session.total.is_none());
+            return;
+        }
+        let root = crate::scratch::StdScratchDir::in_std_target("nts-broken-check-channel");
+        let output = crate::self_test::run(NAME, |command| {
+            command.env("NTS_TEST_BROKEN_CHECK_CHANNEL", root.join("absent.sock"));
+        });
+        assert!(String::from_utf8_lossy(&output.stderr).contains("check telemetry: channel"));
+        assert_eq!(
+            std::fs::read_dir(&root).unwrap().count(),
+            0,
+            "a broken supplied channel cannot create a fallback file"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn completed_phases_reach_the_kernel_before_the_total_finishes() {
+        use std::io::{BufRead, BufReader};
+        use std::os::fd::AsRawFd;
+        use std::os::unix::net::{UnixListener, UnixStream};
+        fn read_frame(reader: &mut BufReader<UnixStream>) -> serde_json::Value {
+            let mut line = String::new();
+            let count = reader.read_line(&mut line).unwrap_or_else(|error| {
+                panic!(
+                    "check telemetry wiring fixture hang guard: peer read did not complete: {error}"
+                )
+            });
+            assert!(count > 0, "check telemetry wiring fixture: unexpected EOF");
+            serde_json::from_str(&line).unwrap()
+        }
+        let root = crate::scratch::StdScratchDir::in_std_target("nts-check-channel-phases");
+        let directory = std::fs::File::open(&root).unwrap();
+        let path = std::path::PathBuf::from(format!(
+            "/proc/{}/fd/{}/stream.sock",
+            std::process::id(),
+            directory.as_raw_fd()
+        ));
+        let listener = UnixListener::bind(&path).unwrap();
+        std::thread::scope(|scope| {
+            let (sent, seen) = std::sync::mpsc::channel();
+            let reader = scope.spawn(move || {
+                let (socket, _) = listener.accept().unwrap();
+                // test-timing.ts selects .test.ts/.mjs and -fixture.ts/.mjs,
+                // not Rust socket IO. This is only a wedged-fixture hang guard:
+                // expiry panics by that name; all assertions wait for frames.
+                socket
+                    .set_read_timeout(Some(std::time::Duration::from_secs(60)))
+                    .unwrap();
+                let mut reader = BufReader::new(socket);
+                let header = read_frame(&mut reader);
+                assert_eq!(header["kind"], "check.producer");
+                reader.get_mut().write_all(b"ready\n").unwrap();
+                let rows = (0..4).map(|_| read_frame(&mut reader)).collect::<Vec<_>>();
+                assert_eq!(rows[3]["event"], "end");
+                assert_eq!(rows[3]["phase"], "capture");
+                sent.send(()).unwrap();
+                let total = read_frame(&mut reader);
+                assert_eq!(total["phase"], "check.total");
+            });
+            let session = channel_session(
+                &path,
+                "capability",
+                camino::Utf8Path::new("fixture"),
+                "examples".into(),
+            );
+            {
+                let _phase = span("capture");
+            }
+            seen.recv().unwrap();
+            assert!(
+                session.total.is_some(),
+                "completed capture was delivered before check.total stopped"
+            );
+            drop(session);
+            reader.join().unwrap();
+        });
+    }
 
     #[test]
     fn emit_observations_need_the_case_workers_explicit_handoff() {

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CaseCosts, distribution, recordAggregatePeak, summarizeCosts, waitingBreakdown, waitCause, type Observation } from "./case-costs.ts";
 import {CgroupObservations,HostObservationError,CgroupDeparted,hostObservations,type CgroupFiles} from './host-observations.ts';
+import {gzipSync} from 'node:zlib';
 import {ownMemory} from './test-memory.ts';
 import {fileInput} from './reader-inputs/main.ts';
 
@@ -38,7 +39,7 @@ function checkFile(root: string, id: number, binary = "new", start = 1, duration
   writeFileSync(join(root, `check-${id}-0.jsonl`), rows.map(r => JSON.stringify(r)).join("\n") + (partial ? '\n{"unfinished":' : "\n"));
 }
 
-test('pool snapshots publish only structural changes, while every token event remains recorded',t=>{
+test('pool snapshots publish only structural changes, while every token event remains recorded',async t=>{
   const costs=new CaseCosts(fixture(t)),snapshot={event:'pool.state',...state(),held:{},waiting:[],running:[]};
   for(let n=0;n<100;n++)costs.record({...snapshot,epoch:epoch+n,runner_cpu:{userCPUTime:n}});
   assert.equal(costs.events.length,1,'an idle pool writes one snapshot, independent of clock and rusage');
@@ -52,28 +53,28 @@ test('pool snapshots publish only structural changes, while every token event re
   assert.deepEqual(rows,costs.events);
   assert.equal(rows.filter(row=>row.event==='pool.state').length,3);
   assert.equal(rows.filter(row=>row.event==='token.request').length,2);
-  const summary=costs.summary([step]);
+  const summary=(await costs.summary([step]));
   assert.ok('pool_state_poll_interval_s' in summary);
   assert.equal(summary.pool_state_poll_interval_s,.5);
   assert.ok(!('queue_sample_interval_s' in summary),'poll cadence is not a promise of recorded samples');
 });
 
-test('a restoring snapshot preserves wait causes after intervening token observations',t=>{
+test('a restoring snapshot preserves wait causes after intervening token observations',async t=>{
   const costs=new CaseCosts(fixture(t)),full=state(true,24),short=state(false,24);
   const snapshot=(at:number)=>({event:'pool.state',epoch:epoch+at,...full});
   const rows=[snapshot(0),event(0,'token.request',1,full),snapshot(.5),
     event(1,'token.request',2,short),event(1.2,'token.cancel',2,short),snapshot(1.5),snapshot(2)];
-  const minute={...step,wall:60},legacy=summarizeCosts(costs.root,rows,[minute]);
+  const minute={...step,wall:60},legacy=(await summarizeCosts(costs.root,rows,[minute]));
   for(const row of rows)costs.record(row);
   const recorded=readFileSync(join(costs.root,'queue.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line) as Observation);
   assert.deepEqual(waitingBreakdown(recorded,minute),waitingBreakdown(rows,minute));
-  assert.deepEqual(costs.summary([minute]),legacy);
+  assert.deepEqual((await costs.summary([minute])),legacy);
   const waiting=waitingBreakdown(recorded,minute)!;
   assert.equal(waiting.wall_s.memory_admission,.5);
   assert.equal(waiting.wall_s.slot_tokens,59.5);
 });
 
-test('every state-bearing event invalidates snapshot dedupe, independently of its event name',t=>{
+test('every state-bearing event invalidates snapshot dedupe, independently of its event name',async t=>{
   for(const kind of ['token.request','token.grant','token.release','token.cancel','pool.change','another.observation']){
     const costs=new CaseCosts(fixture(t)),snapshot={event:'pool.state',...state(true,24)};
     costs.record({...snapshot,epoch});
@@ -86,7 +87,7 @@ test('every state-bearing event invalidates snapshot dedupe, independently of it
   }
 });
 
-test('interleaved process sessions retain the exact legacy summary of a recorded compiler trace',t=>{
+test('interleaved process sessions retain the exact legacy summary of a recorded compiler trace',async t=>{
   const costs=new CaseCosts(fixture(t));
   // One completed check from the measured green core 1dccb9d1090c. Reuse its
   // actual floating-point phase/rusage observations, including unknown peaks.
@@ -98,7 +99,7 @@ test('interleaved process sessions retain the exact legacy summary of a recorded
   const polling=Array.from({length:20},(_,n)=>({event:'pool.state',epoch:Math.floor(recorded[1].epoch)+n/2,
     ...state(n>=10),runner_cpu:{userCPUTime:n}}));
   costs.events.push(...polling); // The old writer retained every clock sample.
-  const legacy=costs.summary([observedStep]);
+  const legacy=(await costs.summary([observedStep]));
   costs.events.length=0;
   for(const file of readdirSync(costs.root))rmSync(join(costs.root,file));
   // All headers arrive before any phase; nested and concurrent sessions can
@@ -107,28 +108,59 @@ test('interleaved process sessions retain the exact legacy summary of a recorded
   writeFileSync(join(costs.root,'check-42.jsonl'),compact.map(row=>JSON.stringify(row)).join('\n')+'\n');
   for(const row of polling)costs.record(row);
   assert.equal(costs.events.length,2,'only the initial state and changed memory state survive');
-  assert.deepEqual(costs.summary([observedStep]),legacy);
+  assert.deepEqual((await costs.summary([observedStep])),legacy);
   assert.ok('steps' in legacy);assert.equal((legacy.steps[header.step] as any).coverage.completed,4);
 });
 
-test('a truncated process stream retains completed and unfinished sessions separately',t=>{
+test('a truncated process stream retains completed and unfinished sessions separately',async t=>{
   const dir=fixture(t);checkFile(dir,42);checkFile(dir,43,'new',4,2,true);
   const rows=[42,43].flatMap(id=>readFileSync(join(dir,`check-${id}-0.jsonl`),'utf8').split('\n').filter(line=>line&& !line.startsWith('{"unfinished":')).map(line=>({...JSON.parse(line),session:id})));
   for(const id of [42,43])rmSync(join(dir,`check-${id}-0.jsonl`));
   writeFileSync(join(dir,'check-42.jsonl'),rows.map(row=>JSON.stringify(row)).join('\n')+'\n{"session":43,');
-  const result=summarizeCosts(dir,[],[step]),data=result.steps.examples as any;
+  const result=(await summarizeCosts(dir,[],[step])),data=result.steps.examples as any;
   assert.equal(result.status,'partial');assert.equal(result.error_count,1);
   assert.deepEqual([data.coverage.started,data.coverage.completed,data.coverage.incomplete],[2,1,1]);
 });
 
-test('unidentified compact rows never attach to another session',t=>{
+test('all four check forms preserve the recorded summary and every double bit',async t=>{
+  const root=fixture(t),recorded=readFileSync(RECORDED_CHECK,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  const population=[42,7].flatMap(pid=>[0,1,2,10].map(session=>({pid,session,rows:recorded.map(row=>row.event==='case'
+    ?{...row,pid,project:row.project+'/'+pid+'/'+session}:row)})));
+  const observed={name:recorded[0].step,started_at:new Date(recorded[1].epoch*1000).toISOString(),wall:10};
+  let expected:unknown;
+  const numberBits=(value:unknown):unknown=>{
+    if(typeof value==='number'){const bytes=Buffer.alloc(8);bytes.writeDoubleLE(value);return bytes.toString('hex');}
+    if(Array.isArray(value))return value.map(numberBits);
+    if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,part])=>[key,numberBits(part)]));
+    return value;
+  };
+  for(const form of ['legacy','process','worker','gzip']){
+    for(const file of readdirSync(root))rmSync(join(root,file));
+    if(form==='legacy')for(const {pid,session,rows} of population)writeFileSync(join(root,`check-${pid}-${session}.jsonl`),rows.map(row=>JSON.stringify(row)).join('\n')+'\n');
+    else{
+      // Reverse arrival/completion order, with all sessions interleaved.
+      const rows=recorded.flatMap((_,index)=>[...population].reverse().map(value=>({pid:value.pid,producer:value.pid,record:{...value.rows[index],session:value.session}})));
+      if(form==='process')for(const pid of [42,7])writeFileSync(join(root,`check-${pid}.jsonl`),rows.filter(row=>row.pid===pid).map(row=>JSON.stringify(row.record)).join('\n')+'\n');
+      else{
+        const bytes=rows.map(row=>JSON.stringify(row)).join('\n')+'\n';
+        writeFileSync(join(root,'check-worker-0.jsonl'+(form==='gzip'?'.gz':'')),form==='gzip'?gzipSync(bytes):bytes);
+      }
+    }
+    const summary=await summarizeCosts(root,[],[observed]);
+    assert.equal(summary.error_count,0,form);
+    if(expected===undefined)expected=summary;
+    assert.deepEqual(summary,expected,form);assert.deepEqual(numberBits(summary),numberBits(expected),form+' double bits');
+  }
+});
+
+test('unidentified compact rows never attach to another session',async t=>{
   const dir=fixture(t);writeFileSync(join(dir,'check-42.jsonl'),JSON.stringify({event:'case',project:'unowned'})+'\n');
-  const result=summarizeCosts(dir,[],[step]);
+  const result=(await summarizeCosts(dir,[],[step]));
   assert.equal(result.status,'partial');assert.match(result.errors[0]!,/invalid case session/);
   assert.equal((result.steps.examples as any).coverage.started,0);
 });
 
-test('barrier traces retain overlapping policy lifetimes separately from admitted work',t=>{
+test('barrier traces retain overlapping policy lifetimes separately from admitted work',async t=>{
   const rows=[event(0,'token.request',1),event(0,'token.grant',1),
     event(1,'token.barrier.begin',2),event(2,'token.barrier.begin',3),
     event(5,'token.barrier.end',2,{reason:'grant'}),event(7,'token.barrier.end',3,{reason:'withdraw'}),event(10,'token.release',1)];
@@ -139,7 +171,7 @@ test('barrier traces retain overlapping policy lifetimes separately from admitte
   const result=waitingBreakdown(costs.events,step)!;
   assert.deepEqual(result.backfill_barrier,{wall_s:6,request_s:9,unfinished:[]});
   assert.equal(result.wall_s.admitted_case,10,'barrier time overlaps existing work, rather than adding to wall time');
-  const summary=costs.summary([step]);assert.ok('steps' in summary);
+  const summary=(await costs.summary([step]));assert.ok('steps' in summary);
   assert.deepEqual((summary.steps.examples as Record<string,any>).waiting.backfill_barrier,result.backfill_barrier);
 });
 
@@ -172,14 +204,14 @@ test("the unpooled JVM sweep is work rather than idle time", () => {
   assert.equal(result.wall_s.script_or_dispatch, 6);
 });
 
-test("before/after checks keep their own binary and token intervals; phase distributions are per program", t => {
+test("before/after checks keep their own binary and token intervals; phase distributions are per program", async t => {
   const dir = fixture(t);
   checkFile(dir, 10, "old", 1, 2);
   checkFile(dir, 11, "new", 4, 2);
   const label = (binary: string) => `json64:${Buffer.from(JSON.stringify({ project: "tests/programs/a/tsconfig.json", binary })).toString("base64url")}`;
   const rows = [event(0, "token.request", 1, { context: label("old") }), event(.5, "token.grant", 1), event(3.2, "token.release", 1),
     event(3.3, "token.request", 2, { context: label("new") }), event(3.8, "token.grant", 2), event(6.1, "token.release", 2)];
-  const result = summarizeCosts(dir, rows, [step]);
+  const result = (await summarizeCosts(dir, rows, [step]));
   assert.equal(result.status, "complete");
   const data = result.steps.examples as Record<string, any>;
   assert.equal(data.coverage.completed, 2);
@@ -198,9 +230,9 @@ test("before/after checks keep their own binary and token intervals; phase distr
   assert.equal(groups.reduce((n: number,p: any)=>n+p.child_cpu_s,0),1);
 });
 
-test("old binaries or missing files are incomplete telemetry, never a fabricated timing", t => {
+test("old binaries or missing files are incomplete telemetry, never a fabricated timing", async t => {
   const dir = fixture(t);
-  const result = summarizeCosts(dir, [event(0,"token.request",1), event(1,"token.grant",1), event(2,"token.release",1)], [step]);
+  const result = (await summarizeCosts(dir, [event(0,"token.request",1), event(1,"token.grant",1), event(2,"token.release",1)], [step]));
   assert.equal(result.status, "partial");
   const data = result.steps.examples as Record<string, any>;
   assert.equal(data.coverage.completed, 0);
@@ -208,7 +240,7 @@ test("old binaries or missing files are incomplete telemetry, never a fabricated
   assert.equal(data.check_wall_s.n, 0);
 });
 
-test("RSS distributions count only measured completed cases and preserve unknown child peaks", t => {
+test("RSS distributions count only measured completed cases and preserve unknown child peaks", async t => {
   const dir = fixture(t);
   checkFile(dir, 10, "new", 1, 2, false, false, 1024);
   checkFile(dir, 11, "new", 1, 2, false, false, 4096);
@@ -218,7 +250,7 @@ test("RSS distributions count only measured completed cases and preserve unknown
   for (const [index, value] of ["4096", -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1].entries()) {
     checkFile(dir, 20 + index, "new", 1, 2, false, false, value);
   }
-  const data = summarizeCosts(dir, [], [step]).steps.examples as Record<string, any>;
+  const data = (await summarizeCosts(dir, [], [step])).steps.examples as Record<string, any>;
   assert.deepEqual(data.self_peak_rss_kb, {n:2, sum:5120, p50:1024, p95:4096, p99:4096, max:4096});
   assert.deepEqual(data.child_peak_rss_kb, distribution([]));
   assert.equal(data.cases.find((c: any) => c.pid === 12).self_peak_rss_kb, null);
@@ -226,11 +258,11 @@ test("RSS distributions count only measured completed cases and preserve unknown
   assert.ok(data.cases.every((c: any) => c.child_peak_rss_kb === null));
 });
 
-test("a truncated child record and unavailable CPU stay visible", t => {
+test("a truncated child record and unavailable CPU stay visible", async t => {
   const dir = fixture(t);
   checkFile(dir, 10, "new", 1, 2, true);
   checkFile(dir, 11, "new", 4, 2, false, true);
-  const result = summarizeCosts(dir, [], [step]);
+  const result = (await summarizeCosts(dir, [], [step]));
   assert.equal(result.status, "partial");
   assert.equal(result.error_count, 1);
   const data = result.steps.examples as Record<string, any>;
@@ -240,13 +272,13 @@ test("a truncated child record and unavailable CPU stay visible", t => {
   assert.deepEqual(data.cpu_resolution_s, [.01, null]);
 });
 
-test("an unwritable metrics directory cannot throw into the runner", t => {
+test("an unwritable metrics directory cannot throw into the runner", async t => {
   const dir = fixture(t);
   const file = join(dir,"file"); writeFileSync(file,"not a directory");
   const costs = new CaseCosts(file);
   assert.equal(costs.available, false);
   assert.doesNotThrow(() => costs.record(event(0,"pool.state")));
-  assert.equal(costs.summary([step]).status,"partial");
+  assert.equal((await costs.summary([step])).status,"partial");
 });
 
 test("percentiles retain slow tails and an empty population is explicit", () => {
@@ -255,7 +287,7 @@ test("percentiles retain slow tails and an empty population is explicit", () => 
   assert.equal(d.p50,1); assert.equal(d.p99,1); assert.equal(d.max,100); assert.equal(d.sum,199);
 });
 
-test("aggregate peaks retain each scope beside the step's reservation", t => {
+test("aggregate peaks retain each scope beside the step's reservation", async t => {
   const dir = fixture(t);
   const scopes = [
     { cgroup: "/run/a", scope_budget_bytes: 6 * 2 ** 30, peak_bytes: 512 * 2 ** 20 },
@@ -263,33 +295,33 @@ test("aggregate peaks retain each scope beside the step's reservation", t => {
     { cgroup: "/run/c", scope_budget_bytes: 6 * 2 ** 30, peak_bytes: null },
   ];
   writeFileSync(join(dir, "aggregate-1-0.jsonl"), scopes.map(row => JSON.stringify({ event: "aggregate.peak", step: "examples", ...row })).join("\n") + "\n");
-  const result = summarizeCosts(dir, [], [{ ...step, memory: { reserved_bytes: 6 * 2 ** 30 } }]);
+  const result = (await summarizeCosts(dir, [], [{ ...step, memory: { reserved_bytes: 6 * 2 ** 30 } }]));
   const data = result.steps.examples as any;
   assert.equal(data.aggregate_memory.reserved_step_bytes, 6 * 2 ** 30);
   assert.equal(data.aggregate_memory.max_scope_peak_bytes, 768 * 2 ** 20);
   assert.equal(data.aggregate_memory.measured_scopes, 2);
   assert.equal(data.aggregate_memory.unknown_scopes, 1);
   assert.deepEqual(data.aggregate_memory.scopes, scopes);
-  assert.equal((summarizeCosts(dir, [], [step]).steps.examples as any).aggregate_memory.reserved_step_bytes, null, "a step the run did not size has no reservation");
+  assert.equal(((await summarizeCosts(dir, [], [step])).steps.examples as any).aggregate_memory.reserved_step_bytes, null, "a step the run did not size has no reservation");
   assert.equal(result.status, "complete");
 });
 
-test("aggregate peaks use supplied observations and retained scopes retire on departure", t => {
+test("aggregate peaks use supplied observations and retained scopes retire on departure", async t => {
   const dir = fixture(t);
   const owned=ownMemory(join(dir,'observations'),{scopePeak:{kind:'fixed',bytes:4096,resettable:true}});
   const env = {...owned, NTS_GATE_CASE_COSTS_DIR: dir, NTS_GATE_STEP: "examples" };
   recordAggregatePeak({path:"/supplied-peak",inode:"retained"}, 1024, env);
-  const result = summarizeCosts(dir, [], [step]);
+  const result = (await summarizeCosts(dir, [], [step]));
   const data = result.steps.examples as any;
   assert.equal(data.aggregate_memory.max_scope_peak_bytes, 4096);
   assert.equal(data.aggregate_memory.unknown_scopes, 0);
   assert.doesNotThrow(() => recordAggregatePeak({path:"/supplied-peak",inode:"retained"}, 1024, { ...env, NTS_GATE_CASE_COSTS_DIR: join(dir, "absent") }));
   ownMemory(join(dir,'observations'),{scopePeak:{kind:'live'}});
   recordAggregatePeak({path:'/nonexistent-nts-peak',inode:'acquired-before-departure'},1024,env);
-  assert.equal((summarizeCosts(dir,[],[step]).steps.examples as any).aggregate_memory.unknown_scopes,1);
+  assert.equal(((await summarizeCosts(dir,[],[step])).steps.examples as any).aggregate_memory.unknown_scopes,1);
 });
 
-test("artifact shadow counts distinguish cross-run matches, mismatches, misses and unavailable keys", t => {
+test("artifact shadow counts distinguish cross-run matches, mismatches, misses and unavailable keys", async t => {
   const dir = fixture(t);
   const rows = [
     { status: "miss", run: "run-a" },
@@ -299,7 +331,7 @@ test("artifact shadow counts distinguish cross-run matches, mismatches, misses a
     { status: "unavailable", run: "run-b" },
   ];
   writeFileSync(join(dir, "shadow-1-0.jsonl"), rows.map(row => JSON.stringify({ event: "artifact.shadow", kind: "assemble", step: "examples", ...row })).join("\n") + "\n");
-  const result = summarizeCosts(dir, [], [step]);
+  const result = (await summarizeCosts(dir, [], [step]));
   assert.deepEqual((result.steps.examples as any).artifact_shadow, {
     observations: 5, skipped_runs: 0, eligible_for_skipping: false, mismatch_evidence: [], kinds: { assemble: {
       observations: 5, misses: 1, matching_hits: 2, mismatching_hits: 1, unavailable: 1, cross_run_hits: 2,
@@ -307,7 +339,7 @@ test("artifact shadow counts distinguish cross-run matches, mismatches, misses a
   });
 });
 
-test("reuse summary counts actual skips and matching tool-only CPU without inventing unknown costs", t => {
+test("reuse summary counts actual skips and matching tool-only CPU without inventing unknown costs", async t => {
   const dir = fixture(t);
   const rows = [
     { status: "fresh", enabled: false, tool_cpu_s: .5, matching_hit_cpu_s: .5 },
@@ -316,7 +348,7 @@ test("reuse summary counts actual skips and matching tool-only CPU without inven
     { status: "reused", enabled: true, tool_cpu_s: null, matching_hit_cpu_s: null },
   ];
   writeFileSync(join(dir, "reuse-1-0.jsonl"), rows.map(row => JSON.stringify({ event: "artifact.reuse", kind: "jvm-verifies", step: "examples", ...row })).join("\n") + "\n");
-  const result = summarizeCosts(dir, [], [step]).steps.examples as any;
+  const result = (await summarizeCosts(dir, [], [step])).steps.examples as any;
   assert.equal(result.artifact_reuse.skipped_runs, 1);
   assert.equal(result.artifact_reuse.fresh_runs, 3);
   assert.equal(result.artifact_reuse.tool_cpu_s.n, 2);
@@ -328,7 +360,7 @@ test("reuse summary counts actual skips and matching tool-only CPU without inven
 
 
 for(const code of ['ENOENT','ENODEV','ESRCH','EIO','EACCES'])for(const operation of ['stat','memory.peak'])
-test(`aggregate peak keeps acquired identity across owners at ${operation}: ${code}`,t=>{
+test(`aggregate peak keeps acquired identity across owners at ${operation}: ${code}`,async t=>{
   const dir=fixture(t),scope={path:'/acquired',inode:'123'},env={...ownMemory(join(dir,'observations')),NTS_GATE_CASE_COSTS_DIR:dir,NTS_GATE_STEP:'examples'};
   let stopped=false;
   const files:CgroupFiles={inode:()=>{if(stopped&&operation==='stat')throw Object.assign(Error(code),{code});return scope.inode;},text:()=>{if(stopped&&operation==='memory.peak')throw Object.assign(Error(code),{code});return '456';},children:()=>[]};
@@ -337,6 +369,6 @@ test(`aggregate peak keeps acquired identity across owners at ${operation}: ${co
   if(['EIO','EACCES'].includes(code))assert.throws(()=>recordAggregatePeak(scope,1024,env,host),error=>error instanceof HostObservationError&&!(error instanceof CgroupDeparted)&&error.message.includes(code)&&error.message.includes(operation));
   else{
     recordAggregatePeak(scope,1024,env,host);
-    assert.equal((summarizeCosts(dir,[],[step]).steps.examples as any).aggregate_memory.unknown_scopes,1);
+    assert.equal(((await summarizeCosts(dir,[],[step])).steps.examples as any).aggregate_memory.unknown_scopes,1);
   }
 });

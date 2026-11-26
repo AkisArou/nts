@@ -1238,3 +1238,225 @@ after completion; source stayed unchanged during proof.
 Raw log `~/.cache/nts-scratch/841/review3/inner-v1.log`, SHA-256
 `d67864c34278442f7357be8edeaf6d0602d7f303126547e8d8da898889cb389a`; compact proof `review3/inner-v1-proof.json`, SHA-256
 `964a0ae23814f06e2a0906426094a91bfca467deed2c80d5d05995cc9e154a7b`.
+
+## Runner-owned check observations, slice (e)
+
+Standalone compiler processes made the earlier process-file consolidation
+insufficient: the committed core baseline still has 62,623 check files.
+The runner now owns one `costs/check-worker-0.jsonl.gz`, published through
+`durableRecordStream` with `gzip: true`. Compiler sessions retain their original
+rows, carried in `{producer, pid, record}` envelopes. The shared asynchronous
+reader accepts the legacy session files, process files and plain or compressed
+worker streams. Derived checks retain legacy logical-file order before
+aggregation, including floating-point accumulation and calibration ties.
+
+A separate mode-0600 Unix socket lives in the run's temporary directory. A
+runner-issued random step capability authorizes publication and expires at
+step reap. The self-reported PID is checked for consistency against that step's
+retained scope through `HostObservations.cgroupMembers`; it is not authenticated.
+Wrong or crossed capabilities, a reaped capability, out-of-scope PID claims and
+duplicate live producers are refused and named. The policy broker is unchanged.
+
+The compiler connects and receives acknowledgement before its timer starts.
+Every completed phase attempts a nonblocking write; a full kernel buffer uses
+a bounded process queue, retried on subsequent sends. The final blocking flush
+occurs only after every active total stops. The descriptor is close-on-exec.
+Connect, acknowledgement and flush use peer events, with no local wall deadline;
+a live runner that stops serving is covered by the command's normal hang bounds.
+After scope reap the runner drains buffered rows through EOF, naming any
+connection still open without a wall-time grace period. Interrupted sessions
+retain their sent phases and are named incomplete. An explicitly supplied
+channel that fails never falls back to legacy files; hand invocations without
+a channel retain that writer.
+
+### Summary inventory and slice (f) handover
+
+The read-only inventory used the completed core
+`core-01d68ab31539-20261125T212409Z`, commit
+`01d68ab3153911309053d70d674e2e34cb5b2df6`. Its `summary.json` SHA-256 is
+`5f8e493b06f941a2521d2f2eab04ad170122a87781dffac74ccc9088dbeb7d7b`.
+Unit `nts-841-e-summary-before-v2` ran through admission at committed base
+`a7055aba27`, verified separately before measurement. No production data changed.
+
+| Population or encoding | Content bytes | Allocated bytes | Files |
+| --- | ---: | ---: | ---: |
+| Original summary | 214,658,138 | 214,671,360 | 1 |
+| Compact summary, encoding measurement only | 109,257,244 | not written | not written |
+| Gzip level 1 of unchanged original bytes, encoding measurement only | 19,338,013 | not written | not written |
+| Compact `case_costs` | 108,906,637 | not written | not written |
+| Compact per-case arrays, 62,869 cases | 107,562,091 | not written | not written |
+
+Per-case arrays account for 98.8% of compact `case_costs`. Summed per-case
+value bytes are 41,933,052 for `phase_groups`, 31,885,468 for `phases`,
+7,104,601 for `project`, 4,149,354 for `binary_sha`, and 2,174,570 for
+`observation`. Whitespace accounts for roughly half the pretty summary.
+At the card's 15 core runs daily for three days, lossless gzip projects
+summary storage from 9.66 GB to 0.87 GB; this is a projection from one core,
+not an inventory of the retained population.
+
+The coordinator approved lossless whole-summary gzip in principle for a fresh
+(f) assignment. It preserves every per-case fact; slimming derived arrays
+requires a separate decision after inventorying their readers. That assignment
+also owns the queue/token/pool-change stream compression, dual-form summary
+readers, bounded streaming fact/digest readers, physical-byte retention seals,
+and the first post-landing whole-core measurement. Slice (e) changes neither
+the summary encoding nor its row content. Pre-landing disk proof uses only the
+approved representative core steps, not a whole-core run.
+
+The full proposal is kept at `~/.cache/nts-scratch/841/f/proposal.md`, SHA-256
+`ee29d7eb66fef28b56d661c995433946e29f296f2787050376d2126a1ece7e59`.
+Measurement recipe `~/.cache/nts-scratch/841/e/measure-summary.py` has SHA-256
+`833e9d562409711b1b31d0c6e3a788b0b89cbfa9903914e62e93ef2ab28062f5`;
+raw inventory `e/summary-before-v2.json` has SHA-256
+`f89f1474381e6139c9c3e3e12a7daf001702087e1608a186ed47af5b006dce7e`.
+
+### Focused and inner proof
+
+Unit `nts-841-e-focused-v6` passed all 12 Rust cost/transport controls and
+40 Node stream/reader/calibration controls. These cover immediate partial-phase
+delivery, a full-buffer queue without timed waits, bounded pending bytes,
+failed-output poisoning, wrong identities, a live connection after reap,
+multi-buffer EOF drain, partial gzip/publication refusal and preservation of
+signed zero. Replaying one recorded population through all four check formats
+gives identical summaries with every double compared bitwise. Calibration also
+retains the legacy maximum on ties despite reversed completion order, hashing
+the shared archive once.
+
+The full `inner.ts --no-agree` passed at
+`48fca6089f060daf8f5db5a962938eef48df91d0`, in `nts-841-e-inner-v3`:
+formatting 8 s, Clippy 8 s, compiler build 19 s and selected Rust/backend tests
+874 s. Its 14 reported suites contain 898 passes and zero failures. The Rust
+wiring fixture's read guard only panics with an explicit hang message;
+`test-timing.ts` does not scan Rust fixtures, as the adjacent comment states.
+
+The subsequent tooling check passed all six strict projects/1,241 modules and
+host ownership over 2,216 sources, 368 entry closures and 419 reads. It prompted
+an explicit `CaseCosts | null` declaration and command-exit propagation in the
+three runner catches, plus a socket-adapter ownership declaration in
+`test-host-owners.ts`. These do not change compiler code or telemetry rows.
+All proof units use Node 26.13.0 first on PATH, the toolchain environment,
+Nice 19, CPUWeight 20 and CPUs 0–3,6–31, with admission waits retained in logs.
+
+| Raw artifact under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `e/focused-v6/rust.log` | `2cebebe4b735845db2775fc415e7ab3d9638ff4e2d2ba5986265097173ebb8dc` |
+| `e/focused-v6/node.log` | `88c1974c780e5eec54537a176882d9a855935e8fb24cb5383438c555286ea06e` |
+| `e/inner-v3.log` | `8d0b0e63362cca8e218fa5924220579599b82f6850496451cd4391d5ffd6de9d` |
+| `e/inner-v3.log.err` | `8f3b9b1f10900fef3a9c1c2e472457b0ffcf860b5448583fa0ebf9e7072c030a` |
+| `e/inner-v3-proof.json` | `86e1fc1c5b997e56420c6ef8b072026e4608bd1fac4e1843d986edb2b0405a98` |
+| `e/tooling-v3/types.log` | `9ca01fffc7bc151ae1a4068626e6c2df80d8566fd947543966acda51fabeaecd` |
+| `e/tooling-v3/audit.log` | `9ca8a557ada36c91b24f5c70686b27227fdc5b76f770fc6ecb5f74134d8a5ea8` |
+
+### Representative core steps
+
+The coordinator replaced pre-landing whole-core proof with `examples` and
+`test262-rest-cases`, including their `program-oracles` prerequisite. The
+experiment ran in this tree at committed
+`7d023231ca3e7892aab00067c8957f44e7efc7d4`, with the fresh `nts-dev` compiler
+through `NTS_BIN`. Its binary SHA-256 was
+`3d95819d272f3f4de419208bb478398f3b91f7a04e4e4e8aec54c07b3107beab`.
+The catalog was refreshed through the official linker; the fresh build and
+expanded 80-test Node set, including real-runner shutdown controls, passed.
+
+Unit `nts-841-e-subset-v1` explicitly records a non-canonical experiment,
+not landing evidence. All three steps passed in 933 s: program oracles 783 s,
+examples 110 s, test262 rest 41 s. The run used its normal 24-slot budget;
+no launcher parallelism cap was supplied. Its final telemetry is complete with
+zero errors, and `tmp/` is absent. Disk inventory ran separately through
+`summary-inventory` in `nts-841-e-inventory-v1`, after verifying the commit.
+
+The baseline is the kept core named above. The selected share consists of
+legacy check files whose PIDs occur in
+`case_costs.steps[examples|test262-rest-cases].cases`; every matched file's first
+case header is checked to name one of those steps. The baseline has 1,129
+examples and 106 rest checks. The experiment has 1,130 and 106 respectively,
+so the per-case comparison accounts for its one additional example.
+
+| Selected check records | Cases | Files / distinct file inodes | Content bytes | Allocated bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline core's matching steps | 1,235 | 1,235 / 1,235 | 33,284,661 | 35,749,888 |
+| Experiment's single worker archive | 1,236 | 1 / 1 | 2,020,890 | 2,023,424 |
+| Baseline per case | 1 | 1 / 1 | 26,951.14 | 28,947.28 |
+| Experiment per case | 1 | 0.000809 / 0.000809 | 1,635.02 | 1,637.07 |
+
+Per-case check content is 6.1% of baseline, and allocated bytes 5.7%. No legacy
+per-PID check file was produced. This demonstrates the fixed publication owner
+against the card's 62,623-check-file full-core baseline; it does not claim a
+measured whole-core after total. The first normal core after landing supplies
+that number to (f).
+
+For footprint context, the full source core and the selected experiment have
+different populations. Their entire directories and summaries are recorded
+below without treating their totals as a same-population reduction. Tree inode
+counts include the `costs/` directory itself; distinct file inodes exclude it.
+
+| Population / artifact | Files | Distinct file inodes | Tree inodes | Content bytes | Allocated bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Full baseline core `costs/` | 66,382 | 66,382 | 66,383 | 552,671,819 | 702,218,240 |
+| Selected experiment `costs/` | 1,588 | 1,588 | 1,589 | 12,086,348 | 17,899,520 |
+| Full baseline `summary.json` | 1 | 1 | 1 | 214,658,138 | 214,671,360 |
+| Selected experiment `summary.json` | 1 | 1 | 1 | 6,480,687 | 6,488,064 |
+
+### Same-compiler transport control
+
+Unit `nts-841-e-overhead-v1` used the same committed compiler and three projects
+under `tests/programs/<name>/tsconfig.json`. Six measured cohorts followed one
+discarded warmup cohort. Each project/cohort ran A1,A2,A,B: an interleaved A/A
+legacy control pair and A/B legacy/channel pair, never separate arm blocks.
+There were 72 measured cases and 12 warmups, on CPUs 0–3,6–31 through admission,
+without a measurement lock. Ratios are later/earlier within each pair.
+`analysis.json` derives ordinary medians, averaging the two middle values for
+six observations, from the unchanged individual observations.
+
+| Project | Metric | A/A minimum–maximum | A/B minimum | A/B median | A/B maximum |
+| --- | --- | ---: | ---: | ---: | ---: |
+| a-length-read-through-a-field | self CPU | 0.9562–0.9973 | 0.9114 | 0.9875 | 1.0608 |
+| a-length-read-through-a-field | child CPU | 0.9368–1.0424 | 0.8750 | 1.0117 | 1.1013 |
+| a-length-read-through-a-field | check wall | 0.8476–1.1081 | 0.6640 | 0.9706 | 1.0442 |
+| a-length-read-through-a-field | command wall | 0.8482–1.1079 | 0.6650 | 0.9714 | 1.0448 |
+| array-from | self CPU | 0.9401–1.0761 | 0.9474 | 1.0071 | 1.0553 |
+| array-from | child CPU | 0.9373–1.0733 | 0.9111 | 0.9632 | 1.0570 |
+| array-from | check wall | 0.8797–1.0813 | 0.9577 | 0.9892 | 1.3962 |
+| array-from | command wall | 0.8799–1.0790 | 0.9597 | 0.9908 | 1.3958 |
+| cross-file-class | self CPU | 0.9132–1.0576 | 0.9378 | 0.9910 | 1.1264 |
+| cross-file-class | child CPU | 0.9549–1.0562 | 0.9736 | 1.0060 | 1.0626 |
+| cross-file-class | check wall | 0.9434–1.0849 | 0.9324 | 0.9931 | 1.1186 |
+| cross-file-class | command wall | 0.9405–1.0862 | 0.9353 | 0.9944 | 1.1182 |
+
+Every A/B median falls inside its project/metric's observed A/A band. Individual
+wall ratios retain load variation, including array-from's 1.3962 maximum.
+These are paired transport controls; cross-run core time distributions do not
+decide the overhead claim.
+
+| Project | A self CPU median (s/case) | B self CPU median | A child CPU median | B child CPU median |
+| --- | ---: | ---: | ---: | ---: |
+| a-length-read-through-a-field | 0.784332 | 0.777243 | 1.742751 | 1.722322 |
+| array-from | 0.490551 | 0.499762 | 2.067094 | 1.981899 |
+| cross-file-class | 0.145118 | 0.146913 | 1.675663 | 1.701120 |
+
+Unit `nts-841-e-killed-v3` supplied a real compiler with a private 12,000-function
+project and stopped only its named scope once the runner received the completed
+capture phase. Four original records survived EOF, including capture's end;
+`check.total` did not. The summary is partial with one incomplete check and the
+named producer/session error. The control joined its helper and removed its
+temporary. Missing totals never become completed costs.
+
+| Raw artifact under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `e/build-proof-v2/build.log` | `ae5d9eaa4b4558b641dd3f0238a57fd3c634cdfab759d3d1426b913d89ed5c02` |
+| `e/build-proof-v2/focused.log` | `0c2b488208e2f0fc4da65a13145d9a6eb7a9ad8599c423b1ab7a6573379cfb81` |
+| `e/measure-subset.py` | `b473b901208a928baf909f7c51de1801ee0e53dc1891c3bb45468826627d19b1` |
+| `e/inventory-v1.json` | `14aa3eecd9d1449dd5960d24f54c7163c16f882c1348e1f6923fdda2c6f60e58` |
+| `e/subset-v1.log` | `8f42a64dd69ba312b8ef3d0d425377021122d1456b4312e121300ae5fa829534` |
+| `e/subset-v1.log.err` | `35e3a150554613f51d5a501f1b94874d8bab1759ad7e2f6e85955809985f7710` |
+| `e/subset-v1/summary.json` | `f0840aa0037943a924d4c966caed39d9cad94304dfc45f482cb12adecaa983c6` |
+| `e/subset-v1/costs/check-worker-0.jsonl.gz` | `79b297bcd8f963160152ad58c33085dddf11576bef0acfa1e0e3a340980366fd` |
+| `e/paired-overhead.mjs` | `3cac896d135c96c5621a66f0725627d314a9c400586499e20e944ca6dfd90422` |
+| `e/overhead-v1/observations.jsonl` | `11131b5c2dd9335428867aa9de905a008480fa48dd18954295a04b9fa9c9358e` |
+| `e/analyze-overhead.py` | `723689b49fe81ec1fe0250ebbf0ee2e6d6bd3c1d659fd9b79d6e9c264912a684` |
+| `e/overhead-v1/analysis.json` | `02ee494ce0ccd91a6c2dd0cbbbe50af0f2830ceec8df3b380bf260b5bdbc5c69` |
+| `e/killed-compiler.mjs` | `b8ae0a9f1c8e1b0a62a08c1578962e94453b33d2f7d5239eb57e8dbd35a5b391` |
+| `e/killed-v3.log` | `d0c7fb42caf6b1250e3c0fb709ff2305f79c901c63d57ba6a5429af3b55cd681` |
+| `e/killed-v3/summary.json` | `0cad9e377958981038087ce704fc09d0239513833619c9dfcb663b6d4694647a` |
+| `e/killed-v3/costs/check-worker-0.jsonl.gz` | `8c747f29ab537c06ad8818affb63e40535587264042a16b90c214410f13f6411` |
+| `e/killed-v3/cleanup.json` | `db5b7aa839a471cd77b97f4a956c25913c29c56959af6372afd75a8a1ff24be8` |

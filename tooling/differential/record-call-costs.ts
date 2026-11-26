@@ -2,8 +2,8 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
-import {basename, dirname, join, resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {basename, dirname, join} from 'node:path';
+import {runAsCommand} from './command-entry/main.ts';
 import {parseJsonReport} from './check-report.ts';
 import {caseCostSessions} from './case-cost-records.ts';
 
@@ -15,10 +15,12 @@ const integer = (value: unknown): number => {
 };
 
 /** A measured maximum supplies the allowance; no historical aggregate is a call. */
-export function calibration(nativeRoot: string, jvmRoot: string, multiple: number, idleSeconds: number) {
+export async function calibration(nativeRoot: string, jvmRoot: string, multiple: number, idleSeconds: number,
+  options:{hashFile?:(path:string)=>string}={}) {
   assert.ok(Number.isSafeInteger(multiple) && multiple > 1, 'invalid calibration multiplier');
   assert.ok(Number.isSafeInteger(idleSeconds) && idleSeconds > 0, 'invalid inactivity guard');
   const arms: Record<string, unknown> = {};
+  const hashFile=options.hashFile??hash;
   for (const arm of ['c', 'llvm', 'sanitized', 'jvm']) {
     const root = arm === 'jvm' ? jvmRoot : nativeRoot, area = join(root, arm), summary = read(join(root, 'result.json'));
     assert.ok(summary.finished, 'calibration sitting did not finish');
@@ -39,8 +41,9 @@ export function calibration(nativeRoot: string, jvmRoot: string, multiple: numbe
     }
     const seen = new Set<string>(), seals: Record<string, string> = {};
     let calls = 0, maximum = {cpu_ticks: 0, clock_ticks_per_second: 1, fixture: '', index: 0, includes_startup: false};
+    let maximumTrace:string|undefined;
     const errors:string[]=[];
-    for (const {file:path,rows:events} of caseCostSessions(join(area,'costs'),errors)) {
+    for await (const {file:path,name:traceName,rows:events} of caseCostSessions(join(area,'costs'),errors)) {
       const header = events[0];
       assert.ok(header&&typeof header.project==='string','missing calibration case header');
       const fixture = basename(header.project).replace(/\.tsconfig\.json$/, '');
@@ -59,11 +62,15 @@ export function calibration(nativeRoot: string, jvmRoot: string, multiple: numbe
         assert.ok(!indexes.has(index), 'duplicate completed call'); indexes.add(index);
         const sample = {cpu_ticks, clock_ticks_per_second,
           fixture, index, includes_startup: event.includes_startup};
-        if (sample.cpu_ticks / sample.clock_ticks_per_second > maximum.cpu_ticks / maximum.clock_ticks_per_second) maximum = sample;
+        const ratio=sample.cpu_ticks/sample.clock_ticks_per_second,previous=maximum.cpu_ticks/maximum.clock_ticks_per_second;
+        // Worker sessions finish out of order. A tie retains the first call
+        // in the legacy logical-file order, independently of arrival order.
+        if(ratio>previous||ratio===previous&&maximumTrace!==undefined&&traceName<maximumTrace){maximum=sample;maximumTrace=traceName;}
       }
       calls += observed.length;
-      seals[`${arm}/costs/${basename(path)}`] = hash(path);
-      seals[`${arm}/${fixture}.json`] = hash(join(area, `${fixture}.json`));
+      // A worker archive contains many sessions; seal its bytes once.
+      seals[`${arm}/costs/${basename(path)}`] ??= hashFile(path);
+      seals[`${arm}/${fixture}.json`] = hashFile(join(area, `${fixture}.json`));
     }
     assert.deepEqual(errors,[],'incomplete calibration observations');
     assert.equal(seen.size, rows.size, 'an accepted project lacks its CPU observations');
@@ -79,12 +86,12 @@ export function calibration(nativeRoot: string, jvmRoot: string, multiple: numbe
     first_call_includes_startup: true, cleanup_uses_same_allowance: true, idle_seconds: idleSeconds, arms};
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+runAsCommand(import.meta.url,async()=>{
   const [native, jvm, out, multiplier, idle, ...extra] = process.argv.slice(2);
   assert.ok(native && jvm && out && !extra.length, 'usage: record-call-costs.ts <native sitting> <JVM sitting> <output> <multiple> <idle seconds>');
-  const value = calibration(native, jvm, Number(multiplier), Number(idle));
+  const value = await calibration(native, jvm, Number(multiplier), Number(idle));
   mkdirSync(dirname(out), {recursive: true}); writeFileSync(out, JSON.stringify(value, null, 2) + '\n');
   for (const [arm, row] of Object.entries(value.arms) as [string, {observed_max_cpu_seconds: number; allowance_seconds: number}][]) {
     console.log(`${arm}: observed ${row.observed_max_cpu_seconds} CPU s; allowance ${row.allowance_seconds} CPU s`);
   }
-}
+});

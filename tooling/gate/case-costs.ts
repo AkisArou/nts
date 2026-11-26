@@ -179,9 +179,9 @@ function peakRss(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
-function readChecks(root: string, errors: string[]) {
-  const checks: Check[] = [];
-  for (const {name,rows} of caseCostSessions(root,errors)) {
+async function readChecks(root: string, errors: string[]) {
+  const checks: {name:string;check:Check}[] = [];
+  for await (const {name,rows} of caseCostSessions(root,errors)) {
     try {
       const first = rows.find(r => r.event === "case");
       const begin = rows.find(r => r.event === "begin" && r.phase === "check.total");
@@ -192,23 +192,23 @@ function readChecks(root: string, errors: string[]) {
         phase: r.phase as string, wall_s: r.wall_s as number,
         self_cpu_s: cpu(r, "self_user_s", "self_sys_s"), child_cpu_s: cpu(r, "child_user_s", "child_sys_s"),
       }));
-      checks.push({ project: String(first.project), binary_sha: String(first.binary_sha ?? ""), observation:typeof first.observation==='string'?first.observation:undefined,pid: Number(first.pid), step: String(first.step),
+      checks.push({name,check:{ project: String(first.project), binary_sha: String(first.binary_sha ?? ""), observation:typeof first.observation==='string'?first.observation:undefined,pid: Number(first.pid), step: String(first.step),
         start: begin.epoch, end: typeof last?.epoch === "number" ? last.epoch : begin.epoch,
         wall_s: typeof last?.wall_s === "number" ? last.wall_s : 0,
         cpu_resolution_s: typeof first.cpu_resolution_s === "number" ? first.cpu_resolution_s : null,
         self_peak_rss_kb: peakRss(last?.self_peak_rss_kb),
         child_peak_rss_kb: peakRss(last?.child_peak_rss_kb),
         phases, complete: Boolean(last),
-      });
+      }});
     } catch (e) { errors.push(`${name}: ${(e as Error).message}`); }
   }
-  return checks;
+  return checks.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0).map(row=>row.check);
 }
 
-export function summarizeCosts(root: string, events: Observation[], steps: TimedStep[], initialErrors: string[] = []) {
+export async function summarizeCosts(root: string, events: Observation[], steps: TimedStep[], initialErrors: string[] = []) {
   const errors = [...initialErrors];
   let checks: Check[] = [];
-  try { checks = readChecks(root, errors); } catch (e) { errors.push(`reading case costs: ${(e as Error).message}`); }
+  try { checks = await readChecks(root, errors); } catch (e) { errors.push(`reading case costs: ${(e as Error).message}`); }
   const aggregates: Record<string, unknown>[] = [];
   const shadows: Record<string, unknown>[] = [];
   const reuse: Record<string, unknown>[] = [];
@@ -376,8 +376,8 @@ export class CaseCosts {
     catch (e) { this.available = false; this.errors.push((e as Error).message); }
   }
 
-  summary(steps: TimedStep[]) {
-    try { return summarizeCosts(this.root, this.events, steps, this.errors); }
+  async summary(steps: TimedStep[]) {
+    try { return await summarizeCosts(this.root, this.events, steps, this.errors); }
     catch (e) { return { version: 1, status: "unavailable", errors: [(e as Error).message] }; }
   }
 }

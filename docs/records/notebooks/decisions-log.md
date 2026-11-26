@@ -5083,3 +5083,23 @@ by name, conservatively wherever the type does not decide (generic, indexed,
 erased operands, exports, native calls, erased stores), until #650's key-order
 part keeps them. simdjson's stage 1 for ASCII text lands as a second slice.
 The contract is in [JSON](../../foundations/json.md#decisions).
+
+## Runner-owned compiler cost publication (11-26)
+
+For #841 slice (e), the coordinator approved the runner as the sole check-stream
+writer, using `durableRecordStream` with gzip immediately. Standalone compiler
+processes make process-local aggregation ineffective at reducing files. A separate
+Unix telemetry socket preserves the existing policy broker. A random per-step
+publication capability is its authority; claimed PID scope membership is a
+consistency check, not authenticated identity. A proposed SO_PEERCRED requirement
+was withdrawn before implementation because it would add a native addon to each
+run without a justified threat model.
+
+Completed phase rows use nonblocking sends and a bounded queue so aborts retain
+sent phases without blocking a measured region. Only the last active total's
+completion permits a blocking flush. Acceptance, acknowledgement, drain and peer
+closure end the waits without local wall deadlines; ordinary step stall and
+process bounds cover a runner which hangs. The runner drains after scope reap,
+names leftover open connections without a wall deadline, and joins durable gzip
+publication before summary derivation. Readers preserve the complete legacy
+summary, including floating-point values and case ordering.
