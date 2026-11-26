@@ -36,13 +36,7 @@ runAsCommand(import.meta.url,async()=>{
   if(!run||!raw)throw new ToolingInstrumentError('tooling-setup','rust-inputs runs inside a gate run (NTS_GATE_RUN_DIR and its environment context)');
   const context=JSON.parse(raw) as Context,capture=join(context.temporary.path,'rust-inputs');
   const admission=new TemporaryAdmission({path:capture,context:{kind:'gate',temporary:context.temporary},reservedBytes:RUST_INPUT_CAPTURE_BYTES});
-  let attempt=admission.tryAcquire();
-  while(!attempt.lease){
-    console.log(`  waiting for disk: ${JSON.stringify(attempt.snapshot)}`);
-    await new Promise(done=>setTimeout(done,5000));
-    attempt=admission.tryAcquire();
-  }
-  const lease=attempt.lease;
+  const {lease}=await admission.acquire({what:'rust-inputs capture',report:line=>console.log('  '+line)});
   registerCommandCloser('rust-inputs capture and disk claim',{close:()=>{try{rmSync(capture,{recursive:true,force:true});}finally{lease.release();}}});
   const trace=join(capture,'trace'),reports=join(capture,'reports');mkdirSync(trace,{recursive:true});
   // The traced run is this step's own tests.mjs, in this step's environment.

@@ -10,7 +10,7 @@ import {publishInputTrace} from './rust-test-inputs.ts';
 import {testScratch} from './test-scratch.ts';
 import {coverageOfCaptures,coverageOfReports,decide,describeCoverage,trackedFrom,MEMBERSHIP_PROBE,type TestReach} from './rust-input-coverage.ts';
 
-const snapshot=(files:string[]):InputSnapshot=>({files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:files,stagingFiles:files,directories:[],optionalFiles:[],memberships:[],observations:[]});
+const snapshot=(files:string[]):InputSnapshot=>({files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:files,stagingFiles:files,directories:[],optionalFiles:[],memberships:[],projectMatches:[],observations:[]});
 const bytes=(text:string)=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
 
 /** One test binary that opens each named file relative to the repository. */
