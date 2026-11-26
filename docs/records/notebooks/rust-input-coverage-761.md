@@ -65,6 +65,25 @@ the declared root walk-ups), 2,729 ignored, 5,139 absent inside ignored
 namespaces and 19 absent directories crossed toward another lookup. The
 capture was removed when the step ended.
 
+## The step after review, at main with nine more days of landings
+
+The step at `c7d69402ad` (the review fixes, root candidates included), through
+`runLanding` (`build`, `rust-inputs`): red, as designed. It waited 1,153 s for
+its disk claim, then took about 3,200 s, 10,512 CPU-s. The traced tests passed:
+3,328 tests in 57 binaries. It saw 6,802 candidates, of which 6,793 were reached
+and 9 missed. All 9 are reads main gained after the first green run:
+
+| Missed | Count | Resolution |
+|---|---:|---|
+| `tests/memory/a-borrow-ends-at-its-last-read` (landed in `14e0538b87`, counted by `compiler/core/tests/counting_moves.rs`): its listings, files and `package.json` lookups | 6 | `project-config` of its reader, as for the fixtures beside it |
+| `tests/memory/traversal/{.git,nts.config.ts,pnpm-workspace.yaml}`, looked up by the CLI that `tooling/cli/tests/memory_census.rs` runs | 3 | `optional-file` declarations on that reader |
+
+Re-decided under these declarations, 2 remain: the new fixture's two
+listings. For a fixture declared this way the validator claims its listings
+and contents itself. Neither is a candidate for `pile-shuffle` or
+`borrowed-call` in the same run, where only stats and readlinks remain, all
+reached. The first wide run is the check of that.
+
 ## What the trace covers
 
 - **Descendants.** The observer is the tests' child subreaper, and its seccomp
@@ -135,6 +154,14 @@ The review's re-decisions of that run, `~/.cache/nts-scratch/761/`:
 | `least-edit-v1/result.json` (byte-sensitive reads by the least-owing edit, stat included; 21 missed) | `b3a0ef36b37010d712b5f422920b79c10816704325ca3c311292786df7696d9f` |
 | `listing-removal-v1/result.json` (removal from the 15 listed directories; 0 missed) | `2e4f24845985ddeb1f1947c71e2a48aace9d3df2f5c0118af13f2fc8ab72abac` |
 | `root-redecide-v1/result.json` (the first run's reports with root candidates: 37 reached; its other misses are the pre-#828 readlinks and `corpus.ts`, declared since) | `47baf4f253bee6a36add3201ecc6a487c2ff7d08c9197294521a61ad59379496` |
+
+The step after review, `~/.cache/nts-scratch/761/`:
+
+| File | SHA-256 |
+|---|---|
+| `step-main-v2/terminal.json` (the run, red) | `3c27da789c6f1d5613cc1d1ce1dd027b6ad75a06357dd038cfbe4ae4ff087a69` |
+| `step-main-v2/run/rust-inputs.coverage.json` (9 missed) | `b525f589c92b49102ae3b0ba2464a10bfc3d2da9ed0644382fa9c5085384d6ec` |
+| `v2-redecide/result.json` (under the new declarations: 2 missed, the listings) | `9a5fb9d89d75031c4aa3d7dea00e7412b08b1cdffe351828c069905b2c33a4f9` |
 
 The step at the rebased tip, `~/.cache/nts-scratch/761/step-main-v1/`:
 
