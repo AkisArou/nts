@@ -396,29 +396,36 @@ fn census_is_the_requested_graphs_sites_and_does_not_change_prepared_hir() {
     );
 }
 
-/// json-parse as `nts-bench` builds it: an executable rooted at `work` and its
-/// module's evaluation, prepared for C under reference counting. The case has
-/// no tsconfig of its own, so one is written beside the test's output.
-fn json_parse() -> (hir::Prepared, hir::Prepared) {
+/// A benchmark case as `nts-bench` builds it: an executable rooted at `work`
+/// and its module's evaluation, prepared for C under reference counting. A
+/// case has no tsconfig of its own, so one is written beside the test's
+/// output.
+fn benchmark(case: &str) -> (hir::Prepared, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
         .expect("the repository");
-    let out = crate::scratch::ScratchDir::path_in_target("nts-memory-json-parse");
+    let out = crate::scratch::ScratchDir::path_in_target(&format!("nts-memory-{case}"));
     std::fs::create_dir_all(&*out).expect("scratch");
     let tsconfig = out.join("tsconfig.json");
     std::fs::write(
         &tsconfig,
         format!(
-            r#"{{"extends":"{root}/tsconfig.fixtures.json","include":["{root}/benchmarks/cases/json-parse/"]}}"#
+            r#"{{"extends":"{root}/tsconfig.fixtures.json","include":["{root}/benchmarks/cases/{case}/"]}}"#
         ),
     )
     .expect("written config");
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
-        .expect("json-parse captures");
+        .expect("the case captures");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    prepare_for_bench(&snapshot)
+}
+
+fn prepare_for_bench(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> (hir::Prepared, hir::Prepared) {
     let roots = ["work".to_owned(), hir::lower::MODULE_INIT.to_owned()];
     let options = hir::Options {
         provider: Memory::ReferenceCounting,
@@ -428,10 +435,14 @@ fn json_parse() -> (hir::Prepared, hir::Prepared) {
             nts_core::hir::EntryUnwind::Terminal,
         )
     };
-    let normal = hir::prepare_unverified(&snapshot, &options);
-    let observed = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
+    let normal = hir::prepare_unverified(snapshot, &options);
+    let observed = hir::RawProgram::lower(snapshot, options.entry_files, options.foreign)
         .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
     (normal, observed)
+}
+
+fn json_parse() -> (hir::Prepared, hir::Prepared) {
+    benchmark("json-parse")
 }
 
 /// json-parse's allocation sites by the role they play in the parser. The
@@ -547,9 +558,18 @@ const JSON_PARSE_SITES: &[(&str, u32, &str, &str)] = &[
     ("syntaxError", 5, "CallStorage", "raised"),
 ];
 
-/// A frontier relative to the site's own context and the parse that holds it,
-/// so the `work` and `work#whole` arrivals read alike.
-fn relative(frontier: &str, own: &str) -> String {
+/// A frontier relative to the site's own context and, where the workload has
+/// one, the activation named by `anchor` that holds it (json-parse's parse),
+/// so the `work` and `work#whole` arrivals read alike. An interval is folded
+/// by the frame of the caller it is held in.
+fn relative(frontier: &str, own: &str, anchor: Option<&str>) -> String {
+    if let Some(label) = frontier.strip_prefix("interval ") {
+        let caller = label.rsplit_once(":%").map_or(label, |(caller, _)| caller);
+        return format!(
+            "interval in {}",
+            relative(&format!("frame {caller}"), own, anchor)
+        );
+    }
     let Some(frame) = frontier.strip_prefix("frame ") else {
         let reason = frontier.trim_start_matches("unknown frontier: ");
         let kind = reason.split(['(', '"']).next().unwrap_or(reason);
@@ -569,10 +589,12 @@ fn relative(frontier: &str, own: &str) -> String {
             .unwrap_or_default();
         return format!("outside {kind} {label}").trim_end().to_owned();
     };
-    let parse = own.find("/parseJsonText:").map(|at| {
-        own[at + 1..]
-            .find('/')
-            .map_or(own, |next| &own[..at + 1 + next])
+    let parse = anchor.and_then(|anchor| {
+        own.find(anchor).map(|at| {
+            own[at + 1..]
+                .find('/')
+                .map_or(own, |next| &own[..at + 1 + next])
+        })
     });
     let caller = parse
         .and_then(|parse| parse.rsplit_once('/'))
@@ -588,6 +610,8 @@ fn relative(frontier: &str, own: &str) -> String {
             "inside the parse: {}",
             frame.rsplit('/').next().unwrap_or(frame)
         )
+    } else if anchor.is_none() && own.rsplit_once('/').is_some_and(|(up, _)| up == frame) {
+        "caller".to_owned()
     } else if frame.ends_with(":merged") {
         format!("merged {frame}")
     } else {
@@ -631,16 +655,14 @@ fn holder_name(holder: &hir::memory::Holder) -> String {
     }
 }
 
-/// One line per source site: its role, and every distinct published answer
-/// across its contexts. Context keys are folded by `relative`.
 /// Where a site's proof chain starts, with context keys folded.
-fn root_text(site: &hir::memory::Site) -> String {
+fn root_text(site: &hir::memory::Site, anchor: Option<&str>) -> String {
     match &site.reached.root {
         hir::memory::Root::Scope(holder) => format!("scope of {}", holder_name(holder)),
         hir::memory::Root::Returned { context } => {
             format!(
                 "returned to {}",
-                relative(&format!("frame {context}"), &site.context)
+                relative(&format!("frame {context}"), &site.context, anchor)
             )
         }
         hir::memory::Root::Outside(label) => {
@@ -660,9 +682,11 @@ fn root_text(site: &hir::memory::Site) -> String {
     }
 }
 
-fn json_parse_table(report: &Report) -> String {
+/// One line per source site: its role, and every distinct published answer
+/// across its contexts, with context keys folded by `relative`.
+fn site_table(report: &Report, sites: &[(&str, u32, &str, &str)], anchor: Option<&str>) -> String {
     use std::collections::{BTreeMap, BTreeSet};
-    let roles: BTreeMap<_, _> = JSON_PARSE_SITES
+    let roles: BTreeMap<_, _> = sites
         .iter()
         .map(|(function, value, storage, role)| ((*function, *value, *storage), *role))
         .collect();
@@ -671,7 +695,7 @@ fn json_parse_table(report: &Report) -> String {
         let storage = format!("{:?}", site.id.storage);
         let role = roles
             .get(&(site.id.function.as_str(), site.id.value, storage.as_str()))
-            .unwrap_or_else(|| panic!("unmapped json-parse site {:?}", site.id));
+            .unwrap_or_else(|| panic!("unmapped site {:?}", site.id));
         let home = match &site.home {
             Home::Heap(reason) => format!(
                 "heap {}",
@@ -685,7 +709,7 @@ fn json_parse_table(report: &Report) -> String {
             }
             other => format!("{other:?}").to_lowercase(),
         };
-        let root = root_text(site);
+        let root = root_text(site, anchor);
         let holders: BTreeSet<_> = expanded_holders(report, site)
             .into_iter()
             .map(|(hold, class)| {
@@ -715,7 +739,7 @@ fn json_parse_table(report: &Report) -> String {
             .collect();
         let answer = format!(
             "{home}; frontier {}; {multiplicity}; {edge}; {root}; holders {holders:?}; obligations {obligations:?}; legacy {:?} {}",
-            relative(&site.retention_frontier, &site.context),
+            relative(&site.retention_frontier, &site.context, anchor),
             site.legacy,
             match site.legacy_agreement() {
                 hir::memory::LegacyAgreement::Conservative(reason) => format!(
@@ -788,7 +812,7 @@ fn json_parse_sites_each_have_a_home_and_a_proof_or_a_named_failure() {
         })
         .collect();
     assert_eq!(seen, table, "every source site has exactly one role");
-    let rendered = json_parse_table(report);
+    let rendered = site_table(report, JSON_PARSE_SITES, Some("/parseJsonText:"));
     print!("{rendered}");
     assert_eq!(
         rendered,
@@ -875,8 +899,9 @@ fn assert_role_proofs(report: &Report) {
 }
 
 /// The controls for json-parse's result and key-list roles: `traversal`'s
-/// chain head is returned and nothing holds it, while `shared-tail`'s is
-/// returned and held by both of its caller's heads.
+/// chain head is returned and nothing else holds it, so it is held for one
+/// arrival of its call, while `shared-tail`'s is held by both of its caller's
+/// heads, for their frame.
 #[test]
 fn a_returned_chain_is_held_by_its_links_and_a_shared_tail_by_both_heads() {
     for (case, heads) in [("traversal", 0), ("shared-tail", 2)] {
@@ -896,12 +921,26 @@ fn a_returned_chain_is_held_by_its_links_and_a_shared_tail_by_both_heads() {
             .iter()
             .find(|site| site.id.function == "chain" && site.id.value == 1)
             .expect("the chain's head");
-        assert_eq!(head.retention_frontier, "frame work:entry", "{case}");
-        assert!(
-            matches!(&head.reached.root, hir::memory::Root::Returned { context } if context.ends_with("/chain:%3")),
-            "{case}: {:?}",
-            head.reached
-        );
+        if heads == 0 {
+            // Only the walk reads the list: it is held for one arrival of
+            // `chain`'s call, and the proof starts where it was returned.
+            assert_eq!(head.retention_frontier, "interval work:entry:%3", "{case}");
+            assert!(
+                matches!(&head.reached.root, hir::memory::Root::Returned { context } if context.ends_with("/chain:%3")),
+                "{case}: {:?}",
+                head.reached
+            );
+        } else {
+            // `work`'s own heads hold the shared list, so it lives as long
+            // as they do: the proof starts at a head's scope.
+            assert_eq!(head.retention_frontier, "frame work:entry", "{case}");
+            assert!(
+                matches!(&head.reached.edge, hir::memory::Edge::Stored(hold) if hold.slot.contains("next"))
+                    && matches!(&head.reached.root, hir::memory::Root::Scope(hir::memory::Holder::Site { id, .. }) if id.function == "work"),
+                "{case}: {:?}",
+                head.reached
+            );
+        }
         let holders: Vec<_> = head
             .holders
             .iter()
@@ -922,5 +961,652 @@ fn a_returned_chain_is_held_by_its_links_and_a_shared_tail_by_both_heads() {
             holders.iter().all(|(function, _)| *function == "work"),
             "{case}: {holders:?}"
         );
+    }
+}
+
+/// tree-teardown's allocation sites by the role they play in one tree.
+///
+/// - `node`: an inner node, holding two subtrees built by the recursive calls.
+/// - `leaf`: a node at depth zero, with no children.
+const TREE_TEARDOWN_SITES: &[(&str, u32, &str, &str)] = &[
+    ("build", 4, "Object", "leaf"),
+    ("build", 8, "Object", "node"),
+];
+
+/// A builder's tree: one arrival of the call that builds it in its caller
+/// holds it, so its frontier is that interval. Inside the arrival its
+/// instances overlap without bound (the builder recurses), but no arrival's
+/// tree survives into the next. Only its own nodes' children hold a node, and
+/// a reset at the interval's end still owes the collector's roots
+/// (`RuntimeRootContract`) and a bound on what one tree holds
+/// (`RepeatedInstances`), so its home is the heap, by name.
+fn assert_tree_proof(report: &Report, site: &hir::memory::Site) {
+    let owner = site
+        .candidate_owner
+        .as_deref()
+        .expect("the builder has a caller");
+    assert_eq!(
+        site.retention_frontier,
+        format!("interval {owner}"),
+        "{site:?}"
+    );
+    assert_eq!(
+        site.home,
+        Home::Heap(Reason::OutlivesFrame(owner.to_owned())),
+        "{site:?}"
+    );
+    assert_eq!(
+        site.obligations,
+        [
+            Reason::OutlivesFrame(owner.to_owned()),
+            Reason::RepeatedInstances,
+            Reason::RuntimeRootContract
+        ],
+        "{site:?}"
+    );
+    let hir::memory::Multiplicity::Unbounded { witness } = &site.multiplicity else {
+        panic!("one tree has many nodes: {site:?}");
+    };
+    assert!(
+        witness.contains("is a recursive, reentrant or merged activation")
+            && !witness.contains("reached more than once"),
+        "only the builder's own recursion repeats within one arrival: {witness}"
+    );
+    assert!(
+        matches!(&site.reached.root, hir::memory::Root::Returned { context } if *context == site.context),
+        "{:?}",
+        site.reached
+    );
+    assert!(
+        site.holders.iter().all(|hold| {
+            (hold.slot.contains("\\\"left\\\"") || hold.slot.contains("\\\"right\\\""))
+                && matches!(&hold.holder, hir::memory::Holder::Site { id, context }
+                    if id.function == "build" && id.value == 8 && *context == site.context_id)
+        }) && !site.holders.is_empty(),
+        "only a node of the same tree holds a node: {:?}",
+        site.holders
+    );
+    let frontier = report
+        .frontiers
+        .iter()
+        .find(|frontier| frontier.owner == owner)
+        .expect("the interval's frontier");
+    assert!(frontier.ends.is_ok(), "{frontier:?}");
+    assert_eq!(
+        frontier.interval,
+        Ok(()),
+        "everything the call returns is held for one arrival: {frontier:?}"
+    );
+}
+
+/// Every tree-teardown site has a home and a proof, or a named failure: each
+/// maps to an emitted variant, plays one named role, and publishes the same
+/// answer three times. Normal preparation runs no solver and the observed
+/// preparation is the same program.
+#[test]
+fn tree_teardown_sites_are_held_for_one_arrival_of_their_builder() {
+    let (normal, baseline) = benchmark("tree-teardown");
+    assert!(normal.memory.is_none());
+    assert_eq!(
+        format!("{:?}", normal.program),
+        format!("{:?}", baseline.program),
+        "the memory report changes no prepared operation"
+    );
+    let report = baseline.memory.as_ref().expect("requested report");
+    assert!(report.failure.is_none(), "{:?}", report.failure);
+    let mut seen = std::collections::BTreeSet::new();
+    for site in &report.sites {
+        assert!(
+            !site.legacy.is_empty() && site.legacy_unknown.is_none(),
+            "unmapped: {site:?}"
+        );
+        // Today's placement serves the builder's call with a call region;
+        // this proof keeps the tree on the heap, by name, until a reset can
+        // discharge the collector's roots and bound one tree's bytes.
+        assert_eq!(site.legacy, ["call-region"], "{site:?}");
+        assert!(
+            matches!(
+                site.legacy_agreement(),
+                hir::memory::LegacyAgreement::Conservative(Reason::OutlivesFrame(_))
+            ),
+            "{site:?}"
+        );
+        assert_tree_proof(report, site);
+        seen.insert((
+            site.id.function.clone(),
+            site.id.value,
+            format!("{:?}", site.id.storage),
+        ));
+    }
+    let table: std::collections::BTreeSet<_> = TREE_TEARDOWN_SITES
+        .iter()
+        .map(|(function, value, storage, _)| {
+            ((*function).to_owned(), *value, (*storage).to_owned())
+        })
+        .collect();
+    assert_eq!(seen, table, "every source site has exactly one role");
+    let rendered = site_table(report, TREE_TEARDOWN_SITES, None);
+    print!("{rendered}");
+    assert_eq!(
+        rendered,
+        include_str!("memory_tree_teardown.tsv"),
+        "tree-teardown's published answers moved"
+    );
+    let first = report.render();
+    for _ in 0..2 {
+        let repeated = benchmark("tree-teardown").1;
+        assert_eq!(
+            first,
+            repeated.memory.expect("requested").render(),
+            "three byte-identical reports"
+        );
+    }
+}
+
+/// The builder fixture's sites, in each of its contexts.
+fn builder_sites(case: &str) -> (hir::Prepared, Vec<hir::memory::Site>) {
+    let (normal, observed) = prepare_for_bench(&snapshot(case));
+    assert_eq!(
+        format!("{:?}", normal.program),
+        format!("{:?}", observed.program),
+        "{case}: the memory report changes no prepared operation"
+    );
+    let report = observed.memory.as_ref().expect("requested report");
+    assert!(report.failure.is_none(), "{case}: {:?}", report.failure);
+    let sites: Vec<_> = report
+        .sites
+        .iter()
+        .filter(|site| site.id.function == "build")
+        .cloned()
+        .collect();
+    assert_eq!(sites.len(), 4, "{case}: two sites in two arrivals");
+    (observed, sites)
+}
+
+/// The fixture and its control differ in one statement: the control also
+/// keeps each round's tree in an array that outlives the round. The fixture's
+/// trees are held for one arrival of `build`; the control's are held by the
+/// array, for the whole of `work`, and its trees overlap across rounds.
+#[test]
+fn a_tree_builder_site_is_proved_and_a_kept_tree_is_not() {
+    let (prepared, proved) = builder_sites("a-tree-builder-site-is-proved");
+    let report = prepared.memory.as_ref().expect("requested report");
+    for site in &proved {
+        assert_tree_proof(report, site);
+    }
+    let (prepared, kept) = builder_sites("a-tree-builder-site-is-proved-control");
+    // The call's scope still ends after its last local read, but the trees
+    // it returns are not held for it: the row names the kept array.
+    let report = prepared.memory.as_ref().expect("requested report");
+    let rows: Vec<_> = report
+        .frontiers
+        .iter()
+        .filter(|frontier| {
+            kept.iter()
+                .any(|site| site.candidate_owner.as_deref() == Some(frontier.owner.as_str()))
+        })
+        .collect();
+    assert_eq!(rows.len(), 2, "{:?}", report.frontiers);
+    for row in rows {
+        assert!(row.ends.is_ok(), "{row:?}");
+        assert!(
+            matches!(&row.interval, Err(why) if why.contains("is held for frame") && why.contains("stored in Elements of work")),
+            "{row:?}"
+        );
+    }
+    for site in &kept {
+        let caller = site.context.rsplit_once('/').expect("build's caller").0;
+        assert_eq!(
+            site.retention_frontier,
+            format!("frame {caller}"),
+            "{site:?}"
+        );
+        let hir::memory::Multiplicity::Unbounded { witness } = &site.multiplicity else {
+            panic!("{site:?}");
+        };
+        assert!(
+            witness.contains("reached more than once in one activation of its caller"),
+            "the rounds' trees overlap: {witness}"
+        );
+        assert!(
+            site.holders.iter().any(|hold| hold.slot == "Elements"
+                && matches!(&hold.holder, hir::memory::Holder::Site { id, .. }
+                    if id.function.starts_with("work") && id.storage == hir::memory::Storage::Array)),
+            "the kept array holds the trees: {:?}",
+            site.holders
+        );
+    }
+}
+
+/// A workload written beside the test's output, prepared as `nts-bench` does.
+fn inline(name: &str, source: &str) -> Report {
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize_utf8()
+        .expect("the repository");
+    let out = crate::scratch::ScratchDir::path_in_target(&format!("nts-memory-{name}"));
+    std::fs::create_dir_all(out.join("src")).expect("scratch");
+    std::fs::write(out.join("src/main.ts"), source).expect("written source");
+    let tsconfig = out.join("tsconfig.json");
+    std::fs::write(
+        &tsconfig,
+        format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","include":["src"]}}"#),
+    )
+    .expect("written config");
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("the source captures");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let (_, observed) = prepare_for_bench(&snapshot);
+    let report = observed.memory.expect("requested report");
+    assert!(report.failure.is_none(), "{name}: {:?}", report.failure);
+    report
+}
+
+const TREE: &str = "class Tree {
+  value: number;
+  left: Tree | null;
+  right: Tree | null;
+  constructor(value: number, left: Tree | null, right: Tree | null) {
+    this.value = value;
+    this.left = left;
+    this.right = right;
+  }
+}
+
+function build(depth: number): Tree {
+  if (depth === 0) return new Tree(1, null, null);
+  return new Tree(depth, build(depth - 1), build(depth - 1));
+}
+
+function sum(tree: Tree): number {
+  let total = tree.value;
+  if (tree.left !== null) total = total + sum(tree.left);
+  if (tree.right !== null) total = total + sum(tree.right);
+  return total;
+}
+";
+
+/// A caller that can suspend holds its callee's result across the
+/// suspension in a frame the program does not end: no interval is proved,
+/// and the proof names why.
+#[test]
+fn a_suspending_caller_proves_no_interval() {
+    let report = inline(
+        "suspending-builder",
+        &format!(
+            "{TREE}
+export async function work(n: number): Promise<number> {{
+  let total = 0;
+  for (let round = 0; round < 4; round++) {{
+    const root = build(3 + (n & 1));
+    await Promise.resolve(round);
+    total = total + sum(root);
+  }}
+  return total;
+}}
+"
+        ),
+    );
+    let sites: Vec<_> = report
+        .sites
+        .iter()
+        .filter(|site| site.id.function == "build")
+        .collect();
+    assert!(
+        !sites.is_empty(),
+        "{:?}",
+        report
+            .sites
+            .iter()
+            .map(|site| (&site.id, &site.context))
+            .collect::<Vec<_>>()
+    );
+    for site in sites {
+        assert!(
+            !site.retention_frontier.starts_with("interval "),
+            "{site:?}"
+        );
+    }
+    let refused: Vec<_> = report
+        .frontiers
+        .iter()
+        .filter(|frontier| frontier.interval == Err("its caller can suspend".to_owned()))
+        .collect();
+    assert!(
+        !refused.is_empty(),
+        "the refusal is named: {:?}",
+        report.frontiers
+    );
+}
+
+/// A callee that throws after building ends its arrival at the unwinding.
+/// Where the thrown value carries the tree into the caller's handler, the
+/// tree is not claimed to die within the call's interval: the handler reads
+/// it after the call. Where it does not, the tree dies on the throw path and
+/// is held for the call's interval.
+#[test]
+fn a_tree_thrown_into_the_callers_handler_is_not_held_for_the_call() {
+    for (name, thrown, handler) in [
+        (
+            "thrown-builder-dropped",
+            "new Error(\"deep\")",
+            "total = total + 1;",
+        ),
+        (
+            "thrown-builder-carried",
+            "new Thrown(tree)",
+            "if (e instanceof Thrown) total = total + sum(e.tree);",
+        ),
+    ] {
+        let report = inline(
+            name,
+            &format!(
+                "{TREE}
+class Thrown {{
+  tree: Tree;
+  constructor(tree: Tree) {{
+    this.tree = tree;
+  }}
+}}
+
+function risky(depth: number): Tree {{
+  const tree = build(depth);
+  if (depth > 2) throw {thrown};
+  return tree;
+}}
+
+export function work(n: number): number {{
+  let total = 0;
+  for (let round = 0; round < 4; round++) {{
+    try {{
+      total = total + sum(risky((round + n) & 3));
+    }} catch (e) {{
+      {handler}
+    }}
+  }}
+  return total;
+}}
+"
+            ),
+        );
+        let sites: Vec<_> = report
+            .sites
+            .iter()
+            .filter(|site| site.id.function == "build")
+            .collect();
+        assert!(!sites.is_empty(), "{name}");
+        for site in sites {
+            let caller = site
+                .context
+                .rsplit_once("/risky@raises:")
+                .expect("risky's arrival")
+                .0;
+            if name.ends_with("carried") {
+                // The raise is an unsealed outcome that carries the tree: no
+                // scope is proved at all.
+                assert!(
+                    site.retention_frontier
+                        .starts_with("unknown frontier: MissingOutcome("),
+                    "{name}: {site:?}"
+                );
+            } else {
+                // The tree is dead on the throw path, so `risky`'s returning
+                // path alone keeps it, for one arrival of its call.
+                let call = site
+                    .context
+                    .rsplit_once("/risky@raises:%")
+                    .and_then(|(_, rest)| rest.split('/').next())
+                    .expect("risky's call");
+                assert_eq!(
+                    site.retention_frontier,
+                    format!("interval {caller}:%{call}"),
+                    "{name}: {site:?}"
+                );
+            }
+        }
+    }
+}
+
+/// A result handed along an edge lives on in the block parameter that
+/// receives it. Here the call before the loop hands its list to the loop
+/// header, which reads it: its frontier ends after that read, not on the
+/// header's entry, and only that call's list is held for one arrival. The
+/// call in the loop hands its list to the next pass's header, where the call's
+/// block does not dominate, so it proves no interval.
+#[test]
+fn a_result_carried_into_a_loop_header_is_held_past_the_headers_read() {
+    let report = inline(
+        "carried-into-a-header",
+        "class Link {
+  value: number;
+  next: Link | null;
+  constructor(value: number) {
+    this.value = value;
+    this.next = null;
+  }
+}
+
+function chain(length: number): Link {
+  const head = new Link(0);
+  let tail = head;
+  for (let i = 1; i < length; i++) {
+    const made = new Link(i);
+    tail.next = made;
+    tail = made;
+  }
+  return head;
+}
+
+function total(head: Link | null): number {
+  let sum = 0;
+  let at = head;
+  while (at !== null) {
+    sum = sum + at.value;
+    at = at.next;
+  }
+  return sum;
+}
+
+export function work(n: number): number {
+  let prev = chain(4 + n);
+  let i = 0;
+  while (total(prev) > i) {
+    prev = chain(3);
+    i = i + 2;
+  }
+  return i;
+}
+",
+    );
+    for frontier in &report.frontiers {
+        if let Ok(ends) = &frontier.ends {
+            assert!(
+                ends.iter().all(|end| !end.starts_with("entry of block")),
+                "the header reads the carried list: {frontier:?}"
+            );
+        }
+    }
+    let heads: Vec<_> = report
+        .sites
+        .iter()
+        .filter(|site| site.id.function == "chain" && site.id.value == 1)
+        .collect();
+    assert_eq!(heads.len(), 4, "two calls in work and in work#whole");
+    let (held, carried): (Vec<&hir::memory::Site>, Vec<&hir::memory::Site>) = heads
+        .iter()
+        .copied()
+        .partition(|site| site.retention_frontier.starts_with("interval "));
+    assert_eq!(held.len(), 2, "{heads:?}");
+    for site in carried {
+        let caller = site.context.rsplit_once('/').expect("a caller").0;
+        assert_eq!(
+            site.retention_frontier,
+            format!("frame {caller}"),
+            "{site:?}"
+        );
+    }
+}
+
+/// A merged context's objects are read out of the call its stores reach:
+/// the fifth `leaf` call merges, its object is stored into `build`'s result,
+/// and `work` reads it in a later block than anything else it reads out of
+/// that result. The lattice places the merged context under `build`'s call,
+/// so the reads must be attributed through the same hierarchy; otherwise the
+/// interval would end before that last read.
+#[test]
+fn a_merged_contexts_object_is_read_out_of_the_call_its_stores_reach() {
+    let report = inline(
+        "merged-into-a-result",
+        "class Leaf {
+  value: number;
+  constructor(value: number) {
+    this.value = value;
+  }
+}
+class Node5 {
+  a: Leaf;
+  b: Leaf;
+  c: Leaf;
+  d: Leaf;
+  e: Leaf;
+  constructor(a: Leaf, b: Leaf, c: Leaf, d: Leaf, e: Leaf) {
+    this.a = a;
+    this.b = b;
+    this.c = c;
+    this.d = d;
+    this.e = e;
+  }
+}
+function leaf(v: number): Leaf {
+  if (v > 1000) return leaf(v - 1000);
+  return new Leaf(v);
+}
+function build(n: number): Node5 {
+  return new Node5(leaf(n), leaf(n + 1), leaf(n + 2), leaf(n + 3), leaf(n + 4));
+}
+function read(l: Leaf): number {
+  return l.value;
+}
+export function work(n: number): number {
+  const root = build(n);
+  const kept = root.e;
+  let total = read(root.a);
+  if (n > 3) {
+    total = total + 1;
+  }
+  total = total + read(kept);
+  return total;
+}
+",
+    );
+    let merged: Vec<_> = report
+        .sites
+        .iter()
+        .filter(|site| site.id.function == "leaf" && site.context.ends_with(":merged"))
+        .collect();
+    assert!(!merged.is_empty(), "the fifth call merges");
+    // `work` reads the merged object last, through `kept`, in block 2: the
+    // interval of `build`'s call ends there, and the merged object is held
+    // for it.
+    let frontier = report
+        .frontiers
+        .iter()
+        .find(|frontier| frontier.owner == "work:entry:%1")
+        .expect("build's call in work");
+    assert_eq!(
+        frontier.ends,
+        Ok(vec!["after last reference use in block 2".to_owned()]),
+        "{frontier:?}"
+    );
+    assert_eq!(frontier.interval, Ok(()), "{frontier:?}");
+    for site in &merged {
+        assert_eq!(
+            site.retention_frontier, "interval work:entry:%1",
+            "{site:?}"
+        );
+    }
+}
+
+/// What a call returns includes what its result reaches through fields: a
+/// `Pair`'s first leaf, kept past the round by `work`'s array, leaves the
+/// call's row not held for one arrival, naming the array, though the pair
+/// itself and its second leaf are, also when the kept leaf joins a weak
+/// class of the caller's own leaves. The controls read the first leaf
+/// instead of keeping it, and their rows stay held for one arrival.
+#[test]
+fn an_object_reached_through_the_result_and_kept_longer_unholds_the_row() {
+    // The `wide-` pair seeds `kept` with eight of the caller's leaves, so
+    // the kept first leaf joins them in one weak class that a caller's leaf
+    // represents: the class still counts as the call's.
+    let seeded = "new Leaf(1), new Leaf(2), new Leaf(3), new Leaf(4), new Leaf(5), new Leaf(6), new Leaf(7), new Leaf(8)";
+    for (name, seed, use_a, held) in [
+        ("pair-kept", "", "kept.push(pair.a);", false),
+        ("pair-read", "", "total = total + pair.a.value;", true),
+        ("wide-pair-kept", seeded, "kept.push(pair.a);", false),
+        (
+            "wide-pair-read",
+            seeded,
+            "total = total + pair.a.value;",
+            true,
+        ),
+    ] {
+        let report = inline(
+            name,
+            &format!(
+                "class Leaf {{
+  value: number;
+  constructor(value: number) {{
+    this.value = value;
+  }}
+}}
+class Pair {{
+  a: Leaf;
+  b: Leaf;
+  constructor(a: Leaf, b: Leaf) {{
+    this.a = a;
+    this.b = b;
+  }}
+}}
+function make(n: number): Pair {{
+  return new Pair(new Leaf(n), new Leaf(n + 1));
+}}
+export function work(n: number): number {{
+  const kept: Leaf[] = [{seed}];
+  let total = 0;
+  for (let round = 0; round < 4; round++) {{
+    const pair = make(n + round);
+    total = total + pair.b.value;
+    {use_a}
+  }}
+  total = total + kept.length;
+  return total;
+}}
+"
+            ),
+        );
+        let rows: Vec<_> = report
+            .frontiers
+            .iter()
+            .filter(|frontier| {
+                report.sites.iter().any(|site| {
+                    site.id.function == "make"
+                        && site.candidate_owner.as_deref() == Some(frontier.owner.as_str())
+                })
+            })
+            .collect();
+        assert_eq!(rows.len(), 2, "{name}: {:?}", report.frontiers);
+        for row in rows {
+            assert!(row.ends.is_ok(), "{name}: {row:?}");
+            if held {
+                assert_eq!(row.interval, Ok(()), "{name}: {row:?}");
+            } else {
+                assert!(
+                    matches!(&row.interval, Err(why) if why.contains("stored in Elements of work")),
+                    "{name}: {row:?}"
+                );
+            }
+        }
     }
 }

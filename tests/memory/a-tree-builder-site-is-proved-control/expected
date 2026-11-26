@@ -1,0 +1,15 @@
+ideal 125
+allocated 126
+because one release per reference given back, and nothing else: the kept
+because array's own, which gives back its four trees, and each tree's thirty
+because releases of the children its nodes hold. Building owes nothing -- each
+because subtree's birth reference moves into its parent's field, and each root's
+because into the array, since the push is its last use -- and the walk borrows.
+because
+because Keeping the trees past their rounds is the one difference from
+because `a-tree-builder-site-is-proved`. The array holds every round's tree until
+because `work` returns, so no call region can serve `build`, and each node is
+because given back on its own when the array dies.
+because
+because Allocations: four trees of thirty one nodes on the heap, the array, and
+because its backing store.

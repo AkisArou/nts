@@ -23,6 +23,9 @@ pub(super) struct Context<'a> {
     pub ancestors: &'a [usize],
     pub key: &'a str,
     pub fallback: bool,
+    /// The interval this context's result is held for in its caller (its
+    /// label, `<caller>:%<call>`), or why none is proved.
+    pub interval: std::result::Result<&'a str, &'a str>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,10 +36,37 @@ pub(super) enum Exposure {
     Unknown(Reason),
 }
 
+/// A scope an object dies within. `Interval(child)` is one arrival of
+/// `child`'s call in its caller: from the call to where every value the
+/// caller read out of its result is dead. It lies between the child's frame
+/// and the caller's: Frame(child) < Interval(child) < Frame(caller), and
+/// exists only where the caller's hold ends are proved (`Context::interval`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Bound {
     Frame(usize),
+    Interval(usize),
     Outside(Reason),
+}
+
+/// The scopes at or above `bound`, innermost first: each frame, then its
+/// proved interval, then the next caller's frame.
+fn upward<'c>(bound: &Bound, contexts: &'c [Context<'c>]) -> impl Iterator<Item = Bound> + 'c {
+    let (start, frame) = match bound {
+        Bound::Frame(at) => (Some(*at), true),
+        Bound::Interval(at) => (Some(*at), false),
+        Bound::Outside(_) => (None, false),
+    };
+    start
+        .into_iter()
+        .flat_map(move |at| std::iter::once(at).chain(contexts[at].ancestors.iter().rev().copied()))
+        .enumerate()
+        .flat_map(move |(depth, at)| {
+            let interval = contexts[at].interval.is_ok().then_some(Bound::Interval(at));
+            (depth > 0 || frame)
+                .then_some(Bound::Frame(at))
+                .into_iter()
+                .chain(interval)
+        })
 }
 
 /// The typed step behind each proof, parallel to `Result::proofs`. Readers
@@ -76,26 +106,27 @@ fn joined(old: &Bound, incoming: &Bound, contexts: &[Context<'_>]) -> Option<Bou
         }
         (Bound::Outside(_), _) => None,
         (_, Bound::Outside(_)) => Some(incoming.clone()),
-        (Bound::Frame(a), Bound::Frame(b)) if a == b => None,
-        (Bound::Frame(a), Bound::Frame(b)) => {
-            let common = contexts[*a]
-                .ancestors
-                .iter()
-                .chain(std::iter::once(a))
-                .rev()
-                .find(|at| **at == *b || contexts[*b].ancestors.contains(at));
-            match common {
-                Some(at) if at == a => None,
-                Some(at) => Some(Bound::Frame(*at)),
-                // A merged context without a common caller chain lost its
-                // lineage to the budget; otherwise the two entries are unrelated.
-                None if contexts[*a].fallback || contexts[*b].fallback => {
-                    Some(Bound::Outside(Reason::ContextBudget))
+        (old, incoming) if old == incoming => None,
+        (Bound::Frame(a) | Bound::Interval(a), Bound::Frame(b) | Bound::Interval(b)) => {
+            // The least scope at or above both: the first of `old`'s upward
+            // scopes that is also one of `incoming`'s.
+            let above: Vec<_> = upward(incoming, contexts).collect();
+            match upward(old, contexts).find(|scope| above.contains(scope)) {
+                Some(scope) if scope == *old => None,
+                Some(scope) => Some(scope),
+                None => {
+                    // A merged context without a common caller chain lost its
+                    // lineage to the budget; otherwise the two entries are
+                    // unrelated.
+                    if contexts[*a].fallback || contexts[*b].fallback {
+                        Some(Bound::Outside(Reason::ContextBudget))
+                    } else {
+                        Some(Bound::Outside(Reason::Outside(format!(
+                            "no activation holds both {} and {}",
+                            contexts[*a].key, contexts[*b].key
+                        ))))
+                    }
                 }
-                None => Some(Bound::Outside(Reason::Outside(format!(
-                    "no activation holds both {} and {}",
-                    contexts[*a].key, contexts[*b].key
-                )))),
             }
         }
     }
@@ -104,6 +135,7 @@ fn joined(old: &Bound, incoming: &Bound, contexts: &[Context<'_>]) -> Option<Bou
 fn spelling(bound: &Bound, contexts: &[Context<'_>]) -> String {
     match bound {
         Bound::Frame(at) => format!("frame {}", contexts[*at].key),
+        Bound::Interval(at) => format!("interval {}", contexts[*at].interval.unwrap_or("?")),
         Bound::Outside(why) => format!("outside {why:?}"),
     }
 }
@@ -293,10 +325,18 @@ pub(super) fn analyze(
             Exposure::Returned(at) if contexts[*at].fallback => {
                 Bound::Outside(Reason::ContextBudget)
             }
-            Exposure::Returned(at) => contexts[*at].parent.map_or_else(
-                || Bound::Outside(Reason::Returned(contexts[*at].key.to_owned())),
-                Bound::Frame,
+            Exposure::Returned(at) => match (contexts[*at].parent, contexts[*at].interval) {
+                (None, _) => Bound::Outside(Reason::Returned(contexts[*at].key.to_owned())),
+                (Some(_), Ok(_)) => Bound::Interval(*at),
+                (Some(parent), Err(_)) => Bound::Frame(parent),
+            },
+        };
+        let edge = match (exposure, bound.clone()) {
+            (Exposure::Returned(at), Bound::Frame(_)) => format!(
+                "{exposure:?}; interval refused: {}",
+                contexts[*at].interval.err().unwrap_or_default()
             ),
+            _ => format!("{exposure:?}"),
         };
         let objects: Vec<_> = graph.values[*node].objects.iter().copied().collect();
         for object in objects {
@@ -307,7 +347,7 @@ pub(super) fn analyze(
                 object,
                 &bound,
                 None,
-                (format!("{exposure:?}"), Step::Exposure(root)),
+                (edge.clone(), Step::Exposure(root)),
                 graph,
             );
         }
@@ -421,12 +461,14 @@ mod tests {
                 ancestors: &[],
                 key: "caller",
                 fallback: false,
+                interval: Err("test"),
             },
             Context {
                 parent: Some(0),
                 ancestors: &[0],
                 key: "callee",
                 fallback: false,
+                interval: Err("test"),
             },
         ];
         let mut graph = Graph::new(10_000, 1_000);
@@ -461,12 +503,14 @@ mod tests {
                 ancestors: &[],
                 key: "caller",
                 fallback: false,
+                interval: Err("test"),
             },
             Context {
                 parent: Some(0),
                 ancestors: &[0],
                 key: "callee",
                 fallback: false,
+                interval: Err("test"),
             },
         ];
         let module = Bound::Outside(Reason::Outside("module slot 0".to_owned()));
@@ -511,6 +555,7 @@ mod tests {
             ancestors: &[],
             key: "entry",
             fallback: false,
+            interval: Err("test"),
         }];
         let mut graph = Graph::new(10_000, 1_000);
         graph.alias_limit = 1;
@@ -542,6 +587,7 @@ mod tests {
             ancestors: &[],
             key: "entry",
             fallback: false,
+            interval: Err("test"),
         }];
         for n in [64, 128, 256] {
             let mut graph = Graph::new(100_000, 10_000);
@@ -568,5 +614,114 @@ mod tests {
                     .all(|(_, at)| matches!(result.bounds[*at], Bound::Outside(_)))
             );
         }
+    }
+
+    fn intervals() -> [Context<'static>; 4] {
+        [
+            Context {
+                parent: None,
+                ancestors: &[],
+                key: "caller",
+                fallback: false,
+                interval: Err("no caller"),
+            },
+            Context {
+                parent: Some(0),
+                ancestors: &[0],
+                key: "a",
+                fallback: false,
+                interval: Ok("caller:%1"),
+            },
+            Context {
+                parent: Some(0),
+                ancestors: &[0],
+                key: "b",
+                fallback: false,
+                interval: Ok("caller:%2"),
+            },
+            Context {
+                parent: Some(1),
+                ancestors: &[0, 1],
+                key: "a/c",
+                fallback: false,
+                interval: Err("its caller can suspend"),
+            },
+        ]
+    }
+
+    /// An interval lies between its call's frame and its caller's: two
+    /// arrivals' intervals meet only in the caller's frame, and what dies
+    /// inside the call stays inside its interval.
+    #[test]
+    fn an_interval_lies_between_its_calls_frame_and_its_callers() {
+        let contexts = intervals();
+        let cases = [
+            (
+                Bound::Interval(1),
+                Bound::Interval(2),
+                Some(Bound::Frame(0)),
+            ),
+            (
+                Bound::Frame(3),
+                Bound::Interval(1),
+                Some(Bound::Interval(1)),
+            ),
+            (Bound::Interval(1), Bound::Frame(3), None),
+            (
+                Bound::Frame(1),
+                Bound::Interval(1),
+                Some(Bound::Interval(1)),
+            ),
+            (Bound::Interval(1), Bound::Frame(1), None),
+            (Bound::Interval(1), Bound::Frame(0), Some(Bound::Frame(0))),
+            (Bound::Frame(0), Bound::Interval(1), None),
+            // A refused interval is no scope: the call's frame meets its
+            // caller's next.
+            (Bound::Frame(3), Bound::Frame(2), Some(Bound::Frame(0))),
+            (Bound::Frame(3), Bound::Frame(1), Some(Bound::Frame(1))),
+            (Bound::Interval(2), Bound::Frame(3), Some(Bound::Frame(0))),
+        ];
+        for (old, incoming, expected) in cases {
+            assert_eq!(
+                joined(&old, &incoming, &contexts),
+                expected,
+                "{old:?} joined with {incoming:?}"
+            );
+        }
+    }
+
+    /// A returned result is held for its proved interval; where the interval
+    /// is refused it is held for the caller's frame, and the proof says why.
+    #[test]
+    fn a_returned_result_is_held_for_its_interval_or_its_callers_frame() {
+        let contexts = intervals();
+        let mut graph = Graph::new(10_000, 1_000);
+        let (proved_value, proved) = object(&mut graph, 1, 0);
+        let (refused_value, refused) = object(&mut graph, 3, 1);
+        let (held_value, held) = object(&mut graph, 3, 2);
+        graph.store(proved_value, Slot::Field("child".to_owned()), held_value);
+        graph.solve();
+        let result = analyze(
+            &mut graph,
+            &contexts,
+            &[
+                (proved_value, Exposure::Returned(1)),
+                (refused_value, Exposure::Returned(3)),
+            ],
+        );
+        assert_eq!(result.bounds[proved], Bound::Interval(1));
+        assert_eq!(result.bounds[held], Bound::Interval(1));
+        assert_eq!(result.bounds[refused], Bound::Frame(1));
+        let refusal = &result.proofs[result.witnesses[refused]];
+        assert!(
+            refusal
+                .edge
+                .ends_with("interval refused: its caller can suspend"),
+            "{refusal:?}"
+        );
+        assert_eq!(
+            result.proofs[result.witnesses[proved]].bound,
+            "interval caller:%1"
+        );
     }
 }

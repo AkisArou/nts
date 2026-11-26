@@ -1431,6 +1431,35 @@ impl Flow {
     }
 }
 
+impl Flow {
+    /// Whether any of `read` is live just before `call`: used by the call or
+    /// after it in its block, or live out of the block, and not defined at
+    /// or after the call. The companion of [`Flow::holds`] for a call that
+    /// runs more than once: everything read out of its result is defined
+    /// after it, so only an earlier arrival can supply such a value, which
+    /// `holds` alone cannot tell apart when the call's block loops to itself.
+    pub(super) fn live_before(&self, func: &Func, call: ValueId, read: &[ValueId]) -> bool {
+        let Some(&index) = self.block_of.get(&call) else {
+            return true;
+        };
+        let block = &func.blocks[index];
+        let at = block.ops.iter().position(|op| *op == call).unwrap_or(0);
+        let defined: FxHashSet<ValueId> = block.ops[at..].iter().copied().collect();
+        let read: FxHashSet<ValueId> = read.iter().copied().collect();
+        block.ops[at..]
+            .iter()
+            .flat_map(|op| super::operands_of(&func.value(*op).kind))
+            .chain(super::operands_of_terminator(&block.terminator))
+            .chain(
+                self.live
+                    .live_out(BlockId(u32::try_from(index).unwrap_or(u32::MAX)))
+                    .iter()
+                    .copied(),
+            )
+            .any(|value| read.contains(&value) && !defined.contains(&value))
+    }
+}
+
 /// Whether an operation ends a served call's region window
 /// (`nts_region_end_call`), which nothing may come between the call and.
 #[must_use]

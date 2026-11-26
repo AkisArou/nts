@@ -1,0 +1,13 @@
+ideal 4
+allocated 128
+because four operations: the release of each round's region handle, which is
+because its reset. `work` calls `build` for a tree it only reads and then drops,
+because so the call is served by a region (`hir::regions`): `build#region` counts
+because nothing, every node of the round's tree is made in that round's region,
+because and the region is given back where `sum` has read the last of it. The
+because walk owes nothing -- it borrows from the result, which the handle keeps
+because alive. The teardown that would be one release per node is the reset.
+because
+because Allocations: four trees of thirty one nodes, made in their rounds'
+because regions rather than one by one on the heap, and four handles, one per
+because served call.

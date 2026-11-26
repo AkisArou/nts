@@ -481,6 +481,68 @@ mod tests {
         func
     }
 
+    /// A block that loops to itself receives the previous arrival's result
+    /// as its own parameter, and the call's block dominates itself, so the
+    /// hold ends alone cannot tell that arrival is still live when the call
+    /// runs again; `Flow::live_before` can. Without the later read it is dead, and
+    /// the call's own result is never live before it.
+    #[test]
+    fn an_earlier_arrival_read_after_the_call_is_live_at_it() {
+        for (read_after, live) in [(true, true), (false, false)] {
+            let mut kinds = vec![
+                OpKind::ConstBool(true),
+                call("make"),
+                OpKind::BlockParam(0),
+                call("make"),
+            ];
+            if read_after {
+                kinds.push(OpKind::Call {
+                    callee: Callee::Direct("read".to_owned()),
+                    args: vec![ValueId(2)],
+                    frame: None,
+                });
+            }
+            let mut func = function("loops".to_owned(), kinds);
+            func.blocks = vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(1)],
+                    },
+                },
+                Block {
+                    params: vec![ValueId(2)],
+                    ops: if read_after {
+                        vec![ValueId(3), ValueId(4)]
+                    } else {
+                        vec![ValueId(3)]
+                    },
+                    terminator: Terminator::Branch {
+                        cond: ValueId(0),
+                        then_target: BlockId(1),
+                        then_args: vec![ValueId(3)],
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(None),
+                },
+            ];
+            let flow = regions::Flow::of(&func).expect("flow");
+            assert_eq!(
+                flow.live_before(&func, ValueId(3), &[ValueId(2), ValueId(3)]),
+                live,
+                "read after the call: {read_after}"
+            );
+            assert!(!flow.live_before(&func, ValueId(3), &[ValueId(3)]));
+        }
+    }
+
     fn site<'r>(report: &'r Report, function: &str) -> &'r Site {
         report
             .sites
@@ -605,7 +667,9 @@ mod tests {
         assert!(
             produced
                 .retention_frontier
-                .starts_with("frame root#init:entry/parse")
+                .starts_with("interval root#init:entry/parse"),
+            "{}",
+            produced.retention_frontier
         );
         assert!(produced.obligations.contains(&Reason::RepeatedInstances));
         let Multiplicity::Unbounded { witness } = &produced.multiplicity else {
@@ -748,7 +812,8 @@ mod tests {
 
     /// A merged context returns to whichever caller called it, so only the
     /// callers' common chain bounds what it returns: the root here, never
-    /// `a` or `b`, while each caller-specific context returns to its caller.
+    /// `a` or `b`, and no one call's interval. Each caller-specific context's
+    /// result is held for one arrival of its call in its caller.
     #[test]
     fn a_merged_context_returns_only_to_its_callers_common_chain() {
         let report = merging(vec![
@@ -763,7 +828,7 @@ mod tests {
         );
         assert_eq!(
             frontier_in(&report, "helper", "root#init:entry/a:%0/helper:%0"),
-            "frame root#init:entry/a:%0"
+            "interval root#init:entry/a:%0:%0"
         );
     }
 
@@ -2232,8 +2297,9 @@ mod tests {
         let context = build.context(0, None, None);
         build.body(context);
         build.graph.solve();
-        // Enough to finish lifetime propagation, not the later event index.
-        build.graph.work_limit = build.graph.work + 3;
+        // Enough to finish the merged chains, the frontiers and lifetime
+        // propagation, not the later event index.
+        build.graph.work_limit = build.graph.work + 6;
         let report = build.finish();
         println!(
             "review-late-budget\tfailure={:?}\tstages={:?}\tproofs={:?}",
@@ -2629,6 +2695,14 @@ impl<'p> CallGraph<'p> {
         }
     }
 }
+
+/// The values each caller reads out of a call's result, keyed by the caller's
+/// and the call's contexts.
+type Reads = BTreeMap<(usize, usize), BTreeSet<ValueId>>;
+
+/// Per context: the label of the interval its result is held for in its
+/// caller, or why none is proved.
+type Intervals = Vec<Result<String, String>>;
 
 fn slot_names(program: &Program) -> Vec<Vec<Slot>> {
     program
@@ -4342,40 +4416,81 @@ impl<'p> Builder<'p> {
         (captures, events.changes().to_vec(), events.len())
     }
 
-    fn frontiers(&mut self) -> Vec<Frontier> {
-        let mut reads: BTreeMap<(usize, usize), BTreeSet<ValueId>> = BTreeMap::new();
+    /// The values each caller reads out of each call's result, by caller and
+    /// call context, and the calls a weak class holds part of the result of.
+    /// A charge that fails stops the scan; the failure is the graph's.
+    ///
+    /// A source's callers are walked through the lattice's own hierarchy
+    /// (`chains`, from `merged_chains`), so a merged context's objects are
+    /// read out of the call whose interval its stores can reach.
+    fn frontier_reads(&mut self, chains: &[Option<Vec<usize>>]) -> (Reads, BTreeSet<usize>) {
+        let mut reads = Reads::new();
+        let mut widened = BTreeSet::new();
         'index: for (parent, context) in self.contexts.iter().enumerate() {
             let function = &self.program.funcs[context.function];
-            for &value in function.blocks.iter().flat_map(|block| &block.ops) {
+            // A result handed along an edge lives on in the block parameter
+            // that receives it, and a recursive caller can receive an earlier
+            // arrival's result as its own parameter: both are read out of it.
+            for &value in function
+                .blocks
+                .iter()
+                .flat_map(|block| block.params.iter().chain(&block.ops))
+                .chain(self.parameters[context.function].iter().map(|(id, _)| id))
+            {
                 let Some(&node) = context.values.get(&value) else {
                     debug_assert!(self.invalid_input);
                     continue;
                 };
                 let objects: Vec<_> = self.graph.values[node].objects.iter().copied().collect();
                 for object in objects {
-                    if self.graph.is_widened(object) {
-                        // A shared weak class supplies no caller-specific
-                        // last-use frontier. Its members remain Heap.
-                        continue;
-                    }
                     let source = self.graph.objects[object].context;
-                    for &owner in self.contexts[source]
-                        .ancestors
-                        .iter()
-                        .chain(std::iter::once(&source))
-                    {
+                    let ancestors = chains[source]
+                        .as_deref()
+                        .unwrap_or(&self.contexts[source].ancestors);
+                    for &owner in ancestors.iter().chain(std::iter::once(&source)) {
                         if !self.graph.charge() {
                             break 'index;
                         }
                         if self.contexts[owner].parent == Some(parent)
                             && !self.contexts[owner].fallback
                         {
-                            reads.entry((parent, owner)).or_default().insert(value);
+                            // A shared weak class supplies no caller-specific
+                            // last-use frontier. Its members remain Heap, and
+                            // no interval is proved for the call it came from.
+                            if self.graph.is_widened(object) {
+                                widened.insert(owner);
+                            } else {
+                                reads.entry((parent, owner)).or_default().insert(value);
+                            }
                         }
                     }
                 }
             }
         }
+        (reads, widened)
+    }
+
+    /// Each call's frontier in its caller, and for each context whether the
+    /// interval its result is held for is proved (`lifetime::Bound::Interval`):
+    /// its label, or why not. An interval needs one non-merged call, a caller
+    /// that cannot suspend, every value read out of the result followed (no
+    /// weak class among them), proved hold ends, and no earlier arrival's
+    /// value still live when the call runs again.
+    fn frontiers(&mut self, chains: &[Option<Vec<usize>>]) -> (Vec<(usize, Frontier)>, Intervals) {
+        let mut intervals: Intervals = self
+            .contexts
+            .iter()
+            .map(|context| {
+                Err(if context.parent.is_none() {
+                    "no caller".to_owned()
+                } else if context.fallback {
+                    "a merged context has more than one call".to_owned()
+                } else {
+                    "its caller reads nothing out of its result".to_owned()
+                })
+            })
+            .collect();
+        let (reads, widened) = self.frontier_reads(chains);
         let mut flows = BTreeMap::new();
         let mut frontiers = Vec::new();
         for ((parent, child), values) in reads {
@@ -4393,18 +4508,22 @@ impl<'p> Builder<'p> {
                 .saturating_mul(values.len().saturating_add(1));
             if cost > self.graph.work_limit.saturating_sub(self.graph.work) {
                 self.graph.failure.get_or_insert(Reason::WorkBudget);
-                frontiers.push(Frontier {
-                    owner,
-                    ends: Err("frontier work budget".to_owned()),
-                });
+                frontiers.push((
+                    child,
+                    Frontier {
+                        owner,
+                        ends: Err("frontier work budget".to_owned()),
+                        interval: Err("frontier work budget".to_owned()),
+                    },
+                ));
                 break;
             }
             self.graph.work += cost;
             let flow = flows.entry(function_index).or_insert_with(|| {
                 regions::Flow::of(function).map_err(|failure| failure.to_string())
             });
+            let values: Vec<_> = values.into_iter().collect();
             let ends = flow.as_ref().map_err(Clone::clone).and_then(|flow| {
-                let values: Vec<_> = values.into_iter().collect();
                 flow.holds(call, &values)
                     .map(|holds| {
                         holds
@@ -4419,30 +4538,197 @@ impl<'p> Builder<'p> {
                     })
                     .map_err(str::to_owned)
             });
-            frontiers.push(Frontier { owner, ends });
+            // A suspending caller is refused outright: what it holds across
+            // a suspension lives in a frame the program does not end.
+            intervals[child] = match (&ends, &*flow) {
+                _ if self.contexts[parent].effects.suspension => {
+                    Err("its caller can suspend".to_owned())
+                }
+                _ if widened.contains(&child) => {
+                    Err("a weak alias class holds part of its result".to_owned())
+                }
+                (Err(why), _) | (_, Err(why)) => Err(why.clone()),
+                (Ok(_), Ok(flow)) => {
+                    if flow.live_before(function, call, &values) {
+                        Err(
+                            "an earlier arrival's result is live when the call runs again"
+                                .to_owned(),
+                        )
+                    } else {
+                        Ok(owner.clone())
+                    }
+                }
+            };
+            frontiers.push((
+                child,
+                Frontier {
+                    owner,
+                    ends,
+                    interval: intervals[child].clone().map(|_| ()),
+                },
+            ));
         }
-        frontiers.sort_by(|a, b| a.owner.cmp(&b.owner));
+        frontiers.sort_by(|a, b| a.1.owner.cmp(&b.1.owner));
+        (frontiers, intervals)
+    }
+
+    /// Why `object` (a representative) outlives an interval: its bound and the
+    /// store that raised it, or for a weak class the slots that hold it.
+    /// `None` when the budget runs out naming a class's holders.
+    fn held_longer(&mut self, lifetimes: &lifetime::Result, object: Object) -> Option<String> {
+        let witness = lifetimes.witnesses[object];
+        let proof = &lifetimes.proofs[witness];
+        let how = match &lifetimes.steps[witness] {
+            lifetime::Step::Stored { parent, slot } => {
+                format!("stored in {slot:?} of {}", self.graph.label(*parent))
+            }
+            // A class's bound joins its members': name every slot that holds
+            // the class, as `Report::class_holders` does.
+            lifetime::Step::Joined(_) => {
+                if !self.graph.charge_many(self.graph.slots.len()) {
+                    return None;
+                }
+                let holders: BTreeSet<String> = self
+                    .graph
+                    .slots
+                    .iter()
+                    .filter(|(_, node)| {
+                        self.graph.values[**node]
+                            .objects
+                            .iter()
+                            .any(|held| self.graph.representative(*held) == object)
+                    })
+                    .map(|((parent, slot), _)| format!("{slot:?} of {}", self.graph.label(*parent)))
+                    .collect();
+                format!(
+                    "{}, stored in {}",
+                    proof.edge,
+                    holders.into_iter().collect::<Vec<_>>().join(", ")
+                )
+            }
+            _ => proof.edge.clone(),
+        };
+        Some(format!(
+            "{} is held for {}: {how}",
+            proof.object, proof.bound
+        ))
+    }
+
+    /// The frontier rows, with each proved interval checked against what the
+    /// lifetime pass proved: an object the call's subtree allocated that is
+    /// reachable from what the call returned, directly or through fields and
+    /// elements, and is held past the call's interval (a store into a
+    /// longer-lived holder raised it) leaves the row's result not held for
+    /// one arrival, and the row names that holder. The walk is charged; an
+    /// exhausted budget fails the analysis, which then publishes every row
+    /// as unknown.
+    fn held_past_their_interval(
+        &mut self,
+        frontiers: Vec<(usize, Frontier)>,
+        lifetimes: &lifetime::Result,
+        chains: &[Option<Vec<usize>>],
+    ) -> Vec<Frontier> {
+        let mut longer: BTreeMap<usize, String> = BTreeMap::new();
+        let mut visited: BTreeMap<usize, BTreeSet<Object>> = BTreeMap::new();
+        let returned: Vec<(Node, usize)> = self
+            .roots
+            .iter()
+            .filter_map(|(node, exposure)| match exposure {
+                Exposure::Returned(child) => Some((*node, *child)),
+                _ => None,
+            })
+            .collect();
+        'roots: for (node, child) in &returned {
+            if longer.contains_key(child) {
+                continue;
+            }
+            let seen = visited.entry(*child).or_default();
+            let mut pending: VecDeque<Object> = self.graph.values[*node]
+                .objects
+                .iter()
+                .map(|object| self.graph.representative(*object))
+                .filter(|object| seen.insert(*object))
+                .collect();
+            while let Some(object) = pending.pop_front() {
+                // A weak class's members share its bound, so the class is the
+                // call's when any member was allocated in the call's subtree,
+                // whichever member represents it.
+                let size = self.graph.class_members(object).len();
+                if !self.graph.charge_many(size.saturating_add(1)) {
+                    break 'roots;
+                }
+                let members = self.graph.class_members(object);
+                let within = members.iter().any(|&member| {
+                    let info = &self.graph.objects[member];
+                    info.site.is_some()
+                        && (info.context == *child
+                            || chains[info.context]
+                                .as_deref()
+                                .unwrap_or(&self.contexts[info.context].ancestors)
+                                .contains(child))
+                });
+                if within && lifetimes.bounds[object] != Bound::Interval(*child) {
+                    let Some(why) = self.held_longer(lifetimes, object) else {
+                        break 'roots;
+                    };
+                    longer.insert(*child, why);
+                    break;
+                }
+                let held: Vec<Object> = self
+                    .graph
+                    .slots
+                    .range(
+                        (object, Slot::Field(String::new()))
+                            ..(object + 1, Slot::Field(String::new())),
+                    )
+                    .flat_map(|(_, slot)| self.graph.values[*slot].objects.iter().copied())
+                    .collect();
+                // Charge the slots and alias sets this object's walk reads.
+                if !self.graph.charge_many(held.len()) {
+                    break 'roots;
+                }
+                for held in held {
+                    let held = self.graph.representative(held);
+                    if seen.insert(held) {
+                        pending.push_back(held);
+                    }
+                }
+            }
+        }
         frontiers
+            .into_iter()
+            .map(|(child, mut frontier)| {
+                if frontier.interval.is_ok()
+                    && let Some(why) = longer.get(&child)
+                {
+                    frontier.interval = Err(why.clone());
+                }
+                frontier
+            })
+            .collect()
     }
 
     /// Why one activation of the site's frontier can hold more than one of its
     /// instances, or `None` for one per activation. Only what lies between the
     /// allocation and its frontier counts: the frontier's own recursion,
     /// reentry or merging, every call below it that one activation of its
-    /// caller can repeat, and a cycle in the producing block. A frontier
-    /// outside the program counts every activation from the entry.
+    /// caller can repeat, and a cycle in the producing block. An interval is
+    /// one arrival of its call, so the arrival's own repetition is not
+    /// counted. A frontier outside the program counts every activation from
+    /// the entry. Every repetition found is named, innermost first.
     fn repetition(&self, allocation: &Allocation, bound: &Bound) -> Option<String> {
         if allocation.backing {
             return Some("growth storage, reallocated as its owner grows".to_owned());
         }
         let here = &self.contexts[allocation.context];
+        let mut why = Vec::new();
         if let Some(block) = allocation.cyclic_block {
-            return Some(format!(
+            why.push(format!(
                 "producing block bb{} is cyclic (or its CFG is unknown) in {}",
                 block.0, here.key
             ));
         }
-        let Bound::Frame(frontier) = bound else {
+        let (Bound::Frame(frontier) | Bound::Interval(frontier)) = bound else {
             return allocation.repeated.then(|| {
                 "loop, recursive/reentrant/suspended or externally repeated activation below an unknown frontier"
                     .to_owned()
@@ -4452,30 +4738,30 @@ impl<'p> Builder<'p> {
         loop {
             let context = &self.contexts[at];
             if context.repeats.own {
-                return Some(format!(
+                why.push(format!(
                     "{} is a recursive, reentrant or merged activation",
                     context.key
                 ));
             }
             if at == *frontier {
-                return None;
+                break;
             }
             if context.repeats.arrival {
-                return Some(format!(
+                why.push(format!(
                     "{} is reached more than once in one activation of its caller",
                     context.key
                 ));
             }
-            match context.parent {
-                Some(parent) => at = parent,
-                None => {
-                    return Some(format!(
-                        "frontier {} is not an ancestor of {}",
-                        self.contexts[*frontier].key, here.key
-                    ));
-                }
-            }
+            let Some(parent) = context.parent else {
+                why.push(format!(
+                    "frontier {} is not an ancestor of {}",
+                    self.contexts[*frontier].key, here.key
+                ));
+                break;
+            };
+            at = parent;
         }
+        (!why.is_empty()).then(|| why.join("; "))
     }
 
     /// Every caller of a merged context runs inside their longest common
@@ -4577,30 +4863,47 @@ impl<'p> Builder<'p> {
         let outcomes = self.outcome_fences();
         self.stages
             .push(("outcome-fences".to_owned(), self.graph.work - outcome_start));
-        let exposure_start = self.graph.work;
+        // The intervals a returned result can be held for are a lattice
+        // input, so the frontiers are read before any lifetime, through the
+        // same context hierarchy the lattice uses.
+        let start = self.graph.work;
         let chains = self.merged_chains();
+        self.stages
+            .push(("merged-chains".to_owned(), self.graph.work - start));
+        let start = self.graph.work;
+        let (frontiers, intervals) = self.frontiers(&chains);
+        self.stages
+            .push(("frontiers".to_owned(), self.graph.work - start));
+        let exposure_start = self.graph.work;
         let hierarchy: Vec<_> = self
             .contexts
             .iter()
             .zip(&chains)
-            .map(|(context, chain)| match chain {
+            .zip(&intervals)
+            .map(|((context, chain), interval)| {
+                (context, chain, interval.as_deref().map_err(String::as_str))
+            })
+            .map(|(context, chain, interval)| match chain {
                 Some(chain) if context.fallback => lifetime::Context {
                     parent: chain.last().copied(),
                     ancestors: chain,
                     key: &context.key,
                     fallback: false,
+                    interval,
                 },
                 Some(chain) => lifetime::Context {
                     parent: context.parent,
                     ancestors: chain,
                     key: &context.key,
                     fallback: false,
+                    interval,
                 },
                 None => lifetime::Context {
                     parent: context.parent,
                     ancestors: &context.ancestors,
                     key: &context.key,
                     fallback: context.fallback,
+                    interval,
                 },
             })
             .collect();
@@ -4617,10 +4920,7 @@ impl<'p> Builder<'p> {
         let mut lifetimes = lifetime::analyze(&mut self.graph, &hierarchy, &self.roots);
         self.stages
             .push(("exposure".to_owned(), self.graph.work - exposure_start));
-        let start = self.graph.work;
-        let mut frontiers = self.frontiers();
-        self.stages
-            .push(("frontiers".to_owned(), self.graph.work - start));
+        let mut frontiers = self.held_past_their_interval(frontiers, &lifetimes, &chains);
         let start = self.graph.work;
         let (mut captures, event_changes, memory_events) = self.store_order(&lifetimes);
         self.stages
@@ -4659,6 +4959,7 @@ impl<'p> Builder<'p> {
             lifetimes = lifetime::failed(&self.graph, reason);
             for frontier in &mut frontiers {
                 frontier.ends = Err(format!("unknown: {reason:?}"));
+                frontier.interval = Err(format!("unknown: {reason:?}"));
             }
             for capture in &mut captures {
                 capture.later_write = super::LaterWrite::Unknown(reason.clone());
@@ -4683,6 +4984,9 @@ impl<'p> Builder<'p> {
                     Bound::Frame(context) => {
                         Some(Reason::OutlivesFrame(self.contexts[*context].key.clone()))
                     }
+                    Bound::Interval(child) => Some(Reason::OutlivesFrame(
+                        intervals[*child].clone().unwrap_or_default(),
+                    )),
                     Bound::Outside(reason) => Some(reason.clone()),
                 };
                 site_reasons[site].extend(reason);
@@ -4761,6 +5065,9 @@ impl<'p> Builder<'p> {
                 .map(|(parent, call)| format!("{}:%{}", self.contexts[parent].key, call.0));
             let retention_frontier = match &lifetimes.bounds[allocation.object] {
                 Bound::Frame(owner) => format!("frame {}", self.contexts[*owner].key),
+                Bound::Interval(child) => {
+                    format!("interval {}", intervals[*child].as_deref().unwrap_or("?"))
+                }
                 Bound::Outside(reason) => format!("unknown frontier: {reason:?}"),
             };
             retention_sites

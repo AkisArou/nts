@@ -10329,6 +10329,16 @@
           {
             "kind": "project-config",
             "role": "compiled-program",
+            "path": "../../../tests/memory/a-tree-builder-site-is-proved-control/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/memory/a-tree-builder-site-is-proved/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
           },
           {
@@ -10337,6 +10347,65 @@
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./benchmarks/cases/json-parse",
             "include": "directory"
+          },
+          {
+            "kind": "generated-project",
+            "role": "compiled-program",
+            "path": "../../../tsconfig.fixtures.json",
+            "directory": "./benchmarks/cases/tree-teardown",
+            "include": "directory"
+          },
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.fixtures.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/native/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/objc/node_modules/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/winrt/node_modules/"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/native/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/objc/package.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../runtime/winrt/package.json"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../runtime/node_modules/"
           }
         ]
       }

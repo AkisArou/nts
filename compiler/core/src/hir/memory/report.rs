@@ -172,6 +172,10 @@ pub struct FunctionSummary {
 pub struct Frontier {
     pub owner: String,
     pub ends: Result<Vec<String>, String>,
+    /// Whether the objects the call returns are held for this one arrival of
+    /// the call (its interval), or why not: no interval was proved for the
+    /// call, or a holder keeps a returned object longer, named here.
+    pub interval: Result<(), String>,
 }
 
 #[derive(Debug, Clone)]
@@ -425,7 +429,11 @@ impl Report {
         }
         self.render_events(&mut out);
         for frontier in &self.frontiers {
-            let _ = writeln!(out, "frontier\t{:?}\t{:?}", frontier.owner, frontier.ends);
+            let _ = writeln!(
+                out,
+                "frontier\t{:?}\t{:?}\tinterval={:?}",
+                frontier.owner, frontier.ends, frontier.interval
+            );
         }
         for proof in &self.proofs {
             let _ = writeln!(
