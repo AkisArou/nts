@@ -371,6 +371,11 @@ mod tests {
             legacy: Vec::new(),
             legacy_variants: Vec::new(),
             legacy_unknown: None,
+            reached: super::super::Reached {
+                edge: super::super::Edge::Scope,
+                root: super::super::Root::Unknown(Reason::WorkBudget),
+            },
+            holders: Vec::new(),
         }
     }
 

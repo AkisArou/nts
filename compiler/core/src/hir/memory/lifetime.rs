@@ -1,6 +1,16 @@
 //! Lifetime propagation uses a scope lattice, not a set of every path by
 //! which each root reaches each object. A bound moves toward an ancestor or
 //! outside; selective contexts bound the height. Proofs form a shared DAG.
+//!
+//! A weak alias class has one lifetime. Its representative starts at the join
+//! of every member's allocation scope, every edge into any member reaches the
+//! representative, and each member publishes the representative's bound.
+//! Widening costs precision, never the lifetime proof.
+//!
+//! The runtime's own roots (`Exposure::Collector`) are a separate column: an
+//! object the cycle collector may hold, and everything it reaches, carries an
+//! unsealed runtime-root obligation, while its bound stays what the program's
+//! own edges prove. The obligation alone keeps such a site on the heap.
 
 use std::collections::VecDeque;
 
@@ -29,10 +39,27 @@ pub(super) enum Bound {
     Outside(Reason),
 }
 
+/// The typed step behind each proof, parallel to `Result::proofs`. Readers
+/// follow these, never a proof's printed edge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Step {
+    /// The object's own allocation scope, or the external storage contract.
+    Scope(Object),
+    /// A root exposure, by its index in the roots handed to `analyze`.
+    Exposure(usize),
+    /// Stored into `slot` of `parent`, whose own witness is the next cause.
+    Stored { parent: Object, slot: Slot },
+    /// A weak class joined its members' scopes.
+    Joined(Object),
+}
+
 pub(super) struct Result {
     pub bounds: Vec<Bound>,
     pub witnesses: Vec<usize>,
     pub proofs: Vec<Proof>,
+    pub steps: Vec<Step>,
+    /// Reached from a runtime root: the collector may hold it.
+    pub runtime_held: Vec<bool>,
 }
 
 fn joined(old: &Bound, incoming: &Bound, contexts: &[Context<'_>]) -> Option<Bound> {
@@ -60,7 +87,15 @@ fn joined(old: &Bound, incoming: &Bound, contexts: &[Context<'_>]) -> Option<Bou
             match common {
                 Some(at) if at == a => None,
                 Some(at) => Some(Bound::Frame(*at)),
-                None => Some(Bound::Outside(Reason::ContextBudget)),
+                // A merged context without a common caller chain lost its
+                // lineage to the budget; otherwise the two entries are unrelated.
+                None if contexts[*a].fallback || contexts[*b].fallback => {
+                    Some(Bound::Outside(Reason::ContextBudget))
+                }
+                None => Some(Bound::Outside(Reason::Outside(format!(
+                    "no activation holds both {} and {}",
+                    contexts[*a].key, contexts[*b].key
+                )))),
             }
         }
     }
@@ -86,9 +121,10 @@ impl State<'_> {
         object: Object,
         incoming: &Bound,
         cause: Option<usize>,
-        edge: String,
+        (edge, step): (String, Step),
         graph: &Graph,
     ) {
+        let object = graph.representative(object);
         let Some(bound) = joined(&self.result.bounds[object], incoming, self.contexts) else {
             return;
         };
@@ -102,6 +138,7 @@ impl State<'_> {
             causes,
             edge,
         });
+        self.result.steps.push(step);
         self.result.bounds[object] = bound;
         self.result.witnesses[object] = id;
         if !self.queued[object] {
@@ -130,19 +167,18 @@ pub(super) fn failed(graph: &Graph, reason: &Reason) -> Result {
         bounds: vec![Bound::Outside(reason.clone()); graph.objects.len()],
         witnesses: (0..graph.objects.len()).collect(),
         proofs,
+        steps: (0..graph.objects.len()).map(Step::Scope).collect(),
+        runtime_held: vec![true; graph.objects.len()],
     }
 }
 
 impl<'a> State<'a> {
-    fn of(graph: &Graph, contexts: &'a [Context<'a>]) -> Self {
+    fn of(graph: &mut Graph, contexts: &'a [Context<'a>]) -> Self {
         let bounds: Vec<_> = graph
             .objects
             .iter()
-            .enumerate()
-            .map(|(index, object)| {
-                if graph.is_widened(index) {
-                    Bound::Outside(Reason::WeakUnionBudget)
-                } else if object.site.is_some() {
+            .map(|object| {
+                if object.site.is_some() {
                     Bound::Frame(object.context)
                 } else {
                     Bound::Outside(Reason::Outside("external or immortal storage".to_owned()))
@@ -162,18 +198,68 @@ impl<'a> State<'a> {
                 edge: "allocation scope or external storage contract".to_owned(),
             })
             .collect();
-        Self {
+        let mut state = Self {
             contexts,
             result: Result {
                 bounds,
                 witnesses: (0..graph.objects.len()).collect(),
                 proofs,
+                steps: (0..graph.objects.len()).map(Step::Scope).collect(),
+                runtime_held: vec![false; graph.objects.len()],
             },
             pending: (0..graph.objects.len())
                 .filter(|object| graph.representative(*object) == *object)
                 .collect(),
             queued: vec![true; graph.objects.len()],
+        };
+        state.join_classes(graph);
+        state
+    }
+
+    /// A weak class starts where its widest member does. Escapes need no
+    /// join: every edge into a member already names the representative.
+    fn join_classes(&mut self, graph: &mut Graph) {
+        for class in 0..graph.objects.len() {
+            if graph.representative(class) != class || !graph.is_widened(class) {
+                continue;
+            }
+            let members = graph.class_members(class).to_vec();
+            let mut bound = self.result.bounds[class].clone();
+            let mut causes = vec![self.result.witnesses[class]];
+            for member in members.into_iter().filter(|member| *member != class) {
+                if !graph.charge() {
+                    return;
+                }
+                if let Some(wider) = joined(&bound, &self.result.bounds[member], self.contexts) {
+                    bound = wider;
+                }
+                causes.push(self.result.witnesses[member]);
+            }
+            let id = self.result.proofs.len();
+            self.result.proofs.push(Proof {
+                id,
+                object: graph.label(class),
+                bound: spelling(&bound, self.contexts),
+                causes,
+                edge: "weak alias class: the join of its members' scopes".to_owned(),
+            });
+            self.result.steps.push(Step::Joined(class));
+            self.result.bounds[class] = bound;
+            self.result.witnesses[class] = id;
         }
+    }
+
+    /// Each member publishes its class's bound and witness.
+    fn publish_members(mut self, graph: &Graph) -> Result {
+        for object in 0..graph.objects.len() {
+            let class = graph.representative(object);
+            if class != object {
+                self.result.bounds[object] = self.result.bounds[class].clone();
+                self.result.witnesses[object] = self.result.witnesses[class];
+                self.result.runtime_held[object] = self.result.runtime_held[class];
+            }
+        }
+        self.result
     }
 }
 
@@ -190,13 +276,19 @@ pub(super) fn analyze(
             bounds: Vec::new(),
             witnesses: Vec::new(),
             proofs: Vec::new(),
+            steps: Vec::new(),
+            runtime_held: Vec::new(),
         };
     }
     let mut state = State::of(graph, contexts);
-    'roots: for (node, exposure) in roots {
+    if !runtime_held(graph, roots, &mut state.result.runtime_held) {
+        let reason = graph.failure.clone().unwrap_or(Reason::WorkBudget);
+        return failed(graph, &reason);
+    }
+    'roots: for (root, (node, exposure)) in roots.iter().enumerate() {
         let bound = match exposure {
+            Exposure::Collector => continue,
             Exposure::Outside(why) => Bound::Outside(Reason::Outside(why.clone())),
-            Exposure::Collector => Bound::Outside(Reason::RuntimeRootContract),
             Exposure::Unknown(why) => Bound::Outside(why.clone()),
             Exposure::Returned(at) if contexts[*at].fallback => {
                 Bound::Outside(Reason::ContextBudget)
@@ -211,7 +303,13 @@ pub(super) fn analyze(
             if !graph.charge() {
                 break 'roots;
             }
-            state.raise(object, &bound, None, format!("{exposure:?}"), graph);
+            state.raise(
+                object,
+                &bound,
+                None,
+                (format!("{exposure:?}"), Step::Exposure(root)),
+                graph,
+            );
         }
     }
     'work: while let Some(object) = state.pending.pop_front() {
@@ -231,6 +329,7 @@ pub(super) fn analyze(
                     .map(move |child| (*child, slot.clone()))
             })
             .collect();
+        let parent = object;
         for (child, slot) in children {
             if !graph.charge() {
                 break 'work;
@@ -239,7 +338,13 @@ pub(super) fn analyze(
                 child,
                 &bound,
                 Some(cause),
-                format!("stored in {slot:?}"),
+                (
+                    format!("stored in {slot:?}"),
+                    Step::Stored {
+                        parent,
+                        slot: slot.clone(),
+                    },
+                ),
                 graph,
             );
         }
@@ -247,8 +352,45 @@ pub(super) fn analyze(
     if let Some(reason) = &graph.failure {
         failed(graph, reason)
     } else {
-        state.result
+        state.publish_members(graph)
     }
+}
+
+/// Everything reachable through slots from the runtime's roots, by class.
+fn runtime_held(graph: &mut Graph, roots: &[(usize, Exposure)], held: &mut [bool]) -> bool {
+    let mut pending = VecDeque::new();
+    for (node, exposure) in roots {
+        if matches!(exposure, Exposure::Collector) {
+            for object in graph.values[*node].objects.clone() {
+                let object = graph.representative(object);
+                if !held[object] {
+                    held[object] = true;
+                    pending.push_back(object);
+                }
+            }
+        }
+    }
+    while let Some(object) = pending.pop_front() {
+        if !graph.charge() {
+            return false;
+        }
+        let children: Vec<_> = graph
+            .slots
+            .range((object, Slot::Field(String::new()))..(object + 1, Slot::Field(String::new())))
+            .flat_map(|(_, node)| graph.values[*node].objects.iter().copied())
+            .collect();
+        for child in children {
+            let child = graph.representative(child);
+            if !graph.charge() {
+                return false;
+            }
+            if !held[child] {
+                held[child] = true;
+                pending.push_back(child);
+            }
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -307,6 +449,90 @@ mod tests {
                 .iter()
                 .all(|proof| proof.causes.iter().all(|cause| *cause < proof.id))
         );
+    }
+
+    /// Joining the members' allocation scopes alone would leave `kept` in its
+    /// frame: a member must reach every escape of its class.
+    #[test]
+    fn a_weak_class_member_reaches_every_escape_of_its_class() {
+        let contexts = [
+            Context {
+                parent: None,
+                ancestors: &[],
+                key: "caller",
+                fallback: false,
+            },
+            Context {
+                parent: Some(0),
+                ancestors: &[0],
+                key: "callee",
+                fallback: false,
+            },
+        ];
+        let module = Bound::Outside(Reason::Outside("module slot 0".to_owned()));
+        for (kept_context, escape, expected) in [
+            (1, None, Bound::Frame(1)),
+            (0, None, Bound::Frame(0)),
+            (1, Some(Exposure::Returned(1)), Bound::Frame(0)),
+            (
+                1,
+                Some(Exposure::Outside("module slot 0".to_owned())),
+                module.clone(),
+            ),
+        ] {
+            let mut graph = Graph::new(10_000, 1_000);
+            graph.alias_limit = 1;
+            let (kept_value, kept) = object(&mut graph, kept_context, 0);
+            let (escaping_value, escaping) = object(&mut graph, 1, 1);
+            let either = graph.node();
+            graph.copy(kept_value, either);
+            graph.copy(escaping_value, either);
+            graph.solve();
+            assert!(graph.is_widened(kept) && graph.is_widened(escaping));
+            let roots: Vec<_> = escape
+                .iter()
+                .map(|exposure| (escaping_value, exposure.clone()))
+                .collect();
+            let result = analyze(&mut graph, &contexts, &roots);
+            assert!(graph.failure.is_none());
+            assert_eq!(result.bounds[kept], expected, "{escape:?}");
+            assert_eq!(result.bounds[escaping], expected, "{escape:?}");
+            assert_eq!(result.witnesses[kept], result.witnesses[escaping]);
+        }
+    }
+
+    /// A runtime root reaches through elements and fields, and through a
+    /// weak class to every member; the bound stays the program's own, and an
+    /// object nothing reaches stays free of the obligation.
+    #[test]
+    fn a_runtime_root_holds_what_it_reaches_and_nothing_else() {
+        let contexts = [Context {
+            parent: None,
+            ancestors: &[],
+            key: "entry",
+            fallback: false,
+        }];
+        let mut graph = Graph::new(10_000, 1_000);
+        graph.alias_limit = 1;
+        let (array_value, array) = object(&mut graph, 0, 0);
+        let (element_value, element) = object(&mut graph, 0, 1);
+        let (child_value, child) = object(&mut graph, 0, 2);
+        let (member_value, member) = object(&mut graph, 0, 3);
+        let (_, free) = object(&mut graph, 0, 4);
+        graph.store(array_value, Slot::Elements, element_value);
+        graph.store(element_value, Slot::Field("child".to_owned()), child_value);
+        let either = graph.node();
+        graph.copy(child_value, either);
+        graph.copy(member_value, either);
+        graph.solve();
+        assert!(graph.is_widened(member) && graph.is_widened(child));
+        let result = analyze(&mut graph, &contexts, &[(array_value, Exposure::Collector)]);
+        assert!(graph.failure.is_none());
+        for held in [array, element, child, member] {
+            assert!(result.runtime_held[held], "object {held}");
+            assert_eq!(result.bounds[held], Bound::Frame(0), "object {held}");
+        }
+        assert!(!result.runtime_held[free]);
     }
 
     #[test]

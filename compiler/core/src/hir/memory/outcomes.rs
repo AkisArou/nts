@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
-use super::super::{Callee, HirType, Op, OpKind, Program, runtime};
+use super::super::{Callee, EntryUnwind, HirType, Op, OpKind, Program, runtime};
 
 /// A direct-call view of the existing escaping-outcome column. An indirect
 /// producer is unsealed by `intrinsic`, so no dispatch precision is assumed.
@@ -43,18 +43,56 @@ impl<'p> DirectEffects<'p> {
                     .collect()
             })
             .collect::<Vec<_>>();
-        let (raises, _, _) = escaping(program, &edges, &by_name);
+        // Ownership's sealing keeps the contract it was built on: it does not
+        // read the product's uncaught exit. Only the memory report does.
+        let (raises, _, _) = escaping(program, &edges, &by_name, Exit::Unknown);
         Self { by_name, raises }
     }
 
     pub(in crate::hir) fn unsealed(&self, op: &Op) -> bool {
-        unsealed(op, &self.by_name, &self.raises).is_some()
+        unsealed(op, &self.by_name, &self.raises, Exit::Unknown).is_some()
+    }
+}
+
+/// What an uncaught exception does to the program, by its product contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::hir) enum Exit {
+    /// No contract read: `nts_uncaught` transfers its payload, fail closed.
+    Unknown,
+    /// Every entry is terminal: `nts_uncaught` ends the process, so no
+    /// surviving caller observes its payload or anything live at the call,
+    /// and nothing reenters through it (`regions::helper` reads it the same way).
+    ///
+    /// No program code runs after it: `nts_uncaught` (`runtime/c/nts_runtime.c`)
+    /// jumps to a landing only where one is pushed, and only Node-API entries
+    /// push one (a resuming product); otherwise it reads the payload's message,
+    /// prints and calls `exit(1)`. The C runtime registers no `atexit` hook,
+    /// compiled `process` `exit` and `uncaughtException` listeners are not
+    /// dispatched natively (`runtime/node/process/process.c`; `_fatalException`
+    /// runs only from an addon host's bindings), and there are no finalization
+    /// callbacks. A runtime that starts running any of these at an uncaught
+    /// exit makes this contract false for terminal products too.
+    Terminates,
+}
+
+impl Exit {
+    #[must_use]
+    pub(in crate::hir) fn of(program: &Program) -> Self {
+        if program.entry_unwind == Some(EntryUnwind::Terminal) {
+            Self::Terminates
+        } else {
+            Self::Unknown
+        }
+    }
+
+    fn ends_the_process(self, helper: &str) -> bool {
+        self == Self::Terminates && helper == "nts_uncaught"
     }
 }
 
 /// Whether this operation itself has an outcome not represented by a complete
 /// exceptional successor. Direct body calls are propagated by the call index.
-fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>) -> bool {
+fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>, exit: Exit) -> bool {
     match &op.kind {
         OpKind::Call {
             callee: Callee::Direct(name),
@@ -63,7 +101,7 @@ fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>) -> bool {
         OpKind::Call {
             callee: Callee::External(name),
             ..
-        } => runtime::has_exceptional_outcome(name),
+        } => !exit.ends_the_process(name) && runtime::has_exceptional_outcome(name),
         OpKind::Binary { .. } | OpKind::Unary { .. } => op.ty == HirType::BigInt,
         OpKind::Param(_)
         | OpKind::BlockParam(_)
@@ -114,6 +152,7 @@ pub(super) fn escaping(
     program: &Program,
     edges: &[Vec<usize>],
     by_name: &BTreeMap<&str, usize>,
+    exit: Exit,
 ) -> (Vec<bool>, Vec<bool>, usize) {
     let mut work = edges.len();
     let mut callers = vec![Vec::new(); edges.len()];
@@ -132,7 +171,7 @@ pub(super) fn escaping(
         for &id in function.blocks.iter().flat_map(|block| &block.ops) {
             work += 1;
             let op = function.values.get(id.0 as usize);
-            unknown |= op.is_none_or(|op| intrinsic(op, by_name));
+            unknown |= op.is_none_or(|op| intrinsic(op, by_name, exit));
             reentry |= op.is_none_or(|op| match &op.kind {
                 OpKind::Call {
                     callee: Callee::Direct(name),
@@ -142,14 +181,15 @@ pub(super) fn escaping(
                     callee: Callee::External(name),
                     ..
                 } => {
-                    super::super::regions::helper(name, program.entry_unwind).is_none()
-                        || runtime::has_exceptional_outcome(name)
+                    !exit.ends_the_process(name)
+                        && (super::super::regions::helper(name, program.entry_unwind).is_none()
+                            || runtime::has_exceptional_outcome(name))
                 }
                 OpKind::Call { .. }
                 | OpKind::Await { .. }
                 | OpKind::Suspend { .. }
                 | OpKind::PromiseSubscribe { .. } => true,
-                _ => intrinsic(op, by_name),
+                _ => intrinsic(op, by_name, exit),
             });
         }
         raises[at] = unknown;
@@ -179,6 +219,7 @@ pub(super) fn unsealed(
     op: &Op,
     by_name: &BTreeMap<&str, usize>,
     raises: &[bool],
+    exit: Exit,
 ) -> Option<String> {
     if let OpKind::Call {
         callee: Callee::Direct(name),
@@ -190,7 +231,7 @@ pub(super) fn unsealed(
             .is_none_or(|at| raises[*at])
             .then(|| format!("unsealed body outcome: {name}"));
     }
-    intrinsic(op, by_name).then(|| match &op.kind {
+    intrinsic(op, by_name, exit).then(|| match &op.kind {
         OpKind::Call { callee, .. } => format!("unsealed call outcome: {callee:?}"),
         _ => "unsealed producer outcome".to_owned(),
     })

@@ -1,4 +1,6 @@
 //! Nonlocal transfer must fence payloads, their children and independent live roots.
+//! A transfer is real where the host resumes after an uncaught throw (a Node
+//! addon's landing); under a terminal product `nts_uncaught` ends the process.
 
 use super::tests::{function, origin};
 use super::*;
@@ -8,6 +10,10 @@ use crate::hir::{
 };
 
 fn transfer_program(transfers: bool) -> Program {
+    transfer_program_for(transfers, crate::hir::EntryUnwind::Resuming)
+}
+
+fn transfer_program_for(transfers: bool, unwind: crate::hir::EntryUnwind) -> Program {
     let cell_id = TypeId(SYNTHETIC_CELLS);
     let env_id = TypeId(SYNTHETIC_CLOSURES);
     let child_id = TypeId(7);
@@ -97,7 +103,7 @@ fn transfer_program(transfers: bool) -> Program {
     };
     Program {
         funcs: vec![caller, ordinary],
-        entry_unwind: Some(crate::hir::EntryUnwind::Terminal),
+        entry_unwind: Some(unwind),
         layouts: vec![
             layout(cell_id, "binding", vec![field("value", child)]),
             layout(env_id, "environment", vec![field("captured", cell)]),
@@ -179,6 +185,45 @@ fn uncaught_transfer_roots_payload_children_live_values_and_capture_order() {
 #[test]
 fn closed_body_no_raise_keeps_the_same_roots_confined() {
     check_transfer(false);
+}
+
+/// The process ends at a terminal product's uncaught throw: no landing, no
+/// listener and no exit hook runs program code after it, so nothing live
+/// there is exposed and nothing reenters. A resuming product keeps the fence
+/// (`uncaught_transfer_roots_payload_children_live_values_and_capture_order`).
+#[test]
+fn a_terminal_uncaught_throw_fences_nothing() {
+    use crate::hir::EntryUnwind;
+    for unwind in [EntryUnwind::Terminal, EntryUnwind::Resuming] {
+        let program = transfer_program_for(true, unwind);
+        let report = memory::Analysis::of(&program).into_report();
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        let fenced = report
+            .sites
+            .iter()
+            .filter(|site| site.id.function == "root#init")
+            .filter(|site| {
+                site.obligations
+                    .iter()
+                    .any(|reason| matches!(reason, Reason::MissingOutcome(_)))
+            })
+            .count();
+        if unwind == EntryUnwind::Terminal {
+            assert!(report.outcomes.is_empty(), "{:?}", report.outcomes);
+            assert_eq!(fenced, 0);
+            for value in [0, 1, 5] {
+                let site = report
+                    .sites
+                    .iter()
+                    .find(|site| site.id.function == "root#init" && site.id.value == value)
+                    .expect("complete allocation inventory");
+                assert_eq!(site.home, Home::Frame, "{site:?}");
+            }
+        } else {
+            assert!(!report.outcomes.is_empty());
+            assert!(fenced >= 3, "the resuming fence stays");
+        }
+    }
 }
 
 fn raw_loan_program(transfers: bool, through_block_loop: bool) -> Program {
@@ -377,7 +422,8 @@ fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
                     expected.insert(0, ("ordinary", 2, memory::Storage::CallStorage));
                 }
                 assert_eq!(sites, expected, "{entry_unwind:?}");
-                assert!(
+                // Only a resuming product's uncaught throw is a transfer to fence.
+                assert_eq!(
                     report
                         .sites
                         .iter()
@@ -386,7 +432,9 @@ fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
                         .all(|site| site
                             .obligations
                             .iter()
-                            .any(|reason| matches!(reason, Reason::MissingOutcome(_))))
+                            .any(|reason| matches!(reason, Reason::MissingOutcome(_)))),
+                    entry_unwind == crate::hir::EntryUnwind::Resuming,
+                    "{entry_unwind:?}"
                 );
             }
         }

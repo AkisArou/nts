@@ -53,6 +53,30 @@ mod tests {
         assert_eq!(graph.values[join].objects, BTreeSet::from([a, b]));
     }
 
+    /// Two sets that overflow separately but both may hold the universal
+    /// outside object stay two classes: a sentinel joins none.
+    #[test]
+    fn the_outside_object_never_joins_a_weak_class() {
+        let mut graph = Graph::new(10_000, 1_000);
+        graph.alias_limit = 1;
+        let mut classes = Vec::new();
+        for side in ["left", "right"] {
+            let (first, a) = allocated(&mut graph, &format!("{side}-a"));
+            let (second, b) = allocated(&mut graph, &format!("{side}-b"));
+            let join = graph.node();
+            graph.insert(join, 0);
+            graph.copy(first, join);
+            graph.copy(second, join);
+            graph.solve();
+            assert!(graph.is_widened(a) && graph.is_widened(b));
+            assert!(graph.values[join].objects.contains(&0));
+            classes.push(graph.representative(a));
+        }
+        assert!(!graph.is_widened(0));
+        assert_eq!(graph.class_members(0), [0]);
+        assert_ne!(classes[0], classes[1]);
+    }
+
     #[test]
     fn loads_discover_late_stores_and_an_unseen_writer_poisons_old_facts() {
         let mut graph = Graph::new(10_000, 1_000);
@@ -334,6 +358,9 @@ enum Event {
     Open(Object),
 }
 
+/// Summary objects that never join a weak class: see `Graph::sentinels`.
+pub(super) const SENTINELS: usize = 2;
+
 #[derive(Debug)]
 pub(super) struct Graph {
     pub event: Option<super::events::Origin>,
@@ -342,6 +369,11 @@ pub(super) struct Graph {
     pub values: Vec<Value>,
     pub objects: Vec<ObjectInfo>,
     twins: Vec<Option<Object>>,
+    /// Summary objects that stand for unbounded storage (`outside:any-reference`
+    /// and the immortal summary). One sits beside any set without counting
+    /// against its alias limit, and none ever joins a weak class: absorbing
+    /// the universal outside object would merge every set it reaches.
+    sentinels: Vec<bool>,
     parents: Vec<Object>,
     members: Vec<Vec<Object>>,
     users: Vec<BTreeSet<Node>>,
@@ -349,6 +381,10 @@ pub(super) struct Graph {
     merging: bool,
     unions: Vec<(Object, Object)>,
     pub slots: BTreeMap<(Object, Slot), Node>,
+    /// Values stored into the universal outside object, in first-store order:
+    /// each is an outside root of the lifetime analysis.
+    pub escapes: Vec<Node>,
+    escaped: BTreeSet<Node>,
     copies: Vec<BTreeSet<Node>>,
     watches: Vec<Vec<Watch>>,
     opened: Vec<bool>,
@@ -377,6 +413,7 @@ impl Graph {
                 open: true,
             }],
             twins: vec![None],
+            sentinels: vec![true],
             parents: vec![0],
             members: vec![vec![0]],
             users: vec![BTreeSet::new()],
@@ -384,6 +421,8 @@ impl Graph {
             merging: false,
             unions: Vec::new(),
             slots: BTreeMap::new(),
+            escapes: Vec::new(),
+            escaped: BTreeSet::new(),
             copies: Vec::new(),
             watches: Vec::new(),
             opened: Vec::new(),
@@ -439,6 +478,7 @@ impl Graph {
         let id = self.objects.len();
         self.objects.push(info);
         self.twins.push(None);
+        self.sentinels.push(false);
         self.parents.push(id);
         self.members.push(vec![id]);
         self.users.push(BTreeSet::new());
@@ -446,20 +486,33 @@ impl Graph {
         id
     }
 
+    /// Mark a summary object created after the universal outside object. At
+    /// most `SENTINELS` exist, so each set grows by at most that many beyond
+    /// its alias limit.
+    pub(super) fn sentinel(&mut self, object: Object) {
+        debug_assert!(self.sentinels.iter().filter(|it| **it).count() < SENTINELS);
+        self.sentinels[object] = true;
+    }
+
     pub(super) fn insert(&mut self, value: Node, object: Object) {
         let object = self.representative(object);
         if !self.charge() {
             return;
         }
-        if let Some(class) = self.values[value].weak {
+        let sentinel = self.sentinels[object];
+        if !sentinel && let Some(class) = self.values[value].weak {
             self.unify(class, object);
             return;
         }
         if self.values[value].objects.contains(&object) {
             return;
         }
-        let weak =
-            self.is_widened(object) || self.values[value].objects.len() >= self.alias_limit.max(1);
+        let precise = self.values[value]
+            .objects
+            .iter()
+            .filter(|other| !self.sentinels[**other])
+            .count();
+        let weak = !sentinel && (self.is_widened(object) || precise >= self.alias_limit.max(1));
         self.values[value].objects.insert(object);
         if self.opened[value] {
             self.pending.push_back(Event::Open(object));
@@ -479,7 +532,7 @@ impl Graph {
     fn changed(&mut self, value: Node) {
         self.values[value].changes += 1;
         debug_assert!(
-            self.values[value].changes <= self.alias_limit.max(1).saturating_add(1),
+            self.values[value].changes <= self.alias_limit.max(1).saturating_add(1 + SENTINELS),
             "points-to node {value} changed {} times at limit {}",
             self.values[value].changes,
             self.alias_limit
@@ -497,7 +550,7 @@ impl Graph {
             self.changed(value);
         }
         for &other in &self.values[value].objects {
-            if other != class {
+            if other != class && !self.sentinels[other] {
                 self.unions.push((class, other));
             }
         }
@@ -527,6 +580,11 @@ impl Graph {
             object = self.parents[object];
         }
         object
+    }
+
+    /// Every object a weak class absorbed, its representative included.
+    pub(super) fn class_members(&self, object: Object) -> &[Object] {
+        &self.members[self.representative(object)]
     }
 
     pub(super) fn is_widened(&self, object: Object) -> bool {
@@ -561,7 +619,9 @@ impl Graph {
     /// Widen an oversized may-alias set, never SSA equality. Union by member
     /// count bounds migrations; existing/future fields and users share the
     /// same weak class. Member sites remain individually inventoried and lose
-    /// singleton/lifetime permissions. No allocation origin is discarded.
+    /// singleton permissions. Their lifetime is the class's: it joins every
+    /// member's allocation scope and every escape of any member
+    /// (`lifetime.rs`). No allocation origin is discarded.
     fn unify(&mut self, left: Object, right: Object) {
         self.unions.push((left, right));
         if self.merging {
@@ -578,7 +638,7 @@ impl Graph {
         while let Some((left, right)) = self.unions.pop() {
             let mut into = self.representative(left);
             let mut from = self.representative(right);
-            if into == from || !self.charge() {
+            if into == from || self.sentinels[into] || self.sentinels[from] || !self.charge() {
                 continue;
             }
             if (self.members[into].len(), std::cmp::Reverse(into))
@@ -752,6 +812,26 @@ impl Graph {
     fn apply(&mut self, object: Object, watch: &Watch) {
         let object = self.representative(object);
         if !self.charge() {
+            return;
+        }
+        // The universal outside object is a sink, never a summary with slots
+        // of its own. A load from it is any outside value. A store into it
+        // opens what it stores and roots it outside (`escapes`), so a
+        // load that named the stored object would add no fact; collecting
+        // them in one slot would only merge everything stored outside.
+        if object == 0 {
+            match *watch {
+                Watch::Load { into, .. } => {
+                    self.insert(into, 0);
+                    self.payload(into, ValueFact::Unknown(Unknown::OpenWriterSet));
+                }
+                Watch::Store { from, .. } => {
+                    self.open(from);
+                    if self.escaped.insert(from) {
+                        self.escapes.push(from);
+                    }
+                }
+            }
             return;
         }
         let slot = match watch {

@@ -9,9 +9,10 @@ use super::graph::{Graph, Instance, Node, Object, ObjectInfo, Slot};
 use super::lifetime::{self, Bound, Exposure};
 use super::outcomes;
 use super::report::{
-    CaptureWrite, Frontier, FunctionSummary, Outcome, Report, RetainedBytes, Retention, Site,
-    SlotFact, StoreVersion, Value,
+    CaptureWrite, Frontier, FunctionSummary, Holder, Outcome, Report, RetainedBytes, Retention,
+    Root, Site, SlotFact, StoreVersion, Value,
 };
+use super::retention;
 use super::summary::Summary;
 use super::{Home, Limits, Multiplicity, Reason, SiteId, Storage};
 
@@ -96,7 +97,7 @@ mod tests {
             values: BTreeMap::new(),
             result: 0,
             fallback: false,
-            repeated: false,
+            repeats: Repeats::default(),
             effects,
         }
     }
@@ -407,6 +408,518 @@ mod tests {
                 .all(|site| matches!(site.multiplicity, Multiplicity::Unbounded { .. }))
         );
         assert!(report.sites.iter().all(|site| site.home != Home::Frame));
+    }
+
+    /// A layout with one field. A numeric field holds no reference, so no
+    /// collector root interferes when construction repeats the producer.
+    fn boxed(field: HirType) -> (HirType, Layout) {
+        let id = super::super::super::TypeId(7);
+        (
+            HirType::Managed(ManagedType::Object(id)),
+            Layout {
+                types: vec![id],
+                name: "Box".to_owned(),
+                fields: vec![super::super::super::Field {
+                    name: "text".into(),
+                    ty: field,
+                    readonly: false,
+                    written: None,
+                    declared_by: None,
+                }],
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            },
+        )
+    }
+
+    fn call(name: &str) -> OpKind {
+        OpKind::Call {
+            callee: Callee::Direct(name.to_owned()),
+            args: Vec::new(),
+            frame: None,
+        }
+    }
+
+    /// `root#init` runs `body`'s ops in block 1, which loops to itself when
+    /// `looped`, between an entry block and a returning exit.
+    fn looping(name: &str, ops: Vec<OpKind>, looped: bool) -> Func {
+        let mut kinds = vec![OpKind::ConstBool(true)];
+        kinds.extend(ops);
+        let count = kinds.len();
+        let mut func = function(name.to_owned(), kinds);
+        func.values[0].ty = HirType::Bool;
+        let body = (1..count)
+            .map(|at| ValueId(u32::try_from(at).expect("test value")))
+            .collect();
+        func.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0)],
+                terminator: Terminator::Jump {
+                    target: BlockId(1),
+                    args: Vec::new(),
+                },
+            },
+            Block {
+                params: Vec::new(),
+                ops: body,
+                terminator: Terminator::Branch {
+                    cond: ValueId(0),
+                    then_target: BlockId(if looped { 1 } else { 2 }),
+                    then_args: Vec::new(),
+                    else_target: BlockId(2),
+                    else_args: Vec::new(),
+                },
+            },
+            Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Return(None),
+            },
+        ];
+        func
+    }
+
+    fn site<'r>(report: &'r Report, function: &str) -> &'r Site {
+        report
+            .sites
+            .iter()
+            .find(|site| site.id.function == function && site.id.storage == Storage::Object)
+            .expect("the object site")
+    }
+
+    /// A repeated activation above the frontier repeats whole frames, not
+    /// instances within one: `parse` runs once per pass of the caller's loop,
+    /// and its object dies in it.
+    #[test]
+    fn a_loop_above_the_frontier_leaves_one_instance_per_activation() {
+        let (object, layout) = boxed(HirType::NUMBER);
+        let root = looping("root#init", vec![call("parse")], true);
+        let mut parse = function(
+            "parse".to_owned(),
+            vec![
+                OpKind::ObjectNew { frame: false },
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0,
+                },
+            ],
+        );
+        parse.values[0].ty = object;
+        parse.values[1].ty = HirType::NUMBER;
+        let report = analyze(
+            &Program {
+                funcs: vec![root, parse],
+                layouts: vec![layout],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        let scanner = site(&report, "parse");
+        assert!(
+            matches!(&scanner.multiplicity, Multiplicity::One { .. }),
+            "{:?}",
+            scanner.multiplicity
+        );
+        assert_eq!(scanner.home, Home::Frame, "{:?}", scanner.obligations);
+        assert_eq!(scanner.reached.edge, super::super::Edge::Scope);
+    }
+
+    /// A loop inside the frontier repeats instances within one activation, and
+    /// the witness names the cyclic block.
+    #[test]
+    fn a_loop_inside_the_frontier_keeps_repeated_instances() {
+        let (object, layout) = boxed(HirType::NUMBER);
+        let root = function("root#init".to_owned(), vec![call("parse")]);
+        let mut parse = looping(
+            "parse",
+            vec![
+                OpKind::ObjectNew { frame: false },
+                OpKind::FieldGet {
+                    object: ValueId(1),
+                    field: 0,
+                },
+            ],
+            true,
+        );
+        parse.values[1].ty = object;
+        parse.values[2].ty = HirType::NUMBER;
+        let report = analyze(
+            &Program {
+                funcs: vec![root, parse],
+                layouts: vec![layout],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        let made = site(&report, "parse");
+        assert_eq!(made.home, Home::Heap(Reason::RepeatedInstances));
+        let Multiplicity::Unbounded { witness } = &made.multiplicity else {
+            panic!("{:?}", made.multiplicity)
+        };
+        assert!(
+            witness.contains("producing block bb1 is cyclic"),
+            "{witness}"
+        );
+    }
+
+    /// Recursion between the allocation and its frontier repeats instances:
+    /// every activation of `make` returns one into the same `parse` frame.
+    #[test]
+    fn recursion_below_the_frontier_keeps_repeated_instances() {
+        let (object, layout) = boxed(HirType::NUMBER);
+        let root = function("root#init".to_owned(), vec![call("parse")]);
+        let mut parse = function(
+            "parse".to_owned(),
+            vec![
+                call("make"),
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0,
+                },
+            ],
+        );
+        parse.values[0].ty = object.clone();
+        parse.values[1].ty = HirType::NUMBER;
+        let mut make = function(
+            "make".to_owned(),
+            vec![OpKind::ObjectNew { frame: false }, call("make")],
+        );
+        make.values[0].ty = object.clone();
+        make.values[1].ty = object.clone();
+        make.return_type = object;
+        make.blocks[0].terminator = Terminator::Return(Some(ValueId(0)));
+        let report = analyze(
+            &Program {
+                funcs: vec![root, parse, make],
+                layouts: vec![layout],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        let produced = site(&report, "make");
+        assert!(
+            produced
+                .retention_frontier
+                .starts_with("frame root#init:entry/parse")
+        );
+        assert!(produced.obligations.contains(&Reason::RepeatedInstances));
+        let Multiplicity::Unbounded { witness } = &produced.multiplicity else {
+            panic!("{:?}", produced.multiplicity)
+        };
+        assert!(
+            witness.contains("recursive, reentrant or merged"),
+            "{witness}"
+        );
+    }
+
+    /// Literals share one immortal summary, so nine of them beside a fresh
+    /// string in one field widen nothing: the fresh string keeps the frame of
+    /// the object holding it.
+    #[test]
+    fn literals_in_a_field_leave_a_fresh_string_its_own_lifetime() {
+        let text = HirType::Managed(ManagedType::String);
+        let (object, layout) = boxed(text.clone());
+        let mut kinds = vec![OpKind::ObjectNew { frame: false }];
+        for at in 0..9 {
+            kinds.push(OpKind::ConstString(format!("literal {at}").as_str().into()));
+            kinds.push(OpKind::FieldSet {
+                object: ValueId(0),
+                field: 0,
+                value: ValueId(u32::try_from(kinds.len() - 1).expect("test value")),
+            });
+        }
+        let fresh = u32::try_from(kinds.len()).expect("test value");
+        kinds.push(OpKind::Binary {
+            op: BinOp::Concat,
+            lhs: ValueId(1),
+            rhs: ValueId(3),
+        });
+        kinds.push(OpKind::FieldSet {
+            object: ValueId(0),
+            field: 0,
+            value: ValueId(fresh),
+        });
+        let mut root = function("root#init".to_owned(), kinds);
+        root.values[0].ty = object;
+        for op in &mut root.values {
+            if matches!(op.kind, OpKind::ConstString(_) | OpKind::Binary { .. }) {
+                op.ty = text.clone();
+            }
+        }
+        let report = analyze(
+            &Program {
+                funcs: vec![root],
+                layouts: vec![layout],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        assert!(
+            report.alias_classes.is_empty(),
+            "{:?}",
+            report.alias_classes
+        );
+        let holder = site(&report, "root#init");
+        let made = report
+            .sites
+            .iter()
+            .find(|site| site.id.storage == Storage::String)
+            .expect("the fresh string");
+        assert_eq!(made.retention_frontier, "frame root#init:entry");
+        assert!(!made.obligations.contains(&Reason::WeakUnionBudget));
+        let owner = super::super::Holder::Site {
+            id: holder.id.clone(),
+            context: holder.context_id,
+        };
+        assert!(
+            made.holders.iter().any(|hold| hold.holder == owner),
+            "{:?}",
+            made.holders
+        );
+        assert_eq!(holder.home, Home::Frame, "{:?}", holder.obligations);
+    }
+
+    /// A function that allocates a `Box` and returns it, calling `calls` first.
+    fn returning(name: &str, calls: &[&str]) -> Func {
+        let (object, _) = boxed(HirType::NUMBER);
+        let mut kinds = vec![OpKind::ObjectNew { frame: false }];
+        kinds.extend(calls.iter().map(|callee| call(callee)));
+        let mut func = function(name.to_owned(), kinds);
+        for op in &mut func.values {
+            op.ty = object.clone();
+        }
+        func.return_type = object;
+        func.blocks[0].terminator = Terminator::Return(Some(ValueId(0)));
+        func
+    }
+
+    fn calling(name: &str, calls: &[&str]) -> Func {
+        let (object, _) = boxed(HirType::NUMBER);
+        let mut func = function(
+            name.to_owned(),
+            calls.iter().map(|callee| call(callee)).collect(),
+        );
+        for op in &mut func.values {
+            op.ty = object.clone();
+        }
+        func
+    }
+
+    fn merging(funcs: Vec<Func>) -> Report {
+        let (_, layout) = boxed(HirType::NUMBER);
+        let report = analyze(
+            &Program {
+                funcs,
+                layouts: vec![layout],
+                ..Program::default()
+            },
+            Limits {
+                contexts_per_function: 2,
+                ..Limits::default()
+            },
+        );
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        report
+    }
+
+    fn frontier_in<'r>(report: &'r Report, function: &str, context: &str) -> &'r str {
+        &report
+            .sites
+            .iter()
+            .find(|site| site.id.function == function && site.context == context)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{function} in {context}: {:?}",
+                    report
+                        .sites
+                        .iter()
+                        .map(|site| &site.context)
+                        .collect::<Vec<_>>()
+                )
+            })
+            .retention_frontier
+    }
+
+    /// A merged context returns to whichever caller called it, so only the
+    /// callers' common chain bounds what it returns: the root here, never
+    /// `a` or `b`, while each caller-specific context returns to its caller.
+    #[test]
+    fn a_merged_context_returns_only_to_its_callers_common_chain() {
+        let report = merging(vec![
+            calling("root#init", &["a", "b"]),
+            calling("a", &["helper", "helper", "helper"]),
+            calling("b", &["helper"]),
+            returning("helper", &[]),
+        ]);
+        assert_eq!(
+            frontier_in(&report, "helper", "helper:merged"),
+            "frame root#init:entry"
+        );
+        assert_eq!(
+            frontier_in(&report, "helper", "root#init:entry/a:%0/helper:%0"),
+            "frame root#init:entry/a:%0"
+        );
+    }
+
+    /// A merged context also called from its own subtree has no settled
+    /// chain: it keeps the one it was built with, and its returns stay
+    /// `ContextBudget`.
+    #[test]
+    fn a_merged_context_called_from_its_own_subtree_keeps_its_budget() {
+        let report = merging(vec![
+            calling("root#init", &["helper", "helper", "helper"]),
+            returning("helper", &["inner"]),
+            calling("inner", &["helper"]),
+        ]);
+        let merged = report
+            .context_views()
+            .find(|context| context.merged && context.function == "helper")
+            .expect("helper's merged context")
+            .id;
+        assert!(
+            report
+                .context_arrivals()
+                .any(|arrival| arrival.child == merged
+                    && report
+                        .context(arrival.parent)
+                        .is_some_and(|parent| parent.function == "inner")),
+            "the merged context is called from its own subtree"
+        );
+        assert_eq!(
+            frontier_in(&report, "helper", "helper:merged"),
+            "unknown frontier: ContextBudget"
+        );
+    }
+
+    /// Each merged level here waits for the one above it, one pass each. A
+    /// chain the passes settle publishes its common chains; one deeper than
+    /// they reach publishes none anywhere, so every merged context keeps
+    /// `ContextBudget`.
+    #[test]
+    fn merged_chains_deeper_than_the_passes_publish_nothing() {
+        for (levels, settled) in [(3, true), (10, false)] {
+            let names: Vec<String> = (0..levels).map(|at| format!("h{at}")).collect();
+            let root: Vec<&str> = names.iter().flat_map(|name| [name.as_str(); 3]).collect();
+            let mut funcs = vec![calling("root#init", &root)];
+            for at in 0..levels {
+                let below: Vec<&str> = if at == 0 {
+                    Vec::new()
+                } else {
+                    vec![names[at - 1].as_str()]
+                };
+                funcs.push(returning(&names[at], &below));
+            }
+            let report = merging(funcs);
+            for name in &names {
+                let frontier = frontier_in(&report, name, &format!("{name}:merged"));
+                if settled {
+                    assert_eq!(frontier, "frame root#init:entry", "{levels}: {name}");
+                } else {
+                    assert_eq!(
+                        frontier, "unknown frontier: ContextBudget",
+                        "{levels}: {name}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The runtime's roots are an obligation column: an `unknown[]` the
+    /// collector may walk, the object in its elements and that object's
+    /// field child all carry `RuntimeRootContract` and stay off the frame; an
+    /// unrelated object in the same frame does not.
+    #[test]
+    fn everything_a_collector_root_reaches_carries_the_runtime_obligation() {
+        let leaf_id = super::super::super::TypeId(8);
+        let holder_id = super::super::super::TypeId(9);
+        let leaf = HirType::Managed(ManagedType::Object(leaf_id));
+        let holder = HirType::Managed(ManagedType::Object(holder_id));
+        let field = |name: &str, ty| super::super::super::Field {
+            name: name.into(),
+            ty,
+            readonly: false,
+            written: None,
+            declared_by: None,
+        };
+        let layout = |id, name: &str, fields| Layout {
+            types: vec![id],
+            name: name.to_owned(),
+            fields,
+            methods: Vec::new(),
+            interfaces: Vec::new(),
+            base: None,
+        };
+        let mut root = function(
+            "root#init".to_owned(),
+            vec![
+                OpKind::ConstInt(1),
+                OpKind::ArrayNew {
+                    length: ValueId(0),
+                    fill: super::super::super::ArrayFill::Filled,
+                },
+                OpKind::ObjectNew { frame: false },
+                OpKind::ObjectNew { frame: false },
+                OpKind::FieldSet {
+                    object: ValueId(2),
+                    field: 0,
+                    value: ValueId(3),
+                },
+                OpKind::ConstInt(0),
+                OpKind::ArraySet {
+                    array: ValueId(1),
+                    index: ValueId(5),
+                    value: ValueId(2),
+                    checked: false,
+                },
+                OpKind::ObjectNew { frame: false },
+            ],
+        );
+        root.values[0].ty = HirType::NUMBER;
+        root.values[1].ty = HirType::Managed(ManagedType::Array(Box::new(HirType::Erased)));
+        root.values[2].ty = holder;
+        root.values[3].ty = leaf.clone();
+        root.values[5].ty = HirType::NUMBER;
+        root.values[7].ty = leaf.clone();
+        let report = analyze(
+            &Program {
+                funcs: vec![root],
+                layouts: vec![
+                    layout(leaf_id, "Leaf", vec![field("n", HirType::NUMBER)]),
+                    layout(holder_id, "Holder", vec![field("child", leaf)]),
+                ],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        let site = |value: u32| {
+            report
+                .sites
+                .iter()
+                .find(|site| site.id.value == value)
+                .expect("the site")
+        };
+        for held in [1, 2, 3] {
+            let held = site(held);
+            assert!(
+                held.obligations.contains(&Reason::RuntimeRootContract),
+                "{held:?}"
+            );
+            assert_ne!(held.home, Home::Frame, "{held:?}");
+            assert_eq!(held.retention_frontier, "frame root#init:entry");
+        }
+        let free = site(7);
+        assert!(
+            !free.obligations.contains(&Reason::RuntimeRootContract),
+            "{free:?}"
+        );
+        assert_eq!(free.home, Home::Frame, "{free:?}");
     }
 
     #[test]
@@ -1862,8 +2375,22 @@ struct Context {
     values: BTreeMap<ValueId, Node>,
     result: Node,
     fallback: bool,
-    repeated: bool,
+    repeats: Repeats,
     effects: Effects,
+}
+
+/// How a context's activations repeat.
+#[derive(Debug, Clone, Copy, Default)]
+struct Repeats {
+    /// Any activation between the program's entry and this context repeats.
+    /// Construction keeps older instances apart by it; homes do not read it.
+    cumulative: bool,
+    /// One activation of this context can overlap or follow another of the
+    /// same context: recursion, reentry, or a merged context.
+    own: bool,
+    /// One activation of the caller can arrive here more than once: the call
+    /// is in a cyclic (or unknown) block, or an outside entry repeats it.
+    arrival: bool,
 }
 
 #[derive(Debug)]
@@ -1872,6 +2399,11 @@ struct Allocation {
     context: usize,
     object: Object,
     repeated: bool,
+    /// The producing block when it lies on a cycle of its own function (or
+    /// its CFG is unknown): one activation can run it more than once.
+    cyclic_block: Option<BlockId>,
+    /// Growth storage, reallocated as its owner grows.
+    backing: bool,
     fallback: bool,
 }
 
@@ -1909,6 +2441,11 @@ struct Builder<'p> {
     contexts_of: Vec<Vec<usize>>,
     unsupported_phase: bool,
     invalid_input: bool,
+    /// The block whose operations are being added, and whether it is cyclic.
+    block: Option<(BlockId, bool)>,
+    /// Every literal, template and static closure: never freed, no counted
+    /// fields, so one object serves them all without costing alias precision.
+    immortal: Option<Object>,
 }
 
 pub(super) fn analyze(program: &Program, limits: Limits) -> Report {
@@ -2063,7 +2600,8 @@ impl<'p> CallGraph<'p> {
                 .sum::<usize>()
             + edges.len()
             + index_edges;
-        let (raises, reenters, outcome_work) = outcomes::escaping(program, &edges, &by_name);
+        let (raises, reenters, outcome_work) =
+            outcomes::escaping(program, &edges, &by_name, outcomes::Exit::of(program));
         let work = work.saturating_add(outcome_work);
         let components = super::super::strongly_connected(&edges);
         let recursive = edges
@@ -2412,6 +2950,8 @@ impl<'p> Builder<'p> {
             contexts_of: vec![Vec::new(); program.funcs.len()],
             unsupported_phase: index.unsupported_phase,
             invalid_input: index.invalid_input,
+            block: None,
+            immortal: None,
         };
         build.summaries = program
             .funcs
@@ -2456,35 +2996,33 @@ impl<'p> Builder<'p> {
                 return parent;
             }
         }
-        let fallback = self.counts[function] >= self.limits.contexts_per_function
-            || parent.is_some_and(|parent| {
-                self.contexts[parent].ancestors.len() >= self.limits.context_depth
-            });
+        let fallback = self.counts[function] >= self.limits.contexts_per_function;
         if fallback && let Some(at) = self.fallback_contexts[function] {
             return at;
         }
         let name = &self.program.funcs[function].name;
-        let repeated = fallback
-            || self.recursive.contains(&function)
-            || self.reenters[function]
-            || match (parent, call) {
-                (Some(parent), Some(call)) => {
-                    let owner = &self.contexts[parent];
-                    owner.repeated
-                        || self.value_blocks[owner.function]
-                            .get(&call)
-                            .and_then(|block| {
-                                self.cycles[owner.function]
-                                    .as_ref()
-                                    .ok()
-                                    .and_then(|cycle| cycle.is_cyclic(*block))
-                            })
-                            != Some(false)
-                }
-                // An opaque or host entry has no bound on simultaneous
-                // invocations. A module's initialization activation is unique.
-                _ => !name.ends_with("#init"),
-            };
+        let self_repeats =
+            fallback || self.recursive.contains(&function) || self.reenters[function];
+        let call_repeats = match (parent, call) {
+            (Some(parent), Some(call)) => {
+                let owner = &self.contexts[parent];
+                self.value_blocks[owner.function]
+                    .get(&call)
+                    .and_then(|block| {
+                        self.cycles[owner.function]
+                            .as_ref()
+                            .ok()
+                            .and_then(|cycle| cycle.is_cyclic(*block))
+                    })
+                    != Some(false)
+            }
+            // An opaque or host entry has no bound on simultaneous
+            // invocations. A module's initialization activation is unique.
+            _ => !name.ends_with("#init"),
+        };
+        let repeated = self_repeats
+            || call_repeats
+            || parent.is_some_and(|parent| self.contexts[parent].repeats.cumulative);
         let key = if fallback {
             format!("{name}:merged")
         } else if let (Some(parent), Some(call)) = (parent, call) {
@@ -2513,7 +3051,11 @@ impl<'p> Builder<'p> {
             values,
             result,
             fallback,
-            repeated,
+            repeats: Repeats {
+                cumulative: repeated,
+                own: self_repeats,
+                arrival: call_repeats,
+            },
             effects: Effects::default(),
         });
         self.contexts_of[function].push(at);
@@ -2538,7 +3080,8 @@ impl<'p> Builder<'p> {
         // Context merging unions every known caller's actual arguments. It
         // does not create a foreign entry or an unseen writer. Allocations in
         // the merged context still receive Heap(ContextBudget), and no return
-        // from it grants a caller-specific lifetime promise.
+        // from it grants a caller-specific lifetime promise: at most the
+        // callers' longest common chain bounds it (`merged_chains`).
         at
     }
 
@@ -2629,6 +3172,12 @@ impl<'p> Builder<'p> {
             // repeated SSA producer conservatively denotes either instance.
             self.graph.copy(older_value, value);
         }
+        // An allocation outside a block walk has no acyclic witness.
+        let cyclic_block = match self.block {
+            Some((_, false)) => None,
+            Some((block, true)) => Some(block),
+            None => Some(BlockId(u32::MAX)),
+        };
         self.allocations.push(Allocation {
             id: SiteId {
                 function: function.name.clone(),
@@ -2638,6 +3187,8 @@ impl<'p> Builder<'p> {
             context,
             object,
             repeated,
+            cyclic_block,
+            backing: false,
             fallback: self.contexts[context].fallback,
         });
         object
@@ -2742,12 +3293,13 @@ impl<'p> Builder<'p> {
             verify::reverse_postorder(function)
         };
         for block_id in blocks {
-            let repeated = self.contexts[context].repeated
-                || self.cycles[function_index]
-                    .as_ref()
-                    .ok()
-                    .and_then(|cycle| cycle.is_cyclic(block_id))
-                    != Some(false);
+            let cyclic = self.cycles[function_index]
+                .as_ref()
+                .ok()
+                .and_then(|cycle| cycle.is_cyclic(block_id))
+                != Some(false);
+            self.block = Some((block_id, cyclic));
+            let repeated = self.contexts[context].repeats.cumulative || cyclic;
             for &id in &function.blocks[block_id.0 as usize].ops {
                 // Inventory still completes after exhaustion. Graph mutations
                 // stop charging/publishing facts, and every home becomes Heap.
@@ -2935,16 +3487,22 @@ impl<'p> Builder<'p> {
             OpKind::ConstNull => self.graph.payload(into, known(Tags::NULL)),
             OpKind::ConstUndefined => self.graph.payload(into, ValueFact::undefined()),
             OpKind::ConstString(_) | OpKind::ConstTemplate { .. } | OpKind::ClosureStatic => {
-                self.graph.object(
-                    ObjectInfo {
-                        label: format!("{}:%{}:immortal", self.contexts[context].key, id.0),
-                        site: None,
-                        context,
-                        instance: Instance::Summary,
-                        open: false,
-                    },
-                    into,
-                );
+                if let Some(immortal) = self.immortal {
+                    self.graph.insert(into, immortal);
+                } else {
+                    let immortal = self.graph.object(
+                        ObjectInfo {
+                            label: "immortal".to_owned(),
+                            site: None,
+                            context,
+                            instance: Instance::Summary,
+                            open: false,
+                        },
+                        into,
+                    );
+                    self.graph.sentinel(immortal);
+                    self.immortal = Some(immortal);
+                }
                 let tags = match op.kind {
                     OpKind::ClosureStatic => Tags::FUNCTION,
                     OpKind::ConstTemplate { .. } => Tags::OBJECT,
@@ -3315,6 +3873,8 @@ impl<'p> Builder<'p> {
             context,
             object,
             repeated: true,
+            cyclic_block: None,
+            backing: true,
             fallback: self.contexts[context].fallback,
         });
         if let Some(base) = base {
@@ -3385,8 +3945,13 @@ impl<'p> Builder<'p> {
                 .iter()
                 .flat_map(|block| &block.ops)
                 .filter_map(|id| {
-                    outcomes::unsealed(function.value(*id), &self.by_name, &self.raises)
-                        .map(|reason| (*id, reason))
+                    outcomes::unsealed(
+                        function.value(*id),
+                        &self.by_name,
+                        &self.raises,
+                        outcomes::Exit::of(program),
+                    )
+                    .map(|reason| (*id, reason))
                 })
                 .collect();
             if unsealed.is_empty() {
@@ -3580,9 +4145,14 @@ impl<'p> Builder<'p> {
                 for &id in &block.ops {
                     let op = function.value(id);
                     let origin = Origin { context, value: id };
-                    let unsealed = outcomes::unsealed(op, &self.by_name, &self.raises)
-                        .map(Reason::MissingOutcome)
-                        .or_else(|| self.graph.unknown_events.get(&origin).cloned());
+                    let unsealed = outcomes::unsealed(
+                        op,
+                        &self.by_name,
+                        &self.raises,
+                        outcomes::Exit::of(self.program),
+                    )
+                    .map(Reason::MissingOutcome)
+                    .or_else(|| self.graph.unknown_events.get(&origin).cloned());
                     if let Some(reason) = &unsealed {
                         context_unknown
                             .entry(context)
@@ -3855,6 +4425,149 @@ impl<'p> Builder<'p> {
         frontiers
     }
 
+    /// Why one activation of the site's frontier can hold more than one of its
+    /// instances, or `None` for one per activation. Only what lies between the
+    /// allocation and its frontier counts: the frontier's own recursion,
+    /// reentry or merging, every call below it that one activation of its
+    /// caller can repeat, and a cycle in the producing block. A frontier
+    /// outside the program counts every activation from the entry.
+    fn repetition(&self, allocation: &Allocation, bound: &Bound) -> Option<String> {
+        if allocation.backing {
+            return Some("growth storage, reallocated as its owner grows".to_owned());
+        }
+        let here = &self.contexts[allocation.context];
+        if let Some(block) = allocation.cyclic_block {
+            return Some(format!(
+                "producing block bb{} is cyclic (or its CFG is unknown) in {}",
+                block.0, here.key
+            ));
+        }
+        let Bound::Frame(frontier) = bound else {
+            return allocation.repeated.then(|| {
+                "loop, recursive/reentrant/suspended or externally repeated activation below an unknown frontier"
+                    .to_owned()
+            });
+        };
+        let mut at = allocation.context;
+        loop {
+            let context = &self.contexts[at];
+            if context.repeats.own {
+                return Some(format!(
+                    "{} is a recursive, reentrant or merged activation",
+                    context.key
+                ));
+            }
+            if at == *frontier {
+                return None;
+            }
+            if context.repeats.arrival {
+                return Some(format!(
+                    "{} is reached more than once in one activation of its caller",
+                    context.key
+                ));
+            }
+            match context.parent {
+                Some(parent) => at = parent,
+                None => {
+                    return Some(format!(
+                        "frontier {} is not an ancestor of {}",
+                        self.contexts[*frontier].key, here.key
+                    ));
+                }
+            }
+        }
+    }
+
+    /// Every caller of a merged context runs inside their longest common
+    /// chain of contexts, so its last context bounds what the merged context
+    /// allocates and returns, and every context below it inherits that chain.
+    /// `None` where no common context exists or a caller's chain is unknown
+    /// (merged contexts calling each other); such a context keeps the chain it
+    /// was built with. Parents precede children, so one pass settles a tree
+    /// and each further pass only shortens merged chains. A refinement that
+    /// does not settle within `PASSES`, or that the remaining work budget
+    /// cannot pay for, publishes nothing: every context keeps its built chain.
+    fn merged_chains(&mut self) -> Vec<Option<Vec<usize>>> {
+        const PASSES: usize = 8;
+        let count = self.contexts.len();
+        let mut callers = vec![Vec::new(); count];
+        for &(parent, child, _) in &self.calls {
+            if self.contexts[child].fallback && parent != child {
+                callers[child].push(parent);
+            }
+        }
+        let mut chains: Vec<Option<Vec<usize>>> = vec![None; count];
+        let pass_cost = self
+            .contexts
+            .iter()
+            .map(|context| context.ancestors.len() + 1)
+            .sum::<usize>()
+            .saturating_add(self.calls.len());
+        for _ in 0..PASSES {
+            if pass_cost > self.graph.work_limit.saturating_sub(self.graph.work)
+                || !self.graph.charge_many(pass_cost)
+            {
+                return vec![None; count];
+            }
+            let mut changed = false;
+            for at in 0..count {
+                let next = if self.contexts[at].fallback {
+                    let mut common: Option<Vec<usize>> = None;
+                    let mut known = !callers[at].is_empty();
+                    for &caller in &callers[at] {
+                        let Some(chain) = &chains[caller] else {
+                            known = false;
+                            break;
+                        };
+                        let mut through = chain.clone();
+                        through.push(caller);
+                        common = Some(match common {
+                            None => through,
+                            Some(common) => common
+                                .iter()
+                                .zip(&through)
+                                .take_while(|(a, b)| a == b)
+                                .map(|(a, _)| *a)
+                                .collect(),
+                        });
+                    }
+                    common.filter(|chain| known && !chain.is_empty() && !chain.contains(&at))
+                } else {
+                    match self.contexts[at].parent {
+                        None => Some(Vec::new()),
+                        Some(parent) => chains[parent].clone().map(|mut chain| {
+                            chain.push(parent);
+                            chain
+                        }),
+                    }
+                };
+                if next.is_some() && chains[at] != next {
+                    chains[at] = next;
+                    changed = true;
+                }
+            }
+            if !changed {
+                return chains;
+            }
+        }
+        vec![None; count]
+    }
+
+    /// A slot's owner, by the representative object that holds it.
+    fn holder(&self, object: Object) -> Holder {
+        if self.graph.is_widened(object) {
+            return Holder::Class(self.graph.label(object));
+        }
+        let info = &self.graph.objects[object];
+        match info.site {
+            Some(site) => Holder::Site {
+                id: self.allocations[site].id.clone(),
+                context: super::ContextId(self.allocations[site].context),
+            },
+            None => Holder::External(info.label.clone()),
+        }
+    }
+
     #[expect(
         clippy::too_many_lines,
         reason = "one detachment of the solved graph into canonical diagnostic tables"
@@ -3865,16 +4578,42 @@ impl<'p> Builder<'p> {
         self.stages
             .push(("outcome-fences".to_owned(), self.graph.work - outcome_start));
         let exposure_start = self.graph.work;
+        let chains = self.merged_chains();
         let hierarchy: Vec<_> = self
             .contexts
             .iter()
-            .map(|context| lifetime::Context {
-                parent: context.parent,
-                ancestors: &context.ancestors,
-                key: &context.key,
-                fallback: context.fallback,
+            .zip(&chains)
+            .map(|(context, chain)| match chain {
+                Some(chain) if context.fallback => lifetime::Context {
+                    parent: chain.last().copied(),
+                    ancestors: chain,
+                    key: &context.key,
+                    fallback: false,
+                },
+                Some(chain) => lifetime::Context {
+                    parent: context.parent,
+                    ancestors: chain,
+                    key: &context.key,
+                    fallback: false,
+                },
+                None => lifetime::Context {
+                    parent: context.parent,
+                    ancestors: &context.ancestors,
+                    key: &context.key,
+                    fallback: context.fallback,
+                },
             })
             .collect();
+        // A value stored into the universal outside object is held by
+        // storage the program cannot see (`Graph::escapes`).
+        let mut roots = self.roots.clone();
+        roots.extend(self.graph.escapes.iter().map(|node| {
+            (
+                *node,
+                Exposure::Outside("stored into storage outside the program".to_owned()),
+            )
+        }));
+        self.roots = roots;
         let mut lifetimes = lifetime::analyze(&mut self.graph, &hierarchy, &self.roots);
         self.stages
             .push(("exposure".to_owned(), self.graph.work - exposure_start));
@@ -3927,8 +4666,18 @@ impl<'p> Builder<'p> {
         }
         let mut site_reasons = vec![BTreeSet::new(); self.allocations.len()];
         let mut site_witnesses = vec![Vec::new(); self.allocations.len()];
+        let mut site_objects = vec![Vec::new(); self.allocations.len()];
         for (object, info) in self.graph.objects.iter().enumerate() {
             if let Some(site) = info.site {
+                site_objects[site].push(object);
+                if lifetimes.runtime_held[object] {
+                    site_reasons[site].insert(Reason::RuntimeRootContract);
+                }
+                // A widened member keeps its class's lifetime, not its
+                // singleton permissions.
+                if self.graph.is_widened(object) {
+                    site_reasons[site].insert(Reason::WeakUnionBudget);
+                }
                 let reason = match &lifetimes.bounds[object] {
                     Bound::Frame(context) if *context == info.context => None,
                     Bound::Frame(context) => {
@@ -3977,6 +4726,9 @@ impl<'p> Builder<'p> {
             aliases.dedup();
             aliases
         };
+        let holder = |object: Object| self.holder(object);
+        let context_key = |at: usize| self.contexts[at].key.clone();
+        let retention = retention::of(&self.graph, &lifetimes, &self.roots, &context_key, &holder);
         let mut sites = Vec::new();
         let mut retention_sites: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for (index, allocation) in self.allocations.iter().enumerate() {
@@ -3987,7 +4739,8 @@ impl<'p> Builder<'p> {
             if allocation.fallback {
                 reasons.insert(Reason::ContextBudget);
             }
-            if allocation.repeated {
+            let repetition = self.repetition(allocation, &lifetimes.bounds[allocation.object]);
+            if repetition.is_some() {
                 reasons.insert(Reason::RepeatedInstances);
             }
             if allocation.id.storage != Storage::Object {
@@ -4018,7 +4771,7 @@ impl<'p> Builder<'p> {
                     context.key, allocation.id.value, allocation.id.storage
                 ));
             let bytes_held_to_frontier = RetainedBytes::Unknown {
-                witness: if allocation.repeated {
+                witness: if repetition.is_some() {
                     "no finite live-instance bound; backing and held heap graphs remain included"
                         .to_owned()
                 } else {
@@ -4035,14 +4788,14 @@ impl<'p> Builder<'p> {
                 context_id: super::ContextId(allocation.context),
                 multiplicity: if let Some(failure) = &self.graph.failure {
                     Multiplicity::Unbounded { witness: format!("no finite-instance proof: {failure:?}") }
-                } else if allocation.repeated {
+                } else if let Some(why) = &repetition {
                     Multiplicity::Unbounded { witness: format!(
-                        "{}:%{}: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained",
+                        "{}:%{}: {why}; older instance retained",
                         context.key, allocation.id.value) }
                 } else {
                     Multiplicity::One { witness: format!(
-                        "{}:%{}: acyclic placed producer in a unique nonreentrant activation",
-                        context.key, allocation.id.value) }
+                        "{}:%{}: acyclic placed producer, one instance per activation of its frontier {}",
+                        context.key, allocation.id.value, retention_frontier) }
                 },
                 retention_frontier,
                 bytes_held_to_frontier,
@@ -4053,6 +4806,19 @@ impl<'p> Builder<'p> {
                 legacy: Vec::new(),
                 legacy_variants: Vec::new(),
                 legacy_unknown: None,
+                reached: if let Some(failure) = &self.graph.failure {
+                    super::Reached {
+                        edge: super::Edge::Scope,
+                        root: Root::Unknown(failure.clone()),
+                    }
+                } else {
+                    retention.reached(&self.graph, &lifetimes, allocation.object, &holder)
+                },
+                holders: if self.graph.failure.is_some() {
+                    Vec::new()
+                } else {
+                    retention.holders(&self.graph, &site_objects[index])
+                },
             });
         }
         sites.sort_by(|a, b| (&a.id, &a.context).cmp(&(&b.id, &b.context)));
@@ -4194,6 +4960,11 @@ impl<'p> Builder<'p> {
             context_membership_visits: self.context_membership_visits,
             proofs: lifetimes.proofs,
             alias_classes: self.graph.classes(),
+            class_holders: if self.graph.failure.is_some() {
+                Vec::new()
+            } else {
+                retention.class_holders(&self.graph)
+            },
             operations: self.operations,
             contexts: self.contexts.len(),
             nodes: self.graph.values.len(),
@@ -4209,7 +4980,11 @@ impl<'p> Builder<'p> {
                 .iter()
                 .map(|value| value.changes)
                 .collect(),
-            state_change_limit: self.graph.alias_limit.max(1).saturating_add(1),
+            state_change_limit: self
+                .graph
+                .alias_limit
+                .max(1)
+                .saturating_add(1 + super::graph::SENTINELS),
         }
     }
 }

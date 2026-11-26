@@ -17,6 +17,7 @@ mod graph;
 mod lifetime;
 pub(super) mod outcomes;
 mod report;
+mod retention;
 mod summary;
 
 pub use super::regions::placement::Storage;
@@ -24,8 +25,8 @@ pub use census::Census;
 pub use comparison::{ContextArrival, ContextId, ContextView, Variant as LegacyVariant};
 pub use events::LaterWrite;
 pub use report::{
-    CaptureWrite, Frontier, FunctionSummary, Outcome, Proof, Report, RetainedBytes, Retention,
-    Site, SlotFact, StoreVersion, Value,
+    CaptureWrite, Edge, Frontier, FunctionSummary, Hold, Holder, LegacyAgreement, Outcome, Proof,
+    Reached, Report, RetainedBytes, Retention, Root, Site, SlotFact, StoreVersion, Value,
 };
 
 #[cfg(test)]
@@ -39,13 +40,22 @@ fn analysis_runs() -> usize {
 }
 
 /// Internal resource limits, independent of allocator choices. Every exhausted
-/// limit invalidates the unfinished answer, including its dependents.
+/// limit invalidates the unfinished answer, including its dependents, except
+/// the context limit, which merges contexts and names `ContextBudget`.
+///
+/// Every limit scales with the program (decision P-7). A function has at most
+/// `contexts_per_function` caller-specific contexts and one merged context
+/// for every later caller, so the operations analysed in all contexts are at
+/// most `(contexts_per_function + 1) x` the program's: the same input that
+/// sizes the work and edge budgets. Context depth needs no bound of its own:
+/// a recursive call reuses its ancestor's context, so a chain is at most the
+/// height of the condensed call graph, and the per-function limit bounds how
+/// many chains there are.
 #[derive(Debug, Clone, Copy)]
 pub struct Limits {
     pub work_per_operation: usize,
     pub edges_per_operation: usize,
     pub contexts_per_function: usize,
-    pub context_depth: usize,
     pub aliases_per_value: usize,
 }
 
@@ -55,7 +65,6 @@ impl Default for Limits {
             work_per_operation: 256,
             edges_per_operation: 8,
             contexts_per_function: 4,
-            context_depth: 4,
             aliases_per_value: 8,
         }
     }

@@ -395,3 +395,532 @@ fn census_is_the_requested_graphs_sites_and_does_not_change_prepared_hir() {
             .is_empty()
     );
 }
+
+/// json-parse as `nts-bench` builds it: an executable rooted at `work` and its
+/// module's evaluation, prepared for C under reference counting. The case has
+/// no tsconfig of its own, so one is written beside the test's output.
+fn json_parse() -> (hir::Prepared, hir::Prepared) {
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize_utf8()
+        .expect("the repository");
+    let out = crate::scratch::ScratchDir::path_in_target("nts-memory-json-parse");
+    std::fs::create_dir_all(&*out).expect("scratch");
+    let tsconfig = out.join("tsconfig.json");
+    std::fs::write(
+        &tsconfig,
+        format!(
+            r#"{{"extends":"{root}/tsconfig.fixtures.json","include":["{root}/benchmarks/cases/json-parse/"]}}"#
+        ),
+    )
+    .expect("written config");
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("json-parse captures");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let roots = ["work".to_owned(), hir::lower::MODULE_INIT.to_owned()];
+    let options = hir::Options {
+        provider: Memory::ReferenceCounting,
+        roots: hir::reachable::Roots::Entry(&roots),
+        ..hir::Options::new(
+            nts_core::hir::backend::Backend::C,
+            nts_core::hir::EntryUnwind::Terminal,
+        )
+    };
+    let normal = hir::prepare_unverified(&snapshot, &options);
+    let observed = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
+        .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
+    (normal, observed)
+}
+
+/// json-parse's allocation sites by the role they play in the parser. The
+/// names are this workload's; the compiler publishes only the facts below.
+///
+/// - `scratch`: dies inside one parse and is not part of its result.
+/// - `frame`: a parser frame, kept in the frame stack and reopened per depth.
+/// - `result`: part of the value the parse returns.
+/// - `keys`: a key list, which a later sibling's frame may take as its template.
+/// - `growth`: backing storage grown by a push, a slice or an append.
+/// - `raised`: the error path's objects and messages.
+/// - `module`: module constants, held by module slots for the whole run.
+/// - `driver`: the benchmark's own input, built once at module evaluation.
+const JSON_PARSE_SITES: &[(&str, u32, &str, &str)] = &[
+    ("Frame#addKey", 11, "CallResult", "keys"),
+    ("Frame#addKey", 11, "CallStorage", "growth"),
+    ("Frame#addKey", 17, "CallStorage", "growth"),
+    ("Frame#finishedKeys", 11, "CallResult", "keys"),
+    ("Frame#finishedKeys", 11, "CallStorage", "growth"),
+    ("Frame#open", 7, "Array", "result"),
+    ("Frame#open", 13, "Array", "result"),
+    ("JsonValue.arrayValue", 3, "Object", "result"),
+    ("JsonValue.booleanValue", 3, "Object", "result"),
+    ("JsonValue.nullValue", 2, "Object", "result"),
+    ("JsonValue.numberValue", 3, "Object", "result"),
+    ("JsonValue.objectValue", 5, "Object", "result"),
+    ("JsonValue.objectValue", 13, "Array", "scratch"),
+    ("JsonValue.objectValue", 15, "Array", "scratch"),
+    ("JsonValue.objectValue", 17, "Array", "scratch"),
+    ("JsonValue.objectValue", 19, "Array", "scratch"),
+    ("JsonValue.objectValue", 21, "Array", "scratch"),
+    ("JsonValue.objectValue", 67, "CallResult", "scratch"),
+    ("JsonValue.objectValue", 67, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 68, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 69, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 70, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 104, "CallResult", "scratch"),
+    ("JsonValue.objectValue", 104, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 105, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 106, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 119, "Object", "result"),
+    ("JsonValue.objectValue", 128, "Array", "keys"),
+    ("JsonValue.objectValue", 130, "Array", "result"),
+    ("JsonValue.objectValue", 139, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 141, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 151, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 153, "CallStorage", "growth"),
+    ("JsonValue.objectValue", 156, "Object", "result"),
+    ("JsonValue.plainObjectValue", 4, "Object", "result"),
+    ("JsonValue.stringValue", 3, "Object", "result"),
+    ("Scanner#describe#into", 8, "CallResult", "raised"),
+    ("Scanner#describe#into", 8, "CallStorage", "raised"),
+    ("Scanner#describe#into", 11, "String", "raised"),
+    ("Scanner#describe#into", 14, "String", "raised"),
+    ("Scanner#describe#into", 15, "String", "raised"),
+    ("Scanner#readString", 25, "CallResult", "result"),
+    ("Scanner#readString", 50, "CallResult", "result"),
+    ("Scanner#readString", 75, "CallResult", "result"),
+    ("Scanner#readString", 75, "CallStorage", "growth"),
+    ("Scanner#readString", 96, "String", "result"),
+    ("Scanner#readString", 100, "String", "result"),
+    ("Scanner#readString", 104, "String", "result"),
+    ("Scanner#readString", 108, "String", "result"),
+    ("Scanner#readString", 112, "String", "result"),
+    ("Scanner#readString", 116, "String", "result"),
+    ("Scanner#readString", 120, "String", "result"),
+    ("Scanner#readString", 124, "String", "result"),
+    ("Scanner#readString", 167, "CallResult", "result"),
+    ("Scanner#readString", 167, "CallStorage", "growth"),
+    ("SyntaxError@toString", 9, "String", "raised"),
+    ("SyntaxError@toString", 10, "String", "raised"),
+    ("ascendingByIndex", 3, "Array", "scratch"),
+    ("ascendingByIndex", 9, "CallStorage", "growth"),
+    ("ascendingByIndex", 15, "Array", "scratch"),
+    ("ascendingByIndex", 22, "CallStorage", "growth"),
+    ("buildSeen", 2, "CallResult", "scratch"),
+    ("buildSeen", 13, "CallResult", "scratch"),
+    ("buildSeen", 13, "CallStorage", "growth"),
+    ("module#init", 1, "Array", "module"),
+    ("module#init", 4, "Array", "module"),
+    ("module#init", 7, "Array", "module"),
+    ("module#init", 10, "Array", "module"),
+    ("module#init", 13, "Array", "module"),
+    ("module#init", 16, "Array", "module"),
+    ("numberValueOf", 34, "CallResult", "scratch"),
+    ("openFrame", 9, "Object", "frame"),
+    ("openFrame", 32, "CallStorage", "growth"),
+    ("parseJsonText", 1, "Object", "scratch"),
+    ("readValue", 2, "Array", "scratch"),
+    ("readValue", 90, "CallStorage", "growth"),
+    ("readValue", 93, "CallStorage", "growth"),
+    ("source", 1, "Array", "driver"),
+    ("source", 14, "CallResult", "driver"),
+    ("source", 14, "CallStorage", "driver"),
+    ("source", 17, "String", "driver"),
+    ("source", 20, "CallResult", "driver"),
+    ("source", 20, "CallStorage", "driver"),
+    ("source", 23, "String", "driver"),
+    ("source", 24, "String", "driver"),
+    ("source", 26, "String", "driver"),
+    ("source", 34, "String", "driver"),
+    ("source", 36, "String", "driver"),
+    ("source", 42, "CallResult", "driver"),
+    ("source", 44, "String", "driver"),
+    ("source", 46, "String", "driver"),
+    ("source", 47, "CallStorage", "driver"),
+    ("source", 52, "CallResult", "driver"),
+    ("source", 53, "String", "driver"),
+    ("source", 55, "String", "driver"),
+    ("syntaxError", 2, "Object", "raised"),
+    ("syntaxError", 4, "String", "raised"),
+    ("syntaxError", 5, "CallResult", "raised"),
+    ("syntaxError", 5, "CallStorage", "raised"),
+];
+
+/// A frontier relative to the site's own context and the parse that holds it,
+/// so the `work` and `work#whole` arrivals read alike.
+fn relative(frontier: &str, own: &str) -> String {
+    let Some(frame) = frontier.strip_prefix("frame ") else {
+        let reason = frontier.trim_start_matches("unknown frontier: ");
+        let kind = reason.split(['(', '"']).next().unwrap_or(reason);
+        let label = reason
+            .split('"')
+            .nth(1)
+            .map(|label| {
+                label
+                    .split(" at ")
+                    .next()
+                    .unwrap_or(label)
+                    .split(':')
+                    .next()
+                    .unwrap_or(label)
+                    .to_owned()
+            })
+            .unwrap_or_default();
+        return format!("outside {kind} {label}").trim_end().to_owned();
+    };
+    let parse = own.find("/parseJsonText:").map(|at| {
+        own[at + 1..]
+            .find('/')
+            .map_or(own, |next| &own[..at + 1 + next])
+    });
+    let caller = parse
+        .and_then(|parse| parse.rsplit_once('/'))
+        .map(|(caller, _)| caller);
+    if frame == own {
+        "own".to_owned()
+    } else if parse.is_some_and(|parse| frame == parse) {
+        "parse".to_owned()
+    } else if caller == Some(frame) {
+        "caller of the parse".to_owned()
+    } else if parse.is_some_and(|parse| frame.starts_with(&format!("{parse}/"))) {
+        format!(
+            "inside the parse: {}",
+            frame.rsplit('/').next().unwrap_or(frame)
+        )
+    } else if frame.ends_with(":merged") {
+        format!("merged {frame}")
+    } else {
+        format!("frame {}", frame.rsplit('/').next().unwrap_or(frame))
+    }
+}
+
+/// A site's holders, with a weak class member's taken from its class (the
+/// report publishes those once), each marked whether it came from the class.
+fn expanded_holders<'r>(
+    report: &'r Report,
+    site: &'r hir::memory::Site,
+) -> Vec<(&'r hir::memory::Hold, bool)> {
+    site.holders
+        .iter()
+        .flat_map(|hold| match &hold.holder {
+            hir::memory::Holder::Class(label) => report
+                .class_holders
+                .iter()
+                .filter(|(class, _)| class == label)
+                .flat_map(|(_, holds)| holds.iter().map(|hold| (hold, true)))
+                .collect::<Vec<_>>(),
+            _ => vec![(hold, false)],
+        })
+        .collect()
+}
+
+fn holder_name(holder: &hir::memory::Holder) -> String {
+    match holder {
+        hir::memory::Holder::Site { id, .. } => {
+            format!("{}%{}:{:?}", id.function, id.value, id.storage)
+        }
+        hir::memory::Holder::Class(_) => "weak-class".to_owned(),
+        hir::memory::Holder::External(label) => {
+            if label == "immortal" || label.starts_with("outside:") {
+                label.clone()
+            } else {
+                "external".to_owned()
+            }
+        }
+    }
+}
+
+/// One line per source site: its role, and every distinct published answer
+/// across its contexts. Context keys are folded by `relative`.
+/// Where a site's proof chain starts, with context keys folded.
+fn root_text(site: &hir::memory::Site) -> String {
+    match &site.reached.root {
+        hir::memory::Root::Scope(holder) => format!("scope of {}", holder_name(holder)),
+        hir::memory::Root::Returned { context } => {
+            format!(
+                "returned to {}",
+                relative(&format!("frame {context}"), &site.context)
+            )
+        }
+        hir::memory::Root::Outside(label) => {
+            format!(
+                "outside {}",
+                label
+                    .split(" at ")
+                    .next()
+                    .unwrap_or(label)
+                    .split(':')
+                    .next()
+                    .unwrap_or(label)
+            )
+        }
+        hir::memory::Root::Unknown(reason) => format!("unknown {reason:?}"),
+        hir::memory::Root::Joined(_) => "weak-class join".to_owned(),
+    }
+}
+
+fn json_parse_table(report: &Report) -> String {
+    use std::collections::{BTreeMap, BTreeSet};
+    let roles: BTreeMap<_, _> = JSON_PARSE_SITES
+        .iter()
+        .map(|(function, value, storage, role)| ((*function, *value, *storage), *role))
+        .collect();
+    let mut rows: BTreeMap<(String, u32, String), (u32, BTreeSet<String>)> = BTreeMap::new();
+    for site in &report.sites {
+        let storage = format!("{:?}", site.id.storage);
+        let role = roles
+            .get(&(site.id.function.as_str(), site.id.value, storage.as_str()))
+            .unwrap_or_else(|| panic!("unmapped json-parse site {:?}", site.id));
+        let home = match &site.home {
+            Home::Heap(reason) => format!(
+                "heap {}",
+                format!("{reason:?}").split('(').next().unwrap_or("")
+            ),
+            other => format!("{other:?}"),
+        };
+        let edge = match &site.reached.edge {
+            hir::memory::Edge::Stored(hold) => {
+                format!("stored in {} of {}", hold.slot, holder_name(&hold.holder))
+            }
+            other => format!("{other:?}").to_lowercase(),
+        };
+        let root = root_text(site);
+        let holders: BTreeSet<_> = expanded_holders(report, site)
+            .into_iter()
+            .map(|(hold, class)| {
+                format!(
+                    "{} of {}{}",
+                    hold.slot,
+                    holder_name(&hold.holder),
+                    if class { " (class)" } else { "" }
+                )
+            })
+            .collect();
+        let multiplicity = match &site.multiplicity {
+            hir::memory::Multiplicity::One { .. } => "one",
+            hir::memory::Multiplicity::Bounded { .. } => "bounded",
+            hir::memory::Multiplicity::Unbounded { .. } => "unbounded",
+        };
+        let obligations: BTreeSet<_> = site
+            .obligations
+            .iter()
+            .map(|reason| {
+                format!("{reason:?}")
+                    .split('(')
+                    .next()
+                    .unwrap_or("")
+                    .to_owned()
+            })
+            .collect();
+        let answer = format!(
+            "{home}; frontier {}; {multiplicity}; {edge}; {root}; holders {holders:?}; obligations {obligations:?}; legacy {:?} {}",
+            relative(&site.retention_frontier, &site.context),
+            site.legacy,
+            match site.legacy_agreement() {
+                hir::memory::LegacyAgreement::Conservative(reason) => format!(
+                    "conservative {}",
+                    format!("{reason:?}").split('(').next().unwrap_or("")
+                ),
+                other => format!("{other:?}").to_lowercase(),
+            },
+        );
+        let row = rows
+            .entry((site.id.function.clone(), site.id.value, storage.clone()))
+            .or_insert_with(|| (site.origin.location.span.start, BTreeSet::new()));
+        row.1.insert(format!("{role}\t{answer}"));
+    }
+    let mut out = String::new();
+    for ((function, value, storage), (start, answers)) in rows {
+        for answer in answers {
+            let (role, answer) = answer.split_once('\t').unwrap();
+            let _ = std::fmt::Write::write_fmt(
+                &mut out,
+                format_args!("{role}\t{function}\t%{value}\t{storage}\t@{start}\t{answer}\n"),
+            );
+        }
+    }
+    out
+}
+
+/// Every json-parse site has a home and a proof, or a named failure: each
+/// maps to an emitted variant, plays one named role, and publishes the same
+/// answer three times. Normal preparation runs no solver and the observed
+/// preparation is the same program.
+#[test]
+fn json_parse_sites_each_have_a_home_and_a_proof_or_a_named_failure() {
+    let (normal, baseline) = json_parse();
+    assert!(normal.memory.is_none());
+    assert_eq!(
+        format!("{:?}", normal.program),
+        format!("{:?}", baseline.program),
+        "the memory report changes no prepared operation"
+    );
+    let report = baseline.memory.as_ref().expect("requested report");
+    assert!(report.failure.is_none(), "{:?}", report.failure);
+    let mut seen = std::collections::BTreeSet::new();
+    for site in &report.sites {
+        assert!(
+            !site.legacy.is_empty() && site.legacy_unknown.is_none(),
+            "unmapped: {site:?}"
+        );
+        assert!(
+            !matches!(
+                site.legacy_agreement(),
+                hir::memory::LegacyAgreement::Unmapped(_)
+            ),
+            "{site:?}"
+        );
+        match &site.home {
+            Home::Heap(reason) => assert_eq!(site.obligations.first(), Some(reason), "{site:?}"),
+            _ => assert!(site.obligations.is_empty(), "{site:?}"),
+        }
+        seen.insert((
+            site.id.function.clone(),
+            site.id.value,
+            format!("{:?}", site.id.storage),
+        ));
+    }
+    let table: std::collections::BTreeSet<_> = JSON_PARSE_SITES
+        .iter()
+        .map(|(function, value, storage, _)| {
+            ((*function).to_owned(), *value, (*storage).to_owned())
+        })
+        .collect();
+    assert_eq!(seen, table, "every source site has exactly one role");
+    let rendered = json_parse_table(report);
+    print!("{rendered}");
+    assert_eq!(
+        rendered,
+        include_str!("memory_json_parse.tsv"),
+        "json-parse's published answers moved"
+    );
+
+    assert_role_proofs(report);
+
+    let repeated = || {
+        let prepared = json_parse().1;
+        prepared.memory.expect("requested").render()
+    };
+    let first = report.render();
+    for _ in 0..2 {
+        assert_eq!(first, repeated(), "three byte-identical reports");
+    }
+}
+
+/// The proofs each role owes, beside the table.
+fn assert_role_proofs(report: &Report) {
+    let contexts = |function: &'static str, value: u32| {
+        report
+            .sites
+            .iter()
+            .filter(move |site| site.id.function == function && site.id.value == value)
+    };
+    for scanner in contexts("parseJsonText", 1) {
+        assert_eq!(
+            scanner.retention_frontier,
+            format!("frame {}", scanner.context)
+        );
+        assert!(scanner.holders.is_empty(), "nothing holds the scanner");
+    }
+    for frames in contexts("readValue", 2) {
+        assert_eq!(
+            frames.retention_frontier,
+            format!("frame {}", frames.context)
+        );
+    }
+    for frame in contexts("openFrame", 9) {
+        let stack = frame
+            .context
+            .rsplit_once('/')
+            .expect("readValue's arrival")
+            .0;
+        assert_eq!(frame.retention_frontier, format!("frame {stack}"));
+        assert!(
+            frame.holders.iter().all(|hold| hold.slot == "Elements"
+                && matches!(&hold.holder, hir::memory::Holder::Site { id, .. } if id.function == "readValue" && id.value == 2)),
+            "only the frame stack holds a frame: {:?}",
+            frame.holders
+        );
+    }
+
+    // A key list is held both by a parser frame's template and by a result's
+    // keys: the sharing the `keys` role names, which `result` arrays lack.
+    let held_by = |site: &hir::memory::Site, field: &str, owner: Option<&str>| {
+        expanded_holders(report, site).iter().any(|(hold, _)| {
+            hold.slot.contains(&format!("\\\"{field}\\\""))
+                && match (&hold.holder, owner) {
+                    (hir::memory::Holder::Site { id, .. }, Some(owner)) => id.function == owner,
+                    (hir::memory::Holder::Class(_), None) => true,
+                    _ => false,
+                }
+        })
+    };
+    for (function, value, storage, role) in JSON_PARSE_SITES {
+        for site in
+            contexts(function, *value).filter(|site| format!("{:?}", site.id.storage) == *storage)
+        {
+            match *role {
+                "keys" => assert!(
+                    held_by(site, "template", Some("openFrame")) && held_by(site, "keys", None),
+                    "{site:?}"
+                ),
+                "result" if *storage == "Array" => {
+                    assert!(!held_by(site, "template", Some("openFrame")), "{site:?}");
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// The controls for json-parse's result and key-list roles: `traversal`'s
+/// chain head is returned and nothing holds it, while `shared-tail`'s is
+/// returned and held by both of its caller's heads.
+#[test]
+fn a_returned_chain_is_held_by_its_links_and_a_shared_tail_by_both_heads() {
+    for (case, heads) in [("traversal", 0), ("shared-tail", 2)] {
+        let snapshot = snapshot(case);
+        let options = hir::Options {
+            provider: Memory::ReferenceCounting,
+            ..hir::Options::new(
+                nts_core::hir::backend::Backend::C,
+                nts_core::hir::EntryUnwind::Terminal,
+            )
+        };
+        let prepared = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
+            .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
+        let report = prepared.memory.as_ref().expect("requested report");
+        let head = report
+            .sites
+            .iter()
+            .find(|site| site.id.function == "chain" && site.id.value == 1)
+            .expect("the chain's head");
+        assert_eq!(head.retention_frontier, "frame work:entry", "{case}");
+        assert!(
+            matches!(&head.reached.root, hir::memory::Root::Returned { context } if context.ends_with("/chain:%3")),
+            "{case}: {:?}",
+            head.reached
+        );
+        let holders: Vec<_> = head
+            .holders
+            .iter()
+            .map(|hold| match &hold.holder {
+                hir::memory::Holder::Site { id, .. } => (id.function.as_str(), id.value),
+                other => panic!("{case}: {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            holders
+                .iter()
+                .filter(|(function, _)| *function == "work")
+                .count(),
+            heads,
+            "{case}: {holders:?}"
+        );
+        assert!(
+            holders.iter().all(|(function, _)| *function == "work"),
+            "{case}: {holders:?}"
+        );
+    }
+}

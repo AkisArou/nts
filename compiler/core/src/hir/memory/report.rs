@@ -22,6 +22,113 @@ pub struct Site {
     pub legacy: Vec<String>,
     pub legacy_variants: Vec<super::LegacyVariant>,
     pub legacy_unknown: Option<String>,
+    /// How the retention frontier was reached, from the lifetime proof.
+    pub reached: Reached,
+    /// Every slot that can hold this site's objects, with its owner. A weak
+    /// class member names its class in the `member` slot; the class's own
+    /// holders are in `Report::class_holders`.
+    pub holders: Vec<Hold>,
+}
+
+/// The owner of a slot that holds a site's objects.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Holder {
+    /// One allocation site in one calling context.
+    Site {
+        id: SiteId,
+        context: super::ContextId,
+    },
+    /// A weak alias class; its members are listed in `Report::alias_classes`.
+    Class(String),
+    /// Storage the graph does not allocate: a parameter's or module slot's
+    /// objects, an opaque result, or the immortal summary.
+    External(String),
+}
+
+/// A field, element, key, value or backing slot, and the holder it belongs to.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Hold {
+    pub slot: String,
+    pub holder: Holder,
+}
+
+/// The last edge that raised a site's lifetime bound.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Edge {
+    /// Nothing raised it: the bound is the allocation's own scope.
+    Scope,
+    /// A root exposure raised it directly.
+    Exposure,
+    /// A store into a holder's slot raised it to the holder's bound.
+    Stored(Hold),
+    /// Its weak alias class joined the members' scopes.
+    Joined,
+}
+
+/// Where the chain of proofs behind the bound starts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Root {
+    /// An allocation's own scope (this site's, or a holder's at the chain's end).
+    Scope(Holder),
+    /// Returned from this calling context to its caller.
+    Returned { context: String },
+    /// Reached by storage outside the analysed program.
+    Outside(String),
+    /// No proof: an unknown outcome or a failed analysis.
+    Unknown(Reason),
+    /// A weak class's joined scopes.
+    Joined(Holder),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reached {
+    pub edge: Edge,
+    pub root: Root,
+}
+
+/// How this analysis's home relates to today's placement for one context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LegacyAgreement {
+    /// No emitted variant was observed for this context.
+    Unmapped(String),
+    /// The same kind of home.
+    Agrees,
+    /// Heap here where today's placement uses a frame or region, for this
+    /// home's reason. Today's placement has known defects, so this is the
+    /// stated cost of a proof that stands on its own, not a verdict on it.
+    Conservative(Reason),
+    /// A frame or region proved here where today's placement uses the heap.
+    Proved,
+}
+
+impl Site {
+    #[must_use]
+    pub fn legacy_agreement(&self) -> LegacyAgreement {
+        if self.legacy.is_empty() {
+            return LegacyAgreement::Unmapped(
+                self.legacy_unknown
+                    .clone()
+                    .unwrap_or_else(|| "no emitted variant".to_owned()),
+            );
+        }
+        let all = |home: &str| self.legacy.iter().all(|legacy| legacy == home);
+        match &self.home {
+            Home::Heap(reason) => {
+                if self
+                    .legacy
+                    .iter()
+                    .all(|legacy| legacy == "heap" || legacy == "host")
+                {
+                    LegacyAgreement::Agrees
+                } else {
+                    LegacyAgreement::Conservative(reason.clone())
+                }
+            }
+            Home::Frame if all("frame") => LegacyAgreement::Agrees,
+            Home::Cohort { .. } if all("call-region") => LegacyAgreement::Agrees,
+            Home::Frame | Home::Cohort { .. } | Home::Immortal => LegacyAgreement::Proved,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -147,6 +254,8 @@ pub struct Report {
     pub event_changes: Vec<usize>,
     pub proofs: Vec<Proof>,
     pub alias_classes: Vec<(String, Vec<String>)>,
+    /// Each weak class's holders, published once for all its members.
+    pub class_holders: Vec<(String, Vec<Hold>)>,
     pub operations: usize,
     pub contexts: usize,
     pub nodes: usize,
@@ -293,25 +402,11 @@ impl Report {
         for (class, members) in &self.alias_classes {
             let _ = writeln!(out, "alias-class\t{class:?}\t{members:?}");
         }
+        for (class, holders) in &self.class_holders {
+            let _ = writeln!(out, "class-holders\t{class:?}\t{holders:?}");
+        }
         for site in &self.sites {
-            Self::render_legacy_site(&mut out, site);
-            let _ = writeln!(
-                out,
-                "site\t{:?}\t%{}\t{:?}\t{:?}\t{:?}\t{:?}\tlegacy={:?}\towner={:?}\tobligations={:?}\twitness={:?}\torigin={:?}\tretention={:?}\theld-bytes={:?}",
-                site.id.function,
-                site.id.value,
-                site.id.storage,
-                site.context,
-                site.multiplicity,
-                site.home,
-                site.legacy,
-                site.candidate_owner,
-                site.obligations,
-                site.witness,
-                site.origin,
-                site.retention_frontier,
-                site.bytes_held_to_frontier
-            );
+            Self::render_site(&mut out, site);
         }
         for function in &self.functions {
             let _ = writeln!(
@@ -355,6 +450,30 @@ impl Report {
         }
         out
     }
+    fn render_site(out: &mut String, site: &Site) {
+        Self::render_legacy_site(out, site);
+        let _ = writeln!(
+            out,
+            "site\t{:?}\t%{}\t{:?}\t{:?}\t{:?}\t{:?}\tlegacy={:?}\towner={:?}\tobligations={:?}\twitness={:?}\torigin={:?}\tretention={:?}\theld-bytes={:?}\treached={:?}\tholders={:?}\tagreement={:?}",
+            site.id.function,
+            site.id.value,
+            site.id.storage,
+            site.context,
+            site.multiplicity,
+            site.home,
+            site.legacy,
+            site.candidate_owner,
+            site.obligations,
+            site.witness,
+            site.origin,
+            site.retention_frontier,
+            site.bytes_held_to_frontier,
+            site.reached,
+            site.holders,
+            site.legacy_agreement()
+        );
+    }
+
     fn render_events(&self, out: &mut String) {
         for store in &self.store_versions {
             let _ = writeln!(

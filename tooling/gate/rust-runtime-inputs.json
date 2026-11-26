@@ -8226,6 +8226,13 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/memory/retention.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "compiler/core/src/hir/memory/summary.rs",
       "declarations": {
         "imports": [],
@@ -10308,6 +10315,13 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
+          },
+          {
+            "kind": "generated-project",
+            "role": "compiled-program",
+            "path": "../../../tsconfig.fixtures.json",
+            "directory": "./benchmarks/cases/json-parse",
+            "include": "directory"
           }
         ]
       }
