@@ -141,12 +141,12 @@ function changedLines(before: string, after: string,probe:InfrastructureProbe): 
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
-/** false includes unknown; it always retains the existing path obligation. */
 /** Whether a comment-only edit of this path can be recognised at all. */
 export function commentLexed(path: string): boolean {
   return /\.(rs|ts|c|h)$/.test(path);
 }
 
+/** false includes unknown; it always retains the existing path obligation. */
 export function commentsOnly(path: string, before: string, after: string,probe:InfrastructureProbe=infrastructureProbe): boolean {
   if (before === after || before.includes("\ufffd") || after.includes("\ufffd") || Buffer.byteLength(before) > LIMIT || Buffer.byteLength(after) > LIMIT) return false;
   if (!commentLexed(path)) return false;

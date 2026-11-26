@@ -8,7 +8,7 @@ import type {FileObserverReceipt} from './file-input-observer.ts';
 import type {InputSnapshot} from './module-closure.ts';
 import {publishInputTrace} from './rust-test-inputs.ts';
 import {testScratch} from './test-scratch.ts';
-import {coverageOfCaptures,coverageOfReports,decide,describeCoverage,trackedFrom,trackedPaths,committedIgnores,MEMBERSHIP_PROBE,type TestReach} from './rust-input-coverage.ts';
+import {coverageOfCaptures,coverageOfReports,decide,describeCoverage,trackedFrom,trackedPaths,committedIgnores,MEMBERSHIP_PROBE,type TestReach,type ReachChange} from './rust-input-coverage.ts';
 import {spawnTest} from './test-wait.ts';
 import {gitArguments} from './git-arguments/main.ts';
 
@@ -38,7 +38,9 @@ async function opened(t:Parameters<typeof testScratch>[0],name:string,declared:s
 
 // Selection's answer, supplied: a change owes the tests only at these paths.
 const none={present:()=>true,ignored:()=>new Set<string>()};
-const reachOf=(owing:string[]):TestReach=>change=>owing.includes(change.path)?['a declared reader']:[];
+/** A reach that answers each change on its own: a commit owes what any of its changes does. */
+const each=(rules:(change:ReachChange)=>string[]):TestReach=>changes=>[...new Set(changes.flatMap(rules))];
+const reachOf=(owing:string[]):TestReach=>each(change=>owing.includes(change.path)?['a declared reader']:[]);
 
 test('a test that opens a tracked file no change to which owes the tests fails by name; its declared control passes',async t=>{
   const tracked=trackedFrom(['fixture.ts','data.json'],none);
@@ -82,16 +84,21 @@ test('an operation the validator cannot claim is still covered when a change to 
 test('a listed directory is reached only when adding and removing its entries owe the tests; a stat of one by a file beneath it',()=>{
   const tracked=trackedFrom(['cases/a/case.ts','cases/b/case.ts'],none);
   const candidate=(path:string,requirements:string[])=>({path,tracked:tracked.kind(path),kind:'endpoint' as const,source:'crate/src/lib.rs',phase:'test-runtime',requirements,reason:null});
-  const owing:TestReach=change=>change.path==='cases/a/case.ts'?['a declared file']:[];
+  const owing=each(change=>change.path==='cases/a/case.ts'?['a declared file']:[]);
   const listed=decide([candidate('cases',['enumeration'])],tracked,owing);
   assert.deepEqual(listed.missed.map(gap=>gap.path),['cases'],'reading one member does not declare the listing');
-  const membership:TestReach=change=>change.added&&change.path==='cases/'+MEMBERSHIP_PROBE||change.deleted&&change.path.startsWith('cases/')?['a directory membership']:[];
+  const membership=each(change=>change.added&&change.path==='cases/'+MEMBERSHIP_PROBE||change.deleted&&change.path.startsWith('cases/')?['a directory membership']:[]);
   assert.deepEqual(decide([candidate('cases',['enumeration'])],tracked,membership).missed,[]);
   // An addition alone is not the listing: removing an entry changes it too.
-  const additions:TestReach=change=>change.added&&change.path==='cases/'+MEMBERSHIP_PROBE?['a new member of the cases']:[];
+  const additions=each(change=>change.added&&change.path==='cases/'+MEMBERSHIP_PROBE?['a new member of the cases']:[]);
   const removal=decide([candidate('cases',['enumeration'])],tracked,additions);
-  assert.deepEqual(removal.missed.map(gap=>[gap.path,gap.removal]),[['cases','cases/a/case.ts']]);
-  assert.match(describeCoverage({...removal,captures:[]}).join('\n'),/cases \(directory, enumeration, .*; removing cases\/a\/case\.ts owes nothing\)/);
+  assert.deepEqual(removal.missed.map(gap=>[gap.path,gap.removal]),[['cases','cases/a']]);
+  assert.match(describeCoverage({...removal,captures:[]}).join('\n'),/cases \(directory, enumeration, .*; removing cases\/a owes nothing\)/);
+  // Removing an entry is one commit deleting everything under it: a rule that
+  // the whole removal reaches answers it, though no single file's deletion does.
+  const deep=trackedFrom(['cases/a/case.ts','cases/a/expect.txt'],none);
+  const whole:TestReach=changes=>changes.some(change=>change.added)||changes.filter(change=>change.deleted).length===2?['the entry is gone']:[];
+  assert.deepEqual(decide([{...candidate('cases',['enumeration']),tracked:deep.kind('cases')}],deep,whole).missed,[]);
   const stat=decide([candidate('cases',['metadata:stat'])],tracked,owing);
   assert.deepEqual(stat.reached.map(gap=>[gap.path,gap.via]),[['cases','cases/a/case.ts']]);
   assert.deepEqual(decide([candidate('cases/b',['metadata:stat'])],tracked,owing).missed.map(gap=>gap.path),['cases/b']);
@@ -109,14 +116,14 @@ test('a content read is decided by the least-owing edit of the bytes; any other 
   const tracked=trackedFrom(['crate/src/lib.rs'],none);
   const candidate=(requirements:string[])=>({path:'crate/src/lib.rs',tracked:'file' as const,kind:'endpoint' as const,source:'crate/tests/integration.rs',phase:'test-runtime',requirements,reason:null});
   // The crate graph owes the tests for an edit, never for a comment alone.
-  const graph:TestReach=change=>change.least?[]:['a Rust compile input through Cargo'];
+  const graph=each(change=>change.least?[]:['a Rust compile input through Cargo']);
   const content=decide([candidate(['content'])],tracked,graph);
   assert.deepEqual(content.missed.map(gap=>gap.path),['crate/src/lib.rs'],'a content read the crate graph alone reaches is missed');
   for(const requirement of ['metadata:stat','readlink'])
     assert.deepEqual(decide([candidate([requirement])],tracked,graph).missed,[],requirement+' is decided by an edit in place');
   assert.equal(decide([candidate(['metadata:stat','content'])],tracked,graph).missed.length,1,'a content read beside a stat is still a content read');
   // The control differs only in a declared byte reader.
-  const declared:TestReach=change=>change.least&&change.sameMode?['declared bytes read by crate/tests/integration.rs']:['a Rust compile input through Cargo'];
+  const declared=each(change=>change.least&&change.sameMode?['declared bytes read by crate/tests/integration.rs']:['a Rust compile input through Cargo']);
   assert.deepEqual(decide([candidate(['content'])],tracked,declared).reached.map(gap=>gap.reachedBy),['declared bytes read by crate/tests/integration.rs']);
 });
 
@@ -125,7 +132,7 @@ test('a listing of the repository root is decided like any listed directory',()=
   const root={path:'',tracked:tracked.kind(''),kind:'endpoint' as const,source:'crate/src/lib.rs',phase:'test-runtime',requirements:['enumeration'],reason:null};
   assert.equal(root.tracked,'directory');
   const asked:string[]=[];
-  const result=decide([root],tracked,change=>{asked.push((change.added?'+':change.deleted?'-':'')+change.path);return change.path==='top.md'?[]:['a rule'];});
+  const result=decide([root],tracked,each(change=>{asked.push((change.added?'+':change.deleted?'-':'')+change.path);return change.path==='top.md'?[]:['a rule'];}));
   assert.deepEqual(asked,['+'+MEMBERSHIP_PROBE,'-top.md']);
   assert.deepEqual(result.missed.map(gap=>[gap.path,gap.removal]),[['','top.md']]);
   assert.match(describeCoverage({...result,captures:[]}).join('\n'),/\(the repository root\) \(directory, enumeration/);
@@ -138,7 +145,7 @@ test('a lookup of an absent path a commit could add owes the tests on that addit
   const unowed=decide([candidate('cases/a.d.ts'),candidate('node_modules/x/package.json')],tracked,()=>[]);
   assert.deepEqual(unowed.missed.map(gap=>gap.path),['cases/a.d.ts']);
   assert.deepEqual(unowed.untracked.map(gap=>[gap.path,gap.state]),[['node_modules/x/package.json','absent-ignored']]);
-  const owed=decide([candidate('cases/a.d.ts')],tracked,change=>change.added&&change.path==='cases/a.d.ts'?['a new member of the cases']:[]);
+  const owed=decide([candidate('cases/a.d.ts')],tracked,each(change=>change.added&&change.path==='cases/a.d.ts'?['a new member of the cases']:[]));
   assert.deepEqual(owed.missed,[]);assert.equal(owed.reached[0]?.reachedBy,'a new member of the cases');
   // Crossing an absent directory toward another path is that path's question.
   const crossed=decide([{...candidate('cases/new'),kind:'component' as const,requirements:['component']}],tracked,()=>[]);

@@ -42,7 +42,7 @@ import {owingByReach} from './owed.mjs';
 export type CoverageCandidate={path:string;tracked:'file'|'directory'|null;kind:'endpoint'|'component';source:string;phase:string;requirements:string[];reason:string|null};
 /** A tracked candidate and the rule that reaches it, or null when none does. */
 export type CoverageDecision=CoverageCandidate&{reachedBy:string|null;via:string|null;
-  /** For a listed directory: the tracked file whose removal from it owes nothing. */
+  /** For a listed directory: the entry whose removal from it owes nothing. */
   removal?:string};
 export type CaptureReport={file:string;target:string|null;repositoryCoverage:string;counts:Record<string,number>};
 /** An untracked candidate: generated or stray bytes in the tree, a lookup of
@@ -51,7 +51,9 @@ export type CaptureReport={file:string;target:string|null;repositoryCoverage:str
 export type UntrackedCandidate=CoverageCandidate&{state:'ignored'|'untracked'|'absent-ignored'|'absent-component'};
 export type CoverageResult={missed:CoverageDecision[];reached:CoverageDecision[];untracked:UntrackedCandidate[];captures:CaptureReport[]};
 /** The rules a change owes the Rust tests by: owed.mjs's reach, in production. */
-export type TestReach=(change:{path:string;added:boolean;deleted?:boolean;sameMode?:boolean;least?:boolean})=>readonly string[];
+export type ReachChange={path:string;added:boolean;deleted?:boolean;sameMode?:boolean;least?:boolean};
+/** The rules a commit holding these changes owes the Rust tests by. */
+export type TestReach=(changes:readonly ReachChange[])=>readonly string[];
 /** Requirements a change to the file's bytes alone can alter: a content read,
  * a write that may read, and what the validator could not classify. Each is
  * decided by the least-owing edit of those bytes. A stat is not: what it
@@ -146,15 +148,15 @@ async function candidates(root:string,report:string,tracked:TrackedPaths,into:Ma
   });
 }
 
-/** One tracked file under each direct entry of a directory: the change that
- * removes that entry from its listing. */
-function entries(directory:string,tracked:TrackedPaths):string[]{
-  const first=new Map<string,string>();
+/** Each direct entry of a directory, with every tracked file under it: the
+ * change set that removes that entry from its listing. */
+function entries(directory:string,tracked:TrackedPaths):Map<string,string[]>{
+  const entries=new Map<string,string[]>();
   for(const file of tracked.beneath(directory)){
-    const name=file.slice(directory?directory.length+1:0).split('/')[0]!;
-    if(!first.has(name))first.set(name,file);
+    const name=within(directory,file.slice(directory?directory.length+1:0).split('/')[0]!),files=entries.get(name);
+    if(files)files.push(file);else entries.set(name,[file]);
   }
-  return [...first.values()];
+  return entries;
 }
 
 /** Ask selection whether a change to each tracked candidate owes the tests. */
@@ -162,9 +164,15 @@ export function decide(candidates:readonly CoverageCandidate[],tracked:TrackedPa
   const memo=new Map<string,string|null>();
   // `bytes` is the least-owing edit of a file's bytes (a comment, prose), with
   // its mode kept; `edit` is any change of the file in place.
-  const owes=(path:string,change:'edit'|'bytes'|'add'|'delete'='edit')=>{
+  const owes=(path:string,change:'edit'|'bytes'|'add'='edit')=>{
     const key=change+':'+path;
-    if(!memo.has(key))memo.set(key,reach({path,added:change==='add',...(change==='delete'?{deleted:true}:change==='bytes'?{sameMode:true,least:true}:{})})[0]??null);
+    if(!memo.has(key))memo.set(key,reach([{path,added:change==='add',...(change==='bytes'?{sameMode:true,least:true}:{})}])[0]??null);
+    return memo.get(key)!;
+  };
+  // Removing an entry deletes every tracked file under it, in one commit.
+  const removing=(entry:string,files:readonly string[])=>{
+    const key='remove:'+entry;
+    if(!memo.has(key))memo.set(key,reach(files.map(path=>({path,added:false,deleted:true})))[0]??null);
     return memo.get(key)!;
   };
   const missed:CoverageDecision[]=[],reached:CoverageDecision[]=[],untracked:UntrackedCandidate[]=[];
@@ -187,10 +195,10 @@ export function decide(candidates:readonly CoverageCandidate[],tracked:TrackedPa
     }
     else if(candidate.requirements.includes('enumeration')){
       // A listing changes when an entry is added or removed: both must owe
-      // the tests. Removing an entry is removing every tracked file under it.
+      // the tests.
       via=within(candidate.path,MEMBERSHIP_PROBE);reachedBy=owes(via,'add');
-      const removal=reachedBy?entries(candidate.path,tracked).find(entry=>!owes(entry,'delete')):undefined;
-      if(removal){missed.push({...candidate,reachedBy:null,via:null,removal});continue;}
+      const removal=reachedBy?[...entries(candidate.path,tracked)].find(([entry,files])=>!removing(entry,files))?.[0]:undefined;
+      if(removal!==undefined){missed.push({...candidate,reachedBy:null,via:null,removal});continue;}
     }
     else for(const file of tracked.beneath(candidate.path)){reachedBy=owes(file,'edit');if(reachedBy){via=file;break;}}
     (reachedBy?reached:missed).push({...candidate,reachedBy,via:reachedBy?via:null});
@@ -261,7 +269,7 @@ export function declaredRustInputs(root:string):Map<string,RuntimeTargetInputs>{
 }
 
 /** Selection's own answer: the rules other than the every-change policy. */
-export const testReach:TestReach=change=>owingByReach([change],'tests');
+export const testReach:TestReach=changes=>owingByReach(changes,'tests');
 
 export function describeCoverage(result:CoverageResult,limit=40):string[]{
   const line=(gap:CoverageDecision)=>`    ${gap.path||'(the repository root)'} (${gap.tracked??'absent'}, ${gap.requirements.join('+')}, ${gap.phase} of ${gap.source}${gap.reason?': '+gap.reason:''}${gap.removal?'; removing '+gap.removal+' owes nothing':''})`;

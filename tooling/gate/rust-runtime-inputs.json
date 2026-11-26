@@ -808,7 +808,12 @@
       },
       "declarations": {
         "imports": [],
-        "assets": []
+        "assets": [
+          {
+            "kind": "membership",
+            "path": "../../../"
+          }
+        ]
       }
     },
     {
