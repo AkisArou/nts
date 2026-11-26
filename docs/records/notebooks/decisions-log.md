@@ -5137,6 +5137,9 @@ the same request only after process, unit, claim and resource guards certify
 absence. The request survives its requester's exit. Resume restores its
 promise through admission and cancels the pending request; publication
 receipts prevent stale observations from detaching resumed workers.
+Pending resume does not wait for a builder's resource lock: pending grants
+no reclamation, and the pool operation owner serializes resume with upkeep.
+Completed detaches and landed holds retain the resource-lock guard.
 Readers accept v1, writers use v2, and unknown or mismatched records stay
 protected. A plain branch switch without presence publication is diagnosed
 by name, never repaired by a reader. The host's terminal-effect handling is

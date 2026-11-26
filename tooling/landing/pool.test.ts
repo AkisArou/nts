@@ -503,6 +503,43 @@ test('a park records a durable detach, drops only the pool promise and completes
   assert.equal(readFileSync(note,'utf8'),'preserved');assert.equal(p.capacity.activeLeases()[0]!.root,other.path);
 });
 
+for(const action of ['attach','take'] as const)test('pending resume restores the promise while a builder holds the resource lock: '+action,t=>{
+  const {p,observe}=pool(t,2),tree=p.take('1031');
+  const lock=GateResource.tryAcquire(tree.path+'.lock');assert.ok(lock);
+  try{
+    assert.equal(p.detach('1031').presence!.state,'detach-pending');
+    assert.match(workerPresence(tree.path,'1031').pendingReason!,/tree resource lock is held/);
+    assert.equal(p.room().reservedBytes,0);
+    observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES-1,freeInodes:1000});
+    const pending=readFileSync(workerPresenceFile(tree.path),'utf8');
+    assert.throws(()=>p[action]('1031'),PoolFull);assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),pending);
+    observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});
+    const resumed=p[action]('1031');
+    assert.equal(resumed.presence!.state,'attached');assert.equal(resumed.presence!.detachRequest,undefined);
+    assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
+    assert.equal(p.capacity.activeLeases().length,1);
+    const attached=readFileSync(workerPresenceFile(tree.path),'utf8');
+    p.prune({now:NOW});assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),attached);
+    assert.throws(()=>p.take('1067'),PoolFull,'the resumed worker keeps the sole cold promise');
+  }finally{lock.close();}
+  p.prune({now:NOW});assert.equal(workerPresence(tree.path,'1031').state,'attached');
+});
+
+for(const action of ['attach','take'] as const)test('completed detached resume waits for the resource lock without changing presence: '+action,t=>{
+  const f=pool(t,1),{p}=f,tree=p.take('1031');
+  assert.equal(p.detach('1031').presence!.state,'detached');
+  const file=workerPresenceFile(tree.path),detached=readFileSync(file,'utf8');
+  const lock=GateResource.tryAcquire(tree.path+'.lock');assert.ok(lock);
+  try{
+    assert.throws(()=>p[action]('1031'),inUse(tree.path));
+    const cli=poolCli(f,action,'1031');assert.equal(cli.status,75,cli.stdout+cli.stderr);
+    assert.match(cli.stderr,/tree resource lock is held/);
+    assert.equal(readFileSync(file,'utf8'),detached);assert.equal(p.room().reservedBytes,0);
+  }finally{lock.close();}
+  assert.equal(p[action]('1031').presence!.state,'attached');
+  assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
+});
+
 for(const action of ['attach','take'] as const)test('resume cancels pending detach and upkeep preserves the live promise: '+action,t=>{
   let busy=false;
   const {p,observe}=pool(t,2,{users:()=>busy?[{pid:42,command:'live resumed worker',where:'its working directory'}]:[]}),tree=p.take('1031');

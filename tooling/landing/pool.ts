@@ -422,11 +422,14 @@ export class Pool {
     // No new promise or publication is needed, even while a builder owns the
     // tree resource.
     if(this.leases([tree]).length>0)return;
-    // Resuming waits for the resource as for disk (`TreeInUse`).
+    // Pending grants no reclamation. The pin and pool operation owner protect
+    // publication against upkeep, so a builder need not finish before resume.
+    if(tree.presence?.state==='detach-pending'){this.publishPresence(tree,'existing');return;}
+    // Completed detaches and landed holds still wait for the resource.
     const lock=this.treeLock(tree.path);
     try{this.publishPresence(tree,'existing');}finally{lock.close();}
   }
-  /** Publish presence while this operation holds the tree's resource lock. A
+  /** Publish presence under the pool operation owner and tree pin. A
    * fresh Git hold publishes its initial presence with no resume admission. */
   private publishPresence(tree:PoolTree,transition:'existing'|'fresh'):void{
     const branch=this.presenceBranch(tree);
@@ -435,8 +438,8 @@ export class Pool {
       writeWorkerPresence(tree.path,branch,'attached',this.capacity.host.wallNow());
       this.capacity.state.advance();
     });
-    // Both resume verbs publish the admitted lease before releasing either
-    // lock: a landed mark would keep the attached promise uncounted.
+    // Both resume verbs publish the admitted lease before releasing the
+    // operation owner: a landed mark would keep the attached promise uncounted.
     if(tree.state==='landed')this.forget(branch);
   }
   /** A successful detach records its intent before asking whether the old worker

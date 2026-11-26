@@ -1260,12 +1260,16 @@ the tooling strict checker owns the source's type checking.
   atomically admits a build claim before creating its Git lease; a durable
   detach request, landing or giving it back ends that promise. Resuming a
   detached, pending or landed tree admits any cold
-  or partial remainder under the same lock and capacity equation as a new take,
+  or partial remainder under the same capacity equation as a new take,
   protecting that target during pressure reclamation. Both take and attach
   retain the admitted claim and operation intent until the Git lease and
   attached presence are published, so another request cannot spend that capacity. A refusal exits 75 and
-  leaves its presence and hold unchanged for retry. A take or attach whose tree
-  resource lock a gate run or disk reclamation holds refuses the same way,
+  leaves its presence and hold unchanged for retry. Resuming a pending detach
+  uses the pool operation owner, tree pin and capacity transaction, without
+  waiting for a builder's resource lock: pending grants no reclamation, and
+  publication cancels its request before upkeep can complete it. Resuming a
+  completed detach or a landed hold still requires the tree resource lock.
+  If a gate run or disk reclamation holds that lock, resume refuses the same way,
   exit 75 naming the tree, before any change to its branch, checkout or
   presence. Taking or attaching an
   already-counted lease is idempotent, with no new admission or publication,
@@ -2113,7 +2117,9 @@ the first node task.
 - **A worker detach is a durable request.** Pending detach releases only the
   unused pool promise; ownership guards still protect live claims and output.
   Upkeep completes the same branch- and tree-bound request after owners drain.
-  Resume admits its promise and cancels the request. The requester's exit
+  Resume admits its promise and cancels the request, even while a builder
+  holds the resource lock; completed detaches and landed holds still wait
+  for that lock. The requester's exit
   never expires it. Presence writers use v2, readers accept v1, and plain
   branch switches remain named, protected mismatches.
   ([log](records/notebooks/decisions-log.md#a-worker-detach-is-a-durable-request-11-26)).
