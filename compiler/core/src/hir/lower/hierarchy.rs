@@ -97,6 +97,11 @@ pub(super) struct Hierarchy {
     /// Frozen source-member and supplier inventory. An early read or repeated
     /// initialization is an error; interfaces.rs owns its one enumeration.
     pub(super) member_fillers: std::sync::OnceLock<super::interfaces::MemberFillers>,
+    /// First symbol listing each declaration, preserving snapshot order.
+    /// Captured symbol facts are immutable; this index is initialized once
+    /// before any raising query and shared with the inference probe.
+    pub(super) declaration_symbols:
+        std::sync::OnceLock<std::sync::Arc<rustc_hash::FxHashMap<NodeId, u32>>>,
     /// The symbol each `get` and `set` declaration belongs to.
     ///
     /// **An access finds its accessor through the receiver's type, which names the
@@ -282,6 +287,27 @@ pub(super) enum Written {
 }
 
 impl Hierarchy {
+    /// Capture immutable symbol/declaration facts before hierarchy inference or
+    /// any raising query. The resulting index is initialized exactly once.
+    fn with_declaration_symbols(snapshot: &SemanticSnapshot) -> Self {
+        let hierarchy = Self::default();
+        hierarchy
+            .declaration_symbols
+            .set(std::sync::Arc::new(declaration_symbols(snapshot)))
+            .expect("declaration symbols initialized once");
+        hierarchy
+    }
+
+    /// Preserve the declaration scan's first-record rule when symbols share a
+    /// declaration. Accessor reads retain their existing symbol owner.
+    pub(super) fn declaration_symbol(&self, declaration: NodeId) -> Option<u32> {
+        self.declaration_symbols
+            .get()
+            .expect("declaration symbols initialized before raising queries")
+            .get(&declaration)
+            .copied()
+    }
+
     /// A type a field family can be keyed by: a declared interface, or an
     /// instantiation of one (`face_instances`).
     pub(super) fn is_field_face(&self, ty: TypeId) -> bool {
@@ -913,6 +939,20 @@ fn objc_state_chain(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<NodeId> {
     chain
 }
 
+/// The former declaration scan's answer, built once rather than per call site.
+fn declaration_symbols(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<NodeId, u32> {
+    let mut symbols = rustc_hash::FxHashMap::default();
+    for (at, record) in snapshot.symbols.iter().enumerate() {
+        let Ok(symbol) = u32::try_from(at) else {
+            continue;
+        };
+        for declaration in &record.declarations {
+            symbols.entry(*declaration).or_insert(symbol);
+        }
+    }
+    symbols
+}
+
 /// See [`Hierarchy::accessor_symbols`].
 fn accessor_symbols(
     snapshot: &SemanticSnapshot,
@@ -941,7 +981,7 @@ pub(super) fn collect_hierarchy(
     closures: &[ClosureInfo],
     qualified: &rustc_hash::FxHashMap<NodeId, String>,
 ) -> Hierarchy {
-    let mut hierarchy = Hierarchy::default();
+    let mut hierarchy = Hierarchy::with_declaration_symbols(snapshot);
     let mut probe = FuncBuilder::new(snapshot, foreign);
     let instantiations = crate::hir::generics::instantiations(snapshot);
     hierarchy.provided_errors = provided_error_identities(snapshot);
@@ -1034,6 +1074,7 @@ pub(super) fn collect_hierarchy(
     let probe_hierarchy = Hierarchy {
         cast_faces: hierarchy.cast_faces.clone(),
         accessor_symbols: std::sync::Arc::clone(&hierarchy.accessor_symbols),
+        declaration_symbols: hierarchy.declaration_symbols.clone(),
         ..Hierarchy::default()
     };
     probe.hierarchy = &probe_hierarchy;

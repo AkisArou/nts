@@ -878,14 +878,12 @@ pub(super) fn assert_structural_plan_unchanged(
     );
 }
 
-/// Check the existing member-symbol owner against the declaration scan before
-/// using it for the per-site raising decision.
+/// Declaration lookup must retain the old scan's answer for every method and
+/// accessor in each core harness program, including shared declarations.
 pub(super) fn assert_member_symbols_unchanged(
     snapshot: &super::LoweringSnapshot<'_>,
     hierarchy: &super::Hierarchy,
 ) {
-    let mut probe = super::FuncBuilder::probe(snapshot);
-    probe.hierarchy = hierarchy;
     for (at, node) in snapshot.nodes.iter().enumerate() {
         let kind = match node.kind {
             super::NodeKind::Syntax(super::syntax::METHOD_DECLARATION) => "method declaration",
@@ -901,7 +899,7 @@ pub(super) fn assert_member_symbols_unchanged(
             .position(|record| record.declarations.contains(&declaration))
             .and_then(|symbol| u32::try_from(symbol).ok());
         assert_eq!(
-            probe.member_symbol(declaration),
+            hierarchy.declaration_symbol(declaration),
             scanned,
             "member symbol differs for {kind} {declaration:?}"
         );

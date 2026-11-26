@@ -1247,7 +1247,7 @@ pub(super) fn interface_family_can_raise(
     unknown_supplier
         || members
             .into_iter()
-            .any(|member| super::a_declaration_that_can_raise(snapshot, throwing, member))
+            .any(|member| super::a_declaration_that_can_raise(hierarchy, throwing, member))
 }
 
 /// Every source member filling root's slot, in original class/member order.

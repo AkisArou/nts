@@ -1161,7 +1161,7 @@ impl FuncBuilder<'_> {
         }
         // Throwing includes override edges, so a quiet Base with a throwing
         // Sub never becomes Quiet here, even in a structurally retyped copy.
-        if !a_declaration_that_can_raise(self.snapshot, self.throwing, declaration) {
+        if !a_declaration_that_can_raise(self.hierarchy, self.throwing, declaration) {
             return Some(MethodRaisingDispatch::Quiet);
         }
         Some(

@@ -95,7 +95,7 @@ pub(super) fn raising_member_slots(
             .iter()
             .filter(|member| {
                 !naming.copyable.contains(member)
-                    && a_declaration_that_can_raise(snapshot, &naming.throwing, **member)
+                    && a_declaration_that_can_raise(hierarchy, &naming.throwing, **member)
             })
             .map(|member| {
                 let owner = probe
@@ -329,35 +329,29 @@ fn request_class_family(
         if !families.numbered.contains(&(root, key.clone()))
             && members_filling(snapshot, probe, hierarchy, root, key)
                 .iter()
-                .any(|member| a_declaration_that_can_raise(snapshot, &naming.throwing, *member))
+                .any(|member| a_declaration_that_can_raise(hierarchy, &naming.throwing, *member))
         {
             families.numbered.insert((root, key.clone()));
         }
     } else if let Some(member) = probe.member_declaration(receiver, &key.key) {
         let member = probe.implementation_of(member);
         if naming.copyable.contains(&member)
-            && a_declaration_that_can_raise(snapshot, &naming.throwing, member)
+            && a_declaration_that_can_raise(hierarchy, &naming.throwing, member)
         {
             naming.raising.insert(member);
         }
     }
 }
 
-/// Whether a declaration can raise, which [`Throwing::any`] answers **by symbol**
-/// because a declaration node carries none of its own.
-///
-/// One spelling, two readers: this and [`what_holds_the_gate_off`]'s wrapper arm,
-/// which asked the same question of the same set with the same scan written out.
+/// Whether a declaration's first symbol is in [`Throwing::any`]. The hierarchy
+/// indexes that relationship once; method sites must not scan every symbol.
 pub(super) fn a_declaration_that_can_raise(
-    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
     raises: &rustc_hash::FxHashSet<u32>,
     declaration: NodeId,
 ) -> bool {
-    snapshot
-        .symbols
-        .iter()
-        .position(|record| record.declarations.contains(&declaration))
-        .and_then(|at| u32::try_from(at).ok())
+    hierarchy
+        .declaration_symbol(declaration)
         .is_some_and(|symbol| raises.contains(&symbol))
 }
 
