@@ -18,7 +18,10 @@ import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,contentCacheEnvironment} f
 
 const HANDOFF = ['NTS_BIN','NTS_SUITE_BIN','NTS_TOOLING_SLICE','NTS_ORACLE_TYPESCRIPT','NTS_ORACLE_DEPENDENCIES'] as const;
 const RUN_HANDOFF = ['NTS_TOOLING_SLICE','NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_GATE_SCOPE_EXPECTED',
-  'NTS_GATE_STEP','NTS_GATE_STEP_ATTEMPT','NTS_GATE_STEP_RESULT','NTS_GATE_STEP_MEMORY_BYTES','NTS_GATE_CASE_COSTS_DIR','NTS_CHECKERS'] as const;
+  'NTS_GATE_STEP','NTS_GATE_STEP_ATTEMPT','NTS_GATE_STEP_RESULT','NTS_GATE_STEP_MEMORY_BYTES','NTS_CHECKERS'] as const;
+// Compiler telemetry is not a fixture handoff: synthetic checks must neither
+// publish into the enclosing run nor inherit only its directory and fall back
+// to per-PID files. A fixture may explicitly own its own observation directory.
 const FIXTURE_GIT={GIT_CONFIG_COUNT:'2',GIT_CONFIG_KEY_0:'maintenance.auto',GIT_CONFIG_VALUE_0:'false',
   GIT_CONFIG_KEY_1:'gc.auto',GIT_CONFIG_VALUE_1:'0'} as const;
 const WRITABLE = ['HOME','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_STATE_HOME','TMPDIR','NODE_COMPILE_CACHE',

@@ -20,6 +20,10 @@ runAsCommand(import.meta.url,async()=>{
   // Fixture-created services follow this file's boundary too, rather than
   // becoming siblings under the collector and escaping its peak and cap.
   assignOwnedValues(process.env,{NTS_TOOLING_SLICE:basename(process.env.NTS_CENSUS_WORKER_GROUP!)});
+  // Revoke the enclosing compiler telemetry packet before relabelling a file's
+  // diagnostic step. Synthetic fixture compiles are not run cost evidence;
+  // nested runners and explicit private observations acquire their own owner.
+  assignOwnedValues(process.env,{NTS_GATE_CASE_COSTS_DIR:undefined,NTS_GATE_CHECK_CHANNEL:undefined,NTS_GATE_CHECK_CAPABILITY:undefined});
   const bootstrapMemoryMax=readLimits(process.env.NTS_CENSUS_WORKER_GROUP!).max;
   const request=readToolingRequest(JSON.parse(process.argv[2]??'null')),files=new Set(request.files.map(file=>resolve(file)));
   const step=process.env.NTS_GATE_STEP;

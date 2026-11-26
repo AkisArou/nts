@@ -29,7 +29,7 @@ export class CheckStream {
   #pendingBytes=0;
   #append!:(chunk:string|Uint8Array)=>Promise<void>;
   #writes:Promise<void>=Promise.resolve();
-  #finish!:()=>void;
+  #finish!:(error?:Error)=>void;
   #publication:Promise<void>;
   #failed=false;
   #closing=false;
@@ -44,7 +44,7 @@ export class CheckStream {
     this.path=`/proc/${process.pid}/fd/${this.#directory}/checks.sock`;
     // Acquire the close handoff before invoking a fallible publication owner.
     // Failure before its producer runs must still release this directory FD.
-    const ending=new Promise<void>(resolve=>{this.#finish=resolve;});
+    const ending=new Promise<void>((resolve,reject)=>{this.#finish=error=>{if(error)reject(error);else resolve();};});
     let started!:()=>void,failed!:(error:unknown)=>void;
     const writing=new Promise<void>((resolve,reject)=>{started=resolve;failed=reject;});
     this.#publication=Promise.resolve().then(()=>publish(join(costs,'check-worker-0.jsonl.gz'),async append=>{
@@ -64,6 +64,13 @@ export class CheckStream {
     this.ready=Promise.all([listening,writing]).then(()=>{});
   }
   #error(message:string){this.errors.push(`check telemetry: ${message}`);}
+  #abortPublication(message:string):void{
+    if(this.#failed)return;
+    this.#failed=true;this.#error(message);
+    // Reject the durable producer, not only future appends. Otherwise a valid
+    // gzip prefix could be renamed as complete after losing the remaining rows.
+    this.#finish(Error('check telemetry: '+message));
+  }
   environment(step:string,members:()=>readonly number[]):Record<string,string>{
     if(this.#closing||this.#steps.has(step))throw Error('check telemetry: duplicate or closed step '+step);
     const capability=randomBytes(32).toString('hex');this.#steps.set(step,{capability,members});
@@ -72,11 +79,11 @@ export class CheckStream {
   #publish(line:string):void{
     if(this.#failed)return;
     const bytes=Buffer.byteLength(line);
-    if(this.#pendingBytes+bytes>MAX_PENDING_BYTES){this.#failed=true;this.#error('bounded publication queue exhausted');return;}
+    if(this.#pendingBytes+bytes>MAX_PENDING_BYTES){this.#abortPublication('bounded publication queue exhausted');return;}
     this.#pendingBytes+=bytes;
     this.#writes=this.#writes.then(async()=>{
       if(!this.#failed)await this.#append(line);
-    }).catch(error=>{this.#failed=true;this.#error(`write failed: ${String(error)}`);}).finally(()=>{this.#pendingBytes-=bytes;});
+    }).catch(error=>{this.#abortPublication(`write failed: ${String(error)}`);}).finally(()=>{this.#pendingBytes-=bytes;});
   }
   #accept(socket:Socket):void{
     const peer:Peer={socket,pending:'',ended:false,sessions:new Set(),totals:new Set()};this.#peers.add(peer);
