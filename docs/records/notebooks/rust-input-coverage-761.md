@@ -82,7 +82,47 @@ Re-decided under these declarations, 2 remain: the new fixture's two
 listings. For a fixture declared this way the validator claims its listings
 and contents itself. Neither is a candidate for `pile-shuffle` or
 `borrowed-call` in the same run, where only stats and readlinks remain, all
-reached. The first wide run is the check of that.
+reached. The step's own run at `bbc20ff472` confirmed it: the new fixture's
+listings were claimed there too, and nothing was missed (below).
+
+## The step at the candidates, and its disk waits
+
+The step through `runLanding` (`build`, `rust-inputs`), one heavy job at a
+time. Wall and CPU are the `rust-inputs` step's own; the disk wait is the
+capture claim's (12 GiB above the 40 GiB floor), which the step's 5400 s
+bound counted until this slice's runner change; tests is the traced tests'
+build and binaries; after is the rest (validating the 58 captures and
+deciding every candidate).
+
+| Run | Commit | Verdict | Wall s | CPU s | Disk wait s | Tests s | After s | Candidates | Missed |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `step-main-v3` | `bbc20ff472` | held at the bound, never admitted (43.6 GiB free) | 5,409 | 2,002 | 5,409 | — | — | — | — |
+| `step-main-v4` | `bbc20ff472` | green | 3,965 | 10,508 | 0 | 918 | 3,047 | 6,799 | 0 |
+| `step-main-v5-held` | `003a0633ab` | held: the tree's installation catalog link was stale | 984 | 7,834 | 0 | 976 | — | — | — |
+| `step-main-v5-held2` | `003a0633ab` | held at the bound, admitted after 5,347 s (52.0 GiB free) | 5,517 | 4,348 | 5,347 | — | — | — | — |
+| `step-main-v5` | `003a0633ab` (main `5c04028d50`) | green | 3,438 | 9,726 | 160 | 898 | 2,380 | 6,809 | 0 |
+
+`003a0633ab` traces main's reads after #841's check transport and the typed
+`JSON.parse` work. Two findings follow from the holds:
+
+- **A disk wait spent the step's bound.** With the working time at
+  3,400–4,000 s, a wait of about 25 minutes held the step instead of deciding
+  it. The runner now reads the step's own recorded disk wait and spends no
+  execution time on it; its CPU still spends the CPU bound, and the full
+  check's run bound still spends the wait
+  ([the workflow's step bound](../../workflow.md#landing-the-landing-check)).
+- **The wait itself costs CPU.** Waiting, the step ran 2,002 CPU-s in
+  5,409 s (`v3`) and 4,348 in 5,517 s (`v5-held2`), in the shared disk poll,
+  not in this step: every second `TemporaryAdmission.acquire` takes a
+  `DiskCapacity` snapshot, which measures every leased build output with
+  `du` (156 ms of CPU each, 123 of it in `du`, by
+  `~/.cache/nts-scratch/761/wait-cpu-v1/probe.ts`), and runs the disk
+  reclamation pass. Its own task, outside #761.
+- **Deciding an entry's removal.** Asked whole, the removal of the root's
+  `tests` entry (18,980 files) took 209 s of selection and the six largest root
+  entries about 330 s, a part of the after time above. One file's deletion that
+  owes now answers for its entry (deletions only add to what `owed()` owes),
+  and only an entry none of whose first file's deletion owes is asked whole.
 
 ## What the trace covers
 
@@ -162,6 +202,18 @@ The step after review, `~/.cache/nts-scratch/761/`:
 | `step-main-v2/terminal.json` (the run, red) | `3c27da789c6f1d5613cc1d1ce1dd027b6ad75a06357dd038cfbe4ae4ff087a69` |
 | `step-main-v2/run/rust-inputs.coverage.json` (9 missed) | `b525f589c92b49102ae3b0ba2464a10bfc3d2da9ed0644382fa9c5085384d6ec` |
 | `v2-redecide/result.json` (under the new declarations: 2 missed, the listings) | `9a5fb9d89d75031c4aa3d7dea00e7412b08b1cdffe351828c069905b2c33a4f9` |
+
+The step at the candidates, `~/.cache/nts-scratch/761/`:
+
+| File | SHA-256 |
+|---|---|
+| `step-main-v3/terminal.json` (`bbc20ff472`, held at the bound) | `c9f7dc660d49bbfdd50a1752e96acea0630cf5b7a9d92ecf8c34dc0bc95ed700` |
+| `step-main-v4/terminal.json` (`bbc20ff472`, green) | `f4bebad63c7242b10a16fb4f6466900054759c2d3e8ec10b4683d46a297129dc` |
+| `step-main-v4/run/rust-inputs.coverage.json` (6,799 reached, 0 missed) | `74100990b88138d238adc011846fae736d23965123e3ca21368fdf9ea045d699` |
+| `step-main-v5-held/terminal.json` (`003a0633ab`, stale catalog link) | `7b202c71189526e3808026b74f46d9d8f9cf660012e0b9353b1fdd36f9181683` |
+| `step-main-v5-held2/terminal.json` (`003a0633ab`, held at the bound) | `9d8bfe59ecd983f8a5ae2164a5c3e3b24450536443fff238c16a7284cdb6254b` |
+| `step-main-v5/terminal.json` (`003a0633ab`, green) | `7b0b2aa76a7c92368967de65a65019ccdd03bb02402edc4e5e32a73b6cc07bd7` |
+| `step-main-v5/run/rust-inputs.coverage.json` (6,809 reached, 0 missed) | `f00bd30b5c333b5c2cc6d28ce609ea7844719484e9b8da969460b27e91d96453` |
 
 The step at the rebased tip, `~/.cache/nts-scratch/761/step-main-v1/`:
 
