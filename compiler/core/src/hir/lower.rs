@@ -261,6 +261,7 @@ impl FuncBuilder<'_> {
             .append(&mut self.arrivals.at_signature);
         arrivals.conversions.append(&mut self.conversions);
         arrivals.json_writers.append(&mut self.json_writers);
+        arrivals.json_readers.append(&mut self.json_readers);
         arrivals
             .uniform_sites
             .append(&mut self.arrivals.uniform_sites);
@@ -316,6 +317,9 @@ pub struct Arrivals {
     pub conversions: Vec<Conversion>,
     /// The writers `JSON.stringify` calls, one per type. See [`json::Writer`].
     json_writers: Vec<json::Writer>,
+    /// The readers a typed `JSON.parse` calls, one per type. See
+    /// [`json_parse::Reader`].
+    json_readers: Vec<json_parse::Reader>,
     /// Calls through a signature's erased entry, each named by its function
     /// once that function is finished. See [`UniformSite`].
     pub uniform_sites: Vec<UniformSite>,
@@ -571,6 +575,9 @@ struct Naming {
     /// The keys a write may add to an object after it was made: see
     /// [`added_keys`].
     added_keys: std::rc::Rc<AddedKeys>,
+    /// Where the program can see an object's keys, which decides whether a
+    /// typed `JSON.parse` may drop their order: see [`json_parse::observers`].
+    json_observers: std::rc::Rc<json_parse::Observers>,
 
     /// Which generator each `function*` is, in source order.
     ///
@@ -690,6 +697,7 @@ fn naming(
     naming.raising_then = throwing.bodily;
     naming.presence_keys = presence_keys(snapshot, &probe);
     naming.added_keys = std::rc::Rc::new(added_keys(snapshot, &probe));
+    naming.json_observers = std::rc::Rc::new(json_parse::observers(snapshot, &probe));
     naming.throwing = throwing.any;
     naming.generators = generators;
     naming.written_order = written_order;
@@ -907,6 +915,7 @@ fn wire_naming<'a>(builder: &mut FuncBuilder<'a>, naming: &'a Naming) {
     builder.presence_keys = &naming.presence_keys;
     builder.written_order = &naming.written_order;
     builder.added_keys = naming.added_keys.clone();
+    builder.json_observers = naming.json_observers.clone();
     builder.class_tokens = &naming.class_tokens;
 }
 
@@ -1792,6 +1801,11 @@ struct FuncBuilder<'a> {
     /// The `JSON.stringify` writers this body's calls name: harvested into
     /// [`Arrivals::json_writers`].
     json_writers: Vec<json::Writer>,
+    /// The typed `JSON.parse` readers this body's boundaries name: harvested
+    /// into [`Arrivals::json_readers`].
+    json_readers: Vec<json_parse::Reader>,
+    /// [`Naming::json_observers`].
+    json_observers: std::rc::Rc<json_parse::Observers>,
     /// Program-wide typed sort helper requests, shared with other builders.
     sort_helpers: array_sort::Registry,
     /// See [`Arrivals`]; drained by [`FuncBuilder::harvest`].
@@ -1891,6 +1905,8 @@ impl<'a> FuncBuilder<'a> {
             used_closures: Vec::new(),
             conversions: Vec::new(),
             json_writers: Vec::new(),
+            json_readers: Vec::new(),
+            json_observers: std::rc::Rc::default(),
             sort_helpers: array_sort::Registry::default(),
             arrivals: Arrivals::default(),
             substitution: Substitution::default(),
@@ -2358,6 +2374,7 @@ mod iteration_callbacks;
 mod iterator_calls;
 mod iterator_close;
 mod json;
+mod json_parse;
 mod layout_collection;
 mod literal_methods;
 mod literals;

@@ -5070,3 +5070,16 @@ leaves slot 1 as invoked. The runtime captures `main`'s `argc` and `argv`
 (`nts_command_line_capture`); the TypeScript surface waits for the
 `node:process` provider (builtins stage 9), so `process.argv` stays NTS1100.
 The contract is in [native](../../targets/native.md#products).
+
+## Typed JSON.parse on C and LLVM (11-26)
+
+#1037, design approved by the coordinator. `JSON.parse(text) as T` with `T` a
+plain object type is one boundary decision (`typed_parse`) that cast-face
+collection, assertion lowering and synchronous effects read; a generated reader
+per type walks a tape from a scan that checks the whole text first, so a
+`SyntaxError` (V8's text word for word) precedes any path `TypeError`. A parse
+whose objects' key order or undeclared keys the program can observe is refused
+by name, conservatively wherever the type does not decide (generic, indexed,
+erased operands, exports, native calls, erased stores), until #650's key-order
+part keeps them. simdjson's stage 1 for ASCII text lands as a second slice.
+The contract is in [JSON](../../foundations/json.md#decisions).

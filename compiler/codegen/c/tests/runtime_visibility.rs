@@ -26,9 +26,10 @@ enum Needs {
 }
 
 /// Every runtime source that builds on Linux, by name.
-const LINUX: [(&str, Needs); 7] = [
+const LINUX: [(&str, Needs); 8] = [
     ("nts_runtime.c", Needs::Nothing),
     ("nts_unicode.c", Needs::Nothing),
+    ("nts_json.c", Needs::Nothing),
     ("nts_test_host.c", Needs::Nothing),
     ("nts_uv_host.c", Needs::Uv),
     ("nts_glib_host.c", Needs::Glib("glib-2.0")),

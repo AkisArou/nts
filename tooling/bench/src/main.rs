@@ -387,6 +387,13 @@ fn run() -> Result<()> {
         file.write(out.as_std_path())
             .with_context(|| format!("writing {}", file.name))?;
     }
+    // And the typed `JSON.parse` scan, which joins a command line only for a
+    // case whose program parses (`nts_codegen_c::reaches_json`).
+    std::fs::write(
+        out.join(nts_codegen_c::JSON_SOURCE_NAME),
+        nts_codegen_c::JSON_SOURCE,
+    )
+    .with_context(|| format!("writing {}", nts_codegen_c::JSON_SOURCE_NAME))?;
 
     if counting_run {
         let counting = Counting {
@@ -787,12 +794,34 @@ fn provider_for(_case: &Utf8Path) -> hir::Memory {
 /// The Unicode tables join them only for a case that converts case: linking
 /// them always takes `tests/programs/hello` from 81 KB to 162 KB, and a benchmark
 /// binary has no more reason to carry them than any other program.
-fn runtime_sources(out: &Utf8Path, needs_unicode: bool) -> Vec<Utf8PathBuf> {
+fn runtime_sources(out: &Utf8Path, links: Links) -> Vec<Utf8PathBuf> {
     let mut sources = vec![out.join(nts_codegen_c::RUNTIME_SOURCE_NAME)];
-    if needs_unicode {
+    if links.unicode {
         sources.push(out.join(nts_codegen_c::UNICODE_SOURCE_NAME));
     }
+    if links.json {
+        sources.push(out.join(nts_codegen_c::JSON_SOURCE_NAME));
+    }
     sources
+}
+
+/// The optional runtime translation units a case's program reaches, each
+/// asked of the emitted text once.
+#[derive(Clone, Copy, Default)]
+struct Links {
+    /// The Unicode tables: a program that converts case.
+    unicode: bool,
+    /// The typed `JSON.parse` scan (`nts_codegen_c::reaches_json`).
+    json: bool,
+}
+
+impl Links {
+    fn of(text: &str) -> Self {
+        Self {
+            unicode: reaches_unicode(text),
+            json: nts_codegen_c::reaches_json(text),
+        }
+    }
 }
 
 /// Whether a case's program reaches the Unicode tables.
@@ -877,7 +906,7 @@ fn run_workload_case(
     if let Ok(numeric) = workload.numeric() {
         println!("workload: {shown}: {}({})", numeric.callee, numeric.input());
     }
-    let needs_unicode = reaches_unicode(&specialized_text);
+    let links = Links::of(&specialized_text);
     // Whether the program has top-level code to evaluate. `module__init` is
     // emitted only when it does, and calling a function that was never emitted
     // is a link error -- which is `standalone_main`'s own rule, applied here.
@@ -915,7 +944,7 @@ fn run_workload_case(
     let emission = Emission {
         renderable,
         initializes,
-        needs_unicode,
+        links,
         refused: refused.as_deref(),
     };
     let (results, absences) = variants(
@@ -1039,8 +1068,8 @@ struct Emission<'a> {
     renderable: bool,
     /// The program has top-level code, so `module__init` exists to call.
     initializes: bool,
-    /// The program reaches the Unicode tables, which are linked only then.
-    needs_unicode: bool,
+    /// The optional runtime units the program reaches, linked only then.
+    links: Links,
     /// The entry point lowering refused, if it refused one. `Some` takes all
     /// four of this compiler's lanes rather than one: the refusal is in the
     /// middle end, above every backend.
@@ -1133,7 +1162,7 @@ fn variants(
             driver.clone()
         };
         let cpp = vec![front, root.join("benchmarks/common/main.cpp")];
-        let mut c = runtime_sources(out, emission.needs_unicode);
+        let mut c = runtime_sources(out, emission.links);
         match variant.generated {
             // Not a C++ file linked against a generated object, so it leaves
             // this loop rather than joining the command line below. A refused

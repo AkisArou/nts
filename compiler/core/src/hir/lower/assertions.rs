@@ -115,6 +115,10 @@ pub(super) fn is_nominal_class(probe: &FuncBuilder<'_>, ty: TypeId) -> bool {
 /// The same checks that lowering emits, before any payload is read.
 /// This is conservative when a contextual copy later proves the operand.
 pub(super) fn can_throw(probe: &FuncBuilder<'_>, id: NodeId) -> bool {
+    // A typed parse throws `SyntaxError` and `TypeError` (`json_parse`).
+    if super::json_parse::typed_parse(probe, id).is_some() {
+        return true;
+    }
     let Some(inner) = probe.children(id).first().copied() else {
         return false;
     };

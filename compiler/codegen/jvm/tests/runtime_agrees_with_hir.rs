@@ -435,7 +435,12 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 141 with stdout/stderr's per-descriptor isTTY queries. This runtime targets
 /// Java 8 and Android; System.console cannot answer either descriptor's state,
 /// and the native FFM route requires Java 22. Keep both calls refused by name.
+///
+/// 146 with the typed `JSON.parse` reads (`nts_json_key_index`, `_mismatch`,
+/// `_missing`, `_number`, `_string`): the C runtime's tape kernels, which this
+/// lane does not provide yet (#1038), so a typed parse is declined here by
+/// name rather than mapped to nothing.
 // This population is runtime::declared_names(): scalar-normalization records.
 // nts_str_resize_owned and nts_view_lend_bytes have no such parameter record;
 // their shared helper-catalog enrollment does not add to this measured count.
-const REFUSED_FLOOR: usize = 141;
+const REFUSED_FLOOR: usize = 146;

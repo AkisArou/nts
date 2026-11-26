@@ -815,6 +815,11 @@ impl FuncBuilder<'_> {
 
     /// `x!`, `x as T` and `x satisfies T`.
     pub(super) fn lower_assertion(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // A checked parse rather than a cast: `json_parse::typed_parse` is the
+        // one decision, and the cast-face collector reads it too.
+        if let Some(parse) = super::json_parse::typed_parse(self, id) {
+            return self.lower_typed_json_parse(id, parse);
+        }
         let Some(inner) = self.children(id).first().copied() else {
             return Err(self.unsupported(id, "an assertion with no operand"));
         };

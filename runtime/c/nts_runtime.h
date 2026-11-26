@@ -2421,6 +2421,39 @@ NTS_READS_ONLY double nts_json_first_escape(const NtsString *s, double from);
 NtsString *nts_str_append_json_quoted(NtsString *a, const NtsString *s);
 NtsString *nts_str_concat_json_quoted(const NtsString *a, const NtsString *s);
 
+/* `JSON.parse(text) as T`: the scan and the reads a reader the compiler
+ * generates for `T` makes (`hir/lower/json_parse.rs`). Defined in
+ * `nts_json.c`, a translation unit only a program that parses links, except
+ * `nts_json_number`, which is ffc's and so `nts_runtime.c`'s.
+ *
+ * - `nts_json_tape`: the whole text checked and indexed, as `nts_json.c`'s
+ *   comment lays the tape out; a text that is not JSON answers a tape whose
+ *   first element is 0, and `nts_json_syntax_message` is then V8's message
+ *   for its first error, word for word.
+ * - `nts_json_key_index`: which of `keys` the key entry `at` is, or -1.
+ *   `keys` is each key as one unit of its length and then its units; `hint`
+ *   is the one to try first.
+ * - `nts_json_string`, `nts_json_number`: the value at entry `at`.
+ * - `nts_json_mismatch`, `nts_json_missing`: a `TypeError`'s message, the
+ *   entry's JSON path and what was expected there, or the property its object
+ *   lacks. Only a failing parse asks. */
+NTS_ALLOCATES NtsArray *nts_json_tape(const NtsString *text);
+NTS_ALLOCATES NtsString *nts_json_syntax_message(const NtsString *text,
+                                                 const NtsArray *tape);
+NTS_READS_ONLY double nts_json_key_index(const NtsString *text,
+                                         const NtsArray *tape, double at,
+                                         const NtsString *keys, double hint);
+NTS_ALLOCATES NtsString *nts_json_string(const NtsString *text,
+                                         const NtsArray *tape, double at);
+NTS_READS_ONLY double nts_json_number(const NtsString *text,
+                                      const NtsArray *tape, double at);
+NTS_ALLOCATES NtsString *nts_json_mismatch(const NtsString *text,
+                                           const NtsArray *tape, double at,
+                                           const NtsString *expected);
+NTS_ALLOCATES NtsString *nts_json_missing(const NtsString *text,
+                                          const NtsArray *tape, double at,
+                                          const NtsString *key);
+
 /* Frame storage for a string of at most `units` code units.
  *
  * `uint16_t` because a slice of a wide string is wide, and this has to hold the

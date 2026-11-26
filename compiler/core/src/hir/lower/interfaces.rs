@@ -851,6 +851,13 @@ fn collect_cast_faces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
             _ => continue,
         };
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // **A typed `JSON.parse` is checked, so it is no face.** Its reader
+        // builds `T`'s own layout and throws for anything else
+        // (`json_parse::typed_parse`, the one decision this and assertion
+        // lowering share); making `T` a face erased it program-wide (#886).
+        if super::json_parse::typed_parse(probe, id).is_some() {
+            continue;
+        }
         let Some(target) = snapshot.node_types.get(&id).copied() else {
             continue;
         };

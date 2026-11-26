@@ -170,6 +170,42 @@ int main(void) {
     );
 }
 
+/// A typed `JSON.parse`'s errors, where node cannot be the oracle: its `as`
+/// checks nothing. The `TypeError` names the JSON path and what was expected
+/// there, invalid text is V8's `SyntaxError` before any mismatch, and a parse
+/// in a helper throws through the call to its caller's handler -- on both
+/// memory providers, reference counting under `AddressSanitizer`.
+#[test]
+fn a_typed_json_parse_names_the_path_it_mismatches() {
+    let harness = r"
+extern double report(double);
+int main(void) {
+    for (int n = 0; n < 9; n++) report(n);
+    return 0;
+}
+";
+    let expected = "parsed 1 true 1 true\n\
+        TypeError: JSON.parse as Row: $.id: expected a number, found a string\n\
+        TypeError: JSON.parse as Row: $.name: expected a string or null, found a number\n\
+        TypeError: JSON.parse as Row: $.tags[1]: expected a string, found a number\n\
+        TypeError: JSON.parse as Row: $.inner.tag[\"odd key\"]: expected a number, found a string\n\
+        TypeError: JSON.parse as Row: $.inner: missing the property \"ok\"\n\
+        TypeError: JSON.parse as Row: $: missing the property \"inner\"\n\
+        TypeError: JSON.parse as Row: $: expected an object, found an array\n\
+        SyntaxError: Expected ',' or '}' after property value in JSON at position 52 (line 1 column 53)\n";
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let Some(output) = build_and_run_with(
+            "a-json-parse-names-the-path-it-mismatches",
+            harness,
+            provider,
+        ) else {
+            return;
+        };
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
+    }
+}
+
 fn counterfeit_closure_return(program: &mut hir::Program) {
     let slot = program.erased_call_slot.expect("uniform closure slot");
     let target = program

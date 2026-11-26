@@ -105,6 +105,22 @@ pub const GTK_HEADER_NAME: &str = "nts_gtk.h";
 pub const GTK_HEADER: &str = include_str!("../../../../runtime/c/nts_gtk.h");
 pub const GTK_SOURCE_NAME: &str = "nts_gtk.c";
 pub const GTK_SOURCE: &str = include_str!("../../../../runtime/c/nts_gtk.c");
+/// A typed `JSON.parse`'s scan and reads (`nts_json_*` in the runtime
+/// header), a translation unit of its own so that only a program that parses
+/// links it -- [`reaches_json`] says which.
+pub const JSON_SOURCE_NAME: &str = "nts_json.c";
+pub const JSON_SOURCE: &str = include_str!("../../../../runtime/c/nts_json.c");
+
+/// Whether a program's emitted text parses JSON, and so links
+/// [`JSON_SOURCE`]. Asked of the text because the text is what is compiled,
+/// by every place that builds one (`Emitted::support_files`, the benchmark
+/// harness): one answer, not one per builder. `nts_json_number` is
+/// `nts_runtime.c`'s and needs nothing more.
+#[must_use]
+pub fn reaches_json(text: &str) -> bool {
+    text.contains("nts_json_tape(")
+}
+
 /// The Windows Runtime at the boundary: HSTRING, COM counts, activation.
 pub const WINRT_SOURCE_NAME: &str = "nts_winrt.c";
 pub const WINRT_SOURCE: &str = include_str!("../../../../runtime/c/nts_winrt.c");
@@ -897,6 +913,13 @@ impl Emitted {
             files.push(Support {
                 name: WINRT_SOURCE_NAME,
                 contents: WINRT_SOURCE,
+                compiled: true,
+            });
+        }
+        if reaches_json(text) {
+            files.push(Support {
+                name: JSON_SOURCE_NAME,
+                contents: JSON_SOURCE,
                 compiled: true,
             });
         }

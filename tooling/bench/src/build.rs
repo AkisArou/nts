@@ -554,7 +554,7 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
             crate::Emission {
                 renderable: false,
                 initializes: false,
-                needs_unicode: false,
+                links: crate::Links::default(),
                 refused: Some("work"),
             },
             &workload,

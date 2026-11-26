@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "offset": {
+        "min": 0,
+        "max": 2,
+        "integer": true,
+        "reason": "Each call parses all 8 prebuilt 2,000-row documents. Offsets zero, one and two exercise rotated order; no document is omitted."
+      }
+    }
+  }
+}

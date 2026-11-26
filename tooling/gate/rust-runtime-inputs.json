@@ -1942,6 +1942,14 @@
             "alternatives": [
               "../../../compiler/core/tests/programs/timers/tsconfig.json"
             ]
+          },
+          {
+            "kind": "project-choice",
+            "role": "compiled-program",
+            "path": "../../../../tests/programs/a-json-parse-names-the-path-it-mismatches/tsconfig.json",
+            "alternatives": [
+              "../../../compiler/core/tests/programs/a-json-parse-names-the-path-it-mismatches/tsconfig.json"
+            ]
           }
         ]
       }
@@ -7482,6 +7490,13 @@
     },
     {
       "source": "compiler/core/src/hir/lower/json.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/lower/json_parse.rs",
       "declarations": {
         "imports": [],
         "assets": []

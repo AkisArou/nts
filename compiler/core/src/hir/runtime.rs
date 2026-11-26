@@ -1139,7 +1139,45 @@ static SIGNATURES: &[Declared] = &[
         Some(HirType::Float { bits: 64 }),
         Raising::NoRaise,
     ),
+    (
+        "nts_json_key_index",
+        Some(&[
+            None,
+            None,
+            Some(HirType::Float { bits: 64 }),
+            None,
+            Some(HirType::Float { bits: 64 }),
+        ]),
+        Some(HirType::Float { bits: 64 }),
+        Raising::NoRaise,
+    ),
+    (
+        "nts_json_mismatch",
+        Some(&[None, None, Some(HirType::Float { bits: 64 }), None]),
+        None,
+        Raising::NoRaise,
+    ),
+    (
+        "nts_json_missing",
+        Some(&[None, None, Some(HirType::Float { bits: 64 }), None]),
+        None,
+        Raising::NoRaise,
+    ),
+    (
+        "nts_json_number",
+        Some(&[None, None, Some(HirType::Float { bits: 64 })]),
+        Some(HirType::Float { bits: 64 }),
+        Raising::NoRaise,
+    ),
     ("nts_json_quote", None, None, Raising::NoRaise),
+    (
+        "nts_json_string",
+        Some(&[None, None, Some(HirType::Float { bits: 64 })]),
+        None,
+        Raising::NoRaise,
+    ),
+    ("nts_json_syntax_message", None, None, Raising::NoRaise),
+    ("nts_json_tape", None, None, Raising::NoRaise),
     ("nts_jvm_store_append", None, None, Raising::MayRaise),
     ("nts_jvm_store_close", None, None, Raising::MayRaise),
     ("nts_jvm_store_commit", None, None, Raising::MayRaise),
@@ -3055,6 +3093,15 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         "nts_concat"
         | "nts_json_quote"
         | "nts_json_first_escape"
+        // A typed `JSON.parse`'s scan and reads: text, tape and keys read,
+        // none kept; each result is fresh or a number.
+        | "nts_json_tape"
+        | "nts_json_syntax_message"
+        | "nts_json_key_index"
+        | "nts_json_string"
+        | "nts_json_number"
+        | "nts_json_mismatch"
+        | "nts_json_missing"
         | "nts_str_concat_at"
         | "nts_str_concat_char_at"
         | "nts_str_concat_char_code"
@@ -3220,6 +3267,8 @@ pub const READS_ONLY: &[&str] = &[
     "nts_is_set",
     "nts_is_view_kind",
     "nts_json_first_escape",
+    "nts_json_key_index",
+    "nts_json_number",
     "nts_landing_detail",
     "nts_landing_thrown",
     "nts_promise_is_rejected",

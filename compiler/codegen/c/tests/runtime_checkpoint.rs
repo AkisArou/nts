@@ -885,6 +885,22 @@ fn a_json_string_is_quoted_as_text_ts_quotes_it_by_both_kernels() {
     }
 }
 
+/// A typed `JSON.parse`'s scan (`nts_json.c`): node's own `SyntaxError` text
+/// for 400 texts, every read a generated reader makes, two-byte text, and a
+/// million nested arrays, under `AddressSanitizer` and `UndefinedBehaviorSanitizer`
+/// with counted references.
+#[test]
+fn a_json_tape_is_read_as_node_reads_its_text() {
+    let report = run_suite_with(
+        "json_scan",
+        &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"],
+        &["nts_test_host.c", "nts_json.c"],
+        &[],
+    );
+    assert!(report.contains("json scan checks passed"), "{report}");
+    assert_eq!(checks(&report), 22, "{report}");
+}
+
 /// The appends that write a number, a unit or a slice into the string they
 /// extend, on five receivers -- in place with room, a grown copy, shared, hashed
 /// by a lookup, a table's key -- their non-consuming twins, which write none of

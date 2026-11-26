@@ -8535,6 +8535,35 @@ NtsString *nts_encode_uri(const NtsString *s, double component) {
   return built;
 }
 
+/* A number a JSON tape holds (`nts_json.c`), as `JSON.parse` reads it: the
+ * span the scan admitted is JSON's grammar, a subset of ffc's general one, so
+ * its answer is the nearest double -- `-0` and `1e400` (Infinity) included.
+ * Here rather than beside the scan because ffc is this file's. */
+double nts_json_number(const NtsString *s, const NtsArray *tape, double at) {
+  const double *items = NTS_ITEMS(tape, const double);
+  const uint32_t entry = (uint32_t)at;
+  const uint32_t start = (uint32_t)items[entry + 1];
+  const uint32_t length = (uint32_t)items[entry + 2] - start;
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    return nts_decimal_value(NTS_ELEMENTS(s, const char) + start, length);
+  }
+  char stack[64];
+  char *text = length <= sizeof stack ? stack : (char *)malloc(length);
+  if (!text) {
+    fprintf(stderr, NTS_REFUSED "out of memory reading a JSON number\n");
+    abort();
+  }
+  const uint16_t *units = NTS_ELEMENTS(s, const uint16_t) + start;
+  for (uint32_t i = 0; i < length; i++) {
+    text[i] = (char)units[i];
+  }
+  const double value = nts_decimal_value(text, length);
+  if (text != stack) {
+    free(text);
+  }
+  return value;
+}
+
 double nts_parse_float(const NtsString *s) {
   if (!s) {
     return (double)NAN;

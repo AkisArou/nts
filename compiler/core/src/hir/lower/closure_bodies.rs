@@ -367,6 +367,7 @@ pub(super) fn lower_wanted_closures(
     lower_conversions(layout_collector, snapshot, shared, lowered, wanted);
     lower_reject_error(layout_collector, snapshot, shared, lowered, wanted);
     json::lower_writers(layout_collector, snapshot, shared, lowered, wanted);
+    super::json_parse::lower_readers(layout_collector, snapshot, shared, lowered, wanted);
     super::array_sort::lower_helpers(layout_collector, snapshot, shared, lowered, wanted);
 }
 
