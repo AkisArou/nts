@@ -56,7 +56,9 @@ function describe(document: Document): string {
 }
 
 // A document's text, written out by hand: nested objects, arrays of objects
-// and of strings, nulls and numbers of every shape.
+// and of strings, nulls and numbers of every shape. A ratio JSON cannot spell
+// (`NaN`, `Infinity`) is written as one it can, so every case compares a
+// document rather than the text's own `SyntaxError`.
 function textOf(n: number): string {
   let rows = "";
   for (let i = 0; i < pick(n, 4); i++) {
@@ -68,7 +70,7 @@ function textOf(n: number): string {
       ',"score":' + score + ',"tags":' + tags + ',"tag":' + tag + "}";
   }
   return '{"rows":[' + rows + '],"count":' + pick(n, 4) + ',"missing":null,"nested":{"ok":' + (n > 2) +
-    ',"ratio":' + String(n / 3) + "}}";
+    ',"ratio":' + String(Number.isFinite(n) ? n / 3 : -0.5) + "}}";
 }
 
 // Nested objects and arrays, read into their layouts.

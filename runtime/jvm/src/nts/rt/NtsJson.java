@@ -113,12 +113,13 @@ public final class NtsJson {
         private static final int KEY = 1;
         private static final int AFTER = 2;
 
-        final String text;
+        /** The text's units, copied once into this thread's buffer: the first {@code n}. */
+        final char[] units;
         final int n;
-        double[] items = new double[64];
+        double[] items;
         int length = HEAD;
         /** Each open container as two ints: its entry, then its count so far. */
-        int[] open = new int[32];
+        int[] open;
         int depth;
         int problem;
         int at;
@@ -126,9 +127,13 @@ public final class NtsJson {
         int close;
         boolean escaped;
 
-        Scan(String text) {
-            this.text = text;
+        Scan(String text, Buffers buffers) {
             this.n = text.length();
+            if (buffers.units.length < n) { buffers.units = new char[Math.max(n, 2 * buffers.units.length)]; }
+            text.getChars(0, n, buffers.units, 0);
+            this.units = buffers.units;
+            this.items = buffers.items;
+            this.open = buffers.open;
         }
 
         boolean fail(int problem, int at) {
@@ -138,7 +143,7 @@ public final class NtsJson {
         }
 
         int unit(int i) {
-            return i < n ? text.charAt(i) : NONE;
+            return i < n ? units[i] : NONE;
         }
 
         int entry(int kind, double a, double b) {
@@ -154,7 +159,7 @@ public final class NtsJson {
         /** JSON's whitespace, and nothing else: not U+FEFF, not U+00A0. */
         int space(int c) {
             while (c < n) {
-                char unit = text.charAt(c);
+                char unit = units[c];
                 if (unit != ' ' && unit != '\t' && unit != '\n' && unit != '\r') { break; }
                 c++;
             }
@@ -166,7 +171,7 @@ public final class NtsJson {
             escaped = false;
             for (;;) {
                 if (c >= n) { fail(UNTERMINATED_STRING, n); return -1; }
-                char unit = text.charAt(c);
+                char unit = units[c];
                 if (unit == '"') {
                     close = c;
                     return c + 1;
@@ -175,14 +180,14 @@ public final class NtsJson {
                     escaped = true;
                     c++;
                     if (c >= n) { fail(END, c); return -1; }
-                    char escape = text.charAt(c);
+                    char escape = units[c];
                     switch (escape) {
                         case '"': case '\\': case '/': case 'b': case 'f': case 'n': case 'r': case 't':
                             break;
                         case 'u':
                             for (int digit = 0; digit < 4; digit++) {
                                 c++;
-                                if (c >= n || hex(text.charAt(c)) < 0) { fail(UNICODE_ESCAPE, c); return -1; }
+                                if (c >= n || hex(units[c]) < 0) { fail(UNICODE_ESCAPE, c); return -1; }
                             }
                             break;
                         default:
@@ -215,13 +220,13 @@ public final class NtsJson {
                 }
             } else {
                 int first = c;
-                while (c < n && digit(text.charAt(c))) { c++; }
+                while (c < n && digit(units[c])) { c++; }
                 if (c == first) { fail(MINUS, c); return -1; }
             }
             if (unit(c) == '.') {
                 c++;
                 if (!digit(unit(c))) { fail(FRACTION, c); return -1; }
-                while (c < n && digit(text.charAt(c))) { c++; }
+                while (c < n && digit(units[c])) { c++; }
             }
             int e = unit(c);
             if (e == 'e' || e == 'E') {
@@ -229,7 +234,7 @@ public final class NtsJson {
                 int sign = unit(c);
                 if (sign == '-' || sign == '+') { c++; }
                 if (!digit(unit(c))) { fail(EXPONENT, c); return -1; }
-                while (c < n && digit(text.charAt(c))) { c++; }
+                while (c < n && digit(units[c])) { c++; }
             }
             return c;
         }
@@ -238,7 +243,7 @@ public final class NtsJson {
         int literal(int c, String word) {
             for (int i = 1; i < word.length(); i++) {
                 if (c + i >= n) { fail(END, n); return -1; }
-                if (text.charAt(c + i) != word.charAt(i)) { fail(TOKEN, c + i); return -1; }
+                if (units[c + i] != word.charAt(i)) { fail(TOKEN, c + i); return -1; }
             }
             return c + word.length();
         }
@@ -259,7 +264,7 @@ public final class NtsJson {
                 if (state == VALUE) {
                     c = space(c);
                     if (c >= n) { return fail(END, c); }
-                    char unit = text.charAt(c);
+                    char unit = units[c];
                     switch (unit) {
                         case '"': {
                             int start = c + 1;
@@ -290,7 +295,7 @@ public final class NtsJson {
                             boolean object = unit == '{';
                             int entry = entry(object ? OBJECT : ARRAY, 0.0, 0.0);
                             c = space(c + 1);
-                            if (c < n && text.charAt(c) == (object ? '}' : ']')) {
+                            if (c < n && units[c] == (object ? '}' : ']')) {
                                 c++;
                                 items[entry + 1] = length;
                                 state = AFTER;
@@ -308,13 +313,13 @@ public final class NtsJson {
                     }
                 } else if (state == KEY) {
                     c = space(c);
-                    if (c >= n || text.charAt(c) != '"') { return fail(firstKey, c); }
+                    if (c >= n || units[c] != '"') { return fail(firstKey, c); }
                     int start = c + 1;
                     c = string(start);
                     if (c < 0) { return false; }
                     entry(STRING, escaped ? -1.0 - start : start, close);
                     c = space(c);
-                    if (c >= n || text.charAt(c) != ':') { return fail(COLON, c); }
+                    if (c >= n || units[c] != ':') { return fail(COLON, c); }
                     c++;
                     state = VALUE;
                 } else {
@@ -323,7 +328,7 @@ public final class NtsJson {
                     int top = 2 * (depth - 1);
                     int entry = open[top];
                     boolean object = items[entry] == OBJECT;
-                    int unit = c < n ? text.charAt(c) : 0;
+                    int unit = c < n ? units[c] : 0;
                     if (unit == ',') {
                         c++;
                         open[top + 1]++;
@@ -346,12 +351,42 @@ public final class NtsJson {
         }
     }
 
+    /**
+     * The scan's text, growing tape and stack, kept by each thread from one
+     * parse to the next. The text's units are copied in once, since a
+     * {@code char[]} is read faster than {@code String.charAt}, which tests the
+     * string's coder at every unit; a tape is written into one and copied out
+     * once at its length. So a program that parses many documents grows these
+     * once, not once a document. One past {@link #RETAINED} entries is used
+     * and dropped rather than kept.
+     */
+    private static final class Buffers {
+        char[] units = new char[64];
+        double[] items = new double[64];
+        int[] open = new int[32];
+    }
+
+    /** The most entries (8 MiB of doubles) a thread keeps between parses. */
+    private static final int RETAINED = 1 << 20;
+
+    private static final ThreadLocal<Buffers> BUFFERS = new ThreadLocal<Buffers>() {
+        @Override protected Buffers initialValue() { return new Buffers(); }
+    };
+
     /** {@code text} checked whole and indexed, as the class comment lays the tape out. */
     public static double[] tape(String text) {
-        Scan scan = new Scan(text);
-        if (scan.run()) {
+        Buffers buffers = BUFFERS.get();
+        Scan scan = new Scan(text, buffers);
+        boolean valid = scan.run();
+        if (scan.items.length <= RETAINED) { buffers.items = scan.items; }
+        if (scan.open.length <= RETAINED) { buffers.open = scan.open; }
+        if (buffers.units.length > RETAINED) { buffers.units = new char[64]; }
+        if (valid) {
             double[] out = Arrays.copyOf(scan.items, scan.length);
             out[0] = 1.0;
+            out[1] = 0.0;
+            out[2] = 0.0;
+            out[3] = 0.0;
             return out;
         }
         double[] out = new double[HEAD];
