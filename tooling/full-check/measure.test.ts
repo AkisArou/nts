@@ -144,20 +144,33 @@ test("a run of sleeping processes is held at its stall bound, with the bound and
 });
 
 // A run whose one command asks for a 1 GiB temporary through the one disk
-// wait owner, on a fixture disk of `freeGiB`; the floor is 40 GiB.
+// wait owner, on a fixture disk of `freeGiB`; the floor is 40 GiB. Its clock
+// is the fixture's: the waiter's startup, however slowly a loaded machine
+// brings it up, spends nothing of the stall bound, which counts only time the
+// fixture moves after the waiter's own report. The bound is longer than one
+// tick: the measurement samples every second, so at most the first tick after
+// the report precedes the sample that sees the wait, and every later one is
+// stall the wait takes. No raw timing site is added:
+// the one remaining bound is the unit's RuntimeMaxSec, a runaway backstop
+// whose expiry is a failure, never a pass -- as for a run that waited for disk
+// without reporting it, which would stand there until the backstop.
 function diskWaiter(t:{after(fn:()=>void|Promise<void>):void},name:string,freeGiB:number){
-  return measured(t,name,{stall:2},run=>[process.execPath,"--input-type=module","-e",`import {TemporaryAdmission} from ${JSON.stringify(new URL("../gate/admission.ts",import.meta.url).href)};
+  return measured(t,name,{stall:8},run=>[process.execPath,"--input-type=module","-e",`import {TemporaryAdmission} from ${JSON.stringify(new URL("../gate/admission.ts",import.meta.url).href)};
 const admission=new TemporaryAdmission({path:${JSON.stringify(join(run,"capture"))},context:{kind:"standalone"},reservedBytes:2**30});
-const {lease}=await admission.acquire({what:"fixture capture"});lease.release();`],{freeDiskBytes:freeGiB*GiB});
+const {lease}=await admission.acquire({what:"fixture capture"});lease.release();`],{freeDiskBytes:freeGiB*GiB,ownedClock:true});
 }
 
-test("a run whose temporary waits for disk is held at its stall bound, and its reason names the wait and what holds the disk",t=>{
+test("a run whose temporary waits for disk is held at its stall bound, and its reason names the wait and what holds the disk",async t=>{
   const m=diskWaiter(t,"disk-wait",40.5);
-  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
-  assert.equal(result.status,124,result.stdout+result.stderr);
-  assert.match(result.stdout+result.stderr,/disk: fixture capture waits for 1\.0 GiB of disk above the 40\.0 GiB floor: 40\.5 GiB free/,"the waiter reports its wait");
+  m.start();
+  // The admission records its wait before it reports it (admission.ts).
+  await waitFor("the waiter to report its disk wait",()=>/disk: fixture capture waits for 1\.0 GiB of disk above the 40\.0 GiB floor: 40\.5 GiB free/.test(m.output()),{stopped:m.stopped});
+  assert.equal(m.progress()?.wall_s??0,0,"no tick lands before the wait is reported");
+  // Only now does the run's clock move: each tick is time it waits for disk.
+  for(let ticks=0;!m.progress()?.held;ticks++){assert.ok(ticks<6,`held within six ticks: ${JSON.stringify(m.progress())}`);await tick(m);}
+  assert.equal(await m.status(),124,m.output());
   const held=readFileSync(join(m.run,MEASUREMENT_HOLD),"utf8").trim();
-  assert.match(held,/^full check run made no progress outside waits for its stall bound of 2 s: in \d+ s it ran [\d.]+ cpu-s, lost \d+ s to higher-ranked CPU work and stalled \d+ s; \d+ s of its stall waiting for disk: fixture capture waits for 1\.0 GiB of disk above the 40\.0 GiB floor: 40\.5 GiB free, 0\.0 GiB promised to builds, 0\.0 GiB to temporaries$/,"a disk wait is named, never excused");
+  assert.match(held,/^full check run made no progress outside waits for its stall bound of 8 s: in \d+ s it ran [\d.]+ cpu-s, lost \d+ s to higher-ranked CPU work and stalled \d+ s; \d+ s of its stall waiting for disk: fixture capture waits for 1\.0 GiB of disk above the 40\.0 GiB floor: 40\.5 GiB free, 0\.0 GiB promised to builds, 0\.0 GiB to temporaries$/,"a disk wait is named, never excused");
   const progress=m.progress()!;
   assert.equal(progress.held,held);
   assert.ok((progress.disk_stalled_s??0)>0,JSON.stringify(progress));
@@ -165,11 +178,13 @@ test("a run whose temporary waits for disk is held at its stall bound, and its r
   assert.equal(progress.waited_s.memory??0,0,"a disk wait spends the stall bound");
 });
 
-test("a run whose temporary has its disk is admitted at once, with no disk wait and no hold",t=>{
+test("a run whose temporary has its disk is admitted at once, with no disk wait and no hold",async t=>{
   const m=diskWaiter(t,"disk-free",60);
-  const result=spawnTest("systemd-run",m.args,{encoding:"utf8"});
-  assert.equal(result.status,0,result.stdout+result.stderr);
-  assert.doesNotMatch(result.stdout+result.stderr,/disk: /,"free disk reports nothing");
+  m.start();
+  // The clock never moves: the run ends on its own, or its admission reports a wait.
+  await waitFor("the run to end or its admission to report a disk wait",()=>m.stopped()!==undefined||/disk: /.test(m.output()));
+  assert.doesNotMatch(m.output(),/disk: /,"free disk reports nothing");
+  assert.equal(await m.status(),0,m.output());
   assert.equal(existsSync(join(m.run,MEASUREMENT_HOLD)),false);
   const progress=m.progress()!;
   assert.deepEqual([progress.disk,progress.disk_stalled_s,progress.held],[null,0,null]);
