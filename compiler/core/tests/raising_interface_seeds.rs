@@ -4,7 +4,7 @@
 use super::scratch;
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Callee, Memory, OpKind, Program};
+use nts_core::hir::{self, Callee, HirType, ManagedType, Memory, OpKind, Program};
 use nts_frontend_ts::Frontend;
 
 fn prepared(fixture: &str, provider: Memory) -> Program {
@@ -234,40 +234,62 @@ fn interface_closure(implementation: &str) -> Program {
 }
 
 #[test]
-fn an_uncarryable_interface_call_refuses_its_raising_entries_by_name() {
-    let program = raw_program(
-        r"
-        interface Unlisted { run(): number; }
-        function attempt(f: () => number): number {
-            try { return f(); } catch { return -1; }
-        }
-        export function probe(receiver: Unlisted): number {
-            return attempt(() => receiver.run());
-        }
-    ",
-    );
-    let body = "Closure0#call@raises";
-    let entry = "Closure0#erased_call@raises";
-    for name in [body, entry] {
+fn a_refused_raising_build_keeps_the_ordinary_closure_store() {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
+        let program = prepared(
+            "tests/outcomes/a-refused-raising-copy-cuts-an-ordinary-closure-store",
+            provider,
+        );
+        let closure = program
+            .layouts
+            .iter()
+            .find(|layout| layout.name == "Closure1")
+            .expect("the setOrder function value keeps its ordinary layout");
         assert!(
             program
-                .refused_bodies()
-                .any(|refusal| { refusal.name == name && refusal.reason.contains("run") }),
-            "{name}: {:?}",
-            program.uncompiled
+                .funcs
+                .iter()
+                .any(|func| func.name == "Closure1#call")
         );
-        assert!(!program.funcs.iter().any(|func| func.name == name));
+        let raising = program
+            .funcs
+            .iter()
+            .find(|func| func.name == "Closure1#erased_call@raises")
+            .expect("an unavailable raising entry keeps its own guard");
+        assert!(raising.values.iter().any(|op| matches!(
+            &op.kind,
+            OpKind::Call { callee: Callee::External(name), .. } if name == "nts_refused"
+        )));
+        let init = program
+            .funcs
+            .iter()
+            .find(|func| func.name == "module#init")
+            .expect("module evaluation remains compiled");
+        let static_value = init
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .copied()
+            .find(|value| {
+                let op = &init.values[value.0 as usize];
+                matches!(op.kind, OpKind::ClosureStatic)
+                    && matches!(
+                        &op.ty,
+                        HirType::Managed(ManagedType::Object(ty)) if closure.types.contains(ty)
+                    )
+            })
+            .expect("preparation preserves the ordinary static closure value");
+        assert!(
+            init.blocks
+                .iter()
+                .flat_map(|block| &block.ops)
+                .any(|value| matches!(
+                    init.values[value.0 as usize].kind,
+                    OpKind::FieldSet { value, .. } if value == static_value
+                )),
+            "the live api.setOrder field must still receive its closure value"
+        );
     }
-    for name in ["Closure0#call", "Closure0#erased_call"] {
-        assert!(program.funcs.iter().any(|func| func.name == name));
-    }
-    let slot = program.raising_call_slot.expect("the gate is on") as usize;
-    let closure = program
-        .layouts
-        .iter()
-        .find(|layout| layout.name == "Closure0")
-        .expect("the ordinary closure keeps its layout");
-    assert_eq!(closure.methods[slot].as_deref(), Some(entry));
 }
 
 #[test]

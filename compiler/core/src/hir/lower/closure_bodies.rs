@@ -1,7 +1,7 @@
 //! Emit wanted closure bodies and raising copies, with the generated ABI names and input setup they use.
 
 use super::{
-    Arrivals, Callee, ClassCopy, ClosureInfo, ClosureSource, Copy, Diagnostic, Facts, Func,
+    Absent, Arrivals, Callee, ClassCopy, ClosureInfo, ClosureSource, Copy, Diagnostic, Facts, Func,
     FuncBuilder, HirType, Layout, LayoutCollector, Lowered, LoweringSnapshot, ManagedType, NodeId,
     OpKind, Origin, Param, ParamShape, ParameterNames, RAISING_SUFFIX, Shared, Terminator, TypeId,
     ValueId, closure_index, closure_result_absent, erased_call, generic_values, json,
@@ -112,9 +112,9 @@ pub(super) fn erased_call_name(index: usize) -> String {
 ///
 /// `RAISING_SUFFIX` is the one a plain function's raising copy already carries, so
 /// the two kinds of copy are recognisable by one string rather than by two.
-fn raising_closure_names(index: usize, reads_this: bool) -> (String, String) {
+fn raising_closure_names(index: usize) -> (String, String) {
     (
-        format!("{}{RAISING_SUFFIX}", closure_body_name(index, reads_this)),
+        format!("Closure{index}#call{RAISING_SUFFIX}"),
         format!("Closure{index}#erased_call{RAISING_SUFFIX}"),
     )
 }
@@ -281,7 +281,7 @@ pub(super) fn lower_wanted_closures(
                 // abort shells and thousands of `@raises` bodies across the corpora
                 // for a slot no call reaches. See `what_holds_the_gate_off`.
                 lowered.program.funcs.push(func);
-                let produced = raising_closure(
+                let (raising, layouts) = raising_closure(
                     snapshot,
                     foreign,
                     shared,
@@ -295,24 +295,6 @@ pub(super) fn lower_wanted_closures(
                         arrivals: &mut lowered.arrivals,
                     },
                 );
-                let (raising, layouts) = match produced {
-                    Ok(produced) => produced,
-                    Err(diagnostic) => {
-                        let (body, entry) =
-                            raising_closure_names(index, closures[index].reads_this);
-                        for name in [body, entry] {
-                            lowered
-                                .program
-                                .uncompiled
-                                .push(crate::hir::Uncompiled::refused(
-                                    name,
-                                    diagnostic.message.clone(),
-                                ));
-                        }
-                        lowered.diagnostics.push(diagnostic);
-                        (Vec::new(), Vec::new())
-                    }
-                };
                 layout_collector.collect(&mut lowered.program, layouts);
                 // **Pushed before the ordinary body, as they always were.** The
                 // raising entry is built with the body last in `kernels`, and
@@ -413,7 +395,8 @@ struct ClosureOutput<'a> {
     arrivals: &'a mut Arrivals,
 }
 
-/// The raising variant of one closure and its entry, or the carrying diagnostic.
+/// The raising variant of one closure, and the entry that names it -- or the entry
+/// that aborts by name where there cannot be one.
 ///
 /// **Three outcomes, and they are why this is its own function.**
 ///
@@ -424,13 +407,26 @@ struct ClosureOutput<'a> {
 ///   the same program      nothing. `declare_raising_entries` then names the
 ///                         *ordinary* entry in the raising slot, because a body with
 ///                         nothing to raise cannot end anything.
-///   refused               the original diagnostic. The caller records named
-///                         refusals for the raising body and its erased entry,
-///                         emitting neither. The ordinary closure stays intact.
+///   refused               the entry that aborts by name.
+///                         `FuncBuilder::a_raising_body_carries_this_call` is what
+///                         refuses -- a body calling something whose own `throw`
+///                         cannot be carried.
 ///
-/// `declare_raising_entries` reads those recorded refusals. Absence alone cannot
-/// distinguish a quiet body from a refused raising build: using the ordinary
-/// entry for the latter would lose a throw.
+/// There was a fourth, "a return with no zero", for a body answering a `bigint`
+/// or a native pointer: its raising path had nothing to return. It does --
+/// [`FuncBuilder::raised_return`] gained both arms on 2026-10-03 -- and the
+/// predicate that refused them kept refusing, so a handle-returning closure
+/// called inside a `try` compiled to an aborting entry
+/// (`blockers/a-raising-handle-returning-closure-called-as-void`).
+///
+/// **The abort rather than an unfilled slot**, because the slot is filled in
+/// `declare_raising_entries` and the body is produced here: a hole would leave a
+/// table naming nothing at a site that compiled. Measured at **0 reachable entries**
+/// across all 29 runtime corpora, which is `refuses_to_cross`' standing exactly.
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep raising-copy comparison and its entry together"
+)]
 fn raising_closure(
     snapshot: &LoweringSnapshot<'_>,
     foreign: &crate::hir::runtime::ForeignTable,
@@ -439,7 +435,7 @@ fn raising_closure(
     index: usize,
     copy: Copy,
     output: ClosureOutput<'_>,
-) -> Result<(Vec<Func>, Vec<Layout>), Diagnostic> {
+) -> (Vec<Func>, Vec<Layout>) {
     let ClosureOutput {
         kernels,
         inputs,
@@ -454,11 +450,31 @@ fn raising_closure(
         || shared.hierarchy.raising_call_slot.is_none()
         || closures[index].source.only_the_runtime_calls()
     {
-        return Ok((Vec::new(), Vec::new()));
+        return (Vec::new(), Vec::new());
     }
+    let (raising_body, raising_entry) = raising_closure_names(index);
+    // Only the raising entry calls this body, so one that takes the call's
+    // `this` keeps it, under its own name, and needs no wrapper.
     let takes_this = closures[index].reads_this;
-    let (raising_body, raising_entry) = raising_closure_names(index, takes_this);
+    let raising_body = if takes_this {
+        format!("{}{RAISING_SUFFIX}", receiving_call_name(index))
+    } else {
+        raising_body
+    };
     let arity = shared.hierarchy.erased_call_arity;
+    let abort = |because: String| {
+        erased_call(
+            raising_entry.clone(),
+            func,
+            arity,
+            Some(&because),
+            Absent::Impossible,
+            takes_this,
+            None,
+        )
+        .into_iter()
+        .collect::<Vec<Func>>()
+    };
     let mut second = shared.builder(snapshot, foreign, copy.clone());
     second.retyped_symbols = closure_aliases(snapshot, closures, index);
     let made = generic_values::lower(
@@ -471,7 +487,7 @@ fn raising_closure(
     .or_else(|| second.lower_made_closure(index, &closures[index]));
     match made.unwrap_or_else(|| second.lower_closure(index, &closures[index])) {
         Ok(raising) if the_same_program(func, &raising) && !inputs.binds_defaults => {
-            Ok((Vec::new(), Vec::new()))
+            (Vec::new(), Vec::new())
         }
         // **With the layouts its builder made**, which are not the ordinary
         // body's: a non-null assertion throws a `TypeError` here where the
@@ -526,14 +542,21 @@ fn raising_closure(
             if let Some(entry) = entry {
                 layouts.extend(entry.layouts.into_layouts());
             }
-            Ok((produced, layouts))
+            (produced, layouts)
         }
         // A raising build needs the dispatch families of every offered closure
         // body, including calls through bodyless interface signatures. Naming
         // publishes those calls to `raising_member_slots`; the carrying check
         // must remain strict if that prerequisite or another lowering rule fails.
         // Its diagnostics describe this second build, not another source body.
-        Err(diagnostic) => Err(diagnostic),
+        Err(_) => (
+            abort(format!(
+                "calling `{}` from inside a `try`, whose raising copy this compiler could \
+                 not build",
+                func.name
+            )),
+            Vec::new(),
+        ),
     }
 }
 
