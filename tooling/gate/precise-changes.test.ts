@@ -22,7 +22,7 @@ test("documentation and notebook records owe only declared tree checks", () => {
   }
   // A new top-level entry changes the repository root's listing, which the
   // bench tests' comparators read: it owes them whatever it holds.
-  assert.ok(owed([{ path: "NOTICE.md", added: true }]).some(row => row.name === "directory membership read by tooling/bench/tests/integration.rs" && row.steps.includes("tests")));
+  assert.ok(owed([{ path: "NOTICE.md", added: true }]).some(row => row.name === "directory membership read by tooling/bench/tests/integration.rs" && (row.steps as readonly string[]).includes("tests")));
 });
 
 test("classification prose owes audit without record replay, class/match edits owe records", () => {

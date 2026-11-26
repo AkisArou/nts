@@ -2301,7 +2301,7 @@ export function owed(changes,options) {
  * but the every-change policy. A rule owing the full gate counts, since it owes
  * every step. A stale installation catalog owes every Rust target whatever
  * changed, so it answers nothing about reach and is refused by name.
- * @param {{path:string,added?:boolean,deleted?:boolean,sameMode?:boolean,least?:boolean}[]} changes
+ * @param {readonly {path:string,added?:boolean,deleted?:boolean,sameMode?:boolean,least?:boolean}[]} changes
  * @param {string} step
  * @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options]
  */
