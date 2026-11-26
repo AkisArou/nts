@@ -99,6 +99,12 @@ test('a listed directory is reached only when adding and removing its entries ow
   const deep=trackedFrom(['cases/a/case.ts','cases/a/expect.txt'],none);
   const whole:TestReach=changes=>changes.some(change=>change.added)||changes.filter(change=>change.deleted).length===2?['the entry is gone']:[];
   assert.deepEqual(decide([{...candidate('cases',['enumeration']),tracked:deep.kind('cases')}],deep,whole).missed,[]);
+  // One file's deletion that owes answers for its entry: the whole set, which
+  // can only owe more, is never asked.
+  const asked:number[]=[];
+  const single:TestReach=changes=>{asked.push(changes.length);return changes.some(change=>change.added)||changes.some(change=>change.deleted&&change.path==='cases/a/case.ts')?['a declared file']:[];};
+  assert.deepEqual(decide([{...candidate('cases',['enumeration']),tracked:deep.kind('cases')}],deep,single).missed,[]);
+  assert.deepEqual(asked,[1,1],'the probe, then one deletion');
   const stat=decide([candidate('cases',['metadata:stat'])],tracked,owing);
   assert.deepEqual(stat.reached.map(gap=>[gap.path,gap.via]),[['cases','cases/a/case.ts']]);
   assert.deepEqual(decide([candidate('cases/b',['metadata:stat'])],tracked,owing).missed.map(gap=>gap.path),['cases/b']);

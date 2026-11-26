@@ -170,9 +170,16 @@ export function decide(candidates:readonly CoverageCandidate[],tracked:TrackedPa
     return memo.get(key)!;
   };
   // Removing an entry deletes every tracked file under it, in one commit.
+  // Over deletions alone, what owed.mjs's owed() owes only grows with the
+  // set: it adds rules per change and never withdraws one, and a membership
+  // it reads (reader-metadata.ts) changes once a child's count reaches
+  // zero, which more deletions cannot undo. So one file's deletion that owes
+  // answers for the entry, and only an entry none of whose first file's
+  // deletion owes is asked whole (the `whole` control in its test).
+  const deleting=(path:string)=>reach([{path,added:false,deleted:true}])[0]??null;
   const removing=(entry:string,files:readonly string[])=>{
     const key='remove:'+entry;
-    if(!memo.has(key))memo.set(key,reach(files.map(path=>({path,added:false,deleted:true})))[0]??null);
+    if(!memo.has(key))memo.set(key,(files.length>1?deleting(files[0]!):null)??(reach(files.map(path=>({path,added:false,deleted:true})))[0]??null));
     return memo.get(key)!;
   };
   const missed:CoverageDecision[]=[],reached:CoverageDecision[]=[],untracked:UntrackedCandidate[]=[];
