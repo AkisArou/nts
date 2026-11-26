@@ -65,6 +65,29 @@ the declared root walk-ups), 2,729 ignored, 5,139 absent inside ignored
 namespaces and 19 absent directories crossed toward another lookup. The
 capture was removed when the step ended.
 
+## What the trace covers
+
+- **Descendants.** The observer is the tests' child subreaper, and its seccomp
+  filter is inherited across `fork` and `exec`, so every process a test starts
+  is traced, orphans included, until it exits. The traced run saw a `node`
+  child of a `tooling/bench` test `access()` `docs/primitives.md`.
+- **Directory listings.** `getdents`/`getdents64` are directory operations.
+  Selection is asked whether adding a child owes the tests. This caught
+  `benchmarks/` above: it was listed, but adding to it owed nothing.
+- **Failed lookups.** An `ENOENT` attempt is kept. Selection is asked whether
+  adding the absent path owes the tests: 51 of 3,638 did not, before their
+  declarations were added.
+- **The ignored namespace** is the tracked `.gitignore` files' positive
+  patterns alone. The shared repository's `info/exclude` holds 11 host rules
+  (`/third_party/node-source/` and `.claude` state), and the user's excludes
+  file is set too. Neither may widen what is reported rather than owed.
+  Checked under only the committed rules, every one of the 5,139 absent-ignored
+  candidates (1,115 distinct paths) is still ignored by a tracked `.gitignore`
+  (path list `~/.cache/nts-scratch/761/absent-ignored-v1.txt`, SHA-256 `fe041c7dbbb11cabfed56c108c759f1d39522ab5582fc04d89895f6092e115b8`).
+- **Conditional reads.** A trace sees only the reads its run makes. A read
+  taken only under another environment, host, OS or toolchain is unseen until
+  a wide run makes it, and is red at that first run.
+
 ## The step's disk
 
 The capture lives in the run's registered temporary under `~/.cache`, never

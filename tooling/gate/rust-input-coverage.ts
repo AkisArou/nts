@@ -15,8 +15,9 @@
 // directory when some tracked file beneath it does, and the lookup of an absent
 // path when a commit adds it. Exit 0: every candidate is reached. Exit 1: the
 // missed paths are named. Present untracked bytes (installed packages, output
-// the validator could not attribute) and absent paths in an ignored namespace
-// are reported beside them: no commit changes them, so they cannot be owed.
+// the validator could not attribute) and absent paths the commit's own tracked
+// .gitignore rules ignore are reported beside them: no commit changes them, so
+// they cannot be owed. A host's own excludes never widen that namespace.
 // The second form decides again from the validation reports of an earlier run.
 import {readFileSync,readdirSync,existsSync,mkdirSync,lstatSync} from 'node:fs';
 import {dirname,join,relative,isAbsolute,sep} from 'node:path';
@@ -43,7 +44,7 @@ export type CoverageCandidate={path:string;tracked:'file'|'directory'|null;kind:
 export type CoverageDecision=CoverageCandidate&{reachedBy:string|null;via:string|null};
 export type CaptureReport={file:string;target:string|null;repositoryCoverage:string;counts:Record<string,number>};
 /** An untracked candidate: generated or stray bytes in the tree, a lookup of
- * an absent path inside an ignored namespace, or an absent directory crossed
+ * an absent path the commit's own .gitignore rules ignore, or an absent directory crossed
  * on the way to another path. None is a commit's input. */
 export type UntrackedCandidate=CoverageCandidate&{state:'ignored'|'untracked'|'absent-ignored'|'absent-component'};
 export type CoverageResult={missed:CoverageDecision[];reached:CoverageDecision[];untracked:UntrackedCandidate[];captures:CaptureReport[]};
@@ -62,16 +63,39 @@ export const MEMBERSHIP_PROBE='nts-rust-input-coverage-probe';
 
 /** Tracked files, and the directories that hold one: a commit's inputs. */
 export function trackedPaths(root:string):TrackedPaths{
-  return trackedFrom(git(root,['ls-files','-z']).split('\0').filter(Boolean),{
+  const list=git(root,['ls-files','-z']).split('\0').filter(Boolean);
+  return trackedFrom(list,{
     present:path=>{try{lstatSync(join(root,path));return true;}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT'||(error as NodeJS.ErrnoException).code==='ENOTDIR')return false;throw error;}},
     ignored:paths=>{
       if(!paths.length)return new Set();
-      // check-ignore exits 1 when no path is ignored; that is an answer.
-      const result=infrastructureProbe({purpose:'Rust input coverage check-ignore',command:'git',args:gitArguments(['check-ignore','--no-index','-z','--stdin']),cwd:root,
+      // Every path is answered with the pattern that decided it; check-ignore
+      // exits 1 when none is ignored, which is an answer too.
+      const result=infrastructureProbe({purpose:'Rust input coverage check-ignore',command:'git',
+        args:gitArguments(['-c','core.excludesFile=/dev/null','check-ignore','--no-index','--verbose','--non-matching','-z','--stdin']),cwd:root,
         input:paths.join('\0')+'\0',maxBuffer:1<<28,exits:'classify'});
       if(result.status!==0&&result.status!==1)throw Error('Rust input coverage: git check-ignore exited '+result.status+': '+result.stderr);
-      return new Set(result.stdout.split('\0').filter(Boolean));
+      return committedIgnores(result.stdout,new Set(list));
     }});
+}
+
+/**
+ * The paths of `check-ignore --verbose --non-matching -z` output that the
+ * commit's own rules ignore: the deciding pattern is a positive one in a
+ * tracked `.gitignore`. Rules outside the commit (the repository's
+ * `info/exclude`, a user's excludes file) are this host's, so a path only they
+ * ignore is one a commit can still add, and it stays owed.
+ */
+export function committedIgnores(output:string,tracked:ReadonlySet<string>):Set<string>{
+  const fields=output.split('\0');
+  if(fields.at(-1)!=='')throw Error('Rust input coverage: unterminated check-ignore output');
+  fields.pop();
+  if(fields.length%4)throw Error('Rust input coverage: check-ignore output is not source, line, pattern, path records');
+  const ignored=new Set<string>();
+  for(let at=0;at<fields.length;at+=4){
+    const [source,,pattern,path]=fields.slice(at,at+4) as [string,string,string,string];
+    if(source&&(source==='.gitignore'||source.endsWith('/.gitignore'))&&tracked.has(source)&&!pattern.startsWith('!'))ignored.add(path);
+  }
+  return ignored;
 }
 export function trackedFrom(list:readonly string[],untracked:Pick<TrackedPaths,'present'|'ignored'>):TrackedPaths{
   const files=new Set(list),directories=new Map<string,string[]>();

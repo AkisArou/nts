@@ -8,7 +8,9 @@ import type {FileObserverReceipt} from './file-input-observer.ts';
 import type {InputSnapshot} from './module-closure.ts';
 import {publishInputTrace} from './rust-test-inputs.ts';
 import {testScratch} from './test-scratch.ts';
-import {coverageOfCaptures,coverageOfReports,decide,describeCoverage,trackedFrom,MEMBERSHIP_PROBE,type TestReach} from './rust-input-coverage.ts';
+import {coverageOfCaptures,coverageOfReports,decide,describeCoverage,trackedFrom,trackedPaths,committedIgnores,MEMBERSHIP_PROBE,type TestReach} from './rust-input-coverage.ts';
+import {spawnTest} from './test-wait.ts';
+import {gitArguments} from './git-arguments/main.ts';
 
 const snapshot=(files:string[]):InputSnapshot=>({files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:files,stagingFiles:files,directories:[],optionalFiles:[],memberships:[],projectMatches:[],observations:[]});
 const bytes=(text:string)=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
@@ -95,4 +97,19 @@ test('a lookup of an absent path a commit could add owes the tests on that addit
   // Crossing an absent directory toward another path is that path's question.
   const crossed=decide([{...candidate('cases/new'),kind:'component' as const,requirements:['component']}],tracked,()=>[]);
   assert.deepEqual(crossed.missed,[]);assert.deepEqual(crossed.untracked.map(gap=>gap.state),['absent-component']);
+});
+
+test('the ignored namespace is the commit\'s own tracked .gitignore rules; a host exclude never widens it',t=>{
+  const root=testScratch(t,'coverage-ignores');
+  const init=spawnTest('git',gitArguments(['init','-q',root]),{encoding:'utf8'});assert.equal(init.status,0,init.stderr);
+  writeFileSync(join(root,'.gitignore'),'build/*\n!build/keep\n');mkdirSync(join(root,'nested'));writeFileSync(join(root,'nested','.gitignore'),'*.out\n');
+  const add=spawnTest('git',gitArguments(['add','.gitignore','nested/.gitignore']),{cwd:root,encoding:'utf8'});assert.equal(add.status,0,add.stderr);
+  // The repository's own excludes are this host's, not the commit's.
+  writeFileSync(join(root,'.git','info','exclude'),'/local/\n');
+  const ignored=trackedPaths(root).ignored(['build/x','build/keep','nested/a.out','local/y','other/z']);
+  assert.deepEqual([...ignored].sort(),['build/x','nested/a.out']);
+  // An untracked .gitignore is no commit's rule either, and a negation decides against.
+  const output=['scratch/.gitignore','1','*','scratch/a','.gitignore','2','!keep','keep','','','','free',''].join('\0');
+  assert.deepEqual([...committedIgnores(output,new Set(['.gitignore']))],[]);
+  assert.throws(()=>committedIgnores('.gitignore\x001\x00x',new Set()),/unterminated/);
 });

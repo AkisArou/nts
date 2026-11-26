@@ -1048,8 +1048,16 @@ tracked file must owe the tests when edited, a listed directory when a child is
 added, any other tracked directory through a tracked file beneath it, and an
 absent path a commit could add when it is added. A path that fails this is
 named and fails the step. Present untracked bytes (installed packages, output
-the validator could not attribute), absent paths in ignored namespaces and
-absent directories crossed toward another lookup are reported, never owed. A
+the validator could not attribute), absent paths the commit's own rules ignore
+and absent directories crossed toward another lookup are reported, never owed.
+The ignored namespace is the tracked `.gitignore` files' positive patterns
+alone, as `git check-ignore --verbose` names the deciding one: the
+repository's `info/exclude` and a user's excludes file are the host's, so a
+path only they ignore stays owed on its addition. The observer follows every
+descendant the tests start, orphans included, and records directory listings
+and failed lookups beside opens. A trace sees only the reads its run makes: a
+read taken only under another environment, host, OS or toolchain is unseen
+until a wide run makes it, and is red at that first run. A
 stale installation catalog owes every Rust target whatever changed, so it
 answers nothing about reach and is refused by name. The step is wide, never a
 landing's: its capture (about 6 GB at the workspace's size) lives in the run's
