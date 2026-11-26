@@ -14424,6 +14424,13 @@
       }
     },
     {
+      "source": "tooling/differential/src/check_transport.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "tooling/differential/src/domains.rs",
       "declarations": {
         "imports": [],

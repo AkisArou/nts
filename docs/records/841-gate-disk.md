@@ -1503,3 +1503,17 @@ landing proof; readiness uses the subsequent exact-commit attempt.
 | `e/final-tooling-v2/focused.log` | `767136cbc09c1ed3bcf1ee2e81b189fd025fb5a35b1abc68bf5b618bbec7eff6` |
 | `e/final-tooling-v2/types.log` | `9ca01fffc7bc151ae1a4068626e6c2df80d8566fd947543966acda51fabeaecd` |
 | `e/final-tooling-v2/audit.log` | `9ca8a557ada36c91b24f5c70686b27227fdc5b76f770fc6ecb5f74134d8a5ea8` |
+
+The exact-commit tooling run at
+`7971449b4a95ef0bb58340b27f17d922a98c3073` exposed an omitted structural
+reader declaration for the new `check_transport.rs`. Its manifest row now
+declares no runtime imports or assets; the module performs no runtime byte
+reads. The run was stopped by its named unit before editing and supplies no
+green proof. The corrected focused selector, Rust module and runtime-input
+suite passes all 15 controls, including the original large-record selection
+case. This declaration changes no compiler or transport behavior.
+
+| Raw artifact under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `e/here-v3-tooling.raw.log` | `2cc18a55ca23e77165df3d7a5d44c0a8d352474d469a61e8835720fc3855953d` |
+| `e/selector-v2/focused.log` | `0b8dfb487e703947f11225acaa1999b3b0d8e82026b4b654885575885af984a1` |
