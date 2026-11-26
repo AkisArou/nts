@@ -3,8 +3,9 @@ import {test} from 'node:test';
 import {connect,type Socket} from 'node:net';
 import {once} from 'node:events';
 import {join} from 'node:path';
-import {existsSync,readdirSync,statSync,fstatSync,readFileSync,writeFileSync,unlinkSync,rmSync} from 'node:fs';
-import {gunzipSync,gzipSync} from 'node:zlib';
+import {createReadStream,existsSync,readdirSync,statSync,fstatSync,readFileSync,writeFileSync,unlinkSync,rmSync} from 'node:fs';
+import {createInterface} from 'node:readline';
+import {createGunzip,gunzipSync,gzipSync} from 'node:zlib';
 import {CheckStream,CHECK_CAPABILITY} from './check-stream.ts';
 import {testScratch,newTestScratch} from './test-scratch.ts';
 import {caseCostSessions} from '../differential/case-cost-records.ts';
@@ -91,24 +92,45 @@ test('a publication write failure disables subsequent appends even if the writer
   assert.equal(existsSync(join(root,'costs/check-worker-0.jsonl.gz')),false,'a write failure cannot publish a valid truncated prefix');
 });
 
-test('bounded publication queue exhaustion rejects the durable producer instead of publishing a complete prefix',async t=>{
-  const root=newTestScratch('check-stream-overflow'),costs=join(root,'costs');let calls=0,release!:()=>void,firstComplete!:()=>void;
+test('backpressure bounds pending publication and preserves every byte after a stalled writer resumes',async t=>{
+  const root=newTestScratch('check-stream-backpressure'),costs=join(root,'costs'),high=8*1024*1024;
+  let release!:()=>void,peak=0;
   const blocked=new Promise<void>(resolve=>{release=resolve;});
-  const complete=new Promise<void>(resolve=>{firstComplete=resolve;});
-  const stream=new CheckStream(costs,join(root,'tmp'),(path,produce,options)=>durableRecordStream(path,append=>produce(async chunk=>{
-    if(++calls>4){await blocked;return;}
-    await append(chunk);if(calls===4)firstComplete();
+  const sockets:Socket[]=[],closed:Promise<unknown>[]=[],expected=new Map<number,string[]>();
+  // Optional only for the committed old-owner control: its implementation
+  // aborts instead, so the named error terminates the state barrier below.
+  let stream:CheckStream&{readonly pendingBytes?:number;readonly backpressured?:boolean;readonly pausedProducers?:number};
+  const sample=()=>{if(stream.pendingBytes!==undefined){peak=Math.max(peak,stream.pendingBytes);assert.ok(stream.pendingBytes<=high,'pending appends must not overshoot the high-water mark');}};
+  stream=new CheckStream(costs,join(root,'tmp'),(path,produce,options)=>durableRecordStream(path,append=>produce(async chunk=>{
+    sample();await blocked;await append(chunk);sample();
   }),options));
-  t.after(async()=>{release();try{await stream.close();}finally{rmSync(root,{recursive:true,force:true});}});
-  await stream.ready;const env=stream.environment('examples',()=>[42]);
-  const socket=await client(stream.path);t.after(()=>socket.destroy());await register(socket,header(env[CHECK_CAPABILITY]!));
-  socket.write(records().map(row=>JSON.stringify(row)).join('\n')+'\n');await complete;
-  const rows=Array.from({length:20},(_,index)=>({event:'observation',session:0,padding:String(index)+'x'.repeat(600*1024)}));
-  const closed=once(socket,'close');socket.end(rows.map(row=>JSON.stringify(row)).join('\n')+'\n');await closed;
-  assert.match(stream.errors.join('\n'),/bounded publication queue exhausted/);
-  release();await stream.reaped('examples');await stream.close();
-  assert.equal(existsSync(join(costs,'check-worker-0.jsonl.gz')),false,'a valid gzip prefix must never stand for the lost population');
-  assert.deepEqual(readdirSync(costs),[],'durable publication also removes its unfinished file');
+  t.after(async()=>{release();for(const socket of sockets)socket.destroy();try{await stream.close();}finally{rmSync(root,{recursive:true,force:true});}});
+  await stream.ready;const pids=Array.from({length:24},(_,index)=>index+1),env=stream.environment('examples',()=>pids);
+  for(const pid of pids){const socket=await client(stream.path);sockets.push(socket);await register(socket,header(env[CHECK_CAPABILITY]!,pid));}
+  let offered=0;
+  for(const [index,socket] of sockets.entries()){
+    const pid=pids[index]!,rows=records(pid),lines=[...rows.slice(0,-1),...Array.from({length:40},(_,row)=>({event:'observation',session:0,row,padding:'x'.repeat(64*1024)})),rows.at(-1)].map(row=>JSON.stringify(row));
+    lines[2]=lines[2]!.replace('"wall_s":0.5','"wall_s":-0');expected.set(pid,lines);
+    const payload=lines.join('\n')+'\n';offered+=Buffer.byteLength(payload);closed.push(once(socket,'close'));socket.end(payload);
+  }
+  assert.ok(offered>7*high,'offered producer data is far beyond the runner queue');
+  const turn=()=>new Promise<void>(resolve=>setImmediate(resolve));
+  // IO/state barriers decide the assertions; the scoped tooling hang guard
+  // alone bounds a broken fixture. No elapsed time decides backpressure.
+  while(!stream.backpressured&&!stream.errors.length)await turn();
+  assert.deepEqual(stream.errors,[]);assert.equal(stream.backpressured,true);assert.equal(stream.pausedProducers,24);
+  let reaped=false;const draining=stream.reaped('examples').then(()=>{reaped=true;});
+  for(let poll=0;poll<100;poll++){await turn();sample();assert.equal(stream.backpressured,true);assert.equal(reaped,false);}
+  release();await Promise.all(closed);await draining;await stream.close();sample();
+  assert.deepEqual(stream.errors,[]);assert.equal(stream.pendingBytes,0);
+  const actual=new Map<number,string[]>();
+  for await(const line of createInterface({input:createReadStream(join(costs,'check-worker-0.jsonl.gz')).pipe(createGunzip()),crlfDelay:Infinity})){
+    const match=/^\{"producer":(\d+),"pid":(\d+),"record":(.*)\}$/.exec(line);assert.ok(match);
+    const pid=Number(match[2]);assert.equal(Number(match[1]),pid);
+    const rows=actual.get(pid)??[];rows.push(match[3]!);actual.set(pid,rows);
+  }
+  assert.deepEqual(actual,expected,'every producer retains every original row byte, including signed zero');
+  t.diagnostic('stalled publication '+JSON.stringify({offeredBytes:offered,highWaterBytes:high,peakPendingBytes:peak,producers:24,rows:[...actual.values()].reduce((sum,rows)=>sum+rows.length,0)}));
 });
 
 for(const kind of ['reject','throw'] as const)test('publication failure before producer entry rejects readiness and closes its directory descriptor: '+kind,async t=>{
