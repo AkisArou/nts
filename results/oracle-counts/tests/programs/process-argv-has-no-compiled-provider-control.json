@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/process-argv-has-no-compiled-provider-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/process-argv-has-no-compiled-provider-control/src/main.ts",
+      "signature": "175f48915bd553112fa6399471376459f899d6cf56781021b595b9d672b78fb3",
+      "keys": {
+        "c": "f6a618eb9e40322086d19c4330bff34f",
+        "jvm": "d655a7d8fef29086cd465a243448e873",
+        "llvm": "a09454db0c27df7851ae597a055531a5"
+      },
+      "cases_sha256": "69ac6979f355c1e6a9e780c8109984c99188687eec3ab6a1228b39230d6b9eb9",
+      "driver_sha256": "35ac9ab40579c292d38c28100b25feb0ec462dd36f251df4c7b925915bb83e04",
+      "populations": {
+        "argvControl": {
+          "count": 1,
+          "cases_sha256": "69ac6979f355c1e6a9e780c8109984c99188687eec3ab6a1228b39230d6b9eb9"
+        }
+      },
+      "complete": true,
+      "count": 1
+    }
+  ]
+}
