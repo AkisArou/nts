@@ -12,11 +12,17 @@ const steps = (path: string, before: string, after: string) => gateSteps(owed([c
 test("documentation and notebook records owe only declared tree checks", () => {
   const listed = spawnSync(process.execPath, ["tooling/gate/run.mjs", "--tree-only"], {env:testEnvironment(), encoding: "utf8" });
   assert.equal(listed.status, 0);
-  for (const path of ["docs/architecture.md", "docs/records/notebooks/new.md", "AGENTS.md", "CLAUDE.md", "README.md"]) {
-    const got = gateSteps(owed([{ path, added: true }]));
-    assert.deepEqual(got, TREE_CHECKS);
+  // New documentation below the top level, and an edit of any page that
+  // keeps its mode (a type change at the top level changes the root's listing).
+  for (const row of [{ path: "docs/architecture-new.md", added: true }, { path: "docs/records/notebooks/new.md", added: true },
+    ...["docs/architecture.md", "AGENTS.md", "CLAUDE.md", "README.md"].map(path => ({ path, added: false, sameMode: true }))]) {
+    const got = gateSteps(owed([row]));
+    assert.deepEqual(got, TREE_CHECKS, row.path);
     for (const name of got) assert.ok(listed.stdout.split(/\s+/).includes(name), name);
   }
+  // A new top-level entry changes the repository root's listing, which the
+  // bench tests' comparators read: it owes them whatever it holds.
+  assert.ok(owed([{ path: "NOTICE.md", added: true }]).some(row => row.name === "directory membership read by tooling/bench/tests/integration.rs" && row.steps.includes("tests")));
 });
 
 test("classification prose owes audit without record replay, class/match edits owe records", () => {

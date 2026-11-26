@@ -80,6 +80,15 @@ capture was removed when the step ended.
 - **Listing removals.** A listing changes when an entry is removed as well as
   added, so removing one tracked file under each entry must owe the tests too.
   All 15 directories the main run listed pass under the current rules.
+- **The repository root.** An operation on the root itself (a listing, a
+  stat) is a candidate like any directory; crossing it toward another path is
+  not. `tooling/bench/tests/integration.rs` lists it: `nts-bench` runs
+  `host-columns.ts` with the root as its working directory, and the bun
+  comparator lists that directory (46 `getdents64` calls in the main run, which
+  the first decision dropped). Its membership of the root is declared, so a
+  new or removed top-level entry owes those tests; an edit inside an existing
+  entry does not. Re-deciding the first main run's reports with root
+  candidates: 37 root candidates, none missed.
 - **Content reads survive the least-owing edit.** A comment-only edit of a
   `.rs`, `.ts`, `.c` or `.h` file outside `tests/` and `third_party/` owes only
   its declared byte readers, so an undeclared content read is decided by that
@@ -125,6 +134,7 @@ The review's re-decisions of that run, `~/.cache/nts-scratch/761/`:
 |---|---|
 | `least-edit-v1/result.json` (byte-sensitive reads by the least-owing edit, stat included; 21 missed) | `b3a0ef36b37010d712b5f422920b79c10816704325ca3c311292786df7696d9f` |
 | `listing-removal-v1/result.json` (removal from the 15 listed directories; 0 missed) | `2e4f24845985ddeb1f1947c71e2a48aace9d3df2f5c0118af13f2fc8ab72abac` |
+| `root-redecide-v1/result.json` (the first run's reports with root candidates: 37 reached; its other misses are the pre-#828 readlinks and `corpus.ts`, declared since) | `47baf4f253bee6a36add3201ecc6a487c2ff7d08c9197294521a61ad59379496` |
 
 The step at the rebased tip, `~/.cache/nts-scratch/761/step-main-v1/`:
 
