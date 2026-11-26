@@ -2211,6 +2211,7 @@ the first node task.
   candidates. Untracked paths are reported, never owed. It is wide because tracing roughly doubles the tests' time; a red
   bisects to the commit that added the read
   ([log](records/notebooks/decisions-log.md#undeclared-rust-test-reads-are-red-11-17)).
+
 - **A worker detach is a durable request.** Pending detach releases only the
   unused pool promise; ownership guards still protect live claims and output.
   Upkeep completes the same branch- and tree-bound request after owners drain.
