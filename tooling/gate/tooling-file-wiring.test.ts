@@ -2,7 +2,7 @@ import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.
 import {declareOwnMembers} from './test-cgroup-members.ts';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
-import {existsSync,mkdirSync,readdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readdirSync,readFileSync,statSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -61,7 +61,10 @@ writeFileSync(${JSON.stringify(receipt)},JSON.stringify([direct,fixture].map(env
   const planned=gateEnvironment(fixtureEnvironment(t),{run,oracleRoot:root,owned:{...memory,CARGO_TARGET_DIR:target,NTS_BIN:compiler}});
   const child=start(t,root,planned.env,join(gate,'run.mjs'),['tooling']);
   assert.equal(await child.closed,0,child.output());
-  assert.deepEqual(readdirSync(join(run,'costs')).filter(name=>/^check-\d+(?:-\d+)?[.]jsonl$/.test(name)),[],'a real tooling run must never leave per-PID check records');
+  const inventory=readdirSync(join(run,'costs')).map(name=>({name,info:statSync(join(run,'costs',name))}));
+  const legacy=inventory.filter(row=>/^check-\d+(?:-\d+)?[.]jsonl$/.test(row.name)).map(row=>row.name),summaryInfo=statSync(join(run,'summary.json'));
+  t.diagnostic('tooling compiler telemetry inventory '+JSON.stringify({costs:{files:inventory.length,fileInodes:new Set(inventory.map(row=>row.info.dev+':'+row.info.ino)).size,bytes:inventory.reduce((sum,row)=>sum+row.info.size,0),allocatedBytes:inventory.reduce((sum,row)=>sum+row.info.blocks*512,0)},summary:{files:1,fileInodes:1,bytes:summaryInfo.size,allocatedBytes:summaryInfo.blocks*512},legacy}));
+  assert.deepEqual(legacy,[],'a real tooling run must never leave per-PID check records');
   const observed=JSON.parse(readFileSync(receipt,'utf8')) as Record<string,string|null>[];
   assert.ok(observed.every(row=>Object.values(row).every(value=>value===null)),'both direct and fixture children revoke the enclosing telemetry packet');
   const summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8'));
