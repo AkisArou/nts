@@ -2,15 +2,15 @@
 
 use super::raising_calls::ArgumentMembers;
 use super::{
-    Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, Member, MemberKey, MethodAccessor,
-    Naming, NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared, Throwing, TypeId,
-    TypeKind, a_copy_can_contain, a_method_with_its_own_instances, a_value_held_callee,
-    calls_guarded_by_a_try, calls_in_the_body_of, close_over_callees,
-    closure_bodies_that_can_raise, declared_base_class, function_behind_const,
-    functions_used_as_values, instance_type_of, interface_member_of, is_generic_function,
-    literal_methods, member_dispatch_key, members_filling, names_a_body, raising_body_calls,
-    syntax, the_constructor_declared_by, the_function_of, the_inlined_chain,
-    the_member_at_or_above,
+    ClosureInfo, Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, Member, MemberKey,
+    MethodAccessor, Naming, NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared,
+    Structural, Throwing, TypeId, TypeKind, a_copy_can_contain, a_method_with_its_own_instances,
+    a_value_held_callee, calls_guarded_by_a_try, calls_in_the_body_of, close_over_callees,
+    closure_bodies, closure_bodies_that_can_raise, declared_base_class, function_behind_const,
+    functions_used_as_values, instance_type_of, interface_family_can_raise, interface_member_of,
+    is_generic_function, literal_methods, member_dispatch_key, members_filling, names_a_body,
+    raising_body_calls, retyped_symbols_of, syntax, the_constructor_declared_by, the_function_of,
+    the_inlined_chain, the_member_at_or_above,
 };
 
 /// A dispatch slot for the raising copy of an **overridden** member, and a copy for
@@ -66,81 +66,19 @@ pub(super) fn raising_member_slots(
     snapshot: &LoweringSnapshot<'_>,
     hierarchy: &mut Hierarchy,
     naming: &mut Naming,
+    structural: &Structural,
+    closures: &[ClosureInfo],
 ) {
     let probe = FuncBuilder::probe(snapshot);
-    // The `(root, key)` families a `try` already reaches: a member with a copy, whose
-    // dispatch is virtual. `raising_copies` seeds from the callee the *checker*
-    // resolved, which for a virtual call is always the declaration the receiver's
-    // static type names -- so this set holds the bases, never the overriders.
-    let mut families: Vec<(TypeId, MemberKey)> = Vec::new();
-    for member in &naming.raising {
-        let Some(key) = member_dispatch_key(&probe, *member) else {
-            continue;
-        };
-        let Some(ty) = probe
-            .enclosing_class(*member)
-            .and_then(|class| instance_type_of(snapshot, class))
-        else {
-            continue;
-        };
-        let Some(root) = hierarchy.root_declaring(ty, &key) else {
-            continue;
-        };
-        if hierarchy.overridden(root, &key) && !families.contains(&(root, key.clone())) {
-            families.push((root, key));
-        }
-    }
-    // **And the families a `try` reaches through an INTERFACE**, which the loop above
-    // cannot find: `raising_copies` seeds from the callee the checker resolved, and for
-    // `sink.take(n)` that is a body-less `MethodSignature` -- so no member of the family
-    // is in `naming.raising` and there is nothing to work back from. The receiver's type
-    // is what names the root ([`interface_member_of`]), and the implementors are what the
-    // call reaches.
-    //
-    // An interface member is a dispatch root exactly as a base class's member is, and the
-    // rest of this function never asked which: the carry condition, the numbering and the
-    // per-class fill are the same three answers. So this is a second **seed**, not a
-    // second mechanism -- which is why it is six lines rather than a sibling of
-    // `raising_member_slots`.
-    //
-    // `blockers/a-try-around-a-call-on-an-interface-typed-receiver` is the witness, and
-    // `runtime/node/timers`' `processImmediate` is why it matters: `9bd3eb1fc` made that
-    // `try` refuse rather than lose a `throw`, and refusing it means the immediate queue
-    // does not run compiled at all.
-    // A raising copy propagates through every call in its body, even when
-    // only its caller is inside a try. Closure variants need the same slots.
-    // Naming publishes the bodies it actually offers, including the gate's
-    // strict arm, rather than numbering unused families from every declaration.
-    for call in naming
-        .guarded_calls
-        .iter()
-        .chain(&naming.raising_body_calls)
-    {
-        for method in naming.iterators.at(*call) {
-            if method.can_raise(&naming.throwing)
-                && let Some(root) = hierarchy.root_declaring(method.receiver, &method.key)
-                && hierarchy.overridden(root, &method.key)
-            {
-                families.push((root, method.key.clone()));
-            }
-        }
-        let access_families: Vec<_> = hierarchy.access_families.at(*call).collect();
-        if !access_families.is_empty() {
-            for family in access_families {
-                families.push((family.face, family.key(false)));
-                if family.writes.is_some() {
-                    families.push((family.face, family.key(true)));
-                }
-            }
-            continue;
-        }
-        let Some((root, key)) = interface_member_of(snapshot, &probe, hierarchy, *call) else {
-            continue;
-        };
-        if hierarchy.overridden(root, &key) && !families.contains(&(root, key.clone())) {
-            families.push((root, key));
-        }
-    }
+    let mut families = requested_member_families(snapshot, &probe, hierarchy, naming);
+    request_specialized_families(
+        snapshot,
+        hierarchy,
+        naming,
+        structural,
+        closures,
+        &mut families,
+    );
     families.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
     families.dedup();
     for (root, key) in families {
@@ -182,6 +120,215 @@ pub(super) fn raising_member_slots(
             if naming.copyable.contains(&member) {
                 naming.raising.insert(member);
             }
+        }
+    }
+}
+
+/// Families requested by named copies and offered source-call contexts.
+fn requested_member_families(
+    snapshot: &LoweringSnapshot<'_>,
+    probe: &FuncBuilder<'_>,
+    hierarchy: &Hierarchy,
+    naming: &mut Naming,
+) -> Vec<(TypeId, MemberKey)> {
+    // The `(root, key)` families a `try` already reaches: a member with a copy, whose
+    // dispatch is virtual. `raising_copies` seeds from the callee the *checker*
+    // resolved, which for a virtual call is always the declaration the receiver's
+    // static type names -- so this set holds the bases, never the overriders.
+    let mut families: Vec<(TypeId, MemberKey)> = Vec::new();
+    for member in &naming.raising {
+        let Some(key) = member_dispatch_key(probe, *member) else {
+            continue;
+        };
+        let Some(ty) = probe
+            .enclosing_class(*member)
+            .and_then(|class| instance_type_of(snapshot, class))
+        else {
+            continue;
+        };
+        let Some(root) = hierarchy.root_declaring(ty, &key) else {
+            continue;
+        };
+        if hierarchy.overridden(root, &key) && !families.contains(&(root, key.clone())) {
+            families.push((root, key));
+        }
+    }
+    // **And the families a `try` reaches through an INTERFACE**, which the loop above
+    // cannot find: `raising_copies` seeds from the callee the checker resolved, and for
+    // `sink.take(n)` that is a body-less `MethodSignature` -- so no member of the family
+    // is in `naming.raising` and there is nothing to work back from. The receiver's type
+    // is what names the root ([`interface_member_of`]), and the implementors are what the
+    // call reaches.
+    //
+    // An interface member is a dispatch root exactly as a base class's member is, and the
+    // rest of this function never asked which: the carry condition, the numbering and the
+    // per-class fill are the same three answers. So this is a second **seed**, not a
+    // second mechanism -- which is why it is six lines rather than a sibling of
+    // `raising_member_slots`.
+    //
+    // `blockers/a-try-around-a-call-on-an-interface-typed-receiver` is the witness, and
+    // `runtime/node/timers`' `processImmediate` is why it matters: `9bd3eb1fc` made that
+    // `try` refuse rather than lose a `throw`, and refusing it means the immediate queue
+    // does not run compiled at all.
+    // A raising copy propagates through every call in its body, even when
+    // only its caller is inside a try. Closure variants need the same slots.
+    // Naming publishes the bodies it actually offers, including the gate's
+    // strict arm, rather than numbering unused families from every declaration.
+    let seed_calls: Vec<_> = naming
+        .guarded_calls
+        .iter()
+        .chain(&naming.raising_body_calls)
+        .copied()
+        .collect();
+    for call in &seed_calls {
+        for method in naming.iterators.at(*call) {
+            if method.can_raise(&naming.throwing)
+                && let Some(root) = hierarchy.root_declaring(method.receiver, &method.key)
+                && hierarchy.overridden(root, &method.key)
+            {
+                families.push((root, method.key.clone()));
+            }
+        }
+        let access_families: Vec<_> = hierarchy.access_families.at(*call).collect();
+        if !access_families.is_empty() {
+            for family in access_families {
+                families.push((family.face, family.key(false)));
+                if family.writes.is_some() {
+                    families.push((family.face, family.key(true)));
+                }
+            }
+            continue;
+        }
+        let Some((root, key)) = interface_member_of(snapshot, probe, hierarchy, *call) else {
+            continue;
+        };
+        if hierarchy.overridden(root, &key)
+            && interface_family_can_raise(snapshot, probe, hierarchy, &naming.throwing, root, &key)
+            && !families.contains(&(root, key.clone()))
+        {
+            // An interface call may be specialized to one of its class fillers.
+            // That copy dispatches through the class family, not the interface's.
+            for member in members_filling(snapshot, probe, hierarchy, root, &key) {
+                if let Some(receiver) = probe
+                    .enclosing_class(member)
+                    .and_then(|class| instance_type_of(snapshot, class))
+                {
+                    request_class_family(
+                        snapshot,
+                        probe,
+                        hierarchy,
+                        naming,
+                        receiver,
+                        &key,
+                        &mut families,
+                    );
+                }
+            }
+            families.push((root, key));
+        }
+    }
+    families
+}
+
+/// Collect selected receivers from the one structural plan, using the same
+/// source-call adapter and capture aliases that their builders read.
+fn request_specialized_families(
+    snapshot: &LoweringSnapshot<'_>,
+    hierarchy: &Hierarchy,
+    naming: &mut Naming,
+    structural: &Structural,
+    closures: &[ClosureInfo],
+    families: &mut Vec<(TypeId, MemberKey)>,
+) {
+    let probe = FuncBuilder::probe(snapshot);
+    // Structural specialization is the authority for receivers not listed among
+    // an interface's fillers. Reuse its plan and the builders' receiver adapter;
+    // a separate structural-matching test here would disagree with body emission.
+    let offered: rustc_hash::FxHashSet<_> = naming
+        .guarded_calls
+        .iter()
+        .chain(&naming.raising_body_calls)
+        .copied()
+        .collect();
+    let mut specialized = FuncBuilder::probe(snapshot);
+    specialized.hierarchy = hierarchy;
+    for (declaration, copies) in &structural.copies {
+        let calls: Vec<_> = calls_in_the_body_of(&probe, *declaration)
+            .into_iter()
+            .filter(|call| offered.contains(call))
+            .collect();
+        for (retyped, _) in copies {
+            specialized.retyped_symbols = retyped_symbols_of(&probe, *declaration, retyped);
+            for call in &calls {
+                if let Some((receiver, key)) = specialized.method_receiver_at(*call) {
+                    request_class_family(
+                        snapshot,
+                        &specialized,
+                        hierarchy,
+                        naming,
+                        receiver,
+                        &key,
+                        families,
+                    );
+                }
+            }
+        }
+    }
+    for (index, closure) in closures.iter().enumerate() {
+        if closure.retyped_captures.is_empty() {
+            continue;
+        }
+        specialized.retyped_symbols =
+            super::closure_bodies::closure_aliases(snapshot, closures, index);
+        for call in calls_in_the_body_of(&probe, closure.node) {
+            if offered.contains(&call)
+                && let Some((receiver, key)) = specialized.method_receiver_at(call)
+            {
+                request_class_family(
+                    snapshot,
+                    &specialized,
+                    hierarchy,
+                    naming,
+                    receiver,
+                    &key,
+                    families,
+                );
+            }
+        }
+    }
+}
+
+/// Request the same class root a specialized call uses, retaining the family's
+/// can-raise and whole-family copyability rules. A quiet class needs no entry.
+fn request_class_family(
+    snapshot: &LoweringSnapshot<'_>,
+    probe: &FuncBuilder<'_>,
+    hierarchy: &Hierarchy,
+    naming: &mut Naming,
+    receiver: TypeId,
+    key: &MemberKey,
+    families: &mut Vec<(TypeId, MemberKey)>,
+) {
+    if hierarchy.faces.contains(&receiver) {
+        return;
+    }
+    let Some(root) = hierarchy.root_declaring(receiver, key) else {
+        return;
+    };
+    if hierarchy.overridden(root, key) {
+        if !families.contains(&(root, key.clone()))
+            && members_filling(snapshot, probe, hierarchy, root, key)
+                .iter()
+                .any(|member| a_declaration_that_can_raise(snapshot, &naming.throwing, *member))
+        {
+            families.push((root, key.clone()));
+        }
+    } else if let Some(member) = probe.member_declaration(receiver, &key.key) {
+        let member = probe.implementation_of(member);
+        if naming.copyable.contains(&member)
+            && a_declaration_that_can_raise(snapshot, &naming.throwing, member)
+        {
+            naming.raising.insert(member);
         }
     }
 }
@@ -818,6 +965,7 @@ pub(super) fn raising_copies(
         // held arrow -- were fine, because those bodies *are* nodes.
         copies.extend(functions_used_as_values(snapshot, probe, &eligible));
     }
+    let closures = closure_bodies(snapshot);
     let mut pending: Vec<NodeId> = Vec::new();
     if guarded_a_call {
         // **And every closure body that can raise.** A closure's raising variant names
@@ -839,7 +987,9 @@ pub(super) fn raising_copies(
         // function instead was measured and is much worse: **+1,341 refusals** across
         // the 29 corpora, because a copy is a body and each one that cannot compile
         // reports its own cascade.
-        pending.extend(closure_bodies_that_can_raise(snapshot, probe, throwing));
+        pending.extend(closure_bodies_that_can_raise(
+            snapshot, probe, throwing, &closures,
+        ));
     }
     // The closure bodies are roots for the walk without being copies themselves: a
     // closure is not a `FUNCTION_DECLARATION` and `function_copies` is not what makes
@@ -858,7 +1008,9 @@ pub(super) fn raising_copies(
     // calls**, which decides whether a call inside a `try` may dispatch at the
     // raising slot at all. See `what_holds_the_gate_off`.
     let Some((holder, call)) = what_holds_the_gate_off(snapshot, probe, throwing, &copies) else {
-        let body_calls = raising_body_calls(probe, &copies, &pending);
+        // Every written closure is offered a raising build, even when the
+        // pre-hierarchy analysis cannot see a throwing interface implementer.
+        let body_calls = raising_body_calls(probe, &copies, &closures);
         return RaisingCopies {
             copies,
             eligible,

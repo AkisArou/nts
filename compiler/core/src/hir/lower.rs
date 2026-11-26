@@ -75,7 +75,7 @@ use self::hierarchy::{
 };
 use self::interfaces::{
     collect_interfaces, declaration_shell, declare_interface_methods, infer_implements,
-    interface_member_of, members_filling,
+    interface_family_can_raise, interface_member_of, members_filling,
 };
 use self::iterable_walks::{
     Binds, NativeBy, NativeWalk, Over, VectorMethods, Walk, for_each_parts,
@@ -164,8 +164,8 @@ use self::raising_copies::{
 use self::raising_reachability::{
     Member, Reached, Throwing, a_callee_with_a_body, a_copy_can_contain,
     a_method_under_a_computed_key, a_value_held_callee, calls_guarded_by_a_try, close_over_callees,
-    closure_bodies_that_can_raise, names_a_body, names_a_class_element, raising_body_calls,
-    the_function_of, the_member_at_or_above, throwing_symbols,
+    closure_bodies, closure_bodies_that_can_raise, names_a_body, names_a_class_element,
+    raising_body_calls, the_function_of, the_member_at_or_above, throwing_symbols,
 };
 use self::receiver_binding::{A_GENERIC_DECLARATION_READING_THIS, binds_its_own_this};
 use self::representations::{
@@ -525,7 +525,9 @@ struct Naming {
     /// calls does a `try` guard" is a question this file must answer once.
     guarded_calls: rustc_hash::FxHashSet<NodeId>,
     /// Calls in the named and closure bodies whose raising entries are offered.
-    /// Collected from the same roots as `raising_copies`, after its gate decision.
+    /// Named roots are the selected copies; with the gate on, closure roots
+    /// are every written body offered to raising lowering, including bodies
+    /// whose interface implementers the pre-dispatch analysis cannot see.
     /// Interface-family numbering needs these transitive calls as well as calls
     /// directly guarded by a try.
     raising_body_calls: rustc_hash::FxHashSet<NodeId>,
@@ -767,18 +769,18 @@ impl Shared {
     fn whole_program(
         snapshot: &LoweringSnapshot<'_>,
         module: ModuleScope,
-        hierarchy: Hierarchy,
-        closures: &[ClosureInfo],
-        naming: Naming,
+        plan: ProgramPlan,
     ) -> Self {
         #[cfg(test)]
         context_scaling::context();
-        let mut structural = structural_instantiations(snapshot, &hierarchy);
+        let ProgramPlan {
+            hierarchy,
+            naming,
+            mut structural,
+            mut closures,
+        } = plan;
         erased_calls::raising_copies(snapshot, &hierarchy, &naming, &mut structural);
         let probe = FuncBuilder::probe(snapshot);
-        let mut closures = closures.to_vec();
-        let variants = closure_variants(&probe, &closures, &structural);
-        closures.extend(variants);
         let mut generics = super::generics::function_instantiations(snapshot);
         generic_values::register(snapshot, &closures, &mut generics);
         let overload_results = overload_results::associate(snapshot, &mut generics);
@@ -943,22 +945,59 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 /// The qualifying map before the hierarchy, because the hierarchy is what names an
 /// instance method and two classes of one name must not name one. `qualified_names`
 /// reads only the snapshot, so it can come first.
+struct ProgramPlan {
+    hierarchy: Hierarchy,
+    naming: Naming,
+    structural: Structural,
+    closures: Vec<ClosureInfo>,
+}
+
 fn hierarchy_and_naming(
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     readers: &initialization::PrivateReaders,
-) -> (Hierarchy, Naming) {
+) -> ProgramPlan {
     let mut hierarchy =
         collect_hierarchy(snapshot, foreign, closures, &qualified_names(snapshot).0);
     let mut naming = naming(snapshot, closures, readers, &hierarchy);
     hierarchy.closures_carry = naming.closures_carry;
     hierarchy.gate_holder = naming.gate_holder.as_deref().map(std::sync::Arc::from);
-    raising_member_slots(snapshot, &mut hierarchy, &mut naming);
+    // Structural planning reads no raising slots, field aliases or erased-copy
+    // eligibility. Plan once before numbering: its selected receivers determine
+    // which class families the offered raising bodies will actually dispatch on.
+    debug_assert!(hierarchy.slots.keys().all(|(_, _, raising)| !raising));
+    debug_assert!(hierarchy.field_aliases.is_empty());
+    let structural = structural_instantiations(snapshot, &hierarchy);
+    debug_assert!(structural.raising.is_empty());
+    let probe = FuncBuilder::probe(snapshot);
+    let variants = closure_variants(&probe, closures, &structural);
+    let mut planned_closures = closures.to_vec();
+    planned_closures.extend(variants);
+    raising_member_slots(
+        snapshot,
+        &mut hierarchy,
+        &mut naming,
+        &structural,
+        &planned_closures,
+    );
     hierarchy.field_aliases = std::sync::Arc::new(field_aliases(
         snapshot, foreign, closures, &hierarchy, &naming,
     ));
-    (hierarchy, naming)
+    #[cfg(test)]
+    tests::assert_structural_plan_unchanged(
+        snapshot,
+        &hierarchy,
+        closures,
+        &structural,
+        &planned_closures,
+    );
+    ProgramPlan {
+        hierarchy,
+        naming,
+        structural,
+        closures: planned_closures,
+    }
 }
 
 /// As [`lower`], told which source files the project named as its roots.
@@ -1015,16 +1054,16 @@ pub fn lower_with(
     // The hierarchy and the naming before the module scope, because the module scope's
     // probe lays out classes and a layout built without the hierarchy is a different
     // layout. See `hierarchy_and_naming` for why the two are built together.
-    let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
-    let module = collect_module_scope(snapshot, foreign, &closures, &hierarchy, &naming);
+    let plan = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
+    let module = collect_module_scope(snapshot, foreign, &closures, &plan.hierarchy, &plan.naming);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
-    hierarchy.publish_uniform_slots(&mut lowered.program);
+    plan.hierarchy.publish_uniform_slots(&mut lowered.program);
     layout_collector.collect(&mut lowered.program, module.layouts.clone());
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
-    let mut shared = Shared::whole_program(snapshot, module, hierarchy, &closures, naming);
+    let mut shared = Shared::whole_program(snapshot, module, plan);
     let refused = mark_refused_initializers(snapshot, &mut shared, &mut lowered);
     let hierarchy = &shared.hierarchy;
     #[cfg(test)]

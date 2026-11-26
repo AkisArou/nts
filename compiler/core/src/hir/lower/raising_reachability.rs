@@ -1268,13 +1268,8 @@ pub(super) fn a_value_held_callee(
     })
 }
 
-/// Every closure body whose raising variant would differ from its ordinary one: one
-/// that holds a call able to bring a `throw` back. See [`a_call_that_can_raise`].
-pub(super) fn closure_bodies_that_can_raise(
-    snapshot: &SemanticSnapshot,
-    probe: &FuncBuilder,
-    throwing: &Throwing,
-) -> Vec<NodeId> {
+/// Written closure bodies offered to the closure lowering, in snapshot order.
+pub(super) fn closure_bodies(snapshot: &SemanticSnapshot) -> Vec<NodeId> {
     snapshot
         .nodes
         .iter()
@@ -1286,6 +1281,21 @@ pub(super) fn closure_bodies_that_can_raise(
             )
         })
         .map(|(index, _)| NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
+        .collect()
+}
+
+/// Closure roots that need named-callee copies, using the pre-dispatch analysis.
+/// Interface-family numbering instead needs every offered closure body: a
+/// bodyless interface signature cannot describe what its implementers throw.
+pub(super) fn closure_bodies_that_can_raise(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+    bodies: &[NodeId],
+) -> Vec<NodeId> {
+    bodies
+        .iter()
+        .copied()
         .filter(|body| {
             calls_in_the_body_of(probe, *body)
                 .into_iter()

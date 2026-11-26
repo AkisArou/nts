@@ -1975,7 +1975,7 @@ mod tests {
         let probe = FuncBuilder::probe(&snapshot);
         let readers = super::super::initialization::PrivateReaders::new(&probe);
         let closures = super::super::collect_closures(&snapshot, &readers);
-        let (hierarchy, _) = super::super::hierarchy_and_naming(
+        let super::super::ProgramPlan { hierarchy, .. } = super::super::hierarchy_and_naming(
             &snapshot,
             &FxHashMap::default(),
             &closures,

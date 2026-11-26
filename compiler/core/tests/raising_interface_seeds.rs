@@ -1,6 +1,8 @@
 //! Interface calls in offered raising bodies use the shared family slots.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use super::scratch;
+
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, Memory, OpKind, Program};
 use nts_frontend_ts::Frontend;
@@ -128,4 +130,203 @@ fn the_strict_gate_still_withholds_the_uniform_raising_entry() {
             .map(|entry| (&entry.name, &entry.reason))
             .any(|(name, _)| name == "guarded")
     );
+}
+
+#[test]
+fn a_closure_gets_the_interface_implementers_raising_dispatch() {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
+        let program = prepared(
+            "tests/outcomes/a-closure-calling-a-throwing-interface-method-inside-a-try",
+            provider,
+        );
+        assert!(program.uncompiled.is_empty(), "{:?}", program.uncompiled);
+        let body = program
+            .funcs
+            .iter()
+            .find(|f| f.name == "Closure0#call@raises")
+            .expect("the closure has a raising body, not an abort entry");
+        let slot = body
+            .values
+            .iter()
+            .find_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Virtual { slot, declared },
+                    ..
+                } if declared == "Sig#throwIfAborted@raises" => Some(*slot as usize),
+                _ => None,
+            })
+            .expect("the closure calls the interface raising slot");
+        let class = program.layouts.iter().find(|l| l.name == "S").unwrap();
+        assert_eq!(
+            class.methods[slot].as_deref(),
+            Some("S#throwIfAborted@raises")
+        );
+        assert!(
+            program
+                .funcs
+                .iter()
+                .any(|f| f.name == "S#throwIfAborted@raises")
+        );
+    }
+}
+
+fn interface_closure(implementation: &str) -> Program {
+    let scratch = scratch::ScratchDir::in_target("closure-interface-seeds");
+    let config = scratch.join("tsconfig.json");
+    let base = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tsconfig.fixtures.json")
+        .canonicalize_utf8()
+        .unwrap();
+    std::fs::write(
+        &config,
+        format!(r#"{{"extends":{base:?},"include":["main.ts"]}}"#),
+    )
+    .unwrap();
+    std::fs::write(
+        scratch.join("main.ts"),
+        format!(
+            r"
+        interface Quiet {{ run(): number; }}
+        {implementation}
+        function attempt(f: () => number): number {{
+            try {{ return f(); }} catch {{ return -1; }}
+        }}
+        export function probe(n: number): number {{
+            const receiver = make(n);
+            return attempt(() => receiver.run());
+        }}
+    "
+        ),
+    )
+    .unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .expect("snapshot the closure family");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    hir::lower::lower(&snapshot).program
+}
+
+#[test]
+fn a_quiet_interface_family_needs_no_raising_slot() {
+    let program = interface_closure(
+        r"
+        class First implements Quiet { run(): number { return 1; } }
+        class Second implements Quiet { run(): number { return 2; } }
+        function make(n: number): Quiet { return n > 0 ? new First() : new Second(); }
+    ",
+    );
+    assert!(program.uncompiled.is_empty(), "{:?}", program.uncompiled);
+    assert!(
+        !program
+            .layouts
+            .iter()
+            .flat_map(|l| &l.methods)
+            .flatten()
+            .any(|name| name.contains("#run") && name.ends_with("@raises"))
+    );
+    assert!(
+        !program
+            .funcs
+            .iter()
+            .any(|f| f.name.ends_with("#run@raises"))
+    );
+    assert!(
+        !program
+            .raising_members
+            .values()
+            .any(|row| row.member == "run")
+    );
+}
+
+#[test]
+fn an_unknown_literal_supplier_keeps_the_raising_slot() {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
+        let program = prepared(
+            "tests/programs/a-closure-calling-a-stored-interface-method-inside-a-try",
+            provider,
+        );
+        assert!(
+            program.refused_bodies().next().is_none(),
+            "{:?}",
+            program.uncompiled
+        );
+        let slot = program
+            .funcs
+            .iter()
+            .filter(|body| body.name.starts_with("Closure") && body.name.ends_with("@raises"))
+            .flat_map(|body| &body.values)
+            .find_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Virtual { slot, declared },
+                    ..
+                } if declared == "Wakeable#then@raises" => Some(*slot as usize),
+                _ => None,
+            })
+            .expect("the closure retains the unknown supplier's raising slot");
+        let adapter = program
+            .layouts
+            .iter()
+            .filter_map(|layout| layout.methods.get(slot).and_then(Option::as_ref))
+            .find(|target| target.contains("#then@field$") && target.ends_with("@raises"))
+            .and_then(|target| program.funcs.iter().find(|body| &body.name == target))
+            .expect("the stored literal supplier fills the raising slot");
+        assert!(adapter.values.iter().any(|op| matches!(
+            &op.kind,
+            OpKind::Call { callee: Callee::Closure { slot, .. }, .. }
+                if Some(*slot) == program.raising_call_slot
+        )));
+    }
+}
+
+#[test]
+fn a_quiet_base_with_a_throwing_override_keeps_raising_dispatch() {
+    for fixture in [
+        "base",
+        "interface",
+        "structural-interface",
+        "structural-interface-with-unlisted-fillers",
+    ] {
+        for provider in [Memory::NoGc, Memory::ReferenceCounting] {
+            let program = prepared(
+                &format!(
+                    "tests/programs/a-closure-calling-a-throwing-override-through-a-{fixture}"
+                ),
+                provider,
+            );
+            assert!(
+                program.refused_bodies().next().is_none(),
+                "{:?}",
+                program.uncompiled
+            );
+            if fixture == "structural-interface-with-unlisted-fillers" {
+                let base = program
+                    .layouts
+                    .iter()
+                    .find(|layout| layout.name == "Base")
+                    .unwrap();
+                assert!(
+                    base.interfaces.is_empty(),
+                    "Base is selected by the structural plan, not the interface filler list"
+                );
+            }
+            assert!(
+                program
+                    .funcs
+                    .iter()
+                    .any(|body| body.name == "Sub#run@raises")
+            );
+            assert!(
+                program
+                    .funcs
+                    .iter()
+                    .flat_map(|body| &body.values)
+                    .any(|op| matches!(
+                        &op.kind,
+                        OpKind::Call { callee: Callee::Virtual { declared, .. }, .. }
+                            if declared.ends_with("#run@raises")
+                    ))
+            );
+        }
+    }
 }

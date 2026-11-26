@@ -196,7 +196,9 @@ fn an_anonymous_field_schema_shares_its_source_supplier_in_either_demand_order()
     let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
     let readers = super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
     let closures = super::collect_closures(&snapshot, &readers);
-    let (hierarchy, naming) = super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
+    let super::ProgramPlan {
+        hierarchy, naming, ..
+    } = super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
     let schemas: Vec<_> = snapshot
         .types
         .iter()
@@ -255,7 +257,9 @@ fn anonymous_reservations_survive_layout_demand_order() {
     let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
     let readers = super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
     let closures = super::collect_closures(&snapshot, &readers);
-    let (hierarchy, naming) = super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
+    let super::ProgramPlan {
+        hierarchy, naming, ..
+    } = super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
     let groups = [["item", "remove"], ["hostname", "port"]];
     let mut faces = Vec::new();
     let mut anonymous = Vec::new();
@@ -786,5 +790,90 @@ fn seventeen_significant_digits_survive() {
     assert_eq!(
         parse_number("1.9999999999999998"),
         Some(1.999_999_999_999_999_8)
+    );
+}
+
+#[test]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+fn the_strict_gate_publishes_only_the_named_raising_body_calls() {
+    let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../tests/refusals/a-callback-held-in-a-field-with-the-raising-gate-off/tsconfig.json",
+    );
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
+    let snapshot = super::LoweringSnapshot::new(&snapshot);
+    let mut probe = super::FuncBuilder::probe(&snapshot);
+    let throwing = super::throwing_symbols(&snapshot, &probe);
+    probe.throwing = &throwing.any;
+    let raising = super::raising_copies(&snapshot, &probe, &throwing);
+    assert!(!raising.closures_carry);
+    assert_eq!(
+        raising.body_calls,
+        super::raising_body_calls(&probe, &raising.copies, &[])
+    );
+    let all = super::raising_body_calls(&probe, &raising.copies, &super::closure_bodies(&snapshot));
+    assert_ne!(
+        raising.body_calls, all,
+        "the control contains extra closure calls"
+    );
+}
+
+/// Recompute at the former position for every core unit-harness lowering. This
+/// checks the private union-member facts through their public semantic readers,
+/// as well as the published call plan and the complete structural variant set.
+pub(super) fn assert_structural_plan_unchanged(
+    snapshot: &super::LoweringSnapshot<'_>,
+    hierarchy: &super::Hierarchy,
+    written: &[super::ClosureInfo],
+    early: &super::Structural,
+    closures: &[super::ClosureInfo],
+) {
+    let late = super::structural_instantiations(snapshot, hierarchy);
+    assert_eq!(early.copies, late.copies, "structural copies moved");
+    assert_eq!(early.at_call, late.at_call, "structural call plan moved");
+    assert_eq!(
+        early.erased_copies, late.erased_copies,
+        "erased triggers moved"
+    );
+    assert_eq!(
+        early.constructions, late.constructions,
+        "constructor copies moved"
+    );
+    assert_eq!(
+        early.raising, late.raising,
+        "premature erased-copy eligibility"
+    );
+    let probe = super::FuncBuilder::probe(snapshot);
+    for (declaration, copies) in &early.copies {
+        assert_eq!(
+            early.lowers_as_declared(*declaration),
+            late.lowers_as_declared(*declaration)
+        );
+        for (_, suffix) in copies {
+            assert_eq!(
+                super::member_symbols(&probe, early, *declaration, suffix),
+                super::member_symbols(&probe, &late, *declaration, suffix)
+            );
+        }
+    }
+    let variants = super::closure_variants(&probe, written, &late);
+    let identities = |entries: &[super::ClosureInfo]| {
+        entries
+            .iter()
+            .map(|entry| {
+                (
+                    entry.node,
+                    entry.within.clone(),
+                    entry.retyped_captures.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        identities(&closures[written.len()..]),
+        identities(&variants),
+        "closure variants moved"
     );
 }

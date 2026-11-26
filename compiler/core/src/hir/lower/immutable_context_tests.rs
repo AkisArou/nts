@@ -22,9 +22,15 @@ fn every_body_builder_borrows_the_one_program_context() {
     let foreign = crate::hir::runtime::ForeignTable::default();
     let readers = initialization::PrivateReaders::new(&FuncBuilder::probe(&snapshot));
     let closures = collect_closures(&snapshot, &readers);
-    let (hierarchy, naming) = hierarchy_and_naming(&snapshot, &foreign, &closures, &readers);
-    let module = collect_module_scope(&snapshot, &foreign, &closures, &hierarchy, &naming);
-    let shared = Shared::whole_program(&snapshot, module, hierarchy, &closures, naming);
+    let plan = hierarchy_and_naming(&snapshot, &foreign, &closures, &readers);
+    let module = collect_module_scope(
+        &snapshot,
+        &foreign,
+        &closures,
+        &plan.hierarchy,
+        &plan.naming,
+    );
+    let shared = Shared::whole_program(&snapshot, module, plan);
     let module: &ModuleScope = &shared.module;
     let hierarchy: &Hierarchy = &shared.hierarchy;
     // The work contract is independent of how many entries need a builder:
@@ -91,9 +97,15 @@ fn body_local_values_stay_independent_between_context_users() {
     let foreign = crate::hir::runtime::ForeignTable::default();
     let readers = initialization::PrivateReaders::new(&FuncBuilder::probe(&snapshot));
     let closures = collect_closures(&snapshot, &readers);
-    let (hierarchy, naming) = hierarchy_and_naming(&snapshot, &foreign, &closures, &readers);
-    let module = collect_module_scope(&snapshot, &foreign, &closures, &hierarchy, &naming);
-    let shared = Shared::whole_program(&snapshot, module, hierarchy, &closures, naming);
+    let plan = hierarchy_and_naming(&snapshot, &foreign, &closures, &readers);
+    let module = collect_module_scope(
+        &snapshot,
+        &foreign,
+        &closures,
+        &plan.hierarchy,
+        &plan.naming,
+    );
+    let shared = Shared::whole_program(&snapshot, module, plan);
     let mut first = shared.builder(&snapshot, &foreign, Copy::default());
     let second = shared.builder(&snapshot, &foreign, Copy::default());
     first.suffix.push_str("local-copy");

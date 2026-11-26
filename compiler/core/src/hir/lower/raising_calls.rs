@@ -1,13 +1,14 @@
 //! Select the raising entry or refuse an uncarryable call, and emit the raised-result test.
 
+use super::method_calls::MethodRaisingDispatch;
 use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, BinOp, Diagnostic, Edge, Exit, FuncBuilder, HirType, MemberKey,
     NodeId, OpKind, Origin, RAISING_SUFFIX, THROUGH_A_FUNCTION_VALUE, Terminator, TypeId, TypeKind,
-    ValueId, a_callee_with_a_body, a_copy_can_be_made_of, a_declaration_that_can_raise,
-    a_method_under_a_computed_key, a_value_held_call, a_value_held_callee, access_families,
-    an_inlined_construction, calls_in_the_body_of, children_in_the_body_of, children_that_run,
-    erased_calls, interface_member_of, is_generic_function, literal_methods, members_filling,
-    planned_callee, raising_callees_of, syntax,
+    ValueId, a_callee_with_a_body, a_copy_can_be_made_of, a_method_under_a_computed_key,
+    a_value_held_call, a_value_held_callee, access_families, an_inlined_construction,
+    calls_in_the_body_of, children_in_the_body_of, children_that_run, erased_calls,
+    interface_family_can_raise, interface_member_of, is_generic_function, planned_callee,
+    raising_callees_of, syntax,
 };
 
 /// How one instantiated receiver supplies the member a generic body invokes.
@@ -766,6 +767,33 @@ impl FuncBuilder<'_> {
         !self.raising_suffix_of(call).is_empty() || self.dispatches_to_a_raising_entry(call)
     }
 
+    /// The source-call adapter for the member decision shared with emission.
+    /// Captures and const aliases carry the specialization's receiver type.
+    fn method_raising_at(&self, call: NodeId) -> Option<MethodRaisingDispatch> {
+        let (receiver, member) = self.method_receiver_at(call)?;
+        self.raising_method_dispatch(receiver, &member)
+    }
+
+    /// The receiver emission will use, including a structural copy's aliases.
+    /// Slot seeding reads this same adapter before numbering dispatch families.
+    pub(super) fn method_receiver_at(&self, call: NodeId) -> Option<(TypeId, MemberKey)> {
+        if self.kind_of(call) != Some(syntax::CALL_EXPRESSION) {
+            return None;
+        }
+        let access = self.children(call).first().copied()?;
+        let (receiver, key) = self.member_access_key(self.through_assertions(access))?;
+        let effective = self
+            .node(receiver)
+            .symbol
+            .and_then(|symbol| self.retyped_symbols.get(&symbol.0))
+            .cloned()
+            .or_else(|| self.type_of(receiver));
+        let HirType::Managed(super::ManagedType::Object(receiver)) = effective? else {
+            return None;
+        };
+        Some((receiver, MemberKey::method(key)))
+    }
+
     /// Whether this call's callee is a plain function with a raising copy.
     ///
     /// The call's *resolved* declaration, not the name at the site: an
@@ -797,6 +825,12 @@ impl FuncBuilder<'_> {
                             .contains_key(&(family.face, family.key(writes), true))
                     })
             });
+        }
+        if let Some(dispatch) = self.method_raising_at(call) {
+            return matches!(
+                dispatch,
+                MethodRaisingDispatch::Direct | MethodRaisingDispatch::Virtual(_)
+            );
         }
         // Through [`raising_callees_of`], which is the one place that turns a site into
         // the declarations a copy belongs to: the set was built from the
@@ -1260,6 +1294,9 @@ impl FuncBuilder<'_> {
                 return true;
             }
         }
+        if let Some(dispatch) = self.method_raising_at(call) {
+            return !matches!(dispatch, MethodRaisingDispatch::Quiet);
+        }
         // A method a copy's argument declares, rather than the bound's the checker
         // named: inside a copy, that copy's own ([`Self::members_run_at_each_argument`]).
         if let Some(groups) = self.members_run_at_each_argument(call) {
@@ -1399,7 +1436,7 @@ impl FuncBuilder<'_> {
     /// also what `arr.push` looks like.
     ///
     /// It needs no test for whether the program *declared* the interface:
-    /// [`members_filling`] finds the classes that both descend from it (which
+    /// [`super::members_filling`] finds the classes that both descend from it (which
     /// [`Hierarchy::descends_from`](super::Hierarchy::descends_from) answers through `implements_transitively`) and declare
     /// the member, and a frontend-carried face like `Array` has none in this program.
     /// One fewer question asked, and the one asked is the one that matters.
@@ -1411,12 +1448,7 @@ impl FuncBuilder<'_> {
         let Some((ty, key)) = interface_member_of(self.snapshot, self, self.hierarchy, call) else {
             return false;
         };
-        if literal_methods::supplies_method_value(self, ty, &key.key) {
-            return true;
-        }
-        members_filling(self.snapshot, self, self.hierarchy, ty, &key)
-            .into_iter()
-            .any(|at| a_declaration_that_can_raise(self.snapshot, self.throwing, at))
+        interface_family_can_raise(self.snapshot, self, self.hierarchy, self.throwing, ty, &key)
     }
 
     /// The test a call that named a raising copy is followed by.

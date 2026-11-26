@@ -1105,6 +1105,46 @@ pub(super) fn interface_member_of(
     Some((ty, MemberKey::method(probe.access_key(callee, "")?)))
 }
 
+/// Whether an interface family's runtime suppliers can bring a throw back.
+/// Shared by slot numbering and the builder's carrying check: a quiet family
+/// must not need a slot at either reader.
+pub(super) fn interface_family_can_raise(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    hierarchy: &Hierarchy,
+    throwing: &rustc_hash::FxHashSet<u32>,
+    root: TypeId,
+    key: &MemberKey,
+) -> bool {
+    let members = members_filling(snapshot, probe, hierarchy, root, key);
+    let listed: rustc_hash::FxHashSet<TypeId> = members
+        .iter()
+        .filter_map(|member| probe.enclosing_class(*member))
+        .filter_map(|class| instance_type_of(snapshot, class))
+        .collect();
+    // Unknown suppliers are potentially raising. An unavailable/any/unknown
+    // receiver family, a literal (including a stored function), or an unresolved
+    // implementer cannot be proved quiet from the class-body inventory.
+    let unknown_supplier = !hierarchy.faces.contains(&root)
+        || members.is_empty()
+        || hierarchy
+            .literal_methods
+            .owners()
+            .any(|owner| hierarchy.descends_from(owner, root))
+        || hierarchy.declares.keys().any(|ty| {
+            *ty != root
+                && !hierarchy.faces.contains(ty)
+                && hierarchy.descends_from(*ty, root)
+                && hierarchy
+                    .declaring(*ty, key)
+                    .is_none_or(|owner| !listed.contains(&owner))
+        });
+    unknown_supplier
+        || members
+            .into_iter()
+            .any(|member| super::a_declaration_that_can_raise(snapshot, throwing, member))
+}
+
 /// Every member declaration that would fill `root`'s `key` slot: the one each class at
 /// or below `root` declares for it.
 ///

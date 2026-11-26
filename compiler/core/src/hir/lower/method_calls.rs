@@ -3,9 +3,19 @@
 use super::{
     Branch, Callee, Diagnostic, FuncBuilder, HirType, ManagedType, MemberKey, MethodAccessor,
     MethodsOf, NodeId, NodeKind, NumericBuiltin, OpKind, Place, RAISING_SUFFIX, Terminator, TypeId,
-    TypeKind, ValueId, a_method_with_its_own_instances, access, callable_fields, is_static_member,
-    member_dispatch_key, named_representation, syntax,
+    TypeKind, ValueId, a_declaration_that_can_raise, a_method_with_its_own_instances, access,
+    callable_fields, interface_family_can_raise, is_static_member, member_dispatch_key,
+    named_representation, syntax,
 };
+
+/// The raising route of the member on the receiver this copy actually uses.
+#[derive(Clone, Copy)]
+pub(super) enum MethodRaisingDispatch {
+    Quiet,
+    Direct,
+    Virtual(u32),
+    Unavailable,
+}
 
 impl FuncBuilder<'_> {
     /// A call to a statically resolved target.
@@ -1116,6 +1126,53 @@ impl FuncBuilder<'_> {
         Ok(self.note_generator_call(call, reserved))
     }
 
+    /// Resolve raising dispatch at the actual receiver, including its override
+    /// family. Retyping a capture does not prove an exact dynamic class.
+    pub(super) fn raising_method_dispatch(
+        &self,
+        receiver: TypeId,
+        member: &MemberKey,
+    ) -> Option<MethodRaisingDispatch> {
+        self.hierarchy.declaring(receiver, member)?;
+        if self.hierarchy.overridden(receiver, member) {
+            if let Some(slot) = self.hierarchy.slot_for(receiver, member, true) {
+                return Some(MethodRaisingDispatch::Virtual(slot));
+            }
+            if self.hierarchy.faces.contains(&receiver) {
+                return Some(
+                    if interface_family_can_raise(
+                        self.snapshot,
+                        self,
+                        self.hierarchy,
+                        self.throwing,
+                        receiver,
+                        member,
+                    ) {
+                        MethodRaisingDispatch::Unavailable
+                    } else {
+                        MethodRaisingDispatch::Quiet
+                    },
+                );
+            }
+        }
+        let declaration = self.implementation_of(self.member_declaration(receiver, &member.key)?);
+        if self.kind_of(declaration) != Some(syntax::METHOD_DECLARATION) {
+            return None;
+        }
+        // Throwing includes override edges, so a quiet Base with a throwing
+        // Sub never becomes Quiet here, even in a structurally retyped copy.
+        if !a_declaration_that_can_raise(self.snapshot, self.throwing, declaration) {
+            return Some(MethodRaisingDispatch::Quiet);
+        }
+        Some(
+            if !self.hierarchy.overridden(receiver, member) && self.raising.contains(&declaration) {
+                MethodRaisingDispatch::Direct
+            } else {
+                MethodRaisingDispatch::Unavailable
+            },
+        )
+    }
+
     /// [`Self::callee_for`], told whether to name the raising copy rather than
     /// asking the call node: a method value's wrapper calls the method with no
     /// node of its own to ask ([`Self::wrapped_call`]).
@@ -1160,56 +1217,41 @@ impl FuncBuilder<'_> {
         } else {
             self.generic_method_suffix(id)
         };
-        // **The raising copy of a method is reached by naming it** where the dispatch is
-        // direct: a member no subclass overrides is already a `Callee::Direct` here, and
-        // the copy is that name with the suffix -- which is why a method needed no table
-        // index the way a closure did.
-        //
-        // **And where the dispatch is virtual the copy has its own slot**, which this
-        // refused for want of until `number_raising_member_slots` allocated one. Naming
-        // the plain entry instead would run a body that ends the program on an uncaught
-        // `throw`, with the flag test the site just emitted watching a flag nothing sets.
-        // This is the one place that knows direct from virtual, so it is the one place
-        // that chooses: `call_within` admits any callee with a raising copy and leaves
-        // the distinction here, rather than deriving it a second time from the
-        // receiver's type.
-        if self.hierarchy.overridden(type_id, member)
-            && let Some(slot) = self.hierarchy.slot_for(type_id, member, false)
-        {
-            // **And the raising copy has a slot of its own now**, which this refused
-            // for want of. A member no subclass overrides is a `Callee::Direct` and its
-            // copy is that name with the suffix; a virtual one had no name to suffix, so
-            // the call named the ordinary entry -- whose body ends the program on an
-            // uncaught `throw` while the flag test the site emitted watched a flag
-            // nothing sets -- and refusing was the only honest answer.
-            //
-            // `number_raising_member_slots` allocates the index and
-            // `fill_raising_member_slots` fills it per class, with the copy or, for an
-            // override that cannot raise, with the ordinary entry.
-            if !suffix.is_empty() {
-                let Some(slot) = self.hierarchy.slot_for(type_id, member, true) else {
+        // Both the suffix/flag reader and emission use the actual receiver's
+        // decision. A static interface's slot cannot suffix a quiet concrete
+        // member selected by structural specialization.
+        if !suffix.is_empty() {
+            match self.raising_method_dispatch(type_id, member) {
+                Some(MethodRaisingDispatch::Quiet) => {}
+                Some(MethodRaisingDispatch::Direct) => {
+                    return Ok(Callee::Direct(format!(
+                        "{owner}#{emitted}{instantiated}{RAISING_SUFFIX}"
+                    )));
+                }
+                Some(MethodRaisingDispatch::Virtual(slot)) => {
+                    return Ok(Callee::Virtual {
+                        slot,
+                        declared: format!("{owner}#{emitted}{RAISING_SUFFIX}"),
+                    });
+                }
+                Some(MethodRaisingDispatch::Unavailable) | None => {
                     let why = self.why_the_raising_slot_is_missing(type_id, member);
                     return Err(self.unsupported(
                         id,
-                        &format!(
-                            "a call inside a `try` to `{member_name}`, which a subclass \
-                             overrides: {why}"
-                        ),
+                        &format!("a call inside a `try` to `{member_name}`: {why}"),
                     ));
-                };
-                return Ok(Callee::Virtual {
-                    slot,
-                    declared: format!("{owner}#{emitted}{RAISING_SUFFIX}"),
-                });
+                }
             }
+        }
+        if self.hierarchy.overridden(type_id, member)
+            && let Some(slot) = self.hierarchy.slot_for(type_id, member, false)
+        {
             return Ok(Callee::Virtual {
                 slot,
                 declared: format!("{owner}#{emitted}"),
             });
         }
-        Ok(Callee::Direct(format!(
-            "{owner}#{emitted}{instantiated}{suffix}"
-        )))
+        Ok(Callee::Direct(format!("{owner}#{emitted}{instantiated}")))
     }
 
     /// The instance a call to a method lowered **once per instance of its own type

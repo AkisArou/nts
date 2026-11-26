@@ -376,7 +376,7 @@ pub(super) fn lower_wanted_closures(
 /// One derivation, because a raising variant that read its captures at different
 /// types from the ordinary body is the mistake `Copy`'s own description exists to
 /// prevent, one field over.
-fn closure_aliases(
+pub(super) fn closure_aliases(
     snapshot: &LoweringSnapshot<'_>,
     closures: &[ClosureInfo],
     index: usize,
@@ -544,13 +544,11 @@ fn raising_closure(
             }
             (produced, layouts)
         }
-        // **Refused where the ordinary body was not**, which reading the raising arm
-        // says cannot happen: it is tested *before* every fallible arm of
-        // `lower_throw` -- the `async` one refuses a thrown non-reference -- and adds
-        // no fallible step of its own. Measured at 0 of 935 closures over four
-        // runtime modules, which is the same sentence from the other side. Its own
-        // diagnostics are dropped: they are the ordinary body's cascade a second
-        // time, under a name no source wrote.
+        // A raising build needs the dispatch families of every offered closure
+        // body, including calls through bodyless interface signatures. Naming
+        // publishes those calls to `raising_member_slots`; the carrying check
+        // must remain strict if that prerequisite or another lowering rule fails.
+        // Its diagnostics describe this second build, not another source body.
         Err(_) => (
             abort(format!(
                 "calling `{}` from inside a `try`, whose raising copy this compiler could \
