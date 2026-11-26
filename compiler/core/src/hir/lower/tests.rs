@@ -906,6 +906,57 @@ pub(super) fn assert_member_symbols_unchanged(
     }
 }
 
+/// Compare the eager relation with the direct predicate for every visible
+/// family, including indexed entries, over each core harness program.
+pub(super) fn assert_overridden_families_unchanged(hierarchy: &super::Hierarchy) {
+    let mut roots: rustc_hash::FxHashSet<_> = hierarchy
+        .declares
+        .keys()
+        .chain(hierarchy.base.keys())
+        .chain(hierarchy.base.values())
+        .chain(hierarchy.implements.keys())
+        .chain(hierarchy.implements.values().flatten())
+        .chain(&hierarchy.faces)
+        .chain(hierarchy.provided_errors.keys())
+        .copied()
+        .chain(hierarchy.literal_methods.owners())
+        .collect();
+    let mut indexed: rustc_hash::FxHashMap<_, rustc_hash::FxHashSet<_>> =
+        rustc_hash::FxHashMap::default();
+    for (root, member) in hierarchy.override_index_pairs() {
+        roots.insert(root);
+        indexed.entry(root).or_default().insert(member);
+    }
+    for root in roots {
+        let mut keys = hierarchy.override_member_keys(root);
+        keys.extend(indexed.remove(&root).unwrap_or_default());
+        for key in keys {
+            let expected = hierarchy.overridden_direct(root, &key);
+            assert_eq!(
+                hierarchy.overridden(root, &key),
+                expected,
+                "override index changed {root:?} {key:?}"
+            );
+            let before = hierarchy.override_scan_work();
+            for _ in 0..3 {
+                assert_eq!(hierarchy.overridden(root, &key), expected);
+            }
+            assert_eq!(
+                hierarchy.override_scan_work(),
+                before,
+                "repeated frozen override queries scanned declarations"
+            );
+        }
+    }
+}
+
+#[test]
+#[should_panic(expected = "override families initialized before indexed queries")]
+fn an_override_index_read_requires_the_freeze() {
+    super::Hierarchy::default()
+        .indexed_overridden(super::TypeId(0), &super::MemberKey::named("run"));
+}
+
 /// The indexed answer must equal the former source scan, including overload
 /// duplicates and order, for every family in each core harness program.
 pub(super) fn assert_member_fillers_unchanged(

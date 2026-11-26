@@ -97,6 +97,11 @@ pub(super) struct Hierarchy {
     /// Frozen source-member and supplier inventory. An early read or repeated
     /// initialization is an error; interfaces.rs owns its one enumeration.
     pub(super) member_fillers: std::sync::OnceLock<super::interfaces::MemberFillers>,
+    /// The frozen override relation, indexed by receiver and member. Nested
+    /// sets allow borrowed member lookups without cloning a property spelling.
+    pub(super) overridden_families: std::sync::OnceLock<OverriddenFamilies>,
+    #[cfg(test)]
+    pub(super) override_scan_work: std::sync::atomic::AtomicUsize,
     /// First symbol listing each declaration, preserving snapshot order.
     /// Captured symbol facts are immutable; this index is initialized once
     /// before any raising query and shared with the inference probe.
@@ -548,6 +553,27 @@ impl Hierarchy {
     /// dispatch, and it is why a class hierarchy with no overriding costs
     /// nothing: every call in it is static.
     pub(super) fn overridden(&self, ty: TypeId, member: &MemberKey) -> bool {
+        if self.overridden_families.get().is_some() {
+            return self.indexed_overridden(ty, member);
+        }
+        self.overridden_direct(ty, member)
+    }
+
+    pub(super) fn indexed_overridden(&self, ty: TypeId, member: &MemberKey) -> bool {
+        self.overridden_families
+            .get()
+            .expect("override families initialized before indexed queries")
+            .by_receiver
+            .get(&ty)
+            .is_some_and(|members| members.contains(member))
+    }
+
+    /// Before the hierarchy freezes, queries use the same direct predicate
+    /// without retaining an answer. Tests compare the frozen relation with it.
+    pub(super) fn overridden_direct(&self, ty: TypeId, member: &MemberKey) -> bool {
+        #[cfg(test)]
+        self.override_scan_work
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if let Some(root) = self.root_declaring(ty, member)
             && self.access_families.projects_method(root, member)
         {
@@ -570,6 +596,156 @@ impl Hierarchy {
             .literal_methods
             .owners()
             .any(|owner| owner != target && self.descends_from(owner, ty))
+    }
+
+    #[cfg(test)]
+    pub(super) fn override_scan_work(&self) -> usize {
+        self.override_scan_work
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    #[cfg(test)]
+    pub(super) fn override_index_pairs(&self) -> impl Iterator<Item = (TypeId, MemberKey)> + '_ {
+        self.overridden_families
+            .get()
+            .expect("override families initialized before indexed queries")
+            .by_receiver
+            .iter()
+            .flat_map(|(receiver, members)| {
+                members.iter().map(|member| (*receiver, member.clone()))
+            })
+    }
+
+    /// All possible ancestors in `descends_from`, including provided-error
+    /// identities. This walks upward from each supplier, never all classes at
+    /// each call site.
+    fn override_ancestors(&self, ty: TypeId) -> rustc_hash::FxHashSet<TypeId> {
+        let mut above = rustc_hash::FxHashSet::default();
+        for here in self.ancestors(ty) {
+            above.insert(here);
+            above.extend(self.inherited_interfaces(here));
+            if let Some(child) = self.provided_errors.get(&here) {
+                above.extend(
+                    self.provided_errors.iter().filter_map(|(parent, kind)| {
+                        (*kind == 0 || kind == child).then_some(*parent)
+                    }),
+                );
+            }
+        }
+        above
+    }
+
+    pub(super) fn override_member_keys(&self, ty: TypeId) -> rustc_hash::FxHashSet<MemberKey> {
+        let mut keys: rustc_hash::FxHashSet<_> = self
+            .ancestors(ty)
+            .flat_map(|here| self.declares.get(&here).into_iter().flatten())
+            .cloned()
+            .collect();
+        if self.faces.contains(&ty) {
+            keys.extend(
+                self.inherited_interfaces(ty)
+                    .flat_map(|here| self.declares.get(&here).into_iter().flatten())
+                    .cloned(),
+            );
+        }
+        keys
+    }
+
+    fn finish_families(&mut self, snapshot: &SemanticSnapshot, probe: &mut FuncBuilder<'_>) {
+        // Last writes to ancestry, provided errors, implements and literal/
+        // stored supplies precede this freeze. Families::collect is the last
+        // write to method projection; numbering changes no override input.
+        self.member_fillers
+            .set(super::interfaces::MemberFillers::collect(
+                snapshot, probe, self,
+            ))
+            .expect("member fillers initialized exactly once");
+        self.access_families = std::sync::Arc::new(access_families::Families::collect(probe, self));
+        self.overridden_families
+            .set(OverriddenFamilies::collect(self))
+            .expect("override families initialized exactly once");
+        #[cfg(test)]
+        super::tests::assert_overridden_families_unchanged(self);
+    }
+}
+
+#[derive(Debug, Default)]
+pub(super) struct OverriddenFamilies {
+    by_receiver: rustc_hash::FxHashMap<TypeId, rustc_hash::FxHashSet<MemberKey>>,
+}
+
+impl OverriddenFamilies {
+    fn insert(&mut self, receiver: TypeId, member: &MemberKey) {
+        self.by_receiver
+            .entry(receiver)
+            .or_default()
+            .insert(member.clone());
+    }
+
+    fn collect(hierarchy: &Hierarchy) -> Self {
+        let mut result = Self::default();
+        let mut receivers = rustc_hash::FxHashSet::default();
+        // Invert the direct predicate: each declaration contributes to its
+        // ancestor receivers, instead of each query scanning declarations.
+        for (class, names) in &hierarchy.declares {
+            let above = hierarchy.override_ancestors(*class);
+            for receiver in &above {
+                for member in names {
+                    if hierarchy
+                        .declaring(*receiver, member)
+                        .is_some_and(|target| target != *class)
+                    {
+                        result.insert(*receiver, member);
+                    }
+                }
+            }
+            // A subclass may supply an interface's inherited body without
+            // declaring the member itself, as in the original predicate.
+            if !hierarchy.faces.contains(class) && hierarchy.base.contains_key(class) {
+                let inherited = hierarchy.override_member_keys(*class);
+                for receiver in above.iter().filter(|ty| hierarchy.faces.contains(ty)) {
+                    for member in &inherited {
+                        if hierarchy
+                            .declaring(*receiver, member)
+                            .is_some_and(|target| target != *class)
+                        {
+                            result.insert(*receiver, member);
+                        }
+                    }
+                }
+            }
+            receivers.extend(above);
+        }
+        // Literal ownership is deliberately conservative: the old predicate
+        // treats any different literal owner below a receiver as a supplier.
+        for owner in hierarchy.literal_methods.owners() {
+            let above = hierarchy.override_ancestors(owner);
+            for receiver in &above {
+                for member in hierarchy.override_member_keys(*receiver) {
+                    if hierarchy
+                        .declaring(*receiver, &member)
+                        .is_some_and(|target| target != owner)
+                    {
+                        result.insert(*receiver, &member);
+                    }
+                }
+            }
+            receivers.extend(above);
+        }
+        receivers.extend(hierarchy.base.keys().copied());
+        receivers.extend(hierarchy.implements.keys().copied());
+        receivers.extend(hierarchy.faces.iter().copied());
+        receivers.extend(hierarchy.provided_errors.keys().copied());
+        for receiver in receivers {
+            for member in hierarchy.override_member_keys(receiver) {
+                if let Some(root) = hierarchy.root_declaring(receiver, &member)
+                    && hierarchy.access_families.projects_method(root, &member)
+                {
+                    result.insert(receiver, &member);
+                }
+            }
+        }
+        result
     }
 }
 
@@ -1089,18 +1265,7 @@ pub(super) fn collect_hierarchy(
         .collect_writes(&probe, &hierarchy.faces);
     infer_implements(snapshot, &probe, &mut hierarchy);
 
-    // Last writes to ancestry, provided errors, implements and literal/stored
-    // supplies are above. Subsequent collection/numbering reads those facts;
-    // only slots and field aliases change before bodies consume this index.
-    hierarchy
-        .member_fillers
-        .set(super::interfaces::MemberFillers::collect(
-            snapshot, &probe, &hierarchy,
-        ))
-        .expect("member fillers initialized exactly once");
-
-    hierarchy.access_families =
-        std::sync::Arc::new(access_families::Families::collect(&mut probe, &hierarchy));
+    hierarchy.finish_families(snapshot, &mut probe);
 
     number_slots(&mut hierarchy);
     std::sync::Arc::clone(&hierarchy.access_families).number_slots(&mut hierarchy);
