@@ -2065,6 +2065,7 @@ test/language/expressions/class/elements/gen-private-method/yield-as-label-ident
 test/language/expressions/class/elements/gen-private-method/yield-as-label-identifier.js	pass	
 test/language/expressions/class/elements/gen-private-method/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/gen-private-method/yield-identifier-strict.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/init-err-evaluation.js	pass	
 test/language/expressions/class/elements/literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/nested-arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
@@ -6374,6 +6375,7 @@ test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-init-fn-name
 test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-init-skipped.js	pass	
 test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/private-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/elements/abrupt-completition-on-field-initializer.js	fail	nts: uncaught Test262Error: static field initializer should end with abrupt completion
 test/language/statements/class/elements/arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/arrow-fnc-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/async-gen-private-method-static/await-as-identifier-reference-escaped.js	pass	
@@ -6415,6 +6417,7 @@ test/language/statements/class/elements/comp-name-init-err-contains-super.js	fai
 test/language/statements/class/elements/ctor-called-after-fields-init.js	pass	
 test/language/statements/class/elements/equality-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/equality-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/fielddefinition-initializer-abrupt-completion.js	pass	
 test/language/statements/class/elements/fields-asi-2.js	pass	
 test/language/statements/class/elements/fields-asi-3.js	pass	
 test/language/statements/class/elements/fields-asi-4.js	pass	
@@ -6444,6 +6447,7 @@ test/language/statements/class/elements/gen-private-method/yield-as-label-identi
 test/language/statements/class/elements/gen-private-method/yield-as-label-identifier.js	pass	
 test/language/statements/class/elements/gen-private-method/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/gen-private-method/yield-identifier-strict.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/init-err-evaluation.js	pass	
 test/language/statements/class/elements/literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error

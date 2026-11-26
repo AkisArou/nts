@@ -1007,6 +1007,7 @@ test/language/expressions/class/elements/async-private-method-static/returns-asy
 test/language/expressions/class/elements/ctor-called-after-fields-init.js	pass	
 test/language/expressions/class/elements/fields-asi-2.js	pass	
 test/language/expressions/class/elements/fields-multiple-definitions-static-private-methods-proxy.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/elements/init-err-evaluation.js	pass	
 test/language/expressions/class/elements/private-async-generator-method-name.js	pass	
 test/language/expressions/class/elements/private-async-method-name.js	pass	
 test/language/expressions/class/elements/private-field-as-arrow-function.js	pass	
@@ -3327,11 +3328,14 @@ test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-init-fn-name
 test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-init-skipped.js	pass	
 test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/private-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/elements/abrupt-completition-on-field-initializer.js	fail	nts: uncaught Test262Error: static field initializer should end with abrupt completion
 test/language/statements/class/elements/async-private-method-static/returns-async-arrow.js	pass	
 test/language/statements/class/elements/async-private-method-static/returns-async-function.js	pass	
 test/language/statements/class/elements/ctor-called-after-fields-init.js	pass	
+test/language/statements/class/elements/fielddefinition-initializer-abrupt-completion.js	pass	
 test/language/statements/class/elements/fields-asi-2.js	pass	
 test/language/statements/class/elements/fields-computed-name-static-propname-prototype.js	pass	
+test/language/statements/class/elements/init-err-evaluation.js	pass	
 test/language/statements/class/elements/private-async-generator-method-name.js	pass	
 test/language/statements/class/elements/private-async-method-name.js	pass	
 test/language/statements/class/elements/private-field-as-arrow-function.js	pass	

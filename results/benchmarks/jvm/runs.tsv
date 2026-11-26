@@ -46,10 +46,14 @@ benchmarks/cases/closure-merge	{"kind":"agrees"}
 benchmarks/cases/closures	{"kind":"agrees"}
 benchmarks/cases/cyclic-churn	{"kind":"agrees"}
 benchmarks/cases/dispatch	{"kind":"agrees"}
+benchmarks/cases/elementwise	{"kind":"agrees"}
 benchmarks/cases/erasure-stored-typed	{"kind":"agrees"}
 benchmarks/cases/erasure-stored-unknown	{"kind":"agrees"}
 benchmarks/cases/erasure-typed	{"kind":"agrees"}
 benchmarks/cases/erasure-unknown	{"kind":"agrees"}
+benchmarks/cases/event-loop-files	{"kind":"refused","diagnostic":"NTS1001 `join`, an imported name whose implementation is not in this program is not supported by this lowering yet"}
+benchmarks/cases/event-loop-promises	{"kind":"agrees"}
+benchmarks/cases/event-loop-timers	{"kind":"refused","diagnostic":"NTS1001 an empty array of unrepresentable type (an array of `Timeout`) is not supported by this lowering yet"}
 benchmarks/cases/event-state	{"kind":"agrees"}
 benchmarks/cases/exceptions	{"kind":"agrees"}
 benchmarks/cases/face-fields	{"kind":"agrees"}
@@ -137,7 +141,24 @@ benchmarks/cases/pipeline	{"kind":"agrees"}
 benchmarks/cases/printer-erased	{"kind":"agrees"}
 benchmarks/cases/record-word-counts	{"kind":"agrees"}
 benchmarks/cases/release-acyclic	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-binary-trees-10	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-binary-trees-12	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-binary-trees-14	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-fasta-16384	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-fasta-32768	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-fasta-8192	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-k-nucleotide-16384	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-k-nucleotide-32768	{"kind":"agrees"}
+benchmarks/cases/rss-clbg-k-nucleotide-8192	{"kind":"agrees"}
+benchmarks/cases/size-flight-planner	{"kind":"refused","diagnostic":"a whole program is compared whole, and lowering changed what its module evaluation runs at <path>:388:5, <path>:438:5, <path>:484:5, <path>:928:1, <path>:388:20, <path>:438:18, <path>:484:21, <path>:928:26, <path>:31:546, <path>:31:565, <path>:31:5, <path>:32:599, <path>:32:620, <path>:32:5, <path>:33:586, <path>:33:607, <path>:33:5, <path>:34:611, <path>:34:630, <path>:34:5, <path>:35:492, <path>:35:513, <path>:35:5, <path>:36:760, <path>:36:781, <path>:36:5, <path>:37:708, <path>:37:729, <path>:37:5, <path>:38:750, <path>:38:771, <path>:38:5, <path>:39:692, <path>:39:713, <path>:39:5, <path>:40:654, <path>:40:675, <path>:40:5, <path>:41:684, <path>:41:705, <path>:41:5, <path>:42:824, <path>:42:845, <path>:42:5, <path>:43:784, <path>:43:805, <path>:43:5, <path>:44:748, <path>:44:769, <path>:44:5, <path>:45:750, <path>:45:771, <path>:45:5, <path>:46:638, <path>:46:659, <path>:46:5, <path>:47:760, <path>:47:781, <path>:47:5, <path>:48:233, <path>:48:5, <path>:49:301, <path>:49:5, <path>:50:286, <path>:50:5, <path>:51:276, <path>:51:5, <path>:52:132, <path>:52:5, <path>:53:361, <path>:53:5, <path>:54:317, <path>:54:5, <path>:55:177, <path>:55:5, <path>:56:379, <path>:56:5, <path>:57:258, <path>:57:5, <path>:58:493, <path>:58:5, <path>:59:247, <path>:59:5, <path>:60:176, <path>:60:5, <path>:61:136, <path>:61:5, <path>:62:206, <path>:62:5, <path>:63:186, <path>:63:5, <path>:64:154, <path>:64:5, <path>:65:140, <path>:65:5, <path>:66:148, <path>:66:5, <path>:67:194, <path>:67:5, <path>:68:186, <path>:68:5, <path>:69:227, <path>:69:5, <path>:70:222, <path>:70:5, <path>:71:133, <path>:71:5, <path>:72:153, <path>:72:5, <path>:73:136, <path>:73:5, <path>:74:144, <path>:74:5, <path>:75:115, <path>:75:5, <path>:76:139, <path>:76:5, <path>:77:173, <path>:77:5, <path>:78:224, <path>:78:5, <path>:79:313, <path>:79:5, <path>:80:95, <path>:80:5, <path>:81:134, <path>:81:5, <path>:82:119, <path>:82:5, <path>:83:187, <path>:83:5, <path>:84:145, <path>:84:5, <path>:85:134, <path>:85:5, <path>:86:161, <path>:86:5, <path>:87:227, <path>:87:5, <path>:88:244, <path>:88:5, <path>:89:230, <path>:89:5, <path>:90:155, <path>:90:5, <path>:91:227, <path>:91:5, <path>:92:145, <path>:92:5, <path>:93:239, <path>:93:5, <path>:94:165, <path>:94:5, <path>:95:292, <path>:95:5, <path>:96:133, <path>:96:5, <path>:97:251, <path>:97:5, <path>:98:145, <path>:98:5, <path>:99:277, <path>:99:5, <path>:100:122, <path>:100:5, <path>:101:293, <path>:101:5, <path>:102:135, <path>:102:5, <path>:103:132, <path>:103:5, <path>:104:142, <path>:104:5, <path>:105:109, <path>:105:5, <path>:106:177, <path>:106:5, <path>:107:131, <path>:107:5, <path>:108:179, <path>:108:5, <path>:109:139, <path>:109:5, <path>:110:183, <path>:110:5, <path>:111:251, <path>:111:5, <path>:112:131, <path>:112:5, <path>:113:229, <path>:113:5, <path>:114:160, <path>:114:5, <path>:115:190, <path>:115:5, <path>:116:117, <path>:116:5, <path>:117:114, <path>:117:5, <path>:118:191, <path>:118:5, <path>:119:118, <path>:119:5, <path>:120:206, <path>:120:5, <path>:121:261, <path>:121:5, <path>:122:240, <path>:122:5, <path>:123:238, <path>:123:5, <path>:124:246, <path>:124:5, <path>:125:239, <path>:125:5, <path>:126:229, <path>:126:5, <path>:127:111, <path>:127:5, <path>:128:281, <path>:128:5, <path>:129:258, <path>:129:5, <path>:130:251, <path>:130:5, <path>:3:13, refused as listed above; nothing can be compared until those refusals are removed or supported"}
+benchmarks/cases/size-hello	{"kind":"agrees"}
+benchmarks/cases/size-json	{"kind":"refused","diagnostic":"a whole program is compared whole, and lowering changed what its module evaluation runs at <path>:8:14, <path>:9:16, <path>:11:1, refused as listed above; nothing can be compared until those refusals are removed or supported"}
 benchmarks/cases/sort-objects	{"kind":"agrees"}
+benchmarks/cases/sort-objects-runs	{"kind":"agrees"}
+benchmarks/cases/sort-objects-shuffled	{"kind":"agrees"}
+benchmarks/cases/startup-builtins	{"kind":"refused","diagnostic":"a whole program is compared whole, and lowering changed what its module evaluation runs at <path>:8:14, <path>:9:16, <path>:11:1, refused as listed above; nothing can be compared until those refusals are removed or supported"}
+benchmarks/cases/startup-empty	{"kind":"agrees"}
+benchmarks/cases/startup-hello	{"kind":"agrees"}
 benchmarks/cases/str-append-length	{"kind":"agrees"}
 benchmarks/cases/str-append-loop	{"kind":"agrees"}
 benchmarks/cases/str-compare	{"kind":"agrees"}
@@ -152,6 +173,7 @@ benchmarks/cases/str-slice-keep	{"kind":"agrees"}
 benchmarks/cases/str-split	{"kind":"agrees"}
 benchmarks/cases/str-template	{"kind":"agrees"}
 benchmarks/cases/str-to-number	{"kind":"agrees"}
+benchmarks/cases/string-sort-control	{"kind":"agrees"}
 benchmarks/cases/strings	{"kind":"agrees"}
 benchmarks/cases/substrings	{"kind":"agrees"}
 benchmarks/cases/symbol-keyed-map	{"kind":"agrees"}

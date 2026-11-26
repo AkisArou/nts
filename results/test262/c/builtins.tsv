@@ -795,6 +795,9 @@ test/built-ins/String/prototype/codePointAt/return-utf16-decode.js	pass
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-than-zero.js	pass	
 test/built-ins/String/prototype/concat/S15.5.4.6_A1_T4.js	pass	
+test/built-ins/String/prototype/concat/S15.5.4.6_A1_T5.js	pass	
+test/built-ins/String/prototype/concat/S15.5.4.6_A1_T7.js	pass	
+test/built-ins/String/prototype/concat/S15.5.4.6_A1_T8.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail_2.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Success.js	pass	
@@ -831,9 +834,11 @@ test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T1.js	pass
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T3.js	pass	
 test/built-ins/String/prototype/lastIndexOf/not-a-substring.js	pass	
 test/built-ins/String/prototype/padEnd/fill-string-empty.js	pass	
+test/built-ins/String/prototype/padEnd/fill-string-omitted.js	pass	
 test/built-ins/String/prototype/padEnd/max-length-not-greater-than-string.js	pass	
 test/built-ins/String/prototype/padEnd/normal-operation.js	pass	
 test/built-ins/String/prototype/padStart/fill-string-empty.js	pass	
+test/built-ins/String/prototype/padStart/fill-string-omitted.js	pass	
 test/built-ins/String/prototype/padStart/max-length-not-greater-than-string.js	pass	
 test/built-ins/String/prototype/padStart/normal-operation.js	pass	
 test/built-ins/String/prototype/repeat/count-coerced-to-zero-returns-empty-string.js	pass	
@@ -843,6 +848,7 @@ test/built-ins/String/prototype/repeat/count-less-than-zero-throws.js	pass
 test/built-ins/String/prototype/repeat/empty-string-returns-empty.js	pass	
 test/built-ins/String/prototype/repeat/repeat-string-n-times.js	pass	
 test/built-ins/String/prototype/repeat/return-abrupt-from-count-as-symbol.js	pass	
+test/built-ins/String/prototype/replace/S15.5.4.11_A1_T7.js	pass	
 test/built-ins/String/prototype/replaceAll/getSubstitution-0x0024-0x0024.js	pass	
 test/built-ins/String/prototype/replaceAll/getSubstitution-0x0024-0x0026.js	pass	
 test/built-ins/String/prototype/replaceAll/getSubstitution-0x0024-0x0027.js	pass	
@@ -854,6 +860,7 @@ test/built-ins/String/prototype/replaceAll/searchValue-empty-string.js	pass
 test/built-ins/String/prototype/slice/S15.5.4.13_A1_T14.js	pass	
 test/built-ins/String/prototype/slice/S15.5.4.13_A1_T4.js	pass	
 test/built-ins/String/prototype/slice/S15.5.4.13_A1_T7.js	pass	
+test/built-ins/String/prototype/split/separator-undef.js	pass	
 test/built-ins/String/prototype/startsWith/coerced-values-of-position.js	pass	
 test/built-ins/String/prototype/startsWith/out-of-bounds-position.js	pass	
 test/built-ins/String/prototype/startsWith/return-abrupt-from-position-as-symbol.js	pass	
