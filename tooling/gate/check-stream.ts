@@ -49,6 +49,7 @@ export class CheckStream {
     const writing=new Promise<void>((resolve,reject)=>{started=resolve;failed=reject;});
     this.#publication=Promise.resolve().then(()=>publish(join(costs,'check-worker-0.jsonl.gz'),async append=>{
       this.#append=append;started();await ending;await this.#writes;
+      if(this.#failed)throw Error('check telemetry: publication remains failed');
     },{gzip:true}));
     void this.#publication.catch(error=>{this.#failed=true;this.#error(`publication failed: ${String(error)}`);failed(error);});
     this.#server=createServer({allowHalfOpen:true},socket=>this.#accept(socket));

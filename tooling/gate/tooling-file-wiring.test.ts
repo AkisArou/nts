@@ -47,11 +47,13 @@ test('real tooling compilers leave no per-PID check records in the enclosing run
   const subject=join(root,'tooling/compiler-telemetry.test.mjs'),privateCosts=join(own,'private-costs'),receipt=join(own,'observed.json');
   writeFileSync(subject,generatedJavaScript(`import{test}from'node:test';import assert from'node:assert/strict';import{spawnSync}from'node:child_process';import{readdirSync,writeFileSync}from'node:fs';
 import{fixtureEnvironment}from ${JSON.stringify(join(gate,'test-environment.ts'))};
+import{durableRecord}from ${JSON.stringify(join(gate,'durable-record.ts'))};
 test('compiler fixture telemetry is private',t=>{
-const fixture=fixtureEnvironment(t),direct={...process.env},privateEnv=fixtureEnvironment(t,{NTS_GATE_CASE_COSTS_DIR:${JSON.stringify(privateCosts)},NTS_GATE_STEP:'private-check',NTS_GATE_CHECK_CHANNEL:undefined,NTS_GATE_CHECK_CAPABILITY:undefined});
-for(const env of [direct,fixture,privateEnv]){const result=spawnSync(process.env.NTS_BIN,['check',${JSON.stringify(project)},'--json'],{env,encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);}
+const fixture=fixtureEnvironment(t),privateEnv=fixtureEnvironment(t,{NTS_GATE_CASE_COSTS_DIR:${JSON.stringify(privateCosts)},NTS_GATE_STEP:'private-check',NTS_GATE_CHECK_CHANNEL:undefined,NTS_GATE_CHECK_CAPABILITY:undefined});
+const direct=spawnSync(process.env.NTS_BIN,['check',${JSON.stringify(project)},'--json'],{encoding:'utf8'});assert.equal(direct.status,0,direct.stdout+direct.stderr);
+for(const env of [fixture,privateEnv]){const result=spawnSync(process.env.NTS_BIN,['check',${JSON.stringify(project)},'--json'],{env,encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);}
 assert.ok(readdirSync(${JSON.stringify(privateCosts)}).some(name=>/^check-\\d+(?:-\\d+)?[.]jsonl$/.test(name)),'the positive hand-invocation control really writes check records');
-writeFileSync(${JSON.stringify(receipt)},JSON.stringify([direct,fixture].map(env=>Object.fromEntries(['NTS_GATE_CASE_COSTS_DIR','NTS_GATE_CHECK_CHANNEL','NTS_GATE_CHECK_CAPABILITY'].map(name=>[name,env[name]??null])))));
+durableRecord(${JSON.stringify(receipt)},[process.env,fixture].map(env=>Object.fromEntries(['NTS_GATE_CASE_COSTS_DIR','NTS_GATE_CHECK_CHANNEL','NTS_GATE_CHECK_CAPABILITY'].map(name=>[name,env[name]??null]))));
 });`));
   const listed=spawnSync('sh',[new URL('./all.sh',source).pathname,'--list'],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
   writeGateFixtureScript(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nexec node tooling/gate/tooling-runner.ts ${JSON.stringify(subject)}\nfi\n`);
