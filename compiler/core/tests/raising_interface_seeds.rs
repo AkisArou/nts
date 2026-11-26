@@ -50,6 +50,32 @@ fn called_slot(program: &Program, caller: &str) -> usize {
 }
 
 #[test]
+fn an_implicit_iterator_getter_keeps_its_raising_accessor_route() {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
+        let program = prepared(
+            "tests/programs/an-abrupt-protocol-exit-preserves-the-close-completion",
+            provider,
+        );
+        assert!(
+            program.refused_bodies().next().is_none(),
+            "{:?}",
+            program.uncompiled
+        );
+        let caller = program
+            .funcs
+            .iter()
+            .find(|body| body.name == "getterCase")
+            .expect("the abrupt-close body survives");
+        let getter = "GetterSource#get return@raises";
+        assert!(caller.values.iter().any(|op| matches!(
+            &op.kind,
+            OpKind::Call { callee: Callee::Direct(name), .. } if name == getter
+        )));
+        assert!(program.funcs.iter().any(|body| body.name == getter));
+    }
+}
+
+#[test]
 fn a_transitive_class_call_has_both_raising_and_nonraising_rows() {
     for provider in [Memory::NoGc, Memory::ReferenceCounting] {
         let program = prepared(

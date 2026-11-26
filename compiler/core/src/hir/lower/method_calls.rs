@@ -1220,9 +1220,11 @@ impl FuncBuilder<'_> {
         // Both the suffix/flag reader and emission use the actual receiver's
         // decision. A static interface's slot cannot suffix a quiet concrete
         // member selected by structural specialization.
-        if !suffix.is_empty() {
+        let suffix = if suffix.is_empty() {
+            suffix
+        } else {
             match self.raising_method_dispatch(type_id, member) {
-                Some(MethodRaisingDispatch::Quiet) => {}
+                Some(MethodRaisingDispatch::Quiet) => "",
                 Some(MethodRaisingDispatch::Direct) => {
                     return Ok(Callee::Direct(format!(
                         "{owner}#{emitted}{instantiated}{RAISING_SUFFIX}"
@@ -1234,24 +1236,46 @@ impl FuncBuilder<'_> {
                         declared: format!("{owner}#{emitted}{RAISING_SUFFIX}"),
                     });
                 }
-                Some(MethodRaisingDispatch::Unavailable) | None => {
+                Some(MethodRaisingDispatch::Unavailable) => {
                     let why = self.why_the_raising_slot_is_missing(type_id, member);
                     return Err(self.unsupported(
                         id,
                         &format!("a call inside a `try` to `{member_name}`: {why}"),
                     ));
                 }
+                // None means this is not program-method dispatch. Accessor
+                // keys keep their existing route below; it is not a missing
+                // raising family and must never become a refusal here.
+                None => suffix,
             }
-        }
+        };
         if self.hierarchy.overridden(type_id, member)
             && let Some(slot) = self.hierarchy.slot_for(type_id, member, false)
         {
+            if !suffix.is_empty() {
+                let Some(slot) = self.hierarchy.slot_for(type_id, member, true) else {
+                    let why = self.why_the_raising_slot_is_missing(type_id, member);
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "a call inside a `try` to `{member_name}`, which a subclass \
+                             overrides: {why}"
+                        ),
+                    ));
+                };
+                return Ok(Callee::Virtual {
+                    slot,
+                    declared: format!("{owner}#{emitted}{RAISING_SUFFIX}"),
+                });
+            }
             return Ok(Callee::Virtual {
                 slot,
                 declared: format!("{owner}#{emitted}"),
             });
         }
-        Ok(Callee::Direct(format!("{owner}#{emitted}{instantiated}")))
+        Ok(Callee::Direct(format!(
+            "{owner}#{emitted}{instantiated}{suffix}"
+        )))
     }
 
     /// The instance a call to a method lowered **once per instance of its own type
