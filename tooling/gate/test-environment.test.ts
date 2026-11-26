@@ -141,6 +141,23 @@ test('generated CommonJS and ESM shims forward only named fixture handoffs',()=>
   }
 });
 
+test('fixtures never inherit enclosing compiler telemetry, but can explicitly own private observations',t=>{
+  const root=testScratch(t,'environment-telemetry');
+  for(const channel of [undefined,'/enclosing/checks.sock']){
+    const parent=gateEnvironment(fixtureEnvironment(t),{run:join(root,channel?'channel':'legacy'),owned:{
+      ...ownMemory(join(root,channel?'channel-memory':'legacy-memory')),
+      NTS_GATE_CASE_COSTS_DIR:join(root,'enclosing-costs'),NTS_GATE_STEP:'tooling',
+      NTS_GATE_CHECK_CHANNEL:channel,NTS_GATE_CHECK_CAPABILITY:channel?'enclosing-capability':undefined,
+    }}).env;
+    const child=testEnvironment({},parent),context=JSON.parse(child[ENVIRONMENT_CONTEXT]!);
+    for(const name of ['NTS_GATE_CASE_COSTS_DIR','NTS_GATE_CHECK_CHANNEL','NTS_GATE_CHECK_CAPABILITY']){
+      assert.equal(child[name],undefined,name);assert.equal(context.owned[name],undefined,name+' context');
+    }
+    const directory=join(root,'private-costs'),privateChild=testEnvironment({NTS_GATE_CASE_COSTS_DIR:directory},parent);
+    assert.equal(privateChild.NTS_GATE_CASE_COSTS_DIR,directory,'an explicit fixture observation remains private');
+  }
+});
+
 test('every absent fixture cache fails by name before its production resolver',()=>{
   const complete=testEnvironment();
   for(const name of CONTENT_CACHE_ENVIRONMENT){

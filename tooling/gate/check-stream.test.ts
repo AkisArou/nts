@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {connect,type Socket} from 'node:net';
 import {once} from 'node:events';
 import {join} from 'node:path';
-import {readdirSync,statSync,fstatSync,readFileSync,writeFileSync,unlinkSync,rmSync} from 'node:fs';
+import {existsSync,readdirSync,statSync,fstatSync,readFileSync,writeFileSync,unlinkSync,rmSync} from 'node:fs';
 import {gunzipSync,gzipSync} from 'node:zlib';
 import {CheckStream,CHECK_CAPABILITY} from './check-stream.ts';
 import {testScratch,newTestScratch} from './test-scratch.ts';
@@ -88,6 +88,27 @@ test('a publication write failure disables subsequent appends even if the writer
   const env=stream.environment('examples',()=>[42]);await send(stream.path,[header(env[CHECK_CAPABILITY]!),...records()]);
   await stream.reaped('examples');await stream.close();
   assert.equal(calls,2,'no later append may recover a poisoned output');assert.match(stream.errors.join('\n'),/injected stream write failure/);
+  assert.equal(existsSync(join(root,'costs/check-worker-0.jsonl.gz')),false,'a write failure cannot publish a valid truncated prefix');
+});
+
+test('bounded publication queue exhaustion rejects the durable producer instead of publishing a complete prefix',async t=>{
+  const root=newTestScratch('check-stream-overflow'),costs=join(root,'costs');let calls=0,release!:()=>void,firstComplete!:()=>void;
+  const blocked=new Promise<void>(resolve=>{release=resolve;});
+  const complete=new Promise<void>(resolve=>{firstComplete=resolve;});
+  const stream=new CheckStream(costs,join(root,'tmp'),(path,produce,options)=>durableRecordStream(path,append=>produce(async chunk=>{
+    if(++calls>4){await blocked;return;}
+    await append(chunk);if(calls===4)firstComplete();
+  }),options));
+  t.after(async()=>{release();try{await stream.close();}finally{rmSync(root,{recursive:true,force:true});}});
+  await stream.ready;const env=stream.environment('examples',()=>[42]);
+  const socket=await client(stream.path);t.after(()=>socket.destroy());await register(socket,header(env[CHECK_CAPABILITY]!));
+  socket.write(records().map(row=>JSON.stringify(row)).join('\n')+'\n');await complete;
+  const rows=Array.from({length:20},(_,index)=>({event:'observation',session:0,padding:String(index)+'x'.repeat(600*1024)}));
+  const closed=once(socket,'close');socket.end(rows.map(row=>JSON.stringify(row)).join('\n')+'\n');await closed;
+  assert.match(stream.errors.join('\n'),/bounded publication queue exhausted/);
+  release();await stream.reaped('examples');await stream.close();
+  assert.equal(existsSync(join(costs,'check-worker-0.jsonl.gz')),false,'a valid gzip prefix must never stand for the lost population');
+  assert.deepEqual(readdirSync(costs),[],'durable publication also removes its unfinished file');
 });
 
 for(const kind of ['reject','throw'] as const)test('publication failure before producer entry rejects readiness and closes its directory descriptor: '+kind,async t=>{

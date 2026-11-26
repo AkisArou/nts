@@ -2,7 +2,7 @@ import {gateFixtureMemory,writeGateFixtureScript} from './fixed-members-fixture.
 import {declareOwnMembers} from './test-cgroup-members.ts';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
-import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -35,6 +35,39 @@ function start(t:TestContext,root:string,env:NodeJS.ProcessEnv,entry:string,args
   t.after(async()=>{spawnSync('systemctl',['--user','stop',unit],{env:fixtureEnvironment(t),stdio:'ignore'});await closed;});
   return {closed,output:()=>output,stopped:()=>child.exitCode!==null||child.signalCode!==null?output||'tooling fixture exited':undefined};
 }
+
+test('real tooling compilers leave no per-PID check records in the enclosing runner',async t=>{
+  const own=testScratch(t,'tooling-check-publication'),root=join(own,'repo'),run=join(own,'run'),target=join(own,'target'),gate=join(root,'tooling/gate');
+  copyModuleClosure(['tooling/gate/run.mjs','tooling/gate/tooling-runner.ts','tooling/gate/test-environment.ts'],root);
+  oracleWorkspaceFixture(t,root);
+  const compiler=process.env.NTS_BIN??join(import.meta.dirname,'../../target/nts-dev/nts');
+  assert.ok(existsSync(compiler),'build the prepared nts-dev compiler before this wiring control');
+  const project=join(root,'project');mkdirSync(project);writeFileSync(join(project,'tsconfig.json'),JSON.stringify({compilerOptions:{strict:true},files:['main.ts']}));
+  writeFileSync(join(project,'main.ts'),'export function next(value:number):number{return value+1;}\n');
+  const subject=join(root,'tooling/compiler-telemetry.test.mjs'),privateCosts=join(own,'private-costs'),receipt=join(own,'observed.json');
+  writeFileSync(subject,generatedJavaScript(`import{test}from'node:test';import assert from'node:assert/strict';import{spawnSync}from'node:child_process';import{readdirSync,writeFileSync}from'node:fs';
+import{fixtureEnvironment}from ${JSON.stringify(join(gate,'test-environment.ts'))};
+test('compiler fixture telemetry is private',t=>{
+const fixture=fixtureEnvironment(t),direct={...process.env},privateEnv=fixtureEnvironment(t,{NTS_GATE_CASE_COSTS_DIR:${JSON.stringify(privateCosts)},NTS_GATE_STEP:'private-check',NTS_GATE_CHECK_CHANNEL:undefined,NTS_GATE_CHECK_CAPABILITY:undefined});
+for(const env of [direct,fixture,privateEnv]){const result=spawnSync(process.env.NTS_BIN,['check',${JSON.stringify(project)},'--json'],{env,encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);}
+assert.ok(readdirSync(${JSON.stringify(privateCosts)}).some(name=>/^check-\\d+(?:-\\d+)?[.]jsonl$/.test(name)),'the positive hand-invocation control really writes check records');
+writeFileSync(${JSON.stringify(receipt)},JSON.stringify([direct,fixture].map(env=>Object.fromEntries(['NTS_GATE_CASE_COSTS_DIR','NTS_GATE_CHECK_CHANNEL','NTS_GATE_CHECK_CAPABILITY'].map(name=>[name,env[name]??null])))));
+});`));
+  const listed=spawnSync('sh',[new URL('./all.sh',source).pathname,'--list'],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
+  writeGateFixtureScript(join(gate,'all.sh'),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\nexec node tooling/gate/tooling-runner.ts ${JSON.stringify(subject)}\nfi\n`);
+  const memory=gateFixtureMemory(join(own,'memory'),root,{resident:{kind:'fixed',defaultBytes:128*2**20},scopePeak:{kind:'fixed',bytes:128*2**20,resettable:true}});
+  const observations=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));observations.width={logical:1,available:1};durableRecord(memory.NTS_HOST_OBSERVATIONS,observations);
+  mkdirSync(join(target,'release'),{recursive:true});writeFileSync(join(target,'release/nts'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  const planned=gateEnvironment(fixtureEnvironment(t),{run,oracleRoot:root,owned:{...memory,CARGO_TARGET_DIR:target,NTS_BIN:compiler}});
+  const child=start(t,root,planned.env,join(gate,'run.mjs'),['tooling']);
+  assert.equal(await child.closed,0,child.output());
+  assert.deepEqual(readdirSync(join(run,'costs')).filter(name=>/^check-\d+(?:-\d+)?[.]jsonl$/.test(name)),[],'a real tooling run must never leave per-PID check records');
+  const observed=JSON.parse(readFileSync(receipt,'utf8')) as Record<string,string|null>[];
+  assert.ok(observed.every(row=>Object.values(row).every(value=>value===null)),'both direct and fixture children revoke the enclosing telemetry packet');
+  const summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8'));
+  assert.equal(summary.case_costs.error_count,0,JSON.stringify(summary.case_costs.errors));
+  assert.equal(existsSync(join(run,'tmp')),false);
+});
 
 for(const scenario of ['ordinary','full','oversized'] as const)test(`real tooling files ${scenario==='full'?'wait on full supplied memory then enter':scenario==='oversized'?'refuse a head lease beyond the pool budget by name':'enter beside two ordinary agent jobs'}`,async t=>{
   const full=scenario==='full',oversized=scenario==='oversized';
