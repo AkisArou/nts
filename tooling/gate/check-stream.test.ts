@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {connect,type Socket} from 'node:net';
 import {once} from 'node:events';
 import {join} from 'node:path';
-import {readdirSync,statSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {readdirSync,statSync,fstatSync,readFileSync,writeFileSync,unlinkSync,rmSync} from 'node:fs';
 import {gunzipSync,gzipSync} from 'node:zlib';
 import {CheckStream,CHECK_CAPABILITY} from './check-stream.ts';
 import {testScratch,newTestScratch} from './test-scratch.ts';
@@ -88,6 +88,48 @@ test('a publication write failure disables subsequent appends even if the writer
   const env=stream.environment('examples',()=>[42]);await send(stream.path,[header(env[CHECK_CAPABILITY]!),...records()]);
   await stream.reaped('examples');await stream.close();
   assert.equal(calls,2,'no later append may recover a poisoned output');assert.match(stream.errors.join('\n'),/injected stream write failure/);
+});
+
+for(const kind of ['reject','throw'] as const)test('publication failure before producer entry rejects readiness and closes its directory descriptor: '+kind,async t=>{
+  const root=newTestScratch('check-stream-startup-failure');
+  const stream=new CheckStream(join(root,'costs'),join(root,'tmp'),()=>{
+    const error=Error('injected publication startup failure');
+    if(kind==='throw')throw error;return Promise.reject(error);
+  });
+  t.after(async()=>{try{await stream.close();}finally{rmSync(root,{recursive:true,force:true});}});
+  const descriptor=Number(/\/fd\/(\d+)\/checks\.sock$/.exec(stream.path)![1]);
+  assert.ok(fstatSync(descriptor).isDirectory());
+  await assert.rejects(stream.ready,/injected publication startup failure/);
+  await stream.close();
+  assert.throws(()=>fstatSync(descriptor),{code:'EBADF'});
+  assert.match(stream.errors.join('\n'),/publication failed.*injected publication startup failure/);
+});
+
+test('transport readiness waits for publication producer entry',async t=>{
+  const root=newTestScratch('check-stream-startup-barrier');let enter!:()=>void;
+  const barrier=new Promise<void>(resolve=>{enter=resolve;});
+  const stream=new CheckStream(join(root,'costs'),join(root,'tmp'),async(path,produce,options)=>{
+    await barrier;return durableRecordStream(path,produce,options);
+  });
+  t.after(async()=>{enter();try{await stream.close();}finally{rmSync(root,{recursive:true,force:true});}});
+  let ready=false;void stream.ready.then(()=>{ready=true;});
+  const socket=await client(stream.path),closed=once(socket,'close');
+  assert.equal(ready,false,'a listening socket alone cannot admit a measured compiler');
+  socket.end();await closed;enter();await stream.ready;await stream.close();
+  assert.deepEqual(stream.errors,[]);
+});
+
+test('socket preparation failure rejects readiness and closes its directory descriptor',async t=>{
+  const root=newTestScratch('check-stream-socket-failure'),temporary=join(root,'tmp');
+  const stream=new CheckStream(join(root,'costs'),temporary);
+  t.after(async()=>{try{await stream.close();}finally{rmSync(root,{recursive:true,force:true});}});
+  const descriptor=Number(/\/fd\/(\d+)\/checks\.sock$/.exec(stream.path)![1]);
+  // Unix bind creates the entry synchronously; permission setup follows on
+  // listening. Remove only this fixture's socket before that callback runs.
+  unlinkSync(join(temporary,'checks.sock'));
+  await assert.rejects(stream.ready,{code:'ENOENT'});
+  await stream.close();assert.throws(()=>fstatSync(descriptor),{code:'EBADF'});
+  assert.match(stream.errors.join('\n'),/listener preparation failed/);
 });
 
 test('publication preserves original row bytes and signed-zero double bits',async t=>{

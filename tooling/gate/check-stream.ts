@@ -42,15 +42,26 @@ export class CheckStream {
     // descriptor resolves to this run's actual tmp; it is closed at run end.
     this.#directory=openSync(temporary,'r');
     this.path=`/proc/${process.pid}/fd/${this.#directory}/checks.sock`;
-    this.#publication=publish(join(costs,'check-worker-0.jsonl.gz'),async append=>{
-      this.#append=append;await new Promise<void>(resolve=>{this.#finish=resolve;});await this.#writes;
-    },{gzip:true});
-    void this.#publication.catch(error=>this.#error(`publication failed: ${String(error)}`));
+    // Acquire the close handoff before invoking a fallible publication owner.
+    // Failure before its producer runs must still release this directory FD.
+    const ending=new Promise<void>(resolve=>{this.#finish=resolve;});
+    let started!:()=>void,failed!:(error:unknown)=>void;
+    const writing=new Promise<void>((resolve,reject)=>{started=resolve;failed=reject;});
+    this.#publication=Promise.resolve().then(()=>publish(join(costs,'check-worker-0.jsonl.gz'),async append=>{
+      this.#append=append;started();await ending;await this.#writes;
+    },{gzip:true}));
+    void this.#publication.catch(error=>{this.#failed=true;this.#error(`publication failed: ${String(error)}`);failed(error);});
     this.#server=createServer({allowHalfOpen:true},socket=>this.#accept(socket));
-    this.ready=new Promise<void>((resolve,reject)=>{
-      this.#server.once('error',reject);
-      this.#server.listen(this.path,()=>{chmodSync(this.#socketPath,0o600);this.#server.unref();resolve();});
+    const listening=new Promise<void>((resolve,reject)=>{
+      this.#server.on('error',error=>{this.#error(`listener failed: ${String(error)}`);reject(error);});
+      this.#server.listen(this.path,()=>{
+        this.#server.unref();
+        try{chmodSync(this.#socketPath,0o600);resolve();}
+        catch(error){this.#error(`listener preparation failed: ${String(error)}`);reject(error);}
+      });
     });
+    // Dispatch cannot start a compiler until both transport and sink exist.
+    this.ready=Promise.all([listening,writing]).then(()=>{});
   }
   #error(message:string){this.errors.push(`check telemetry: ${message}`);}
   environment(step:string,members:()=>readonly number[]):Record<string,string>{
@@ -138,11 +149,15 @@ export class CheckStream {
   close():Promise<void>{return this.#closed??=this.#close();}
   async #close():Promise<void>{
     this.#closing=true;
-    for(const step of [...this.#steps.keys()])await this.reaped(step);
-    for(const peer of this.#peers){this.#error('unidentified producer still open at run end');peer.socket.destroy();}
-    await new Promise<void>(resolve=>this.#server.close(()=>resolve()));
-    this.#finish();
-    await this.#publication.catch(()=>{});
-    rmSync(this.#socketPath,{force:true});closeSync(this.#directory);
+    try{for(const step of [...this.#steps.keys()])await this.reaped(step);}
+    finally{
+      for(const peer of this.#peers){this.#error('unidentified producer still open at run end');peer.socket.destroy();}
+      try{await new Promise<void>(resolve=>this.#server.close(()=>resolve()));}
+      finally{
+        this.#finish();
+        try{await this.#publication.catch(()=>{});}
+        finally{try{rmSync(this.#socketPath,{force:true});}finally{closeSync(this.#directory);}}
+      }
+    }
   }
 }

@@ -1460,3 +1460,46 @@ temporary. Missing totals never become completed costs.
 | `e/killed-v3/summary.json` | `0cad9e377958981038087ce704fc09d0239513833619c9dfcb663b6d4694647a` |
 | `e/killed-v3/costs/check-worker-0.jsonl.gz` | `8c747f29ab537c06ad8818affb63e40535587264042a16b90c214410f13f6411` |
 | `e/killed-v3/cleanup.json` | `db5b7aa839a471cd77b97f4a956c25913c29c56959af6372afd75a8a1ff24be8` |
+
+### Publication and listener startup
+
+The final ownership review found that publication could fail before invoking
+its producer. Readiness then reported success and the close handoff had not
+been acquired. The owner now acquires that handoff before calling publication,
+joins writer entry with listener readiness before dispatch, and closes the
+directory descriptor in `finally`. Listener errors remain named after startup;
+permission-setup errors reject readiness instead of escaping the asynchronous
+listening callback. These changes affect setup and cleanup, not the timed send
+path, row bytes, compression format or the healthy-path measurements above.
+
+The committed before control at
+`ca1c237c564136171976b74bcb8dc488e4dbb140` fails with “Missing expected rejection”
+when publication rejects before producer entry. A second committed control at
+`c22d904b4af125617fa70abd1c0fd78fdb12d5a7` removes only its private bound socket
+before permission setup and reproduces an uncaught `chmod` `ENOENT`.
+Both controls run after their commits were verified separately.
+
+At `4c13f510ed511dcc998a15349164dc6d0b507032`, all four startup controls pass:
+synchronous publication throw, rejected publication, delayed producer entry,
+and native socket preparation failure. Each failure rejects readiness; `fstat`
+reports `EBADF` after close, proving the acquired directory descriptor is gone.
+The delayed-entry control waits on socket events and an explicit producer
+barrier, with no elapsed-time verdict. The final admitted batch passes all
+44 cost/stream/reader/calibration tests, a fresh compiler build, six strict type
+projects/1,241 modules, and host ownership's 2,216 sources, 368 entry closures
+and 419 reads. The preceding expanded batch passed all 83 tests, including
+the real-runner environment and shutdown controls.
+
+The first `--here` attempt was stopped by its named unit while its build
+waited for admission, before making these corrections. It supplies no green
+landing proof; readiness uses the subsequent exact-commit attempt.
+
+| Raw artifact under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `e/publication-before-v2.log` | `1f9013a0067b0b6a7a4ea1f58810f45dbf2f0a97edefc62b512a58efcb24b439` |
+| `e/socket-before-v1.log` | `6705efe5638bd2b2fdd47065e6d2c5382f677abe92c51e32b9e572dc896d0058` |
+| `e/startup-after-v1.log` | `9dbfc27b9285efa823092c75b2a8907d701409e79f2364c6ccd75cadfd16a75e` |
+| `e/final-tooling-v1/focused.log` | `4af43e9e56081e7e1c78219eae189cf74f4b7b8b0948a03c9081f441ba8c7068` |
+| `e/final-tooling-v2/focused.log` | `767136cbc09c1ed3bcf1ee2e81b189fd025fb5a35b1abc68bf5b618bbec7eff6` |
+| `e/final-tooling-v2/types.log` | `9ca01fffc7bc151ae1a4068626e6c2df80d8566fd947543966acda51fabeaecd` |
+| `e/final-tooling-v2/audit.log` | `9ca8a557ada36c91b24f5c70686b27227fdc5b76f770fc6ecb5f74134d8a5ea8` |
