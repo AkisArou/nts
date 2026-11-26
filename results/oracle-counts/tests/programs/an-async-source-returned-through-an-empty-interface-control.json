@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-async-source-returned-through-an-empty-interface-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-async-source-returned-through-an-empty-interface-control/src/main.ts",
+      "signature": "cc3e716986f2608ee3071ea166e38ede871adae53ecff35c304cf3f5ca26eabb",
+      "keys": {
+        "c": "690f6baac6dad8dff875881f4fd71956",
+        "jvm": "f0677a4a41522d263e47db0162ed720d",
+        "llvm": "b56176eaf9f42ba4ae3b40b8cf6ae3bf"
+      },
+      "cases_sha256": "6393f453fde83f0eb54ff20426d78ecf53819ace3a51bd2c8dc3dc79297a7dfb",
+      "driver_sha256": "e65a879cf62fc1261a5edca7d4663675d2fabb6f0fa9d6c7d78bbff2a6d4e23c",
+      "populations": {
+        "control": {
+          "count": 29,
+          "cases_sha256": "6393f453fde83f0eb54ff20426d78ecf53819ace3a51bd2c8dc3dc79297a7dfb"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

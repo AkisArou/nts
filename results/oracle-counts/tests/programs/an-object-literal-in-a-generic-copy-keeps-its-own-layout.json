@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-literal-in-a-generic-copy-keeps-its-own-layout",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-literal-in-a-generic-copy-keeps-its-own-layout/src/main.ts",
+      "signature": "f6d4ef13cb826319b0cb401a0be7d75da9822f51a9a7b2254bd5cfd085d13929",
+      "keys": {
+        "c": "44324bfa91748c098eee22b084d4fc0f",
+        "jvm": "5be8422288834ed941a72f8b31e63708",
+        "llvm": "10adb898e3cc4df533c2ce6c9c6a3980"
+      },
+      "cases_sha256": "1be3cfa2434f3191917d998cd57c01f129d2199988d9c44557ac2a375da22faf",
+      "driver_sha256": "6522a72bdd29d71c4682238204f6fd8ecac2cbd5c57c2781e482170286d8af40",
+      "populations": {
+        "describedEach": {
+          "count": 29,
+          "cases_sha256": "45e15d606f58c0ad914beb783d7c09f3ad51093c4c3617c7c0cd030871b6ffa8"
+        },
+        "kept": {
+          "count": 29,
+          "cases_sha256": "fd6c86e2e7d5e56871aed6651046ba9d4dc5126132ffa36dc893bf429678b302"
+        },
+        "measured": {
+          "count": 29,
+          "cases_sha256": "288606ea309929ed342795a61fc06d77f6eb2fb9a73d2ca0492f941d2d016648"
+        },
+        "mixed": {
+          "count": 29,
+          "cases_sha256": "9e66fe499e69a583fb69a5e174cb820802a9ab81ea8e68379ccf782e73096835"
+        },
+        "moved": {
+          "count": 29,
+          "cases_sha256": "bdff291e59ad8d9750a18e670567dbc12d8b1d800174ee130aa2c0a52f6534c3"
+        },
+        "namedItsOwnType": {
+          "count": 29,
+          "cases_sha256": "5998c7db037a16c0e131853da52783e4104879520f7742640fec6fa881707f63"
+        },
+        "queued": {
+          "count": 29,
+          "cases_sha256": "0ceb3e528eb7fdb383d522a08ba0344cf147dd797e261aef6089958fb7df3071"
+        },
+        "sameType": {
+          "count": 29,
+          "cases_sha256": "8364ee5e8a8067937d002910e20cd00c8c02865d72cd18a6c4b67ee59b29b6b8"
+        },
+        "shelved": {
+          "count": 29,
+          "cases_sha256": "f4ecc7cbe6780ca68a9059023247ddf8f01a0e6afc5fabfdb3a50a2913929e56"
+        },
+        "weighed": {
+          "count": 29,
+          "cases_sha256": "37b0b0105f096bcb68e2de742094e15d459074aa0f3ff9fa838378a0584750ab"
+        }
+      },
+      "complete": true,
+      "count": 290
+    }
+  ]
+}

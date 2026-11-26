@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-imported-builtin-namespace-keeps-its-binding",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-imported-builtin-namespace-keeps-its-binding/src/main.ts",
+      "signature": "e67b87cd2ac132498aae79cdf7b17aa00580343d2e2905bb78383ada87db4751",
+      "keys": {
+        "c": "047ff4d089cf1527bae213c08d04c6c2",
+        "jvm": "58d2e5e2619617eb3fcf4e6952228c59",
+        "llvm": "424b24e98e7b4e2e81a0ecf82f9cda05"
+      },
+      "cases_sha256": "d7a077c58fc301b10d5e392c4f5fa28d8757b401c5c38ceb9bf072354a76e6f7",
+      "driver_sha256": "ce58c357e92703a421d1f1e27ebec38672f6860e7125bb461196732e6b868633",
+      "populations": {
+        "importedJSON": {
+          "count": 29,
+          "cases_sha256": "1ca7e5fd55e9d40b9ff2026641566f6e0d070982541475fe7bc1634008a2afca"
+        },
+        "importedMath": {
+          "count": 29,
+          "cases_sha256": "e39838341a37937da9916b17667205fdfc61630a26bd1f580781a55eebc176c4"
+        },
+        "importedNumber": {
+          "count": 29,
+          "cases_sha256": "8b5809aae52620cf684fb4251af4a1572bda524a1b22516c58ee0a281f8f73b1"
+        },
+        "importedParse": {
+          "count": 29,
+          "cases_sha256": "b212f2488fe58dcd887a4d1ffae15bd854a793032b3c819c8885796919d5c30b"
+        },
+        "renamedJSON": {
+          "count": 29,
+          "cases_sha256": "7dc358a692bd1a812be722b734111a468a49eb0ab573b6809e45896c79736c1f"
+        },
+        "renamedMath": {
+          "count": 29,
+          "cases_sha256": "66348792e0e392cefacf7e6460a8ec2337576636e1c3bae351635e915cdac23f"
+        },
+        "renamedNumber": {
+          "count": 29,
+          "cases_sha256": "03fdfcedef6953a685c79ba56b260bc523037818164a908230cf7eb60d43a2c1"
+        },
+        "renamedParse": {
+          "count": 29,
+          "cases_sha256": "afdec9e61093a29adb52d2d7ad3adf784c37651e1560e2f7d58dfb98c39a19d9"
+        }
+      },
+      "complete": true,
+      "count": 232
+    }
+  ]
+}

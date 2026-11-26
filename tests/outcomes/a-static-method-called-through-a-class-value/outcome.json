@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 16,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "conditional 2 4059400000000000",
+        "node": "conditional 2 4069200000000000"
+      },
+      {
+        "compiled": "conditional 3 4058c00000000000",
+        "node": "conditional 3 4068e00000000000"
+      },
+      {
+        "compiled": "conditional 5 4059c00000000000",
+        "node": "conditional 5 4069600000000000"
+      },
+      {
+        "compiled": "conditional 8 4059600000000000",
+        "node": "conditional 8 4069300000000000"
+      },
+      {
+        "compiled": "conditional 9 4058a00000000000",
+        "node": "conditional 9 4068d00000000000"
+      },
+      {
+        "compiled": "conditional 10 4059eccccccccccd",
+        "node": "conditional 10 4069766666666666"
+      },
+      {
+        "compiled": "conditional 11 4058133333333333",
+        "node": "conditional 11 406889999999999a"
+      },
+      {
+        "compiled": "conditional 12 405ac00000000000",
+        "node": "conditional 12 4069e00000000000"
+      },
+      {
+        "compiled": "conditional 13 405fc00000000000",
+        "node": "conditional 13 406c600000000000"
+      },
+      {
+        "compiled": "conditional 15 4076300000000000",
+        "node": "conditional 15 407c700000000000"
+      },
+      {
+        "compiled": "conditional 19 40f0063000000000",
+        "node": "conditional 19 40f00c7000000000"
+      },
+      {
+        "compiled": "conditional 20 41e000000c600000",
+        "node": "conditional 20 41e0000018e00000"
+      },
+      {
+        "compiled": "conditional 23 41f0000006300000",
+        "node": "conditional 23 41f000000c700000"
+      },
+      {
+        "compiled": "conditional 24 4340000000000032",
+        "node": "conditional 24 4340000000000064"
+      },
+      {
+        "compiled": "conditional 25 c33fffffffffff9b",
+        "node": "conditional 25 c33fffffffffff37"
+      },
+      {
+        "compiled": "conditional 27 40c84e8000000000",
+        "node": "conditional 27 40c8808000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 16 disagreements",
+  "node": null,
+  "measured_with": "30b9235597068db4",
+  "source": "measured"
+}

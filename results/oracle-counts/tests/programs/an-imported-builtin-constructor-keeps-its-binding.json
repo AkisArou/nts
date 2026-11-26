@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-imported-builtin-constructor-keeps-its-binding",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-imported-builtin-constructor-keeps-its-binding/src/main.ts",
+      "signature": "7c5ab710766240e00055b565163fc7d1cf82faafcb6c3214a7aca1d67ed0244e",
+      "keys": {
+        "c": "47341c6b52f492dc327a6bae90e1554b",
+        "jvm": "2709c971d5f8689c21437325c94a8cfb",
+        "llvm": "96e766eacd8d526aef4a3706ac90217d"
+      },
+      "cases_sha256": "26cbe7b3bd99aaf7b6d0cd1ca1f3208da339f4794059ef922304f04b9d493c89",
+      "driver_sha256": "4a14a6e172efe509eae1a1de22c8d3ddabffa12390aaeae27b03e85d64e5be8b",
+      "populations": {
+        "importedArray": {
+          "count": 29,
+          "cases_sha256": "5d8cc70153b2ed7ab1a3a21a1f2cd9745dada38257d41f850843eb5d32df46be"
+        },
+        "importedFloat32Array": {
+          "count": 29,
+          "cases_sha256": "823c0c2c711a8c0e357dd15e238cf4085d6a41075a2c8517eb4d47059d127b3f"
+        },
+        "importedFloat64Array": {
+          "count": 29,
+          "cases_sha256": "c3d728d7365c4dcacfd851d483846a1b027e7465d2ef0078cc3b8deb01257f85"
+        },
+        "importedInt16Array": {
+          "count": 29,
+          "cases_sha256": "3e98650845998b80187bebfbcae849f2dea4fb0a94b727cd46fbff346c18be32"
+        },
+        "importedInt32Array": {
+          "count": 29,
+          "cases_sha256": "295d15de40ecc35259685129ff34dc439e72b3bfa1b30802e87fd8c788dac844"
+        },
+        "importedInt8Array": {
+          "count": 29,
+          "cases_sha256": "46d2eed64f23a81829692ea0cb738d664166686c635ba641cec550c9fbf8d7b3"
+        },
+        "importedUint16Array": {
+          "count": 29,
+          "cases_sha256": "20fb891d300cf1a3a8c19ebd25a279a9c7dfb1f72854a2aeab9d246ab20249ac"
+        },
+        "importedUint32Array": {
+          "count": 29,
+          "cases_sha256": "e6a5954452361468061c93062e12d2866473aca6e813fca166e3252c6b6cdb21"
+        },
+        "importedUint8Array": {
+          "count": 29,
+          "cases_sha256": "43c923b65a61567683b7b4cfecf04673e1a75158e5c3693eda7d80ff162e521d"
+        },
+        "renamedArray": {
+          "count": 29,
+          "cases_sha256": "834f4d69dc3010fb2a56ce8e275a51b9f832359a874b025e3891f5c006e513f8"
+        },
+        "renamedFloat32Array": {
+          "count": 29,
+          "cases_sha256": "95399a29b7c57496bdf3ef10a2a62fee7404c2dce9eb5dee279266b970401507"
+        },
+        "renamedFloat64Array": {
+          "count": 29,
+          "cases_sha256": "962da68b53b82512ca2d55320d5216fc8390fc06b7fe84306f1b2b015e5b548e"
+        },
+        "renamedInt16Array": {
+          "count": 29,
+          "cases_sha256": "555482a6ae07585dcebe3d478644cf8c307705c8cd864100074307514d18447b"
+        },
+        "renamedInt32Array": {
+          "count": 29,
+          "cases_sha256": "90c23a21fce461f957e8127a4a9726236c4ab8b74d43af487253de90b4e46752"
+        },
+        "renamedInt8Array": {
+          "count": 29,
+          "cases_sha256": "f7b19d484ae2b0fd13db512f21c42990be4e6eef1dc39fbdfa01b551d14607f8"
+        },
+        "renamedUint16Array": {
+          "count": 29,
+          "cases_sha256": "04fc0f9d6bf0a91777fe2b0fd479ab4ed6f72cacee7c99580783f87ae3955bdf"
+        },
+        "renamedUint32Array": {
+          "count": 29,
+          "cases_sha256": "a0c240c2ef5de8aa3e0d3610f88db8725b316fd8dcea41169ad68b8fe21b8b97"
+        },
+        "renamedUint8Array": {
+          "count": 29,
+          "cases_sha256": "0bce954b4e22096603996bca8689f5f823979aa01f61dbc072ef587e67be5387"
+        }
+      },
+      "complete": true,
+      "count": 522
+    }
+  ]
+}

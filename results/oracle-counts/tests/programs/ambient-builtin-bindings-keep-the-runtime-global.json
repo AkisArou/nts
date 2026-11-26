@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/ambient-builtin-bindings-keep-the-runtime-global",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/ambient-builtin-bindings-keep-the-runtime-global/src/main.ts",
+      "signature": "873d84cc944d2d2f43089124eff6add474ae3b84f0b278aa9ac619de2951a1cf",
+      "keys": {
+        "c": "82123d667054642d5bb719b1f103139a",
+        "jvm": "70c180b3146614513c9a007cf7d5aabf",
+        "llvm": "a0f30b77720c8e3708fb1a7f911911b5"
+      },
+      "cases_sha256": "2d6cd99cd3e5e2931a8b7f8b7ae613338b8008d705773805ef4a102f8161d521",
+      "driver_sha256": "f9f5760521183a0f4b5b6515d15632351fc6dda53cf2d098e68fd66297f327dc",
+      "populations": {
+        "ambientFloor": {
+          "count": 29,
+          "cases_sha256": "ec01181155568772abf5da216b524a50c44ebc7bb36203df2ced469e9f4c78c1"
+        },
+        "ambientJSON": {
+          "count": 29,
+          "cases_sha256": "4243d937ddaae56c8f7da5f4e8c9e048b8bad815a23ea1aa8a510d2fd1ac99ec"
+        },
+        "ambientNumber": {
+          "count": 29,
+          "cases_sha256": "45d2d8ca2f17b9cf4d2b0e3fa52121218eb2b32ad9657b765ea93ea07f22a607"
+        },
+        "augmentedConstant": {
+          "count": 29,
+          "cases_sha256": "e24a37d3c57e19082812625b4e2fa1c9ccd65e0ac04dfbdf805eabc23c31dca4"
+        },
+        "augmentedView": {
+          "count": 29,
+          "cases_sha256": "d3e83b8cf6c68b112c7472a1400a1155426bebe0f980f73a10f668bcfb031005"
+        },
+        "mergedFloor": {
+          "count": 29,
+          "cases_sha256": "9e2b1cfe246fcf0a0e58cdb70322e8c216a18397d6fd86a5f1549c340e9eb377"
+        },
+        "mergedIsNaN": {
+          "count": 29,
+          "cases_sha256": "134c77c02d99b1899ae1c2bfecabd63716ef3d86886d8f834fb3cac34baeb985"
+        }
+      },
+      "complete": true,
+      "count": 203
+    }
+  ]
+}

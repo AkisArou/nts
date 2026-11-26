@@ -33,7 +33,7 @@ tests/typescript/absent-routes-controls/parameters-rest-argument-presence-contro
 tests/typescript/absent-routes-controls/properties-declared-class-field-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/absent-routes-controls/properties-defined-union-field-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/absent-routes-controls/properties-destructuring-default-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/absent-routes-controls/properties-generic-optional-slot-control.ts	{"kind":"invalid-hir","validator":"StoreType { func: \"inspect<f64>\", what: \"a field read\", expected: Bool, found: Float { bits: 64 } }"}
+tests/typescript/absent-routes-controls/properties-generic-optional-slot-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/absent-routes-controls/properties-optional-interface-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/absent-routes-controls/properties-partial-view-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/absent-routes-controls/properties-required-present-view-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -1281,17 +1281,17 @@ tests/typescript/builtin-identity/name-block-int8array.ts	{"kind":"refused","dia
 tests/typescript/builtin-identity/name-block-isnan.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-block-json-stringify.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-block-map.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-block-math-max.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-block-math-min.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-block-math-max.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-block-math-min.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-block-math-random.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-block-number-isnan.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-block-number-parsefloat.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-block-number-isnan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-block-number-parsefloat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-block-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-block-object-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-block-object-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-block-parseint.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-block-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-block-set.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-block-string-fromcharcode.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-block-string-fromcharcode.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-block-typeerror.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-block-uint16array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-block-uint32array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -1311,17 +1311,17 @@ tests/typescript/builtin-identity/name-function-int8array.ts	{"kind":"refused","
 tests/typescript/builtin-identity/name-function-isnan.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-function-json-stringify.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-function-map.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-function-math-max.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-function-math-min.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-function-math-max.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-function-math-min.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-function-math-random.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-function-number-isnan.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-function-number-parsefloat.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-function-number-isnan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-function-number-parsefloat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-function-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-function-object-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-function-object-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-function-parseint.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-function-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-function-set.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-function-string-fromcharcode.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-function-string-fromcharcode.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-function-typeerror.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-function-uint16array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-function-uint32array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -1341,17 +1341,17 @@ tests/typescript/builtin-identity/name-module-int8array.ts	{"kind":"refused","di
 tests/typescript/builtin-identity/name-module-isnan.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-module-json-stringify.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-module-map.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-module-math-max.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-module-math-min.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-module-math-max.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-module-math-min.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-module-math-random.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-module-number-isnan.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-module-number-parsefloat.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-module-number-isnan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-module-number-parsefloat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-module-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-module-object-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-module-object-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-module-parseint.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-module-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-module-set.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-module-string-fromcharcode.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-module-string-fromcharcode.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-module-typeerror.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-module-uint16array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-module-uint32array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -1371,17 +1371,17 @@ tests/typescript/builtin-identity/name-namespace-int8array.ts	{"kind":"refused",
 tests/typescript/builtin-identity/name-namespace-isnan.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-namespace-json-stringify.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-map.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-namespace-math-max.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
-tests/typescript/builtin-identity/name-namespace-math-min.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/builtin-identity/name-namespace-math-max.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-namespace-math-min.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-math-random.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-namespace-number-isnan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
-tests/typescript/builtin-identity/name-namespace-number-parsefloat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/builtin-identity/name-namespace-number-isnan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-namespace-number-parsefloat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-namespace-object-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/builtin-identity/name-namespace-object-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-parseint.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-namespace-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-namespace-set.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-namespace-string-fromcharcode.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/builtin-identity/name-namespace-string-fromcharcode.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-typeerror.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-namespace-uint16array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-uint32array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -1401,17 +1401,17 @@ tests/typescript/builtin-identity/name-parameter-int8array.ts	{"kind":"refused",
 tests/typescript/builtin-identity/name-parameter-isnan.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-parameter-json-stringify.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-parameter-math-max.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-parameter-math-min.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-parameter-math-max.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-parameter-math-min.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-math-random.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-parameter-number-isnan.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/builtin-identity/name-parameter-number-parsefloat.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-parameter-number-isnan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/name-parameter-number-parsefloat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-parameter-object-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-parameter-object-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-parseint.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-parameter-promise.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-set.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/name-parameter-string-fromcharcode.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-parameter-string-fromcharcode.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-typeerror.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-uint16array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-parameter-uint32array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -2956,7 +2956,7 @@ tests/typescript/enum-routes/string-live-field-comparisons.ts	{"kind":"pass"}
 tests/typescript/enum-routes/string-map-alias-reinsert.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/enum-routes/string-record-alias-order.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"thread 'nts' panicked: invalid emitted C identifier \"\" from \"\""}
 tests/typescript/enums/as-parameter-type.ts	{"kind":"pass"}
-tests/typescript/enums/combination-enum-keyed-class.ts	{"kind":"invalid-hir","validator":"StoreType { func: \"PerChannel<N>#constructor\", what: \"a field\", expected: Float { bits: 64 }, found: Managed(String) }"}
+tests/typescript/enums/combination-enum-keyed-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/enums/computed-members.ts	{"kind":"pass"}
 tests/typescript/enums/const-enum-in-namespace.ts	{"kind":"pass"}
 tests/typescript/enums/const-enum.ts	{"kind":"pass"}
@@ -3891,7 +3891,7 @@ tests/typescript/generic-routes/functions-heterogeneous-pair.ts	{"kind":"invalid
 tests/typescript/generic-routes/functions-heterogeneous-swap.ts	{"kind":"invalid-hir","validator":"StoreType { func: \"swap<erased,bigint>\", what: \"a field read\", expected: Erased, found: BigInt }"}
 tests/typescript/generic-routes/functions-identity-explicit.ts	{"kind":"pass"}
 tests/typescript/generic-routes/functions-identity-inferred.ts	{"kind":"pass"}
-tests/typescript/generic-routes/functions-nested-instantiations.ts	{"kind":"invalid-hir","validator":"StoreType { func: \"relay<bool>\", what: \"a field read\", expected: BigInt, found: Bool }"}
+tests/typescript/generic-routes/functions-nested-instantiations.ts	{"kind":"pass"}
 tests/typescript/generic-routes/functions-pair-storage.ts	{"kind":"pass"}
 tests/typescript/generic-routes/functions-polymorphic-recursion.ts	{"kind":"pass"}
 tests/typescript/generic-routes/functions-tuple-swap.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -5960,7 +5960,7 @@ tests/typescript/math-routes-controls/powers-log-generic-record-control.ts	{"kin
 tests/typescript/math-routes-controls/powers-log10-array-field-write-control.ts	{"kind":"pass"}
 tests/typescript/math-routes-controls/powers-log1p-readonly-tuple-control.ts	{"kind":"pass"}
 tests/typescript/math-routes-controls/powers-log2-function-field-control.ts	{"kind":"pass"}
-tests/typescript/math-routes-controls/powers-pow-generic-special-values-control.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/math-routes-controls/powers-pow-generic-special-values-control.ts	{"kind":"pass"}
 tests/typescript/math-routes-controls/powers-sqrt-interface-return-control.ts	{"kind":"pass"}
 tests/typescript/math-routes-controls/rounding-ceil-readonly-array-input-control.ts	{"kind":"pass"}
 tests/typescript/math-routes-controls/rounding-floor-interface-input-control.ts	{"kind":"pass"}
@@ -6009,7 +6009,7 @@ tests/typescript/math-routes/powers-log-generic-record.ts	{"kind":"pass"}
 tests/typescript/math-routes/powers-log10-array-field-write.ts	{"kind":"pass"}
 tests/typescript/math-routes/powers-log1p-readonly-tuple.ts	{"kind":"pass"}
 tests/typescript/math-routes/powers-log2-function-field.ts	{"kind":"pass"}
-tests/typescript/math-routes/powers-pow-generic-special-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/math-routes/powers-pow-generic-special-values.ts	{"kind":"pass"}
 tests/typescript/math-routes/powers-sqrt-interface-return.ts	{"kind":"pass"}
 tests/typescript/math-routes/rounding-ceil-readonly-array-input.ts	{"kind":"pass"}
 tests/typescript/math-routes/rounding-floor-interface-input.ts	{"kind":"pass"}
@@ -6061,7 +6061,7 @@ tests/typescript/namespaces/import-alias.ts	{"kind":"refused","diagnostics":[{"c
 tests/typescript/namespaces/merging.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/namespaces/nested.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/namespaces/same-object-after-merge.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/namespaces/shadowing-a-global.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/namespaces/shadowing-a-global.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/namespaces/type-only-namespace.ts	{"kind":"pass"}
 tests/typescript/namespaces/unexported-member.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/namespaces/values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -12112,7 +12112,7 @@ tests/typescript/weak-collection-routes-controls/cache-set-map-values-control.ts
 tests/typescript/weak-collection-routes-controls/cache-undefined-interface-presence-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/weak-collection-routes-controls/lifetime-ref-bivariant-factory-primitives-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/weak-collection-routes-controls/lifetime-ref-class-field-replacement-control.ts	{"kind":"pass"}
-tests/typescript/weak-collection-routes-controls/lifetime-ref-generic-return-control.ts	{"kind":"invalid-hir","validator":"StoreType { func: \"module#init\", what: \"a field read\", expected: Managed(Object(TypeId(N))), found: Erased }"}
+tests/typescript/weak-collection-routes-controls/lifetime-ref-generic-return-control.ts	{"kind":"pass"}
 tests/typescript/weak-collection-routes-controls/lifetime-ref-narrowed-symbol-targets-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/weak-collection-routes-controls/lifetime-ref-tuple-array-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/weak-collection-routes-controls/lifetime-registry-bivariant-callback-factory-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}

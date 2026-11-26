@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-table-write-borrows-its-key",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-table-write-borrows-its-key/src/main.ts",
+      "signature": "9109f8d4b26cf0b528ee10a509786629fe5a7985ae8f055851b865e8196541d3",
+      "keys": {
+        "c": "fc5f7a5e0404bed3ff00db9b01893e9c",
+        "jvm": "6dc84107efd6e7730b0d9b167350922f",
+        "llvm": "e4f86cfb42a9edbdeb80a6a1b5e71d22"
+      },
+      "cases_sha256": "d376c6b10dff286a8c3a383ced0503d97cbb4aa044dcb52c5774be076926e9e1",
+      "driver_sha256": "f0fa4473cb0e60fc32e138053b5a6b9d96ce5f337a2cca3d41048adcecbebd9d",
+      "populations": {
+        "aClearFreesTheHolder": {
+          "count": 29,
+          "cases_sha256": "a2d6b5d977149aec2cc89d3846c565f35a78f7d61685937264224876d0460b09"
+        },
+        "aDeleteFreesTheHolder": {
+          "count": 29,
+          "cases_sha256": "31c305cbda0cd4333b8d3c615f0d4ad4a45df9759b52d101e0d86cf3461e95ed"
+        },
+        "anOverwriteFreesTheHolder": {
+          "count": 29,
+          "cases_sha256": "287bc54f41a8ac2669f518b98e304ba50701dd7cb649e00d2d0e343dc9de2f5e"
+        },
+        "aSetGivesUpTheHolder": {
+          "count": 29,
+          "cases_sha256": "30297b87d3d2d6e30743ad13dc283eb6cb1c7bcd582c77a2f6b53df2fca747ae"
+        },
+        "aTupleOutlivesItsMap": {
+          "count": 29,
+          "cases_sha256": "476ec929c2eb29c5d190edad9990798c7e9e38b4fc08a86bbc62ee7a6a70ef66"
+        },
+        "fromAParameter": {
+          "count": 29,
+          "cases_sha256": "2c88e16d9ef4d816921a3ea8aaf4cb7cdc0c9811d0d939a07751b1489f1c1ceb"
+        },
+        "fromUnsettled": {
+          "count": 29,
+          "cases_sha256": "2089171a92a92d2815c3b1cbae0601a51af1b1c51ac5b7e2679bcda3a237be35"
+        },
+        "replaceUnsettled": {
+          "count": 29,
+          "cases_sha256": "224d3ee6392989d6b3d22a822bb97056475efdfecd3eeaabcddbded8cd056803"
+        },
+        "sourceOverwritten": {
+          "count": 29,
+          "cases_sha256": "e37104e83fc8495c70a990015b5cdbfe0e53799c8ec7007fdc81ef891ddec609"
+        },
+        "sourceOverwrittenByACall": {
+          "count": 29,
+          "cases_sha256": "3fb04a13723d2b08293e6f9868bf05fed32fc46f655a411735fbaac1f97dfc28"
+        },
+        "theKeyIsInTheHolderTheWriteFrees": {
+          "count": 29,
+          "cases_sha256": "dcc120985319478598201d84056c818a1609c0f829900e696955d89c189573f1"
+        },
+        "updates": {
+          "count": 29,
+          "cases_sha256": "14d1fe58e9cd857de41636150eef1029007965da688a0638e27f26c80a508608"
+        },
+        "widenedAliases": {
+          "count": 29,
+          "cases_sha256": "617a1dc1fe79214a1ee1a83fa123ffca5b820a41103129e4d41bd6e2b17747b0"
+        }
+      },
+      "complete": true,
+      "count": 377
+    }
+  ]
+}

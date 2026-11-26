@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 16,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "parameter 2 4059400000000000",
+        "node": "parameter 2 4069200000000000"
+      },
+      {
+        "compiled": "parameter 3 4058c00000000000",
+        "node": "parameter 3 4068e00000000000"
+      },
+      {
+        "compiled": "parameter 5 4059c00000000000",
+        "node": "parameter 5 4069600000000000"
+      },
+      {
+        "compiled": "parameter 8 4059600000000000",
+        "node": "parameter 8 4069300000000000"
+      },
+      {
+        "compiled": "parameter 9 4058a00000000000",
+        "node": "parameter 9 4068d00000000000"
+      },
+      {
+        "compiled": "parameter 10 4059eccccccccccd",
+        "node": "parameter 10 4069766666666666"
+      },
+      {
+        "compiled": "parameter 11 4058133333333333",
+        "node": "parameter 11 406889999999999a"
+      },
+      {
+        "compiled": "parameter 12 405ac00000000000",
+        "node": "parameter 12 4069e00000000000"
+      },
+      {
+        "compiled": "parameter 13 405fc00000000000",
+        "node": "parameter 13 406c600000000000"
+      },
+      {
+        "compiled": "parameter 15 4076300000000000",
+        "node": "parameter 15 407c700000000000"
+      },
+      {
+        "compiled": "parameter 19 40f0063000000000",
+        "node": "parameter 19 40f00c7000000000"
+      },
+      {
+        "compiled": "parameter 20 41e000000c600000",
+        "node": "parameter 20 41e0000018e00000"
+      },
+      {
+        "compiled": "parameter 23 41f0000006300000",
+        "node": "parameter 23 41f000000c700000"
+      },
+      {
+        "compiled": "parameter 24 4340000000000032",
+        "node": "parameter 24 4340000000000064"
+      },
+      {
+        "compiled": "parameter 25 c33fffffffffff9b",
+        "node": "parameter 25 c33fffffffffff37"
+      },
+      {
+        "compiled": "parameter 27 40c84e8000000000",
+        "node": "parameter 27 40c8808000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 16 disagreements",
+  "node": null,
+  "measured_with": "30b9235597068db4",
+  "source": "measured"
+}
