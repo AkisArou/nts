@@ -5111,3 +5111,13 @@ Synthetic checks therefore cannot publish into the enclosing run or silently
 use its directory for the legacy writer. Publication queue exhaustion and write
 failure reject the durable producer and prevent a final rename, rather than
 leaving a valid gzip prefix that later readers could mistake for complete data.
+
+Sign-off review replaces the publication-queue exhaustion verdict with socket
+backpressure. Slow storage must not fail a run's telemetry. Before admitting a
+row would cross 8 MiB of pending appends, the runner pauses every producer;
+after joining the writes below the 4 MiB low-water mark it resumes them. Complete
+frames held at EOF remain owned until admitted, and reap joins successive
+batches without a wall deadline. Actual write failures still poison publication
+and release paused producers so their final flush can end. Compiler-side bounded
+queue loss remains a named session error, never a reason to abort other sessions'
+publication.

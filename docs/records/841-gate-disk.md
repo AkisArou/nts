@@ -1594,3 +1594,52 @@ Summary compression remains isolated to the approved later slice (f).
 | `e/review-inventory.py` | `fb151f5cb01afe72e5c430d456006872515c083ccaa307f7c2c59010f51a79c4` |
 | `e/review-inner-v1.log` | `08494789b4f9875d2f11034fd57521fa42f4e3b482bdf53d822d34d0ca659ba2` |
 | `e/review-inner-v1.log.err` | `7f02318cad8be3b3827f3f2c2a4544ea8d6b585609b505531abb423d4f96d2a4` |
+
+### Slice (e) sign-off: bounded backpressure
+
+The queue-exhaustion rule above was rejected at sign-off: a loaded disk must
+not decide that the run's telemetry fails. The runner now pauses every producer
+socket before admitting a row would cross 8 MiB of pending appends. It joins
+that writes chain and resumes below the 4 MiB low-water mark. Complete frames
+held at EOF or close remain owned until admitted; reap joins successive batches
+without a wall deadline. Actual append failure still rejects the durable
+producer, releases paused senders and prevents final publication. Compiler-side
+queue loss remains a named session error. Wire envelopes and original records
+are unchanged; summary compression remains in slice (f).
+
+The committed before control at
+`f627f741ee2ad2d304e18d029ad260f8e0c2e7a1` reproduces the rejected behavior:
+the stalled writer reports “bounded publication queue exhausted”. The commit
+was verified in a separate command before the control ran. At
+`21dd29057550356ecdcfc1c345cecc2b79f43593`, 24 producers offer 62,976,639 bytes
+while the writer is stalled. The runner pauses all live producers, keeps reap
+pending, and peaks at 8,341,850 pending bytes, below the 8,388,608-byte budget.
+After release, all 1,056 original rows match byte for byte, including signed
+zero. State and IO barriers decide these assertions; elapsed wall time does
+not decide them.
+
+The surrounding five-file focused suite passes all 68 tests. Both actual
+append-failure controls retain poison and refuse a final rename, including a
+failure while producers are paused. The real tooling-path inventory again has
+no legacy per-PID file: costs has 3 files/inodes, 6,523 content bytes and 16,384
+allocated bytes; summary is one file/inode, 25,566 content bytes and 28,672
+allocated bytes. The four-form summary comparison still preserves every double
+bit. Strict checking passes six projects and 1,241 modules; the host audit
+passes 2,216 sources, 368 entry closures and 419 reads.
+
+A fresh `inner.ts --no-agree` passes 898 tests with zero failures or ignored
+cases across 14 suites. Formatting takes 6 s, Clippy 188 s including admission
+wait, the fresh build 4 s and tests 698 s. Oracle capture first waits 644 s in
+admission; that queue time is recorded separately from a test result. All proof
+commands run in named units with the toolchain environment, Node 26.13.0 first
+on PATH, Nice 19, CPUWeight 20 and CPUs 0–3,6–31.
+
+| Raw artifact under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `e/flow-before-v1/focused.log` | `03bdd79a99b8f9b4f91b8d2acb5a88e8967035c9dc2ef2fddb6ec35e8abd0ce3` |
+| `e/flow-quick-v1/focused.log` | `ab56d5ddab6891f3508e1e9ea88877638d93dd298a77de580353f3a607c9ce0b` |
+| `e/flow-focused-v1/focused.log` | `5beb4e00e83445790332269fcf93e8c5f07e5e1027188af4ca8fd4a31d82ed83` |
+| `e/flow-focused-v1/types.log` | `9ca01fffc7bc151ae1a4068626e6c2df80d8566fd947543966acda51fabeaecd` |
+| `e/flow-focused-v1/audit.log` | `9ca8a557ada36c91b24f5c70686b27227fdc5b76f770fc6ecb5f74134d8a5ea8` |
+| `e/flow-inner-v1.log` | `dcc23ccc60f739a93c107fe0f3f853abdbbcd2879b40a152ca403d6925e30d9e` |
+| `e/flow-inner-v1.log.err` | `91e20b175e64dc69827cf0dfbfdabbb27758959e58c692c8b41e58d400c995e0` |
