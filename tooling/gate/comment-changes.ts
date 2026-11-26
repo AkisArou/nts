@@ -142,10 +142,15 @@ function changedLines(before: string, after: string,probe:InfrastructureProbe): 
 }
 
 /** false includes unknown; it always retains the existing path obligation. */
+/** Whether a comment-only edit of this path can be recognised at all. */
+export function commentLexed(path: string): boolean {
+  return /\.(rs|ts|c|h)$/.test(path);
+}
+
 export function commentsOnly(path: string, before: string, after: string,probe:InfrastructureProbe=infrastructureProbe): boolean {
   if (before === after || before.includes("\ufffd") || after.includes("\ufffd") || Buffer.byteLength(before) > LIMIT || Buffer.byteLength(after) > LIMIT) return false;
-  const lex = path.endsWith(".rs") ? rust : path.endsWith(".ts") ? typescript : /\.(c|h)$/.test(path) ? c : null;
-  if (!lex) return false;
+  if (!commentLexed(path)) return false;
+  const lex = path.endsWith(".rs") ? rust : path.endsWith(".ts") ? typescript : c;
   try {
     const a = lex(before,probe), b = lex(after,probe);
     if (a === null || b === null || a !== b) return false;

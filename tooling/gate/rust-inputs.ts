@@ -7,8 +7,14 @@
 //
 // Selection owes the tests only for what those declarations reach; this step
 // is what makes a test that reads a tracked file no change to which would owe
-// the tests fail. It is wide:
-// the full check runs it, and a red bisects to the commit that added the read.
+// the tests fail. The observer follows every process a test starts, and
+// records directory listings and failed lookups beside opens.
+//
+// One run sees only the reads of the conditions it ran under: a read taken
+// only under another environment, input or host is unseen until a run takes
+// it. So the step runs on every wide run, never once: drift is red at the
+// first wide run that makes the read, and the culprit search bisects that red
+// to the commit that added it.
 // The capture lives in the run's registered temporary under a disk claim and
 // is removed once checked; coverage.json in the run directory keeps the result.
 import {spawnSync} from 'node:child_process';

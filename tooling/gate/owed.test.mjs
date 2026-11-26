@@ -1069,6 +1069,28 @@ test("a path no rule names owes the full gate", () => {
   assert.equal(stepsFor("Cargo.lock").length, landing().length);
 });
 
+test("a new Cargo manifest outside the workspace's crates owes the full gate; a member crate's manifest edit does not", () => {
+  // The tests' scratch owner walks up from a crate reading each Cargo.toml.
+  const rule = "a new Cargo manifest outside the workspace's crates";
+  const added = owed([{ path: "tooling/Cargo.toml", added: true }]);
+  assert.ok(added.some(row => row.name === rule && row.full), "an added tooling/Cargo.toml");
+  assert.equal(changeOwes([{ path: "tooling/Cargo.toml", added: true }]).length, landing().length);
+  assert.ok(!owed([{ path: "tooling/Cargo.toml", added: false }]).some(row => row.name === rule), "only a new manifest changes the walk");
+  assert.ok(!owed([{ path: "compiler/core/Cargo.toml", added: false }]).some(row => row.name === rule), "a member crate's own manifest is the crate graph's");
+});
+
+test("the least-owing edit of a path keeps only its byte readers: a test's content read must survive it", () => {
+  // Reached by an edit through the crate graph or a step's module closure;
+  // a comment changes neither what compiles nor what runs.
+  for (const path of ["compiler/core/src/lib.rs", "tooling/gate/test-profile.ts"]) {
+    assert.ok(policy.owingByReach([{ path, added: false }], "tests").length > 0, path + " is reached by an edit");
+    assert.deepEqual(policy.owingByReach([{ path, sameMode: true, least: true }], "tests"), [], path + "'s bytes alone reach no test");
+  }
+  // A fixture's comments are its assertions: no edit of it owes less.
+  const fixture = "tests/programs/hello/src/main.ts";
+  assert.deepEqual(policy.owingByReach([{ path: fixture, sameMode: true, least: true }], "tests"), policy.owingByReach([{ path: fixture, sameMode: true }], "tests"));
+});
+
 test("the runner owes the full gate", () => {
   for (const p of ["tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/token.sh", "tooling/gate/token-pool.ts", "tooling/gate/pinned.sh", "tooling/differential/command-entry/main.ts", "tooling/differential/command-entry/tsconfig.json"]) {
     // Every step, the wide ones too: the runner runs them all.

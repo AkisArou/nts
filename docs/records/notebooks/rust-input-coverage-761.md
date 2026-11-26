@@ -77,6 +77,19 @@ capture was removed when the step ended.
 - **Failed lookups.** An `ENOENT` attempt is kept. Selection is asked whether
   adding the absent path owes the tests: 51 of 3,638 did not, before their
   declarations were added.
+- **Listing removals.** A listing changes when an entry is removed as well as
+  added, so removing one tracked file under each entry must owe the tests too.
+  All 15 directories the main run listed pass under the current rules.
+- **Content reads survive the least-owing edit.** A comment-only edit of a
+  `.rs`, `.ts`, `.c` or `.h` file outside `tests/` and `third_party/` owes only
+  its declared byte readers, so an undeclared content read is decided by that
+  edit, not by an edit in place. Re-deciding the main run's 6,197 candidates this
+  way leaves one content read missed: `tooling/inputs/corpus.ts`, imported by
+  `tooling/bootstrap/awfy.ts`, which `nts-bench`'s tests run with `--resolve`.
+  It is now declared as that target's module import. A stat is decided by an
+  edit in place. The 20 crate-root `.rs` files a frontend-ts test's child Cargo
+  stats for freshness would otherwise be missed, though no comment changes
+  what they decide.
 - **The ignored namespace** is the tracked `.gitignore` files' positive
   patterns alone. The shared repository's `info/exclude` holds 11 host rules
   (`/third_party/node-source/` and `.claude` state), and the user's excludes
@@ -105,6 +118,13 @@ Kept scratch, `~/.cache/nts-scratch/761/main-trace-v1/` (kept while #761 is open
 | `terminal.json` (the traced run) | `a63288407e135f52535aabe5290e13802b692a0e15fbc7040f0d96eb8d9e0a23` |
 | `reach/classified.json` (the 3,950 tracked candidates and their reaching rules) | `242c4b1cefbecc15efcc5cc9bb23da8afd6d6281c48ff39e91d6b5fc100fa8be` |
 | `coverage/coverage.json` (the decision with this slice's declarations) | `5ca31686b32f5b61c12e503c5e7944f30809229f237906b1580d81845f561b9b` |
+
+The review's re-decisions of that run, `~/.cache/nts-scratch/761/`:
+
+| File | SHA-256 |
+|---|---|
+| `least-edit-v1/result.json` (byte-sensitive reads by the least-owing edit, stat included; 21 missed) | `b3a0ef36b37010d712b5f422920b79c10816704325ca3c311292786df7696d9f` |
+| `listing-removal-v1/result.json` (removal from the 15 listed directories; 0 missed) | `2e4f24845985ddeb1f1947c71e2a48aace9d3df2f5c0118af13f2fc8ab72abac` |
 
 The step at the rebased tip, `~/.cache/nts-scratch/761/step-main-v1/`:
 

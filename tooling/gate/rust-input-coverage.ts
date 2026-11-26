@@ -11,7 +11,7 @@
 // The validator (rust-input-validation.ts) names each attempt its target's
 // declarations do not claim, operation by operation. A candidate on a tracked
 // path is then asked of selection, as a change: a file owes the tests when it is
-// edited, a listed directory when a child is added to it, and any other
+// edited, a listed directory when an entry is added to it or removed, and any other
 // directory when some tracked file beneath it does, and the lookup of an absent
 // path when a commit adds it. Exit 0: every candidate is reached. Exit 1: the
 // missed paths are named. Present untracked bytes (installed packages, output
@@ -41,7 +41,9 @@ import {owingByReach} from './owed.mjs';
 /** One repository path a test opened without a claim of its target. */
 export type CoverageCandidate={path:string;tracked:'file'|'directory'|null;kind:'endpoint'|'component';source:string;phase:string;requirements:string[];reason:string|null};
 /** A tracked candidate and the rule that reaches it, or null when none does. */
-export type CoverageDecision=CoverageCandidate&{reachedBy:string|null;via:string|null};
+export type CoverageDecision=CoverageCandidate&{reachedBy:string|null;via:string|null;
+  /** For a listed directory: the tracked file whose removal from it owes nothing. */
+  removal?:string};
 export type CaptureReport={file:string;target:string|null;repositoryCoverage:string;counts:Record<string,number>};
 /** An untracked candidate: generated or stray bytes in the tree, a lookup of
  * an absent path the commit's own .gitignore rules ignore, or an absent directory crossed
@@ -49,7 +51,13 @@ export type CaptureReport={file:string;target:string|null;repositoryCoverage:str
 export type UntrackedCandidate=CoverageCandidate&{state:'ignored'|'untracked'|'absent-ignored'|'absent-component'};
 export type CoverageResult={missed:CoverageDecision[];reached:CoverageDecision[];untracked:UntrackedCandidate[];captures:CaptureReport[]};
 /** The rules a change owes the Rust tests by: owed.mjs's reach, in production. */
-export type TestReach=(change:{path:string;added:boolean})=>readonly string[];
+export type TestReach=(change:{path:string;added:boolean;deleted?:boolean;sameMode?:boolean;least?:boolean})=>readonly string[];
+/** Requirements a change to the file's bytes alone can alter: a content read,
+ * a write that may read, and what the validator could not classify. Each is
+ * decided by the least-owing edit of those bytes. A stat is not: what it
+ * decides (Cargo's freshness, a kind) a comment cannot change, so it is decided
+ * by an edit in place. */
+const BYTE_SENSITIVE=new Set(['content','mutation','unknown']);
 export type TrackedPaths={kind(path:string):'file'|'directory'|null;beneath(directory:string):readonly string[];
   /** Whether an untracked path is present in the working tree now. */
   present(path:string):boolean;
@@ -57,7 +65,11 @@ export type TrackedPaths={kind(path:string):'file'|'directory'|null;beneath(dire
   ignored(paths:readonly string[]):ReadonlySet<string>};
 
 const git=(root:string,args:string[])=>infrastructureProbe({purpose:'Rust input coverage '+args[0],command:'git',args:gitArguments(args),cwd:root,maxBuffer:1<<28}).stdout;
-const inside=(root:string,path:string)=>{const part=relative(root,path);return part!==''&&part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);};
+// The repository root is inside: a test that lists it changes with any new
+// top-level entry. Its relative path is ''.
+const inside=(root:string,path:string)=>{const part=relative(root,path);return part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);};
+/** A path in a directory, '' being the root. */
+const within=(directory:string,name:string)=>directory?directory+'/'+name:name;
 /** A name no tracked directory holds: adding it is the membership question. */
 export const MEMBERSHIP_PROBE='nts-rust-input-coverage-probe';
 
@@ -99,6 +111,7 @@ export function committedIgnores(output:string,tracked:ReadonlySet<string>):Set<
 }
 export function trackedFrom(list:readonly string[],untracked:Pick<TrackedPaths,'present'|'ignored'>):TrackedPaths{
   const files=new Set(list),directories=new Map<string,string[]>();
+  if(files.size)directories.set('',[...files]);
   for(const file of files)for(let at=file.lastIndexOf('/');at>0;at=file.lastIndexOf('/',at-1)){
     const directory=file.slice(0,at),members=directories.get(directory);
     if(members)members.push(file);else directories.set(directory,[file]);
@@ -117,6 +130,8 @@ async function candidates(root:string,report:string,tracked:TrackedPaths,into:Ma
       if(!inside(root,path))return;
       // A final component is its endpoint; one path is one candidate per target.
       const relativePath=relative(root,path),key=JSON.stringify([relativePath,row.source]),seen=into.get(key);
+      // Every repository lookup crosses the root: only an operation on it is its own.
+      if(relativePath===''&&kind==='component')return;
       // A path traversed only as a component of another records that; its own
       // operations, once seen, replace it.
       const requirements=kind==='endpoint'?[requirement]:['component'];
@@ -131,12 +146,25 @@ async function candidates(root:string,report:string,tracked:TrackedPaths,into:Ma
   });
 }
 
+/** One tracked file under each direct entry of a directory: the change that
+ * removes that entry from its listing. */
+function entries(directory:string,tracked:TrackedPaths):string[]{
+  const first=new Map<string,string>();
+  for(const file of tracked.beneath(directory)){
+    const name=file.slice(directory?directory.length+1:0).split('/')[0]!;
+    if(!first.has(name))first.set(name,file);
+  }
+  return [...first.values()];
+}
+
 /** Ask selection whether a change to each tracked candidate owes the tests. */
 export function decide(candidates:readonly CoverageCandidate[],tracked:TrackedPaths,reach:TestReach):Omit<CoverageResult,'captures'>{
   const memo=new Map<string,string|null>();
-  const owes=(path:string,added:boolean)=>{
-    const key=(added?'+':'')+path;
-    if(!memo.has(key))memo.set(key,reach({path,added})[0]??null);
+  // `bytes` is the least-owing edit of a file's bytes (a comment, prose), with
+  // its mode kept; `edit` is any change of the file in place.
+  const owes=(path:string,change:'edit'|'bytes'|'add'|'delete'='edit')=>{
+    const key=change+':'+path;
+    if(!memo.has(key))memo.set(key,reach({path,added:change==='add',...(change==='delete'?{deleted:true}:change==='bytes'?{sameMode:true,least:true}:{})})[0]??null);
     return memo.get(key)!;
   };
   const missed:CoverageDecision[]=[],reached:CoverageDecision[]=[],untracked:UntrackedCandidate[]=[];
@@ -150,11 +178,21 @@ export function decide(candidates:readonly CoverageCandidate[],tracked:TrackedPa
       // until that path itself is added, and every such lookup is its own candidate.
       if(candidate.kind==='component'){untracked.push({...candidate,state:'absent-component'});continue;}
       // A lookup of an absent path a commit could add: adding it must owe the tests.
-      via=candidate.path;reachedBy=owes(candidate.path,true);
+      via=candidate.path;reachedBy=owes(candidate.path,'add');
     }
-    else if(candidate.tracked==='file'){reachedBy=owes(candidate.path,false);via=candidate.path;}
-    else if(candidate.requirements.includes('enumeration')){via=candidate.path+'/'+MEMBERSHIP_PROBE;reachedBy=owes(via,true);}
-    else for(const file of tracked.beneath(candidate.path)){reachedBy=owes(file,false);if(reachedBy){via=file;break;}}
+    else if(candidate.tracked==='file'){
+      // A read the file's bytes decide must survive the edit that owes least,
+      // which keeps only its declared byte readers; any other read, any edit.
+      reachedBy=owes(candidate.path,candidate.requirements.some(requirement=>BYTE_SENSITIVE.has(requirement))?'bytes':'edit');via=candidate.path;
+    }
+    else if(candidate.requirements.includes('enumeration')){
+      // A listing changes when an entry is added or removed: both must owe
+      // the tests. Removing an entry is removing every tracked file under it.
+      via=within(candidate.path,MEMBERSHIP_PROBE);reachedBy=owes(via,'add');
+      const removal=reachedBy?entries(candidate.path,tracked).find(entry=>!owes(entry,'delete')):undefined;
+      if(removal){missed.push({...candidate,reachedBy:null,via:null,removal});continue;}
+    }
+    else for(const file of tracked.beneath(candidate.path)){reachedBy=owes(file,'edit');if(reachedBy){via=file;break;}}
     (reachedBy?reached:missed).push({...candidate,reachedBy,via:reachedBy?via:null});
   }
   return {missed,reached,untracked};
@@ -226,7 +264,7 @@ export function declaredRustInputs(root:string):Map<string,RuntimeTargetInputs>{
 export const testReach:TestReach=change=>owingByReach([change],'tests');
 
 export function describeCoverage(result:CoverageResult,limit=40):string[]{
-  const line=(gap:CoverageDecision)=>`    ${gap.path} (${gap.tracked??'absent'}, ${gap.requirements.join('+')}, ${gap.phase} of ${gap.source}${gap.reason?': '+gap.reason:''})`;
+  const line=(gap:CoverageDecision)=>`    ${gap.path||'(the repository root)'} (${gap.tracked??'absent'}, ${gap.requirements.join('+')}, ${gap.phase} of ${gap.source}${gap.reason?': '+gap.reason:''}${gap.removal?'; removing '+gap.removal+' owes nothing':''})`;
   const states=new Map<string,number>();for(const row of result.untracked)states.set(row.state,(states.get(row.state)??0)+1);
   const lines=[`  ${result.captures.length} captures; ${result.reached.length+result.missed.length} candidate(s) a commit can change: ${result.reached.length} reached by selection, ${result.missed.length} missed;`
     +` ${result.untracked.length} outside every commit (${[...states].map(([state,count])=>count+' '+state).join(', ')||'none'})`];

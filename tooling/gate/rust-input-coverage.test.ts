@@ -15,13 +15,14 @@ import {gitArguments} from './git-arguments/main.ts';
 const snapshot=(files:string[]):InputSnapshot=>({files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:files,stagingFiles:files,directories:[],optionalFiles:[],memberships:[],projectMatches:[],observations:[]});
 const bytes=(text:string)=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
 
-/** One test binary that opens each named file relative to the repository. */
-async function opened(t:Parameters<typeof testScratch>[0],name:string,declared:string[],reads:string[]){
+/** One test binary that opens each named file relative to the repository;
+ * those in `byChild` are opened only by a process the test binary started. */
+async function opened(t:Parameters<typeof testScratch>[0],name:string,declared:string[],reads:string[],byChild:readonly string[]=[]){
   const root=testScratch(t,name),trace=join(root,'.trace');mkdirSync(trace);
   for(const file of [...declared,...reads])writeFileSync(join(root,file),file);
   const observer:FileObserverReceipt={version:1,observedPath:process.execPath,artifactPath:process.execPath,abi:'linux-x86_64-v1',
     sourceSha256:'1'.repeat(64),sha256:createHash('sha256').update(readFileSync(process.execPath)).digest('hex')};
-  const attempts=reads.map((file,i)=>({kind:'attempt',id:String(i+1),tid:1,tgid:1,ppid:0,birth:'1',parentBirth:'0',
+  const attempts=reads.map((file,i)=>({kind:'attempt',id:String(i+1),...(byChild.includes(file)?{tid:2,tgid:2,ppid:1,birth:'2',parentBirth:'1'}:{tid:1,tgid:1,ppid:0,birth:'1',parentBirth:'0'}),
     syscall:'openat',operation:'open',outcome:'unknown',canceled:false,factsComplete:true,args:['ffffffffffffff9c','0','0','0','0','0'],
     cwd:bytes(root),image:bytes(process.execPath),argvRead:false,argv:bytes(''),paths:[{arg:1,dirfdArg:0,value:bytes(file)}],dirfds:[{arg:0,fd:-100,target:bytes(root)}]}));
   const native=[{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},...attempts,
@@ -54,6 +55,20 @@ test('a test that opens a tracked file no change to which owes the tests fails b
   assert.equal(control.captures[0]?.repositoryCoverage,'complete');
 });
 
+test('a read made only by a process the test started is the test\'s: undeclared, it fails by name',async t=>{
+  const tracked=trackedFrom(['fixture.ts','child.json'],none);
+  const undeclared=await opened(t,'coverage-child-undeclared',['fixture.ts'],['fixture.ts','child.json'],['child.json']);
+  const result=await coverageOfCaptures({root:undeclared.root,captures:[{file:'binary-0.raw.gz',capture:undeclared.capture}],
+    reports:join(undeclared.trace,'reports'),targets:undeclared.targets,tracked,reach:reachOf(['fixture.ts'])});
+  assert.deepEqual(result.missed.map(gap=>[gap.path,gap.phase,gap.source]),[['child.json','test-runtime','crate/tests/integration.rs']]);
+  assert.match(describeCoverage(result).join('\n'),/child\.json \(file, content, test-runtime of crate\/tests\/integration\.rs/);
+  // The control differs only in declaring the file the child reads.
+  const declared=await opened(t,'coverage-child-declared',['fixture.ts','child.json'],['fixture.ts','child.json'],['child.json']);
+  const control=await coverageOfCaptures({root:declared.root,captures:[{file:'binary-0.raw.gz',capture:declared.capture}],
+    reports:join(declared.trace,'reports'),targets:declared.targets,tracked,reach:reachOf(['fixture.ts','child.json'])});
+  assert.deepEqual(control.missed,[]);assert.deepEqual(control.untracked,[]);
+});
+
 test('an operation the validator cannot claim is still covered when a change to its path owes the tests',async t=>{
   const run=await opened(t,'coverage-reached',[],['data.json']);
   const result=await coverageOfCaptures({root:run.root,captures:[{file:'binary-0.raw.gz',capture:run.capture}],
@@ -64,14 +79,19 @@ test('an operation the validator cannot claim is still covered when a change to 
   assert.deepEqual(again.missed.map(gap=>gap.path),['data.json'],'deciding from saved reports asks selection afresh');
 });
 
-test('a listed directory is reached only by a change to its membership; a stat of one by a file beneath it',()=>{
+test('a listed directory is reached only when adding and removing its entries owe the tests; a stat of one by a file beneath it',()=>{
   const tracked=trackedFrom(['cases/a/case.ts','cases/b/case.ts'],none);
   const candidate=(path:string,requirements:string[])=>({path,tracked:tracked.kind(path),kind:'endpoint' as const,source:'crate/src/lib.rs',phase:'test-runtime',requirements,reason:null});
   const owing:TestReach=change=>change.path==='cases/a/case.ts'?['a declared file']:[];
   const listed=decide([candidate('cases',['enumeration'])],tracked,owing);
   assert.deepEqual(listed.missed.map(gap=>gap.path),['cases'],'reading one member does not declare the listing');
-  const membership:TestReach=change=>change.added&&change.path==='cases/'+MEMBERSHIP_PROBE?['a directory membership']:[];
+  const membership:TestReach=change=>change.added&&change.path==='cases/'+MEMBERSHIP_PROBE||change.deleted&&change.path.startsWith('cases/')?['a directory membership']:[];
   assert.deepEqual(decide([candidate('cases',['enumeration'])],tracked,membership).missed,[]);
+  // An addition alone is not the listing: removing an entry changes it too.
+  const additions:TestReach=change=>change.added&&change.path==='cases/'+MEMBERSHIP_PROBE?['a new member of the cases']:[];
+  const removal=decide([candidate('cases',['enumeration'])],tracked,additions);
+  assert.deepEqual(removal.missed.map(gap=>[gap.path,gap.removal]),[['cases','cases/a/case.ts']]);
+  assert.match(describeCoverage({...removal,captures:[]}).join('\n'),/cases \(directory, enumeration, .*; removing cases\/a\/case\.ts owes nothing\)/);
   const stat=decide([candidate('cases',['metadata:stat'])],tracked,owing);
   assert.deepEqual(stat.reached.map(gap=>[gap.path,gap.via]),[['cases','cases/a/case.ts']]);
   assert.deepEqual(decide([candidate('cases/b',['metadata:stat'])],tracked,owing).missed.map(gap=>gap.path),['cases/b']);
@@ -83,6 +103,32 @@ test('an undeclared read of present untracked bytes is reported, never owed: no 
     reports:join(run.trace,'reports'),targets:run.targets,tracked:trackedFrom([],none),reach:reachOf([])});
   assert.deepEqual(result.missed,[]);
   assert.deepEqual(result.untracked.map(gap=>[gap.path,gap.state]),[['scratch.out','untracked']]);
+});
+
+test('a content read is decided by the least-owing edit of the bytes; any other read by an edit in place',()=>{
+  const tracked=trackedFrom(['crate/src/lib.rs'],none);
+  const candidate=(requirements:string[])=>({path:'crate/src/lib.rs',tracked:'file' as const,kind:'endpoint' as const,source:'crate/tests/integration.rs',phase:'test-runtime',requirements,reason:null});
+  // The crate graph owes the tests for an edit, never for a comment alone.
+  const graph:TestReach=change=>change.least?[]:['a Rust compile input through Cargo'];
+  const content=decide([candidate(['content'])],tracked,graph);
+  assert.deepEqual(content.missed.map(gap=>gap.path),['crate/src/lib.rs'],'a content read the crate graph alone reaches is missed');
+  for(const requirement of ['metadata:stat','readlink'])
+    assert.deepEqual(decide([candidate([requirement])],tracked,graph).missed,[],requirement+' is decided by an edit in place');
+  assert.equal(decide([candidate(['metadata:stat','content'])],tracked,graph).missed.length,1,'a content read beside a stat is still a content read');
+  // The control differs only in a declared byte reader.
+  const declared:TestReach=change=>change.least&&change.sameMode?['declared bytes read by crate/tests/integration.rs']:['a Rust compile input through Cargo'];
+  assert.deepEqual(decide([candidate(['content'])],tracked,declared).reached.map(gap=>gap.reachedBy),['declared bytes read by crate/tests/integration.rs']);
+});
+
+test('a listing of the repository root is decided like any listed directory',()=>{
+  const tracked=trackedFrom(['top.md','dir/a.ts'],none);
+  const root={path:'',tracked:tracked.kind(''),kind:'endpoint' as const,source:'crate/src/lib.rs',phase:'test-runtime',requirements:['enumeration'],reason:null};
+  assert.equal(root.tracked,'directory');
+  const asked:string[]=[];
+  const result=decide([root],tracked,change=>{asked.push((change.added?'+':change.deleted?'-':'')+change.path);return change.path==='top.md'?[]:['a rule'];});
+  assert.deepEqual(asked,['+'+MEMBERSHIP_PROBE,'-top.md']);
+  assert.deepEqual(result.missed.map(gap=>[gap.path,gap.removal]),[['','top.md']]);
+  assert.match(describeCoverage({...result,captures:[]}).join('\n'),/\(the repository root\) \(directory, enumeration/);
 });
 
 test('a lookup of an absent path a commit could add owes the tests on that addition; an ignored one is reported',()=>{

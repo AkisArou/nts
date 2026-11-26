@@ -713,7 +713,9 @@
         ]
       },
       "declarations": {
-        "imports": [],
+        "imports": [
+          "../../bootstrap/awfy.ts"
+        ],
         "assets": [
           {
             "kind": "file",

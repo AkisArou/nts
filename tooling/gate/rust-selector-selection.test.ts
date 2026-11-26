@@ -107,14 +107,21 @@ const trustedStat=choose('docs/stat.ts',{acceptedRustRecordBlob:blob}),absentSta
 console.log(JSON.stringify({trustedStat,absentStat,trustedAgain,file:choose('docs/bytes.ts'),stat:choose('docs/stat.ts'),unread:choose('docs/unread.md'),
 conservative:choose('docs/broad/input.md'),added:gateSteps(owed([{path:'docs/broad/new.md',added:true}])),deleted:gateSteps(owed([{path:'docs/broad/input.md',deleted:true}])),
 unplaced:owed([{path:'tooling/unowned/input.ts',sameMode:true}]).some(row=>row.full&&row.fallback),directories:inputDirectoryDeclarations(),metadata:inputMetadataDeclarations(),
-reach:{bytes:owingByReach([{path:'docs/bytes.ts',added:false}],'tests'),unread:owingByReach([{path:'docs/unread.md',added:false}],'tests')}}));`;
+reach:{bytes:owingByReach([{path:'docs/bytes.ts',added:false}],'tests'),unread:owingByReach([{path:'docs/unread.md',added:false}],'tests'),
+  stat:owingByReach([{path:'docs/stat.ts',added:false}],'tests'),
+  leastBytes:owingByReach([{path:'docs/bytes.ts',sameMode:true,least:true}],'tests'),leastStat:owingByReach([{path:'docs/stat.ts',sameMode:true,least:true}],'tests')}}));`;
   const selected=spawnTest(process.execPath,['--input-type=module','-e',select],{cwd:root,env,encoding:'utf8'});assert.equal(selected.status,0,selected.stdout+selected.stderr);
-  const result=JSON.parse(selected.stdout) as {reach:{bytes:string[];unread:string[]};trustedStat:string[];absentStat:string[];trustedAgain:string[];file:string[];stat:string[];unread:string[];conservative:string[];added:string[];deleted:string[];unplaced:boolean;directories:{kind:string;directory:string;steps:string[];context?:{entry:string}}[];metadata:{dependencies:{dependency:{path:string;kind:string};steps:string[]}[]}};
+  const result=JSON.parse(selected.stdout) as {reach:{bytes:string[];unread:string[];stat:string[];leastBytes:string[];leastStat:string[]};trustedStat:string[];absentStat:string[];trustedAgain:string[];file:string[];stat:string[];unread:string[];conservative:string[];added:string[];deleted:string[];unplaced:boolean;directories:{kind:string;directory:string;steps:string[];context?:{entry:string}}[];metadata:{dependencies:{dependency:{path:string;kind:string};steps:string[]}[]}};
   for(const step of ['tests','doctests','addons']){assert.ok(result.trustedStat.includes(step));assert.ok(!result.absentStat.includes(step),'explicit null takes live after a trusted decision: '+step);assert.ok(result.trustedAgain.includes(step));}
   for(const name of ['file','stat'] as const)for(const step of ['tests','doctests','addons'])assert.ok(result[name].includes(step),name+' retains '+step);
   for(const step of ['tests','doctests','addons'])assert.ok(!result.unread.includes(step),'unread prose keeps precision: '+step);
   assert.ok(result.reach.bytes.length>0,'a declared byte input reaches the tests without the every-change policy');
   assert.deepEqual(result.reach.unread,[],'unread prose reaches no test');
+  // A content read must survive the least-owing edit of the bytes: declared
+  // file and file-stat bytes do.
+  assert.ok(result.reach.stat.length>0,'an edit in place reaches the stat reader');
+  assert.ok(result.reach.leastBytes.length>0,'declared bytes survive the least-owing edit');
+  assert.ok(result.reach.leastStat.length>0,'declared file-stat bytes survive the least-owing edit');
   for(const name of ['conservative','added','deleted'] as const)for(const step of ['tests','doctests','addons'])assert.ok(result[name].includes(step),name+' retains '+step);
   assert.equal(result.unplaced,true,'conservative bytes do not supply executable placement');
   assert.ok(result.directories.some(row=>row.kind==='conservative'&&row.directory==='docs/broad'&&row.context?.entry==='<entry>'&&row.steps.includes('addons')));

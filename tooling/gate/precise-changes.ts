@@ -1,9 +1,24 @@
-import { commentsOnly } from "./comment-changes.ts";
+import { commentLexed, commentsOnly } from "./comment-changes.ts";
 
 export type ContentChange = {
   path: string; added?: boolean; deleted?: boolean;
   before?: string; after?: string; sameMode?: boolean;
+  /** The least-owing edit of the path's bytes, whatever they are: the
+   * reach a test's content read must survive (rust-input-coverage.ts). */
+  least?: boolean;
 };
+
+const DOCUMENTATION = (path: string) => /^docs\//.test(path) || path === "AGENTS.md" || path === "CLAUDE.md" || path === "README.md";
+const CLASSIFICATION = (path: string) => /^tooling\/census\/(features|test262-exclusions)\.json$/.test(path);
+// Fixture comments are assertions or compiler inputs.
+const FIXTURE = (path: string) => /^(tests|third_party)\//.test(path);
+
+/** The least-owing class some edit of this path's bytes can receive. */
+export function leastPrecision(path: string): "documentation" | "classification prose" | "comments" | null {
+  if (DOCUMENTATION(path)) return "documentation";
+  if (CLASSIFICATION(path)) return "classification prose";
+  return !FIXTURE(path) && commentLexed(path) ? "comments" : null;
+}
 
 // Only these keys are prose. An unrecognised new field keeps the ordinary
 // gate: it may have gained a reader that this classifier does not know.
@@ -27,16 +42,17 @@ function classification(path: string, text: string): string | null {
 
 export function preciseChange(change: ContentChange): "documentation" | "classification prose" | "classification meaning" | "comments" | null {
   const { path, before, after } = change;
-  if (/^docs\//.test(path) || path === "AGENTS.md" || path === "CLAUDE.md" || path === "README.md") return "documentation";
+  if (DOCUMENTATION(path)) return "documentation";
+  if (change.least && !change.added && !change.deleted) return leastPrecision(path);
   if (change.added || change.deleted || change.sameMode !== true || before === undefined || after === undefined || before.includes("\0") || after.includes("\0")) return null;
-  if (/^tooling\/census\/(features|test262-exclusions)\.json$/.test(path)) {
+  if (CLASSIFICATION(path)) {
     try {
       const a = classification(path, before), b = classification(path, after);
       return a === null || b === null ? null : a === b ? "classification prose" : "classification meaning";
     } catch { return null; }
   }
-  // Fixture comments are assertions or compiler inputs. C and Rust sources
-  // that are embedded as text are also excluded by owed's dependency map.
-  if (/^(tests|third_party)\//.test(path)) return null;
+  // C and Rust sources that are embedded as text are also excluded by owed's
+  // dependency map.
+  if (FIXTURE(path)) return null;
   return commentsOnly(path, before, after) ? "comments" : null;
 }

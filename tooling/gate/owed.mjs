@@ -366,7 +366,7 @@ export const ASKS = {
   build: ["hygiene", "does it build"],
   clippy: ["hygiene", "does it lint clean"],
   tests: ["answers", "do the unit tests pass, including the runtime tables"],
-  "rust-inputs": ["valid", "is every tracked file a Rust test opens a declared input"],
+  "rust-inputs": ["valid", "does a change to every tracked file a Rust test opens owe the tests"],
   doctests: ["answers", "do the doc examples of the touched Rust crates pass"],
   audit: ["valid", "do feature and exclusion classifications cite existing authorities and suite entries"],
   format: ["hygiene", "is runtime/c formatted"],
@@ -2301,7 +2301,7 @@ export function owed(changes,options) {
  * but the every-change policy. A rule owing the full gate counts, since it owes
  * every step. A stale installation catalog owes every Rust target whatever
  * changed, so it answers nothing about reach and is refused by name.
- * @param {{path:string,added?:boolean}[]} changes
+ * @param {{path:string,added?:boolean,deleted?:boolean,sameMode?:boolean,least?:boolean}[]} changes
  * @param {string} step
  * @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options]
  */

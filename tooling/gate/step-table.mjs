@@ -110,7 +110,7 @@ export const STEPS = [
     capabilities: ["jvm"],
   },
   // The same tests under the file observer: wide, so its bound is its own.
-  { name: "rust-inputs", slots: 8, min: 4, lock: "cargo", after: ["build"], bound: 5400, doc: "every tracked file a Rust test opens is a declared input",
+  { name: "rust-inputs", slots: 8, min: 4, lock: "cargo", after: ["build"], bound: 5400, doc: "a change to every tracked file a Rust test opens owes the tests",
     capabilities: ["jvm"],
   },
   { name: "corpus", slots: 8, min: 4, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0",
