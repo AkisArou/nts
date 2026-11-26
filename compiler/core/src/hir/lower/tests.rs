@@ -878,6 +878,36 @@ pub(super) fn assert_structural_plan_unchanged(
     );
 }
 
+/// Check the existing member-symbol owner against the declaration scan before
+/// using it for the per-site raising decision.
+pub(super) fn assert_member_symbols_unchanged(
+    snapshot: &super::LoweringSnapshot<'_>,
+    hierarchy: &super::Hierarchy,
+) {
+    let mut probe = super::FuncBuilder::probe(snapshot);
+    probe.hierarchy = hierarchy;
+    for (at, node) in snapshot.nodes.iter().enumerate() {
+        let kind = match node.kind {
+            super::NodeKind::Syntax(super::syntax::METHOD_DECLARATION) => "method declaration",
+            super::NodeKind::Syntax(super::syntax::METHOD_SIGNATURE) => "method signature",
+            super::NodeKind::Syntax(super::syntax::GET_ACCESSOR) => "get accessor",
+            super::NodeKind::Syntax(super::syntax::SET_ACCESSOR) => "set accessor",
+            _ => continue,
+        };
+        let declaration = super::NodeId(u32::try_from(at).unwrap_or(u32::MAX));
+        let scanned = snapshot
+            .symbols
+            .iter()
+            .position(|record| record.declarations.contains(&declaration))
+            .and_then(|symbol| u32::try_from(symbol).ok());
+        assert_eq!(
+            probe.member_symbol(declaration),
+            scanned,
+            "member symbol differs for {kind} {declaration:?}"
+        );
+    }
+}
+
 /// The indexed answer must equal the former source scan, including overload
 /// duplicates and order, for every family in each core harness program.
 pub(super) fn assert_member_fillers_unchanged(

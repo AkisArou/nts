@@ -196,7 +196,7 @@ fn a_closure_gets_the_interface_implementers_raising_dispatch() {
     }
 }
 
-fn interface_closure(implementation: &str) -> Program {
+fn raw_program(source: &str) -> Program {
     let scratch = scratch::ScratchDir::in_target("closure-interface-seeds");
     let config = scratch.join("tsconfig.json");
     let base = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -208,10 +208,18 @@ fn interface_closure(implementation: &str) -> Program {
         format!(r#"{{"extends":{base:?},"include":["main.ts"]}}"#),
     )
     .unwrap();
-    std::fs::write(
-        scratch.join("main.ts"),
-        format!(
-            r"
+    std::fs::write(scratch.join("main.ts"), source).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .expect("snapshot the closure family");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    hir::lower::lower(&snapshot).program
+}
+
+fn interface_closure(implementation: &str) -> Program {
+    raw_program(&format!(
+        r"
         interface Quiet {{ run(): number; }}
         {implementation}
         function attempt(f: () => number): number {{
@@ -222,15 +230,44 @@ fn interface_closure(implementation: &str) -> Program {
             return attempt(() => receiver.run());
         }}
     "
-        ),
-    )
-    .unwrap();
-    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
-        .with_checkers(std::num::NonZeroU16::MIN)
-        .snapshot(&config)
-        .expect("snapshot the closure family");
-    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    hir::lower::lower(&snapshot).program
+    ))
+}
+
+#[test]
+fn an_uncarryable_interface_call_refuses_its_raising_entries_by_name() {
+    let program = raw_program(
+        r"
+        interface Unlisted { run(): number; }
+        function attempt(f: () => number): number {
+            try { return f(); } catch { return -1; }
+        }
+        export function probe(receiver: Unlisted): number {
+            return attempt(() => receiver.run());
+        }
+    ",
+    );
+    let body = "Closure0#call@raises";
+    let entry = "Closure0#erased_call@raises";
+    for name in [body, entry] {
+        assert!(
+            program
+                .refused_bodies()
+                .any(|refusal| { refusal.name == name && refusal.reason.contains("run") }),
+            "{name}: {:?}",
+            program.uncompiled
+        );
+        assert!(!program.funcs.iter().any(|func| func.name == name));
+    }
+    for name in ["Closure0#call", "Closure0#erased_call"] {
+        assert!(program.funcs.iter().any(|func| func.name == name));
+    }
+    let slot = program.raising_call_slot.expect("the gate is on") as usize;
+    let closure = program
+        .layouts
+        .iter()
+        .find(|layout| layout.name == "Closure0")
+        .expect("the ordinary closure keeps its layout");
+    assert_eq!(closure.methods[slot].as_deref(), Some(entry));
 }
 
 #[test]

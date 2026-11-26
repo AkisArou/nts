@@ -966,26 +966,24 @@ fn declare_erased_entries(
 ///
 /// **Every callable class must fill it or a call through it is an
 /// `AbstractMethodError`** — the rule `refuses_to_cross` states for the entry beside
-/// it, applied to the second slot. Two answers, and they are the two
+/// it, applied to the second slot. Three answers, and they are the three
 /// `lower_wanted_closures` leaves behind:
 ///
 ///   a `@raises` entry exists  name it. Either it wraps a body that records an
 ///                             uncaught `throw` and returns, which is what a `try`
-///                             needs, or it is the abort made where that body could
-///                             not be — and the site that reached it is named.
-///   none at all               name the **ordinary** entry. The raising body is the
+///                             needs.
+///   a named refusal exists    keep the refused raising name. Preparation sees
+///                             the original reason; the ordinary body cannot
+///                             substitute for an unavailable raising entry.
+///   neither                   name the **ordinary** entry. The raising body is the
 ///                             same program — measured at 98% of closures — so it
 ///                             has nothing to raise and cannot end anything.
 ///
-/// **Two rather than three, and that is a property of the producer.** An absent
-/// `@raises` entry used to mean either "the two are one program" or "it refused",
-/// which are opposite treatments of one absence; the abort is made where the body
-/// is, so nothing here has to tell them apart. See `lower_wanted_closures`.
-///
 /// Driven by what already fills `erased_call_slot` rather than by asking which
 /// layouts are closures, so "is this callable" keeps the single answer
-/// `declare_erased_entries` established — and a signature layout, whose ordinary
-/// entry is a named abort, gets that same abort here for the same reason.
+/// `declare_erased_entries` established. Abstract signature declarations get
+/// distinct raising declarations; a body can serve both slots only when its
+/// raising build is the same program.
 fn declare_raising_entries(hierarchy: &Hierarchy, program: &mut Program) {
     let (Some(erased), Some(raising)) = (
         hierarchy.erased_call_slot.map(|slot| slot as usize),
@@ -998,6 +996,10 @@ fn declare_raising_entries(hierarchy: &Hierarchy, program: &mut Program) {
         .iter()
         .map(|func| (func.name.as_str(), func.abstract_declaration))
         .collect();
+    let refused: rustc_hash::FxHashSet<&str> = program
+        .refused_bodies()
+        .map(|entry| entry.name.as_str())
+        .collect();
     let table = hierarchy.table_size();
     let mut fill: Vec<(usize, String)> = Vec::new();
     let mut declare: Vec<String> = Vec::new();
@@ -1006,7 +1008,9 @@ fn declare_raising_entries(hierarchy: &Hierarchy, program: &mut Program) {
             continue;
         };
         let with_suffix = format!("{ordinary}{RAISING_SUFFIX}");
-        if made.contains_key(with_suffix.as_str()) {
+        // A refused raising entry is not identical to the ordinary body.
+        // Preserve its named refusal rather than losing a throw by falling back.
+        if made.contains_key(with_suffix.as_str()) || refused.contains(with_suffix.as_str()) {
             fill.push((at, with_suffix));
             continue;
         }
