@@ -5121,3 +5121,23 @@ batches without a wall deadline. Actual write failures still poison publication
 and release paused producers so their final flush can end. Compiler-side bounded
 queue loss remains a named session error, never a reason to abort other sessions'
 publication.
+
+## A worker detach is a durable request (11-26)
+
+A parked task can outlive its pane through its own build units. Rejecting
+its detach until those owners end let a host exhaust retries and leave an
+attached promise indefinitely. `pool.ts detach` instead publishes a v2
+`detach-pending` request bound to branch and physical tree identity, with
+request UUID, timestamp and requester birth identity. It exits zero once
+that request or completed detach is durable; otherwise it fails visibly.
+
+Pending releases only the unused pool build promise. Live build and temporary
+claims remain counted; pending grants no output reclamation. Upkeep completes
+the same request only after process, unit, claim and resource guards certify
+absence. The request survives its requester's exit. Resume restores its
+promise through admission and cancels the pending request; publication
+receipts prevent stale observations from detaching resumed workers.
+Readers accept v1, writers use v2, and unknown or mismatched records stay
+protected. A plain branch switch without presence publication is diagnosed
+by name, never repaired by a reader. The host's terminal-effect handling is
+owned outside nts.

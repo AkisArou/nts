@@ -267,6 +267,17 @@ test('the count names corrupt and future worker records, and leaves the normal m
   }
 });
 
+test('the count names a pending request and explains a branch changed without presence publication',t=>{
+  const cache=cacheFixture(t),tree=join(cache,'nts-pool/1'),file=workerPresenceFile(tree);
+  const request={id:randomUUID(),at:NOW,pid:42,identity:'00000000-0000-0000-0000-000000000000 42 99'};
+  writeWorkerPresence(tree,'compiler/a-task','detach-pending',NOW,{request,reason:'unit nts-1031-work.service owns WorkingDirectory'});
+  const bytes=readFileSync(file,'utf8'),pending=count(input(t,{cache}),KEEP);
+  assert.ok(pending.notices?.some(line=>line.includes('detach pending since')&&line.includes(request.identity)&&line.includes('unused pool promise released')&&line.includes('nts-1031-work.service')),JSON.stringify(pending));
+  const switched=count(input(t,{cache,worktrees:[{path:tree,branch:'refs/heads/compiler/new-task'}]}),KEEP);
+  assert.ok(switched.red.some(line=>line.includes('kept as attached')&&line.includes('branch changed without presence publication: record names compiler/a-task, tree holds compiler/new-task')),switched.red.join('\n'));
+  assert.equal(readFileSync(file,'utf8'),bytes,'count never repairs a pending or mismatched presence');
+});
+
 test('presence diagnostics follow canonical pool membership through a cache alias',t=>{
   const cache=cacheFixture(t),tree=join(cache,'nts-pool/1'),file=workerPresenceFile(tree),alias=cache+'-alias';
   symlinkSync(cache,alias);t.after(()=>rmSync(alias));writeFileSync(file,'{broken');

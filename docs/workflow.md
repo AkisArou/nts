@@ -1225,27 +1225,41 @@ the tooling strict checker owns the source's type checking.
   an unbuilt idle checkout is removed through Git.
   Agents do not make worktrees of their own. The shared checkout
   `~/Projects/nts` stays on `main`.
-  A held task's worker presence is explicit: `pool.ts detach <branch>` marks
-  it without giving back its checkout; `pool.ts attach <branch>` and taking
-  an already-held branch attach it again. Agent hosts call detach after their
-  worker ends or parks, and attach before recovery/resume; a host that only
-  reads status must attach separately. Hosts without these hooks leave trees
-  attached. Detach refuses live process, unit, resource-lock or disk-claim
-  owners by name. The pool writes a versioned, atomic, branch- and worktree-bound
-  `<slot>.worker.json` beside the tree's lease. Missing state is the normal
-  attached default, with no diagnostic. Corrupt, mismatched or unknown-version
-  state protects it as attached with a named diagnostic; the hourly count
-  reports that diagnostic. `status --json` version 2 reports
-  attached, detached or unknown presence without changing it. The task's Git
-  branch and checkout remain held in either worker state. Ending the hold by
-  reset or checkout removal also removes its presence record; a future-version
-  record refuses either mutation.
+  A held task's worker presence is explicit: `pool.ts detach <branch>`
+  durably requests it without giving back the checkout; `pool.ts attach <branch>`
+  and taking an already-held branch attach it again. Agent hosts call detach
+  after their worker ends or parks, and attach before recovery/resume; a host
+  that only reads status must attach separately. Hosts without these hooks
+  leave trees attached. Detach exits zero once detached or once its request is
+  durable as `detach-pending`, even while the exiting worker's processes,
+  units, resource locks or disk claims still own the tree. A refusal that
+  records neither exits nonzero with its reason on stderr. Upkeep completes
+  a pending detach only after the existing ownership guards certify absence.
+  The request's UUID, timestamp and requester boot/PID/start identity are
+  provenance: the request survives the requester's exit. Resume admits the
+  restored build promise and cancels the request; upkeep cannot apply a
+  cancelled request. Git/presence receipts refuse changes during observation.
+  The pool writes an atomic, branch- and worktree-bound `<slot>.worker.json`
+  beside the tree's lease. Readers accept version 1; writers use version 2,
+  which includes the pending request. Missing state is the normal attached
+  default, with no diagnostic. Corrupt, mismatched or unknown-version state
+  protects it as attached with a named diagnostic. A branch changed by plain
+  checkout without presence publication remains protected, with that cause
+  named by the hourly count; no reader repairs it. The count also reports
+  pending requests and their remaining ownership blockers. `status --json`
+  version 2 reports attached, detach-pending, detached or unknown presence
+  without changing it. Pending releases only the unused pool build promise;
+  live build and temporary claims remain counted, and reclamation still
+  requires a completed detach. The task's Git branch, checkout and work stay
+  held throughout. Ending the hold by reset or checkout removal also removes
+  its presence record; a future-version record refuses either mutation.
 - **One disk capacity owner.** `tooling/gate/disk-capacity.ts` keeps the
   temporary hard floor free beside active build promises. A free checkout
   promises nothing. An attached held tree promises its remaining cold build;
-  a detached worker promises none. Taking a cold tree atomically admits a build claim before creating its
-  Git lease; worker detachment, landing or giving it
-  back ends that promise. Resuming a detached or landed tree admits any cold
+  a detached or detach-pending worker promises none. Taking a cold tree
+  atomically admits a build claim before creating its Git lease; a durable
+  detach request, landing or giving it back ends that promise. Resuming a
+  detached, pending or landed tree admits any cold
   or partial remainder under the same lock and capacity equation as a new take,
   protecting that target during pressure reclamation. Both take and attach
   retain the admitted claim and operation intent until the Git lease and
@@ -1341,10 +1355,8 @@ the tooling strict checker owns the source's type checking.
   entry or a read race makes the receipt intrinsically unstable. The request's
   own tree and reclaim candidates retain full receipts. This shallow metadata
   work scales with registered trees; it never traverses checkout contents or
-  runs Git. Claim and presence schemas remain
-  v1; generation and intents live
-  only in the separate `.lock.state.json`. The
-  final transaction reads current free disk bytes; those bytes alone never
+  runs Git. Claim schemas remain v1; worker presence writers use v2. Generation
+  and intents live only in the separate `.lock.state.json`. The final transaction reads current free disk bytes; those bytes alone never
   validate an observation.
   A reclamation intent names its root, unique token, PID and process birth.
   A live intent rejects overlapping new claims; the tree resource fence
@@ -2097,6 +2109,14 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **A worker detach is a durable request.** Pending detach releases only the
+  unused pool promise; ownership guards still protect live claims and output.
+  Upkeep completes the same branch- and tree-bound request after owners drain.
+  Resume admits its promise and cancels the request. The requester's exit
+  never expires it. Presence writers use v2, readers accept v1, and plain
+  branch switches remain named, protected mismatches.
+  ([log](records/notebooks/decisions-log.md#a-worker-detach-is-a-durable-request-11-26)).
 
 - **Gate disk reclamation follows declared writers.** Older green raw costs
   can go only after a known materialized summary with zero reader errors,

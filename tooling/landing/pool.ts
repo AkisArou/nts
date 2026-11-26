@@ -1,5 +1,8 @@
 import {DiskBuildAdmissionError} from '../gate/step-result.ts';
 import {TreePin} from './tree-pin.ts';
+import {randomUUID} from 'node:crypto';
+import {processIdentity} from './lock.ts';
+import {GitReceipt} from '../gate/disk-preparation.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // The worktree pool, elastic (docs/workflow.md, "The machine"). A task takes a
 // free tree, warm with the cargo target the task before it built; when every
@@ -25,9 +28,12 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //     (`PoolFull`): wait for a tree to be given back, or for disk;
 //   - `take` and `attach`: a gate run or disk reclamation holds the tree's
 //     resource lock (`TreeInUse`);
-//   - `give` and `detach`: a live process's use of the tree could not be
+//   - `give`: a live process's use of the tree could not be
 //     observed completely (`PoolOwnershipUnavailable`, tree-users.ts), so
 //     nothing certifies the tree idle.
+// `detach` records a durable pending request while owners still use the tree;
+// upkeep completes it once those owners drain. Pending releases only its unused
+// pool promise and grants no reclamation. Both accepted states exit 0.
 // Every other error exits 1, a defect or an unreadable pool or Git path among
 // them. `give` refuses, exit 1, a tree any live process uses -- the asking
 // agent's own shell or session with its working directory there included:
@@ -60,7 +66,7 @@ import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from 
 import {completedBuild} from '../gate/build-completion.ts';
 import type {HostObservations} from '../gate/host-observations.ts';
 import {describeReclamation,diskTrash,type TrashEntry,type ReclaimReport} from '../gate/disk-reclamation.ts';
-import {workerPresence,writeWorkerPresence,assertWorkerPresenceWritable,removeWorkerPresence,type WorkerPresence} from './pool-presence.ts';
+import {workerPresence,writeWorkerPresence,assertWorkerPresenceWritable,removeWorkerPresence,type WorkerPresence,type DetachRequest} from './pool-presence.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
@@ -129,6 +135,7 @@ export type Pruned = {
   released: { tree: PoolTree; branch: string; outcome: BranchOutcome[] }[]; waiting: { tree: PoolTree; why: string }[];
   removed: { tree: PoolTree; targetBytes: number | null }[]; kept: { tree: PoolTree; why: string }[]; free: number;
   reclamation:ReclaimReport|null;
+  detached:PoolTree[]; detachWaiting:{tree:PoolTree;why:string}[];
 };
 
 /** A refusal that changed nothing and can succeed when asked again later: exit 75 (EX_TEMPFAIL). */
@@ -364,7 +371,7 @@ export class Pool {
             if(!registered)this.grow(name,pin);
             const exists=run(this.git,['rev-parse','--verify','--quiet',`refs/heads/${branch}`],this.git.root).status===0;
             checked(this.git,exists?['switch','-q',branch]:['switch','-q','-c',branch,'refs/heads/main'],path);
-            this.publishPresence(this.trees().find(tree=>tree.name===name)!,'attached','fresh',pin);
+            this.publishPresence(this.trees().find(tree=>tree.name===name)!,'fresh');
             this.inputs(path);return this.trees().find(tree=>tree.name===name)!;
           });
           if(result)return result;
@@ -403,47 +410,111 @@ export class Pool {
     assertWorkerPresenceWritable(tree.path);
     return tree.branch;
   }
-  private setPresence(tree:PoolTree,state:WorkerPresence['state'],ownPin?:TreePin):void{
+  private setPresence(tree:PoolTree,state:'attached'|'detached',ownPin?:TreePin):void{
     if(!ownPin)return this.pinned(tree.path,false,pin=>{
       const current=this.trees().find(row=>row.path===tree.path&&row.branch===tree.branch);
       if(!current)throw new TreeInUse(tree.path);
       return this.setPresence(current,state,pin);
     });
     this.presenceBranch(tree);
+    if(state==='detached'){this.requestDetach(tree,ownPin);return;}
     // Use the lease owner's predicate, including its fail-closed default.
     // No new promise or publication is needed, even while a builder owns the
     // tree resource.
-    if(state==='attached'&&this.leases([tree]).length>0)return;
-    // Resuming waits for the resource as for disk (`TreeInUse`); detach
-    // refuses it by name, as it refuses every other live owner.
-    const lock=state==='attached'?this.treeLock(tree.path):GateResource.tryAcquire(tree.path+'.lock');
-    if(!lock)throw Error('tree resource lock is held: '+tree.path);
-    try{this.publishPresence(tree,state,'existing',ownPin);}finally{lock.close();}
+    if(this.leases([tree]).length>0)return;
+    // Resuming waits for the resource as for disk (`TreeInUse`).
+    const lock=this.treeLock(tree.path);
+    try{this.publishPresence(tree,'existing');}finally{lock.close();}
   }
   /** Publish presence while this operation holds the tree's resource lock. A
    * fresh Git hold publishes its initial presence with no resume admission. */
-  private publishPresence(tree:PoolTree,state:WorkerPresence['state'],transition:'existing'|'fresh',ownPin:TreePin):void{
+  private publishPresence(tree:PoolTree,transition:'existing'|'fresh'):void{
     const branch=this.presenceBranch(tree);
-    if(state==='attached'&&transition!=='fresh')this.admitLease(tree.path,true);
-    if(state==='detached'){
-      const users=this.users(tree.path,ownPin);
-      if(users.length)throw Error('cannot detach '+branch+': '+using(users));
-      this.capacity.assertWorkerAbsent(tree.path,ownPin);
-    }
-    writeWorkerPresence(tree.path,branch,state,this.capacity.host.wallNow());
+    if(transition!=='fresh')this.admitLease(tree.path,true);
+    this.capacity.transactions.run('pool-presence',tree.path,()=>{
+      writeWorkerPresence(tree.path,branch,'attached',this.capacity.host.wallNow());
+      this.capacity.state.advance();
+    });
     // Both resume verbs publish the admitted lease before releasing either
     // lock: a landed mark would keep the attached promise uncounted.
-    if(state==='attached'&&tree.state==='landed')this.forget(branch);
+    if(tree.state==='landed')this.forget(branch);
+  }
+  /** A successful detach records its intent before asking whether the old worker
+   * has drained. Its identity is provenance, never an expiry condition. */
+  private requestDetach(tree:PoolTree,pin:TreePin):void{
+    const receipt=new GitReceipt(tree.path,[],'lease');
+    if(this.trees().find(row=>row.path===tree.path)?.branch!==tree.branch)throw Error('branch changed without presence publication: '+tree.path);
+    const presence=workerPresence(tree.path,tree.branch!);
+    if(presence.diagnostic)throw Error(presence.diagnostic);
+    if(presence.state==='detached')return;
+    let request=presence.detachRequest;
+    if(!request){
+      const identity=processIdentity(process.pid);
+      if(!identity)throw Error('detach requester has no process birth identity');
+      request={id:randomUUID(),at:this.capacity.host.wallNow(),pid:process.pid,identity};
+      this.capacity.transactions.run('pool-detach-request',tree.path,()=>{
+        if(!receipt.valid())throw Error('tree or worker presence changed before detach request: '+tree.path);
+        writeWorkerPresence(tree.path,tree.branch!,'detach-pending',request!.at,{request:request!,reason:'awaiting complete ownership observation'});
+        this.capacity.state.advance();
+      });
+    }
+    try{this.finishDetach(tree,request,pin);}catch(error){
+      // Completion is deferred once the request is durable. A failure to
+      // observe or update that result cannot turn acceptance into a refusal.
+      const saved=workerPresence(tree.path,tree.branch!);
+      if(saved.diagnostic||saved.state!=='detach-pending'||saved.detachRequest?.id!==request.id)throw error;
+      console.warn('pool: detach pending for '+tree.branch+'; completion deferred: '+(error instanceof Error?error.message:String(error)));
+    }
+  }
+  /** The operation owner serializes resume and upkeep. Receipts also refuse
+   * legacy/manual branch or presence changes during the ownership observation. */
+  private finishDetach(tree:PoolTree,request:DetachRequest,pin:TreePin):string|undefined{
+    const receipt=new GitReceipt(tree.path,[],'lease');
+    const current=this.trees().find(row=>row.path===tree.path),presence=current?.presence;
+    if(!current||current.branch!==tree.branch)return 'branch changed without presence publication: '+tree.path;
+    if(presence?.diagnostic)return presence.diagnostic;
+    if(presence?.state!=='detach-pending'||presence.detachRequest?.id!==request.id)return 'detach request was replaced or cancelled: '+tree.path;
+    const lock=GateResource.tryAcquire(tree.path+'.lock');
+    let why:string|undefined;
+    try{
+      if(!lock)why='tree resource lock is held: '+tree.path;
+      else{
+        try{
+          const users=this.users(tree.path,pin);
+          if(users.length)why=using(users);
+          else this.capacity.assertWorkerAbsent(tree.path,pin);
+        }catch(error){why=error instanceof Error?error.message:String(error);}
+      }
+      return this.capacity.transactions.run('pool-detach-complete',tree.path,()=>{
+        if(!receipt.valid())return 'tree or worker presence changed during detach observation: '+tree.path;
+        const latest=workerPresence(tree.path,tree.branch!);
+        if(latest.diagnostic)return latest.diagnostic;
+        if(latest.state!=='detach-pending'||latest.detachRequest?.id!==request.id)return 'detach request was replaced or cancelled: '+tree.path;
+        if(why){
+          if(latest.pendingReason!==why){
+            writeWorkerPresence(tree.path,tree.branch!,'detach-pending',request.at,{request,reason:why});
+            this.capacity.state.advance();
+          }
+        }else{
+          writeWorkerPresence(tree.path,tree.branch!,'detached',this.capacity.host.wallNow());
+          this.capacity.state.advance();
+        }
+        return why;
+      });
+    }finally{lock?.close();}
   }
   attach(branch:string):PoolTree{return this.presence(branch,'attached');}
   detach(branch:string):PoolTree{return this.presence(branch,'detached');}
-  private presence(branch:string,state:WorkerPresence['state']):PoolTree{
+  private presence(branch:string,state:'attached'|'detached'):PoolTree{
     if(state==='attached')this.prepareAdmission(branch);
     return this.locked(()=>{
       const tree=this.trees().find(tree=>tree.branch===branch);
       if(!tree)throw Error('no pool tree holds branch '+branch);
       this.setPresence(tree,state);
-      return this.trees().find(row=>row.name===tree.name)!;
+      const current=this.trees().find(row=>row.name===tree.name);
+      if(state==='detached'&&(!current||current.branch!==branch||current.presence?.diagnostic))
+        throw Error(current?.presence?.diagnostic??'branch changed without presence publication: '+tree.path);
+      return current!;
     });
   }
 
@@ -546,13 +617,14 @@ export class Pool {
    * The upkeep: first each landed tree is reset once nothing uses it and
    * nothing is left in it (`settle`). Then free trees idle longer than
    * `idleMs` go, cold ones first, then the longest idle, while more than
-   * `keep` trees are free. A held, dirty or missing tree is never touched.
+   * `keep` trees are free. Pending worker detaches complete under the same
+   * ownership guards, without changing their held branch or task work.
    * Each operation uses a nonwaiting owner; the shared pool lock never spans
    * a reset, scan or removal.
    */
   prune({ idleMs = IDLE_LIMIT_MS, keep = WARM_MINIMUM, now = Date.now() }: { idleMs?: number; keep?: number; now?: number } = {}): Pruned {
     if(keep<WARM_MINIMUM)throw Error('pool upkeep must keep at least two warm targets');
-    const out: Pruned = { released: [], waiting: [], removed: [], kept: [], free: 0,reclamation:null };
+    const out: Pruned = { released: [], waiting: [], removed: [], kept: [], free: 0,reclamation:null,detached:[],detachWaiting:[] };
     if (!existsSync(this.dir)) return out;
     for (const name of this.locked(() => this.trees().filter(t => t.state === "landed").map(t => t.name))) {
       this.locked(() => {
@@ -561,6 +633,20 @@ export class Pool {
         const settled = this.settle(tree, landed);
         if (settled && "why" in settled) out.waiting.push({ tree, why: settled.why });
         else if (settled) out.released.push({ tree: this.trees().find(t => t.name === name)!, branch: tree.branch!, outcome: settled.outcome });
+      });
+    }
+    // A resumed worker cancels its old request. Re-read it under the operation
+    // owner rather than carrying a pending decision across the upkeep scan.
+    for(const name of this.trees().filter(tree=>tree.presence?.state==='detach-pending'||tree.presence?.diagnostic).map(tree=>tree.name)){
+      this.locked(()=>{
+        const tree=this.trees().find(row=>row.name===name);
+        if(!tree?.branch)return;
+        if(tree.presence?.diagnostic){out.detachWaiting.push({tree,why:tree.presence.diagnostic});return;}
+        const request=tree.presence?.detachRequest;
+        if(tree.presence?.state!=='detach-pending'||!request)return;
+        const why=this.pinned(tree.path,false,pin=>this.finishDetach(tree,request,pin));
+        if(why)out.detachWaiting.push({tree,why});
+        else out.detached.push(this.trees().find(row=>row.name===name)!);
       });
     }
     // A mark whose branch moved on is its task's again, and one whose branch no
@@ -609,7 +695,8 @@ export function describePool(trees: readonly (PoolTree | StatusTree | MeasuredTr
       : t.users.length ? `, kept while ${using(t.users)}` : t.changes.length ? "" : ", reset at the next upkeep";
     const idle = t.movedAt === null ? "" : `, idle ${idleFor(now - t.movedAt)}`;
     const target = "targetBytes" in t ? `, ${t.targetBytes === null ? "no target" : `target ${gb(t.targetBytes)}`}` : "";
-    return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${landed}${idle}${target}`;
+    const presence=t.presence?.diagnostic?`, worker presence unknown: ${t.presence.diagnostic}`:t.presence?.state==='detach-pending'?`, detach pending: ${t.presence.pendingReason}`:'';
+    return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${landed}${idle}${target}${presence}`;
   }).join("\n");
 }
 
@@ -629,7 +716,7 @@ export function statusJson(dir: string, trees: readonly MeasuredTree<StatusTree>
       users: t.users.map(user => ({ pid: user.pid, command: user.command, where: user.where })),
       ...(t.ownershipError?{ownership_error:t.ownershipError}:{}),
       ...(t.presence?{worker_presence:t.presence.diagnostic?'unknown':t.presence.state,detached_at:t.presence.detachedAt,
-        presence_diagnostic:t.presence.diagnostic??null}:{}),
+        presence_diagnostic:t.presence.diagnostic??null,...(t.presence.detachRequest?{detach_request:t.presence.detachRequest,pending_reason:t.presence.pendingReason}:{})}:{}),
     })),
   };
 }
@@ -647,6 +734,8 @@ export function reportPoolStatus(pool:Pool,json=false):number{
 export function pruneLines(pruned: Pruned): string[] {
   const lines = pruned.released.map(({ tree, branch, outcome }) =>
     `pool: reset tree ${tree.name}, whose task ${branch} landed, now that nothing uses it${outcome.map(b => `; its branch here ${b.state}${b.reason ? ` (${b.reason})` : ""}`).join("")}`);
+  for(const tree of pruned.detached)lines.push(`pool: detached tree ${tree.name}, task ${tree.branch}, now that nothing uses it`);
+  for(const {tree,why} of pruned.detachWaiting)lines.push(`pool: detach pending or protected for tree ${tree.name}, task ${tree.branch}: ${why}`);
   for (const { tree, why } of pruned.waiting) lines.push(`pool: kept tree ${tree.name} on its landed branch ${tree.branch}: ${why}`);
   for(const row of pruned.reclamation?.removed??[])lines.push(`disk: removed ${row.root}, ${row.kind}, ${row.allocatedBytes} allocated bytes; free-space change ${row.freeBytesChange} bytes; ${row.facts.join('; ')}`);
   for(const row of pruned.reclamation?.kept??[])if(!row.routine)lines.push(`disk: kept ${row.root}: ${row.reason}`);

@@ -30,6 +30,10 @@ import {cargoSync} from '../gate/cargo.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {acquire} from './lock.ts';
 import {TreePin} from './tree-pin.ts';
+import {randomUUID} from 'node:crypto';
+import {processIdentity} from './lock.ts';
+import {assertNoUnitUsers} from '../gate/disk-reclamation.ts';
+import {assertWritableState} from '../gate/state-version.ts';
 
 const GB = 2 ** 30, DAY = 86_400_000;
 /** The tests' "now": git's clock and every idle time are read against it, never the machine's. */
@@ -447,22 +451,198 @@ test('ending a hold refuses a future presence version before changing Git',t=>{
   assert.equal(s.git(['branch','--show-current'],tree.path),'884');assert.equal(readFileSync(file,'utf8'),future);
 });
 
-test('detach refuses live process, unit, claim and resource owners by name',async t=>{
+test('detach durably waits for live process, unit, claim and resource owners by name',async t=>{
   const f=pool(t,1),tree=f.p.take('884');
   const child=spawn('cat',[],{cwd:tree.path,env:f.s.env,stdio:['pipe','ignore','pipe']}),exited=once(child,'exit');
   try{
     await once(child,'spawn');
     const owned=new Pool(f.p.dir,f.p.git,()=>{},{host:f.p.capacity.host,users:path=>treeUsers(path,{pids:[child.pid!]}),reclamation:{services:[],ownership:()=>{}}});
-    assert.throws(()=>owned.detach('884'),new RegExp('pid '+child.pid));
-    assert.equal(workerPresence(tree.path,'884').state,'attached');
+    const presence=owned.detach('884').presence!;
+    assert.equal(presence.state,'detach-pending');assert.match(presence.pendingReason!,new RegExp('pid '+child.pid));
+    assert.equal(f.p.room().reservedBytes,0);
   }finally{child.stdin.end();await exited;}
   const unit=new Pool(f.p.dir,f.p.git,()=>{},{host:f.p.capacity.host,users:()=>[],reclamation:{services:[],ownership:()=>{throw Error('unit branch-build.service owns WorkingDirectory');}}});
-  assert.throws(()=>unit.detach('884'),/branch-build.service/);
+  assert.match(unit.detach('884').presence!.pendingReason!,/branch-build.service/);
   const release=f.p.capacity.beginBuild({root:tree.path,target:join(tree.path,'target')});
-  try{assert.throws(()=>f.p.detach('884'),/live build claim.*pid/);}finally{release();}
+  try{
+    assert.match(f.p.detach('884').presence!.pendingReason!,/live build claim.*pid/);
+    assert.equal(f.p.capacity.snapshot(f.p.dir).reservedBytes,COLD_TARGET_BYTES,'a live build retains its own promise while the pool promise is pending');
+  }finally{release();}
+  const capture=f.p.capacity.tryTemporary(join(tree.path,'capture'),4096).lease;assert.ok(capture);
+  try{
+    assert.match(f.p.detach('884').presence!.pendingReason!,/live temporary claim.*pid/);
+    assert.equal(f.p.capacity.snapshot(f.p.dir).reservedBytes,4096,'a live temporary retains its independent claim');
+  }finally{capture.release();}
   const lock=GateResource.tryAcquire(tree.path+'.lock');assert.ok(lock);
-  try{assert.throws(()=>f.p.detach('884'),/resource lock is held/);}finally{lock.close();}
+  try{assert.match(f.p.detach('884').presence!.pendingReason!,/resource lock is held/);}finally{lock.close();}
   f.p.detach('884');assert.equal(workerPresence(tree.path,'884').state,'detached');
+});
+
+test('a park records a durable detach, drops only the pool promise and completes through upkeep',t=>{
+  let busy=false;
+  const {p,s,observe}=pool(t,2,{users:()=>busy?[{pid:42,command:'exiting worker',where:'its working directory'}]:[]}),tree=p.take('1031');
+  const file=workerPresenceFile(tree.path),attached=readFileSync(file,'utf8');
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});
+  assert.throws(()=>p.take('1067'),PoolFull,'a live attached worker keeps the only available promise');
+  busy=true;const presence=p.detach('1031').presence!,request=presence.detachRequest!;
+  assert.equal(presence.state,'detach-pending');assert.ok(request.id);assert.equal(request.identity,processIdentity(process.pid));
+  assert.equal(request.pid,process.pid);assert.ok(Number.isSafeInteger(request.at));assert.notEqual(readFileSync(file,'utf8'),attached);
+  assert.equal(p.capacity.activeLeases().length,0);assert.equal(p.room().reservedBytes,0);
+  assert.equal(p.capacity.snapshot(p.dir).reservedBytes,0);
+  const status=statusJson(p.dir,p.measured(p.statusTrees()),p.room(),NOW).trees[0]!;
+  assert.match(describePool(p.trees(),NOW),/detach pending:.*exiting worker/);
+  assert.equal(status.worker_presence,'detach-pending');assert.deepEqual(status.detach_request,request);assert.match(status.pending_reason!,/exiting worker/);
+  p.detach('1031');assert.deepEqual(workerPresence(tree.path,'1031').detachRequest,request,'retry preserves provenance');
+  const other=p.take('1067');assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES,'another task can use released room');
+  const waiting=p.prune({now:NOW});assert.equal(waiting.detached.length,0);assert.match(waiting.detachWaiting[0]!.why,/exiting worker/);
+  assert.deepEqual(workerPresence(tree.path,'1031').detachRequest,request);
+  const note=join(tree.path,'task-work.txt');writeFileSync(note,'preserved');busy=false;
+  const settled=p.prune({now:NOW});assert.deepEqual(settled.detached.map(row=>row.path),[tree.path]);
+  assert.match(pruneLines(settled).join('\n'),/detached tree 1, task 1031/);
+  assert.equal(workerPresence(tree.path,'1031').state,'detached');assert.equal(s.git(['branch','--show-current'],tree.path),'1031');
+  assert.equal(readFileSync(note,'utf8'),'preserved');assert.equal(p.capacity.activeLeases()[0]!.root,other.path);
+});
+
+for(const action of ['attach','take'] as const)test('resume cancels pending detach and upkeep preserves the live promise: '+action,t=>{
+  let busy=false;
+  const {p,observe}=pool(t,2,{users:()=>busy?[{pid:42,command:'live resumed worker',where:'its working directory'}]:[]}),tree=p.take('1031');
+  busy=true;p.detach('1031');const request=workerPresence(tree.path,'1031').detachRequest!;
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES-1,freeInodes:1000});
+  const pending=readFileSync(workerPresenceFile(tree.path),'utf8');
+  assert.throws(()=>p[action]('1031'),PoolFull);assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),pending);
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});
+  p[action]('1031');const resumed=readFileSync(workerPresenceFile(tree.path),'utf8');
+  assert.equal(workerPresence(tree.path,'1031').state,'attached');assert.equal(workerPresence(tree.path,'1031').detachRequest,undefined);
+  p.prune({now:NOW});assert.equal(readFileSync(workerPresenceFile(tree.path),'utf8'),resumed,'old request '+request.id+' cannot detach a resumed worker');
+  assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);assert.equal(p.capacity.activeLeases().length,1);
+  assert.throws(()=>p.take('1067'),PoolFull,'the resumed worker keeps the sole cold promise');
+});
+
+test('a branch switch leaves pending presence protected and immutable, with its exact cause named',t=>{
+  let busy=false;
+  const {p,s,observe}=pool(t,2,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]}),tree=p.take('1031');
+  busy=true;p.detach('1031');const file=workerPresenceFile(tree.path),bytes=readFileSync(file,'utf8');busy=false;
+  s.git(['switch','-q','-c','1031-resumed'],tree.path);
+  const presence=workerPresence(tree.path,'1031-resumed');assert.equal(presence.state,'attached');
+  assert.match(presence.diagnostic!,/branch changed without presence publication: record names 1031, tree holds 1031-resumed/);
+  assert.throws(()=>p.detach('1031-resumed'),/branch changed without presence publication/);
+  const pruned=p.prune({now:NOW});assert.match(pruned.detachWaiting[0]!.why,/branch changed without presence publication/);
+  assert.equal(readFileSync(file,'utf8'),bytes);assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
+  observe({freeBytes:DISK_MARGIN_BYTES+COLD_TARGET_BYTES,freeInodes:1000});assert.throws(()=>p.take('1067'),PoolFull);
+});
+
+test('a legacy resume or branch switch during the final observation invalidates pending completion',t=>{
+  for(const mutation of ['attach','branch']){
+    let busy=false,change=false;
+    const f=pool(t,1,{users:()=>busy?[{pid:42,command:'worker',where:'its working directory'}]:[]}),tree=f.p.take('1031');
+    busy=true;f.p.detach('1031');busy=false;
+    const resumed=()=>{
+      if(!change)return;change=false;
+      if(mutation==='attach'){
+        const row=JSON.parse(readFileSync(workerPresenceFile(tree.path),'utf8'));
+        delete row.detachRequest;delete row.pendingReason;row.state='attached';writeFileSync(workerPresenceFile(tree.path),JSON.stringify(row));
+      }else f.s.git(['switch','-q','-c','1031-new'],tree.path);
+    };
+    const p=new Pool(f.p.dir,f.p.git,()=>{},{host:f.p.capacity.host,users:()=>{resumed();return [];},reclamation:{services:[],ownership:()=>{}}});
+    change=true;const pruned=p.prune({now:NOW});assert.equal(pruned.detached.length,0);
+    assert.match(pruned.detachWaiting[0]!.why,/changed during detach observation/);
+    assert.equal(workerPresence(tree.path,mutation==='attach'?'1031':'1031-new').state,'attached');
+    assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
+  }
+});
+
+test('a branch change during detach is refused by the CLI instead of accepting unknown presence',t=>{
+  let change=()=>{},pending='';
+  const f=pool(t,1,{users:()=>{change();return [];}}),tree=f.p.take('1031'),file=workerPresenceFile(tree.path);
+  change=()=>{change=()=>{};pending=readFileSync(file,'utf8');f.s.git(['switch','-q','-c','1031-resumed'],tree.path);};
+  assert.throws(()=>f.p.detach('1031'),/branch changed without presence publication: record names 1031, tree holds 1031-resumed/);
+  assert.equal(readFileSync(file,'utf8'),pending,'the stale request is retained as evidence');
+  const cli=poolCli(f,'detach','1031-resumed');assert.equal(cli.status,1);assert.match(cli.stderr,/branch changed without presence publication/);
+  assert.equal(readFileSync(file,'utf8'),pending);assert.equal(f.p.room().reservedBytes,COLD_TARGET_BYTES);
+});
+
+test('a pending request survives its requester exit, then completes after the remaining worker drains',t=>{
+  let busy=false;
+  const f=pool(t,1,{users:()=>busy?[{pid:42,command:'exiting worker',where:'its working directory'}]:[]}),tree=f.p.take('1031');
+  const source=generatedJavaScript(`
+import {Pool} from ${JSON.stringify(new URL('./pool.ts',import.meta.url).href)};
+const p=new Pool(${JSON.stringify(f.p.dir)},{root:${JSON.stringify(f.s.root)}},()=>{}, {users:()=>[{pid:42,command:'exiting worker',where:'its working directory'}],reclamation:{services:[],ownership:()=>{}}});
+p.detach('1031');`);
+  const child=spawnTest(process.execPath,['--input-type=module','-e',source],{cwd:f.s.root,env:{...f.s.env,...f.observe({freeBytes:1000*GB,freeInodes:1000})},encoding:'utf8'});
+  assert.equal(child.status,0,child.stderr);const request=workerPresence(tree.path,'1031').detachRequest!;
+  assert.notEqual(request.pid,process.pid);assert.equal(processIdentity(request.pid),null,'the requester has exited');
+  busy=true;f.p.prune({now:NOW});assert.deepEqual(workerPresence(tree.path,'1031').detachRequest,request);
+  assert.equal(f.p.room().reservedBytes,0,'requester death does not revive the pool promise');
+  busy=false;f.p.prune({now:NOW});assert.equal(workerPresence(tree.path,'1031').state,'detached');
+});
+
+test('a real named worker unit delays completion until that unit ends',t=>{
+  const f=pool(t,1),tree=f.p.take('1031'),unit='nts-1066-blocker-'+randomUUID()+'.service';
+  const started=spawnTest('systemd-run',['--user','--collect','--quiet','--service-type=exec','--unit='+unit,'--working-directory='+tree.path,
+    '-p','RuntimeMaxSec=180','-p','LimitCORE=0','-p','Nice=19','-p','CPUWeight=20','--','taskset','-c','0-3,6-31','/usr/bin/sleep','infinity'],{env:f.s.env,encoding:'utf8'});
+  assert.equal(started.status,0,started.stderr);
+  let stopped=false;
+  const stop=()=>{if(stopped)return;const result=spawnTest('systemctl',['--user','stop',unit],{env:f.s.env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);stopped=true;};
+  t.after(stop);
+  const p=new Pool(f.p.dir,f.p.git,()=>{},{host:f.p.capacity.host,processes:{pids:[]},reclamation:{services:[],ownership:()=>assertNoUnitUsers([tree.path],[unit])}});
+  const presence=p.detach('1031').presence!;assert.equal(presence.state,'detach-pending');assert.ok(presence.pendingReason!.includes(unit));
+  p.prune({now:NOW});assert.equal(workerPresence(tree.path,'1031').state,'detach-pending');assert.equal(p.room().reservedBytes,0);
+  stop();p.prune({now:NOW});assert.equal(workerPresence(tree.path,'1031').state,'detached');
+});
+
+test('pending detach retains output and observation failures stay pending until a complete control',t=>{
+  let busy=false,blind=false;
+  const {p}=pool(t,1,{users:()=>{if(blind)throw new TreeOwnershipUnavailable([Error('supplied unreadable owner')]);return busy?[{pid:42,command:'worker',where:'its working directory'}]:[];}}),tree=p.take('1031');
+  const target=join(tree.path,'target');mkdirSync(target);writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
+  for(const name of ['nts-dev','clippy'] as const){const output=join(target,name);mkdirSync(output);completeBuild(tree.path,name,output);}
+  busy=true;p.detach('1031');const request=workerPresence(tree.path,'1031').detachRequest!;
+  assert.ok(p.capacity.reclaim(p.dir,1000*GB)!.kept.some(row=>row.reason.includes('attached worker')));assert.ok(existsSync(target));
+  busy=false;blind=true;p.prune({now:NOW});assert.match(workerPresence(tree.path,'1031').pendingReason!,/unreadable owner/);
+  assert.deepEqual(workerPresence(tree.path,'1031').detachRequest,request);
+  blind=false;p.prune({now:NOW});assert.equal(workerPresence(tree.path,'1031').state,'detached');
+});
+
+test('v1 presence stays readable and corrupt, future and malformed requests fail closed without repair',t=>{
+  const {p}=pool(t,1),tree=p.take('1031'),file=workerPresenceFile(tree.path),row=JSON.parse(readFileSync(file,'utf8'));
+  row.version=1;writeFileSync(file,JSON.stringify(row));assert.equal(workerPresence(tree.path,'1031').state,'attached');
+  assert.doesNotThrow(()=>assertWritableState(file,1));
+  p.detach('1031');assert.equal(JSON.parse(readFileSync(file,'utf8')).version,2);
+  assert.throws(()=>assertWritableState(file,1),/unsupported future state version 2/,'an old mutator cannot overwrite v2');
+  for(const body of ['{broken',JSON.stringify({version:99}),JSON.stringify({...row,version:2,state:'detach-pending',detachRequest:{}}),
+    JSON.stringify({...row,version:2,state:'detach-pending',detachedAt:null,pendingReason:'waiting',detachRequest:{id:randomUUID(),at:Number.MAX_SAFE_INTEGER,pid:42,identity:'00000000-0000-0000-0000-000000000000 42 99'}})]){
+    writeFileSync(file,body);const presence=workerPresence(tree.path,'1031');assert.equal(presence.state,'attached');assert.ok(presence.diagnostic);
+    assert.throws(()=>p.detach('1031'));p.prune({now:NOW});assert.equal(readFileSync(file,'utf8'),body);assert.equal(p.room().reservedBytes,COLD_TARGET_BYTES);
+  }
+});
+
+test('completion publication failure leaves an accepted durable intent for upkeep to finish',t=>{
+  const {p}=pool(t,1),tree=p.take('1031'),run=p.capacity.transactions.run.bind(p.capacity.transactions),warnings:string[]=[];
+  t.mock.method(console,'warn',(message:string)=>warnings.push(message));
+  p.capacity.transactions.run=(operation,path,body,wait,options)=>{
+    if(operation==='pool-detach-complete')throw Error('supplied completion publication failure');
+    return run(operation,path,body,wait,options);
+  };
+  assert.equal(p.detach('1031').presence!.state,'detach-pending');assert.match(warnings[0]!,/completion deferred: supplied completion publication failure/);
+  p.capacity.transactions.run=run;p.prune({now:NOW});assert.equal(workerPresence(tree.path,'1031').state,'detached');
+});
+
+test('detach CLI exits zero for durable detached and pending states, and nonzero only for an unrecorded request',t=>{
+  const f=pool(t,1),tree=f.p.take('1031'),file=workerPresenceFile(tree.path);
+  const detached=poolCli(f,'detach','1031');assert.equal(detached.status,0,detached.stderr);assert.match(detached.stdout,/task 1031: detached/);
+  f.p.attach('1031');const resource=GateResource.tryAcquire(tree.path+'.lock');assert.ok(resource);
+  try{
+    const pending=poolCli(f,'detach','1031');assert.equal(pending.status,0,pending.stderr);assert.match(pending.stdout,/task 1031: detach-pending/);
+    assert.equal(workerPresence(tree.path,'1031').state,'detach-pending');
+  }finally{resource.close();}
+  for(const body of ['{broken',JSON.stringify({version:99}),JSON.stringify({...JSON.parse(readFileSync(file,'utf8')),branch:'1031-old'})]){
+    writeFileSync(file,body);const refused=poolCli(f,'detach','1031');assert.equal(refused.status,1);assert.match(refused.stderr,/pool: .*worker.json/);
+    assert.equal(readFileSync(file,'utf8'),body);
+  }
+  rmSync(file);chmodSync(f.p.dir,0o500);
+  try{
+    const unwritable=poolCli(f,'detach','1031');assert.equal(unwritable.status,1);assert.match(unwritable.stderr,/pool:.*EACCES/);assert.equal(existsSync(file),false);
+  }finally{chmodSync(f.p.dir,0o755);}
+  const missing=poolCli(f,'detach','absent');assert.equal(missing.status,1);assert.match(missing.stderr,/pool: no pool tree holds branch absent/);
 });
 
 test('a reclaimed task reattaches, rebuilds Cargo output and runs its committed branch test',t=>{

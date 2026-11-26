@@ -188,7 +188,7 @@ export function poolWorktree(path: string, cache: string): string | null {
   return null;
 }
 
-function worktreeLines(input: CountInput, red: string[]): void {
+function worktreeLines(input: CountInput, red: string[], notices:string[]): void {
   const shared = real(input.shared), home = dirname(input.cache);
   const named = new Set([...planNames(input.plan).paths].map(path => real(path.startsWith("~/") ? join(home, path.slice(2)) : path)));
   for (const tree of [...input.worktrees].sort((a, b) => a.path.localeCompare(b.path))) {
@@ -198,6 +198,7 @@ function worktreeLines(input: CountInput, red: string[]): void {
     if(tree.branch&&poolWorktree(tree.path,input.cache)==='the pool'){
       const presence=workerPresence(real(tree.path),tree.branch.replace(/^refs\/heads\//,''));
       if(presence.diagnostic)red.push(`worktree ${tree.path} (${what}): kept as attached; ${presence.diagnostic}`);
+      else if(presence.state==='detach-pending')notices.push(`worktree ${tree.path} (${what}): detach pending since ${new Date(presence.detachRequest!.at).toISOString()}, requested by ${presence.detachRequest!.identity}; unused pool promise released; reclamation protected: ${presence.pendingReason}`);
     }
     if (real(tree.path) === shared || poolWorktree(tree.path, input.cache) || named.has(real(tree.path))) continue;
     red.push(`worktree ${tree.path} (${what}): outside the pool (~/.cache/nts-pool/<n>), and docs/plan.md does not name it`);
@@ -543,7 +544,7 @@ function sliceLines(input: CountInput, red: string[], notes: string[], stoppable
 export function count(input: CountInput, keep: Record<string, Keep> = readKeep()): CountResult {
   const red: string[] = [], notes: string[] = [], notices: string[] = [], removable: Removable[] = [], stoppable: Stoppable[] = [];
   branchLines(input, red, notes);
-  worktreeLines(input, red);
+  worktreeLines(input, red, notices);
   cacheLines(input, keep, red, removable,notes,notices);
   sliceLines(input, red, notes, stoppable);
   return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, ...(notices.length?{notices}:{}), removable, stoppable };
