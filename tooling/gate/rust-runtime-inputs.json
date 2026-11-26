@@ -9224,6 +9224,11 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/memory/pile-shuffle/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/memory/a-borrow-ends-at-its-last-read/tsconfig.json"
           }
         ]
       }
@@ -14181,6 +14186,18 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/memory/traversal/tsconfig.json"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/memory/traversal/.git"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/memory/traversal/nts.config.ts"
+          },
+          {
+            "kind": "optional-file",
+            "path": "../../../tests/memory/traversal/pnpm-workspace.yaml"
           }
         ]
       }
