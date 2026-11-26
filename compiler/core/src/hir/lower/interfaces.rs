@@ -1105,6 +1105,108 @@ pub(super) fn interface_member_of(
     Some((ty, MemberKey::method(probe.access_key(callee, "")?)))
 }
 
+/// Source members and runtime suppliers, indexed once after hierarchy inference.
+/// Vectors retain class and member order, including normalized overload duplicates.
+#[derive(Debug, Default)]
+pub(super) struct MemberFillers {
+    members: rustc_hash::FxHashMap<TypeId, rustc_hash::FxHashMap<MemberKey, Vec<NodeId>>>,
+    suppliers: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
+    literal_roots: rustc_hash::FxHashSet<TypeId>,
+}
+
+impl MemberFillers {
+    pub(super) fn collect(
+        snapshot: &SemanticSnapshot,
+        probe: &FuncBuilder<'_>,
+        hierarchy: &Hierarchy,
+    ) -> Self {
+        let mut found = Self::default();
+        let mut roots = rustc_hash::FxHashMap::default();
+        // The only source-node enumeration. Queries never revisit the snapshot.
+        for (index, node) in snapshot.nodes.iter().enumerate() {
+            if !matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind)) {
+                continue;
+            }
+            let class = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+            let Some(ty) = instance_type_of(snapshot, class) else {
+                continue;
+            };
+            let above = roots
+                .entry(ty)
+                .or_insert_with(|| filler_roots(hierarchy, ty));
+            for member in probe.children(class) {
+                let Some(key) = member_dispatch_key(probe, member) else {
+                    continue;
+                };
+                let declaration = probe.implementation_of(the_function_of(probe, member));
+                for root in above.iter().copied() {
+                    found
+                        .members
+                        .entry(root)
+                        .or_default()
+                        .entry(key.clone())
+                        .or_default()
+                        .push(declaration);
+                }
+            }
+        }
+        // These inventories include instantiated and unresolved suppliers that
+        // need not have a source class node. They do not enumerate members again.
+        for ty in hierarchy
+            .declares
+            .keys()
+            .filter(|ty| !hierarchy.faces.contains(ty))
+        {
+            for root in roots
+                .entry(*ty)
+                .or_insert_with(|| filler_roots(hierarchy, *ty))
+                .iter()
+                .copied()
+            {
+                if root != *ty {
+                    found.suppliers.entry(root).or_default().push(*ty);
+                }
+            }
+        }
+        for ty in hierarchy.literal_methods.owners() {
+            found.literal_roots.extend(
+                roots
+                    .entry(ty)
+                    .or_insert_with(|| filler_roots(hierarchy, ty))
+                    .iter()
+                    .copied(),
+            );
+        }
+        found
+    }
+
+    #[cfg(test)]
+    pub(super) fn keys(&self, root: TypeId) -> impl Iterator<Item = &MemberKey> {
+        self.members
+            .get(&root)
+            .into_iter()
+            .flat_map(|members| members.keys())
+    }
+}
+
+/// Expand the existing ancestry primitives read by `Hierarchy::descends_from`.
+fn filler_roots(hierarchy: &Hierarchy, ty: TypeId) -> rustc_hash::FxHashSet<TypeId> {
+    let mut roots = rustc_hash::FxHashSet::default();
+    for ancestor in hierarchy.ancestors(ty) {
+        roots.insert(ancestor);
+        roots.extend(hierarchy.interfaces_of(ancestor));
+        if let Some(child) = hierarchy.provided_errors.get(&ancestor) {
+            roots.extend(
+                hierarchy
+                    .provided_errors
+                    .iter()
+                    .filter_map(|(ty, parent)| (*parent == 0 || child == parent).then_some(*ty)),
+            );
+        }
+    }
+    roots
+}
+
 /// Whether an interface family's runtime suppliers can bring a throw back.
 /// Shared by slot numbering and the builder's carrying check: a quiet family
 /// must not need a slot at either reader.
@@ -1117,6 +1219,10 @@ pub(super) fn interface_family_can_raise(
     key: &MemberKey,
 ) -> bool {
     let members = members_filling(snapshot, probe, hierarchy, root, key);
+    let fillers = hierarchy
+        .member_fillers
+        .get()
+        .expect("member fillers initialized before queries");
     let listed: rustc_hash::FxHashSet<TypeId> = members
         .iter()
         .filter_map(|member| probe.enclosing_class(*member))
@@ -1127,33 +1233,28 @@ pub(super) fn interface_family_can_raise(
     // implementer cannot be proved quiet from the class-body inventory.
     let unknown_supplier = !hierarchy.faces.contains(&root)
         || members.is_empty()
-        || hierarchy
-            .literal_methods
-            .owners()
-            .any(|owner| hierarchy.descends_from(owner, root))
-        || hierarchy.declares.keys().any(|ty| {
-            *ty != root
-                && !hierarchy.faces.contains(ty)
-                && hierarchy.descends_from(*ty, root)
-                && hierarchy
+        || fillers.literal_roots.contains(&root)
+        || fillers
+            .suppliers
+            .get(&root)
+            .into_iter()
+            .flatten()
+            .any(|ty| {
+                hierarchy
                     .declaring(*ty, key)
                     .is_none_or(|owner| !listed.contains(&owner))
-        });
+            });
     unknown_supplier
         || members
             .into_iter()
             .any(|member| super::a_declaration_that_can_raise(snapshot, throwing, member))
 }
 
-/// Every member declaration that would fill `root`'s `key` slot: the one each class at
-/// or below `root` declares for it.
-///
-/// By walking the class declarations rather than a reverse map, because the map from a
-/// type back to the class node is not one this file keeps and a second derivation of it
-/// would be a third place that answers "which class is this".
+/// Every source member filling root's slot, in original class/member order.
+/// Accessor transport retains its existing owner and read/write policy.
 pub(super) fn members_filling(
-    snapshot: &SemanticSnapshot,
-    probe: &FuncBuilder,
+    _snapshot: &SemanticSnapshot,
+    _probe: &FuncBuilder,
     hierarchy: &Hierarchy,
     root: TypeId,
     key: &MemberKey,
@@ -1161,34 +1262,15 @@ pub(super) fn members_filling(
     if let Some((family, writes)) = hierarchy.access_families.for_key(root, key) {
         return family.accessors_for(writes);
     }
-    let mut found = Vec::new();
-    for (index, node) in snapshot.nodes.iter().enumerate() {
-        let NodeKind::Syntax(kind) = node.kind else {
-            continue;
-        };
-        if !declares_a_class(kind) {
-            continue;
-        }
-        let class = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let Some(ty) = instance_type_of(snapshot, class) else {
-            continue;
-        };
-        if !hierarchy.descends_from(ty, root) {
-            continue;
-        }
-        for member in probe.children(class) {
-            if member_dispatch_key(probe, member).as_ref() == Some(key) {
-                // Normalised the way `raising_copies` normalises what it puts in
-                // `Naming::copyable`, because the caller asks that set about these nodes.
-                // An **overloaded** member declares several nodes for one dispatch key and
-                // only the implementation is ever in the set, so comparing the raw nodes
-                // would reject every such family -- conservative, and a second spelling of
-                // one normalisation, which is the defect this file has had four of.
-                found.push(probe.implementation_of(the_function_of(probe, member)));
-            }
-        }
-    }
-    found
+    hierarchy
+        .member_fillers
+        .get()
+        .expect("member fillers initialized before queries")
+        .members
+        .get(&root)
+        .and_then(|members| members.get(key))
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// Give a closure's layout the function type it is a value of as its base, and

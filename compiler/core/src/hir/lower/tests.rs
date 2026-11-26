@@ -877,3 +877,68 @@ pub(super) fn assert_structural_plan_unchanged(
         "closure variants moved"
     );
 }
+
+/// The indexed answer must equal the former source scan, including overload
+/// duplicates and order, for every family in each core harness program.
+pub(super) fn assert_member_fillers_unchanged(
+    snapshot: &super::LoweringSnapshot<'_>,
+    hierarchy: &super::Hierarchy,
+) {
+    let probe = super::FuncBuilder::probe(snapshot);
+    let index = hierarchy
+        .member_fillers
+        .get()
+        .expect("member fillers initialized");
+    let roots: rustc_hash::FxHashSet<_> = hierarchy
+        .declares
+        .keys()
+        .chain(&hierarchy.faces)
+        .copied()
+        .collect();
+    for root in roots {
+        // The old scan, grouped by key so a test visits the source once per
+        // root rather than once per member. Production never uses this scan.
+        let mut expected: rustc_hash::FxHashMap<super::MemberKey, Vec<super::NodeId>> =
+            rustc_hash::FxHashMap::default();
+        for (at, node) in snapshot.nodes.iter().enumerate() {
+            if !matches!(node.kind, super::NodeKind::Syntax(kind) if super::declares_a_class(kind))
+            {
+                continue;
+            }
+            let class = super::NodeId(u32::try_from(at).unwrap_or(u32::MAX));
+            let Some(ty) = super::instance_type_of(snapshot, class) else {
+                continue;
+            };
+            if !hierarchy.descends_from(ty, root) {
+                continue;
+            }
+            for member in probe.children(class) {
+                if let Some(key) = super::member_dispatch_key(&probe, member) {
+                    expected
+                        .entry(key)
+                        .or_default()
+                        .push(probe.implementation_of(super::the_function_of(&probe, member)));
+                }
+            }
+        }
+        let keys: rustc_hash::FxHashSet<_> = expected
+            .keys()
+            .chain(index.keys(root))
+            .chain(hierarchy.declares.get(&root).into_iter().flatten())
+            .cloned()
+            .collect();
+        for key in keys {
+            let former =
+                if let Some((family, writes)) = hierarchy.access_families.for_key(root, &key) {
+                    family.accessors_for(writes)
+                } else {
+                    expected.remove(&key).unwrap_or_default()
+                };
+            assert_eq!(
+                super::members_filling(snapshot, &probe, hierarchy, root, &key),
+                former,
+                "member filler index changed {root:?} {key:?}"
+            );
+        }
+    }
+}

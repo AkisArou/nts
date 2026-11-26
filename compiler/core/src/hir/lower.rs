@@ -985,6 +985,8 @@ fn hierarchy_and_naming(
         snapshot, foreign, closures, &hierarchy, &naming,
     ));
     #[cfg(test)]
+    tests::assert_member_fillers_unchanged(snapshot, &hierarchy);
+    #[cfg(test)]
     tests::assert_structural_plan_unchanged(
         snapshot,
         &hierarchy,

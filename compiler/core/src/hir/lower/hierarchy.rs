@@ -94,6 +94,9 @@ pub(super) struct Hierarchy {
     pub(super) literal_methods: std::sync::Arc<literal_methods::Supplies>,
     /// A complete, shared contract for reads and writes through a field face.
     pub(super) access_families: std::sync::Arc<access_families::Families>,
+    /// Frozen source-member and supplier inventory. An early read or repeated
+    /// initialization is an error; interfaces.rs owns its one enumeration.
+    pub(super) member_fillers: std::sync::OnceLock<super::interfaces::MemberFillers>,
     /// The symbol each `get` and `set` declaration belongs to.
     ///
     /// **An access finds its accessor through the receiver's type, which names the
@@ -1044,6 +1047,16 @@ pub(super) fn collect_hierarchy(
     std::sync::Arc::make_mut(&mut hierarchy.literal_methods)
         .collect_writes(&probe, &hierarchy.faces);
     infer_implements(snapshot, &probe, &mut hierarchy);
+
+    // Last writes to ancestry, provided errors, implements and literal/stored
+    // supplies are above. Subsequent collection/numbering reads those facts;
+    // only slots and field aliases change before bodies consume this index.
+    hierarchy
+        .member_fillers
+        .set(super::interfaces::MemberFillers::collect(
+            snapshot, &probe, &hierarchy,
+        ))
+        .expect("member fillers initialized exactly once");
 
     hierarchy.access_families =
         std::sync::Arc::new(access_families::Families::collect(&mut probe, &hierarchy));
