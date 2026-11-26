@@ -577,7 +577,8 @@ struct Naming {
     added_keys: std::rc::Rc<AddedKeys>,
     /// Where the program can see an object's keys, which decides whether a
     /// typed `JSON.parse` may drop their order: see [`json_parse::observers`].
-    json_observers: std::rc::Rc<json_parse::Observers>,
+    /// Found on the first typed parse, so a program without one pays nothing.
+    json_observers: std::rc::Rc<std::cell::OnceCell<json_parse::Observers>>,
 
     /// Which generator each `function*` is, in source order.
     ///
@@ -697,7 +698,6 @@ fn naming(
     naming.raising_then = throwing.bodily;
     naming.presence_keys = presence_keys(snapshot, &probe);
     naming.added_keys = std::rc::Rc::new(added_keys(snapshot, &probe));
-    naming.json_observers = std::rc::Rc::new(json_parse::observers(snapshot, &probe));
     naming.throwing = throwing.any;
     naming.generators = generators;
     naming.written_order = written_order;
@@ -1805,7 +1805,7 @@ struct FuncBuilder<'a> {
     /// into [`Arrivals::json_readers`].
     json_readers: Vec<json_parse::Reader>,
     /// [`Naming::json_observers`].
-    json_observers: std::rc::Rc<json_parse::Observers>,
+    json_observers: std::rc::Rc<std::cell::OnceCell<json_parse::Observers>>,
     /// Program-wide typed sort helper requests, shared with other builders.
     sort_helpers: array_sort::Registry,
     /// See [`Arrivals`]; drained by [`FuncBuilder::harvest`].

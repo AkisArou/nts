@@ -65,9 +65,11 @@ exist.
   (`Object.keys` and its family, `Reflect.ownKeys`, `hasOwnProperty`,
   `for...in`, object spread, `in`, an object pattern's rest element) and what
   can reach one unseen (`JSON.stringify`, `console`, a native call, an
-  export, a store into an `any` or `unknown` place). An operand counts when its
-  type is a produced type, one whose names are among a produced type's, or one
-  the type does not decide (erased, generic, indexed). A `const` built of
+  export's value or result, a store into an `any` or `unknown` place). An
+  operand counts when its type is a produced type, one a produced object may be
+  assigned to (every member it requires, other than what every object
+  inherits, is one a produced type has), or one the type does not decide
+  (erased, generic, indexed). A `const` built of
   literals that the program never lets go of is no parse's result and does not
   count.
 - **On native, simdjson's scanner** finds the structure of one-byte ASCII

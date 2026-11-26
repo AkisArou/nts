@@ -282,7 +282,7 @@ struct Observer {
 ///   function's parameters and result, and a store into an `any` or `unknown`
 ///   place -- everything it holds, since each can reach a key observer this
 ///   walk cannot see.
-pub(super) fn observers(snapshot: &SemanticSnapshot, probe: &FuncBuilder<'_>) -> Observers {
+fn observers(snapshot: &SemanticSnapshot, probe: &FuncBuilder<'_>) -> Observers {
     let mut sites = Vec::new();
     let mut references: rustc_hash::FxHashMap<SymbolId, Vec<NodeId>> =
         rustc_hash::FxHashMap::default();
@@ -427,6 +427,18 @@ fn export_observers(snapshot: &SemanticSnapshot, sites: &mut Vec<Observer>) {
                 continue;
             };
             for declaration in &record.declarations {
+                // A type is not a value the host can be handed.
+                if matches!(
+                    snapshot
+                        .nodes
+                        .get(declaration.0 as usize)
+                        .map(|node| node.kind),
+                    Some(NodeKind::Syntax(
+                        syntax::INTERFACE_DECLARATION | syntax::TYPE_ALIAS_DECLARATION
+                    ))
+                ) {
+                    continue;
+                }
                 let Some(ty) = snapshot.node_types.get(declaration).copied() else {
                     continue;
                 };
@@ -648,8 +660,13 @@ fn reaches(
                 else {
                     return false;
                 };
+                // An over-approximation of "a produced object is assignable to
+                // this type": every member the type requires is one the produced
+                // type has. An optional member it lacks does not stop the
+                // assignment, and neither does one every object inherits.
                 properties
                     .iter()
+                    .filter(|property| !property.optional && !inherited(&property.name))
                     .all(|property| made.iter().any(|other| other.name == property.name))
             });
             accepts
@@ -697,6 +714,28 @@ fn reaches(
     }
 }
 
+/// Whether every object has the member from `Object.prototype`, so a type that
+/// requires it requires nothing of a parsed object.
+fn inherited(name: &PropertyKey) -> bool {
+    name.public_name().is_some_and(|name| {
+        matches!(
+            name,
+            "constructor"
+                | "toString"
+                | "toLocaleString"
+                | "valueOf"
+                | "hasOwnProperty"
+                | "isPrototypeOf"
+                | "propertyIsEnumerable"
+                | "__proto__"
+                | "__defineGetter__"
+                | "__defineSetter__"
+                | "__lookupGetter__"
+                | "__lookupSetter__"
+        )
+    })
+}
+
 /// The keys of an object reader, as `nts_json_key_index` reads them: each one
 /// unit of its length, then its units.
 fn key_table(members: &[Member]) -> Vec<u16> {
@@ -723,7 +762,14 @@ impl FuncBuilder<'_> {
             .map_err(|why| {
                 self.unsupported(id, &format!("`JSON.parse(text) as T` where T is {why}"))
             })?;
-        if let Some(what) = self.json_observers.first_over(self.snapshot, &produced) {
+        // Found once per program, by a probe that is no function's, on the
+        // first typed parse a program has.
+        let found = std::rc::Rc::clone(&self.json_observers);
+        let snapshot = self.snapshot;
+        let observed = found
+            .get_or_init(|| observers(snapshot, &FuncBuilder::probe(snapshot)))
+            .first_over(snapshot, &produced);
+        if let Some(what) = observed {
             return Err(self.unsupported(
                 id,
                 &format!(

@@ -31,8 +31,11 @@
  *
  * # The tape
  *
- * A `number[]`, so every backend reads it as an ordinary array. Four
- * doubles of header, then three per value, in document order:
+ * A `number[]`, so every backend reads it as an ordinary array: the compiler
+ * has no managed array of 32-bit integers, which would halve it. The scan
+ * writes into a growable buffer and copies it once into the array it hands
+ * back, whose length it then knows. Four doubles of header, then three per
+ * value, in document order:
  *
  *     [0]  1 when the text is JSON, 0 when it is not
  *     [1]  not JSON: the error (`Problem`); JSON: unused
