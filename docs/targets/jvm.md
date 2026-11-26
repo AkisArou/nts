@@ -161,6 +161,8 @@ which disagree with node's; the decided fix is nts's own tables (D4). The
 TypeScript Intl over ICU4J in `runtime/ecmascript` exists, and `Intl` is not a
 provided global. Number formatting is Grisu2, with a port of native's zmij
 decided ([JVM and Wasm](../foundations/jvm-and-wasm.md#where-they-stand)).
+A typed `JSON.parse` runs the generated readers every backend runs, over
+`NtsJson`'s scan and reads ([JSON](../foundations/json.md#reading-jsonparse)).
 
 ## Open questions
 

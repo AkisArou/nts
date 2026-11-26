@@ -301,6 +301,33 @@ pub fn table_fill_external(
     Some((types::TABLE, member, format!("(Lnts/rt/NtsTable;{out})V")))
 }
 
+/// A typed `JSON.parse`'s kernels (`nts.rt.NtsJson`): the scan that writes
+/// the tape and the reads the generated readers make of it
+/// (`hir/lower/json_parse.rs`), the same seven names `runtime/c/nts_json.c`
+/// defines. `None` for another name.
+///
+/// The tape is a `number[]`, so its form is the program's: a bare `[D` where
+/// no array grows and an `NtsArrayD` where one does (`shape.grows`, decided
+/// for the whole program). `NtsJson` takes either, so `grows` picks the
+/// overload here and no call site rewrites a descriptor.
+#[must_use]
+pub fn json_external(name: &str, grows: bool) -> Option<(&'static str, &'static str, String)> {
+    const STRING: &str = "Ljava/lang/String;";
+    let tape = if grows { "Lnts/rt/NtsArrayD;" } else { "[D" };
+    let (member, signature) = match name {
+        "nts_json_tape" if grows => ("tapeArray", format!("({STRING}){tape}")),
+        "nts_json_tape" => ("tape", format!("({STRING}){tape}")),
+        "nts_json_syntax_message" => ("syntaxMessage", format!("({STRING}{tape}){STRING}")),
+        "nts_json_key_index" => ("keyIndex", format!("({STRING}{tape}D{STRING}D)D")),
+        "nts_json_string" => ("string", format!("({STRING}{tape}D){STRING}")),
+        "nts_json_number" => ("number", format!("({STRING}{tape}D)D")),
+        "nts_json_mismatch" => ("mismatch", format!("({STRING}{tape}D{STRING}){STRING}")),
+        "nts_json_missing" => ("missing", format!("({STRING}{tape}D{STRING}){STRING}")),
+        _ => return None,
+    };
+    Some((types::JSON, member, signature))
+}
+
 /// The array helpers, which need one entry point per element width.
 ///
 /// `element` is `"D"`, `"Z"` or `"L"` -- the two primitive widths that appear
@@ -4007,7 +4034,9 @@ impl Emitter<'_> {
             subject.as_ref(),
             Some(HirType::Managed(ManagedType::Array(holds))) if **holds == HirType::Erased
         );
-        let found = if name == "nts_promise_all" {
+        let found = if let Some(found) = json_external(name, self.shape.grows) {
+            Some(found)
+        } else if name == "nts_promise_all" {
             let holds = if erased {
                 "V"
             } else {

@@ -718,6 +718,8 @@ pub const MAP: &str = "nts/rt/NtsMap";
 /// return type. The kind is the class now instead of a bit, which also makes
 /// `nts_is_map` and `nts_is_set` two `instanceof`s that cannot both be true.
 pub const SET: &str = "nts/rt/NtsSet";
+/// A typed `JSON.parse`'s scan and reads over its tape (`ops::json_external`).
+pub const JSON: &str = "nts/rt/NtsJson";
 /// A `Date`: a `double` and an identity, and the two operations that reach it.
 pub const DATE: &str = "nts/rt/NtsDate";
 /// A symbol: a description and an identity, and five operations.

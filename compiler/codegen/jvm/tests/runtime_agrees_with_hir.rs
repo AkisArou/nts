@@ -129,6 +129,42 @@ fn every_promise_all_spelling_names_a_method_the_jar_has() {
     );
 }
 
+/// A typed parse's seven kernels, in both tape forms: each is a member of
+/// `nts.rt.NtsJson`, since a program's arrays decide which form it calls and
+/// either can be the one a program reaches.
+#[test]
+fn every_json_spelling_names_a_method_the_jar_has() {
+    let Some(published) = published() else {
+        eprintln!("SKIP runtime_agrees_with_hir: no JAVA_HOME/javap");
+        return;
+    };
+    let names = [
+        "nts_json_tape",
+        "nts_json_syntax_message",
+        "nts_json_key_index",
+        "nts_json_string",
+        "nts_json_number",
+        "nts_json_mismatch",
+        "nts_json_missing",
+    ];
+    let mut missing = Vec::new();
+    for name in names {
+        for grows in [false, true] {
+            let (owner, method, descriptor) = nts_codegen_jvm::ops::json_external(name, grows)
+                .unwrap_or_else(|| panic!("{name} has no JVM kernel"));
+            let member = format!("{owner}.{method}:{descriptor}");
+            if !published.contains(&member) {
+                missing.push(member);
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "typed JSON.parse kernels the runtime jar does not publish:\n  {}",
+        missing.join("\n  ")
+    );
+}
+
 /// What a call site could resolve `name` to: the array helpers need to be
 /// told what the array holds, since the name alone does not say, so this tries
 /// each width as a call site does, one at a time.
@@ -159,6 +195,17 @@ fn resolve(name: &str) -> Vec<(String, String)> {
     }
     if name == "nts_promise_all" {
         found.extend(promise_all_spellings());
+    }
+    // A typed parse's tape is a bare `[D` or an `NtsArrayD` by the program,
+    // and both forms are rendered.
+    for grows in [false, true] {
+        if let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::json_external(name, grows)
+        {
+            found.push((
+                format!("{owner}.{method}:{descriptor}"),
+                format!("json/{}", if grows { "growable" } else { "bare" }),
+            ));
+        }
     }
     // A view's helpers are told its class as an array's are told what it
     // holds. Not trying them counted every one as refused -- `length` and
@@ -436,11 +483,10 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// Java 8 and Android; System.console cannot answer either descriptor's state,
 /// and the native FFM route requires Java 22. Keep both calls refused by name.
 ///
-/// 146 with the typed `JSON.parse` reads (`nts_json_key_index`, `_mismatch`,
-/// `_missing`, `_number`, `_string`): the C runtime's tape kernels, which this
-/// lane does not provide yet (#1038), so a typed parse is declined here by
-/// name rather than mapped to nothing.
+/// The typed `JSON.parse` reads (`nts_json_key_index`, `_mismatch`,
+/// `_missing`, `_number`, `_string`) are rendered, by `ops::json_external`
+/// over `nts.rt.NtsJson`, so they do not count here.
 // This population is runtime::declared_names(): scalar-normalization records.
 // nts_str_resize_owned and nts_view_lend_bytes have no such parameter record;
 // their shared helper-catalog enrollment does not add to this measured count.
-const REFUSED_FLOOR: usize = 146;
+const REFUSED_FLOOR: usize = 141;

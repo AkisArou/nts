@@ -26,8 +26,8 @@ written once.
 ## Reading: `JSON.parse`
 
 **`JSON.parse(text) as T`**, `T` a plain object type, is a parser the compiler
-generates for `T` (`compiler/core/src/hir/lower/json_parse.rs`). On C and LLVM
-it is built; on the JVM and Wasm it is declined by name until their kernels
+generates for `T` (`compiler/core/src/hir/lower/json_parse.rs`). On C, LLVM
+and the JVM it is built; on Wasm it is declined by name until its kernels
 exist.
 
 - **One boundary decision.** `typed_parse` says a node is this boundary: the
@@ -76,7 +76,12 @@ exist.
   text (its C++ runtime linked statically, about +0.6 MB, only into programs
   that parse), and nts's own scan handles non-ASCII text. Today nts's scan
   serves every text.
-- **On the JVM,** the same generated parser runs over Java kernels.
+- **On the JVM,** the same generated parser runs over Java kernels
+  (`runtime/jvm/src/nts/rt/NtsJson.java`): `nts_json.c`'s grammar, tape and
+  messages, unit for unit. The tape is a `number[]` in the program's own form
+  (a bare `double[]`, or an `NtsArrayD` where arrays grow), and each kernel
+  takes either. A number is Clinger's exact fast path where it applies, and
+  the JDK's correctly rounded `Double.parseDouble` otherwise.
 - **On Wasm,** the generated parser reads the text after one copy into a GC
   `i16` array (proposal W8, [JVM and Wasm](jvm-and-wasm.md)).
 - **An untyped `JSON.parse`** (`any`, `unknown`) is served by the TypeScript

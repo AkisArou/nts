@@ -1496,6 +1496,7 @@ public final class RuntimeRegression {
         testTableFills(); System.out.println("table fills passed");
         testNumberColumns(); System.out.println("number columns passed");
         testNumberValues(); System.out.println("number values beside boxed keys passed");
+        checks += JsonKernels.run(); System.out.println("typed JSON.parse kernels passed");
         System.out.println("PASS " + checks + " assertions");
     }
 
