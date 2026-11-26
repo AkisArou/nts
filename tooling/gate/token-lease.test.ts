@@ -154,7 +154,7 @@ for(const mode of ['unsized','sized-sync','sized-async'] as const)test(`${mode} 
     answering:()=>mode==='sized-async'?Promise.resolve():null,
     observe:event=>{if(event.event==='pool.change'){
       const held=pool.held.get('census')??0;
-      const waiting=stepBoundWait({elastic:true,held,outranked:false,requests:pool.waiting.map(row=>row.bytes??1),freeSlots:1-pool.total,freeFrontends:Infinity,freeBytes:1});
+      const waiting=stepBoundWait({elastic:true,held,outranked:false,requests:pool.waiting.map(row=>row.bytes??1),freeSlots:1-pool.total,freeFrontends:Infinity,freeBytes:1,disk:false});
       events.push({event:'runner-observes-held',now,held});clock.observe(now,waiting);
     }}});
   // A separately scheduled client may enter and spend its entire allowance

@@ -5211,3 +5211,15 @@ recomputes identities from journal-derived workload declarations and the
 record's original source captures, checks the original identities and matching
 journal captures, and re-renders the report. The immutability checker permits
 only the exact original/replacement blob transition recorded in its ledger.
+## A step's own disk wait spends no execution time (11-27)
+
+Issue #761, the coordinator's decision on review: a step whose own process
+waits for a temporary's disk (`TemporaryAdmission.acquire`, the one waiting
+owner) spends none of its execution bound while the wait is recorded, fixed
+steps included; an elastic step's case holding a token still spends it. The
+runner reads the recorded waits and takes the one whose process runs in the
+step's slice. The CPU bound still counts all CPU, so a step that spins while
+it waits is still stopped, and a landing's ceiling and the full check's run
+bound still spend the wait's time: a temporary's disk wait stays named, never
+excused, at the run's level. The rust-inputs step's 12 GiB capture claim had
+held its wide runs inside its own 5400 s bound on a machine near the floor.

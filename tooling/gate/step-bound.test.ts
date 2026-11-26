@@ -36,7 +36,7 @@ import type { Priority } from "./ranks.ts";
 const baseline = () => readStepBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
 
 test("only a gate-owned admission wait with no executing case suspends a step's execution budget", () => {
-  const ready = { elastic:true, held:0, outranked:false, requests:[8,4], freeSlots:1, freeFrontends:1, freeBytes:4 };
+  const ready = { elastic:true, held:0, outranked:false, requests:[8,4], freeSlots:1, freeFrontends:1, freeBytes:4, disk:false };
   assert.equal(stepBoundWait(ready), undefined, "one eligible request can execute");
   assert.equal(stepBoundWait({...ready,freeBytes:3}), "memory");
   assert.equal(stepBoundWait({...ready,freeSlots:0}), "slots");
@@ -45,6 +45,9 @@ test("only a gate-owned admission wait with no executing case suspends a step's 
   assert.equal(stepBoundWait({...ready,held:1,outranked:true,freeBytes:0}), undefined, "an executing case consumes the budget throughout");
   assert.equal(stepBoundWait({...ready,requests:[],freeBytes:0}), undefined, "a script with no admission request consumes the budget");
   assert.equal(stepBoundWait({...ready,elastic:false,outranked:true}), undefined, "a fixed step's work is not tracked by tokens");
+  assert.equal(stepBoundWait({...ready,elastic:false,disk:true}), "disk", "a fixed step's own recorded disk wait");
+  assert.equal(stepBoundWait({...ready,requests:[],disk:true}), "disk", "an elastic script holding no token waits for disk");
+  assert.equal(stepBoundWait({...ready,held:1,disk:true}), undefined, "a case holding a token consumes the budget through a disk wait");
 });
 
 const spent = (state: ReturnType<ProgressBound["observe"]>) => ({ used_s: state.used_s, waited_s: state.waited_s, expired: state.expired });
@@ -223,8 +226,11 @@ test("no bound would have stopped the committed healthy run", () => {
  * the clock stands at 0 until `format` moves it by `clockS`, and its slice's
  * cpu.stat usage by `usageS` and cpu.pressure `full` by `fullS`, all in one
  * write of the capability file. Then `format` exits, or waits for the release.
+ * With `disk`, `format` first waits for disk through the one waiting owner
+ * (admission.ts) for a capture its fixture's disk can never hold, and the
+ * runner's ticks see that recorded wait before the clock moves.
  */
-type Advance = { clockS: number; usageS: number; fullS: number; then: "exit" | "wait" };
+type Advance = { clockS: number; usageS: number; fullS: number; then: "exit" | "wait"; disk?: boolean };
 
 /** How a fixture's runner runs: `format`'s command (else it sleeps until the test ends), or the observations it advances; a rank its run root takes beside every rank's work under nts.slice (else nested where the test runs); and live CPU counters. */
 type FixtureRun = { owned?: Record<string, string>; format?: string[]; advance?: Advance; rank?: Priority; live?: boolean };
@@ -270,6 +276,15 @@ const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, 
 const observations = ${JSON.stringify(memory.NTS_HOST_OBSERVATIONS)};
 const release = () => new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
 if (process.env.NTS_GATE_STEP === "format" && advance) {
+  let diskWait = null;
+  if (advance.disk) {
+    const { TemporaryAdmission } = await import(${JSON.stringify(pathToFileURL(join(source, "admission.ts")).href)});
+    const stop = new AbortController(), admission = new TemporaryAdmission({ path: own + "/capture", context: { kind: "standalone" }, reservedBytes: 2 ** 50, env: process.env });
+    const waited = admission.acquire({ what: "the fixture's capture", signal: stop.signal, report: line => console.log(line) })
+      .then(() => { throw new Error("the fixture's capture was admitted"); }, error => { if (error?.name !== "AbortError") throw error; });
+    diskWait = () => { stop.abort(); return waited; };
+    await new Promise(resolve => setTimeout(resolve, 1500));
+  }
   // The step's slice, the one its runner gave it, as the user manager names its cgroup.
   const shown = spawnSync("systemctl", ["--user", "show", process.env.NTS_TOOLING_SLICE, "-p", "ControlGroup", "--value"], { encoding: "utf8" }), group = shown.stdout.trim();
   if (shown.status !== 0 || !group.endsWith("/" + process.env.NTS_TOOLING_SLICE)) throw new Error("the step's slice " + process.env.NTS_TOOLING_SLICE + " has no cgroup: " + shown.stderr);
@@ -283,6 +298,7 @@ if (process.env.NTS_GATE_STEP === "format" && advance) {
   durableRecord(observations, value, { compact: true });
   console.log("format advanced its observations: " + JSON.stringify(advance));
   if (advance.then === "wait") await release();
+  await diskWait?.();
 } else if (process.env.NTS_GATE_STEP === "format" && format) {
   const ran = spawnSync(format[0], format.slice(1), { stdio: "inherit" });
   console.log("format finished");
@@ -317,7 +333,7 @@ fi
     ...Object.entries(planned.env).filter(([, value]) => value !== undefined).map(([name, value]) => `--setenv=${name}=${value}`),
     process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
   type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string; wall: number; bound_cpu_s: number;
-    bound_clock: { execution_s: number; cpu_s: number; cpu_lost_s: number; stalled_s: number };
+    bound_clock: { execution_s: number; admission_wait_s: Partial<Record<string, number>>; cpu_s: number; cpu_lost_s: number; stalled_s: number };
     instrument?: { kind: string; verdict: string; reason: string }; scope?: { populated: number } };
   assert.ok(existsSync(join(run, "summary.json")), `the runner wrote no summary (exit ${result.status}):\n${result.stdout}${result.stderr}`);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as { verdict: string; steps: Row[]; interrupted: unknown; scope_cleanup: { state: string } };
@@ -384,6 +400,34 @@ test("a step whose slice is observed to lose CPU to other work spends none of th
   assert.equal(kept.format.verdict, "INSTRUMENT", kept.result.stdout);
   assert.equal(kept.format.reason, "step exceeded its bound of 3 s");
   assert.ok(kept.format.bound_clock.execution_s >= 30 && kept.format.bound_clock.cpu_lost_s === 0, JSON.stringify(kept.format.bound_clock));
+});
+
+test("a fixed step's own recorded disk wait spends none of its execution bound; the same time without it spends its bound", t => {
+  // 30 s pass on the fixture's clock while `format`'s capture waits for disk
+  // its fixture can never hold, and its slice runs 0.3 s: the wait is the
+  // step's own, recorded by its one owner, so the step is decided, not held.
+  const waited = runFixture(t, "format", { format: 3 }, { advance: { clockS: 30, usageS: 0.3, fullS: 0, then: "exit", disk: true } });
+  assert.equal(waited.result.status, 0, waited.result.stdout + waited.result.stderr);
+  assert.equal(waited.format.verdict, "PASS", waited.format.reason);
+  const clock = waited.format.bound_clock;
+  t.diagnostic(`waited: ${JSON.stringify(clock)}`);
+  assert.ok(clock.execution_s < 3 && clock.admission_wait_s.disk! >= 30 && Math.abs(clock.cpu_s - 0.3) < 1e-6, `the 30 s of its disk wait spent nothing: ${JSON.stringify(clock)}`);
+  const log = readFileSync(waited.format.log, "utf8");
+  assert.match(log, /disk: the fixture's capture waits for /);
+  assert.match(log, /\nstep budget: .* s execution; admission waits \{"disk":3\d(\.\d+)?\};.*waited 3\d s for disk/, "its log names the wait it spent nothing on");
+  // The control is the lost-CPU test's counterfactual: the same 30 s with no
+  // recorded wait and no loss spend the bound, and the step is held.
+});
+
+test("a step that spins while its disk wait is recorded is still stopped at its CPU bound", t => {
+  // In 5 s on the fixture's clock its slice runs 25 cpu-s, past the 20 cpu-s
+  // of a 20 s bound at width 1, while its capture's disk wait stays recorded:
+  // a disk wait excuses time, never CPU.
+  const { result, format } = runFixture(t, "format", { format: 20 }, { advance: { clockS: 5, usageS: 25, fullS: 0, then: "wait", disk: true } });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(format.verdict, "INSTRUMENT", result.stdout);
+  assert.equal(format.reason, "step exceeded its CPU bound of 20 cpu-s");
+  assert.ok(Math.abs(format.bound_clock.cpu_s - 25) < 1e-6 && format.bound_clock.execution_s < 5, JSON.stringify(format.bound_clock));
 });
 
 // One gate CPU, outside the measurement CPUs, for a control and its competitor alike.

@@ -57,15 +57,21 @@ export const LANDING_CEILING_FLOOR_S = 15 * 60;
 export type StepBound = { seconds: number; basis: "stated" | "derived" | "ceiling" };
 export type BoundRow = { name: string; bound?: number; treeOnly?: boolean };
 
-export type BoundWait = "memory" | "priority" | "slots" | "frontends";
+export type BoundWait = "memory" | "priority" | "slots" | "frontends" | "disk";
 
 /** A gate-owned admission wait, with no case executing, consumes no execution
  * budget. A script without a pending request still consumes it, as does a
- * case holding a token, even when other workers wait. */
+ * case holding a token, even when other workers wait. `disk`: the step's own
+ * slice holds a recorded temporary disk wait (admission.ts), the one wait a
+ * fixed step can declare; an elastic step's case holding a token still
+ * consumes the budget through it. Its CPU still spends the CPU bound, and a
+ * landing's ceiling and the full check's run bound still spend its time,
+ * since what holds the disk may never end on its own. */
 export function stepBoundWait(state: {
   elastic: boolean; held: number; outranked: boolean; requests: readonly number[];
-  freeSlots: number; freeFrontends: number; freeBytes: number;
+  freeSlots: number; freeFrontends: number; freeBytes: number; disk: boolean;
 }): BoundWait | undefined {
+  if (state.disk && (!state.elastic || state.held === 0)) return "disk";
   if (!state.elastic || state.held > 0) return;
   if (state.outranked) return "priority";
   if (!state.requests.length) return;

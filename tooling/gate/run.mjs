@@ -105,6 +105,7 @@ import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, in
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {RunLifecycleFeed} from "./run-lifecycle.ts";
 import {ProgressBound, progressSummary, stepBound, stepBoundReason, stepBoundWait, stepCpuBound, stepCpuBoundReason} from "./step-bound.ts";
+import {DiskCapacity} from "./disk-capacity.ts";
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
@@ -240,6 +241,19 @@ reportEnvironment(normalized.report);
 const ntsBin = resolve(env.NTS_BIN ?? join(target, "release/nts"));
 const suiteBin = resolve(env.NTS_SUITE_BIN ?? join(dirname(ntsBin), "nts-suite"));
 const host = normalized.observations;
+// The temporary disk waits recorded now (admission.ts): a step whose own
+// slice holds one spends no execution time on it (stepBoundWait). Unreadable
+// waits name nothing and excuse nothing; the failure is said once.
+let diskCapacity, diskWaitFailure;
+const diskWaitsNow = () => {
+  try { diskCapacity ??= new DiskCapacity({ env, host }); const waits = diskCapacity.diskWaits(); diskWaitFailure = undefined; return waits; }
+  catch (error) {
+    if (isCommandExit(error)) throw error;
+    const failure = `step bounds cannot read the disk waits: ${String(error)}`;
+    if (failure !== diskWaitFailure) process.stderr.write(failure + "\n");
+    diskWaitFailure = failure; return [];
+  }
+};
 const cores = host.machineWidth();
 const intEnv = (name, fallback) => {
   const v = env[name];
@@ -1367,7 +1381,8 @@ function start(step, slots, rider = false) {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
       requests: tok.waiting.filter(request => request.step === step.name).map(request => request.bytes ?? tokenBytes(step)),
       freeSlots: SLOTS - u.slots - withhold, freeFrontends: step.fe ? FRONTENDS - u.fe : Infinity,
-      freeBytes: reserved() - u.bytes - withholdBytes });
+      freeBytes: reserved() - u.bytes - withholdBytes,
+      disk: diskWaitsNow().some(wait => wait.cgroup === scope.group || wait.cgroup.startsWith(`${scope.group}/`)) });
     boundState = boundClock.observe(now, waiting, cpu);
   };
   const stopAtBound = () => {
@@ -1396,7 +1411,7 @@ function start(step, slots, rider = false) {
   boundTimer.unref();
   process.stderr.write(elastic
     ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running; execution bound ${bound.seconds} s; admission waits and CPU lost to other work excluded; CPU bound ${cpuBound} cpu-s${STEP_CEILING === undefined ? "" : `; wall ceiling ${STEP_CEILING} s`})\n`
-    : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running; bound ${bound.seconds} s, CPU lost to other work excluded; CPU bound ${cpuBound} cpu-s)\n`);
+    : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running; bound ${bound.seconds} s, its disk waits and CPU lost to other work excluded; CPU bound ${cpuBound} cpu-s)\n`);
   let completed = false;
   const complete = async (code, signal, spawnError) => {
     if (completed) return;
@@ -1439,7 +1454,8 @@ function start(step, slots, rider = false) {
     }
     const {cpu,user,sys,maxrss_kb:maxrss}=measurement??{};
     // After the drain, so no process of the step can still write over it.
-    if (elastic) writeFileSync(log, `\nstep budget: ${boundState.used_s.toFixed(3)} s execution; admission waits ${JSON.stringify(boundState.waited_s)}; ${progressSummary(boundState)}\n`, { flag: "a" });
+    // A fixed step reports its budget once it waited (its own disk wait).
+    if (elastic || Object.values(boundState.waited_s).some(value => value > 0)) writeFileSync(log, `\nstep budget: ${boundState.used_s.toFixed(3)} s execution; admission waits ${JSON.stringify(boundState.waited_s)}; ${progressSummary(boundState)}\n`, { flag: "a" });
     if (owned.overBound) writeFileSync(log, `\n${boundFailure}: stopped through its scope\n`, { flag: "a" });
     let oracleCapture, captureProblem;
     try { oracleCapture = captureCost(step.name, log); } catch (error) {if(isCommandExit(error))throw error; captureProblem = error.message; }

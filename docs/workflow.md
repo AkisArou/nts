@@ -343,7 +343,12 @@ slots, at least an hour; in a landing check, at most max(15 minutes, three
 times the change's estimate). A tokened step spends this execution allowance
 while a case runs or its script works; a known admission wait with no case
 running spends none. This includes memory, priority, slots and frontend
-admission. Nor does CPU that other work takes from the step: the runner
+admission. A step's own temporary disk wait spends none either, fixed or
+tokened while no case of it holds a token: the runner reads the waits the one
+waiting owner records (`TemporaryAdmission.acquire`) and takes the one whose
+process runs in the step's slice. Its CPU still spends the CPU bound, and a
+landing's ceiling and the full check's run bound below still spend its time,
+since what holds the disk may never end on its own. Nor does CPU that other work takes from the step: the runner
 samples the step slice's `cpu.stat` and `cpu.pressure` `full` (time it had
 runnable tasks and none of them ran) every 500 ms, and that lost time spends
 nothing. `some` is not read, because a step whose threads outnumber its CPUs
@@ -2954,10 +2959,13 @@ death; an absent timestamp remains explicit after forced termination.
   step with no active case suspends its execution budget only for the
   runner's known memory, priority, slot or frontend wait. Token transitions
   account for short cases between polls. Case supervisors keep their own
-  clocks, fixed steps keep their wall bounds, and a landing's independent
-  ceiling includes all waits. The full check's independent run ceiling
-  includes those waits too and holds the measurement when it expires
+  clocks, and a landing's independent ceiling includes all waits. The full
+  check's independent run ceiling includes those waits too and holds the
+  measurement when it expires
   ([log](records/notebooks/decisions-log.md#step-budgets-exclude-idle-admission-waits-11-10)).
+  A step's own recorded disk wait suspends it too, fixed steps included,
+  while no case of it holds a token; its CPU still spends the CPU bound
+  ([log](records/notebooks/decisions-log.md#a-steps-own-disk-wait-spends-no-execution-time-11-27)).
 - **This workflow** (11-06): the landing check, the full check after
   landing, tasks that land within a day, agents per task, and the fresh start
   ([log](records/notebooks/decisions-log.md#fresh-start-11-06)).
