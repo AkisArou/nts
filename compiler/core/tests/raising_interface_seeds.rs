@@ -237,7 +237,7 @@ fn interface_closure(implementation: &str) -> Program {
 fn a_refused_raising_build_keeps_the_ordinary_closure_store() {
     for provider in [Memory::NoGc, Memory::ReferenceCounting] {
         let program = prepared(
-            "tests/outcomes/a-refused-raising-copy-cuts-an-ordinary-closure-store",
+            "tests/programs/a-refused-raising-copy-cuts-an-ordinary-closure-store",
             provider,
         );
         let closure = program
