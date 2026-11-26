@@ -9,8 +9,9 @@ export const CHECK_CHANNEL='NTS_GATE_CHECK_CHANNEL';
 export const CHECK_CAPABILITY='NTS_GATE_CHECK_CAPABILITY';
 export const MAX_CHECK_ROW_BYTES=1024*1024;
 const MAX_PENDING_BYTES=8*1024*1024;
+const LOW_PENDING_BYTES=MAX_PENDING_BYTES/2;
 type Step={capability:string;members:()=>readonly number[]};
-type Peer={socket:Socket;step?:string;pid?:number;producer?:number;pending:string;ended:boolean;sessions:Set<number>;totals:Set<number>};
+type Peer={socket:Socket;step?:string;pid?:number;producer?:number;pending:string;ended:boolean;closed:boolean;sessions:Set<number>;totals:Set<number>};
 // Two check turns include a poll turn even when reap itself ran in IO. This
 // drains kernel EOF notifications after the step's last descriptor closed;
 // it is an event-loop yield, not a wall-time grace period or drain deadline.
@@ -27,6 +28,7 @@ export class CheckStream {
   #identities=new Map<string,Peer>();
   #producer=0;
   #pendingBytes=0;
+  #backpressured=false;
   #append!:(chunk:string|Uint8Array)=>Promise<void>;
   #writes:Promise<void>=Promise.resolve();
   #finish!:(error?:Error)=>void;
@@ -65,12 +67,19 @@ export class CheckStream {
     this.ready=Promise.all([listening,writing]).then(()=>{});
   }
   #error(message:string){this.errors.push(`check telemetry: ${message}`);}
+  get pendingBytes():number{return this.#pendingBytes;}
+  get backpressured():boolean{return this.#backpressured;}
+  get producerConnections():number{return [...this.#peers].filter(peer=>!peer.socket.destroyed).length;}
+  get pausedProducers():number{return [...this.#peers].filter(peer=>!peer.socket.destroyed&&peer.socket.isPaused()).length;}
   #abortPublication(message:string):void{
     if(this.#failed)return;
     this.#failed=true;this.#error(message);
     // Reject the durable producer, not only future appends. Otherwise a valid
     // gzip prefix could be renamed as complete after losing the remaining rows.
     this.#finish(Error('check telemetry: '+message));
+    // A failed sink cannot drain a paused compiler's final flush. Consume its
+    // remaining transport without publishing, while retaining the named error.
+    this.#resume();
   }
   environment(step:string,members:()=>readonly number[]):Record<string,string>{
     if(this.#closing||this.#steps.has(step))throw Error('check telemetry: duplicate or closed step '+step);
@@ -80,70 +89,118 @@ export class CheckStream {
   #publish(line:string):void{
     if(this.#failed)return;
     const bytes=Buffer.byteLength(line);
-    if(this.#pendingBytes+bytes>MAX_PENDING_BYTES){this.#abortPublication('bounded publication queue exhausted');return;}
     this.#pendingBytes+=bytes;
     this.#writes=this.#writes.then(async()=>{
       if(!this.#failed)await this.#append(line);
     }).catch(error=>{this.#abortPublication(`write failed: ${String(error)}`);}).finally(()=>{this.#pendingBytes-=bytes;});
+    if(this.#pendingBytes===MAX_PENDING_BYTES)this.#pause();
   }
-  #accept(socket:Socket):void{
-    const peer:Peer={socket,pending:'',ended:false,sessions:new Set(),totals:new Set()};this.#peers.add(peer);
-    const refuse=(message:string)=>{this.#error(message);socket.destroy();};
-    socket.setEncoding('utf8');
-    socket.on('data',(part:string)=>{
-      peer.pending+=part;
-      try{
-        let nl:number;
-        while((nl=peer.pending.indexOf('\n'))>=0){
-          const text=peer.pending.slice(0,nl);peer.pending=peer.pending.slice(nl+1);
-          if(Buffer.byteLength(text)>MAX_CHECK_ROW_BYTES)throw Error('oversized record');
-          const row=JSON.parse(text) as Record<string,unknown>;
-          if(!row||typeof row!=='object'||Array.isArray(row))throw Error('invalid record');
-          if(peer.producer===undefined){
-            const step=typeof row.step==='string'?this.#steps.get(row.step):undefined;
-            if(row.kind!=='check.producer'||!step||row.capability!==step.capability)throw Error('unknown, crossed or reaped step capability');
-            if(!Number.isSafeInteger(row.pid)||(row.pid as number)<=0)throw Error('invalid producer PID');
-            // The capability is the authority. PID is self-reported and checked
-            // only for consistency with the dispatched step, not authenticated.
-            if(!step.members().includes(row.pid as number))throw Error('producer PID is outside its dispatched step');
-            const identity=`${row.step}:${row.pid}`;
-            if(this.#identities.has(identity))throw Error('duplicate live producer '+identity);
-            peer.step=row.step as string;peer.pid=row.pid as number;peer.producer=++this.#producer;
-            this.#identities.set(identity,peer);
-            // The compiler waits for registration before starting any timer,
-            // keeping its short-lived PID present during the consistency check.
-            socket.write('ready\n');
-          }else{
-            if(!Number.isSafeInteger(row.session)||(row.session as number)<0)throw Error('invalid session identity');
-            if(row.event==='case'){
-              if(row.pid!==peer.pid||row.step!==peer.step||peer.sessions.has(row.session as number))throw Error('duplicate or mismatched case identity');
-              peer.sessions.add(row.session as number);
-            }else if(!peer.sessions.has(row.session as number))throw Error('record without its session header');
-            if(row.event==='end'&&row.phase==='check.total')peer.totals.add(row.session as number);
-            // Preserve the original JSON spelling as well as every double
-            // bit (in particular -0); validation must not reserialize it.
-            this.#publish(`{"producer":${peer.producer},"pid":${peer.pid},"record":${text}}\n`);
-          }
-        }
-        if(Buffer.byteLength(peer.pending)>MAX_CHECK_ROW_BYTES)throw Error('oversized unfinished record');
-      }catch(error){refuse(String(error));}
+  #pause():void{
+    if(this.#backpressured||this.#failed)return;
+    this.#backpressured=true;
+    for(const peer of this.#peers)peer.socket.pause();
+    // No more rows are admitted while paused. Join this writes chain before
+    // resuming below the low-water mark; disk load is backpressure, not failure.
+    void this.#writes.then(()=>{
+      if(this.#backpressured&&this.#pendingBytes<=LOW_PENDING_BYTES)this.#resume();
     });
-    socket.on('end',()=>{peer.ended=true;if(peer.pending)this.#error('incomplete final record from '+peer.pid);socket.end();});
-    socket.on('error',error=>this.#error(`producer ${peer.pid??'unknown'}: ${error.message}`));
-    socket.on('close',()=>{
-      if(peer.step)this.#identities.delete(`${peer.step}:${peer.pid}`);
+  }
+  #resume():void{
+    this.#backpressured=false;
+    for(const peer of this.#peers){
+      this.#consume(peer);
+      if(this.#backpressured)return;
+    }
+    for(const peer of this.#peers){
+      if(this.#backpressured)return;
+      if(!peer.socket.destroyed&&!peer.ended)peer.socket.resume();
+    }
+  }
+  #finishPeer(peer:Peer):void{
+    if((!peer.ended&&!peer.closed)||(this.#backpressured&&peer.pending))return;
+    if(peer.pending){this.#error('incomplete final record from '+peer.pid);peer.pending='';}
+    if(peer.closed){
       for(const id of peer.sessions)if(!peer.totals.has(id))this.#error(`producer ${peer.pid} session ${id} has no completed check.total`);
       this.#peers.delete(peer);
+    }else if(!peer.socket.writableEnded&&!peer.socket.destroyed)peer.socket.end();
+  }
+  #consume(peer:Peer):void{
+    try{
+      let nl:number;
+      while(!this.#backpressured&&(nl=peer.pending.indexOf('\n'))>=0){
+        const text=peer.pending.slice(0,nl);
+        if(Buffer.byteLength(text)>MAX_CHECK_ROW_BYTES)throw Error('oversized record');
+        const line=peer.producer===undefined?undefined:`{"producer":${peer.producer},"pid":${peer.pid},"record":${text}}\n`;
+        // Keep the complete frame in its bounded input buffer if admitting
+        // it would cross the budget. Do not mutate session state or consume
+        // its bytes until the sink has made room.
+        if(!this.#failed&&line!==undefined&&this.#pendingBytes+Buffer.byteLength(line)>MAX_PENDING_BYTES){this.#pause();break;}
+        peer.pending=peer.pending.slice(nl+1);
+        const row=JSON.parse(text) as Record<string,unknown>;
+        if(!row||typeof row!=='object'||Array.isArray(row))throw Error('invalid record');
+        if(peer.producer===undefined){
+          const step=typeof row.step==='string'?this.#steps.get(row.step):undefined;
+          if(row.kind!=='check.producer'||!step||row.capability!==step.capability)throw Error('unknown, crossed or reaped step capability');
+          if(!Number.isSafeInteger(row.pid)||(row.pid as number)<=0)throw Error('invalid producer PID');
+          // The capability is the authority. PID is self-reported and checked
+          // only for consistency with the dispatched step, not authenticated.
+          if(!step.members().includes(row.pid as number))throw Error('producer PID is outside its dispatched step');
+          const identity=`${row.step}:${row.pid}`;
+          if(this.#identities.has(identity))throw Error('duplicate live producer '+identity);
+          peer.step=row.step as string;peer.pid=row.pid as number;peer.producer=++this.#producer;
+          this.#identities.set(identity,peer);
+          // The compiler waits for registration before starting any timer,
+          // keeping its short-lived PID present during the consistency check.
+          peer.socket.write('ready\n');
+        }else{
+          if(!Number.isSafeInteger(row.session)||(row.session as number)<0)throw Error('invalid session identity');
+          if(row.event==='case'){
+            if(row.pid!==peer.pid||row.step!==peer.step||peer.sessions.has(row.session as number))throw Error('duplicate or mismatched case identity');
+            peer.sessions.add(row.session as number);
+          }else if(!peer.sessions.has(row.session as number))throw Error('record without its session header');
+          if(row.event==='end'&&row.phase==='check.total')peer.totals.add(row.session as number);
+          // Preserve the original JSON spelling as well as every double
+          // bit (in particular -0); validation must not reserialize it.
+          this.#publish(line!);
+        }
+      }
+      if(!peer.pending.includes('\n')&&Buffer.byteLength(peer.pending)>MAX_CHECK_ROW_BYTES)throw Error('oversized unfinished record');
+    }catch(error){this.#error(String(error));peer.pending='';peer.socket.destroy();}
+    this.#finishPeer(peer);
+  }
+  #accept(socket:Socket):void{
+    const peer:Peer={socket,pending:'',ended:false,closed:false,sessions:new Set(),totals:new Set()};this.#peers.add(peer);
+    socket.setEncoding('utf8');
+    socket.on('data',(part:string)=>{peer.pending+=part;this.#consume(peer);if(this.#backpressured)socket.pause();});
+    socket.on('end',()=>{peer.ended=true;this.#consume(peer);});
+    socket.on('error',error=>this.#error(`producer ${peer.pid??'unknown'}: ${error.message}`));
+    socket.on('close',()=>{
+      peer.closed=true;
+      const identity=`${peer.step}:${peer.pid}`;
+      if(this.#identities.get(identity)===peer)this.#identities.delete(identity);
+      // EOF/close can arrive with complete frames still held behind the
+      // publication budget. Retain them until resume instead of dropping them.
+      this.#consume(peer);
     });
+    if(this.#backpressured)socket.pause();
+  }
+  async #drainWrites():Promise<void>{
+    for(;;){
+      const writes=this.#writes;await writes;await pollTurn();
+      // Resume may have admitted buffered frames and started another bounded
+      // batch. Join it too, without a wall-time bound or a false open-peer error.
+      if(writes===this.#writes&&!this.#backpressured)return;
+    }
   }
   /** Called after scope drain/reap, before dropping the dispatched scope. */
   async reaped(step:string):Promise<void>{
     this.#steps.delete(step);
     for(;;){
-      const remaining=[...this.#peers].filter(peer=>peer.step===step&&!peer.ended&&!peer.socket.destroyed);
+      await this.#drainWrites();
+      const remaining=[...this.#peers].filter(peer=>peer.step===step&&!peer.ended&&!peer.closed&&!peer.socket.destroyed);
       if(!remaining.length)break;
       const before=new Map(remaining.map(peer=>[peer,peer.socket.bytesRead]));
-      await pollTurn();await this.#writes;
+      await pollTurn();await this.#drainWrites();
       for(const peer of remaining)if(!peer.ended&&!peer.socket.destroyed&&peer.socket.bytesRead===before.get(peer)){
         // A departed local writer can leave several socket buffers behind.
         // Keep consuming while bytes advance, through EOF. After a full poll
@@ -152,7 +209,7 @@ export class CheckStream {
         this.#error(`producer ${peer.pid} connection still open after ${step} was reaped`);peer.socket.destroy();
       }
     }
-    await pollTurn();await this.#writes;
+    await this.#drainWrites();
   }
   close():Promise<void>{return this.#closed??=this.#close();}
   async #close():Promise<void>{

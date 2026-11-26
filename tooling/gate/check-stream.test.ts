@@ -99,7 +99,7 @@ test('backpressure bounds pending publication and preserves every byte after a s
   const sockets:Socket[]=[],closed:Promise<unknown>[]=[],expected=new Map<number,string[]>();
   // Optional only for the committed old-owner control: its implementation
   // aborts instead, so the named error terminates the state barrier below.
-  let stream:CheckStream&{readonly pendingBytes?:number;readonly backpressured?:boolean;readonly pausedProducers?:number};
+  let stream:CheckStream&{readonly pendingBytes?:number;readonly backpressured?:boolean;readonly pausedProducers?:number;readonly producerConnections?:number};
   const sample=()=>{if(stream.pendingBytes!==undefined){peak=Math.max(peak,stream.pendingBytes);assert.ok(stream.pendingBytes<=high,'pending appends must not overshoot the high-water mark');}};
   stream=new CheckStream(costs,join(root,'tmp'),(path,produce,options)=>durableRecordStream(path,append=>produce(async chunk=>{
     sample();await blocked;await append(chunk);sample();
@@ -118,9 +118,9 @@ test('backpressure bounds pending publication and preserves every byte after a s
   // IO/state barriers decide the assertions; the scoped tooling hang guard
   // alone bounds a broken fixture. No elapsed time decides backpressure.
   while(!stream.backpressured&&!stream.errors.length)await turn();
-  assert.deepEqual(stream.errors,[]);assert.equal(stream.backpressured,true);assert.equal(stream.pausedProducers,24);
+  assert.deepEqual(stream.errors,[]);assert.equal(stream.backpressured,true);assert.ok(stream.producerConnections!>0);assert.equal(stream.pausedProducers,stream.producerConnections);
   let reaped=false;const draining=stream.reaped('examples').then(()=>{reaped=true;});
-  for(let poll=0;poll<100;poll++){await turn();sample();assert.equal(stream.backpressured,true);assert.equal(reaped,false);}
+  for(let poll=0;poll<100;poll++){await turn();sample();assert.equal(stream.backpressured,true);assert.equal(stream.pausedProducers,stream.producerConnections);assert.equal(reaped,false);}
   release();await Promise.all(closed);await draining;await stream.close();sample();
   assert.deepEqual(stream.errors,[]);assert.equal(stream.pendingBytes,0);
   const actual=new Map<number,string[]>();
@@ -131,6 +131,22 @@ test('backpressure bounds pending publication and preserves every byte after a s
   }
   assert.deepEqual(actual,expected,'every producer retains every original row byte, including signed zero');
   t.diagnostic('stalled publication '+JSON.stringify({offeredBytes:offered,highWaterBytes:high,peakPendingBytes:peak,producers:24,rows:[...actual.values()].reduce((sum,rows)=>sum+rows.length,0)}));
+});
+
+test('an actual append failure releases paused producers and still poisons publication',async t=>{
+  const root=newTestScratch('check-stream-paused-failure'),costs=join(root,'costs');let release!:()=>void,calls=0;
+  const blocked=new Promise<void>(resolve=>{release=resolve;});
+  const stream=new CheckStream(costs,join(root,'tmp'),(path,produce,options)=>durableRecordStream(path,()=>produce(async()=>{
+    calls++;await blocked;throw Error('injected write failure while paused');
+  }),options));
+  let socket:Socket|undefined;
+  t.after(async()=>{release();socket?.destroy();try{await stream.close();}finally{rmSync(root,{recursive:true,force:true});}});
+  await stream.ready;const env=stream.environment('examples',()=>[42]);socket=await client(stream.path);await register(socket,header(env[CHECK_CAPABILITY]!));
+  const closed=once(socket,'close'),rows=records();socket.end([...rows.slice(0,-1),...Array.from({length:160},()=>({event:'observation',session:0,padding:'x'.repeat(64*1024)})),rows.at(-1)].map(row=>JSON.stringify(row)).join('\n')+'\n');
+  while(!stream.backpressured)await new Promise<void>(resolve=>setImmediate(resolve));
+  release();await closed;await stream.reaped('examples');await stream.close();
+  assert.equal(calls,1);assert.match(stream.errors.join('\n'),/injected write failure while paused/);
+  assert.equal(existsSync(join(costs,'check-worker-0.jsonl.gz')),false);assert.equal(stream.pendingBytes,0);
 });
 
 for(const kind of ['reject','throw'] as const)test('publication failure before producer entry rejects readiness and closes its directory descriptor: '+kind,async t=>{
