@@ -1754,8 +1754,14 @@ the tooling strict checker owns the source's type checking.
   a wall-time drain deadline. It joins publication before deriving the summary.
   Readers accept legacy per-session and per-process files and plain or gzip
   worker streams, sorting derived cases by their legacy logical names. Truncated
-  gzip and unfinished publication are named errors. Hand invocations without a
-  channel retain the process writer; a supplied broken channel never falls back.
+  gzip and unfinished publication are named errors. Publication queue exhaustion
+  and write failure reject the durable producer; a truncated prefix is never
+  renamed into a final archive. Tooling files revoke the enclosing compiler
+  telemetry directory, channel and capability before relabelling their diagnostic
+  step. Fixture children do not inherit these observations; explicit private
+  observations and nested runners acquire their own owner. Hand or explicitly
+  private fixture invocations without a channel retain the process writer;
+  a supplied broken channel never falls back.
   A failed process output disables every session sharing it.
   Only `runs` rules and log rules explicitly marked as gate-run roots in
   `keep.json` supply raw-cost inventory roots. The hourly count reserves its
@@ -1986,8 +1992,10 @@ the tooling strict checker owns the source's type checking.
   Its owned Git configuration disables automatic maintenance and garbage
   collection, so fixture commits never leave a detached writer in that state.
   Tools and named run, oracle and resource capabilities are allowlisted;
-  unknown shell variables never reach a child. Declared Node, JDK and rustup
-  directories precede version-manager shims that consult HOME. Shared
+  unknown shell variables never reach a child. Compiler telemetry from the
+  enclosing run is excluded; a fixture declares any private observations.
+  Declared Node, JDK and rustup directories precede version-manager shims that
+  consult HOME. Shared
   content-addressed caches are explicit named capabilities from
   `tooling/gate/cache-environment.ts`, including native dependencies, pinned Node inputs, hash-pinned source files, C
   objects, case roots, JVM CDS and Node compile caches. A fixture marker travels
@@ -2187,7 +2195,9 @@ the first node task.
   cost sessions retain explicit session keys. Their runner-owned Unix channel
   publishes one durable gzip worker stream, with per-step capabilities and
   nonblocking timed sends. Legacy process files remain available only without
-  a channel. Readers group sessions in the legacy logical-file order so phase
+  a channel. Tooling fixtures revoke the enclosing telemetry packet before
+  relabelling their diagnostic step. A poisoned durable producer never publishes
+  a final archive. Readers group sessions in the legacy logical-file order so phase
   populations and case ordering remain unchanged
   ([log](records/notebooks/decisions-log.md#runner-owned-compiler-cost-publication-11-26)).
 

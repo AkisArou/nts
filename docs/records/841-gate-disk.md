@@ -1380,7 +1380,8 @@ so the per-case comparison accounts for its one additional example.
 | Experiment per case | 1 | 0.000809 / 0.000809 | 1,635.02 | 1,637.07 |
 
 Per-case check content is 6.1% of baseline, and allocated bytes 5.7%. No legacy
-per-PID check file was produced. This demonstrates the fixed publication owner
+per-PID check file was produced by these selected examples/rest processes.
+This demonstrates the fixed publication owner
 against the card's 62,623-check-file full-core baseline; it does not claim a
 measured whole-core after total. The first normal core after landing supplies
 that number to (f).
@@ -1517,3 +1518,79 @@ case. This declaration changes no compiler or transport behavior.
 | --- | --- |
 | `e/here-v3-tooling.raw.log` | `2cc18a55ca23e77165df3d7a5d44c0a8d352474d469a61e8835720fc3855953d` |
 | `e/selector-v2/focused.log` | `0b8dfb487e703947f11225acaa1999b3b0d8e82026b4b654885575885af984a1` |
+
+
+### Slice (e) review: fixture isolation and publication failure
+
+The examples/rest measurement above covered those selected processes. It did
+not cover tooling fixtures. The complete green landing proof at
+`537efa8aef9bc08e5101a4aa47fb71762aa0f0c7` still contained four legacy
+`tooling-file` records from the Unicode fixtures: 50,703 content bytes and
+61,440 allocated bytes. Its costs directory had 910 files and distinct file
+inodes (911 including the directory), 1,652,087 content bytes and 5,062,656
+allocated bytes. Its summary was one file/inode, 821,013 content bytes and
+823,296 allocated bytes. These are tooling-inclusive observations, not another
+whole-core measurement.
+
+The cause was a split handoff: fixture environments inherited the run's check
+cost directory without its Unix channel. The file worker also relabels its
+instrumentation step, so forwarding the channel alone would fail registration.
+The coordinator approved isolation at that boundary. The worker now revokes
+the enclosing compiler telemetry directory, channel and capability before
+relabelling its diagnostic step; fixture environments do not inherit them.
+Synthetic fixture checks are not enclosing-run cost evidence. A fixture can
+still explicitly own private observations, and a nested runner owns its new
+stream. Authentication, envelope shape, original records and reader ordering
+are unchanged.
+
+A second failure allowed a poisoned append queue to resolve the durable
+producer normally. Overflow or write failure now rejects that producer, and
+the poisoned state is checked after its final write join. No final gzip path
+is renamed; a later reader cannot silently accept its valid prefix as the
+lost population. Ordinary partial compiler phases still survive EOF and are
+kept with their named incomplete total.
+
+The committed before control at
+`17d1b46e956b0c77cc012f18d379b860e5086034` fails all four requested assertions:
+fixture environment isolation, an actual per-PID file in a real tooling run,
+no final rename after queue exhaustion, and no final rename after append
+failure. Its commit was verified separately before running the control.
+The real runner traverses the production tooling collector and file worker,
+then invokes the actual compiler through both direct and fixture environments.
+An explicitly private legacy writer is the positive control.
+
+At `dd2f278431d27d540d5a118f84118a4450b17568`, all four regression controls
+pass. The tooling wiring population has no per-PID check file: its enclosing
+costs directory has 3 files and distinct file inodes, 6,505 content bytes and
+16,384 allocated bytes; its summary is one file/inode, 25,672 content bytes
+and 28,672 allocated bytes. This small wiring population is different from
+the complete landing population above, so their total bytes are not a
+before/after reduction ratio. The complete landing inventory, including
+tooling, is collected separately with the same metadata recipe.
+
+The surrounding six-file focused suite passed all 67 tests. The final critical
+rerun also passed six strict projects / 1,241 modules and the host audit's
+2,216 sources, 368 entry closures and 419 reads. The audit initially caught
+only two new fixture details (an environment spread and JSON receipt writer);
+the final fixture inherits directly for its direct-child control and publishes
+its receipt through `durableRecord`.
+
+A fresh `inner.ts --no-agree` at the same runtime source passed 898 tests with
+zero failures or ignored cases across 14 suites. Formatting took 4 s, Clippy
+4 s, fresh build 6 s and tests 708 s. The existing named startup fallback is
+retained: if acquiring `CheckStream` throws, the run reports “check telemetry
+unavailable”; a compiler given a broken channel still never silently falls
+back. The normal tooling-path inventory rejects every legacy per-PID file.
+Summary compression remains isolated to the approved later slice (f).
+
+| Raw artifact under `~/.cache/nts-scratch/841/` | SHA-256 |
+| --- | --- |
+| `e/review-before-v1/focused.log` | `a0b2e49e14ca71dd884b55956f02e071dccdb6464c86daa8d611ab1bb74d0bad` |
+| `e/review-after-v1/focused.log` | `446a0ae28a4dbc9e063e383aa5a6accfc0e205513c77c8bc56fd9591174f6ca4` |
+| `e/review-after-v2/focused.log` | `60fe25a77d925708d0d82af6b23672ba2a0313b404030d2502468f68b02abc5d` |
+| `e/review-after-v2/types.log` | `9ca01fffc7bc151ae1a4068626e6c2df80d8566fd947543966acda51fabeaecd` |
+| `e/review-after-v2/audit.log` | `9ca8a557ada36c91b24f5c70686b27227fdc5b76f770fc6ecb5f74134d8a5ea8` |
+| `e/review-inventory-before.json` | `3f07fb2e4e64c7cc2a5056ec6d273102cf3651903cbceabeff4a6b2e6fd8ea5b` |
+| `e/review-inventory.py` | `fb151f5cb01afe72e5c430d456006872515c083ccaa307f7c2c59010f51a79c4` |
+| `e/review-inner-v1.log` | `08494789b4f9875d2f11034fd57521fa42f4e3b482bdf53d822d34d0ca659ba2` |
+| `e/review-inner-v1.log.err` | `7f02318cad8be3b3827f3f2c2a4544ea8d6b585609b505531abb423d4f96d2a4` |

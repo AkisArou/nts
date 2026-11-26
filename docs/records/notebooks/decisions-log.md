@@ -5103,3 +5103,11 @@ process bounds cover a runner which hangs. The runner drains after scope reap,
 names leftover open connections without a wall deadline, and joins durable gzip
 publication before summary derivation. Readers preserve the complete legacy
 summary, including floating-point values and case ordering.
+
+Review of slice (e) excludes enclosing compiler telemetry from tooling fixture
+handoffs. The file worker revokes its directory, channel and capability before
+relabelling the diagnostic step; private fixture observations remain explicit.
+Synthetic checks therefore cannot publish into the enclosing run or silently
+use its directory for the legacy writer. Publication queue exhaustion and write
+failure reject the durable producer and prevent a final rename, rather than
+leaving a valid gzip prefix that later readers could mistake for complete data.
