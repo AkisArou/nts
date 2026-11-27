@@ -9,7 +9,9 @@ per-landing performance proof is native instruction counts, not timed runs.
 Measured on 2026-11-27 at `7d755be182`, which adds the phase record this
 measurement reads. Count mode used to build each row's build recorder and
 then drop it, and it timed neither the count driver nor the host columns.
-Each counted row now writes `target/bench/count/<row>.phases.json` with:
+Each counted row now writes `target/bench/phases/<row>.phases.json` (under
+`count/` at the measured commit, where count runs were also named by their
+driver label, such as `nts`, rather than by their table column) with:
 
 - the row's wall time;
 - the process's own CPU (capture, preparation and emission, checker threads

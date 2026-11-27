@@ -525,6 +525,7 @@ fn count_cases(
             .collect::<Vec<_>>()
             .join(", ")
     );
+    fresh_phases_directory(out)?;
     println!("phase records: {}", counted_phases_path(out, "<row>"));
     println!("case\t{}", columns.map(|(name, _, _, _)| name).join("\t"));
     let lanes = wanted_lanes();
@@ -566,7 +567,7 @@ fn count_cases(
 /// What a counted row cost, by phase, beside its counts: the row's wall
 /// clock, this process's CPU (capture, preparation and emission with their
 /// checker threads), its waited children's CPU, the build stages and the
-/// counted and host runs. Written to `count/<row>.phases.json` in the build
+/// counted and host runs. Written to `phases/<row>.phases.json` in the build
 /// directory, which the header's `phase records:` line names; the table's
 /// rows are unchanged.
 #[derive(serde::Serialize)]
@@ -585,7 +586,21 @@ struct CountedPhases<'a> {
 
 /// Where a counted row's phase record goes; the header names it.
 fn counted_phases_path(out: &Utf8Path, row: &str) -> Utf8PathBuf {
-    out.join("count").join(format!("{row}.phases.json"))
+    out.join("phases").join(format!("{row}.phases.json"))
+}
+
+/// Each counting run starts its phase records afresh, so the folder holds
+/// exactly the rows this run attempted and never an earlier run's.
+fn fresh_phases_directory(out: &Utf8Path) -> Result<()> {
+    let probe = counted_phases_path(out, "probe");
+    let directory = probe.parent().expect("a phase record has a directory");
+    match std::fs::remove_dir_all(directory) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(error).with_context(|| format!("clearing {directory}"))?;
+        }
+        _ => {}
+    }
+    std::fs::create_dir_all(directory).with_context(|| format!("creating {directory}"))
 }
 
 fn write_counted_phases(
@@ -614,8 +629,6 @@ fn write_counted_phases(
         observed,
     };
     let path = counted_phases_path(out, row);
-    let directory = path.parent().expect("a phase record has a directory");
-    std::fs::create_dir_all(directory).with_context(|| format!("creating {directory}"))?;
     std::fs::write(&path, serde_json::to_vec_pretty(&phases)?)
         .with_context(|| format!("writing {path}"))
 }
@@ -1281,7 +1294,7 @@ fn variants(
                 &mut std::process::Command::new(&binary),
                 counting,
                 name,
-                variant.label,
+                (variant.column(), variant.label),
                 builds,
             )
         });
@@ -1664,7 +1677,6 @@ fn render(root: &Utf8Path, path: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-/// The standing engines use one typed loop, verified pins and one input protocol.
 /// The host columns, timed for a counted row's phase record.
 fn measure_hosts(
     root: &Utf8Path,
@@ -1683,6 +1695,7 @@ fn measure_hosts(
     }
 }
 
+/// The standing engines use one typed loop, verified pins and one input protocol.
 fn host_columns(
     root: &Utf8Path,
     case: &Utf8Path,
@@ -2324,7 +2337,7 @@ fn run_driver(
             .arg("Case"),
         counting,
         name,
-        "nts (jvm)",
+        ("nts JVM", "nts (jvm)"),
         builds,
     )
 }
@@ -2421,7 +2434,7 @@ fn handwritten_java(
             .arg("Case"),
         counting,
         name,
-        "Java",
+        ("Java", "Java"),
         builds,
     )
 }
@@ -3134,18 +3147,18 @@ fn count(
 }
 
 /// Time a command, or count it when this run is a counting run.
+/// `column` is the table's column, which names the run in the row's phase
+/// record as its build stages do; `label` names its count folder.
 fn measure_or_count(
     command: &mut std::process::Command,
     counting: Option<&Counting>,
     name: &str,
-    column: &str,
+    (column, label): (&str, &str),
     builds: &mut build::Recorder<'_>,
 ) -> Result<Measured> {
     match counting {
         // Timed for the row's phase record, outside the counted bracket.
-        Some(counting) => {
-            builds.observe(column, "count", || count(command, counting, name, column))
-        }
+        Some(counting) => builds.observe(column, "count", || count(command, counting, name, label)),
         None => measure(command),
     }
 }
