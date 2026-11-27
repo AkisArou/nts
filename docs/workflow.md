@@ -1688,6 +1688,9 @@ the tooling strict checker owns the source's type checking.
       prose, with `{a,b}` braces expanded.
     A cited directory keeps its subtree. The folder root is an anchor and
     keeps nothing by itself.
+  - **Citations by content.** Every SHA-256 a citing record gives keeps each
+    file of the folder with that digest, named or not, so `plan` hashes every
+    file. The dry run lists the record digests that match no file.
   - **One hop of binding.** A directly cited file that names another file of
     the folder together with that file's SHA-256 keeps it. The bound file is
     not read for further bindings.
@@ -1709,8 +1712,11 @@ the tooling strict checker owns the source's type checking.
   - at apply, any change to the issue, the plan or the inventory since the
     dry run.
 
-  Each removal first checks that the entry's inode, and its ctime for
-  anything but a directory, are still the dry run's.
+  Each removal first checks that the entry's inode, and its ctime and link
+  count for anything but a directory, are still the dry run's. After a hard
+  link is removed, the next listed link of that inode is expected as a lstat
+  saw it right after that unlink. An inode counts as freed only when all of
+  its links are removed.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
 - **Admitted work keeps its place within its priority.** Growth of an admitted

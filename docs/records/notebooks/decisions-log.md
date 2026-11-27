@@ -5157,6 +5157,9 @@ approved #1078's design on 11-27:
   narrowing it is the owner's call.
 - A directly cited manifest's digest bindings are followed one hop within
   the folder.
+- The review of the first candidate added a fifth form, the citation by
+  content: a record digest keeps any file of the folder with that SHA-256.
+  It also added link-count-aware removal of hard links.
 
 Pruning stays a hand-run tool on issues named by number. It is not a sweep
 kind of the full check.
