@@ -1,4 +1,4 @@
-import {readKeep,declaredTargets,type Keep,type DeclaredTarget} from './keep.ts';
+import {readKeep,declaredTargets,readScratchRecordCitations,type Keep,type DeclaredTarget} from './keep.ts';
 export {readKeep,declaredTargets,KEEP_FILE,type Keep,type DeclaredTarget} from './keep.ts';
 import {DISK_TRASH,ProfileMarkerError,targetLeftovers,targetProfiles,type TargetProfile} from '../gate/disk-reclamation.ts';
 import {buildGeneration} from '../gate/build-completion.ts';
@@ -47,13 +47,12 @@ import { pathToFileURL } from "node:url";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
-import {acceptedRevisionData,acceptedRevision,type AcceptedRevision} from "../gate/accepted-revision-data.ts";
+import {acceptedRevisionData,acceptedRevision} from "../gate/accepted-revision-data.ts";
 import {workerPresence} from '../landing/pool-presence.ts';
 import {landingLayout} from '../landing/layout.ts';
 import {layout as fullCheckLayout} from './layout.ts';
 import {INCREMENTAL_BOUNDS,incrementalUsage,readRetentionState,retainedProfiles,type RetainedProfile,type RetentionOutcome} from '../gate/incremental-retention.ts';
 
-const RECORD_DIRECTORY=acceptedRevisionData(new URL('../../docs/records/',import.meta.url));
 const PLAN=acceptedRevisionData(new URL('../../docs/plan.md',import.meta.url));
 
 type FolderStat = (path: string) => { isDirectory(): boolean; isSymbolicLink(): boolean; mtimeMs: number };
@@ -634,26 +633,6 @@ export function stopSlices(stoppable: readonly Stoppable[]): string[] {
 // ---------------------------------------------------------------------------
 // What the machine holds, read without changing anything.
 // ---------------------------------------------------------------------------
-/** Literal record citations have a path boundary, so issue 7610 cannot keep
- * 761. A relative path names an input inside the folder; absolute and home
- * spellings may also name the folder itself. */
-export function scratchRecordCitations(text:string,cache:string):string[]{
-  const found=new Set<string>(),prefixes=[resolve(cache)+'/', '~/.cache/'];
-  for(const match of text.matchAll(/nts-scratch\/[1-9][0-9]*|nts-[1-9][0-9]*-scratch/g)){
-    const path=match[0],at=match.index,next=text[at+path.length];
-    const folder=prefixes.some(prefix=>at>=prefix.length&&text.startsWith(prefix,at-prefix.length));
-    if(next==='/'||folder&&(next===undefined||/[\s`"'<>),;:\]}.]/.test(next)))found.add(path);
-  }
-  return [...found].sort();
-}
-
-/** One Git grep over immutable main blobs; working edits cannot manufacture
- * retention. Unknown Git state keeps issue folders through the decision API. */
-export function readScratchRecordCitations(reader:AcceptedRevision,cache:string):string[]|Unavailable{
-  const result=reader.grep(RECORD_DIRECTORY,'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch');
-  return typeof result==='string'?scratchRecordCitations(result,cache):result;
-}
-
 function read(command: string, args: string[], cwd: string): { ok: true; out: string } | { ok: false; error: string } {
   const r = spawnSync(command, args, { cwd, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
   if (r.error || r.status!==0) return { ok: false, error: (r.error?.message ?? r.stderr.trim()) || `exit ${r.status}` };

@@ -49,7 +49,7 @@ export function unitOwnershipScopeProblems(facts:SourceFacts):string[]{
 }
 
 /** Accepted-main descriptors are opaque. A const alias preserves that fact;
- * the only consuming expressions are this owner's show/grep methods. */
+ * the only consuming expressions are this owner's show/grep/files methods. */
 export function acceptedRevisionDataProblems(facts:SourceFacts):string[]{
   const ast=facts.ast,problems:string[]=[];
   const owner=(node:Node,member:string)=>{
@@ -80,14 +80,14 @@ export function acceptedRevisionDataProblems(facts:SourceFacts):string[]{
       use=consumer;consumer=facts.parents.get(consumer);
     }
     if(consumer&&ast.isCallExpression(consumer)&&consumer.arguments[0]===use&&ast.isPropertyAccessExpression(consumer.expression)
-      &&['show','grep'].includes(consumer.expression.name.text)){
+      &&['show','grep','files'].includes(consumer.expression.name.text)){
       const receiver=facts.resolve(consumer.expression.expression);
       if(ast.isCallExpression(receiver)&&owner(receiver.expression,'acceptedRevision')&&receiver.arguments.length===1)continue;
       const binding=facts.binding(receiver),parameter=binding?.kind==='parameter'&&facts.parents.get(binding.value);
       if(parameter&&ast.isParameterDeclaration(parameter)&&parameter.type&&ast.isTypeReferenceNode(parameter.type)
         &&owner(parameter.type.typeName,'AcceptedRevision'))continue;
     }
-    problems.push(`${facts.file}:${facts.line(node.pos)}: acceptedRevisionData may only be consumed by acceptedRevision(repo).show/grep: ${facts.code(node)}`);
+    problems.push(`${facts.file}:${facts.line(node.pos)}: acceptedRevisionData may only be consumed by acceptedRevision(repo).show/grep/files: ${facts.code(node)}`);
   }
   return problems;
 }

@@ -5144,3 +5144,19 @@ Readers accept v1, writers use v2, and unknown or mismatched records stay
 protected. A plain branch switch without presence publication is diagnosed
 by name, never repaired by a reader. The host's terminal-effect handling is
 owned outside nts.
+
+## Closed issue scratch is pruned to its citations (11-27)
+
+Owner decision 2026-11-26 (Signalbox scratch-prune-closed-cited-20261126):
+"Yes: prune the six closed issues' scratch to cited files (dry run first)".
+The six were #916, #900, #798, #760, #702 and #728, about 80 GB, with the
+disk at 43-56 GB free against the gate's 40 GiB floor. The coordinator
+approved #1078's design on 11-27:
+- The folder root is an anchor, not a directory citation.
+- A cited subdirectory stays whole, `900/guard-experiment/` included;
+  narrowing it is the owner's call.
+- A directly cited manifest's digest bindings are followed one hop within
+  the folder.
+
+Pruning stays a hand-run tool on issues named by number. It is not a sweep
+kind of the full check.

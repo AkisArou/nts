@@ -28,6 +28,20 @@ test('accepted revision show and grep retain main blobs across dirty and committ
   const missing=acceptedRevision(s.root);assert.ok('error' in missing&&missing.error.length>0);
 });
 
+test('accepted revision files returns whole matching main blobs by path, never candidate edits',t=>{
+  const s=scratchRepo(t,'accepted-revision-files');
+  s.commit({'docs/records/a.md':'one\nneedle here\nthree\n','docs/records/sub/b.md':'needle\n','docs/records/c.md':'nothing\n'},'main records');
+  const reader=acceptedRevision(s.root);assert.ok(!('error' in reader));
+  const whole=[{path:'docs/records/a.md',text:'one\nneedle here\nthree\n'},{path:'docs/records/sub/b.md',text:'needle\n'}];
+  assert.deepEqual(reader.files(records,'needle'),whole);
+  assert.deepEqual(reader.files(records,'absent'),[],'no match is a measured empty set');
+  writeFileSync(join(s.root,'docs/records/c.md'),'needle in a working edit\n');
+  assert.deepEqual(reader.files(records,'needle'),whole);
+  s.git(['switch','-qc','candidate']);s.commit({'docs/records/c.md':'needle on a candidate\n'},'candidate');
+  assert.deepEqual(reader.files(records,'needle'),whole);
+  assert.ok('error' in reader.files(records,'('),'an invalid pattern is an error, not an empty set');
+});
+
 test('accepted main plan and record edits owe only their declared tree checks',()=>{
   for(const path of ['docs/plan.md','docs/records/notebooks/candidate.md'])
     assert.deepEqual(gateSteps(owed([{path,added:true}])),TREE_CHECKS,path);

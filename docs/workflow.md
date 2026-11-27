@@ -1643,7 +1643,9 @@ the tooling strict checker owns the source's type checking.
   path, or `~/.cache` holds an nts folder that `tooling/full-check/keep.json`
   does not name with its reason. Issue-named scratch (`nts-scratch/<N>` and
   `nts-<N>-scratch`) needs no per-issue row: an open issue or a literal path
-  citation in committed `docs/records/` on main keeps it. Unknown issue or
+  citation in committed `docs/records/` or `results/` on main keeps it. One
+  reader in `tooling/full-check/keep.ts` decides citations, for the count and
+  for pruning. Unknown issue or
   citation state keeps the folder and names the observation failure. Closed,
   uncited folders are reported after the scratch grace period; they are never
   placed in the automatic removal list. Non-issue exceptions remain explicit.
@@ -1671,6 +1673,44 @@ the tooling strict checker owns the source's type checking.
   and an empty nts slice bound to no active unit, stopped by name.
   Build output and raw cost retention use their separate owners above.
   Everything else the count only reports.
+- **A closed issue's scratch is pruned by hand to what its records cite**
+  (`tooling/full-check/scratch-prune.ts`), only for issues the user approves
+  by number; it is not a kind the full check removes. `plan` is the dry run:
+  it lists each folder's kept entries with their SHA-256, and what would go.
+  `apply` removes exactly that list. `verify` checks that every citation
+  still resolves. What a folder keeps:
+  - **Cited entries.** The pruner keeps each entry a citing record names:
+    - an absolute path, in any home or cache spelling (`~`, `$HOME`,
+      `${HOME}`, the expanded path);
+    - a relative path, resolved against the folder root or against a
+      directory the same record cites (a table under "relative to …", a JSON
+      root and its names), in a backtick span, a table cell, a JSON string or
+      prose, with `{a,b}` braces expanded.
+    A cited directory keeps its subtree. The folder root is an anchor and
+    keeps nothing by itself.
+  - **One hop of binding.** A directly cited file that names another file of
+    the folder together with that file's SHA-256 keeps it. The bound file is
+    not read for further bindings.
+  - **Link targets.** A kept link's target is kept while the link stays inside
+    the folder. A link out of the folder is never followed: the link itself is
+    kept or removed, and its target is never read.
+
+  A digest pairs with a path in the same table row or paragraph, or in JSON
+  by the object's structure (the key's own value, a `<key>Sha256` sibling, or
+  a lone `sha256`). A cited file whose digest appears in its record is
+  verified; one with no digest is kept unverified.
+
+  Any of these refuses the folder by name, and nothing in it is removed:
+  - an issue that is not closed, or whose state is unknown;
+  - a cited or bound file whose SHA-256 disagrees with its record;
+  - a hashed citation through a link out of the folder;
+  - an absolute citation that names nothing;
+  - an entry on another device;
+  - at apply, any change to the issue, the plan or the inventory since the
+    dry run.
+
+  Each removal first checks that the entry's inode, and its ctime for
+  anything but a directory, are still the dry run's.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
 - **Admitted work keeps its place within its priority.** Growth of an admitted
@@ -3201,6 +3241,12 @@ death; an absent timestamp remains explicit after forced termination.
   Missing observations keep it by name; closed uncited folders are reported,
   with deletion held for the user
   ([log](records/notebooks/decisions-log.md#issue-scratch-retention-is-derived-11-15)).
+
+- **Closed issues' scratch is pruned to its citations.** On the user's yes per
+  issue, a closed issue's folder keeps exactly what committed records cite,
+  plus one hop of digest bindings. A dry run is posted on the issue first,
+  and the apply removes only that list
+  ([log](records/notebooks/decisions-log.md#closed-issue-scratch-is-pruned-to-its-citations-11-27)).
 
 - **Cargo configuration is empty and checked.** The shared Cargo home keeps
   its complete cache protocol. Cargo's two configuration spellings must be
