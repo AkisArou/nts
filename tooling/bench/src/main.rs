@@ -525,6 +525,7 @@ fn count_cases(
             .collect::<Vec<_>>()
             .join(", ")
     );
+    println!("phase records: {}", counted_phases_path(out, "<row>"));
     println!("case\t{}", columns.map(|(name, _, _, _)| name).join("\t"));
     let lanes = wanted_lanes();
     let mut failed: Vec<String> = Vec::new();
@@ -566,7 +567,8 @@ fn count_cases(
 /// clock, this process's CPU (capture, preparation and emission with their
 /// checker threads), its waited children's CPU, the build stages and the
 /// counted and host runs. Written to `count/<row>.phases.json` in the build
-/// directory; the printed table is unchanged.
+/// directory, which the header's `phase records:` line names; the table's
+/// rows are unchanged.
 #[derive(serde::Serialize)]
 struct CountedPhases<'a> {
     version: u8,
@@ -579,6 +581,11 @@ struct CountedPhases<'a> {
     children_basis: &'static str,
     builds: build::Details,
     observed: Vec<build::Observed>,
+}
+
+/// Where a counted row's phase record goes; the header names it.
+fn counted_phases_path(out: &Utf8Path, row: &str) -> Utf8PathBuf {
+    out.join("count").join(format!("{row}.phases.json"))
 }
 
 fn write_counted_phases(
@@ -606,9 +613,9 @@ fn write_counted_phases(
         builds,
         observed,
     };
-    let directory = out.join("count");
-    std::fs::create_dir_all(&directory).with_context(|| format!("creating {directory}"))?;
-    let path = directory.join(format!("{row}.phases.json"));
+    let path = counted_phases_path(out, row);
+    let directory = path.parent().expect("a phase record has a directory");
+    std::fs::create_dir_all(directory).with_context(|| format!("creating {directory}"))?;
     std::fs::write(&path, serde_json::to_vec_pretty(&phases)?)
         .with_context(|| format!("writing {path}"))
 }

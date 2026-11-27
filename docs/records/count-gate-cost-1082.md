@@ -18,7 +18,7 @@ Each counted row now writes `target/bench/count/<row>.phases.json` with:
 - every build stage;
 - each counted and host run's wall time and children's CPU.
 
-The printed table is unchanged.
+The header names the file in one added `phase records:` line, and the table's rows are unchanged.
 
 ## Conditions
 

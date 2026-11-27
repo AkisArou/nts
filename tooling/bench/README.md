@@ -255,6 +255,14 @@ checksum agreement a timed row keeps is kept here too: calibration and
 the counted run must print the same checksum, and every column must agree
 with node, before any count prints.
 
+Each counted row also writes its cost by phase to the file the header's
+`phase records:` line names (`target/bench/count/<row>.phases.json`): the
+row's wall time, this process's CPU (capture, preparation and emission,
+checker threads included), its waited children's CPU, every build stage
+with its waited usage, and the wall time and children's CPU of each counted
+column and of the host columns. Timing reads only the clock and `getrusage`
+around those runs; the counted bracket is unchanged.
+
 # Optional C++ reference libraries
 
 A case may put library names in `ref.link` beside `ref.cpp`, in link order:

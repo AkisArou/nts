@@ -74,7 +74,11 @@ fn counted_row() -> Result<Row> {
         .split(", ")
         .map(str::to_owned)
         .collect();
-    let phases = root()?.join("target/bench/count/fib.phases.json");
+    let phases = text
+        .lines()
+        .find_map(|line| line.strip_prefix("phase records: "))
+        .context("no phase record location")?
+        .replace("<row>", "fib");
     let phases = serde_json::from_slice(
         &std::fs::read(&phases).with_context(|| format!("reading {phases}"))?,
     )?;
