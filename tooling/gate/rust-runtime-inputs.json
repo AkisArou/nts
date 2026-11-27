@@ -3725,6 +3725,11 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../../tests/programs/a-set-walked-by-its-cursor/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "json-parse-grows/tsconfig.json"
           }
         ]
       }

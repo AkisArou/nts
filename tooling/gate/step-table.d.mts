@@ -15,6 +15,7 @@ export type StepRow = {
   treeOnly?: boolean;
   capabilities?: readonly string[];
   bound?: number;
+  unmeasuredDisk?: number;
   doc: string;
 };
 export const STEPS: readonly StepRow[];
