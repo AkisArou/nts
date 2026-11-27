@@ -1266,3 +1266,91 @@ fn many_handle_holders_meeting_many_readers_charge_every_operation() {
         }
     }
 }
+
+#[test]
+fn indexed_invalidation_visits_affected_facts_and_blanket_twin_clears_all() {
+    for count in [128, 4096] {
+        let mut func = fixture();
+        func.blocks.clear();
+        func.values = (0..=count)
+            .map(|_| Op {
+                kind: OpKind::ConstNull,
+                ty: func.return_type.clone(),
+                origin: func.origin.clone(),
+            })
+            .collect();
+        let aliases = std::sync::Arc::new(Aliases::of(&func));
+        let mut zero = super::Written::default();
+        let mut visits = 0;
+        for at in 0..count {
+            let base = ValueId(at);
+            visits += zero.invalidate(Slot::Field(0), Some(base), &aliases);
+            zero.insert(base, Slot::Field(0));
+            zero.insert(base, Slot::Element(0));
+        }
+        assert_eq!(visits, 0, "unrelated allocations must not visit old facts");
+        assert_eq!(zero.facts.len(), count as usize);
+        assert_eq!(
+            zero.invalidate(Slot::Field(0), Some(ValueId(0)), &aliases),
+            1
+        );
+        assert_eq!(
+            zero.invalidate(Slot::Field(0), None, &aliases),
+            count as usize - 1
+        );
+        for at in 0..count {
+            assert!(!zero.contains(ValueId(at), Slot::Field(0)));
+            assert!(zero.contains(ValueId(at), Slot::Element(0)));
+        }
+        assert_eq!(
+            zero.invalidate(Slot::Element(0), None, &aliases),
+            count as usize
+        );
+        assert!(zero.facts.is_empty());
+
+        // Same-component twin: every Convert can name the writer, so all of
+        // its facts must be visited, even with the confinement proof.
+        for op in func.values.iter_mut().skip(1) {
+            op.kind = OpKind::Convert(ValueId(0));
+        }
+        let aliases = std::sync::Arc::new(Aliases::of(&func));
+        for at in 0..count {
+            zero.insert(ValueId(at), Slot::Field(0));
+        }
+        assert_eq!(
+            zero.invalidate(Slot::Field(0), Some(ValueId(count)), &aliases),
+            count as usize
+        );
+        assert!(zero.facts.is_empty());
+    }
+}
+
+#[test]
+fn indexed_facts_follow_phi_rebinding_intersections_and_removal() {
+    let func = fixture();
+    let aliases = std::sync::Arc::new(Aliases::of(&func));
+    let mut original = super::Written::default();
+    original.insert(ValueId(0), Slot::Field(0));
+    original.insert(ValueId(0), Slot::Field(1));
+    original.bind(&aliases);
+    let mut carried = original.clone();
+    carried.forget(ValueId(0));
+    carried.carry(&original, ValueId(0), ValueId(1));
+    carried.remove(ValueId(1), Slot::Field(1));
+    let mut merged = carried.union(&original).intersection(&carried);
+    assert_eq!(merged, carried);
+    assert_eq!(
+        merged.invalidate(Slot::Field(0), Some(ValueId(0)), &aliases),
+        0
+    );
+    assert_eq!(
+        merged.invalidate(Slot::Field(0), Some(ValueId(1)), &aliases),
+        1
+    );
+    assert!(merged.facts.is_empty());
+    carried.retain_bases(|base| *base != ValueId(1));
+    assert_eq!(carried.invalidate(Slot::Field(0), None, &aliases), 0);
+    carried.insert(ValueId(0), Slot::Field(1));
+    carried.retain(|_, slot| slot != Slot::Field(1));
+    assert_eq!(carried.invalidate(Slot::Field(1), None, &aliases), 0);
+}

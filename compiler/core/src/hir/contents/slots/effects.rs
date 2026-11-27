@@ -8,7 +8,7 @@ use crate::hir::{
 
 #[derive(Debug)]
 pub(in crate::hir) struct Inputs {
-    pub(super) aliases: Aliases,
+    pub(super) aliases: std::sync::Arc<Aliases>,
     counts: Vec<Counts>,
 }
 
@@ -55,7 +55,7 @@ impl Inputs {
             })
             .collect();
         Self {
-            aliases: Aliases::of(func),
+            aliases: std::sync::Arc::new(Aliases::of(func)),
             counts,
         }
     }

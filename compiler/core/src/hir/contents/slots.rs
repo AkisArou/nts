@@ -4,6 +4,7 @@
 
 use crate::hir::{self, BlockId, Func, Layout, OpKind, ValueId};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 
 mod summaries;
 pub(in crate::hir) use summaries::{Summaries, summarize};
@@ -160,8 +161,52 @@ pub(in crate::hir) fn freshness(
 ///
 /// Holds no empty set of slots, so two that hold the same slots are equal, as
 /// the fixpoint that compares them needs.
-#[derive(Debug, Default, Clone, PartialEq)]
-struct Written(rustc_hash::FxHashMap<ValueId, rustc_hash::FxHashSet<Slot>>);
+#[derive(Debug, Default, Clone)]
+struct Written {
+    facts: FxHashMap<ValueId, FxHashSet<Slot>>,
+    index: Option<WrittenIndex>,
+}
+
+/// Derived lookup data, never part of the must-analysis lattice. Only explicit
+/// zero facts need it; the written-slot set stays indexed by base alone.
+#[derive(Debug, Clone)]
+struct WrittenIndex {
+    aliases: Arc<Aliases>,
+    slots: FxHashMap<Slot, FxHashSet<ValueId>>,
+    components: FxHashMap<(usize, Slot), FxHashSet<ValueId>>,
+}
+
+impl PartialEq for Written {
+    fn eq(&self, other: &Self) -> bool {
+        self.facts == other.facts
+    }
+}
+
+impl WrittenIndex {
+    fn insert(&mut self, base: ValueId, slot: Slot) {
+        self.slots.entry(slot).or_default().insert(base);
+        self.components
+            .entry((self.aliases.component(base), slot))
+            .or_default()
+            .insert(base);
+    }
+
+    fn remove(&mut self, base: ValueId, slot: Slot) {
+        let key = (self.aliases.component(base), slot);
+        if let Some(bases) = self.slots.get_mut(&slot) {
+            bases.remove(&base);
+            if bases.is_empty() {
+                self.slots.remove(&slot);
+            }
+        }
+        if let Some(bases) = self.components.get_mut(&key) {
+            bases.remove(&base);
+            if bases.is_empty() {
+                self.components.remove(&key);
+            }
+        }
+    }
+}
 
 /// Fields and indexed elements never share a slot merely because their
 /// numeric indices happen to agree.
@@ -180,63 +225,152 @@ pub(in crate::hir) struct Analysis {
 
 impl Written {
     fn contains(&self, base: ValueId, slot: Slot) -> bool {
-        self.0.get(&base).is_some_and(|slots| slots.contains(&slot))
+        self.facts
+            .get(&base)
+            .is_some_and(|slots| slots.contains(&slot))
     }
 
     fn insert(&mut self, base: ValueId, slot: Slot) {
-        self.0.entry(base).or_default().insert(slot);
+        if self.facts.entry(base).or_default().insert(slot)
+            && let Some(index) = &mut self.index
+        {
+            index.insert(base, slot);
+        }
     }
 
     fn remove(&mut self, base: ValueId, slot: Slot) {
-        if let Some(slots) = self.0.get_mut(&base) {
-            slots.remove(&slot);
+        if let Some(slots) = self.facts.get_mut(&base) {
+            if slots.remove(&slot)
+                && let Some(index) = &mut self.index
+            {
+                index.remove(base, slot);
+            }
             if slots.is_empty() {
-                self.0.remove(&base);
+                self.facts.remove(&base);
             }
         }
     }
 
     /// Every slot of `base` is a zero again, or `base` names something new.
     fn forget(&mut self, base: ValueId) {
-        self.0.remove(&base);
+        if let Some(slots) = self.facts.remove(&base)
+            && let Some(index) = &mut self.index
+        {
+            for slot in slots {
+                index.remove(base, slot);
+            }
+        }
     }
 
     fn intersection(&self, other: &Self) -> Self {
         let mut both = self.clone();
-        both.0.retain(|base, slots| {
-            slots.retain(|slot| other.contains(*base, *slot));
-            !slots.is_empty()
-        });
+        both.retain(|base, slot| other.contains(base, slot));
         both
     }
 
-    fn invalidate(&mut self, slot: Slot, may_alias: impl Fn(ValueId) -> bool) {
-        self.0.retain(|base, slots| {
-            if may_alias(*base) {
-                slots.remove(&slot);
+    fn bind(&mut self, aliases: &Arc<Aliases>) {
+        if self
+            .index
+            .as_ref()
+            .is_some_and(|index| Arc::ptr_eq(&index.aliases, aliases))
+        {
+            return;
+        }
+        let mut index = WrittenIndex {
+            aliases: Arc::clone(aliases),
+            slots: FxHashMap::default(),
+            components: FxHashMap::default(),
+        };
+        for (&base, slots) in &self.facts {
+            for &slot in slots {
+                index.insert(base, slot);
             }
-            !slots.is_empty()
-        });
+        }
+        self.index = Some(index);
+    }
+
+    /// Visits only facts for this slot and, for a confined writer, its alias
+    /// ceiling. Debug/test compilers compare every result with the full scan.
+    /// The returned visits count excludes that deliberately exhaustive check.
+    fn invalidate(
+        &mut self,
+        slot: Slot,
+        confined: Option<ValueId>,
+        aliases: &Arc<Aliases>,
+    ) -> usize {
+        self.bind(aliases);
+        #[cfg(debug_assertions)]
+        let expected = {
+            let mut facts = self.facts.clone();
+            facts.retain(|base, slots| {
+                if confined.is_none_or(|writer| aliases.may_share(writer, *base)) {
+                    slots.remove(&slot);
+                }
+                !slots.is_empty()
+            });
+            facts
+        };
+        let index = self.index.as_ref().unwrap();
+        let affected = match confined {
+            Some(writer) => index.components.get(&(aliases.component(writer), slot)),
+            None => index.slots.get(&slot),
+        };
+        let affected: Vec<_> = affected.into_iter().flatten().copied().collect();
+        let visits = affected.len();
+        for base in affected {
+            self.remove(base, slot);
+        }
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            self.facts, expected,
+            "indexed slot invalidation disagrees with full scan"
+        );
+        visits
+    }
+
+    fn retain(&mut self, keep: impl Fn(ValueId, Slot) -> bool) {
+        let removed: Vec<_> = self
+            .facts
+            .iter()
+            .flat_map(|(&base, slots)| {
+                let keep = &keep;
+                slots
+                    .iter()
+                    .filter_map(move |&slot| (!keep(base, slot)).then_some((base, slot)))
+            })
+            .collect();
+        for (base, slot) in removed {
+            self.remove(base, slot);
+        }
     }
 
     fn retain_bases(&mut self, keep: impl Fn(&ValueId) -> bool) {
-        self.0.retain(|base, _| keep(base));
+        let removed: Vec<_> = self
+            .facts
+            .keys()
+            .filter(|base| !keep(base))
+            .copied()
+            .collect();
+        for base in removed {
+            self.forget(base);
+        }
     }
 
     /// `to` has written what `from` had written in `of`.
     fn carry(&mut self, of: &Self, from: ValueId, to: ValueId) {
-        if let Some(slots) = of.0.get(&from) {
-            self.0.entry(to).or_default().extend(slots.iter().copied());
+        if let Some(slots) = of.facts.get(&from) {
+            for &slot in slots {
+                self.insert(to, slot);
+            }
         }
     }
 
     fn union(&self, other: &Self) -> Self {
         let mut both = self.clone();
-        for (base, slots) in &other.0 {
-            both.0
-                .entry(*base)
-                .or_default()
-                .extend(slots.iter().copied());
+        for (&base, slots) in &other.facts {
+            for &slot in slots {
+                both.insert(base, slot);
+            }
         }
         both
     }
@@ -411,9 +545,8 @@ impl Fresh {
                 // under that proof: distinct SSA names alone prove nothing.
                 // Publication ends confinement before any subsequent writer.
                 let confined = self.bases.contains(&object) && !self.escaped.contains(&object);
-                self.zero.invalidate(Slot::Field(field), |base| {
-                    !confined || aliases.may_share(object, base)
-                });
+                self.zero
+                    .invalidate(Slot::Field(field), confined.then_some(object), aliases);
                 if matches!(func.values[stored.0 as usize].kind, OpKind::ConstNull) {
                     self.zero.insert(object, Slot::Field(field));
                     self.written.remove(object, Slot::Field(field));
@@ -423,10 +556,7 @@ impl Fresh {
             }
             Effect::ElementWrite { array, index, .. } => {
                 // Unknown array aliases may name the same indexed slot.
-                self.zero.0.retain(|_, slots| {
-                    slots.retain(|slot| matches!(slot, Slot::Field(_)));
-                    !slots.is_empty()
-                });
+                self.zero.retain(|_, slot| matches!(slot, Slot::Field(_)));
                 if let Some(slot) = slot_of(func, index) {
                     self.mark_written(aliases, array, Slot::Element(slot));
                 } else {

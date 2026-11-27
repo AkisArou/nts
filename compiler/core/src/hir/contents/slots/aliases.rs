@@ -31,6 +31,10 @@ impl Aliases {
         Self { component }
     }
 
+    pub(super) fn component(&self, value: ValueId) -> usize {
+        self.component[value.0 as usize]
+    }
+
     pub(super) fn may_share(&self, a: ValueId, b: ValueId) -> bool {
         self.component[a.0 as usize] == self.component[b.0 as usize]
     }
