@@ -36,12 +36,14 @@ export type EntryType='file'|'directory'|'link'|'other';
 /** One inventory entry, as lstat sees it; `link` is a link's text, never followed. */
 export type Entry={path:string;type:EntryType;dev:string;ino:string;size:number;blocks:number;mode:number;mtimeNs:string;ctimeNs:string;link?:string};
 export type KeptWhy='file'|'directory'|'binding'|'link';
-export type Verification='verified'|'sha-less'|'escaping-link';
+export type Verification='verified'|'sha-less'|'escaping-link'|'stale-binding';
 export type KeptCitation={path:string;why:KeptWhy;verification?:Verification;sha?:string;by:string[];
   /** A kept directory: its entries, disk bytes, and the digest of its listing with each file's SHA-256. */
   tree?:{entries:number;bytes:number;digest:string}};
 export type FolderPlan={
   folder:string;issue:number;state:string;records:string[];refusals:string[];
+  /** What is kept without proof: a binding whose file no longer has the manifest's digest. */
+  notes:string[];
   inventoryDigest:string;entries:number;bytes:number;
   kept:KeptCitation[];
   totals:Record<KeptWhy,{entries:number;bytes:number}>;
@@ -146,7 +148,9 @@ type Hit={token:CitationToken;record:string;resolutions:Resolution[]};
  * from the root; the others from the root and from each directory the record
  * cites absolutely (and `extraBases`). The longest variant that names an
  * entry wins; an absolute citation naming nothing is returned unresolved. */
-function resolveRecord(root:string,entries:Map<string,Entry>,record:CitingRecord,folder:string,extraBases:string[]=[]):{hits:Hit[];unresolved:string[];digests:DigestMark[];json:boolean}{
+type Resolved={hits:Hit[];unresolved:string[];digests:DigestMark[];tokens:CitationToken[];kind:TextKind};
+type TextKind='json'|'markdown'|'text';
+function resolveRecord(root:string,entries:Map<string,Entry>,record:CitingRecord,folder:string,extraBases:string[]=[]):Resolved{
   const {tokens,digests,json}=citationTokens(record.text,folder),hits:Hit[]=[],unresolved:string[]=[];
   const attempt=(token:CitationToken,bases:string[])=>{
     for(const variant of token.variants){
@@ -171,17 +175,29 @@ function resolveRecord(root:string,entries:Map<string,Entry>,record:CitingRecord
     const resolutions=attempt(token,[...bases]);
     if(resolutions.length)hits.push({token,record:record.path,resolutions});
   }
-  return {hits,unresolved,digests,json};
+  return {hits,unresolved,digests,tokens,kind:json?'json':record.path.endsWith('.md')?'markdown':'text'};
 }
 
 /** The digest beside a citation. In JSON, by structure: a path key's own
  * value, a sibling `<key>Sha256` (or `_sha256`, `Sha`, `Digest`, `Hash`), or a
- * lone `sha256` sibling when the object holds one cited path. Elsewhere, the
- * first digest after it in its paragraph (in its row, for a table) and
- * before the next resolved quoted or absolute citation. */
-function adjacentDigests(hits:Hit[],digests:DigestMark[],json:boolean):Map<Hit,string>{
+ * lone `sha256` sibling when the object holds one cited path. In Markdown,
+ * the first digest after it in its paragraph (in its row, for a table) and
+ * before the next spelling that looks like a path, cited or not. In other text (a log, a
+ * checksum list), only the one digest on a line with one cited path. */
+function adjacentDigests({hits,digests,tokens,kind}:Resolved):Map<Hit,string>{
   const paired=new Map<Hit,string>(),cited=hits.filter(hit=>hit.token.form!=='word');
-  if(json){
+  if(kind==='text'){
+    // Plain text has no quoting: every spelling is a word.
+    const byLine=new Map<number,Hit[]>(),marks=new Map<number,DigestMark[]>();
+    for(const hit of hits)byLine.set(hit.token.line,[...(byLine.get(hit.token.line)??[]),hit]);
+    for(const d of digests)marks.set(d.line,[...(marks.get(d.line)??[]),d]);
+    for(const [line,list] of byLine){
+      const finals=new Set(list.flatMap(hit=>hit.resolutions.map(r=>r.final))),here=marks.get(line)??[];
+      if(finals.size===1&&here.length===1)for(const hit of list)paired.set(hit,here[0]!.value);
+    }
+    return paired;
+  }
+  if(kind==='json'){
     const perObject=new Map<number,number>();
     for(const hit of cited){const slot=hit.token.slot;if(slot&&!slot.isKey)perObject.set(slot.object,(perObject.get(slot.object)??0)+1);}
     for(const hit of cited){
@@ -197,9 +213,11 @@ function adjacentDigests(hits:Hit[],digests:DigestMark[],json:boolean):Map<Hit,s
     }
     return paired;
   }
-  const sorted=[...cited].sort((a,b)=>a.token.start-b.token.start);
-  sorted.forEach((hit,i)=>{
-    let next=Infinity;for(const later of sorted.slice(i+1))if(later.token.start>=hit.token.end){next=later.token.start;break;}
+  const pathLike=(token:CitationToken)=>!/^[0-9a-f]{64}$/i.test(token.variants[0]!)&&/\/|\.[A-Za-z0-9]{1,8}$/.test(token.variants[0]!);
+  const stops=[...cited.map(hit=>hit.token),...tokens.filter(pathLike)].map(token=>token.start).sort((a,b)=>a-b);
+  cited.forEach(hit=>{
+    let lo=0,hi=stops.length;while(lo<hi){const mid=(lo+hi)>>1;if(stops[mid]!<hit.token.end)lo=mid+1;else hi=mid;}
+    const next=stops[lo]??Infinity;
     const mark=digests.find(d=>d.start>=hit.token.end&&d.start<next&&d.paragraph===hit.token.paragraph&&(!hit.token.tableRow||d.line===hit.token.line));
     if(mark)paired.set(hit,mark.value);
   });
@@ -219,7 +237,7 @@ export type PlanResult={plan:FolderPlan;remove:Entry[];kept:{entry:Entry;sha?:st
 /** The dry run for one folder: what its records keep and what would go. */
 export function planFolder(input:PlanInput):PlanResult{
   const folder=`nts-scratch/${input.issue}`,root=join(input.cache,folder),memo=input.memo??new Map<string,string>();
-  const refusals:string[]=[];
+  const refusals:string[]=[],notes:string[]=[];
   const state=typeof input.state==='string'?input.state:'unknown';
   if(input.state!=='CLOSED')refusals.push(`issue #${input.issue} is ${typeof input.state==='string'?input.state.toLowerCase():'in an unknown state ('+input.state.error+')'}`);
   const records='error' in input.records?[]:input.records;
@@ -240,7 +258,7 @@ export function planFolder(input:PlanInput):PlanResult{
   for(const record of records){
     const resolved=resolveRecord(root,entries,record,folder);
     hits.push(...resolved.hits);
-    for(const [hit,value] of adjacentDigests(resolved.hits,resolved.digests,resolved.json))paired.set(hit,value);
+    for(const [hit,value] of adjacentDigests(resolved))paired.set(hit,value);
     for(const d of resolved.digests)allDigests.add(d.value);
     for(const line of resolved.unresolved)refusals.push(`absolute citation names nothing: ${line}`);
   }
@@ -270,16 +288,16 @@ export function planFolder(input:PlanInput):PlanResult{
     const entry=entries.get(path)!,text=readText(root,entry);
     if(text===null)continue;
     const bindingRecord={path,text},resolved=resolveRecord(root,entries,bindingRecord,folder,[posix.dirname(path)==='.'?'':posix.dirname(path)]);
-    const own=new Set(resolved.digests.map(d=>d.value)),pairs=adjacentDigests(resolved.hits,resolved.digests,resolved.json);
+    const own=new Set(resolved.digests.map(d=>d.value)),pairs=adjacentDigests(resolved);
+    // Any spelling of a file whose digest the manifest carries binds it.
     for(const hit of resolved.hits){
-      if(hit.token.form==='word')continue;
       const hash=pairs.get(hit);
       for(const r of hit.resolutions){
         const bound=entries.get(r.final)!;
         if(r.escaped||bound.type!=='file'||r.final===path)continue;
         const sha=digestOf(root,bound,memo);
         if(own.has(sha)){for(const link of r.via)keep(link,'link',`${path} (binding)`);keep(r.final,'binding',path,{verification:'verified',sha});}
-        else if(hash)refusals.push(`${path} binds ${r.final} with SHA-256 ${hash}; the file has ${sha}`);
+        else if(hash){keep(r.final,'binding',path,{verification:'stale-binding',sha});notes.push(`${path} binds ${r.final} with SHA-256 ${hash}; the file has ${sha}: kept, unproved`);}
       }
     }
   }
@@ -329,7 +347,7 @@ export function planFolder(input:PlanInput):PlanResult{
   const freed=new Set<string>();let removeBytes=0;
   for(const entry of remove)if(!keptInodes.has(entry.ino)&&!freed.has(entry.ino)){freed.add(entry.ino);removeBytes+=entry.blocks;}
   remove.sort((a,b)=>b.path.split('/').length-a.path.split('/').length||(a.path<b.path?-1:a.path>b.path?1:0));
-  const plan:FolderPlan={folder,issue:input.issue,state,records:records.map(r=>r.path),refusals:[...new Set(refusals)],
+  const plan:FolderPlan={folder,issue:input.issue,state,records:records.map(r=>r.path),refusals:[...new Set(refusals)],notes:[...new Set(notes)],
     inventoryDigest:inventoryDigest(entries),entries:entries.size,bytes,
     kept:keptRoots.sort((a,b)=>a.path<b.path?-1:1),totals,keptEntries:keptEntries.length,keptBytes,
     remove:{entries:remove.length,bytes:removeBytes,digest:removalDigest(remove)}};
@@ -408,6 +426,7 @@ const GB=(n:number)=>(n/1e9).toFixed(2)+' GB';
 export function reportFolder(plan:FolderPlan,manifest:string):string{
   const out=[`### ${plan.folder} (#${plan.issue}, ${plan.state})`,''];
   if(plan.refusals.length){out.push('**Refused; nothing is removed:**','',...plan.refusals.map(r=>'- '+r),'');}
+  if(plan.notes.length){out.push('**Kept without proof** (a cited manifest binds them with a digest they no longer have):','',...plan.notes.map(r=>'- '+r),'');}
   const cell=(k:KeptCitation)=>`${k.by.slice(0,2).join(', ')}${k.by.length>2?` +${k.by.length-2}`:''}`;
   const direct=plan.kept.filter(k=>k.why!=='binding'),bound=plan.kept.filter(k=>k.why==='binding');
   const byManifest=new Map<string,{files:number;bytes:number}>();

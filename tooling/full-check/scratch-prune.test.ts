@@ -10,7 +10,7 @@ import {chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdi
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {test,type TestContext} from 'node:test';
-import {applyFolder,expandBraces,planFolder,verifyFolder,type IssueState,type PlanInput} from './scratch-prune.ts';
+import {applyFolder,expandBraces,planFolder,removeListed,verifyFolder,type IssueState,type PlanInput} from './scratch-prune.ts';
 import {citationTokens,jsonStrings,scratchRecordCitations,type CitingRecord} from './keep.ts';
 
 const ISSUE=4242,FOLDER=`nts-scratch/${ISSUE}`;
@@ -110,6 +110,13 @@ test('a cited file whose SHA-256 disagrees refuses the folder; a digest of somet
   assert.ok(planFolder(f.input([jsonBad])).plan.refusals.some(r=>r.includes('b.log has SHA-256')));
 });
 
+test('a digest after another file named in prose belongs to that file, not the cited one',t=>{
+  const f=fixture(t,{'exp/restoration.json':'r'});
+  const text=`Under \`~/.cache/${FOLDER}/exp/\`.\n\n\`restoration.json\` verifies each file against its blob: own.rs\n\`${sha('own.rs')}\`.`;
+  const {plan}=planFolder(f.input([record(text)]));
+  assert.deepEqual(plan.refusals,[]);
+});
+
 test('an absolute citation that names nothing refuses the folder',t=>{
   const f=fixture(t,{'a.log':'a'});
   const {plan}=planFolder(f.input([record(`Kept in ~/.cache/${FOLDER}/missing/summary.json.`)]));
@@ -151,8 +158,22 @@ test('one hop of binding: a cited manifest keeps the files it hashes, and no fur
   assert.ok(r.removed.has('unhashed.log'),'a name without its digest does not bind');
   assert.ok(r.removed.has('loose.log'));
   assert.equal(r.plan.totals.binding.entries,1);
+  // A binding whose file has since changed keeps that file and says so; it
+  // does not refuse, since keeping it loses nothing.
   writeFileSync(join(f.root,'census.json'),JSON.stringify({reports:{'projects/per-project.json':sha('stale')}}));
-  assert.ok(planFolder(f.input(records)).plan.refusals.some(r=>r.includes('binds projects/per-project.json')));
+  const stale=kept(f,records);
+  assert.deepEqual(stale.plan.refusals,[]);
+  assert.ok(stale.kept.has('projects/per-project.json'));
+  assert.equal(stale.plan.kept.find(k=>k.path==='projects/per-project.json')!.verification,'stale-binding');
+  assert.ok(stale.plan.notes.some(n=>n.includes('binds projects/per-project.json')));
+  // A log pairs a path only with the one digest on its own line.
+  writeFileSync(join(f.root,'census.json'),'{');
+  writeFileSync(join(f.root,'run.log'),`ran ${f.root}/projects/per-project.json\nsome archive-sha256 ${sha('other')}\n${sha('loose')}  loose.log\n${sha('nope')}  unhashed.log\n`);
+  const log=kept(f,[record(`The run log is \`~/.cache/${FOLDER}/run.log\`.`)]);
+  assert.deepEqual(log.plan.refusals,[]);
+  assert.ok(log.removed.has('projects/per-project.json'),'named on a line without its digest: not bound');
+  assert.equal(log.plan.kept.find(k=>k.path==='loose.log')?.verification,'verified');
+  assert.equal(log.plan.kept.find(k=>k.path==='unhashed.log')?.verification,'stale-binding');
 });
 
 test('apply removes exactly the dry run, through read-only directories, and verify then holds',t=>{
@@ -178,6 +199,7 @@ test('apply refuses a reopened issue, a changed folder or a new citation since t
     ['entry changed',f=>{writeFileSync(join(f.root,'b.log'),'B!');return records;}],
     ['entry removed',f=>{rmSync(join(f.root,'c.log'));return records;}],
     ['new citation',()=>[...records,record(`\`~/.cache/${FOLDER}/b.log\``,'docs/records/later.md')]],
+    ['kept entry changed in mode only',f=>{chmodSync(join(f.root,'a.log'),0o600);return records;}],
   ];
   for(const [name,change] of cases){
     const f=fixture(t,files),{plan}=planFolder(f.input(records));
@@ -189,6 +211,15 @@ test('apply refuses a reopened issue, a changed folder or a new citation since t
     assert.ok(f.has('a.log'));
     assert.ok(name==='entry removed'||f.has('c.log'),`${name}: nothing removed`);
   }
+});
+
+test('a listed entry replaced after the last check is not removed: each unlink matches inode and ctime',t=>{
+  const f=fixture(t,{'a.log':'a','b.log':'b'});
+  const {remove}=planFolder(f.input([record(`\`~/.cache/${FOLDER}/a.log\``)]));
+  writeFileSync(join(f.root,'b.log'),'rewritten');
+  const result=removeListed(f.root,remove);
+  assert.equal(result.removed,0);assert.match(result.error??'',/b\.log changed since the dry run/);
+  assert.equal(readFileSync(join(f.root,'b.log'),'utf8'),'rewritten');
 });
 
 test('brace expansion and JSON string structure',()=>{
