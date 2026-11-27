@@ -446,7 +446,7 @@ fn actual_overwrite_entries_and_first_arrival_calls_keep_memory_source_lineage()
             for site in report.sites.iter().filter(|site| {
                 site.id.function == "fill"
                     && site.context.ends_with("/fill:%12")
-                    && site.whole == whole
+                    && site.context.contains("work#whole") == whole
             }) {
                 found = true;
                 assert!(
