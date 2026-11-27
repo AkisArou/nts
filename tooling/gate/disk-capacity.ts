@@ -217,6 +217,10 @@ export class DiskCapacity {
   private record(claims:BuildClaim[]):void{
     assertWritableState(this.stateFile,1);durableRecord(this.stateFile,{version:1,claims});
   }
+  /** The live temporary claim `id` as its owner published it, or null: a
+   * process handed a claim (a gate step's NTS_GATE_STEP_DISK) proves it is
+   * held before it writes beneath it. */
+  heldTemporary(id:string):TemporaryDiskClaim|null{return this.temporaryClaims().find(claim=>claim.id===id)??null;}
   private temporaryClaims():TemporaryDiskClaim[]{
     if(!existsSync(this.temporaryStateFile))return [];
     const row=JSON.parse(readFileSync(this.temporaryStateFile,'utf8')) as TemporaryDiskClaims;

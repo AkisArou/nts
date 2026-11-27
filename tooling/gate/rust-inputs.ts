@@ -15,8 +15,11 @@
 // it. So the step runs on every wide run, never once: drift is red at the
 // first wide run that makes the read, and the culprit search bisects that red
 // to the commit that added it.
-// The capture lives in the run's registered temporary under a disk claim and
-// is removed once checked; coverage.json in the run directory keeps the result.
+// The capture lives in the step's own temporary, which the runner claims on
+// disk before the step's slots and memory and hands to it (run.mjs,
+// NTS_GATE_STEP_DISK); the step proves the claim is held, writes only beneath
+// it, and removes it once checked. coverage.json in the run directory keeps
+// the result.
 import {spawnSync} from 'node:child_process';
 import {mkdirSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
@@ -24,26 +27,26 @@ import {fileURLToPath} from 'node:url';
 import {runAsCommand,exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import type {Context} from './environment-types.ts';
-import {TemporaryAdmission} from './admission.ts';
+import {DiskCapacity} from './disk-capacity.ts';
 import {durableRecord} from './durable-record.ts';
 import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
 import {coverageOfCaptures,traceCaptures,declaredRustInputs,trackedPaths,describeCoverage,testReach} from './rust-input-coverage.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {gitArguments} from './git-arguments/main.ts';
 
-// The workspace capture measured 4.8 GiB at 1e421fac88 with its validation
-// reports beside it (#761 record). A larger capture holds rather than filling
-// the disk past its floor.
-export const RUST_INPUT_CAPTURE_BYTES=12*2**30;
 const TESTS=fileURLToPath(new URL('./tests.mjs',import.meta.url));
 
 runAsCommand(import.meta.url,async()=>{
   const run=process.env.NTS_GATE_RUN_DIR,raw=process.env[ENVIRONMENT_CONTEXT];
   if(!run||!raw)throw new ToolingInstrumentError('tooling-setup','rust-inputs runs inside a gate run (NTS_GATE_RUN_DIR and its environment context)');
   const context=JSON.parse(raw) as Context,capture=join(context.temporary.path,'rust-inputs');
-  const admission=new TemporaryAdmission({path:capture,context:{kind:'gate',temporary:context.temporary},reservedBytes:RUST_INPUT_CAPTURE_BYTES});
-  const {lease}=await admission.acquire({what:'rust-inputs capture',report:line=>console.log('  '+line)});
-  registerCommandCloser('rust-inputs capture and disk claim',{close:()=>{try{rmSync(capture,{recursive:true,force:true});}finally{lease.release();}}});
+  // The runner's claim, held for exactly this temporary: never one of the step's own.
+  const handed=process.env.NTS_GATE_STEP_DISK;
+  if(!handed)throw new ToolingInstrumentError('tooling-setup','rust-inputs runs with the disk claim its runner hands it (NTS_GATE_STEP_DISK)');
+  const claim=JSON.parse(handed) as {path:string;bytes:number;id:string},held=new DiskCapacity({env:process.env}).heldTemporary(claim.id);
+  if(claim.path!==capture||!held||held.path!==capture||held.bytes!==claim.bytes)throw new ToolingInstrumentError('tooling-setup',`rust-inputs: its runner's disk claim ${claim.id} is not held for ${capture}`);
+  console.log(`  capture: ${capture}, under its runner's claim of ${(claim.bytes/2**30).toFixed(1)} GiB`);
+  registerCommandCloser('rust-inputs capture',{close:()=>{rmSync(capture,{recursive:true,force:true});}});
   const trace=join(capture,'trace'),reports=join(capture,'reports');mkdirSync(trace,{recursive:true});
   // The traced run is this step's own tests.mjs, in this step's environment.
   process.env.NTS_RUST_INPUT_TRACE=trace;

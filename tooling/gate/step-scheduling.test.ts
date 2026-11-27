@@ -18,7 +18,7 @@ import {spawn, spawnSync} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import {newToolingSlice, stopToolingSlice, toolingSlice} from "./tooling-slice.ts";
 import {once} from "node:events";
-import {COST_HISTORY_VERSION,historyFile as schedulingHistoryFile,RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
+import {COST_HISTORY_NAME,COST_HISTORY_VERSION,diskClaim,historyFile as schedulingHistoryFile,RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
   snapshotCostHistory,unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {type OwnMemory} from "./test-memory.ts";
@@ -86,6 +86,35 @@ test("a key's last few peaks are kept, per unit, and one small run does not shri
   assert.deepEqual(readCostHistory(file).steps.get("tests"), { cpu: 10, memory: { unit: "token", peaks: [64 * MiB] } });
   writeFileSync(file, JSON.stringify({ version: 3, steps: { tests: { memory: { unit: "step", peaks: [] } } }, jobs: {} }));
   assert.equal(readCostHistory(file).steps.size, 0, "a key with no peaks is not a history");
+});
+
+test("a step's temporary keeps its last few disk peaks whatever its verdict, and claims 1.25 times the largest, else its unmeasured basis", t => {
+  const file = join(testScratch(t, "step-scheduling-disk"), "costs", COST_HISTORY_NAME), MiB = 2 ** 20, GiB = 2 ** 30;
+  const step = { name: "rust-inputs", unmeasuredDisk: 12 * GiB };
+  assert.deepEqual(diskClaim(readCostHistory(file), step), { bytes: 12 * GiB, basis: "unmeasured" }, "never measured: the table's basis");
+  for (const [peak, verdict] of [[5 * GiB, "PASS"], [6 * GiB, "FAIL"], [4 * GiB, "INSTRUMENT"]] as const)
+    assert.equal(writeCostHistory(file, { steps: [{ name: "rust-inputs", verdict, disk: { peak } }] }), undefined);
+  const history = readCostHistory(file);
+  assert.deepEqual(history.steps.get("rust-inputs"), { disk: { unit: "step", peaks: [5 * GiB, 6 * GiB, 4 * GiB] } });
+  assert.deepEqual(diskClaim(history, step), { bytes: Math.ceil(1.25 * 6 * 1024) * MiB, basis: "measured" }, "the largest, with the margin, not the last");
+  assert.equal(JSON.parse(readFileSync(file, "utf8")).version, 6);
+});
+
+test("the v6 history imports v5's rows and jobs while it is absent, and never after its first publication", t => {
+  const dir = join(testScratch(t, "step-scheduling-v5"), "costs"), MiB = 2 ** 20;
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "steps-v5.json"), JSON.stringify({ version: 5, cpu_measure: STEP_CPU_MEASURE, steps: { tests: { cpu: 10, memory: { unit: "step", peaks: [MiB] } } },
+    jobs: { agree: { basis: "worker", observations: [{ peak: MiB, width: 2 }] } } }));
+  const file = join(dir, COST_HISTORY_NAME);
+  const imported = readCostHistory(file, line => assert.fail(line));
+  assert.deepEqual(imported.steps.get("tests"), { cpu: 10, memory: { unit: "step", peaks: [MiB] } });
+  assert.deepEqual(imported.jobs.get("agree"), { basis: "worker", observations: [{ peak: MiB, width: 2 }] }, "v5 jobs keep their basis and width");
+  assert.equal(writeCostHistory(file, { steps: [{ name: "tests", disk: { peak: MiB } }] }), undefined);
+  writeFileSync(join(dir, "steps-v5.json"), JSON.stringify({ version: 5, cpu_measure: STEP_CPU_MEASURE, steps: {}, jobs: {} }));
+  assert.deepEqual(readCostHistory(file).steps.get("tests"), { cpu: 10, memory: { unit: "step", peaks: [MiB] }, disk: { unit: "step", peaks: [MiB] } }, "published, v6 is read alone");
+  writeFileSync(join(dir, "steps-v5.json"), JSON.stringify({ version: 5, cpu_measure: STEP_CPU_MEASURE, steps: { tests: { disk: { unit: "step", peaks: [MiB] } } }, jobs: {} }));
+  rmSync(file);
+  assert.equal(readCostHistory(file, () => {}).steps.size, 0, "a v5 row never had disk peaks: one that does is no history");
 });
 
 test("an unmeasured step reserves the largest of its kind, and with nothing measured, its share of the machine", () => {
@@ -379,7 +408,7 @@ test('an observed run uses ordinary measured ledger sizing and leaves ordinary h
   let source='',snapshot='',before:Buffer|undefined;
   const traced=memoryRun(t,{...fixture,before:(own,memory)=>{
     source=schedulingHistoryFile(memory);before=readFileSync(source);
-    snapshot=join(own,'observation-costs','steps-v5.json');snapshotCostHistory(source,snapshot);
+    snapshot=join(own,'observation-costs',COST_HISTORY_NAME);snapshotCostHistory(source,snapshot);
     assert.deepEqual(readFileSync(snapshot),before);
     memory.NTS_GATE_COSTS_DIR=dirname(snapshot);
   }});

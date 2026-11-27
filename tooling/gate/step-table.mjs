@@ -25,6 +25,12 @@
 //   bound  seconds the step may run before it is stopped and held, for a step
 //          whose recorded cost cannot derive one (step-bound.ts): no committed
 //          baseline, or a cost that is what its build cache lacks
+//   unmeasuredDisk  the step has a temporary of its own in the run's
+//          registered temporary, which the runner claims (admission.ts)
+//          before its slots and memory and hands to the step
+//          (NTS_GATE_STEP_DISK): these bytes are the claim of a step never
+//          measured; once measured, its claim is what it held
+//          (step-scheduling.ts's diskClaim). A fixed step's only
 //   doc    what it proves, for the summary's reader
 //
 // No row says how much memory its step needs: what the run reserves for a
@@ -110,7 +116,9 @@ export const STEPS = [
     capabilities: ["jvm"],
   },
   // The same tests under the file observer: wide, so its bound is its own.
-  { name: "rust-inputs", slots: 8, min: 4, lock: "cargo", after: ["build"], bound: 5400, doc: "a change to every tracked file a Rust test opens owes the tests",
+  // Its capture's first claim, before any run of it is measured: it held
+  // 4.8 GiB at 1e421fac88 with its validation reports beside it (#761 record).
+  { name: "rust-inputs", slots: 8, min: 4, lock: "cargo", after: ["build"], bound: 5400, unmeasuredDisk: 12 * 2 ** 30, doc: "a change to every tracked file a Rust test opens owes the tests",
     capabilities: ["jvm"],
   },
   { name: "corpus", slots: 8, min: 4, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0",
@@ -180,6 +188,11 @@ export const STEPS = [
  */
 export function stepTableProblem(steps = STEPS) {
   for (const s of steps) { const problem = statedBoundProblem(s); if (problem) return problem; }
+  for (const s of steps) {
+    if (s.unmeasuredDisk === undefined) continue;
+    if (!Number.isSafeInteger(s.unmeasuredDisk) || s.unmeasuredDisk <= 0) return `${s.name} declares an unmeasured disk of ${String(s.unmeasuredDisk)}, which is not a positive number of bytes`;
+    if (s.elastic) return `${s.name} declares a disk, which only a fixed step's runner can claim before its start`;
+  }
   const names = new Set(steps.map((s) => s.name));
   const deps = new Map(steps.map((s) => [s.name, [...(s.needs ?? []), ...(s.after ?? [])]]));
   for (const [name, on] of deps) for (const d of on) if (!names.has(d)) return `${name} depends on ${d}, which is not a step`;

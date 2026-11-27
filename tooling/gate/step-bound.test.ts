@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {readStepBaseline} from "./step-time.ts";
+import {STEP_CPU_MEASURE, readStepBaseline} from "./step-time.ts";
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
@@ -18,7 +18,7 @@ import { instrumentPolicy, publishToolingFailure, readStepInstrument } from "./s
 import { HostStateError } from "./host-state.ts";
 import { completedHostFault } from "./tooling-test-runner.ts";
 import { readRunLifecycle } from "./run-lifecycle.ts";
-import { usableWidth } from "./step-scheduling.ts";
+import { COST_HISTORY_NAME, readCostHistory, usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
@@ -233,14 +233,17 @@ test("no bound would have stopped the committed healthy run", () => {
 type Advance = { clockS: number; usageS: number; fullS: number; then: "exit" | "wait"; disk?: boolean };
 
 /** How a fixture's runner runs: `format`'s command (else it sleeps until the test ends), or the observations it advances; a rank its run root takes beside every rank's work under nts.slice (else nested where the test runs); and live CPU counters. */
-type FixtureRun = { owned?: Record<string, string>; format?: string[]; advance?: Advance; rank?: Priority; live?: boolean };
+type FixtureRun = { owned?: Record<string, string>; format?: string[]; advance?: Advance; rank?: Priority; live?: boolean;
+  /** Step table fields beside the bounds; observations beside the counters; a scheduling history the run starts from; `records` waiting for `format`'s disk wait. */
+  rows?: Record<string, Record<string, unknown>>; observations?: { allocated?: { kind: "fixed"; defaultBytes: number }; disk?: { freeBytes: number; freeInodes: number } };
+  history?: unknown; recordsFreesDisk?: boolean };
 
 /**
  * A real runner in a scratch repository running `steps`, in a unit of its own
  * stopped by name: `format` runs its command or never finishes, `records`
  * finishes at once.
  */
-function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, advance, rank, live = false }: FixtureRun = {}) {
+function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, advance, rank, live = false, rows = {}, observations = {}, history, recordsFreesDisk = false }: FixtureRun = {}) {
   // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
   const own = newTestScratch("step-bound");
   t.after(() => { writeFileSync(join(own, "release"), "the test is over"); removable(own); rmSync(own, { recursive: true, force: true }); });
@@ -253,8 +256,8 @@ function runFixture(t: { after: (fn: () => void) => void }, steps: string, bound
     mkdirSync(dirname(destination), { recursive: true });
     if (name === "tooling/gate/step-table.mjs") {
       writeFileSync(destination, `import { STEPS as REAL, stepTableProblem } from ${JSON.stringify(pathToFileURL(original).href)};
-const bounds = ${JSON.stringify(bounds)};
-export const STEPS = REAL.map(row => Object.hasOwn(bounds, row.name) ? { ...row, bound: bounds[row.name] } : row);
+const bounds = ${JSON.stringify(bounds)}, rows = ${JSON.stringify(rows)};
+export const STEPS = REAL.map(row => ({ ...row, ...(Object.hasOwn(bounds, row.name) ? { bound: bounds[row.name] } : {}), ...(rows[row.name] ?? {}) }));
 export { stepTableProblem };
 `);
     }
@@ -267,14 +270,31 @@ export { stepTableProblem };
   // a real runner gives it; live, its own cgroups' CPU counters; advanced, a
   // clock that stands until the step moves it.
   const counters = live ? { cpu: { kind: "live" as const }, pressure: { kind: "live" as const } } : advance ? { clock: { kind: "fixed" as const, now: 0 } } : {};
-  const memory = gateFixtureMemory(join(own, "memory"), root, counters);
+  const memory = gateFixtureMemory(join(own, "memory"), root, { ...counters, ...observations });
+  if (history !== undefined) { mkdirSync(memory.NTS_GATE_COSTS_DIR, { recursive: true }); writeFileSync(join(memory.NTS_GATE_COSTS_DIR, COST_HISTORY_NAME), JSON.stringify(history)); }
   writeFileSync(join(gate, "payload.mjs"), `
 import { existsSync, readFileSync, watch } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { durableRecord } from ${JSON.stringify(pathToFileURL(join(source, "durable-record.ts")).href)};
-const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)};
+const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)}, recordsFreesDisk = ${JSON.stringify(recordsFreesDisk)};
 const observations = ${JSON.stringify(memory.NTS_HOST_OBSERVATIONS)};
 const release = () => new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
+// A step handed its temporary's claim says what it was handed, and that it ran.
+if (process.env.NTS_GATE_STEP === "format") durableRecord(own + "/format-started.json", { disk: process.env.NTS_GATE_STEP_DISK ? JSON.parse(process.env.NTS_GATE_STEP_DISK) : null });
+if (process.env.NTS_GATE_STEP === "records" && recordsFreesDisk) {
+  // While format waits for disk: what the runner holds for it, then disk enough.
+  const { DiskCapacity } = await import(${JSON.stringify(pathToFileURL(join(source, "disk-capacity.ts")).href)});
+  const { readRunLifecycle } = await import(${JSON.stringify(pathToFileURL(join(source, "run-lifecycle.ts")).href)});
+  const capacity = new DiskCapacity({ env: process.env });
+  for (let i = 0; !capacity.diskWaits().some(wait => wait.path.endsWith("/format")); i++) {
+    if (i > 600) throw new Error("format never waited for disk");
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  durableRecord(own + "/while-waiting.json", { waits: capacity.diskWaits(), formatStarted: existsSync(own + "/format-started.json"), lifecycle: readRunLifecycle(process.env.NTS_GATE_RUN_DIR) });
+  const value = JSON.parse(readFileSync(observations, "utf8"));
+  value.disk = { freeBytes: 2 ** 52, freeInodes: 2 ** 30 };
+  durableRecord(observations, value, { compact: true });
+}
 if (process.env.NTS_GATE_STEP === "format" && advance) {
   let diskWait = null;
   if (advance.disk) {
@@ -338,7 +358,7 @@ fi
   assert.ok(existsSync(join(run, "summary.json")), `the runner wrote no summary (exit ${result.status}):\n${result.stdout}${result.stderr}`);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as { verdict: string; steps: Row[]; interrupted: unknown; scope_cleanup: { state: string } };
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
-  return { result, summary, run, format: step("format"), records: step("records") };
+  return { result, summary, run, own, costs: memory.NTS_GATE_COSTS_DIR, format: step("format"), records: step("records") };
 }
 
 test("a step past its bound is stopped through its scope and held, its log kept, and the run finishes", t => {
@@ -428,6 +448,53 @@ test("a step that spins while its disk wait is recorded is still stopped at its 
   assert.equal(format.verdict, "INSTRUMENT", result.stdout);
   assert.equal(format.reason, "step exceeded its CPU bound of 20 cpu-s");
   assert.ok(Math.abs(format.bound_clock.cpu_s - 25) < 1e-6 && format.bound_clock.execution_s < 5, JSON.stringify(format.bound_clock));
+});
+
+const GiB = 2 ** 30;
+/** The claim `format` was handed, and its history's disk peaks after the run. */
+const handed = (own: string) => (JSON.parse(readFileSync(join(own, "format-started.json"), "utf8")) as { disk: { path: string; bytes: number; id: string } | null }).disk;
+const diskPeaks = (run: { costs: string }) => readCostHistory(join(run.costs, COST_HISTORY_NAME), () => {}).steps.get("format")?.disk?.peaks;
+
+test("a step waiting for its temporary's disk holds neither slots nor memory, and starts with the claim once the disk frees", t => {
+  // The fixture's disk holds 1 GiB above the floor; format's temporary
+  // claims 2 GiB, never measured. records, running beside it, sees format's
+  // wait recorded while format has not started and only records runs, then
+  // frees the disk.
+  const tight = { freeBytes: 41 * GiB, freeInodes: 2 ** 30 };
+  const ran = runFixture(t, "format records", { format: 30, records: 30 }, { rows: { format: { unmeasuredDisk: 2 * GiB } }, observations: { disk: tight }, recordsFreesDisk: true, format: ["true"] });
+  assert.equal(ran.result.status, 0, ran.result.stdout + ran.result.stderr);
+  assert.equal(ran.format.verdict, "PASS", ran.format.reason);
+  const own = ran.own;
+  const seen = JSON.parse(readFileSync(join(own, "while-waiting.json"), "utf8")) as { waits: { path: string; bytes: number }[]; formatStarted: boolean; lifecycle: { running: string[] } };
+  assert.equal(seen.formatStarted, false, "format did not start while it waited");
+  assert.deepEqual(seen.lifecycle.running, ["records"], "only records ran: format held no slot and no memory of the run");
+  assert.deepEqual(seen.waits.map(wait => [wait.path.split("/").at(-1), wait.bytes]), [["format", 2 * GiB]], "its wait was recorded, in its runner's name");
+  const claim = handed(own);
+  assert.ok(claim && claim.path.endsWith("/format") && claim.bytes === 2 * GiB, JSON.stringify(claim));
+  assert.match(ran.result.stdout, /disk: format's temporary \(2\.0 GiB, unmeasured\) waits for /);
+  assert.match(ran.result.stdout, /disk: format's temporary \(2\.0 GiB, unmeasured\) admitted after \d+ s/);
+});
+
+test("a step's temporary claims what it was measured to hold, with the margin, and records what it held this time", t => {
+  // A history with one measured peak of 3 GiB: the claim is 1.25 times it,
+  // not the table's unmeasured 1 GiB; this run's temporary holds 2 GiB,
+  // which joins the peaks.
+  const history = { version: 6, cpu_measure: STEP_CPU_MEASURE, steps: { format: { disk: { unit: "step", peaks: [3 * GiB] } } }, jobs: {} };
+  const ran = runFixture(t, "format", { format: 30 }, { rows: { format: { unmeasuredDisk: GiB } }, observations: { allocated: { kind: "fixed", defaultBytes: 2 * GiB } }, history, format: ["sleep", "3"] });
+  assert.equal(ran.result.status, 0, ran.result.stdout + ran.result.stderr);
+  assert.equal(ran.format.verdict, "PASS", ran.format.reason);
+  assert.equal(handed(ran.own)?.bytes, Math.ceil(1.25 * 3 * 1024) * 2 ** 20);
+  assert.deepEqual(diskPeaks(ran), [3 * GiB, 2 * GiB]);
+});
+
+test("a step whose temporary outgrows its claim is stopped and held by name, and its next claim covers what it held", t => {
+  // Unmeasured, format claims 1 GiB; its temporary holds 2 GiB.
+  const ran = runFixture(t, "format", { format: 30 }, { rows: { format: { unmeasuredDisk: GiB } }, observations: { allocated: { kind: "fixed", defaultBytes: 2 * GiB } } });
+  assert.equal(ran.result.status, 1, ran.result.stdout + ran.result.stderr);
+  assert.equal(ran.format.verdict, "INSTRUMENT", ran.result.stdout);
+  assert.equal(ran.format.reason, "its temporary outgrew its disk claim of 1.0 GiB (unmeasured): it holds 2.0 GiB");
+  assert.equal(ran.format.scope?.populated, 0, "its scope was drained");
+  assert.deepEqual(diskPeaks(ran), [2 * GiB]);
 });
 
 // One gate CPU, outside the measurement CPUs, for a control and its competitor alike.

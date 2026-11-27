@@ -56,6 +56,8 @@ export class TemporaryAdmission {
     }
   }
 
+  #wait: { record: DiskWaitRecord; began: number; described: string } | undefined;
+
   /**
    * **The one owner of a temporary's disk wait.** Tries until the bytes are
    * admitted, or `signal` aborts. A refused request is recorded in the
@@ -68,25 +70,40 @@ export class TemporaryAdmission {
    */
   async acquire({ what, signal, report = line => process.stderr.write(line + "\n"), everyMs = 1000 }: TemporaryWait): Promise<{ snapshot: TemporaryAdmissionSnapshot; lease: TemporaryDiskLease }> {
     signal?.throwIfAborted();
-    const host = this.#capacity.host, began = host.now();
-    let waiting: DiskWaitRecord | undefined, described = "";
     try {
       for (;;) {
-        const { snapshot, lease, capacity } = this.#attempt();
-        if (lease) {
-          if (waiting) report(`disk: ${what} admitted after ${Math.round((host.now() - began) / 1000)} s`, snapshot);
-          return { snapshot, lease };
-        }
-        const line = describeDiskWait({ what, bytes: this.#options.reservedBytes, freeBytes: capacity.freeBytes, floorBytes: capacity.floorBytes, holders: diskHolders(capacity) });
-        if (!waiting) {
-          waiting = this.#capacity.beginWait(what, this.#options.path, this.#options.reservedBytes, capacity, new Date(host.wallNow()).toISOString());
-          report(`disk: ${line}`, snapshot);
-        } else if (line !== described) waiting.update(capacity);
-        described = line;
+        const admitted = this.attempt({ what, report });
+        if (admitted) return admitted;
         await pause(everyMs, undefined, { signal });
       }
-    } finally { waiting?.end(); }
+    } finally { this.endWait(); }
   }
+
+  /**
+   * One try of `acquire`, for an owner that cannot block on it (the gate
+   * runner admits a step's disk before its memory and slots, run.mjs): the
+   * lease, or null with this request's wait recorded, opened at the first
+   * refusal and kept, with the same two reports, until it is admitted or
+   * `endWait` ends it.
+   */
+  attempt({ what, report = line => process.stderr.write(line + "\n") }: Omit<TemporaryWait, "signal" | "everyMs">): { snapshot: TemporaryAdmissionSnapshot; lease: TemporaryDiskLease } | null {
+    const host = this.#capacity.host;
+    const { snapshot, lease, capacity } = this.#attempt();
+    if (lease) {
+      const waited = this.#wait;
+      if (waited) { this.endWait(); report(`disk: ${what} admitted after ${Math.round((host.now() - waited.began) / 1000)} s`, snapshot); }
+      return { snapshot, lease };
+    }
+    const line = describeDiskWait({ what, bytes: this.#options.reservedBytes, freeBytes: capacity.freeBytes, floorBytes: capacity.floorBytes, holders: diskHolders(capacity) });
+    if (!this.#wait) {
+      this.#wait = { record: this.#capacity.beginWait(what, this.#options.path, this.#options.reservedBytes, capacity, new Date(host.wallNow()).toISOString()), began: host.now(), described: line };
+      report(`disk: ${line}`, snapshot);
+    } else if (line !== this.#wait.described) { this.#wait.record.update(capacity); this.#wait.described = line; }
+    return null;
+  }
+
+  /** Ends this request's recorded wait, if it has one. */
+  endWait(): void { const waited = this.#wait; this.#wait = undefined; waited?.record.end(); }
 
   #attempt():{snapshot:TemporaryAdmissionSnapshot;lease:TemporaryDiskLease|null;capacity:CapacitySnapshot} {
     this.#validate();

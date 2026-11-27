@@ -101,11 +101,12 @@ import {clippyTarget} from "./build-targets.ts";
 import {HostObservationError,reportMemoryFailure,sampleCgroup} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {RESERVATION_PER_PEAK, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {RESERVATION_PER_PEAK, diskClaim, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {RunLifecycleFeed} from "./run-lifecycle.ts";
 import {ProgressBound, progressSummary, stepBound, stepBoundReason, stepBoundWait, stepCpuBound, stepCpuBoundReason} from "./step-bound.ts";
 import {DiskCapacity} from "./disk-capacity.ts";
+import {TemporaryAdmission} from "./admission.ts";
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
@@ -460,6 +461,9 @@ function stepEnv(step, slots, scope) {
   delete e.NTS_GATE_TOKENS;
   delete e.NTS_GATE_TOKEN_HELD;
   e.NTS_GATE_STEP = step.name;
+  delete e.NTS_GATE_STEP_DISK;
+  const claim = diskClaims.get(step.name);
+  if (claim?.lease) e.NTS_GATE_STEP_DISK = JSON.stringify({ path: claim.path, bytes: claim.bytes, id: claim.lease.id });
   e.NTS_GATE_STEP_ATTEMPT = RUN_DIR;
   e.NTS_GATE_STEP_RESULT = join(RUN_DIR, `${step.name}.instrument.json`);
   // What its tools size their workers by. Separately capped supervisor and
@@ -930,6 +934,72 @@ let capacity = 0, totalBytes = 0;
 const MEMORY = new Map();
 // What each step that ran to its own end held at most, per unit, for the history: name -> { unit, peak }.
 const observations = new Map();
+// ---------------------------------------------------------------------------
+// A step's own temporary (the step table's `unmeasuredDisk`).
+//
+// **The runner claims a step's temporary before its slots and memory**, so
+// neither is held while the step waits for the other. Once the step would be
+// admitted, the runner tries its claim (TemporaryAdmission.attempt, the one
+// owner of a disk wait) at <run temporary>/<step>: refused, the step stays
+// pending, holding nothing, its wait recorded in the runner's own name for
+// the full check's run bound to name, and asked again every DISK_LOOK_MS;
+// admitted, it starts at once with the claim handed to it as
+// NTS_GATE_STEP_DISK. The claim is what the step's temporary was measured to
+// hold (step-scheduling.ts's diskClaim). While the step runs the runner
+// samples the temporary every DISK_SAMPLE_MS: one that outgrows its claim is
+// stopped through its scope and held by name, so it overruns its claim by at
+// most what it writes between two samples, never the floor beneath every
+// claim. Its peak is recorded whatever the verdict; the claim is released,
+// and the temporary removed, once the step's scope has drained.
+// ---------------------------------------------------------------------------
+const DISK_LOOK_MS = 5000, DISK_SAMPLE_MS = 2000;
+const diskClaims = new Map(), diskObservations = new Map();
+let diskLook = null;
+/** True once the step's claim is held, null while it waits for disk, false when it cannot be claimed (the step is finished). */
+function claimDisk(step) {
+  let claim = diskClaims.get(step.name);
+  const refuse = error => {
+    if (isCommandExit(error)) throw error;
+    const reason = `its temporary cannot be claimed: ${error.message}`;
+    pending = pending.filter(name => name !== step.name);
+    finish(step.name, "INSTRUMENT", reason, { instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason } });
+    report(step.name);
+    return false;
+  };
+  try {
+    if (!claim) {
+      const sized = diskClaim(HISTORY, step), temporary = JSON.parse(env[ENVIRONMENT_CONTEXT]).temporary, path = join(temporary.path, step.name);
+      claim = { ...sized, path, lease: null, peak: 0, sampled: 0,
+        admission: new TemporaryAdmission({ path, context: { kind: "gate", temporary }, reservedBytes: sized.bytes, host, env }) };
+      diskClaims.set(step.name, claim);
+    }
+    if (claim.lease) return true;
+    const admitted = claim.admission.attempt({ what: `${step.name}'s temporary (${gib(claim.bytes)}, ${claim.basis})`, report: line => process.stdout.write(`  ${line}\n`) });
+    if (admitted) { claim.lease = admitted.lease; return true; }
+  } catch (error) { return refuse(error); }
+  diskLook ??= setTimeout(() => { diskLook = null; schedule(); }, DISK_LOOK_MS);
+  return null;
+}
+/** The step's temporary now, and its peak; past its claim, the reason to stop it. */
+function sampleDisk(name) {
+  const claim = diskClaims.get(name);
+  if (!claim?.lease) return null;
+  const held = host.allocatedBytes(claim.path);
+  claim.peak = Math.max(claim.peak, held);
+  return held > claim.bytes ? `its temporary outgrew its disk claim of ${gib(claim.bytes)} (${claim.basis}): it holds ${gib(held)}` : null;
+}
+/** After the step's scope drained: its peak recorded, its temporary removed, its claim released. */
+function releaseDisk(name) {
+  const claim = diskClaims.get(name);
+  if (!claim) return;
+  diskClaims.delete(name);
+  claim.admission.endWait();
+  if (!claim.lease) return;
+  try { sampleDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's last sample failed: ${error.message}\n`); }
+  if (claim.peak > 0) diskObservations.set(name, { peak: claim.peak });
+  try { rmSync(claim.path, { recursive: true, force: true }); }
+  finally { claim.lease.release(); }
+}
 // A step's share of what the ledger can ever give the run: a run whose every
 // slot is busy with unmeasured steps fits in it.
 const shareOf = (step, units = width(step.name)) => machineShare(capacity, units, SLOTS);
@@ -1311,6 +1381,12 @@ function schedule() {
         }
         continue;
       }
+      // Its temporary first: waiting for disk, it holds no slot and no memory.
+      if (step.unmeasuredDisk !== undefined) {
+        const claimed = claimDisk(step);
+        if (claimed === null) continue;
+        if (claimed === false) { progressed = true; break; }
+      }
       pending = pending.filter((n) => n !== name);
       start(step, granted.slots, granted.rider);
       progressed = true;
@@ -1376,7 +1452,7 @@ function start(step, slots, rider = false) {
   let boundTimer;
   const cpuBound = stepCpuBound(bound, width(step.name));
   const boundStarted = firstCpu.atMs, boundClock = new ProgressBound({ execution_s: bound.seconds, cpu_s: cpuBound, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
-  let boundState = boundClock.observe(boundStarted, undefined, firstCpu.cpu), boundFailure;
+  let boundState = boundClock.observe(boundStarted, undefined, firstCpu.cpu), boundFailure, diskSampled = -Infinity;
   owned.observeBound = (now, u, /** @type {import("./step-bound.ts").CpuSample | undefined} */ cpu) => {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
       requests: tok.waiting.filter(request => request.step === step.name).map(request => request.bytes ?? tokenBytes(step)),
@@ -1398,7 +1474,14 @@ function start(step, slots, rider = false) {
     try { sample = sampleCpu(); }
     catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); return; }
     owned.observeBound(sample.atMs, used(), sample.cpu);
-    if (boundState.expired) {
+    let outgrown = null;
+    if (diskClaims.has(step.name) && sample.atMs - diskSampled >= DISK_SAMPLE_MS) {
+      diskSampled = sample.atMs;
+      try { outgrown = sampleDisk(step.name); }
+      catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s temporary: ${error}`); return; }
+    }
+    if (outgrown) { boundFailure = outgrown; stopAtBound(); }
+    else if (boundState.expired) {
       boundFailure = boundState.expired === "wall_s" ? `step exceeded the landing wall ceiling of ${STEP_CEILING} s`
         : boundState.expired === "cpu_s" ? stepCpuBoundReason(cpuBound) : stepBoundReason(bound.seconds);
       stopAtBound();
@@ -1436,6 +1519,9 @@ function start(step, slots, rider = false) {
       stop(cleanupError);
     }
     try{await checkStream?.reaped(step.name);}catch(error){if(isCommandExit(error))throw error;caseCosts?.errors.push(`check telemetry drain: ${String(error)}`);}
+    // Nothing of the step can write its temporary now.
+    try { if (drained) releaseDisk(step.name); }
+    catch (error) {if(isCommandExit(error))throw error; cleanupError ??= `step temporary cleanup failed: ${error.message}`; stop(cleanupError); }
     let stepDiagnostics;
     try{stepDiagnostics=diagnostics?.endStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);cleanupError=`step host observation failed: ${error}`;stop(cleanupError);}
     running.delete(step.name);
@@ -1615,7 +1701,14 @@ function slower() {
 
 function done(){
   if (summaryWritten) return;
-  summaryWritten=true;finishRun();
+  summaryWritten=true;
+  // Nothing runs: a step still waiting for disk stops waiting, and a claim no
+  // drained step released (one whose start failed) is released.
+  clearTimeout(diskLook);
+  for (const name of [...diskClaims.keys()]) {
+    try { releaseDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's claim was not released: ${error.message}\n`); }
+  }
+  finishRun();
 }
 
 /** The same terminal verdict governs diagnostic retention and reporting.
@@ -1741,7 +1834,7 @@ async function writeSummary() {
   if (normalized.report.canonical) {
     const warning = writeCostHistory(HISTORY_FILE, { steps: plan.map(name => {
       const r = results.get(name);
-      return { name, verdict: r.verdict, cpu: r.cpu, cpu_measure:r.cpu_measure,memory: observations.get(name) };
+      return { name, verdict: r.verdict, cpu: r.cpu, cpu_measure:r.cpu_measure,memory: observations.get(name), disk: diskObservations.get(name) };
     }) }, CPU_HISTORY);
     if (warning) process.stderr.write(`scheduling history unavailable: ${warning}\n`);
   }

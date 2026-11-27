@@ -120,6 +120,33 @@ test("an aborted wait removes its record, and free disk admits with no record an
   finally { admitted.lease.release(); }
 });
 
+test("attempt, for an owner that cannot block on disk, keeps one recorded wait across refusals and ends it when admitted or told to", async t => {
+  const { temporary, path } = temporaryFixture(t);
+  const observations = join(temporary.path, "observations");
+  const setFree = (freeBytes: number) => ownMemory(observations, { disk: { freeBytes, freeInodes: 100 } });
+  const env = setFree(40.5 * 2 ** 30), host = hostObservations(env), capacity = new DiskCapacity({ env, host });
+  const admission = new TemporaryAdmission({ path, reservedBytes: 2 ** 30, host, capacity, context: { kind: "gate", temporary } });
+  const lines: string[] = [];
+  assert.equal(admission.attempt({ what: "step temporary", report: line => lines.push(line) }), null);
+  const [first] = capacity.diskWaits();
+  assert.equal(admission.attempt({ what: "step temporary", report: line => lines.push(line) }), null);
+  assert.deepEqual(capacity.diskWaits().map(wait => wait.id), [first!.id], "a second refusal keeps the one record");
+  assert.equal(lines.length, 1, "and reports only the first");
+  admission.endWait();
+  assert.deepEqual(capacity.diskWaits(), [], "endWait ends it");
+  assert.equal(admission.attempt({ what: "step temporary", report: line => lines.push(line) }), null, "a later refusal opens a new one");
+  assert.equal(capacity.diskWaits().length, 1);
+  setFree(60 * 2 ** 30);
+  const admitted = admission.attempt({ what: "step temporary", report: line => lines.push(line) });
+  try {
+    assert.ok(admitted?.lease);
+    assert.deepEqual(capacity.diskWaits(), [], "admission ends the record");
+    assert.equal(capacity.heldTemporary(admitted.lease.id)?.path, path, "the claim is published, for the process it is handed to");
+    assert.match(lines.at(-1)!, /^disk: step temporary admitted after \d+ s$/);
+  } finally { admitted?.lease.release(); }
+  assert.equal(capacity.heldTemporary(admitted!.lease.id), null, "a released claim is no longer held");
+});
+
 test("gate policy rejects a replaced registration and outside or escaping capture roots", async t => {
   const { run, temporary, path } = temporaryFixture(t);
   const env=ownMemory(join(run,'observations'),{disk:{freeBytes:60*2**30,freeInodes:100}}),host=hostObservations(env);

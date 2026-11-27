@@ -5,10 +5,12 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // committed baseline and the machine's shares; it never changes which checks
 // run or their verdicts.
 //
-// **One history of what each step costs, per target**: `steps-v5.json` in
+// **One history of what each step costs, per target**: `steps-v6.json` in
 // <target>/gate-costs (NTS_GATE_COSTS_DIR, where a test's code names its own).
 // For each step, the CPU seconds its checks took when they last passed, and
-// the memory its last few runs held at most; beside the steps, by key, the
+// the memory its last few runs held at most, and for a step with a temporary
+// of its own (the step table's `unmeasuredDisk`) the most its temporary held on disk;
+// beside the steps, by key, the
 // jobs that reserve memory outside any step (memory-ledger.ts's `reserveJob`,
 // `admit.ts --key`): an agent's build, a census run by hand. Every canonical
 // gate run writes it, every job writes its own, and every run reads it. It is
@@ -43,8 +45,16 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // with a desktop running, never has it free. There is no declared number
 // anywhere: the step table names none.
 //
+// **A step's temporary is claimed by what it held.** The runner admits a
+// step's own temporary before its slots and memory (run.mjs), claiming 1.25
+// times the largest of its last few measured peaks of allocated bytes; a
+// step never measured claims the step table's `unmeasuredDisk`.
+// The runner samples the temporary while the step runs and records its peak
+// whatever the verdict, so a capture that outgrew its claim, and was held for
+// it, claims more next time.
+//
 // **A case can be its own unit.** An elastic step whose cases differ by
-// orders of magnitude keeps a history of its own beside steps-v5.json,
+// orders of magnitude keeps a history of its own beside steps-v6.json,
 // `cases-v2/<step>.json`: each case's last few peaks, by step, backend and
 // path. The runner sizes each lease from those peaks, or live use and margin
 // when it has never been measured. The old cases/ namespace is imported only
@@ -78,15 +88,21 @@ export type StepSuccessors = Readonly<Record<string, { readonly steps: readonly 
 export type MemoryUnit = "step" | "token";
 /** A key's last few measured peaks, oldest first, in bytes per unit. */
 export type Peaks = { readonly unit: MemoryUnit; readonly peaks: readonly number[] };
-export type StepCosts = { readonly cpu?: number; readonly memory?: Peaks };
+export type StepCosts = { readonly cpu?: number; readonly memory?: Peaks; readonly disk?: Peaks };
 export type JobBasis = "job" | "worker";
 /** Whole-job bytes, with the actual width that produced the sample. */
 export type JobSample = {readonly peak:number;readonly width:number};
 export type JobPeaks = {readonly basis:JobBasis;readonly observations:readonly JobSample[]};
 export type CostHistory = { readonly steps: ReadonlyMap<string, StepCosts>; readonly jobs: ReadonlyMap<string, JobPeaks>;
   readonly unsupportedVersion?:FutureStateVersionError;readonly legacyJobs?:readonly string[];readonly legacyFile?:string };
-export const COST_HISTORY_VERSION=5;
-export const COST_HISTORY_NAME="steps-v5.json";
+export const COST_HISTORY_VERSION=6;
+export const COST_HISTORY_NAME="steps-v6.json";
+/** The namespaces a new history imports while it is absent, newest first. */
+const PREDECESSORS=["steps-v5.json","steps.json"];
+const predecessor=(file:string)=>{
+  if(basename(file)!==COST_HISTORY_NAME||existsSync(file))return file;
+  return PREDECESSORS.map(name=>join(dirname(file),name)).find(existsSync)??file;
+};
 
 /** Peaks kept per key: one small run among them does not shrink a reservation. */
 export const KEPT_PEAKS = 5;
@@ -107,24 +123,26 @@ function parsePeaks(value: unknown, units: readonly MemoryUnit[]): Peaks | null 
  * namespace imports its predecessor only before the first v5 publication;
  * older historical candidates continue writing their own file. */
 export function readCostHistory(file: string,report:(line:string)=>void=console.error): CostHistory {
-  const input=basename(file)===COST_HISTORY_NAME&&!existsSync(file)?join(dirname(file),"steps.json"):file;
+  const input=predecessor(file);
   let value: unknown;
   try { value = JSON.parse(readFileSync(input, "utf8")); } catch { return empty(); }
   const unsupportedVersion=futureStateVersion(value,COST_HISTORY_VERSION,input);
   if(unsupportedVersion){report(unsupportedVersion.message);return {...empty(),unsupportedVersion};}
   if (!record(value)) return empty();
   if (value.version === 2) return empty(); // Legacy wait4 CPU cannot seed cgroup CPU history.
-  if ((value.version!==3&&value.version!==4&&value.version!==5) || !keys(value, ["version", "cpu_measure", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
+  if ((value.version!==3&&value.version!==4&&value.version!==5&&value.version!==6) || !keys(value, ["version", "cpu_measure", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
   const steps = new Map<string, StepCosts>(), jobs = new Map<string, JobPeaks>();
   for (const [name, row] of Object.entries(value.steps)) {
-    if (!KEY.test(name) || !record(row) || !keys(row, ["cpu", "memory"])) return empty();
+    if (!KEY.test(name) || !record(row) || !keys(row, value.version===6?["cpu", "memory", "disk"]:["cpu", "memory"])) return empty();
     if (row.cpu !== undefined && !measured(row.cpu)) return empty();
     const memory = row.memory === undefined ? undefined : parsePeaks(row.memory, ["step", "token"]);
-    if (memory === null || (row.cpu === undefined && memory === undefined)) return empty();
+    const disk = row.disk === undefined ? undefined : parsePeaks(row.disk, ["step"]);
+    if (memory === null || disk === null || (row.cpu === undefined && memory === undefined && disk === undefined)) return empty();
     const cpu=value.version!==3&&value.cpu_measure===STEP_CPU_MEASURE?row.cpu:undefined;
-    if(cpu!==undefined||memory)steps.set(name,{...(cpu!==undefined?{cpu:cpu as number}:{}),...(memory?{memory}:{})});
+    if(cpu!==undefined||memory||disk)steps.set(name,{...(cpu!==undefined?{cpu:cpu as number}:{}),...(memory?{memory}:{}),...(disk?{disk}:{})});
   }
-  if(value.version!==COST_HISTORY_VERSION){
+  // v6 added step disk peaks to v5's rows; their jobs share one meaning.
+  if(value.version!==5&&value.version!==COST_HISTORY_VERSION){
     const legacyJobs=Object.keys(value.jobs).sort();
     if(legacyJobs.length)report(`memory history: ignoring ${legacyJobs.length} ambiguous legacy job key(s) in ${input}; sizing basis and measured width are absent: ${legacyJobs.join(", ")}`);
     return {steps,jobs,legacyJobs,legacyFile:input};
@@ -297,6 +315,14 @@ export function peakReservation(peaks: readonly number[]): number {
   return Math.max(LEAST_RESERVATION_BYTES, Math.ceil(RESERVATION_PER_PEAK * Math.max(...peaks) / MIB) * MIB);
 }
 
+/** A step's temporary claim: RESERVATION_PER_PEAK times the largest of its
+ * measured disk peaks, in whole MiB, or its step table's unmeasured basis. */
+export function diskClaim(history: CostHistory, step: { readonly name: string; readonly unmeasuredDisk: number }): { bytes: number; basis: "measured" | "unmeasured" } {
+  const peaks = history.steps.get(step.name)?.disk?.peaks;
+  if (!peaks?.length) return { bytes: step.unmeasuredDisk, basis: "unmeasured" };
+  return { bytes: Math.ceil(RESERVATION_PER_PEAK * Math.max(...peaks) / MIB) * MIB, basis: "measured" };
+}
+
 /**
  * What an elastic step's held tokens are counted for: each sized one at its
  * size, the rest at the step's unit. Held tokens of its unit alone are
@@ -367,7 +393,7 @@ export function snapshotCostHistory(source:string,destination:string):void{
   if(!unlock)throw Error(`${source} stayed locked for ${LOCK_WAIT_SECONDS} s while snapshotting observation history`);
   const pending=`${destination}.${process.pid}.${randomUUID()}`;
   try{
-    const input=basename(source)===COST_HISTORY_NAME&&!existsSync(source)?join(dirname(source),'steps.json'):source;
+    const input=predecessor(source);
     let bytes:Buffer;try{bytes=readFileSync(input);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
     if(existsSync(destination))throw Error('observation history already exists: '+destination);
     mkdirSync(dirname(destination),{recursive:true});
@@ -379,6 +405,8 @@ export type StepObservation = {
   name: string; verdict?: string; cpu?: number;cpu_measure?:string;
   /** The most it held, per unit: present only for a step that ran to its own end. */
   memory?: { unit: "step" | "token"; peak: number };
+  /** The most its own temporary held on disk, in allocated bytes, whatever its verdict. */
+  disk?: { peak: number };
 };
 export type JobObservation = {key:string;basis:JobBasis;peak:number;width:number};
 
@@ -402,7 +430,7 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
     if (unlock === null) return `${file} stayed locked for ${LOCK_WAIT_SECONDS} s`;
     const current = readCostHistory(file,()=>{});
     if(current.unsupportedVersion)return current.unsupportedVersion.message;
-    const steps = new Map<string, { cpu?: number; memory?: Peaks }>();
+    const steps = new Map<string, { cpu?: number; memory?: Peaks; disk?: Peaks }>();
     for (const [name, cpu] of initialCpu) if (KEY.test(name) && measured(cpu)) steps.set(name, { cpu });
     for (const [name, row] of current.steps) steps.set(name, { ...steps.get(name), ...row });
     const jobs = new Map(current.jobs);
@@ -411,7 +439,8 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
       const was = steps.get(row.name) ?? {};
       const cpu = row.verdict === "PASS" && measured(currentStepCpu(row)) ? row.cpu : was.cpu;
       const memory = row.memory && bytes(row.memory.peak) ? appended(was.memory, row.memory.unit, row.memory.peak) : was.memory;
-      if (cpu !== undefined || memory !== undefined) steps.set(row.name, { ...(cpu !== undefined ? { cpu } : {}), ...(memory ? { memory } : {}) });
+      const disk = row.disk && bytes(row.disk.peak) ? appended(was.disk, "step", row.disk.peak) : was.disk;
+      if (cpu !== undefined || memory !== undefined || disk !== undefined) steps.set(row.name, { ...(cpu !== undefined ? { cpu } : {}), ...(memory ? { memory } : {}), ...(disk ? { disk } : {}) });
     }
     for (const row of observed.jobs ?? []) {
       if(!KEY.test(row.key)||!bytes(row.peak)||!bytes(row.width)||(row.basis!=="job"&&row.basis!=="worker")||(row.basis==="job"&&row.width!==1))throw new Error("invalid memory observation for job "+row.key);

@@ -34,6 +34,13 @@ test("the table's dependencies all name steps, and none waits for itself", () =>
   assert.equal(stepTableProblem([{ name: "a", after: ["b"] }, { name: "b", needs: ["c"] }, { name: "c" }]), null, "a chain is not a cycle");
 });
 
+test("a step's unmeasured disk is a positive number of bytes, on a fixed step", () => {
+  assert.equal(stepTableProblem([{ name: "a", unmeasuredDisk: 2 ** 30 }]), null);
+  assert.equal(stepTableProblem([{ name: "a", unmeasuredDisk: 0 }]), "a declares an unmeasured disk of 0, which is not a positive number of bytes");
+  assert.equal(stepTableProblem([{ name: "a", unmeasuredDisk: 1.5 }]), "a declares an unmeasured disk of 1.5, which is not a positive number of bytes");
+  assert.equal(stepTableProblem([{ name: "a", unmeasuredDisk: 2 ** 30, elastic: true }]), "a declares a disk, which only a fixed step's runner can claim before its start");
+});
+
 test("the runner refuses a table whose steps wait for one another, before any step starts", t => {
   const own = newTestScratch("step-table-run");t.after(() => {removable(own);rmSync(own, {recursive:true,force:true});});
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), run = join(own, "home/.cache/gate-run"), started = join(own, "started");

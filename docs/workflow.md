@@ -348,7 +348,21 @@ tokened while no case of it holds a token: the runner reads the waits the one
 waiting owner records (`TemporaryAdmission.acquire`) and takes the one whose
 process runs in the step's slice. Its CPU still spends the CPU bound, and a
 landing's ceiling and the full check's run bound below still spend its time,
-since what holds the disk may never end on its own. Nor does CPU that other work takes from the step: the runner
+since what holds the disk may never end on its own.
+
+**A step's own temporary is claimed before its slots and memory.** A step
+whose row names `unmeasuredDisk` has a temporary of its own,
+`<run temporary>/<step>`. Once the step would be admitted, the runner tries
+its claim through the same owner (`TemporaryAdmission.attempt`): refused, the
+step stays pending and holds neither slots nor memory, its wait recorded in
+the runner's name, and is asked again every few seconds; admitted, it starts at
+once with the claim handed to it (`NTS_GATE_STEP_DISK`). The claim is 1.25
+times the largest of the temporary's last few measured peaks in the
+scheduling history, or `unmeasuredDisk` before any is measured. The runner
+samples the temporary while the step runs: one that outgrows its claim is
+stopped and held by name, overrunning its claim by at most what it writes
+between two samples. Its peak is recorded whatever the verdict, and the claim
+released once the step's scope has drained. Nor does CPU that other work takes from the step: the runner
 samples the step slice's `cpu.stat` and `cpu.pressure` `full` (time it had
 runnable tasks and none of them ran) every 500 ms, and that lost time spends
 nothing. `some` is not read, because a step whose threads outnumber its CPUs
@@ -1065,9 +1079,12 @@ read taken only under another environment, host, OS or toolchain is unseen
 until a wide run makes it, and is red at that first run. A
 stale installation catalog owes every Rust target whatever changed, so it
 answers nothing about reach and is refused by name. The step is wide, never a
-landing's: its capture lives in the run's registered temporary under ~/.cache
-with a 12 GiB disk claim, and is removed when the step ends whatever its verdict; `rust-inputs.coverage.json` in the run
-keeps the decision. A local capture from `check.ts --here --trace-rust-inputs`
+landing's: its capture lives in its own temporary, in the run's registered
+temporary under ~/.cache, which the runner claims on disk before the step's
+slots and memory (the step table's `unmeasuredDisk`, below). The step proves
+the handed claim is held, and the capture is removed when the step ends
+whatever its verdict; `rust-inputs.coverage.json` in the run keeps the
+decision. A local capture from `check.ts --here --trace-rust-inputs`
 is checked with `node tooling/gate/rust-input-coverage.ts <trace> <reports>`,
 and decided again from its reports with `--reports <reports>`.
 
@@ -1808,8 +1825,9 @@ the tooling strict checker owns the source's type checking.
   a width of one, declares worker sizing; omission declares a whole job.
   A mismatch refuses by name, and publication rechecks the basis under the
   same lock. Samples retain the whole peak and measured width; worker
-  forecasts normalize each sample by that width. `steps-v5.json` imports its
-  predecessor only while absent. Step rows survive; legacy job observations
+  forecasts normalize each sample by that width. `steps-v6.json` imports its
+  predecessor (`steps-v5.json`, whose rows and jobs it keeps, else
+  `steps.json`) only while absent. Step rows survive; legacy job observations
   without a recoverable basis and width are rejected with a named count and
   measured again through live accounting. Historical writers retain their
   old namespace.
