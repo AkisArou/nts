@@ -9,6 +9,28 @@ is in [the records](..).
 
 Dates are 2026.
 
+## Incoming null-slot contracts (11-27)
+
+Issue #1049's approved design separates incoming null-slot shapes with private
+entries and a loop's first arrival with one CFG copy. Each original callee has
+at most four additional entries; each original caller has one arrival copy;
+total copied pre-count HIR is bounded by the original. Every version records
+positive removed-operation opportunities. Planning visits original bodies only
+and has a linear work budget. Ownership is recomputed after rewriting.
+
+The runtime's consuming-string family is one canonical contract shared by
+`keeps` and `stores_nothing`. All seven helpers reuse bytes only when unshared;
+retirement decrements or frees the consumed leaf string, never an object,
+handle or callback. Slots consume that existing owner while retaining every
+native before/after/cleanup invalidation. A confined allocation's field write
+invalidates explicit facts only within its static alias ceiling; publication
+ends confinement immediately. Index explicit facts by slot and alias component.
+Ordinary debug builds compare invalidations with a full scan only up to 64 total
+facts, counted in constant time; unit tests and `verify-slot-index` compare every
+invalidation. The corpus, native wrong-accept controls and compile tripwires
+are required evidence. The current contract is in
+[memory management](../../foundations/memory.md#decisions).
+
 ## Pressure reclamation uses ownership provenance (11-14)
 
 Issue #709 retains the user's deletion grant: free pool build output keeping

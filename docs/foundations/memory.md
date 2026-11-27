@@ -497,6 +497,33 @@ never declared.
 | M6 | **The cycle collector stays trial deletion for now.** Its next step is measurement only (per-phase counters, pause and retained-memory distributions, batch-size and candidate-filter controls); an exact tracing backstop waits until stages 2 and 3 have moved the allocation side | Even removing all collector work would leave the cycle-heavy row well behind node, because allocation and the program's own work remain. An exact tracing backstop needs precise roots for C and LLVM frames and a heap registry, the largest architecture change on offer. |
 | M7 | **A managed sort moves a permutation without counts when the target prefix still matches its snapshot; mutations use counted reconciliation.** `toSorted` permutes its private owner by cycles | Moving the same set of references creates no ownership. The snapshot keeps comparator arguments alive through mutations, collections and throws. See [arrays](objects.md#arrays) and the [decision log](../records/notebooks/decisions-log.md#adaptive-managed-sorting-11-19). |
 
+Incoming null-slot facts are contracts of an entry, rather than a promise
+shared by incompatible call shapes. The slot owner may give direct callers a
+private entry for their proven incoming fields, and separate a loop's first
+arrival from its backedge where that join loses the proof. Ownership is rebuilt
+from the rewritten call graph before counting. Unknown and published arrivals
+receive no additional promise.
+
+Each original callee has at most four additional entries; each original caller
+has at most one first-arrival copy. Copies are never candidates for another
+versioning round. The sum of copied placed operations, block parameters and
+terminators cannot exceed the original pre-count HIR. A version must remove an
+additional old-slot release opportunity in its body or its redirected callers,
+and its accounting names that gain. Planning uses a program-sized work budget;
+exhaustion keeps ordinary entries. These are ceilings, not growth targets.
+
+Slot effects consume the runtime's shared storage/callback contract. A
+consuming string helper may retire only its consumed leaf string, never an
+object or foreign handle and never through a callback; in-place byte reuse
+requires unique ownership. Its consumption remains part of the ownership
+contract. Native retains, releases and cleanup keep their before/after
+invalidations. A field write may limit explicit-fact invalidation to its static
+alias ceiling only while its writer is a confined allocation; publication ends
+that proof. Explicit facts are indexed by slot and alias component, so a write
+visits affected facts rather than every unrelated allocation. Ordinary debug
+verification has a fixed small fact bound; unit tests and an opt-in verifier
+check the index exhaustively.
+
 From the open-questions audit (10-28,
 [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)):
 
