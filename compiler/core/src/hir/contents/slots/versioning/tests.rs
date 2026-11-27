@@ -205,6 +205,7 @@ fn first_arrival_is_separate_from_the_occupied_backedge() {
 
 #[test]
 fn unknown_call_and_reentrant_callee_do_not_manufacture_a_profitable_shape() {
+    assert!(!hir::runtime::stores_nothing("unknown_effect"));
     for in_callee in [false, true] {
         let mut program = program(2);
         let func = &mut program.funcs[usize::from(!in_callee)];
@@ -212,7 +213,7 @@ fn unknown_call_and_reentrant_callee_do_not_manufacture_a_profitable_shape() {
         func.values.push(Op {
             kind: OpKind::Call {
                 callee: Callee::External("unknown_effect".into()),
-                args: vec![],
+                args: vec![ValueId(0)],
                 frame: None,
             },
             ty: HirType::Void,
@@ -221,6 +222,42 @@ fn unknown_call_and_reentrant_callee_do_not_manufacture_a_profitable_shape() {
         func.blocks[0].ops.insert(1, call);
         assert!(rewrite(&mut program).versions.is_empty());
     }
+}
+
+#[test]
+fn a_string_helper_before_the_store_leaves_two_useful_release_elisions() {
+    let mut program = program(2);
+    let callee = &mut program.funcs[0];
+    let number = push(callee, OpKind::ConstFloat(3.0), HirType::Float { bits: 64 });
+    let helper = push(
+        callee,
+        OpKind::Call {
+            callee: Callee::External("nts_str_append_number".into()),
+            args: vec![ValueId(1), number],
+            frame: None,
+        },
+        HirType::Managed(ManagedType::String),
+    );
+    callee.blocks[0].ops = vec![
+        ValueId(0),
+        ValueId(1),
+        number,
+        helper,
+        ValueId(2),
+        ValueId(3),
+    ];
+    for id in [ValueId(2), ValueId(3)] {
+        if let OpKind::FieldSet { value, .. } = &mut callee.values[id.0 as usize].kind {
+            *value = helper;
+        }
+    }
+    let report = rewrite(&mut program);
+    assert_eq!(
+        report.versions.len(),
+        1,
+        "the effect-connection counterfactual makes this zero"
+    );
+    assert_eq!(report.versions[0].removed, 2);
 }
 
 #[test]

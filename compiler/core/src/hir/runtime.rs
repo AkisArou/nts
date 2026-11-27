@@ -3126,13 +3126,7 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // right is only read. The same for the appends that write a number, a
         // unit, a slice or a string's quoted form without making a string of
         // it.
-        "nts_str_append"
-        | "nts_str_append_at"
-        | "nts_str_append_char_at"
-        | "nts_str_append_char_code"
-        | "nts_str_append_json_quoted"
-        | "nts_str_append_number"
-        | "nts_str_append_slice" => Some(&[0]),
+        name if CONSUMES_STRING.contains(&name) => Some(&[0]),
         // The presence helpers touch one word of the header and keep nothing.
         //
         // Saying so is what lets the object stay on the stack. Without it,
@@ -3369,12 +3363,33 @@ pub const READS_A_SETTLEMENT: &[&str] = &[
 #[must_use]
 pub fn stores_nothing(name: &str) -> bool {
     reads_only(name)
+        || CONSUMES_STRING.contains(&name)
         || RETAINS_ONLY_ITS_RESULT.contains(&name)
         || READS_A_SHAPE.contains(&name)
         || READS_A_SETTLEMENT.contains(&name)
         || REGION_CALLS.contains(&name)
         || name == "nts_refused"
 }
+
+/// Consumes only its left string, and cannot modify a field or element slot
+/// or run program code. This is the same family `keeps` uses for argument 0.
+/// It is deliberately not READS_ONLY: an unused call still consumes a string.
+///
+/// All seven C entries use `nts_str_room`/`nts_str_written`. `nts_str_reserve`
+/// reuses bytes only at reserved == 1; otherwise `nts_str_regrow` copies them.
+/// Slices/substrings copy their units (`nts_str_range`), and char reads return
+/// a value. `nts_str_retire` frees or decrements only a string, whose payload
+/// contains no managed/foreign references and invokes no callback. The result
+/// preserves its input's prefix. A live slot/string alias remains unchanged.
+pub const CONSUMES_STRING: &[&str] = &[
+    "nts_str_append",
+    "nts_str_append_at",
+    "nts_str_append_char_at",
+    "nts_str_append_char_code",
+    "nts_str_append_json_quoted",
+    "nts_str_append_number",
+    "nts_str_append_slice",
+];
 
 /// Helpers that write only the table they are handed first: they store into
 /// that table's own storage and nowhere else, and run no program code.
@@ -3438,6 +3453,29 @@ pub const REGION_CALLS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn consuming_string_helpers_preserve_slots_but_must_not_be_dropped_as_reads() {
+        for &name in super::CONSUMES_STRING {
+            assert_eq!(
+                super::keeps(name),
+                Some(&[0][..]),
+                "{name} consumes its left string"
+            );
+            assert!(
+                super::stores_nothing(name),
+                "{name} cannot overwrite a slot or invoke program code"
+            );
+            assert!(
+                !super::reads_only(name),
+                "{name} still consumes a reference"
+            );
+        }
+        assert!(
+            !super::stores_nothing("nts_checkpoint"),
+            "queued callbacks may write published slots"
+        );
+    }
+
     use super::SIGNATURES;
 
     /// Each table writer is a table helper the runtime declares, so a rename

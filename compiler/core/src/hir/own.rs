@@ -276,7 +276,8 @@ fn holds_foreign_counts(program: &Program) -> bool {
 /// one and survives in the other.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum HelperEffect {
-    /// Nothing: it stores and releases nothing (`runtime::stores_nothing`),
+    /// Nothing: it overwrites no storage a borrow depends on and runs no
+    /// program code (`runtime::stores_nothing`, including leaf-string cleanup),
     /// or it writes only the table it is handed in a program whose releases
     /// run no foreign code (`runtime::writes_only_its_table`). No borrow
     /// rests on a table's storage -- every read out of one retains -- so

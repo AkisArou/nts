@@ -121,6 +121,60 @@ fn an_open_call_without_arguments_can_still_mutate_an_aliased_field() {
 }
 
 #[test]
+fn a_catalogued_string_append_preserves_explicit_null_fields() {
+    assert!(hir::runtime::stores_nothing("nts_str_append_number"));
+    let mut func = fixture();
+    func.values.push(Op {
+        kind: OpKind::ConstString("prefix".into()),
+        ty: HirType::Managed(hir::ManagedType::String),
+        origin: func.origin.clone(),
+    });
+    func.values.push(Op {
+        kind: OpKind::ConstFloat(3.0),
+        ty: HirType::Float { bits: 64 },
+        origin: func.origin.clone(),
+    });
+    func.values[7].kind = OpKind::Call {
+        callee: Callee::External("nts_str_append_number".into()),
+        args: vec![ValueId(8), ValueId(9)],
+        frame: None,
+    };
+    func.values[7].ty = HirType::Managed(hir::ManagedType::String);
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 3);
+    observe(&mut state, &func, 7);
+    assert!(state.known_zero(ValueId(0), Slot::Field(0)));
+    assert!(state.initializing(&func, &func.values[3].kind));
+}
+
+#[test]
+fn a_callback_or_an_external_writer_keeps_its_old_value_release() {
+    for (name, args) in [
+        ("nts_checkpoint", vec![]),
+        ("external_slot_writer", vec![ValueId(0)]),
+    ] {
+        assert!(
+            !hir::runtime::stores_nothing(name),
+            "a callback may reach a previously published holder, and a writer can reach its argument"
+        );
+        let mut func = fixture();
+        func.values[7].kind = OpKind::Call {
+            callee: Callee::External(name.into()),
+            args,
+            frame: None,
+        };
+        let mut state = Fresh::default();
+        observe(&mut state, &func, 3);
+        assert!(state.known_zero(ValueId(0), Slot::Field(0)));
+        observe(&mut state, &func, 7);
+        assert!(
+            !state.initializing(&func, &func.values[3].kind),
+            "{name} must keep the old-slot load/release"
+        );
+    }
+}
+
+#[test]
 fn fields_and_array_elements_have_separate_slot_keys() {
     let mut state = Fresh::default();
     state.zero.insert(ValueId(0), Slot::Field(0));

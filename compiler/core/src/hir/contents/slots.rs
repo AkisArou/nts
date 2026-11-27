@@ -593,6 +593,14 @@ fn effect(kind: &OpKind) -> Effect {
         | OpKind::SharedFieldGet { .. }
         | OpKind::ArrayGet { .. }
         | OpKind::GlobalGet(_) => Effect::Read,
+        // Use the same external-effect owner as borrow invalidation. A helper
+        // that writes no program storage cannot erase a parameter's explicit
+        // null facts. Implicit native counts still invalidate before/after
+        // this transfer through Inputs; this grants no cleanup exemption.
+        OpKind::Call {
+            callee: hir::Callee::External(name),
+            ..
+        } if hir::runtime::stores_nothing(name) => Effect::NoWrite,
         OpKind::Call { .. }
         | OpKind::Suspend { .. }
         | OpKind::Await { .. }
