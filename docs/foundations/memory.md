@@ -28,8 +28,8 @@ Terms used below:
 
 - **Ownership, one answer per value** ([record 0024](../records/0024-one-ownership-answer-per-value.md)):
   borrowing inferred across the whole program, moves, consuming parameters.
-  Counting is at its floor: all of `tests/memory`'s cases sit at their argued
-  minimum of count operations and allocations.
+  `tests/memory` ratchets counted operations and allocations, with an argument
+  for each floor and an explicit account of remaining avoidable work.
 - **Objects that never leave a function live in its frame**
   ([record 0006](../records/0006-objects-and-their-lifetimes.md)); objects whose
   every use is a field read or write become plain values.

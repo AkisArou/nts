@@ -1,6 +1,7 @@
 //! Slot contents at a program point. This is the shared initialization owner
-//! for fields and array elements. Today only ownership consumes it, through
-//! `initializing_stores`; read initialization (`initialized.rs`) does not yet.
+//! for fields and array elements. Ownership consumes its initializing-store
+//! answer and incoming-entry planner; read initialization (`initialized.rs`)
+//! does not yet.
 
 use crate::hir::{self, BlockId, Func, Layout, OpKind, ValueId};
 use rustc_hash::{FxHashMap, FxHashSet};

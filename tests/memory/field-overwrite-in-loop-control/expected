@@ -10,5 +10,5 @@ because releases, giving seventeen necessary operations.
 because The initial kept fill and first loop arrival use the null-slot entry.
 because The second iteration clears both slots before its generic fill, whose
 because call still follows the conditional clear/merge and attempts two null
-because releases. Those two attempts remain in this case's current ratchet.
+because releases. #1114 tracks those two attempts in this current ratchet.
 because Forced collection must leave the live-object count flat.
