@@ -300,6 +300,12 @@ pub(in crate::hir) fn materialize(
 ) -> Versioning {
     let (harmless, summaries) = ownership.slot_contracts();
     let original_ops: usize = program.funcs.iter().map(size).sum();
+    if !hir::own::eliding() {
+        return Versioning {
+            original_ops,
+            ..Versioning::default()
+        };
+    }
     let direct = super::summaries::invoked_only_directly(program, &program.layouts);
     let targets: FxHashMap<_, _> = program
         .funcs
@@ -419,6 +425,13 @@ pub(in crate::hir) fn materialize(
             body
         })
         .collect::<Vec<_>>();
+    planner.report.capped = planner
+        .counts
+        .iter()
+        .filter(|(_, count)| **count == VARIANTS)
+        .map(|(at, _)| program.funcs[*at].name.clone())
+        .collect();
+    planner.report.capped.sort();
     let report = planner.report;
     debug_assert!(report.duplicated_ops <= report.original_ops);
     debug_assert!(report.versions.iter().all(|version| version.removed > 0));
