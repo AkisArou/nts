@@ -188,7 +188,8 @@ export const STEPS = [
  */
 export function stepTableProblem(steps = STEPS) {
   for (const s of steps) { const problem = statedBoundProblem(s); if (problem) return problem; }
-  for (const s of steps) {
+  for (const row of steps) {
+    const s = /** @type {{ name: string, unmeasuredDisk?: number, elastic?: boolean }} */ (row);
     if (s.unmeasuredDisk === undefined) continue;
     if (!Number.isSafeInteger(s.unmeasuredDisk) || s.unmeasuredDisk <= 0) return `${s.name} declares an unmeasured disk of ${String(s.unmeasuredDisk)}, which is not a positive number of bytes`;
     if (s.elastic) return `${s.name} declares a disk, which only a fixed step's runner can claim before its start`;

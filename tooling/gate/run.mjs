@@ -245,7 +245,11 @@ const host = normalized.observations;
 // The temporary disk waits recorded now (admission.ts): a step whose own
 // slice holds one spends no execution time on it (stepBoundWait). Unreadable
 // waits name nothing and excuse nothing; the failure is said once.
-let diskCapacity, diskWaitFailure;
+/** @type {DiskCapacity | undefined} */
+let diskCapacity;
+/** @type {string | undefined} */
+let diskWaitFailure;
+/** @returns {import("./disk-capacity.ts").TemporaryDiskWait[]} */
 const diskWaitsNow = () => {
   try { diskCapacity ??= new DiskCapacity({ env, host }); const waits = diskCapacity.diskWaits(); diskWaitFailure = undefined; return waits; }
   catch (error) {
@@ -953,14 +957,26 @@ const observations = new Map();
 // and the temporary removed, once the step's scope has drained.
 // ---------------------------------------------------------------------------
 const DISK_LOOK_MS = 5000, DISK_SAMPLE_MS = 2000;
-const diskClaims = new Map(), diskObservations = new Map();
+/** @typedef {{ bytes: number, basis: "measured" | "unmeasured", path: string, lease: import("./disk-capacity.ts").TemporaryDiskLease | null, peak: number, admission: TemporaryAdmission }} DiskClaim */
+/** @type {Map<string, DiskClaim>} */
+const diskClaims = new Map();
+/** @type {Map<string, { peak: number }>} */
+const diskObservations = new Map();
+/** @type {ReturnType<typeof setTimeout> | null} */
 let diskLook = null;
-/** True once the step's claim is held, null while it waits for disk, false when it cannot be claimed (the step is finished). */
+/** @param {unknown} error */
+const errorText = error => error instanceof Error ? error.message : String(error);
+/**
+ * True once the step's claim is held, null while it waits for disk, false when it cannot be claimed (the step is finished).
+ * @param {{ name: string, unmeasuredDisk: number }} step
+ * @returns {boolean | null}
+ */
 function claimDisk(step) {
   let claim = diskClaims.get(step.name);
+  /** @param {unknown} error */
   const refuse = error => {
     if (isCommandExit(error)) throw error;
-    const reason = `its temporary cannot be claimed: ${error.message}`;
+    const reason = `its temporary cannot be claimed: ${errorText(error)}`;
     pending = pending.filter(name => name !== step.name);
     finish(step.name, "INSTRUMENT", reason, { instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason } });
     report(step.name);
@@ -969,7 +985,7 @@ function claimDisk(step) {
   try {
     if (!claim) {
       const sized = diskClaim(HISTORY, step), temporary = JSON.parse(env[ENVIRONMENT_CONTEXT]).temporary, path = join(temporary.path, step.name);
-      claim = { ...sized, path, lease: null, peak: 0, sampled: 0,
+      claim = { ...sized, path, lease: null, peak: 0,
         admission: new TemporaryAdmission({ path, context: { kind: "gate", temporary }, reservedBytes: sized.bytes, host, env }) };
       diskClaims.set(step.name, claim);
     }
@@ -980,7 +996,11 @@ function claimDisk(step) {
   diskLook ??= setTimeout(() => { diskLook = null; schedule(); }, DISK_LOOK_MS);
   return null;
 }
-/** The step's temporary now, and its peak; past its claim, the reason to stop it. */
+/**
+ * The step's temporary now, and its peak; past its claim, the reason to stop it.
+ * @param {string} name
+ * @returns {string | null}
+ */
 function sampleDisk(name) {
   const claim = diskClaims.get(name);
   if (!claim?.lease) return null;
@@ -988,14 +1008,17 @@ function sampleDisk(name) {
   claim.peak = Math.max(claim.peak, held);
   return held > claim.bytes ? `its temporary outgrew its disk claim of ${gib(claim.bytes)} (${claim.basis}): it holds ${gib(held)}` : null;
 }
-/** After the step's scope drained: its peak recorded, its temporary removed, its claim released. */
+/**
+ * After the step's scope drained: its peak recorded, its temporary removed, its claim released.
+ * @param {string} name
+ */
 function releaseDisk(name) {
   const claim = diskClaims.get(name);
   if (!claim) return;
   diskClaims.delete(name);
   claim.admission.endWait();
   if (!claim.lease) return;
-  try { sampleDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's last sample failed: ${error.message}\n`); }
+  try { sampleDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's last sample failed: ${errorText(error)}\n`); }
   if (claim.peak > 0) diskObservations.set(name, { peak: claim.peak });
   try { rmSync(claim.path, { recursive: true, force: true }); }
   finally { claim.lease.release(); }
@@ -1382,8 +1405,8 @@ function schedule() {
         continue;
       }
       // Its temporary first: waiting for disk, it holds no slot and no memory.
-      if (step.unmeasuredDisk !== undefined) {
-        const claimed = claimDisk(step);
+      if (step && step.unmeasuredDisk !== undefined) {
+        const claimed = claimDisk({ name: step.name, unmeasuredDisk: step.unmeasuredDisk });
         if (claimed === null) continue;
         if (claimed === false) { progressed = true; break; }
       }
@@ -1452,7 +1475,9 @@ function start(step, slots, rider = false) {
   let boundTimer;
   const cpuBound = stepCpuBound(bound, width(step.name));
   const boundStarted = firstCpu.atMs, boundClock = new ProgressBound({ execution_s: bound.seconds, cpu_s: cpuBound, ...(STEP_CEILING === undefined ? {} : { wall_s: STEP_CEILING }) }, boundStarted);
-  let boundState = boundClock.observe(boundStarted, undefined, firstCpu.cpu), boundFailure, diskSampled = -Infinity;
+  let boundState = boundClock.observe(boundStarted, undefined, firstCpu.cpu), diskSampled = -Infinity;
+  /** @type {string | undefined} */
+  let boundFailure;
   owned.observeBound = (now, u, /** @type {import("./step-bound.ts").CpuSample | undefined} */ cpu) => {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
       requests: tok.waiting.filter(request => request.step === step.name).map(request => request.bytes ?? tokenBytes(step)),
@@ -1521,7 +1546,7 @@ function start(step, slots, rider = false) {
     try{await checkStream?.reaped(step.name);}catch(error){if(isCommandExit(error))throw error;caseCosts?.errors.push(`check telemetry drain: ${String(error)}`);}
     // Nothing of the step can write its temporary now.
     try { if (drained) releaseDisk(step.name); }
-    catch (error) {if(isCommandExit(error))throw error; cleanupError ??= `step temporary cleanup failed: ${error.message}`; stop(cleanupError); }
+    catch (error) {if(isCommandExit(error))throw error; cleanupError ??= `step temporary cleanup failed: ${errorText(error)}`; stop(cleanupError); }
     let stepDiagnostics;
     try{stepDiagnostics=diagnostics?.endStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);cleanupError=`step host observation failed: ${error}`;stop(cleanupError);}
     running.delete(step.name);
@@ -1704,9 +1729,9 @@ function done(){
   summaryWritten=true;
   // Nothing runs: a step still waiting for disk stops waiting, and a claim no
   // drained step released (one whose start failed) is released.
-  clearTimeout(diskLook);
+  if (diskLook) clearTimeout(diskLook);
   for (const name of [...diskClaims.keys()]) {
-    try { releaseDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's claim was not released: ${error.message}\n`); }
+    try { releaseDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's claim was not released: ${errorText(error)}\n`); }
   }
   finishRun();
 }
