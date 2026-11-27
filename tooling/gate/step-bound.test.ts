@@ -274,6 +274,7 @@ export { stepTableProblem };
   if (history !== undefined) { mkdirSync(memory.NTS_GATE_COSTS_DIR, { recursive: true }); writeFileSync(join(memory.NTS_GATE_COSTS_DIR, COST_HISTORY_NAME), JSON.stringify(history)); }
   writeFileSync(join(gate, "payload.mjs"), `
 import { existsSync, readFileSync, watch } from "node:fs";
+import { dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { durableRecord } from ${JSON.stringify(pathToFileURL(join(source, "durable-record.ts")).href)};
 const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)}, recordsFreesDisk = ${JSON.stringify(recordsFreesDisk)};
@@ -285,11 +286,13 @@ if (process.env.NTS_GATE_STEP === "records" && recordsFreesDisk) {
   // While format waits for disk: what the runner holds for it, then disk enough.
   const { DiskCapacity } = await import(${JSON.stringify(pathToFileURL(join(source, "disk-capacity.ts")).href)});
   const { readRunLifecycle } = await import(${JSON.stringify(pathToFileURL(join(source, "run-lifecycle.ts")).href)});
-  const capacity = new DiskCapacity({ env: process.env });
-  for (let i = 0; !capacity.diskWaits().some(wait => wait.path.endsWith("/format")); i++) {
-    if (i > 600) throw new Error("format never waited for disk");
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
+  const capacity = new DiskCapacity({});
+  // Each wait is published whole into the capacity's own file: watch it.
+  await new Promise(resolve => {
+    const waiting = () => capacity.diskWaits().some(wait => wait.path.endsWith("/format"));
+    const watcher = watch(dirname(capacity.waitStateFile), () => { if (waiting()) { watcher.close(); resolve(); } });
+    if (waiting()) { watcher.close(); resolve(); }
+  });
   durableRecord(own + "/while-waiting.json", { waits: capacity.diskWaits(), formatStarted: existsSync(own + "/format-started.json"), lifecycle: readRunLifecycle(process.env.NTS_GATE_RUN_DIR) });
   const value = JSON.parse(readFileSync(observations, "utf8"));
   value.disk = { freeBytes: 2 ** 52, freeInodes: 2 ** 30 };
@@ -299,11 +302,11 @@ if (process.env.NTS_GATE_STEP === "format" && advance) {
   let diskWait = null;
   if (advance.disk) {
     const { TemporaryAdmission } = await import(${JSON.stringify(pathToFileURL(join(source, "admission.ts")).href)});
-    const stop = new AbortController(), admission = new TemporaryAdmission({ path: own + "/capture", context: { kind: "standalone" }, reservedBytes: 2 ** 50, env: process.env });
+    const stop = new AbortController(), admission = new TemporaryAdmission({ path: own + "/capture", context: { kind: "standalone" }, reservedBytes: 2 ** 50 });
     const waited = admission.acquire({ what: "the fixture's capture", signal: stop.signal, report: line => console.log(line) })
       .then(() => { throw new Error("the fixture's capture was admitted"); }, error => { if (error?.name !== "AbortError") throw error; });
     diskWait = () => { stop.abort(); return waited; };
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1500)); // three of the runner's bound ticks
   }
   // The step's slice, the one its runner gave it, as the user manager names its cgroup.
   const shown = spawnSync("systemctl", ["--user", "show", process.env.NTS_TOOLING_SLICE, "-p", "ControlGroup", "--value"], { encoding: "utf8" }), group = shown.stdout.trim();
@@ -480,7 +483,7 @@ test("a step's temporary claims what it was measured to hold, with the margin, a
   // not the table's unmeasured 1 GiB; this run's temporary holds 2 GiB,
   // which joins the peaks.
   const history = { version: 6, cpu_measure: STEP_CPU_MEASURE, steps: { format: { disk: { unit: "step", peaks: [3 * GiB] } } }, jobs: {} };
-  const ran = runFixture(t, "format", { format: 30 }, { rows: { format: { unmeasuredDisk: GiB } }, observations: { allocated: { kind: "fixed", defaultBytes: 2 * GiB } }, history, format: ["sleep", "3"] });
+  const ran = runFixture(t, "format", { format: 30 }, { rows: { format: { unmeasuredDisk: GiB } }, observations: { allocated: { kind: "fixed", defaultBytes: 2 * GiB } }, history, format: ["true"] });
   assert.equal(ran.result.status, 0, ran.result.stdout + ran.result.stderr);
   assert.equal(ran.format.verdict, "PASS", ran.format.reason);
   assert.equal(handed(ran.own)?.bytes, Math.ceil(1.25 * 3 * 1024) * 2 ** 20);

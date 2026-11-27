@@ -35,15 +35,15 @@ test('guarded durable publication cannot downgrade future bytes, including neste
  assert.equal(readFileSync(file,'utf8'),newer);
 });
 
-test('v5 history readers name a v6 read-only view and both publications leave its bytes intact',t=>{
+test('v6 history readers name a v7 read-only view and both publications leave its bytes intact',t=>{
  const root=testScratch(t,'history-future'),file=join(root,'steps.json'),warnings:string[]=[];
- const future='{ "version": 6, "steps": {"new-format":"opaque"}, "jobs": {}, "future": true }\n';writeFileSync(file,future);
+ const future='{ "version": 7, "steps": {"new-format":"opaque"}, "jobs": {}, "future": true }\n';writeFileSync(file,future);
  const history=readCostHistory(file,line=>warnings.push(line));
  assert.equal(history.steps.size,0);assert.equal(history.jobs.size,0);assert.ok(history.unsupportedVersion);
- assert.match(warnings.join('\n'),/unsupported future state version 6/);
+ assert.match(warnings.join('\n'),/unsupported future state version 7/);
  for(const observed of [{steps:[{name:'tests',verdict:'PASS',cpu:9,cpu_measure:STEP_CPU_MEASURE,memory:{unit:'step' as const,peak:1024}}]},
    {jobs:[{key:'landing-build',basis:'worker' as const,width:1,peak:2048}]}]){
-  assert.match(writeCostHistory(file,observed)??'',/future state version 6/);assert.equal(readFileSync(file,'utf8'),future);
+  assert.match(writeCostHistory(file,observed)??'',/future state version 7/);assert.equal(readFileSync(file,'utf8'),future);
  }
 });
 
@@ -52,11 +52,11 @@ test('supported v3 memory migrates, and a stale controller cannot erase a newer 
  writeFileSync(file,json({version:3,steps:{tests:{cpu:1,memory:{unit:'step',peaks:[peak]}}},jobs:{}}));
  const before=readCostHistory(file);assert.equal(unitReservation(before,{step:'tests'},'step',0).bytes,250*2**20);
  assert.equal(writeCostHistory(file,{jobs:[{key:'landing-build',basis:'worker' as const,width:1,peak:20*2**20}]}),undefined);
- const migrated=JSON.parse(readFileSync(file,'utf8'));assert.equal(migrated.version,5);assert.deepEqual(migrated.steps.tests.memory.peaks,[peak]);
+ const migrated=JSON.parse(readFileSync(file,'utf8'));assert.equal(migrated.version,6);assert.deepEqual(migrated.steps.tests.memory.peaks,[peak]);
  const current=readCostHistory(file);assert.equal(unitReservation(current,{step:'tests'},'step',0).bytes,250*2**20);
  // Runner publishes a new version after the old controller read its view.
- const future=json({...migrated,version:6,runner:'new'});writeFileSync(file,future);
- assert.match(writeCostHistory(file,{jobs:[{key:'landing-build',basis:'worker' as const,width:1,peak:30*2**20}]})??'',/future state version 6/);
+ const future=json({...migrated,version:7,runner:'new'});writeFileSync(file,future);
+ assert.match(writeCostHistory(file,{jobs:[{key:'landing-build',basis:'worker' as const,width:1,peak:30*2**20}]})??'',/future state version 7/);
  assert.equal(readFileSync(file,'utf8'),future);
 });
 

@@ -992,7 +992,7 @@ function claimDisk(step) {
     if (claim.lease) return true;
     const admitted = claim.admission.attempt({ what: `${step.name}'s temporary (${gib(claim.bytes)}, ${claim.basis})`, report: line => process.stdout.write(`  ${line}\n`) });
     if (admitted) { claim.lease = admitted.lease; return true; }
-  } catch (error) { return refuse(error); }
+  } catch (error) { if (isCommandExit(error)) throw error; return refuse(error); }
   diskLook ??= setTimeout(() => { diskLook = null; schedule(); }, DISK_LOOK_MS);
   return null;
 }

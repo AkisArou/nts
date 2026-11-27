@@ -43,7 +43,7 @@ runAsCommand(import.meta.url,async()=>{
   // The runner's claim, held for exactly this temporary: never one of the step's own.
   const handed=process.env.NTS_GATE_STEP_DISK;
   if(!handed)throw new ToolingInstrumentError('tooling-setup','rust-inputs runs with the disk claim its runner hands it (NTS_GATE_STEP_DISK)');
-  const claim=JSON.parse(handed) as {path:string;bytes:number;id:string},held=new DiskCapacity({env:process.env}).heldTemporary(claim.id);
+  const claim=JSON.parse(handed) as {path:string;bytes:number;id:string},held=new DiskCapacity({}).heldTemporary(claim.id);
   if(claim.path!==capture||!held||held.path!==capture||held.bytes!==claim.bytes)throw new ToolingInstrumentError('tooling-setup',`rust-inputs: its runner's disk claim ${claim.id} is not held for ${capture}`);
   console.log(`  capture: ${capture}, under its runner's claim of ${(claim.bytes/2**30).toFixed(1)} GiB`);
   registerCommandCloser('rust-inputs capture',{close:()=>{rmSync(capture,{recursive:true,force:true});}});
