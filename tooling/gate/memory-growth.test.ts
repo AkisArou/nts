@@ -144,6 +144,8 @@ test('yielding forbids a new step while keeping the started cohort eligible for 
   const state={preparing:false,stopping:false,summaryWritten:false,drainReturn:null,reservation:{drained:0},outranked:()=>true,outrankedNow:true,
     pending:['new'],running,BY_NAME:new Map([['new',row],['started',{name:'started',fe:false}]]),
     withhold:0,withholdBytes:0,memoryWanted:0,blockedBy:()=>null,preflight:()=>null,
+    // No step here has a temporary of its own (run.mjs's disk claims).
+    diskBlocked:()=>false,lookAgainForDisk:()=>{},diskClaims:new Map(),endDiskWait:()=>{},
     used:()=>({bytes:0,slots:0,fe:0,locks:new Set()}),admit:()=>({slots:1,rider:false}),
     start:(step:{name:string})=>{calls.push(step.name);},grant:()=>{},adjustMemory:()=>{},done:()=>{},lookAgain:()=>{},
     SLOTS:24,FRONTENDS:4,reserved:()=>GiB,tokenBytes:()=>GiB,wantMemory:()=>calls.push('memory'),
@@ -171,6 +173,7 @@ async function equalRankDrain(){
     admit:(_step:typeof row,_u:unknown):{slots:number;short?:number;bytes?:number;rider?:boolean}=>({slots:0}),
     reservedForStarts:()=>0,stepBytes:()=>2*GiB,tiny:()=>false,
     blockedBy:()=>null,preflight:()=>null,fixedReservation:()=>0,
+    diskBlocked:()=>false,lookAgainForDisk:()=>{},diskClaims:new Map(),endDiskWait:()=>{},
     start:(step:typeof row):void=>{starts.push(step.name);state.running.set(step.name,{draining:false,want:0});},
     grant:()=>{},adjustMemory:()=>{},done:()=>{},lookAgain:()=>{},
   };
