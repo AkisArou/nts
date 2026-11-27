@@ -1,6 +1,7 @@
 // Types for step-table.mjs, for the TypeScript that reads the gate's step
 // table; the fields are the ones its header comment defines.
 export type StepRow = {
+  memoryPhases?: readonly string[];
   name: string;
   slots: number;
   min?: number;

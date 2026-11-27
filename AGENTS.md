@@ -375,7 +375,7 @@ An oracle test's supplied canonical environment is already sealed with
   A key binds whole-job sizing without `--workers`, or worker sizing with it;
   keep that declaration consistent. A case-sized key (`hir-compare`) is
   declared in code and takes `--case` instead. Samples retain their whole peak and measured
-  width in `steps-v6.json`. On 2026-11-12 a whole-build sample was recorded as
+  width in `steps-v7.json`. On 2026-11-12 a whole-build sample was recorded as
   one worker and inflated the next build's reservation. Admission now refuses
   a changed basis by name instead of reinterpreting the same key.
   Pooled cases use the common case lease, keyed by step, backend and source

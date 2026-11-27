@@ -18,7 +18,7 @@ import { instrumentPolicy, publishToolingFailure, readStepInstrument } from "./s
 import { HostStateError } from "./host-state.ts";
 import { completedHostFault } from "./tooling-test-runner.ts";
 import { readRunLifecycle } from "./run-lifecycle.ts";
-import { COST_HISTORY_NAME, readCostHistory, usableWidth } from "./step-scheduling.ts";
+import { COST_HISTORY_NAME, COST_HISTORY_VERSION, readCostHistory, usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
@@ -235,17 +235,17 @@ type Advance = { clockS: number; usageS: number; fullS: number; then: "exit" | "
 /** How a fixture's runner runs: `format`'s command (else it sleeps until the test ends), or the observations it advances; a rank its run root takes beside every rank's work under nts.slice (else nested where the test runs); and live CPU counters. */
 type FixtureRun = { owned?: Record<string, string>; format?: string[]; advance?: Advance; rank?: Priority; live?: boolean;
   /** Step table fields beside the bounds; observations beside the counters; a scheduling history the run starts from; `records` waiting for `format`'s disk wait. */
-  rows?: Record<string, Record<string, unknown>>; observations?: { allocated?: { kind: "fixed"; defaultBytes: number }; disk?: { freeBytes: number; freeInodes: number } };
+  rows?: Record<string, Record<string, unknown>>; observations?: NonNullable<Parameters<typeof gateFixtureMemory>[2]>;
   history?: unknown; recordsFreesDisk?: boolean;
   /** While format waits for disk, records (elastic) takes this many pairs of tokens at once and returns them, before it frees the disk. */
-  recordsTokenPairs?: number };
+  recordsTokenPairs?: number; phaseFixture?: "empty" | "measured" | "runaway" };
 
 /**
  * A real runner in a scratch repository running `steps`, in a unit of its own
  * stopped by name: `format` runs its command or never finishes, `records`
  * finishes at once.
  */
-function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, advance, rank, live = false, rows = {}, observations = {}, history, recordsFreesDisk = false, recordsTokenPairs = 0 }: FixtureRun = {}) {
+function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, advance, rank, live = false, rows = {}, observations = {}, history, recordsFreesDisk = false, recordsTokenPairs = 0, phaseFixture }: FixtureRun = {}) {
   // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
   const own = newTestScratch("step-bound");
   t.after(() => { writeFileSync(join(own, "release"), "the test is over"); removable(own); rmSync(own, { recursive: true, force: true }); });
@@ -275,12 +275,46 @@ export { stepTableProblem };
   const memory = gateFixtureMemory(join(own, "memory"), root, { ...counters, ...observations });
   if (history !== undefined) { mkdirSync(memory.NTS_GATE_COSTS_DIR, { recursive: true }); writeFileSync(join(memory.NTS_GATE_COSTS_DIR, COST_HISTORY_NAME), JSON.stringify(history)); }
   writeFileSync(join(gate, "payload.mjs"), `
-import { existsSync, readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { durableRecord } from ${JSON.stringify(pathToFileURL(join(source, "durable-record.ts")).href)};
 const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)}, recordsFreesDisk = ${JSON.stringify(recordsFreesDisk)}, recordsTokenPairs = ${JSON.stringify(recordsTokenPairs)};
 const observations = ${JSON.stringify(memory.NTS_HOST_OBSERVATIONS)};
+const phaseFixture = ${JSON.stringify(phaseFixture ?? null)};
+const step = process.env.NTS_GATE_STEP;
+if (phaseFixture) {
+  const waitFor = (directory, condition) => new Promise(resolve => {
+    const ready = () => { if (condition()) { watcher.close(); resolve(); } };
+    const watcher = watch(directory, ready);
+    ready();
+  });
+  if (step === "format") {
+    const {stepPhaseClient} = await import("./step-phase.ts");
+    await stepPhaseClient()("tail");
+    if (phaseFixture === "runaway") {
+      await waitFor(own, () => existsSync(own + "/neighbor-ready.json"));
+      const meminfo = ${JSON.stringify(memory.NTS_MEMINFO)};
+      const low = readFileSync(meminfo, "utf8").replace(/^MemAvailable:.*$/m, "MemAvailable: 2097152 kB");
+      writeFileSync(meminfo + ".next", low);
+      renameSync(meminfo + ".next", meminfo);
+      const {readLedger} = await import("./memory-ledger.ts");
+      const ledger = ${JSON.stringify(memory.NTS_MEMORY_LEDGER)};
+      const live = Buffer.alloc(200 * 2 ** 20, 1);
+      await waitFor(ledger + "/waiting", () => readLedger(ledger).waiting.some(row => row.grows !== null));
+      durableRecord(own + "/growth-denied.json", {live:live[0]});
+      // The child touches more than the acknowledged MemoryMax. Ignore its
+      // exit code so that only the runner's own OOM evidence holds this step.
+      spawnSync(process.execPath, ["-e", "Buffer.alloc(1200 * 2 ** 20, 1)"], {stdio:"inherit"});
+    }
+  } else if (phaseFixture === "runaway") {
+    durableRecord(own + "/neighbor-ready.json", {ready:true});
+    const run = process.env.NTS_GATE_RUN_DIR;
+    await waitFor(run, () => existsSync(run + "/format.time"));
+    durableRecord(own + "/neighbor-survived.json", {alive:true});
+  }
+  console.log(step + " phase fixture complete");
+} else {
 const release = () => new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
 // A step handed its temporary's claim says what it was handed, and that it ran.
 if (process.env.NTS_GATE_STEP === "format") durableRecord(own + "/format-started.json", { disk: process.env.NTS_GATE_STEP_DISK ? JSON.parse(process.env.NTS_GATE_STEP_DISK) : null });
@@ -346,6 +380,7 @@ if (process.env.NTS_GATE_STEP === "format" && advance) {
   console.log("format waits for a release that comes only after the test");
   await release();
 } else console.log("records finished");
+}
 `);
   writeGateFixtureScript(join(gate, "all.sh"), `#!/bin/sh
 if [ "$1" = --list ]; then
@@ -373,6 +408,7 @@ fi
     process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
   type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string; wall: number; bound_cpu_s: number;
     disk?: { bytes: number; basis: string; peak_bytes: number; attempts: number; waited_s: number };
+    memory: { phases?: {name:string;phase_sized:boolean;reserved_bytes:number;grant_bytes:number;killed:number;over:boolean}[] };
     bound_clock: { execution_s: number; admission_wait_s: Partial<Record<string, number>>; cpu_s: number; cpu_lost_s: number; stalled_s: number };
     instrument?: { kind: string; verdict: string; reason: string }; scope?: { populated: number } };
   assert.ok(existsSync(join(run, "summary.json")), `the runner wrote no summary (exit ${result.status}):\n${result.stdout}${result.stderr}`);
@@ -380,6 +416,33 @@ fi
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
   return { result, summary, run, own, costs: memory.NTS_GATE_COSTS_DIR, format: step("format"), records: step("records") };
 }
+
+for (const mode of ["empty", "measured", "runaway"] as const) test(`memory phase runner control with ${mode} history or demand`, t => {
+  const MiB = 2 ** 20, GiB = 1024 * MiB, widePeak = Math.floor(1.6 * GiB);
+  const tailPeak = 64 * MiB;
+  const history = {version:COST_HISTORY_VERSION, cpu_measure:STEP_CPU_MEASURE, jobs:{}, steps:{
+    format:{memory:{unit:"step",peaks:[widePeak]}, ...(mode === "empty" ? {} : {phases:{tail:[tailPeak]}})},
+    records:{memory:{unit:"step",peaks:[Math.floor(0.8 * GiB)]}},
+  }};
+  const f = runFixture(t, mode === "runaway" ? "format records" : "format", {format:60,records:60},
+    {rows:{format:{memoryPhases:["wide","tail"]}}, history, phaseFixture:mode, observations:{resident:{kind:"live"}}});
+  const phases = f.format.memory.phases;
+  assert.deepEqual(phases?.map(row => [row.name,row.phase_sized,row.reserved_bytes]),
+    [["wide",false,2 * GiB], ["tail",mode !== "empty",mode === "empty" ? 2 * GiB : 128 * MiB]]);
+  if (mode !== "runaway") {
+    assert.equal(f.format.verdict, "PASS", f.result.stderr);
+    assert.equal(phases?.at(-1)?.killed, 0);
+    return;
+  }
+  assert.equal(f.format.verdict, "INSTRUMENT", f.result.stdout + f.result.stderr);
+  assert.equal(f.format.instrument?.kind, "memory-pressure");
+  assert.match(f.format.reason, /phase tail at its runaway bound/);
+  assert.equal(phases?.at(-1)?.over, true);
+  assert.equal(phases?.at(-1)?.killed, 1);
+  assert.ok(existsSync(join(f.own,"growth-denied.json")), "the next growth remained queued");
+  assert.equal(f.records.verdict, "PASS");
+  assert.ok(existsSync(join(f.own,"neighbor-survived.json")));
+});
 
 test("a step past its bound is stopped through its scope and held, its log kept, and the run finishes", t => {
   const { result, summary, format, records } = runFixture(t, "format records", { format: 3 }, { live: true });

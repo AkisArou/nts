@@ -19,7 +19,7 @@ import {randomUUID} from "node:crypto";
 import {newToolingSlice, stopToolingSlice, toolingSlice} from "./tooling-slice.ts";
 import {once} from "node:events";
 import {COST_HISTORY_NAME,COST_HISTORY_VERSION,diskClaim,historyFile as schedulingHistoryFile,RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
-  snapshotCostHistory,unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+  snapshotCostHistory,unitReservation,phaseReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {type OwnMemory} from "./test-memory.ts";
 import {OOM_SCORE,readLedger} from "./memory-ledger.ts";
@@ -97,10 +97,10 @@ test("a step's temporary keeps its last few disk peaks whatever its verdict, and
   const history = readCostHistory(file);
   assert.deepEqual(history.steps.get("rust-inputs"), { disk: { unit: "step", peaks: [5 * GiB, 6 * GiB, 4 * GiB] } });
   assert.deepEqual(diskClaim(history, step), { bytes: Math.ceil(1.25 * 6 * 1024) * MiB, basis: "measured" }, "the largest, with the margin, not the last");
-  assert.equal(JSON.parse(readFileSync(file, "utf8")).version, 6);
+  assert.equal(JSON.parse(readFileSync(file, "utf8")).version, COST_HISTORY_VERSION);
 });
 
-test("the v6 history imports v5's rows and jobs while it is absent, and never after its first publication", t => {
+test("current history imports v5's rows and jobs while it is absent, and never after its first publication", t => {
   const dir = join(testScratch(t, "step-scheduling-v5"), "costs"), MiB = 2 ** 20;
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "steps-v5.json"), JSON.stringify({ version: 5, cpu_measure: STEP_CPU_MEASURE, steps: { tests: { cpu: 10, memory: { unit: "step", peaks: [MiB] } } },
@@ -115,6 +115,31 @@ test("the v6 history imports v5's rows and jobs while it is absent, and never af
   writeFileSync(join(dir, "steps-v5.json"), JSON.stringify({ version: 5, cpu_measure: STEP_CPU_MEASURE, steps: { tests: { disk: { unit: "step", peaks: [MiB] } } }, jobs: {} }));
   rmSync(file);
   assert.equal(readCostHistory(file, () => {}).steps.size, 0, "a v5 row never had disk peaks: one that does is no history");
+});
+
+test("phase sizing keeps the whole-step fallback and does not change its predecessor", t => {
+  const dir = join(testScratch(t, "step-phase-history"), "costs"), MiB = 2 ** 20;
+  const oldFile = join(dir, "steps-v6.json"), file = join(dir, COST_HISTORY_NAME);
+  mkdirSync(dir);
+  const step = "rust-inputs";
+  const old = JSON.stringify({version:6, cpu_measure:STEP_CPU_MEASURE, jobs:{}, steps:{
+    [step]: {memory:{unit:"step",peaks:[800 * MiB]},disk:{unit:"step",peaks:[MiB]}},
+  }});
+  writeFileSync(oldFile, old);
+  const whole = (name: string) => unitReservation(readCostHistory(name), {step}, "step", GiBForPhase);
+  const GiBForPhase = 1024 * MiB;
+  const forecast = (phase: string) => phaseReservation(readCostHistory(file), step, phase, whole(file));
+  assert.deepEqual(forecast("coverage"), {bytes:1000 * MiB,basis:"measured"});
+  for (const peak of [480, 500, 510, 470, 490, 520]) {
+    assert.equal(writeCostHistory(file, {steps:[{name:step,phases:[{name:"traced-tests",peak:peak * MiB}]}]}), undefined);
+  }
+  assert.equal(forecast("traced-tests").bytes, 650 * MiB);
+  assert.equal(forecast("coverage").bytes, 1000 * MiB, "an absent phase still uses the whole-step forecast");
+  assert.equal(writeCostHistory(file, {steps:[{name:step,phases:[{name:"coverage",peak:200 * MiB}]}]}), undefined);
+  assert.equal(forecast("coverage").bytes, 250 * MiB);
+  assert.deepEqual(readCostHistory(file).steps.get(step)?.phases?.["traced-tests"], [500,510,470,490,520].map(peak=>peak * MiB));
+  assert.equal(readFileSync(oldFile, "utf8"), old);
+  assert.equal(whole(oldFile).bytes, 1000 * MiB, "a reader of the previous namespace still sizes the whole step");
 });
 
 test("an unmeasured step reserves the largest of its kind, and with nothing measured, its share of the machine", () => {

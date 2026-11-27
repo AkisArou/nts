@@ -3,8 +3,9 @@
 //
 //   node --test tooling/gate/step-table.test.ts
 import assert from "node:assert/strict";
-import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
-import {join, dirname} from "node:path";
+import {existsSync, mkdirSync, renameSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
+import {join} from "node:path";
+import {randomUUID} from "node:crypto";
 
 import {test} from "node:test";
 import {fileURLToPath} from "node:url";
@@ -16,6 +17,7 @@ import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {ownMemory} from "./test-memory.ts";
+import {toolingSliceArgs} from "./tooling-slice.ts";
 
 test('the shell and runner catalogues contain exactly the same complete step set',()=>{
   const listed=spawnTest('sh',[fileURLToPath(new URL('./all.sh',import.meta.url)),'--list'],{encoding:'utf8'});
@@ -41,29 +43,41 @@ test("a step's unmeasured disk is a positive number of bytes, on a fixed step", 
   assert.equal(stepTableProblem([{ name: "a", slots: 1, doc: "", unmeasuredDisk: 2 ** 30, elastic: true }]), "a declares a disk, which only a fixed step's runner can claim before its start");
 });
 
+test("memory phase names are distinct and belong to a fixed step", () => {
+  const fixed = {name:"a",slots:1,doc:""};
+  assert.equal(stepTableProblem([{...fixed,memoryPhases:["wide","tail"]}]), null);
+  assert.match(stepTableProblem([{...fixed,memoryPhases:["wide","wide"]}]) ?? "", /distinct phase names/);
+  assert.match(stepTableProblem([{...fixed,elastic:true,memoryPhases:["wide","tail"]}]) ?? "", /require a fixed step/);
+});
+
 test("the runner refuses a table whose steps wait for one another, before any step starts", t => {
   const own = newTestScratch("step-table-run");t.after(() => {removable(own);rmSync(own, {recursive:true,force:true});});
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), run = join(own, "home/.cache/gate-run"), started = join(own, "started");
   const source = fileURLToPath(new URL("./", import.meta.url));
   mkdirSync(gate, { recursive: true });
-  for (const file of copyModuleClosure(["tooling/gate/run.mjs"],root)) {
-    const target = join(root, file);
-    mkdirSync(dirname(target), {recursive: true});
-    const original = join(source, "../..", file);
-    if (file === "tooling/gate/step-table.mjs") {
-      // clippy needs tests, and tests waits for clippy as well as the build.
-      const text = readFileSync(original, "utf8").replace('{ name: "clippy", slots: 6,', '{ name: "clippy", needs: ["tests"], slots: 6,').replace('after: ["build"], doc: "cargo test --workspace"', 'after: ["build", "clippy"], doc: "cargo test --workspace"');
-      assert.notEqual(text, readFileSync(original, "utf8"));
-      writeFileSync(target, text);
-    }
-  }
+  copyModuleClosure(["tooling/gate/run.mjs"],root);
+  const table = join(gate, "step-table.mjs");
+  renameSync(table, join(gate, "step-table-base.mjs"));
+  // Keep every production field while adding the two edges of the cycle.
+  writeFileSync(table, `import {STEPS as rows, stepTableProblem} from "./step-table-base.mjs";
+export {stepTableProblem};
+export const STEPS = rows.map(row => {
+  if (row.name === "clippy") return {...row, needs:[...(row.needs ?? []), "tests"]};
+  if (row.name === "tests") return {...row, after:[...(row.after ?? []), "clippy"]};
+  return row;
+});
+`);
   symlinkSync(join(source, "times.tsv"), join(gate, "times.tsv"));
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  : > ${JSON.stringify(started)}\nfi\n`);
   // An ample memory reading and a ledger of its own, as every test that starts a real runner gives it.
   const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: { NTS_GATE_STEPS: "clippy tests", CARGO_TARGET_DIR: join(own, "target"), ...ownMemory(join(own, "memory")) } });
-  const refused = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
+  const unit = `nts-test-step-table-${randomUUID()}`;
+  const refused = spawnTest("systemd-run", ["--user", ...toolingSliceArgs(process.env, "agent"), `--unit=${unit}`,
+    "--collect", "--wait", "--pipe", "--quiet", "-p", "LimitCORE=0", "-p", "RuntimeMaxSec=60",
+    `--working-directory=${root}`, ...Object.entries(planned.env).filter(([,value]) => value !== undefined).map(([name,value]) => `--setenv=${name}=${value}`),
+    process.execPath, join(gate, "run.mjs")], {encoding:"utf8"});
   assert.equal(refused.status, 2, refused.stdout + refused.stderr);
   assert.match(refused.stderr, /run\.mjs: steps wait for one another: (clippy -> tests -> clippy|tests -> clippy -> tests)/);
   assert.equal(existsSync(started), false, "no step started");

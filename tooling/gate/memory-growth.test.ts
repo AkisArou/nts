@@ -35,7 +35,7 @@ function controlledGrowth({grantAtCancellation=false,allocated:initial=10*GiB,de
   const pending:{bytes:number;draining:boolean;answer:ReturnType<typeof Promise.withResolvers<void>>;done:boolean}[]=[];
   void closed.promise.catch(()=>{});
   const state={
-    stopping:false,summaryWritten:false,yielding:false,outrankedNow:false,drainReturn:null as Promise<void>|null,withholdBytes:0,memoryWanted:21*GiB,
+    stopping:false,summaryWritten:false,yielding:false,outrankedNow:false,drainReturn:null as Promise<void>|null,withholdBytes:0,memoryWanted:21*GiB,phaseReturnBytes:0,
     capacity:32*GiB,BLOCK:GiB,running:new Map<string,{draining:boolean;want:number}>(),growth:null as null|{bytes:number;draining:boolean;controller:AbortController;withdrawn:boolean},
     memoryRecord:{shrinks:0,growths:0,withdrawn:0,waited_s:0},
     used:()=>({bytes:0}),outranked:():boolean=>state.yielding,reserved:()=>allocated,tokenShort:()=>0,
@@ -276,6 +276,47 @@ test('a rejected growth retains the observation stack before the runner stops',a
   const stopped=assert.rejects(run.closed,/memory: supplied memory read EIO/);
   run.adjust();run.rejectFirst(error);await stopped;
   assert.equal(run.state.stopping,true);assert.deepEqual(run.reports,[error.stack+'\n']);
+});
+
+test('phase growth is acknowledged only after admission and verified kernel bounds', async () => {
+  const opening = Promise.withResolvers<void>(), verify = Promise.withResolvers<void>();
+  const cap = {max:2 * GiB};
+  const scope = {
+    limits:cap, get workerLimit(){return cap.max;},
+    caseLimit:async (_bytes:number) => {},
+    limit:async ({max}:{max:number}) => { opening.resolve(); await verify.promise; cap.max = max; },
+    memoryEvents:() => ({own_oom:0, oom_kill:0}),
+  };
+  const ack = Promise.withResolvers<void>();
+  const next = {name:'wide',bytes:3 * GiB,phaseSized:true,basis:'measured',resolve:ack.resolve,reject:ack.reject};
+  const phases:{current:{name:string;bytes:number};finished:unknown[];next?:typeof next;applying?:Promise<void>} =
+    {current:{name:'small',bytes:GiB},finished:[],next};
+  const running = {phase:phases,scope,charge:0,extra:0,want:0,grown:0};
+  let reserved = 2 * GiB;
+  const grant = () => phases.current.bytes + running.extra;
+  const context = createContext({
+    running:new Map([['step',running]]), sampleStep:()=>{}, grantOf:grant, runawayBound:(bytes:number)=>2 * bytes,
+    nearGrant:()=>0, used:()=>({bytes:grant()}), reserved:()=>reserved, stopping:false,
+    phaseRecord:()=>({ended_at:'verified'}), phaseReturnBytes:0, process:{stderr:{write:()=>{}}},
+    gib:String, caseCosts:null, stop:assert.fail, isCommandExit:()=>false, setImmediate:()=>{}, schedule:()=>{},
+  });
+  const advance = runInContext('('+policy('advancePhases')+')', context) as () => void;
+  advance();
+  assert.equal(running.want, 2 * GiB);
+  assert.equal(grant(), GiB);
+  assert.equal(phases.applying, undefined);
+  reserved = 3 * GiB;
+  advance();
+  await opening.promise;
+  assert.equal(phases.current.name,'small');
+  assert.equal(grant(),3 * GiB);
+  assert.equal(scope.workerLimit,2 * GiB);
+  verify.resolve();
+  await ack.promise;
+  assert.equal(phases.current.name,'wide');
+  assert.equal(grant(),3 * GiB);
+  assert.equal(scope.workerLimit,6 * GiB);
+  await phases.applying;
 });
 
 test('the runner ends a departed scope sample while retaining its measured peak',()=>{

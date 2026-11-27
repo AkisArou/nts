@@ -5,7 +5,7 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // committed baseline and the machine's shares; it never changes which checks
 // run or their verdicts.
 //
-// **One history of what each step costs, per target**: `steps-v6.json` in
+// **One history of what each step costs, per target**: `steps-v7.json` in
 // <target>/gate-costs (NTS_GATE_COSTS_DIR, where a test's code names its own).
 // For each step, the CPU seconds its checks took when they last passed, and
 // the memory its last few runs held at most, and for a step with a temporary
@@ -54,7 +54,7 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // it, claims more next time.
 //
 // **A case can be its own unit.** An elastic step whose cases differ by
-// orders of magnitude keeps a history of its own beside steps-v6.json,
+// orders of magnitude keeps a history of its own beside steps-v7.json,
 // `cases-v2/<step>.json`: each case's last few peaks, by step, backend and
 // path. The runner sizes each lease from those peaks, or live use and margin
 // when it has never been measured. The old cases/ namespace is imported only
@@ -88,17 +88,18 @@ export type StepSuccessors = Readonly<Record<string, { readonly steps: readonly 
 export type MemoryUnit = "step" | "token";
 /** A key's last few measured peaks, oldest first, in bytes per unit. */
 export type Peaks = { readonly unit: MemoryUnit; readonly peaks: readonly number[] };
-export type StepCosts = { readonly cpu?: number; readonly memory?: Peaks; readonly disk?: Peaks };
+export type StepCosts = { readonly cpu?: number; readonly memory?: Peaks; readonly disk?: Peaks;
+  readonly phases?: Readonly<Record<string, readonly number[]>> };
 export type JobBasis = "job" | "worker";
 /** Whole-job bytes, with the actual width that produced the sample. */
 export type JobSample = {readonly peak:number;readonly width:number};
 export type JobPeaks = {readonly basis:JobBasis;readonly observations:readonly JobSample[]};
 export type CostHistory = { readonly steps: ReadonlyMap<string, StepCosts>; readonly jobs: ReadonlyMap<string, JobPeaks>;
   readonly unsupportedVersion?:FutureStateVersionError;readonly legacyJobs?:readonly string[];readonly legacyFile?:string };
-export const COST_HISTORY_VERSION=6;
-export const COST_HISTORY_NAME="steps-v6.json";
+export const COST_HISTORY_VERSION=7;
+export const COST_HISTORY_NAME="steps-v7.json";
 /** The namespaces a new history imports while it is absent, newest first. */
-const PREDECESSORS=["steps-v5.json","steps.json"];
+const PREDECESSORS=["steps-v6.json","steps-v5.json","steps.json"];
 const predecessor=(file:string)=>{
   if(basename(file)!==COST_HISTORY_NAME||existsSync(file))return file;
   return PREDECESSORS.map(name=>join(dirname(file),name)).find(existsSync)??file;
@@ -119,8 +120,18 @@ function parsePeaks(value: unknown, units: readonly MemoryUnit[]): Peaks | null 
   return { unit: value.unit as MemoryUnit, peaks };
 }
 
+function parsePhases(value: unknown): StepCosts["phases"] {
+  if (!record(value)) return undefined;
+  const phases = new Map<string, readonly number[]>();
+  for (const [name, peaks] of Object.entries(value)) {
+    if (!KEY.test(name) || !Array.isArray(peaks) || !peaks.length || peaks.length > KEPT_PEAKS || !peaks.every(bytes)) return undefined;
+    phases.set(name, peaks);
+  }
+  return phases.size ? Object.fromEntries(phases) : undefined;
+}
+
 /** A supported view, with old step observations retained. The versioned
- * namespace imports its predecessor only before the first v5 publication;
+ * namespace imports its predecessor only before its first publication;
  * older historical candidates continue writing their own file. */
 export function readCostHistory(file: string,report:(line:string)=>void=console.error): CostHistory {
   const input=predecessor(file);
@@ -130,19 +141,23 @@ export function readCostHistory(file: string,report:(line:string)=>void=console.
   if(unsupportedVersion){report(unsupportedVersion.message);return {...empty(),unsupportedVersion};}
   if (!record(value)) return empty();
   if (value.version === 2) return empty(); // Legacy wait4 CPU cannot seed cgroup CPU history.
-  if ((value.version!==3&&value.version!==4&&value.version!==5&&value.version!==6) || !keys(value, ["version", "cpu_measure", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
+  if ((value.version!==3&&value.version!==4&&value.version!==5&&value.version!==6&&value.version!==7) || !keys(value, ["version", "cpu_measure", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
   const steps = new Map<string, StepCosts>(), jobs = new Map<string, JobPeaks>();
   for (const [name, row] of Object.entries(value.steps)) {
-    if (!KEY.test(name) || !record(row) || !keys(row, value.version===6?["cpu", "memory", "disk"]:["cpu", "memory"])) return empty();
+    const fields = value.version===7 ? ["cpu", "memory", "disk", "phases"] :
+      value.version===6 ? ["cpu", "memory", "disk"] : ["cpu", "memory"];
+    if (!KEY.test(name) || !record(row) || !keys(row, fields)) return empty();
     if (row.cpu !== undefined && !measured(row.cpu)) return empty();
     const memory = row.memory === undefined ? undefined : parsePeaks(row.memory, ["step", "token"]);
     const disk = row.disk === undefined ? undefined : parsePeaks(row.disk, ["step"]);
-    if (memory === null || disk === null || (row.cpu === undefined && memory === undefined && disk === undefined)) return empty();
+    const phases = parsePhases(row.phases);
+    if (memory === null || disk === null || (row.phases !== undefined && !phases) ||
+      (row.cpu === undefined && memory === undefined && disk === undefined && !phases)) return empty();
     const cpu=value.version!==3&&value.cpu_measure===STEP_CPU_MEASURE?row.cpu:undefined;
-    if(cpu!==undefined||memory||disk)steps.set(name,{...(cpu!==undefined?{cpu:cpu as number}:{}),...(memory?{memory}:{}),...(disk?{disk}:{})});
+    if(cpu!==undefined||memory||disk||phases)steps.set(name,{...(cpu!==undefined?{cpu:cpu as number}:{}),...(memory?{memory}:{}),...(disk?{disk}:{}),...(phases?{phases}:{})});
   }
   // v6 added step disk peaks to v5's rows; their jobs share one meaning.
-  if(value.version!==5&&value.version!==COST_HISTORY_VERSION){
+  if(value.version!==5&&value.version!==6&&value.version!==COST_HISTORY_VERSION){
     const legacyJobs=Object.keys(value.jobs).sort();
     if(legacyJobs.length)report(`memory history: ignoring ${legacyJobs.length} ambiguous legacy job key(s) in ${input}; sizing basis and measured width are absent: ${legacyJobs.join(", ")}`);
     return {steps,jobs,legacyJobs,legacyFile:input};
@@ -369,6 +384,14 @@ export function unitReservation(history: CostHistory, of: { step: string }, unit
   return { bytes: share, basis: "share" };
 }
 
+/** A named phase uses only its own peaks. Until one is measured, keep the
+ * fixed step's entire forecast, including when only some phases have rows. */
+export function phaseReservation(history: CostHistory, step: string, phase: string | undefined, whole: MemorySizing): MemorySizing {
+  const phases = history.steps.get(step)?.phases;
+  const peaks = phase && phases && Object.hasOwn(phases, phase) ? phases[phase] : undefined;
+  return peaks ? { bytes: peakReservation(peaks), basis: "measured" } : whole;
+}
+
 // ---------------------------------------------------------------------------
 // The file.
 // ---------------------------------------------------------------------------
@@ -405,6 +428,8 @@ export type StepObservation = {
   name: string; verdict?: string; cpu?: number;cpu_measure?:string;
   /** The most it held, per unit: present only for a step that ran to its own end. */
   memory?: { unit: "step" | "token"; peak: number };
+  /** Sampled ledger charge by ordered phase, independent of the whole-step peak. */
+  phases?: readonly { name: string; peak: number }[];
   /** The most its own temporary held on disk, in allocated bytes, whatever its verdict. */
   disk?: { peak: number };
 };
@@ -430,7 +455,7 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
     if (unlock === null) return `${file} stayed locked for ${LOCK_WAIT_SECONDS} s`;
     const current = readCostHistory(file,()=>{});
     if(current.unsupportedVersion)return current.unsupportedVersion.message;
-    const steps = new Map<string, { cpu?: number; memory?: Peaks; disk?: Peaks }>();
+    const steps = new Map<string, StepCosts>();
     for (const [name, cpu] of initialCpu) if (KEY.test(name) && measured(cpu)) steps.set(name, { cpu });
     for (const [name, row] of current.steps) steps.set(name, { ...steps.get(name), ...row });
     const jobs = new Map(current.jobs);
@@ -440,7 +465,13 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
       const cpu = row.verdict === "PASS" && measured(currentStepCpu(row)) ? row.cpu : was.cpu;
       const memory = row.memory && bytes(row.memory.peak) ? appended(was.memory, row.memory.unit, row.memory.peak) : was.memory;
       const disk = row.disk && bytes(row.disk.peak) ? appended(was.disk, "step", row.disk.peak) : was.disk;
-      if (cpu !== undefined || memory !== undefined || disk !== undefined) steps.set(row.name, { ...(cpu !== undefined ? { cpu } : {}), ...(memory ? { memory } : {}), ...(disk ? { disk } : {}) });
+      const phases = new Map(Object.entries(was.phases ?? {}));
+      for (const phase of row.phases ?? []) {
+        if (!KEY.test(phase.name) || !bytes(phase.peak)) continue;
+        phases.set(phase.name, [...(phases.get(phase.name) ?? []), phase.peak].slice(-KEPT_PEAKS));
+      }
+      if (cpu !== undefined || memory !== undefined || disk !== undefined || phases.size) steps.set(row.name, { ...(cpu !== undefined ? { cpu } : {}), ...(memory ? { memory } : {}), ...(disk ? { disk } : {}),
+        ...(phases.size ? {phases:Object.fromEntries(phases)} : {}) });
     }
     for (const row of observed.jobs ?? []) {
       if(!KEY.test(row.key)||!bytes(row.peak)||!bytes(row.width)||(row.basis!=="job"&&row.basis!=="worker")||(row.basis==="job"&&row.width!==1))throw new Error("invalid memory observation for job "+row.key);

@@ -32,6 +32,8 @@
 //          measured; once measured, it claims 1.25 times the largest of its
 //          temporary's last few peaks (step-scheduling.ts's diskClaim). Only
 //          a fixed step may declare one (stepTableProblem)
+//   memoryPhases  ordered phases of a fixed step. After joining the previous
+//          phase's work, the step waits for the runner to admit the next phase.
 //   doc    what it proves, for the summary's reader
 //
 // No row says how much memory its step needs: what the run reserves for a
@@ -39,6 +41,7 @@
 // history (step-scheduling.ts), per token for an elastic step.
 // ---------------------------------------------------------------------------
 import { statedBoundProblem } from "./step-bound.ts";
+import { KEY } from "./step-scheduling.ts";
 
 export const STEPS = [
   // Its history is the last build's, which a warm cache makes seconds; a cold
@@ -119,7 +122,7 @@ export const STEPS = [
   // The same tests under the file observer: wide, so its bound is its own.
   // Its capture's first claim, before any run of it is measured: it held
   // 4.8 GiB at 1e421fac88 with its validation reports beside it (#761 record).
-  { name: "rust-inputs", slots: 8, min: 4, lock: "cargo", after: ["build"], bound: 5400, unmeasuredDisk: 12 * 2 ** 30, doc: "a change to every tracked file a Rust test opens owes the tests",
+  { name: "rust-inputs", slots: 8, min: 4, lock: "cargo", after: ["build"], bound: 5400, memoryPhases: ["traced-tests", "coverage"], unmeasuredDisk: 12 * 2 ** 30, doc: "a change to every tracked file a Rust test opens owes the tests",
     capabilities: ["jvm"],
   },
   { name: "corpus", slots: 8, min: 4, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0",
@@ -190,7 +193,12 @@ export const STEPS = [
 export function stepTableProblem(steps = STEPS) {
   for (const s of steps) { const problem = statedBoundProblem(s); if (problem) return problem; }
   for (const row of steps) {
-    const s = /** @type {{ name: string, unmeasuredDisk?: number, elastic?: boolean }} */ (row);
+    const s = /** @type {{ name: string, unmeasuredDisk?: number, elastic?: boolean, memoryPhases?: string[] }} */ (row);
+    const phases = s.memoryPhases;
+    if (phases !== undefined && (s.elastic || !Array.isArray(phases) || phases.length < 2 ||
+        new Set(phases).size !== phases.length || !phases.every(phase => typeof phase === "string" && KEY.test(phase)))) {
+      return `${s.name}: memory phases require a fixed step and at least two distinct phase names`;
+    }
     if (s.unmeasuredDisk === undefined) continue;
     if (!Number.isSafeInteger(s.unmeasuredDisk) || s.unmeasuredDisk <= 0) return `${s.name} declares an unmeasured disk of ${String(s.unmeasuredDisk)}, which is not a positive number of bytes`;
     if (s.elastic) return `${s.name} declares a disk, which only a fixed step's runner can claim before its start`;

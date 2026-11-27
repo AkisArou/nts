@@ -1858,8 +1858,8 @@ the tooling strict checker owns the source's type checking.
   a width of one, declares worker sizing; omission declares a whole job.
   A mismatch refuses by name, and publication rechecks the basis under the
   same lock. Samples retain the whole peak and measured width; worker
-  forecasts normalize each sample by that width. `steps-v6.json` imports its
-  predecessor (`steps-v5.json`, whose rows and jobs it keeps, else
+  forecasts normalize each sample by that width. `steps-v7.json` imports its
+  newest available predecessor (`steps-v6.json`, `steps-v5.json`, or
   `steps.json`) only while absent. Step rows survive; legacy job observations
   without a recoverable basis and width are rejected with a named count and
   measured again through live accounting. Historical writers retain their
@@ -3267,6 +3267,16 @@ death; an absent timestamp remains explicit after forced termination.
   check's ordinary work first, then agents', then a culprit search's, and a
   landing's last
   ([log](records/notebooks/decisions-log.md#memory-limits-guard-against-runaways-only-11-10)).
+- **Fixed steps can declare ordered memory phases.** Each phase reserves from
+  its own recent cgroup charge peaks with the ordinary margin. An unmeasured
+  phase uses the whole-step forecast. The step joins the previous phase's work
+  before requesting the next phase and waiting for acknowledgement. The runner
+  admits any growth and reads both sibling MemoryMax values back before
+  acknowledging or returning the old
+  phase's surplus to the ledger. Slots, the step clock and any disk claim keep
+  their original lifetime. The step summary records the phase forecasts,
+  sampled charge and memory-pressure events
+  ([log](records/notebooks/decisions-log.md#fixed-steps-reserve-memory-by-phase-11-27)).
 - **CPU ranks follow the memory ranks** (11-17): the CPU scheduler shares a
   contended machine by the ledger's ranks, as cgroup CPU weights from one
   table, because every run's steps share `nts.slice` and nice alone, set by

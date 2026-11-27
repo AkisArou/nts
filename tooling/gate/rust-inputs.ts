@@ -33,10 +33,12 @@ import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
 import {coverageOfCaptures,traceCaptures,declaredRustInputs,trackedPaths,describeCoverage,testReach} from './rust-input-coverage.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {gitArguments} from './git-arguments/main.ts';
+import {stepPhaseClient} from './step-phase.ts';
 
 const TESTS=fileURLToPath(new URL('./tests.mjs',import.meta.url));
 
 runAsCommand(import.meta.url,async()=>{
+  const enterPhase=stepPhaseClient();
   const run=process.env.NTS_GATE_RUN_DIR,raw=process.env[ENVIRONMENT_CONTEXT];
   if(!run||!raw)throw new ToolingInstrumentError('tooling-setup','rust-inputs runs inside a gate run (NTS_GATE_RUN_DIR and its environment context)');
   const context=JSON.parse(raw) as Context,capture=join(context.temporary.path,'rust-inputs');
@@ -53,6 +55,7 @@ runAsCommand(import.meta.url,async()=>{
   const tests=spawnSync(process.execPath,[TESTS],{stdio:'inherit'});
   if(tests.error||tests.signal)throw new ToolingInstrumentError('tooling-setup','rust-inputs: traced tests '+(tests.signal?'killed by '+tests.signal:'not started: '+tests.error?.message));
   if(tests.status!==0){console.log(`  the traced tests exited ${tests.status}; their own step reports why`);exitCommand(tests.status??1);}
+  await enterPhase('coverage');
   const root=infrastructureProbe({purpose:'rust-inputs tree',command:'git',args:gitArguments(['rev-parse','--show-toplevel']),cwd:process.cwd()}).stdout.trim();
   let result;
   try{result=await coverageOfCaptures({root,captures:traceCaptures(root,trace),reports,targets:declaredRustInputs(root),tracked:trackedPaths(root),reach:testReach});}

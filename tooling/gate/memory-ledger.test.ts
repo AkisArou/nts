@@ -535,6 +535,25 @@ test("an admitted job grows before later equal-rank arrivals, which retain their
   for(const held of [job,first,second])held.release();
 });
 
+test("a smaller phase returns capacity to a waiting neighbour, and the next larger phase queues for it", async t => {
+  const f = fixture(t);
+  const run = await f.ask({bytes:10 * GiB, what:"phase run"});
+  const neighbour = f.ask({bytes:9 * GiB, what:"phase neighbour"});
+  await waitFor("the neighbour waits on the wide phase", () => f.of("phase neighbour").some(row => !row.admitted));
+  await run.shrink(5 * GiB);
+  const held = await neighbour;
+  assert.equal(readLedger(f.dir).admitted.find(row => row.id === run.id)?.bytes, 5 * GiB);
+  const next = run.grow(5 * GiB);
+  await waitFor("the larger phase waits for readmission", () => readLedger(f.dir).waiting.some(row => row.grows === run.id));
+  assert.equal(run.bytes, 5 * GiB);
+  held.release();
+  await held.closed;
+  await next;
+  assert.deepEqual(readLedger(f.dir).admitted.map(row => [row.id,row.bytes]), [[run.id,10 * GiB]]);
+  run.release();
+  await run.closed;
+});
+
 test("a growing admitted agent still yields its place and unused promise to a waiting landing", async t => {
   const f=fixture(t),job=await f.ask({bytes:10*GiB,what:"agent job"});
   const blocker=await f.ask({bytes:8*GiB,what:"running landing",priority:"landing"});

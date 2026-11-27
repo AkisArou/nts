@@ -5223,3 +5223,13 @@ it waits is still stopped, and a landing's ceiling and the full check's run
 bound still spend the wait's time: a temporary's disk wait stays named, never
 excused, at the run's level. The rust-inputs step's 12 GiB capture claim had
 held its wide runs inside its own 5400 s bound on a machine near the floor.
+
+## Fixed steps reserve memory by phase (11-27)
+
+For #1074, the coordinator approved ordered memory phases owned by the gate
+runner. The runner keeps the whole-step forecast while a phase has no memory
+history. A measured phase uses its own recent cgroup charge peaks. The next
+phase can proceed after any growth is admitted and the runner verifies the
+kernel bounds. The smaller grant returns obsolete bytes through the existing
+locked ledger shrink. The step keeps its disk lease and overall execution
+budget. A kernel kill at a phase's runaway bound is memory pressure.

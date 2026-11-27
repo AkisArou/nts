@@ -102,7 +102,8 @@ import {clippyTarget} from "./build-targets.ts";
 import {HostObservationError,reportMemoryFailure,sampleCgroup} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {RESERVATION_PER_PEAK, diskClaim, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {RESERVATION_PER_PEAK, diskClaim, peakReservation, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, phaseReservation, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {STEP_PHASE_CHANNEL, StepPhaseChannel} from "./step-phase.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {RunLifecycleFeed} from "./run-lifecycle.ts";
 import {ProgressBound, progressSummary, stepBound, stepBoundReason, stepBoundWait, stepCpuBound, stepCpuBoundReason} from "./step-bound.ts";
@@ -414,12 +415,19 @@ let releaseTreeLock=()=>{};
 let caseCosts = null;
 /** @type {CheckStream|undefined} */
 let checkStream;
+/** @type {StepPhaseChannel | undefined} */
+let phaseChannel;
+/** @typedef {ReturnType<typeof sizingPhase> & {name:string, started:string, peak:number,
+ * events:Pick<import('./scopes/step-scope.ts').MemoryEvents, 'own_oom' | 'oom_kill'>}} ActivePhase */
+/** @typedef {ReturnType<typeof sizingPhase> & {name:string, resolve:()=>void, reject:(error:unknown)=>void}} PendingPhase */
+/** @typedef {{current:ActivePhase, finished:ReturnType<typeof phaseRecord>[], next?:PendingPhase, applying?:Promise<void>}} StepPhases */
 let typeScriptOracleReference;
 let programOracleReference;
 const identities = {};
 let plan = [];
 
-function stepEnv(step, slots, scope) {
+/** @param {string} [phaseHandoff] */
+function stepEnv(step, slots, scope, phaseHandoff) {
   // The step runs inside the run's slice and the run's memory reservation: a
   // tool in it that reserves memory joins this one instead of queueing again.
   const owned={NTS_TOOLING_SLICE:scope.slice,...reservation.env};
@@ -466,6 +474,8 @@ function stepEnv(step, slots, scope) {
   delete e.NTS_GATE_TOKENS;
   delete e.NTS_GATE_TOKEN_HELD;
   e.NTS_GATE_STEP = step.name;
+  if (phaseHandoff) e[STEP_PHASE_CHANNEL] = phaseHandoff;
+  else delete e[STEP_PHASE_CHANNEL];
   delete e.NTS_GATE_STEP_DISK;
   const claim = diskClaims.get(step.name);
   if (claim?.lease) e.NTS_GATE_STEP_DISK = JSON.stringify({ path: claim.path, bytes: claim.bytes, id: claim.lease.id });
@@ -939,6 +949,7 @@ let capacity = 0, totalBytes = 0;
 const MEMORY = new Map();
 // What each step that ran to its own end held at most, per unit, for the history: name -> { unit, peak }.
 const observations = new Map();
+const phaseObservations = new Map();
 // ---------------------------------------------------------------------------
 // A step's own temporary (the step table's `unmeasuredDisk`).
 //
@@ -1065,12 +1076,18 @@ function sizing(step) {
   }
   return sized;
 }
+/** @param {typeof STEPS[number]} step @param {string} [phase] */
+function sizingPhase(step, phase) {
+  const whole = sizing(step), sized = phaseReservation(HISTORY, step.name, phase, whole);
+  return { ...sized, bytes: Math.min(capacity, sized.bytes), phaseSized: sized !== whole };
+}
 /** Every planned step's reservation, once the machine's size is known. */
 const planMemory = () => { for (const name of plan) sizing(BY_NAME.get(name)); };
 const tokenBytes = (step) => sizing(step).bytes;
 // A fixed step's reservation; an elastic step's for `slots` tokens, as it is
 // counted while it runs without a token server, and while it drains.
-const stepBytes = (step, slots = width(step.name)) => Math.min(capacity, step.elastic ? sizing(step).bytes * slots : sizing(step).bytes);
+const stepBytes = (step, slots = width(step.name)) => step.elastic
+  ? Math.min(capacity, sizing(step).bytes * slots) : sizingPhase(step, step.memoryPhases?.[0]).bytes;
 // What a step's tools size their workers by (NTS_GATE_STEP_MEMORY_BYTES): its
 // grant at its full width and a margin above it, never below one census
 // worker's own cap.
@@ -1101,7 +1118,7 @@ const heldBytes = (name, r) => elasticHeldBytes(tokensOf(name, r), r.draining ? 
 // step its held tokens'; each with what it grew by while it ran.
 function grantOf(name, r) {
   const step = BY_NAME.get(name);
-  return (r.elastic ? heldBytes(name, r) : stepBytes(step, r.slots)) + r.extra;
+  return (r.elastic ? heldBytes(name, r) : r.phase?.current.bytes ?? stepBytes(step, r.slots)) + r.extra;
 }
 // What its runaway bound is reckoned from: its grant, and for an elastic step
 // holding less than one token's share, one token's share all the same, for
@@ -1119,6 +1136,7 @@ let drainReturn = null;
 let memoryWanted = 0;
 let withholdBytes = 0;
 let memoryCheck = null;
+let phaseReturnBytes = 0;
 const memoryRecord = { peak_bytes: 0, waited_s: 0, growths: 0, withdrawn: 0, shrinks: 0, outranked: 0, outranked_s: 0,
   steps_grown: 0, steps_killed: 0 };
 // The ledger's last answer to `outranked`, when it was read, and since when it has been yes.
@@ -1169,8 +1187,83 @@ function chargeOf(scope) {
   return sampleCgroup(scope.group,()=>host.cgroupCharge(scope.group),0);
 }
 function sampleStep(r) {
-  try { r.charge = chargeOf(r.scope); r.peakCharge = Math.max(r.peakCharge ?? 0, r.charge); }
+  try {
+    r.charge = chargeOf(r.scope);
+    r.peakCharge = Math.max(r.peakCharge ?? 0, r.charge);
+    if (r.phase) r.phase.current.peak = Math.max(r.phase.current.peak, r.charge);
+  }
   catch(error) {if(isCommandExit(error))throw error; if(error instanceof HostObservationError)throw error; /* the slice went as it was read */ }
+}
+
+/** @param {ActivePhase} phase @param {import('./scopes/step-scope.ts').MemoryEvents | null} events
+ * @param {number} grant @param {number} bound */
+function phaseRecord(phase, events, grant, bound) {
+  const killed = events && events.own_oom > phase.events.own_oom ? events.oom_kill - phase.events.oom_kill : 0;
+  return { name: phase.name, started_at: phase.started, ended_at: new Date().toISOString(),
+    reserved_bytes: phase.bytes, basis: phase.basis, phase_sized: phase.phaseSized, peak_bytes: phase.peak, grant_bytes: grant,
+    bound_bytes: bound, killed, over: killed > 0 || phase.peak > phase.bytes };
+}
+
+/** @param {typeof STEPS[number]} step @param {{phase?:StepPhases, draining:boolean}} r @param {string} name */
+async function requestPhase(step, r, name) {
+  const phases = r.phase;
+  if (!phases || stopping || r.draining || phases.next || name !== step.memoryPhases?.[phases.finished.length + 1]) {
+    throw Error(`${step.name}: unexpected memory phase ${name} after ${phases?.current.name ?? 'dispatch'}`);
+  }
+  /** @type {PromiseWithResolvers<void>} */
+  const {promise, resolve, reject} = Promise.withResolvers();
+  phases.next = {name, ...sizingPhase(step, name), resolve, reject};
+  schedule();
+  return promise;
+}
+
+function advancePhases() {
+  for (const [name, r] of running) {
+    /** @type {StepPhases | undefined} */
+    const phases = r.phase;
+    if (!phases?.next || phases.applying || r.draining) continue;
+    const next = phases.next;
+    sampleStep(r);
+    const grant = grantOf(name, r), oldBound = r.scope.workerLimit;
+    // Old work can still be draining. Retain its promise until the lower
+    // boundary can accommodate the charge, without forcing an OOM at handoff.
+    const bytes = next.phaseSized ? next.bytes : Math.max(next.bytes, grant);
+    const max = runawayBound(bytes);
+    if (max < oldBound && r.charge + nearGrant(max) > max) continue;
+    const more = Math.max(0, bytes - grant);
+    if (more > 0 && used().bytes + more > reserved()) {
+      r.want = more;
+      continue;
+    }
+    r.want = 0;
+    r.extra += more;
+    r.grown += more;
+    // Keep the old promise during the kernel update, or the newly admitted
+    // larger one if growth was needed. Neither watcher can move the cap here.
+    phases.applying = (async () => {
+      await r.scope.caseLimit(0);
+      await r.scope.limit({max});
+      if (r.draining || stopping) return;
+      if (r.scope.limits.max !== max || r.scope.workerLimit !== max) throw Error(`${name}: memory phase ${next.name} bound was not applied`);
+      sampleStep(r);
+      const events = r.scope.memoryEvents();
+      const finished = phaseRecord(phases.current, events, grant, oldBound);
+      phases.finished.push(finished);
+      phases.current = {name:next.name, bytes:next.bytes, basis:next.basis, phaseSized:next.phaseSized,
+        peak:r.charge, started:finished.ended_at, events};
+      phases.next = undefined;
+      r.extra = bytes - next.bytes;
+      phaseReturnBytes += Math.max(0, grant - bytes);
+      process.stderr.write(`-- ${name}: memory phase ${next.name}, ${gib(grant)} to ${gib(bytes)} (${next.phaseSized ? next.basis : 'whole-step forecast'}; bound ${gib(max)})\n`);
+      caseCosts?.record({event:'phase.memory', step:name, phase:next.name, previous:finished, memory:memoryState()});
+      next.resolve();
+      setImmediate(schedule);
+    })().catch(error => {
+      if (isCommandExit(error)) throw error;
+      next.reject(error);
+      if (!r.draining && !stopping) stop(`memory phase ${name}/${next.name}: ${String(error)}`);
+    }).finally(() => { phases.applying = undefined; });
+  }
 }
 // Every SAMPLE_MS: each running step's charge; a step whose charge nears its
 // grant, or passed it, wants more -- a quarter of its grant, at least 64 MiB,
@@ -1193,6 +1286,7 @@ function watchMemory() {
   for (const [name, r] of running) {
     if (r.draining) continue;
     sampleStep(r);
+    if (r.phase?.next) continue;
     // Idle pooled workers have no case promise while priority yields. Their
     // actual charge retains the same margin; historic extras may return only
     // as those resources drain. Active cases keep their complete grant.
@@ -1206,13 +1300,14 @@ function watchMemory() {
     if (r.charge >= grant - nearGrant(grant)) r.want = Math.max(r.want, Math.ceil((Math.max(0, r.charge - grant) + growthOf(grant)) / MIB) * MIB);
   }
   feedSteps();
-  for (const [name, r] of running) if (!r.draining) applyBound(name, r);
-  if (idleReturned||[...running.values()].some(r => r.want > 0)) adjustMemory();
+  for (const [name, r] of running) if (!r.draining && !r.phase?.next) applyBound(name, r);
+  if ([...running.values()].some(r => r.phase?.next)) schedule();
+  else if (idleReturned||[...running.values()].some(r => r.want > 0)) adjustMemory();
 }
 // What running steps want beyond their grants, from the reservation's slack.
 function feedSteps() {
   for (const [name, r] of running) {
-    if (r.draining || r.want <= 0) continue;
+    if (r.draining || r.phase?.next || r.want <= 0) continue;
     const free = reserved() - used().bytes - withholdBytes;
     if (free <= 0) continue;
     const give = Math.min(r.want, free);
@@ -1336,8 +1431,14 @@ function adjustMemory() {
   // next step's known need until its growth ticket is published.
   // Releasing first lets a later neighbour decide inside the handoff gap,
   // before the ledger can give this admitted run's growth its existing place.
-  const back = yielding ? reserved() - Math.max(1, drainTarget)
+  const normalBack = yielding ? reserved() - Math.max(1, drainTarget)
     : Math.floor((reserved() - Math.max(memoryWanted, drainTarget + withholdBytes, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK;
+  // A verified phase change can return its obsolete promise even within the
+  // ordinary slack window. Preserve any already claimed demand in this run.
+  const phaseBack = Math.min(phaseReturnBytes,
+    reserved() - Math.max(1, memoryWanted, drainTarget + withholdBytes));
+  const back = Math.max(normalBack, phaseBack);
+  phaseReturnBytes = 0;
   if (back > 0) {
     memoryRecord.shrinks++;
     reservation.shrink(back).catch(error => process.stderr.write(`run.mjs: the memory ledger kept the ${gib(back)} the run gave back: ${error.message}\n`));
@@ -1384,6 +1485,7 @@ function schedule() {
   // The empty queue during startup does not mean that every step has drained.
   if (preparing || stopping || summaryWritten || drainReturn) return;
   if (running.size === 0 && (reservation?.drained ?? 0) > 0) { adjustMemory(); return; }
+  if ([...running.values()].some(r => r.phase?.next)) advancePhases();
   const yielding = outranked();
   let progressed = true;
   while (progressed) {
@@ -1475,6 +1577,14 @@ function start(step, slots, rider = false) {
   let firstCpu;
   try { firstCpu = sampleCpu(); }
   catch (error) {if(isCommandExit(error))throw error; stop(`host observation: ${step.name}'s CPU: ${error}`); return; }
+  const firstPhase = step.memoryPhases?.[0];
+  /** @type {StepPhases | undefined} */
+  const phase = firstPhase === undefined ? undefined : {
+    current: {name:firstPhase, ...sizingPhase(step, firstPhase), started:new Date().toISOString(), peak:0, events:{own_oom:0,oom_kill:0}},
+    finished: [],
+  };
+  /** @type {ReturnType<StepPhaseChannel['dispatch']> | undefined} */
+  const phaseDispatch = phase && phaseChannel?.dispatch(name => requestPhase(step, owned, name));
   const log = join(RUN_DIR, `${step.name}.log`);
   const timeFile = join(RUN_DIR, `${step.name}.gnu-time`);
   rmSync(join(RUN_DIR, `${step.name}.instrument.json`), { force: true });
@@ -1485,7 +1595,7 @@ function start(step, slots, rider = false) {
   const launch = scope.command(cmd[0], cmd.slice(1));
   const child = spawn(launch.command, launch.args, {
     cwd: ROOT,
-    env: stepEnv(step, slots, scope),
+    env: stepEnv(step, slots, scope, phaseDispatch?.handoff),
     stdio: ["ignore", fd, fd],
     detached: true,
   });
@@ -1493,7 +1603,7 @@ function start(step, slots, rider = false) {
   const started = Date.now();
   // `extra`: what it grew by while it ran; `want`: what it waits to grow by;
   // `grown`: what it grew by in all.
-  const owned = { child, slots, started, rider, elastic, scope, draining: false, overBound: false, peakCharge: undefined,
+  const owned = { child, slots, started, rider, elastic, scope, phase, draining: false, overBound: false, peakCharge: undefined,
     charge: 0, extra: 0, want: 0, grown: 0 };
   running.set(step.name, owned);
   lifecycle?.started(step.name);
@@ -1566,6 +1676,11 @@ function start(step, slots, rider = false) {
     // the sampling interval is measured by it.
     sampleStep(owned);
     owned.draining = true;
+    phaseDispatch?.revoke();
+    if (owned.phase?.next) {
+      owned.phase.next.reject(Error(`${step.name}: step ended during the phase handoff`));
+      await owned.phase.applying;
+    }
     let drained, cleanupError, entered, entryError;
     try { entered = scope.entry(); } catch (error) {if(isCommandExit(error))throw error; entryError = `step scope entry was not proved: ${error.message}`; }
     try { drained = await scope.drain(); }
@@ -1616,9 +1731,12 @@ function start(step, slots, rider = false) {
     // as its slice emptied).
     let events = null;
     try { events = scope.memoryEvents(); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* the slice was never read */ }
-    const memory = { peak_bytes: peak, reserved_bytes: reservedBytes, over: peak !== null && peak > reservedBytes, basis: sized.basis,
+    const phases = owned.phase && [...owned.phase.finished,
+      phaseRecord(owned.phase.current, events, limitOf(step.name, owned), scope.workerLimit)];
+    const phaseKilled = phases?.findLast(row => row.killed > 0);
+    const memory = { peak_bytes: peak, reserved_bytes: reservedBytes, over: (peak !== null && peak > reservedBytes) || (phases?.some(row => row.over) ?? false), basis: sized.basis,
       grant_bytes: limitOf(step.name, owned), grown_bytes: owned.grown, bound_bytes: scope.workerLimit,supervisor_bound_bytes:scope.limits.max,
-      killed: events === null ? null : events.own_oom > 0 ? events.oom_kill : 0 };
+      killed: events === null ? null : events.own_oom > 0 ? events.oom_kill : 0, ...(phases ? {phases} : {}) };
     if (owned.grown > 0) memoryRecord.steps_grown++;
     if (memory.killed > 0) memoryRecord.steps_killed++;
     const extra = { exit: code, signal, wall, cpu, user, sys, cpu_measure:measurement?.cpu_measure,gnu_time:gnuTime,maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
@@ -1655,9 +1773,11 @@ function start(step, slots, rider = false) {
       finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
     } else if (entryError) {
       finish(step.name, "INSTRUMENT", entryError, { ...extra, instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason: entryError } });
-    } else if (memory.killed > 0 && (signal || code !== 0) && !instrument) {
+    } else if (phaseKilled || memory.killed > 0 && (signal || code !== 0) && !instrument) {
       // Killed at its runaway bound: memory, never a verdict about the change.
-      const reason = `memory: the kernel killed ${memory.killed} process(es) of the step at its runaway bound of ${gib(memory.bound_bytes)} (counted for ${gib(memory.grant_bytes)}); ${signal ? `killed by ${signal}` : `exit ${code}`}`;
+      const result = phaseKilled ?? memory;
+      const subject = phaseKilled ? `phase ${phaseKilled.name}` : 'the step';
+      const reason = `memory: the kernel killed ${result.killed} process(es) of ${subject} at its runaway bound of ${gib(result.bound_bytes)} (counted for ${gib(result.grant_bytes)}); ${signal ? `killed by ${signal}` : `exit ${code}`}`;
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "memory-pressure", verdict: "INSTRUMENT", reason } });
     } else {
       const status = signal ? `killed by ${signal}` : `exit ${code}`;
@@ -1673,6 +1793,14 @@ function start(step, slots, rider = false) {
     // holds; one stopped at its bound or with the run measured only a part.
     if (peak > 0 && !owned.overBound && !cleanupError && !spawnError && results.get(step.name).verdict !== "NOT RUN") {
       observations.set(step.name, { unit: sized.unit, peak: Math.ceil(peak / units) });
+    }
+    if (phases && !cleanupError && !spawnError) {
+      // Completed earlier phases still measure their full lifetimes. A
+      // killed phase's sampled peak is a lower bound. Only use that sample
+      // for learning if it actually observed the phase exceeding its grant.
+      const completedPhases = phases.slice(0, owned.overBound || results.get(step.name).verdict === "NOT RUN" ? -1 : undefined);
+      phaseObservations.set(step.name, completedPhases.filter(row => row.killed === 0 || row.peak_bytes > row.reserved_bytes)
+        .map(row => ({name:row.name, peak:row.peak_bytes})));
     }
     if (memory.over) reservation?.noteOver(step.name).catch(error => process.stderr.write(`run.mjs: the memory ledger's entry does not say ${step.name} is over: ${error.message}\n`));
     report(step.name);
@@ -1890,7 +2018,7 @@ async function writeSummary() {
   if (normalized.report.canonical) {
     const warning = writeCostHistory(HISTORY_FILE, { steps: plan.map(name => {
       const r = results.get(name);
-      return { name, verdict: r.verdict, cpu: r.cpu, cpu_measure:r.cpu_measure,memory: observations.get(name), disk: diskObservations.get(name) };
+      return { name, verdict: r.verdict, cpu: r.cpu, cpu_measure:r.cpu_measure,memory: observations.get(name), disk: diskObservations.get(name), phases: phaseObservations.get(name) };
     }) }, CPU_HISTORY);
     if (warning) process.stderr.write(`scheduling history unavailable: ${warning}\n`);
   }
@@ -1986,6 +2114,7 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     const failures=[];
     try{tok.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await tok.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{await phaseChannel?.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     if(checkStream){
       try{await checkStream.close();}catch(error){if(isCommandExit(error))throw error;caseCosts?.errors.push(`check telemetry close: ${String(error)}`);}
       caseCosts?.errors.push(...checkStream.errors);
@@ -2103,6 +2232,10 @@ if (!setupFailure && !stopping) {
 if (!stopping && !setupFailure && !dependencySealFailure) {
   tokenAddr = await tok.start();
   if (!tokenAddr) process.stderr.write("run.mjs: no token server; elastic steps run at fixed slot counts\n");
+  if (plan.some(name => BY_NAME.get(name)?.memoryPhases)) {
+    try { phaseChannel = new StepPhaseChannel(); await phaseChannel.ready; }
+    catch (error) { if (isCommandExit(error)) throw error; setupFailure = `memory phase channel: ${String(error)}`; }
+  }
   pending = order(plan);
 }
 preparing = false;
