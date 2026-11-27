@@ -14,11 +14,16 @@ fn push(func: &mut Func, kind: OpKind, ty: HirType) -> ValueId {
 }
 
 fn call(func: &mut Func, object: ValueId) -> ValueId {
+    let text = push(
+        func,
+        OpKind::ConstString("payload".into()),
+        HirType::Managed(ManagedType::String),
+    );
     push(
         func,
         OpKind::Call {
             callee: Callee::Direct("fill".into()),
-            args: vec![object],
+            args: vec![object, text],
             frame: None,
         },
         HirType::Void,
@@ -33,17 +38,17 @@ fn program(fields: usize) -> Program {
     callee.return_type = HirType::Void;
     callee.values.clear();
     callee.params.truncate(1);
+    let mut text_parameter = callee.params[0].clone();
+    text_parameter.name = "text".into();
+    text_parameter.ty = string.clone();
+    callee.params.push(text_parameter);
     callee.blocks = vec![Block {
         params: vec![],
         ops: vec![],
         terminator: Terminator::Return(None),
     }];
     let base = push(&mut callee, OpKind::Param(0), object.clone());
-    let text = push(
-        &mut callee,
-        OpKind::ConstString("value".into()),
-        string.clone(),
-    );
+    let text = push(&mut callee, OpKind::Param(1), string.clone());
     for field in 0..fields {
         push(
             &mut callee,
@@ -147,6 +152,11 @@ fn first_arrival_is_separate_from_the_occupied_backedge() {
         written: None,
     }];
     let busy = push(caller, OpKind::ObjectNew { frame: true }, object);
+    let text = push(
+        caller,
+        OpKind::ConstString("payload".into()),
+        HirType::Managed(ManagedType::String),
+    );
     caller.blocks[0].terminator = Terminator::Jump {
         target: BlockId(1),
         args: vec![],
@@ -155,7 +165,7 @@ fn first_arrival_is_separate_from_the_occupied_backedge() {
     caller.values.push(Op {
         kind: OpKind::Call {
             callee: Callee::Direct("fill".into()),
-            args: vec![busy],
+            args: vec![busy, text],
             frame: None,
         },
         ty: HirType::Void,
@@ -242,4 +252,77 @@ fn three_runs_make_identical_versions_and_bodies() {
         })
         .collect();
     assert!(runs.windows(2).all(|pair| pair[0] == pair[1]));
+}
+
+fn with_shapes(fields: usize, masks: &[u32]) -> Program {
+    let mut program = program(fields);
+    let caller = &mut program.funcs[1];
+    caller.values.clear();
+    caller.blocks[0].ops.clear();
+    let text = push(
+        caller,
+        OpKind::ConstString("old".into()),
+        HirType::Managed(ManagedType::String),
+    );
+    for mask in masks {
+        let base = push(
+            caller,
+            OpKind::ObjectNew { frame: true },
+            HirType::Managed(ManagedType::Object(TypeId(1))),
+        );
+        for field in 0..fields {
+            if mask & (1 << field) == 0 {
+                push(
+                    caller,
+                    OpKind::FieldSet {
+                        object: base,
+                        field: u32::try_from(field).unwrap(),
+                        value: text,
+                    },
+                    HirType::Void,
+                );
+            }
+        }
+        call(caller, base);
+        call(caller, base);
+    }
+    program
+}
+
+#[test]
+fn partial_shapes_stop_at_four_entries_and_leave_other_calls_generic() {
+    let mut program = with_shapes(4, &[1, 2, 4, 8, 3, 5]);
+    let report = rewrite(&mut program);
+    assert_eq!(report.versions.len(), VARIANTS);
+    assert_eq!(report.capped, ["fill"]);
+    assert!(report.versions.iter().all(|version| version.removed > 0));
+    assert!(report.duplicated_ops <= report.original_ops);
+    let contracts = hir::own::summarize(&program, &program.layouts);
+    for version in &report.versions {
+        assert!(!contracts.slot_contracts().1.parameters[&version.entry].is_empty());
+    }
+    assert!(contracts.slot_contracts().1.parameters["fill"].is_empty());
+}
+
+#[test]
+fn growth_budget_keeps_a_large_second_shape_generic() {
+    let mut program = with_shapes(2, &[1, 2]);
+    for _ in 0..1_000 {
+        push(
+            &mut program.funcs[0],
+            OpKind::ConstBool(false),
+            HirType::Bool,
+        );
+    }
+    let report = rewrite(&mut program);
+    assert_eq!(report.versions.len(), 1);
+    assert_eq!(report.exhausted, ["slot version HIR growth"]);
+    assert!(report.duplicated_ops <= report.original_ops);
+    let generic = program.funcs[1].blocks.iter().flat_map(|block| &block.ops).filter(|&&id| {
+        matches!(&program.funcs[1].value(id).kind, OpKind::Call { callee: Callee::Direct(name), .. } if name == "fill")
+    }).count();
+    assert_eq!(
+        generic, 3,
+        "two occupied calls and the unversioned partial shape"
+    );
 }

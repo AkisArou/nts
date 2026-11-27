@@ -352,7 +352,7 @@ pub(in crate::hir) fn materialize(
         let mut replacement = None;
         if eligible(program, func)
             && planner.spend_work(size(func).saturating_mul(8))
-            && let Some((mut trial, copied, duplicated)) = first_arrival(func, &planner)
+            && let Some((mut trial, copied, duplicated)) = first_arrival(func, &mut planner)
         {
             let checkpoint = (
                 planner.report.duplicated_ops,
@@ -467,11 +467,12 @@ fn redirect(func: &mut Func, sites: &[(ValueId, Key, usize)], entries: &BTreeMap
 /// stays generic. This is a proof restriction, never an optimistic SSA repair.
 fn first_arrival(
     func: &Func,
-    planner: &Planner<'_>,
+    planner: &mut Planner<'_>,
 ) -> Option<(Func, FxHashMap<ValueId, ValueId>, usize)> {
+    let summaries = planner.summaries;
     let dominates = hir::loops::dominance(func);
     let incoming = hir::loops::predecessors(func);
-    let inputs = &planner.summaries.inputs[&func.name];
+    let inputs = &summaries.inputs[&func.name];
     let analysis = freshness(
         func,
         &planner.program.layouts,
@@ -487,6 +488,9 @@ fn first_arrival(
             .any(|(from, _)| dominates(header, *from))
         {
             continue;
+        }
+        if !planner.spend_work(size(func)) {
+            return None;
         }
         let entries: Vec<_> = predecessors
             .iter()
@@ -546,6 +550,17 @@ fn first_arrival(
         });
         if has_live_out {
             continue;
+        }
+        let cost: usize = region
+            .iter()
+            .map(|at| {
+                let block = &func.blocks[at.0 as usize];
+                block.params.len() + block.ops.len() + 1
+            })
+            .sum();
+        if cost > planner.report.original_ops - planner.report.duplicated_ops {
+            planner.exhausted("slot version HIR growth");
+            return None;
         }
         return copy_arrival(func, header, *entry, arguments, &region);
     }
