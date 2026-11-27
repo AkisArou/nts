@@ -8037,6 +8037,11 @@
             "kind": "project-config",
             "role": "compiled-program",
             "path": "../../../tests/programs/accessor-schema-order/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../../tests/refusals/a-callback-held-in-a-field-with-the-raising-gate-off/tsconfig.json"
           }
         ]
       }
