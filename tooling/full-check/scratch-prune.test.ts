@@ -6,7 +6,7 @@
 // must keep its target; each refusal removes nothing.
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {chmodSync,existsSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {test,type TestContext} from 'node:test';
@@ -220,6 +220,46 @@ test('a listed entry replaced after the last check is not removed: each unlink m
   const result=removeListed(f.root,remove);
   assert.equal(result.removed,0);assert.match(result.error??'',/b\.log changed since the dry run/);
   assert.equal(readFileSync(join(f.root,'b.log'),'utf8'),'rewritten');
+});
+
+test('hard links: every listed link of an inode goes, a kept link keeps its content, a link from outside keeps its name',t=>{
+  const f=fixture(t,{'both/a':'shared','pair/kept':'kept content','gone':'g'});
+  linkSync(join(f.root,'both/a'),join(f.root,'both/b'));
+  linkSync(join(f.root,'both/a'),join(f.root,'other-b'));
+  linkSync(join(f.root,'pair/kept'),join(f.root,'pair/removed'));
+  const outside=join(f.cache,'outside-file');writeFileSync(outside,'outside');linkSync(outside,join(f.root,'from-outside'));
+  const records=[record(`\`~/.cache/${FOLDER}/pair/kept\``)];
+  const {plan,remove}=planFolder(f.input(records));
+  assert.deepEqual(remove.map(e=>e.path).sort(),['both','both/a','both/b','from-outside','gone','other-b','pair/removed']);
+  assert.equal(plan.remove.bytes,remove.filter(e=>['both/a','gone','both'].includes(e.path)).reduce((n,e)=>n+e.blocks,0),
+    'an inode still linked from a kept or outside name frees nothing');
+  const result=applyFolder(plan,f.input(records));
+  assert.equal(result.status,'removed',result.lines.join('\n'));
+  assert.equal(readFileSync(join(f.root,'pair/kept'),'utf8'),'kept content');
+  assert.equal(readFileSync(outside,'utf8'),'outside');assert.equal(lstatSync(outside).nlink,1);
+  for(const path of ['both','other-b','pair/removed','from-outside','gone'])assert.ok(!f.has(path),path);
+});
+
+test('a hard link count changed since the dry run refuses the apply',t=>{
+  const f=fixture(t,{'a':'a','b':'b'});
+  const records=[record(`\`~/.cache/${FOLDER}/a\``)];
+  const {plan}=planFolder(f.input(records));
+  linkSync(join(f.root,'b'),join(f.cache,'new-outside-link'));
+  assert.equal(applyFolder(plan,f.input(records)).status,'refused');
+  assert.ok(f.has('b'));
+});
+
+test('a citation by content keeps an unnamed file with that SHA-256, and a digest matching nothing is listed',t=>{
+  const f=fixture(t,{'deep/candidate/nts':'the permanent candidate','other':'o','named.log':'n'});
+  const gone=sha('already deleted');
+  const text=`Run against the immutable permanent candidate (SHA-256 \`${sha('the permanent candidate')}\`). See \`~/.cache/${FOLDER}/named.log\`.\n\nThe old one was \`${gone}\`.`;
+  const r=kept(f,[record(text)]);
+  assert.deepEqual(r.plan.refusals,[]);
+  const k=r.plan.kept.find(k=>k.path==='deep/candidate/nts')!;
+  assert.equal(k.why,'content');assert.equal(k.verification,'verified');assert.equal(k.by[0],'docs/records/r.md:1');
+  assert.ok(r.removed.has('other'));
+  assert.equal(r.plan.totals.content.entries,1);
+  assert.deepEqual(r.plan.unmatched,[{digest:gone,by:'docs/records/r.md:3'}]);
 });
 
 test('brace expansion and JSON string structure',()=>{

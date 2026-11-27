@@ -34,8 +34,8 @@ import {citationTokens,readCitingRecords,type CitingRecord,type CitationToken,ty
 export type IssueState='OPEN'|'CLOSED'|{error:string};
 export type EntryType='file'|'directory'|'link'|'other';
 /** One inventory entry, as lstat sees it; `link` is a link's text, never followed. */
-export type Entry={path:string;type:EntryType;dev:string;ino:string;size:number;blocks:number;mode:number;mtimeNs:string;ctimeNs:string;link?:string};
-export type KeptWhy='file'|'directory'|'binding'|'link';
+export type Entry={path:string;type:EntryType;dev:string;ino:string;nlink:number;size:number;blocks:number;mode:number;mtimeNs:string;ctimeNs:string;link?:string};
+export type KeptWhy='file'|'directory'|'binding'|'content'|'link';
 export type Verification='verified'|'sha-less'|'escaping-link'|'stale-binding';
 export type KeptCitation={path:string;why:KeptWhy;verification?:Verification;sha?:string;by:string[];
   /** A kept directory: its entries, disk bytes, and the digest of its listing with each file's SHA-256. */
@@ -49,11 +49,13 @@ export type FolderPlan={
   totals:Record<KeptWhy,{entries:number;bytes:number}>;
   keptEntries:number;keptBytes:number;
   remove:{entries:number;bytes:number;digest:string};
+  /** Record digests that match no file of the folder: evidence already gone, or never here. */
+  unmatched:{digest:string;by:string}[];
 };
-/** A digest is reused only for an entry whose lstat identity is unchanged. */
+/** A digest is reused only for an inode whose lstat identity is unchanged; hard links share it. */
 export type DigestMemo=Map<string,string>;
 
-const identity=(entry:Entry)=>`${entry.path}\0${entry.dev}\0${entry.ino}\0${entry.size}\0${entry.mtimeNs}\0${entry.ctimeNs}`;
+export const identity=(entry:Pick<Entry,'dev'|'ino'|'size'|'mtimeNs'|'ctimeNs'>)=>`${entry.dev}:${entry.ino}:${entry.size}:${entry.mtimeNs}:${entry.ctimeNs}`;
 const sha256=(data:string|Buffer)=>createHash('sha256').update(data).digest('hex');
 const typeOf=(st:BigIntStats):EntryType=>st.isSymbolicLink()?'link':st.isDirectory()?'directory':st.isFile()?'file':'other';
 const ancestors=(path:string)=>{const out:string[]=[];let p=path;while(p.includes('/')){p=p.slice(0,p.lastIndexOf('/'));out.push(p);}return out;};
@@ -67,7 +69,7 @@ export function inventory(root:string):{entries:Map<string,Entry>;refusals:strin
     for(const name of readdirSync(join(root,rel)).sort()){
       const path=rel?rel+'/'+name:name,st=lstatSync(join(root,path),{bigint:true}),type=typeOf(st);
       if(st.dev!==top.dev){refusals.push(`${path} is on another device`);continue;}
-      entries.set(path,{path,type,dev:String(st.dev),ino:String(st.ino),size:Number(st.size),blocks:Number(st.blocks)*512,mode:Number(st.mode),
+      entries.set(path,{path,type,dev:String(st.dev),ino:String(st.ino),nlink:Number(st.nlink),size:Number(st.size),blocks:Number(st.blocks)*512,mode:Number(st.mode),
         mtimeNs:String(st.mtimeNs),ctimeNs:String(st.ctimeNs),...(type==='link'?{link:readlinkSync(join(root,path))}:{})});
       if(type==='directory')visit(path);
     }
@@ -247,19 +249,19 @@ export function planFolder(input:PlanInput):PlanResult{
   const kept=new Map<string,KeptCitation>();
   const keep=(path:string,why:KeptWhy,by:string,extra:Partial<KeptCitation>={})=>{
     const known=kept.get(path);
-    const rank:Record<KeptWhy,number>={directory:0,file:1,binding:2,link:3};
+    const rank:Record<KeptWhy,number>={directory:0,file:1,binding:2,content:3,link:4};
     if(!known){kept.set(path,{path,why,by:[by],...extra});return;}
     if(!known.by.includes(by))known.by.push(by);
     if(rank[why]<rank[known.why])known.why=why;
     if(extra.verification&&(!known.verification||known.verification==='sha-less'))Object.assign(known,extra);
   };
-  const allDigests=new Set<string>();
+  const allDigests=new Map<string,string>();
   const hits:Hit[]=[],paired=new Map<Hit,string>();
   for(const record of records){
     const resolved=resolveRecord(root,entries,record,folder);
     hits.push(...resolved.hits);
     for(const [hit,value] of adjacentDigests(resolved))paired.set(hit,value);
-    for(const d of resolved.digests)allDigests.add(d.value);
+    for(const d of resolved.digests)if(!allDigests.has(d.value))allDigests.set(d.value,`${record.path}:${d.line+1}`);
     for(const line of resolved.unresolved)refusals.push(`absolute citation names nothing: ${line}`);
   }
   const direct:string[]=[];
@@ -301,6 +303,16 @@ export function planFolder(input:PlanInput):PlanResult{
       }
     }
   }
+  // A citation by content: every digest a citing record gives keeps each
+  // file of the folder with that SHA-256, named or not. Every file is hashed.
+  const present=new Set<string>();
+  for(const entry of entries.values()){
+    if(entry.type!=='file')continue;
+    const sha=digestOf(root,entry,memo);present.add(sha);
+    const by=allDigests.get(sha);
+    if(by&&!kept.has(entry.path)&&!ancestors(entry.path).some(dir=>kept.get(dir)?.why==='directory'))keep(entry.path,'content',by,{verification:'verified',sha});
+  }
+  const unmatched=[...allDigests].filter(([digest])=>!present.has(digest)).map(([digest,by])=>({digest,by}));
   // A kept link that stays inside the folder keeps its target, wherever the
   // link itself was kept from (a cited directory's links included).
   const keptUnder=(path:string)=>{for(const p of [path,...ancestors(path)]){const k=kept.get(p);if(k&&(p===path||k.why==='directory'))return true;}return false;};
@@ -326,7 +338,7 @@ export function planFolder(input:PlanInput):PlanResult{
     for(const a of ancestors(entry.path)){const k=kept.get(a);if(k?.why==='directory')return 'directory';}
     return null;
   };
-  const totals:FolderPlan['totals']={file:{entries:0,bytes:0},directory:{entries:0,bytes:0},binding:{entries:0,bytes:0},link:{entries:0,bytes:0}};
+  const totals:FolderPlan['totals']={file:{entries:0,bytes:0},directory:{entries:0,bytes:0},binding:{entries:0,bytes:0},content:{entries:0,bytes:0},link:{entries:0,bytes:0}};
   const remove:Entry[]=[],keptEntries:{entry:Entry;sha?:string}[]=[];
   const keptInodes=new Set<string>();
   let bytes=0,keptBytes=0;
@@ -344,13 +356,15 @@ export function planFolder(input:PlanInput):PlanResult{
     k.tree={entries:inside.length,bytes:inside.reduce((n,{entry})=>n+entry.blocks,0),
       digest:sha256(inside.map(({entry,sha})=>`${entry.type}\t${entry.path.slice(k.path.length+1)}\t${sha??entry.link??''}`).join('\n'))};
   }
+  // An inode is freed only when every one of its links is removed.
+  const listed=new Map<string,number>();for(const entry of remove)listed.set(entry.ino,(listed.get(entry.ino)??0)+1);
   const freed=new Set<string>();let removeBytes=0;
-  for(const entry of remove)if(!keptInodes.has(entry.ino)&&!freed.has(entry.ino)){freed.add(entry.ino);removeBytes+=entry.blocks;}
+  for(const entry of remove)if(!keptInodes.has(entry.ino)&&!freed.has(entry.ino)&&(entry.type==='directory'||listed.get(entry.ino)===entry.nlink)){freed.add(entry.ino);removeBytes+=entry.blocks;}
   remove.sort((a,b)=>b.path.split('/').length-a.path.split('/').length||(a.path<b.path?-1:a.path>b.path?1:0));
   const plan:FolderPlan={folder,issue:input.issue,state,records:records.map(r=>r.path),refusals:[...new Set(refusals)],notes:[...new Set(notes)],
     inventoryDigest:inventoryDigest(entries),entries:entries.size,bytes,
     kept:keptRoots.sort((a,b)=>a.path<b.path?-1:1),totals,keptEntries:keptEntries.length,keptBytes,
-    remove:{entries:remove.length,bytes:removeBytes,digest:removalDigest(remove)}};
+    remove:{entries:remove.length,bytes:removeBytes,digest:removalDigest(remove)},unmatched};
   return {plan,remove,kept:keptEntries,memo};
 }
 
@@ -372,16 +386,29 @@ export function removeListed(root:string,remove:Entry[]):{removed:number;error?:
       if(!removing.has(parent))changed.set(path,mode);
     }
   }catch(error){return {removed:0,error:error instanceof Error?error.message:String(error)};}
+  // Unlinking one link of an inode moves the ctime and lowers the link count
+  // of the links that remain; the next listed link is expected at what a
+  // lstat right after that unlink saw.
+  const links=new Map<string,string[]>();
+  for(const entry of remove)if(entry.type!=='directory')links.set(entry.ino,[...(links.get(entry.ino)??[]),entry.path]);
+  const after=new Map<string,{ctimeNs:string;nlink:number}>();
   let removed=0;
   try{
     for(const entry of remove){
       const path=join(root,entry.path),st=lstatSync(path,{bigint:true});
+      const want=after.get(entry.ino)??{ctimeNs:entry.ctimeNs,nlink:entry.nlink};
       // A directory's own ctime moves as its listed children go; a new child
       // makes its rmdir fail instead.
-      if(typeOf(st)!==entry.type||String(st.ino)!==entry.ino||entry.type!=='directory'&&String(st.ctimeNs)!==entry.ctimeNs)
+      if(typeOf(st)!==entry.type||String(st.ino)!==entry.ino||entry.type!=='directory'&&(String(st.ctimeNs)!==want.ctimeNs||Number(st.nlink)!==want.nlink))
         return {removed,error:`${entry.path} changed since the dry run`};
-      if(entry.type==='directory')rmdirSync(path);else unlinkSync(path);
-      removed++;
+      if(entry.type==='directory'){rmdirSync(path);removed++;continue;}
+      unlinkSync(path);removed++;
+      const rest=links.get(entry.ino)!;rest.shift();
+      if(rest.length){
+        const next=lstatSync(join(root,rest[0]!),{bigint:true});
+        if(String(next.ino)!==entry.ino||Number(next.nlink)!==want.nlink-1)return {removed,error:`${rest[0]} changed beside its hard link ${entry.path}`};
+        after.set(entry.ino,{ctimeNs:String(next.ctimeNs),nlink:want.nlink-1});
+      }
     }
     return {removed};
   }catch(error){return {removed,error:error instanceof Error?error.message:String(error)};}
@@ -434,13 +461,15 @@ export function reportFolder(plan:FolderPlan,manifest:string):string{
   out.push(`Records: ${plan.records.map(r=>'`'+r+'`').join(', ')}`,'',
     `| | entries | disk |`,`|---|---:|---:|`,
     `| folder | ${plan.entries} | ${GB(plan.bytes)} |`,
-    ...(['file','directory','binding','link'] as const).map(w=>`| kept by ${w==='binding'?'one-hop binding':w==='link'?'link or link target':w+' citation'} | ${plan.totals[w].entries} | ${GB(plan.totals[w].bytes)} |`),
+    ...(['file','directory','binding','content','link'] as const).map(w=>`| kept by ${w==='binding'?'one-hop binding':w==='link'?'link or link target':w==='content'?'content (a record digest, no path)':w+' citation'} | ${plan.totals[w].entries} | ${GB(plan.totals[w].bytes)} |`),
     `| kept in all, with their parent directories | ${plan.keptEntries} | ${GB(plan.keptBytes)} |`,
     `| **removed** (disk freed counts each inode once) | ${plan.remove.entries} | ${GB(plan.remove.bytes)} |`,'',
     '| kept | why | SHA-256, or directory listing digest | cited by |','|---|---|---|---|',
     ...direct.map(k=>`| \`${k.path}\` | ${k.why}${k.verification?', '+k.verification:''}${k.tree?`, ${k.tree.entries} entries, ${GB(k.tree.bytes)}`:''} | ${k.sha?'`'+k.sha+'`':k.tree?'`'+k.tree.digest+'`':''} | ${cell(k)} |`),'');
   if(bound.length)out.push('| binding manifest | files it binds, each verified by its SHA-256 |','|---|---:|',
     ...[...byManifest].map(([by,m])=>`| \`${by}\` | ${m.files} |`),'');
+  if(plan.unmatched.length)out.push(`<details><summary>${plan.unmatched.length} record digests match no file in this folder (evidence already gone, or never kept here)</summary>`,'',
+    '| SHA-256 | first given at |','|---|---|',...plan.unmatched.map(u=>`| \`${u.digest}\` | ${u.by} |`),'','</details>','');
   out.push(`Every kept entry with its SHA-256: \`${manifest}\`; the removal list and plan beside it (removal digest \`${plan.remove.digest}\`, inventory digest \`${plan.inventoryDigest}\`).`,'');
   return out.join('\n');
 }
@@ -473,9 +502,10 @@ function main(argv:string[]):number{
     mkdirSync(out,{recursive:true});
     const plans:FolderPlan[]=[],report:string[]=[];
     for(const issue of numbers){
-      const {plan,remove,kept}=planFolder(plannedInput(repo,cache,issue));
-      writeLines(join(out,`${issue}.remove.jsonl`),remove.map(entry=>JSON.stringify([entry.path,entry.type,entry.ino,entry.ctimeNs,entry.blocks])));
-      writeLines(join(out,`${issue}.kept.jsonl`),kept.map(({entry,sha})=>JSON.stringify({...entry,...(sha?{sha}:{})})));
+      const result=planFolder(plannedInput(repo,cache,issue)),{plan,remove,kept}=result;
+      const {memo}=result,shaOf=(entry:Entry)=>entry.type==='file'?memo.get(identity(entry)):undefined;
+      writeLines(join(out,`${issue}.remove.jsonl`),remove.map(entry=>{const sha=shaOf(entry);return JSON.stringify({...entry,...(sha?{sha}:{})});}));
+      writeLines(join(out,`${issue}.kept.jsonl`),kept.map(({entry})=>{const sha=shaOf(entry);return JSON.stringify({...entry,...(sha?{sha}:{})});}));
       plans.push(plan);report.push(reportFolder(plan,join(out,`${issue}.kept.jsonl`)));
       console.log(`${plan.folder}: ${plan.refusals.length?'REFUSED':'planned'}; keep ${plan.keptEntries} (${GB(plan.keptBytes)}), remove ${plan.remove.entries} (${GB(plan.remove.bytes)})`);
     }
@@ -489,7 +519,7 @@ function main(argv:string[]):number{
     let failed=false;const lines:string[]=[];
     for(const dryRun of plans){
       const memo:DigestMemo=new Map();
-      for(const line of readFileSync(join(out,`${dryRun.issue}.kept.jsonl`),'utf8').split('\n').filter(Boolean)){
+      for(const list of ['kept','remove'])for(const line of readFileSync(join(out,`${dryRun.issue}.${list}.jsonl`),'utf8').split('\n').filter(Boolean)){
         const {sha,...entry}=JSON.parse(line) as Entry&{sha?:string};if(sha)memo.set(identity(entry),sha);
       }
       const result=applyFolder(dryRun,plannedInput(repo,cache,dryRun.issue,memo));
