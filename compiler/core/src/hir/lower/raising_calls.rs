@@ -1,6 +1,7 @@
 //! Select the raising entry or refuse an uncarryable call, and emit the raised-result test.
 
 use super::method_calls::MethodRaisingDispatch;
+use super::raising_reachability::CalleeOrigin;
 use super::{
     A_FUNCTION_WRITTEN_AS_A_VALUE, BinOp, Diagnostic, Edge, Exit, FuncBuilder, HirType, MemberKey,
     NodeId, OpKind, Origin, RAISING_SUFFIX, THROUGH_A_FUNCTION_VALUE, Terminator, TypeId, TypeKind,
@@ -1309,6 +1310,9 @@ impl FuncBuilder<'_> {
                 ArgumentMembers::Unresolved => false,
             });
         }
+        if a_value_held_callee(self.snapshot, self, CalleeOrigin::GetterResultOf(call)) {
+            return true;
+        }
         let Some(callee) = self.children(call).first().copied() else {
             return false;
         };
@@ -1401,7 +1405,7 @@ impl FuncBuilder<'_> {
         // census did not, because the GIR bindings are not in it.
         if !self.settlers.contains_key(&symbol.0)
             && !a_callee_with_a_body(self.snapshot, self, symbol.0)
-            && a_value_held_callee(self.snapshot, self, symbol.0)
+            && a_value_held_callee(self.snapshot, self, CalleeOrigin::Symbol(symbol.0))
         {
             return true;
         }

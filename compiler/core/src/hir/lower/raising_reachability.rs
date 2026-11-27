@@ -495,6 +495,9 @@ pub(super) fn walk_one_declaration(
             let constructs = kind == Some(syntax::NEW_EXPRESSION);
             reached.push(
                 match named {
+                    _ if a_value_held_callee(snapshot, probe, CalleeOrigin::GetterResultOf(at)) => {
+                        Reached::Elsewhere
+                    }
                     Some(target) if constructs || a_callee_with_a_body(snapshot, probe, target) => {
                         Reached::Body(target)
                     }
@@ -1140,6 +1143,9 @@ pub(super) fn a_call_that_can_raise(
             ArgumentMembers::Unresolved => false,
         });
     }
+    if a_value_held_callee(snapshot, probe, CalleeOrigin::GetterResultOf(call)) {
+        return true;
+    }
     // `f.call(r)` can raise what `f` can ([`FuncBuilder::through_call_or_apply`]).
     let Some(callee) = probe
         .through_call_or_apply(call)
@@ -1203,7 +1209,7 @@ pub(super) fn a_call_that_can_raise(
         Some(symbol) if constructs || a_callee_with_a_body(snapshot, probe, symbol) => {
             throwing.any.contains(&symbol)
         }
-        Some(symbol) if a_value_held_callee(snapshot, probe, symbol) => true,
+        Some(symbol) if a_value_held_callee(snapshot, probe, CalleeOrigin::Symbol(symbol)) => true,
         Some(_) => false,
         None => true,
     }
@@ -1232,8 +1238,16 @@ pub(super) fn a_method_under_a_computed_key(
     probe.node(probe.name_node(declaration)?).symbol
 }
 
-/// Whether a callee's symbol names a **value** that holds a function rather than a
+#[derive(Clone, Copy)]
+pub(super) enum CalleeOrigin {
+    Symbol(u32),
+    GetterResultOf(NodeId),
+}
+
+/// Whether a callee names a **value** that holds a function rather than a
 /// function declaration: a variable, a parameter, a property, a destructured binding.
+/// At `obj.f()` where `f` is a getter, the access runs the getter's body and the
+/// enclosing call invokes its result. Only the enclosing call asks about the result.
 ///
 /// This is the distinction [`a_call_that_can_raise`] needs and the symbol alone does not
 /// make. `const f = () => { throw … }` is *not* one -- [`the_function_of`] follows a
@@ -1249,8 +1263,21 @@ pub(super) fn a_method_under_a_computed_key(
 pub(super) fn a_value_held_callee(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
-    symbol: u32,
+    callee: CalleeOrigin,
 ) -> bool {
+    let symbol = match callee {
+        CalleeOrigin::Symbol(symbol) => symbol,
+        CalleeOrigin::GetterResultOf(call) => {
+            return probe.kind_of(call) == Some(syntax::CALL_EXPRESSION)
+                && probe.children(call).first().is_some_and(|callee| {
+                    let access = probe.through_assertions(*callee);
+                    probe
+                        .accessors_run_by(access)
+                        .into_iter()
+                        .any(|declaration| probe.kind_of(declaration) == Some(syntax::GET_ACCESSOR))
+                });
+        }
+    };
     snapshot.symbols.get(symbol as usize).is_some_and(|record| {
         record.declarations.iter().any(|at| {
             taken_as_a_closure(&probe.closures, *at)

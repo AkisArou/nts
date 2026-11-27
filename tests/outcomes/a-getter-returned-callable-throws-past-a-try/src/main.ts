@@ -1,6 +1,6 @@
 // run: check
-// #921: a getter-returned closure is invoked directly inside a try. Its throw escapes.
-// The control extracts the closure before invoking it. Found during #888 review.
+// #921: attempt catches a throw from a closure invoked directly at the getter read.
+// The control extracts the closure before invoking it.
 class Holder {
   readonly n: number;
   constructor(n: number) { this.n = n; }

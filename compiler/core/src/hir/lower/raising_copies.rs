@@ -1,6 +1,7 @@
 //! Choose which bodies and dispatch slots get a raising copy and record the reason an eligible route is held.
 
 use super::raising_calls::ArgumentMembers;
+use super::raising_reachability::CalleeOrigin;
 use super::{
     ClosureInfo, Copy, FuncBuilder, Hierarchy, Lowered, LoweringSnapshot, Member, MemberKey,
     MethodAccessor, Naming, NodeId, NodeKind, Program, Reached, SemanticSnapshot, Shared,
@@ -406,7 +407,11 @@ pub(super) fn copyable_symbols(
                         .filter(|called| {
                             raises.contains(called)
                                 && !copyable.contains(called)
-                                && !a_value_held_callee(snapshot, probe, *called)
+                                && !a_value_held_callee(
+                                    snapshot,
+                                    probe,
+                                    CalleeOrigin::Symbol(*called),
+                                )
                         })
                         .map(|called| (*symbol, called))
                 })
@@ -1488,6 +1493,9 @@ pub(super) fn a_value_held_call(
             .iter()
             .any(|group| matches!(group, ArgumentMembers::Stored(_)));
     }
+    if a_value_held_callee(snapshot, probe, CalleeOrigin::GetterResultOf(call)) {
+        return true;
+    }
     let Some(callee) = probe
         .children(call)
         .first()
@@ -1496,7 +1504,11 @@ pub(super) fn a_value_held_call(
         return false;
     };
     match probe.node(callee).symbol {
-        Some(symbol) => a_value_held_callee(snapshot, probe, probe.denoted_symbol(symbol).0),
+        Some(symbol) => a_value_held_callee(
+            snapshot,
+            probe,
+            CalleeOrigin::Symbol(probe.denoted_symbol(symbol).0),
+        ),
         None if probe.kind_of(callee) == Some(syntax::CALL_EXPRESSION) => true,
         None => {
             probe.kind_of(callee) == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
