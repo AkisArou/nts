@@ -15,6 +15,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, relative,resolve } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
+import type { GateResource } from '../gate/gate-resource.ts';
 
 export type Use = "gate" | "work";
 export type Linker = { script: string; args: [string] };
@@ -44,11 +45,12 @@ export class LinkError extends Error {
  * fails; `inherit` passes the linker's output through instead of keeping its
  * tail for the message.
  */
-export function linkTree(tree: string, use: Use, root: string, options: { env?: NodeJS.ProcessEnv; inherit?: boolean } = {}): void {
+export function linkTree(tree: string, use: Use, root: string, options: { env?: NodeJS.ProcessEnv; inherit?: boolean; resource?: GateResource } = {}): void {
   const linker = linkerOf(tree, use);
   if (!linker) throw new LinkError(`${tree} has no input linker: neither tooling/inputs/link.sh nor tooling/lanes/inputs.sh`, null);
   const r = spawnSync("sh", [linker.script, ...linker.args, root, tree], {
-    cwd: tree, env: options.env ?? process.env, encoding: "utf8", maxBuffer: 64 << 20, stdio: options.inherit ? "inherit" : "pipe",
+    cwd: tree, env: options.env ?? process.env, encoding: "utf8", maxBuffer: 64 << 20,
+    stdio: options.resource?.stdio(options.inherit ? 'inherit' : 'pipe') ?? (options.inherit ? 'inherit' : 'pipe'),
   });
   if (r.error || r.signal || r.status !== 0) {
     const said = `${r.stderr ?? ""}${r.stdout ?? ""}`.trim().split("\n").slice(-3).join("; ");

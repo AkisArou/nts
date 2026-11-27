@@ -456,7 +456,36 @@ sample; everything else runs after landing. A change's landing steps are what
 it owes, mapped through that table. An estimate from each step's measured
 cost keeps them under ten minutes, moving the costliest deferrable ones to
 the full check. `node tooling/landing/check.ts <commit> --dry-run` prints the
-landing steps, the deferred ones and the estimate.
+landing steps, the deferred ones and the estimate from the submitted history.
+
+**Local checks use the landing replay.** `check.ts <commit> --here` starts
+from a checkout of the submitted commit with no tracked changes or untracked,
+non-ignored files, and resolves current `main`.
+It uses the queued landing's replay, selects from that base to the replayed
+tip, and runs the resulting checkout in the task's own pool tree with its warm
+target. It names the submission, the checked tip, the main base and the tree
+at the start and end of the run. A replay conflict refuses before checkout.
+It uses the current checkout when its Git tree matches the replayed tip,
+including when the replay only adds an issue reference to the commit message.
+If main advances, the run is held so a later check can use the new base.
+An explicit check of a commit already on main uses that commit's own change
+and names that range.
+
+The tree's resource lock covers the replay checkout and the run. Before
+detaching, `--here` durably records the task branch, original HEAD, linked
+input targets, installation catalog bytes, replayed tip and its private
+worktree ref. It parks each existing installation directory by rename after
+recording its original path, parking path and inode. After the check drains,
+it returns those directories and restores the saved links and catalog bytes,
+checks those identities, then removes the temporary ref and receipt. A
+subsequent `--here` recovers an interrupted checkout under the same lock
+before resolving its commit argument, including a partial set of parking
+renames. The pool and upkeep keep a tree with a restore receipt reserved and
+name the receipt when access is refused. A shell with its working directory
+in the tree can stay open. `--here` detects another live gate runner. Direct
+commands such as `inner.ts`, `cargo test` and `node --test` can bypass that
+lock and are undetected. Finish them before starting `--here` and wait for
+the restore before editing, building, testing or committing in that tree.
 
 **Choosing is heavy work, and it is ledgered.** Evaluating the rules at both
 endpoints holds a few GiB, so every selection reserves through the memory
@@ -472,10 +501,10 @@ choosing the steps and running them.
 
 **Installed packages are current before a step runs.** The landing service's
 tree preparation links each tip with its own linker, which republishes the
-tree's installation catalog. `check.ts <commit> --here` runs in an agent's
-tree as it stands, so it reads that tree's catalog through its owner
+tree's installation catalog. `--here` reads the original checkout's catalog through its owner
 (`installationCatalogState` in `tooling/inputs/dependency-inputs.ts`) before it
-selects anything. A missing catalog, or one whose pins no longer match the tree
+selects anything, and links a replayed tip with that tip's own linker. A missing
+original catalog, or one whose pins no longer match the tree
 (after a rebase, say), is a refusal naming the
 `node tooling/inputs/linker.ts work` command that republishes it. A tree with
 no package graph owes no catalog.

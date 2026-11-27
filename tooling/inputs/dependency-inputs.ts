@@ -121,20 +121,29 @@ function recordAt(root:string,id:Identity):string {return join(dependencyCache(r
 function assertPrivate(root:string,tree:string):void {
   if(realpathSync(root)===realpathSync(tree))throw failure("prepare a private tree; the shared checkout is never an installation target");
 }
-function removeModules(tree:string,importers:string[]):void {
-  const files=execFileSync("git",gitArguments(["ls-files","-z"]),{cwd:tree,encoding:"utf8",maxBuffer:Infinity}).split("\0").filter(Boolean);
+/** The installer's writable dependency roots, including previous importers. */
+export function installationRoots(files: readonly string[], importers: readonly string[]): string[] {
   const owners=new Set(importers),tracked=new Set<string>();
   for(const file of files) {
     const parts=file.split("/");
     const at=parts.indexOf("node_modules");if(at>=0)tracked.add(parts.slice(0,at+1).join("/"));
     for(let directory=dirname(file);directory!==".";directory=dirname(directory))owners.add(directory);
   }
+  const roots:string[]=[];
   for(const importer of owners) {
-    const path=join(tree,importer,"node_modules");
-    if([...tracked].some(source=>relative(tree,path)===source||relative(tree,path).startsWith(source+sep))) {
-      if(importers.includes(importer))throw failure(`an install target is tracked source: ${relative(tree,path)}`);
+    const path=join(importer,"node_modules");
+    if([...tracked].some(source=>path===source||path.startsWith(source+sep))) {
+      if(importers.includes(importer))throw failure(`an install target is tracked source: ${path}`);
       continue;
     }
+    roots.push(path);
+  }
+  return roots;
+}
+function removeModules(tree:string,importers:string[]):void {
+  const files=execFileSync("git",gitArguments(["ls-files","-z"]),{cwd:tree,encoding:"utf8",maxBuffer:Infinity}).split("\0").filter(Boolean);
+  for(const relativePath of installationRoots(files,importers)) {
+    const path=join(tree,relativePath);
     if(existsSync(dirname(path))) {
       const parent=realpathSync(dirname(path));
       if(parent!==tree&&!parent.startsWith(tree+sep))throw failure(`module directory escapes its tree: ${path}`);

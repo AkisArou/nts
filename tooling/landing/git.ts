@@ -11,6 +11,8 @@ import {homedir} from 'node:os';
 import {oracleSourceDigests} from '../differential/oracle-source-digests.ts';
 import {RECORDS,recordPath} from '../differential/oracle-record-paths.ts';
 import { issuesNamed, withFixes } from "../tasks/links.ts";
+import { issueOfBranch } from '../tasks/branch.ts';
+import { hereRestore, hereRestoreNeeded } from './here-restore-record.ts';
 
 export type Git = { root: string; env?: NodeJS.ProcessEnv };
 export class GitError extends Error {}
@@ -156,6 +158,28 @@ export function namingIssue(git: Git, base: string, tip: string, n: number): str
   return checked(git, ["commit-tree", tree!, ...parentArgs, "-F", "-"], git.root, env, message);
 }
 
+type LandingReplay = { state: 'check'; tip: string } | { state: 'already' | 'refused' | 'withdrawn'; message: string };
+
+/** Decide what a submission leaves on this main, before any checkout or steps run. */
+export function landingReplay(git: Git, base: string, sha: string, branch: string | null, report: (line: string) => void): LandingReplay {
+  const short = (commit: string) => commit.slice(0, 12);
+  const rebased = rebaseOnto(git, base, sha);
+  if ('conflict' in rebased) {
+    const message = rebased.reason
+      ? `${short(sha)} does not rebase onto main ${short(base)}: ${short(rebased.conflict)} ${rebased.reason}`
+      : `${short(sha)} conflicts with main ${short(base)} in ${rebased.files.join(', ') || 'files git did not name'} (at ${short(rebased.conflict)}): rebase it onto main and submit it again`;
+    return { state: 'refused', message };
+  }
+  for (const fixture of rebased.leftPending ?? []) report(`left pending: ${fixture}: oracle sources changed at landing base ${short(base)}; its recorded rows were dropped`);
+  if (isAncestor(git, rebased.tip, base)) {
+    return rebased.leftPending?.length
+      ? { state: 'withdrawn', message: `withdrawn: all records were dropped; left pending: ${rebased.leftPending.join(', ')}` }
+      : { state: 'already', message: `${short(sha)} is on main already` };
+  }
+  const issue = branch === null ? null : issueOfBranch(branch);
+  return { state: 'check', tip: issue === null ? rebased.tip : namingIssue(git, base, rebased.tip, issue) };
+}
+
 /** The files `commit` conflicts in when picked onto `onto`. */
 export function conflictedFiles(git: Git, commit: string, onto: string): string[] {
   const r = run(git, ["merge-tree", "--write-tree", "--name-only", "--no-messages", "--merge-base", `${commit}^`, onto, commit]);
@@ -166,15 +190,20 @@ export function conflictedFiles(git: Git, commit: string, onto: string): string[
   return [...new Set(files)];
 }
 
-export type Worktree = { path: string; head: string; branch: string | null };
-/** `git worktree list`, one row per tree; `branch` is null for a detached one. */
+export type Worktree = { path: string; head: string; branch: string | null; hereReplay?: string };
+/** A --here receipt keeps the task's branch and checkout reserved while Git shows a detached HEAD. */
 export function worktrees(git: Git): Worktree[] {
   const out: Worktree[] = [];
   for (const record of checked(git, ["worktree", "list", "--porcelain", "-z"]).split("\0\0")) {
     const fields = record.split("\0").filter(Boolean);
     const path = fields.find(f => f.startsWith("worktree "))?.slice(9);
     if (!path || fields.includes("bare")) continue;
-    out.push({ path, head: fields.find(f => f.startsWith("HEAD "))?.slice(5) ?? "", branch: fields.find(f => f.startsWith("branch "))?.slice(7).replace(/^refs\/heads\//, "") ?? null });
+    const head = fields.find(f => f.startsWith('HEAD '))?.slice(5) ?? '';
+    const branch = fields.find(f => f.startsWith('branch '))?.slice(7).replace(/^refs\/heads\//, '') ?? null;
+    try {
+      const record = hereRestore(path);
+      out.push(record ? { path, head: record.head, branch: record.branch, hereReplay: hereRestoreNeeded(path) } : { path, head, branch });
+    } catch (error) { out.push({ path, head, branch, hereReplay: String(error) }); }
   }
   return out;
 }

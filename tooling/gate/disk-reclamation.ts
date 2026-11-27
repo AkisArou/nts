@@ -15,6 +15,7 @@ import {userInfo} from 'node:os';
 import {worktrees,type Git} from '../landing/git.ts';
 import {assertNoProcessUsers} from '../landing/tree-users.ts';
 import {GateResource} from './gate-resource.ts';
+import { assertNoHereRestore } from '../landing/here-restore-record.ts';
 import {gitArguments} from './git-arguments/main.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {buildGeneration,buildGenerationFromInputs,type BuildOutputName} from './build-completion.ts';
@@ -496,6 +497,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     const start=candidates.length;
     try{
       physical(target.tree);
+      if(!target.service)assertNoHereRestore(target.tree);
       const branch=target.service?null:registered().find(row=>resolve(row.path)===target.tree)?.branch;
       if(branch){
         // An explicit detached worker lease offers only Cargo output, never
@@ -548,6 +550,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       held.intent=state.begin(root,'reclaim');
       const allocatedBytes=host.allocatedBytes(root);
       const certify=()=>{
+        if(!candidate.service)assertNoHereRestore(tree);
         sameRoot(candidate.identity);
         if(gitRead(pool.git,['rev-parse','refs/heads/main'])!==revision)throw Error('current build policy changed during reclamation');
         assertUnclaimed(root);

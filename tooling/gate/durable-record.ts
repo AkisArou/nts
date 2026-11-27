@@ -23,11 +23,14 @@ function removePending(record:Publication):void{
   try{if(record.file!==undefined){const fd=record.file;record.file=undefined;closeSync(fd);}}
   finally{rmSync(record.temporary,{force:true});}
 }
-export function durableRecord(path: string, value: unknown,options:{compact?:true}={}): void {
+export function durableBytes(path: string, bytes: string | Buffer): void {
   const record=publication(path);
   try {
-    writeFileSync(record.file!,JSON.stringify(value,null,options.compact?undefined:2)+'\n');publish(record);
+    writeFileSync(record.file!,bytes);publish(record);
   }finally{removePending(record);}
+}
+export function durableRecord(path: string, value: unknown,options:{compact?:true}={}): void {
+  durableBytes(path,JSON.stringify(value,null,options.compact?undefined:2)+'\n');
 }
 
 /** A producer supplies bounded chunks, never a complete rendered document.

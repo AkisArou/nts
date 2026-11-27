@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import {gitArguments} from "./git-arguments/main.ts";
 import {CheckStream} from './check-stream.ts';
+import {liveTreeRunLock,treeRunLockPath} from './tree-run-lock.ts';
 import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
@@ -1923,7 +1924,7 @@ function recordTimes() {
 // `addons` rebuilding `target/node/*.node` under another run's `divergence`.
 // The lock names the run holding it; a lock whose process is gone is stale and
 // taken over.
-const LOCK = join(ROOT, "target", ".gate-run.lock");
+const LOCK = treeRunLockPath(ROOT);
 function takeTreeLock() {
   mkdirSync(dirname(LOCK), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -1935,10 +1936,8 @@ function takeTreeLock() {
       return;
     } catch (e) {if(isCommandExit(e))throw e;
       if (e.code !== "EEXIST") throw e;
-      const [pid, dir] = readFileSync(LOCK, "utf8").trim().split(" ");
-      let alive = false;
-      try { process.kill(Number(pid), 0); alive = true; } catch (k) {if(isCommandExit(k))throw k; alive = k.code === "EPERM"; }
-      if (alive) usage(`another gate (pid ${pid}, logs ${dir}) is running in this tree; its steps write the same target/ paths`);
+      const owner = liveTreeRunLock(LOCK);
+      if (owner) usage(`another gate (pid ${owner.pid}, logs ${owner.run}) is running in this tree; its steps write the same target/ paths`);
       rmSync(LOCK, { force: true });
     }
   }

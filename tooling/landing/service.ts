@@ -30,8 +30,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
-import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingIssue, pushedMain, pushMain, rebaseOnto, revParse, treeOf, type BranchOutcome, type Git } from "./git.ts";
-import { issueOfBranch } from "../tasks/branch.ts";
+import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, landingReplay, pushedMain, pushMain, revParse, treeOf, type BranchOutcome, type Git } from "./git.ts";
 import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
 import { Queue, type Checking, type Entry, type Result } from "./queue.ts";
@@ -248,22 +247,12 @@ export async function landOne(config: Config, queue: Queue, entry: Checking,canc
     if(queue.withdrawRequested(entry.id))return queue.answer(entry,{state:'withdrawn',message:'withdrawn before another check started'});
     const base = revParse(g, "refs/heads/main");
     queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, message: `rebasing onto main ${short(base)}` });
-    const rebased = rebaseOnto(g, base, entry.sha);
-    if ("conflict" in rebased) {
-      const message = rebased.reason
-        ? `${short(entry.sha)} does not rebase onto main ${short(base)}: ${short(rebased.conflict)} ${rebased.reason}`
-        : `${short(entry.sha)} conflicts with main ${short(base)} in ${rebased.files.join(", ") || "files git did not name"} (at ${short(rebased.conflict)}): rebase it onto main and submit it again`;
-      return queue.answer(entry, { state: "refused", base, message });
+    const replay = landingReplay(g, base, entry.sha, entry.branch, config.log);
+    if (replay.state !== 'check') {
+      if (replay.state === 'already') return finishLanding(config, queue, entry, base, base, null, null, replay.message);
+      return queue.answer(entry, {state:replay.state, base, message:replay.message});
     }
-    for(const fixture of rebased.leftPending??[])config.log(`left pending: ${fixture}: oracle sources changed at landing base ${short(base)}; its recorded rows were dropped`);
-    if (isAncestor(g, rebased.tip, base)) {
-      if(rebased.leftPending?.length)return queue.answer(entry,{state:'withdrawn',base,message:`withdrawn: all records were dropped; left pending: ${rebased.leftPending.join(', ')}`});
-      return finishLanding(config, queue, entry, base, base, null, null, `${short(entry.sha)} is on main already`);
-    }
-    // A task's issue closes when main reaches the change; the commit checked
-    // is the one that lands.
-    const issue = entry.branch === null ? null : issueOfBranch(entry.branch);
-    const tip = issue === null ? rebased.tip : namingIssue(g, base, rebased.tip, issue);
+    const {tip} = replay;
     queue.update({ base, tip, phase: "checking" });
     const paths = changedPaths(g, base, tip);
     const checked = await selectAndRun(config, queue, entry, base, tip, paths, cancellation);

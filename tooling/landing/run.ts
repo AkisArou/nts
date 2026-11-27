@@ -108,6 +108,8 @@ export type RunOptions = {
   ceiling?: number;
   /** A submission's durable withdrawal watch, never an environment policy. */
   signal?:AbortSignal;
+  /** An in-place --here checkout's resource lock, lent to its candidate children. */
+  treeLock?: number;
   /** Report retained ownership while cancellation has not proved its drain. */
   cancellationHold?:(reason:string)=>void;
   /** A repeated durable withdrawal wakes certification after a failed drain. */
@@ -152,7 +154,7 @@ async function certifyDrain(options:RunOptions,check:()=>void|Promise<void>):Pro
 
 async function runCandidate(options:RunOptions,node:string,request:Parameters<typeof candidateCommandAsync>[1],launcher:NodeJS.ProcessEnv,gate=false,log?:string){
   options.signal?.throwIfAborted();
-  const result=await candidateCommandAsync(node,request,launcher,{signal:options.signal,retainDrain:true,groupDirectory:join(options.run,'candidate-groups'),cancelled:()=>options.cancellationHold?.('waiting for the owned candidate command and its children to close')});
+  const result=await candidateCommandAsync(node,request,launcher,{signal:options.signal,treeLock:options.treeLock,retainDrain:true,groupDirectory:join(options.run,'candidate-groups'),cancelled:()=>options.cancellationHold?.('waiting for the owned candidate command and its children to close')});
   await certifyDrain(options,()=>result.certifyDrain?.());
   if(result.cancelled){
     if(log)appendFileSync(log,`${result.stdout??''}${result.stderr??''}`);
