@@ -45,7 +45,10 @@ export function work(_iterations: number): number {
     const original = text(kind);
     const aliased = fieldAlias(kind, kind);
     if (aliased.substring(0, original.length) !== original) return 0;
-    if (liveViews(kind, kind).length === 0) return 0;
+    if (aliased.charAt(original.length) !== "|") return 0;
+    const prefix = original.slice(1, original.length - 1) + "|" +
+      original.substring(2, original.length - 2) + "|" + original[3]! + "|";
+    if (liveViews(kind, kind).substring(0, prefix.length) !== prefix) return 0;
   }
   return 1;
 }
