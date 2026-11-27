@@ -96,7 +96,8 @@ export function targetScratch(keep:Record<string,Keep>=readKeep()):{names:Record
 // folder a record keeps) use. Records are docs/records/ and results/ at
 // accepted main; working edits and candidate branches never decide retention.
 // ---------------------------------------------------------------------------
-const RECORD_DIRECTORIES=[acceptedRevisionData(new URL('../../docs/records/',import.meta.url)),acceptedRevisionData(new URL('../../results/',import.meta.url))];
+const RECORDS=acceptedRevisionData(new URL('../../docs/records/',import.meta.url));
+const RESULTS=acceptedRevisionData(new URL('../../results/',import.meta.url));
 const FOLDER_PATTERN='nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch';
 const HOME_PREFIXES=['~/.cache/','$HOME/.cache/','${HOME}/.cache/'];
 export type Unreadable={error:string};
@@ -117,26 +118,21 @@ export function scratchRecordCitations(text:string,cache:string):string[]{
 /** Every issue folder a committed record cites. Unknown Git state is an
  * error the caller keeps folders by. */
 export function readScratchRecordCitations(reader:AcceptedRevision,cache:string):string[]|Unreadable{
-  const found=new Set<string>();
-  for(const directory of RECORD_DIRECTORIES){
-    const result=reader.grep(directory,FOLDER_PATTERN);
-    if(typeof result!=='string')return result;
-    for(const folder of scratchRecordCitations(result,cache))found.add(folder);
-  }
-  return [...found].sort();
+  const records=reader.grep(RECORDS,FOLDER_PATTERN),results=reader.grep(RESULTS,FOLDER_PATTERN);
+  if(typeof records!=='string')return records;
+  if(typeof results!=='string')return results;
+  return scratchRecordCitations(records+'\n'+results,cache);
 }
 
 /** A committed record, whole: a relative path cites only beside its own root. */
 export type CitingRecord={path:string;text:string};
 /** The records that cite `folder` (nts-scratch/<N>), by the same boundary rule. */
 export function readCitingRecords(reader:AcceptedRevision,folder:string,cache:string):CitingRecord[]|Unreadable{
-  const escaped=folder.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),records:CitingRecord[]=[];
-  for(const directory of RECORD_DIRECTORIES){
-    const result=reader.files(directory,escaped+'([^0-9]|$)');
-    if('error' in result)return result;
-    records.push(...result.filter(record=>scratchRecordCitations(record.text,cache).includes(folder)));
-  }
-  return records;
+  const pattern=folder.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^0-9]|$)';
+  const records=reader.files(RECORDS,pattern),results=reader.files(RESULTS,pattern);
+  if('error' in records)return records;
+  if('error' in results)return results;
+  return [...records,...results].filter(record=>scratchRecordCitations(record.text,cache).includes(folder));
 }
 
 /** One spelling in a record that may name an entry of the folder.
