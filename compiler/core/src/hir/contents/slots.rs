@@ -172,6 +172,7 @@ struct Written {
 #[derive(Debug, Clone)]
 struct WrittenIndex {
     aliases: Arc<Aliases>,
+    facts: usize,
     slots: FxHashMap<Slot, FxHashSet<ValueId>>,
     components: FxHashMap<(usize, Slot), FxHashSet<ValueId>>,
 }
@@ -184,6 +185,7 @@ impl PartialEq for Written {
 
 impl WrittenIndex {
     fn insert(&mut self, base: ValueId, slot: Slot) {
+        self.facts += 1;
         self.slots.entry(slot).or_default().insert(base);
         self.components
             .entry((self.aliases.component(base), slot))
@@ -192,6 +194,7 @@ impl WrittenIndex {
     }
 
     fn remove(&mut self, base: ValueId, slot: Slot) {
+        self.facts -= 1;
         let key = (self.aliases.component(base), slot);
         if let Some(bases) = self.slots.get_mut(&slot) {
             bases.remove(&base);
@@ -278,6 +281,7 @@ impl Written {
         }
         let mut index = WrittenIndex {
             aliases: Arc::clone(aliases),
+            facts: 0,
             slots: FxHashMap::default(),
             components: FxHashMap::default(),
         };
@@ -290,8 +294,10 @@ impl Written {
     }
 
     /// Visits only facts for this slot and, for a confined writer, its alias
-    /// ceiling. Debug/test compilers compare every result with the full scan.
-    /// The returned visits count excludes that deliberately exhaustive check.
+    /// ceiling. Unit tests and the explicit verifier build compare every result
+    /// with the full scan. Ordinary debug compilers check at most 64 facts, so
+    /// verification cannot restore the quadratic allocation walk. The returned
+    /// visits count excludes this independent check.
     fn invalidate(
         &mut self,
         slot: Slot,
@@ -299,17 +305,19 @@ impl Written {
         aliases: &Arc<Aliases>,
     ) -> usize {
         self.bind(aliases);
-        #[cfg(debug_assertions)]
-        let expected = {
-            let mut facts = self.facts.clone();
-            facts.retain(|base, slots| {
-                if confined.is_none_or(|writer| aliases.may_share(writer, *base)) {
-                    slots.remove(&slot);
-                }
-                !slots.is_empty()
+        #[cfg(any(test, feature = "verify-slot-index", debug_assertions))]
+        let expected = (cfg!(any(test, feature = "verify-slot-index"))
+            || self.index.as_ref().unwrap().facts <= 64)
+            .then(|| {
+                let mut facts = self.facts.clone();
+                facts.retain(|base, slots| {
+                    if confined.is_none_or(|writer| aliases.may_share(writer, *base)) {
+                        slots.remove(&slot);
+                    }
+                    !slots.is_empty()
+                });
+                facts
             });
-            facts
-        };
         let index = self.index.as_ref().unwrap();
         let affected = match confined {
             Some(writer) => index.components.get(&(aliases.component(writer), slot)),
@@ -320,11 +328,13 @@ impl Written {
         for base in affected {
             self.remove(base, slot);
         }
-        #[cfg(debug_assertions)]
-        assert_eq!(
-            self.facts, expected,
-            "indexed slot invalidation disagrees with full scan"
-        );
+        #[cfg(any(test, feature = "verify-slot-index", debug_assertions))]
+        if let Some(expected) = expected {
+            assert_eq!(
+                self.facts, expected,
+                "indexed slot invalidation disagrees with full scan"
+            );
+        }
         visits
     }
 

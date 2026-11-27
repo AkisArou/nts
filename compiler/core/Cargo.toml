@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Exhaustive slot-index verification for corpus proofs; never a default build.
+verify-slot-index = []
+
 [dependencies]
 nts-diagnostics.workspace = true
 nts-semantic-schema.workspace = true
