@@ -191,6 +191,96 @@ fn raw_program(source: &str) -> Program {
     hir::lower::lower(&snapshot).program
 }
 
+#[test]
+fn an_implicit_iterator_getter_uses_its_raising_accessor() {
+    let program = raw_program(
+        r"
+        class GetterSource {
+            [Symbol.iterator](): GetterSource { return this; }
+            next(): { value: number; done: boolean } { return { value: 1, done: false }; }
+            get return(): () => { value: number; done: boolean } { throw new RangeError(); }
+        }
+        export function getterCase(): number {
+            try {
+                for (const value of new GetterSource()) {
+                    if (value !== 0) break;
+                }
+            } catch {
+                return -1;
+            }
+            return 0;
+        }
+        ",
+    );
+    assert!(
+        program.refused_bodies().next().is_none(),
+        "{:?}",
+        program.uncompiled
+    );
+    let caller = program
+        .funcs
+        .iter()
+        .find(|f| f.name == "getterCase")
+        .unwrap();
+    let getter = "GetterSource#get return@raises";
+    assert!(caller.values.iter().any(|op| matches!(
+        &op.kind,
+        OpKind::Call { callee: Callee::Direct(name), .. } if name == getter
+    )));
+    assert!(program.funcs.iter().any(|f| f.name == getter));
+}
+
+#[test]
+fn a_program_client_keeps_its_raising_interface_dispatch() {
+    let program = raw_program(
+        r#"
+        interface HttpClient {
+            getStringAsync(uri: string): Promise<string>;
+        }
+        class ProgramClient implements HttpClient {
+            getStringAsync(uri: string): Promise<string> {
+                if (uri === "invalid") throw new RangeError();
+                return Promise.resolve("ok");
+            }
+        }
+        function attempt(run: () => Promise<string>): Promise<string> {
+            try { return run(); } catch { return Promise.resolve("caught"); }
+        }
+        function client(): HttpClient { return new ProgramClient(); }
+        export function probe(uri: string): Promise<string> {
+            const receiver = client();
+            return attempt(() => receiver.getStringAsync(uri));
+        }
+        "#,
+    );
+    assert!(program.uncompiled.is_empty(), "{:?}", program.uncompiled);
+    let closure = program
+        .funcs
+        .iter()
+        .find(|f| f.name == "Closure0#call@raises")
+        .unwrap();
+    let slot = closure
+        .values
+        .iter()
+        .find_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Virtual { slot, declared },
+                ..
+            } if declared == "HttpClient#getStringAsync@raises" => Some(*slot as usize),
+            _ => None,
+        })
+        .expect("the closure uses the program interface raising slot");
+    let layout = program
+        .layouts
+        .iter()
+        .find(|l| l.name == "ProgramClient")
+        .unwrap();
+    assert_eq!(
+        layout.methods[slot].as_deref(),
+        Some("ProgramClient#getStringAsync@raises")
+    );
+}
+
 fn interface_closure(implementation: &str) -> Program {
     raw_program(&format!(
         r"

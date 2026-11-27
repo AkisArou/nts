@@ -1295,6 +1295,11 @@ impl FuncBuilder<'_> {
                 return true;
             }
         }
+        // Native lowering owns the boundary. For example, HRESULT lowering
+        // turns a failed status into a throw in the caller's current handler.
+        if self.native_method(call).is_some() {
+            return false;
+        }
         if let Some(dispatch) = self.method_raising_at(call) {
             return !matches!(dispatch, MethodRaisingDispatch::Quiet);
         }

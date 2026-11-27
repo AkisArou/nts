@@ -1134,11 +1134,13 @@ impl FuncBuilder<'_> {
         member: &MemberKey,
     ) -> Option<MethodRaisingDispatch> {
         self.hierarchy.declaring(receiver, member)?;
-        if self.hierarchy.overridden(receiver, member) {
+        let overridden = self.hierarchy.overridden(receiver, member);
+        if overridden {
             if let Some(slot) = self.hierarchy.slot_for(receiver, member, true) {
                 return Some(MethodRaisingDispatch::Virtual(slot));
             }
-            if self.hierarchy.faces.contains(&receiver) {
+            if member.accessor == MethodAccessor::Method && self.hierarchy.faces.contains(&receiver)
+            {
                 return Some(
                     if interface_family_can_raise(
                         self.snapshot,
@@ -1155,6 +1157,18 @@ impl FuncBuilder<'_> {
                 );
             }
         }
+        if member.accessor != MethodAccessor::Method {
+            // An implicit accessor call has already chosen its raising form.
+            // An overridden accessor needs a slot; a direct accessor does
+            // not go through the method-declaration classifier below.
+            return Some(
+                if overridden && self.hierarchy.slot_for(receiver, member, false).is_some() {
+                    MethodRaisingDispatch::Unavailable
+                } else {
+                    MethodRaisingDispatch::Direct
+                },
+            );
+        }
         let declaration = self.implementation_of(self.member_declaration(receiver, &member.key)?);
         if self.kind_of(declaration) != Some(syntax::METHOD_DECLARATION) {
             return None;
@@ -1164,13 +1178,11 @@ impl FuncBuilder<'_> {
         if !a_declaration_that_can_raise(self.hierarchy, self.throwing, declaration) {
             return Some(MethodRaisingDispatch::Quiet);
         }
-        Some(
-            if !self.hierarchy.overridden(receiver, member) && self.raising.contains(&declaration) {
-                MethodRaisingDispatch::Direct
-            } else {
-                MethodRaisingDispatch::Unavailable
-            },
-        )
+        Some(if !overridden && self.raising.contains(&declaration) {
+            MethodRaisingDispatch::Direct
+        } else {
+            MethodRaisingDispatch::Unavailable
+        })
     }
 
     /// [`Self::callee_for`], told whether to name the raising copy rather than

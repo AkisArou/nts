@@ -1964,7 +1964,6 @@ tests/typescript/conversions/value-of-returning-an-object.ts	{"kind":"refused","
 tests/typescript/dataview-routes-controls/bigints-int64-captured-fractional-offsets-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/bigints-int64-generic-seeded-endian-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/bigints-int64-generic-wide-modulo-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/dataview-routes-controls/bigints-int64-interface-failed-write-atomic-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build"}}
 tests/typescript/dataview-routes-controls/bigints-int64-interface-seeded-signedness-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/bigints-int64-map-nonfitting-offsets-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/bigints-int64-public-default-limits-control.ts	{"kind":"pass"}
@@ -2061,7 +2060,6 @@ tests/typescript/dataview-routes-controls/views-access-captured-window-replaceme
 tests/typescript/dataview-routes-controls/views-access-float32-generic-final-fit-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/views-access-float64-public-window-bounds-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/views-access-int16-private-window-bounds-control.ts	{"kind":"pass"}
-tests/typescript/dataview-routes-controls/views-access-interface-width-final-fit-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build"}}
 tests/typescript/dataview-routes-controls/views-access-uint32-static-window-bounds-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/views-access-uint8-map-window-bounds-control.ts	{"kind":"pass"}
 tests/typescript/dataview-routes-controls/views-access-union-negative-offsets-control.ts	{"kind":"pass"}
@@ -10595,7 +10593,6 @@ tests/typescript/typed-array-routes-controls/construction-layout-length-public-i
 tests/typescript/typed-array-routes-controls/construction-layout-length-static-bigint64-control.ts	{"kind":"pass"}
 tests/typescript/typed-array-routes-controls/construction-layout-window-end-captured-control.ts	{"kind":"pass"}
 tests/typescript/typed-array-routes-controls/construction-layout-window-misaligned-generic-control.ts	{"kind":"pass"}
-tests/typescript/typed-array-routes-controls/construction-layout-window-overlong-interface-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused at run time: calling `Closure0#call` from inside a `try`, whose raising copy this compiler could not build"}}
 tests/typescript/typed-array-routes-controls/construction-layout-window-private-float64-control.ts	{"kind":"pass"}
 tests/typescript/typed-array-routes-controls/construction-layout-window-public-int32-control.ts	{"kind":"pass"}
 tests/typescript/typed-array-routes-controls/construction-layout-window-ragged-map-control.ts	{"kind":"pass"}
