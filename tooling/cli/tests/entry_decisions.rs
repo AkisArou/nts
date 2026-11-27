@@ -62,6 +62,25 @@ fn entry_decisions_are_sorted_and_do_not_change_the_unrequested_listing() {
                     || line.starts_with("declare func "))
                 .count()
         );
+        let slot_names: Vec<_> = names
+            .iter()
+            .copied()
+            .filter(|name| name.starts_with("@slots:"))
+            .collect();
+        assert_eq!(
+            slot_names,
+            [
+                "@slots:Sink#keep#whole:0.0",
+                "@slots:Sink#keep@raises#whole:0.0",
+            ]
+        );
+        for name in slot_names {
+            let row = rows.iter().find(|row| row["function"] == name).unwrap();
+            assert_eq!(
+                row["decision"], "excluded",
+                "a private slot body has no separate borrowed arrival"
+            );
+        }
         assert!(
             rows.iter()
                 .any(|row| row["function"] == "publish" && row["decision"] == "selected")
