@@ -66,13 +66,55 @@ test("a held change waits aside until it is retried, at the front", t => {
   assert.throws(() => q.retry(a.id), /no held change/);
 });
 
+test("queue timing survives restart and retry under the same id", t => {
+  const clock = t.mock.timers;
+  const time = (seconds: number) => new Date(Date.UTC(2026, 10, 27, 12, 0, seconds)).toISOString();
+  clock.enable({ apis: ["Date"], now: Date.parse(time(0)) });
+  const q = new Queue(home(t));
+  const entry = q.submit(sha("a"));
+  clock.setTime(Date.parse(time(1)));
+  const checked = q.take()!;
+  assert.equal(checked.first_checking_at, time(1));
+  // A checking record from before the first-checking field still owns its start.
+  const legacy = { ...checked };
+  delete legacy.first_checking_at;
+  writeFileSync(join(q.home, "checking.json"), JSON.stringify(legacy));
+  clock.setTime(Date.parse(time(2)));
+  q.update({ run: "/runs/first", selected_at: time(2) });
+  assert.equal(q.requeue()?.first_checking_at, time(1));
+  clock.setTime(Date.parse(time(3)));
+  assert.equal(q.take()?.started_at, time(3));
+  const held = q.answer(entry, { state: "held", message: "awaiting retry" });
+  assert.equal(held.id, entry.id);
+  assert.equal(held.submitted_at, time(0));
+  assert.equal(held.first_checking_at, time(1));
+  assert.equal(held.selected_at, time(2));
+
+  const first = q.submit(sha("b"), { first: true });
+  clock.setTime(Date.parse(time(4)));
+  q.retry(entry.id);
+  assert.deepEqual(q.waiting().map(row => row.id), [first.id, entry.id]);
+  assert.equal(q.withdraw(first.id), "withdrawn");
+  clock.setTime(Date.parse(time(5)));
+  assert.equal(q.take()?.first_checking_at, time(1));
+  q.update({ run: "/runs/retry", selected_at: time(5) });
+  q.answer(entry, { state: "landed", message: "landed" });
+  const landed = new Queue(q.home).result(entry.id)!;
+  assert.equal(landed.id, entry.id);
+  assert.equal(landed.submitted_at, time(0));
+  assert.equal(landed.first_checking_at, time(1));
+  assert.equal(landed.selected_at, time(5));
+});
+
 test('disk readiness restores its original key and cannot resurrect a newer answer',t=>{
   const q=new Queue(home(t)),entry=q.submit(sha('a')),later=q.submit(sha('b'));
   const disk={kind:'shortfall' as const,root:q.home,target:join(q.home,'target'),outputs:['nts-dev' as const],shortBytes:1,freeBytes:0,floorBytes:0,buildReservedBytes:1,temporaryReservedBytes:0};
   const held=q.answer(q.take()!,{state:'held',message:'disk',retryDisk:[disk]});
   assert.equal(q.retryDiskReady(entry.id,'different answer'),null);
-  assert.deepEqual(q.retryDiskReady(entry.id,held.answerNonce!),entry);
-  assert.deepEqual(q.waiting(),[entry,later]);assert.equal(q.retryDiskReady(entry.id,held.answerNonce!),null);
+  const restored = q.retryDiskReady(entry.id,held.answerNonce!);
+  assert.equal(restored?.submitted_at,entry.submitted_at);
+  assert.equal(restored?.first_checking_at,held.first_checking_at);
+  assert.deepEqual(q.waiting().map(row=>row.id),[entry.id,later.id]);assert.equal(q.retryDiskReady(entry.id,held.answerNonce!),null);
   q.answer(q.take()!,{state:'held',message:'disk again',retryDisk:[disk]});
   // A durable request can arrive just before the drained result is published.
   writeFileSync(join(q.home,'withdraw',entry.id),JSON.stringify({version:1,at:'fixture',request:'before-held'}));
@@ -102,7 +144,11 @@ test("a withdrawal answers a waiting change at once and the one being checked wh
   assert.equal(q.withdraw(sha("a").slice(0, 12)), "requested");
   assert.ok(q.withdrawRequested(a.id));
   assert.equal(q.withdraw(b.id), "withdrawn");
-  assert.equal(q.result(b.id)?.state, "withdrawn");
+  const withdrawn = q.result(b.id)!;
+  assert.equal(withdrawn.state, "withdrawn");
+  assert.equal(withdrawn.submitted_at, b.submitted_at);
+  assert.equal(withdrawn.first_checking_at, null);
+  assert.equal(withdrawn.selected_at, null);
   assert.deepEqual(q.waiting(), []);
   assert.equal(q.withdraw("nothing"), "unknown");
   q.answer(q.checking()!, { state: "withdrawn", message: "withdrawn while it was checked" });

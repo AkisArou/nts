@@ -36,15 +36,24 @@ export type Entry = {
   /** The tree it was submitted from, when it was a tree. */
   tree: string | null;
   first: boolean; submitted_at: string; by: string; note?: string;
+  /** Manual retry changes queue order while retaining the submission time. */
+  queued_at?: string;
+  first_checking_at?: string;
+  /** The latest completed selection for this queue id. */
+  selected_at?: string;
 };
 export type Checking = Entry & { started_at: string; base?: string; tip?: string; run?: string; phase?: "checking" | "landing" };
-/** Run metadata belongs to checking/held, never to a queued arrival. */
-function entryOf(current:Checking):Entry{
-  const {started_at:_s,base:_b,tip:_t,run:_r,phase:_p,...entry}=current;return entry;
+/** The current run belongs to checking; its queue history follows the entry. */
+function entryOf(current:Entry | Checking):Entry{
+  if (!("started_at" in current)) return current;
+  const {started_at,base:_b,tip:_t,run:_r,phase:_p,...entry}=current;
+  return {...entry,first_checking_at:entry.first_checking_at??started_at};
 }
 export type State = "landed" | "refused" | "withdrawn" | "held";
 export type Result = {
   version: 1; id: string; sha: string; state: State; message: string; at: string;
+  /** Absent in older results; null denotes a phase with no recorded start or selection. */
+  submitted_at?: string; first_checking_at?: string | null; selected_at?: string | null;
   /** Source-owned answer identity; wall time is display data only. */
   answerNonce?:string;
   /** The task's branch the change came from (Entry.branch); absent in answers from before it was kept. */
@@ -87,7 +96,7 @@ export class Queue {
   }
   // `0-` sorts ahead of `1-`; among equals, by time and then id.
   private key(entry: Entry): string {
-    return `${entry.first ? 0 : 1}-${String(Date.parse(entry.submitted_at)).padStart(15, "0")}-${entry.id}`;
+    return `${entry.first ? 0 : 1}-${String(Date.parse(entry.queued_at ?? entry.submitted_at)).padStart(15, "0")}-${entry.id}`;
   }
 
   /** The changes waiting, in the order they will be checked. */
@@ -100,7 +109,8 @@ export class Queue {
       for (const name of files(this.path("queue"))) {
         const entry = readJson<Entry>(this.path("queue", name));
         if (!entry) { this.remove(this.path("queue", name)); continue; }
-        const checking: Checking = { ...entry, started_at: now(), phase: "checking" };
+        const started_at = now();
+        const checking: Checking = { ...entry, started_at, first_checking_at: entry.first_checking_at ?? started_at, phase: "checking" };
         this.record(this.path("checking.json"), checking);
         this.remove(this.path("queue", name));
         return checking;
@@ -132,7 +142,7 @@ export class Queue {
   }
 
   /** Answer `entry`: its result is durable before it leaves `checking.json`. */
-  answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at" | "task" | "answerNonce">,options:{retainChecking?:boolean}={}): Result {
+  answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at" | "task" | "answerNonce" | "submitted_at" | "first_checking_at" | "selected_at">,options:{retainChecking?:boolean}={}): Result {
     return this.mutate(()=>{
       if(options.retainChecking&&result.state!=='held')throw Error('only a held cancellation can retain its checking owner');
       // Validate every existing destination before publishing any part of a
@@ -140,9 +150,11 @@ export class Queue {
       const checking=this.checking();
       for(const path of [this.path("results",`${entry.id}.json`),this.path("withdraw",entry.id),
         this.path("held",`${entry.id}.json`)])assertWritableState(path,1);
-      const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), task: entry.branch, ...result,answerNonce:randomUUID() };
+      const history = entryOf(checking?.id === entry.id ? checking : entry);
+      const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), task: entry.branch, ...result,answerNonce:randomUUID(),
+        submitted_at: history.submitted_at, first_checking_at: history.first_checking_at ?? null, selected_at: history.selected_at ?? null };
       this.record(this.path("results", `${entry.id}.json`), full);
-      if (result.state === "held") this.record(this.path("held", `${entry.id}.json`), entry);
+      if (result.state === "held") this.record(this.path("held", `${entry.id}.json`), history);
       else this.remove(this.path("held",`${entry.id}.json`));
       if (checking?.id === entry.id&&!options.retainChecking) this.remove(this.path("checking.json"));
       // A held cancellation has not proved its drain. Keep the request so a
@@ -165,7 +177,7 @@ export class Queue {
       const entry = readJson<Entry>(this.path("held", `${id}.json`));
       if (!entry) throw new Error(`no held change ${id}`);
       if(this.withdrawRequested(id))throw Error(`withdrawal of ${id} has not drained; its check cannot be retried`);
-      const again: Entry = { ...entry, first: true, submitted_at: now() };
+      const again: Entry = { ...entryOf(entry), first: true, queued_at: now() };
       this.record(this.path("queue", `${this.key(again)}.json`), again);
       this.remove(this.path("held", `${id}.json`));
       return again;
@@ -174,7 +186,7 @@ export class Queue {
   /** A readiness observation cannot resurrect a withdrawal or a newer answer. */
   retryDiskReady(id:string,answerNonce:string):Entry|null{
     return this.mutate(()=>{
-      const held=readJson<Checking>(this.path('held',`${id}.json`)),answer=this.result(id);
+      const held=readJson<Entry>(this.path('held',`${id}.json`)),answer=this.result(id);
       if(!held||answer?.state!=='held'||!answer.answerNonce||answer.answerNonce!==answerNonce||!answer.retryDisk?.length||this.withdrawRequested(id))return null;
       const entry=entryOf(held);
       this.record(this.path('queue',`${this.key(entry)}.json`),entry);

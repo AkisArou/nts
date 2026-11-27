@@ -96,10 +96,14 @@ test('a replay names stale oracle fixtures and lands its remaining records; an a
     f.s.git(['commit','--amend','-q','-m',recordsMessage({commit:measured,part:'core',main:measured,run:'/runs/core',attempt:1,output:''})],task.tree);
     const submission=f.s.git(['rev-parse','HEAD'],task.tree);
     const base=f.s.commit({[source]:'export function old(){return 1;}\nexport function added(){return 2;}\n'},'B: new cases');
-    const entry=f.submit('records',submission);
+    const entry=f.queue.submit(submission,{branch:'records',by:'full-check'});
     await drain(f.config);
     const result=f.queue.result(entry.id)!;
     assert.equal(result.state,keepOther?'landed':'withdrawn',result.message);
+    assert.equal(result.id,entry.id);
+    assert.equal(result.submitted_at,entry.submitted_at);
+    assert.ok(result.first_checking_at && result.first_checking_at >= entry.submitted_at);
+    assert.equal(result.selected_at,keepOther ? new Date(Number(result.run!.split('-').at(-1))).toISOString() : null);
     assert.ok(f.logs.some(line=>line.includes(`left pending: ${fixture}`)),f.logs.join('\n'));
     assert.equal(existsSync(join(f.s.root,shard)),false,'the stale oracle row never reaches main');
     if(keepOther)assert.equal(readFileSync(join(f.s.root,'results/other.tsv'),'utf8'),'fresh\n');
@@ -140,6 +144,10 @@ test("queued changes land one at a time, each rebased onto the newest main, push
   assert.equal(drained.state, "drained");
   assert.deepEqual(drained.answered.map(r => r.state), ["landed", "landed"]);
   const ra = f.queue.result(ea.id)!, rb = f.queue.result(eb.id)!;
+  assert.equal(ra.id, ea.id);
+  assert.equal(ra.submitted_at, ea.submitted_at);
+  assert.ok(ra.first_checking_at && ra.first_checking_at >= ea.submitted_at);
+  assert.equal(ra.selected_at, new Date(Number(ra.run!.split("-").at(-1))).toISOString());
   assert.equal(ra.tip, a.sha, "a was on main's line: it lands as itself");
   assert.notEqual(rb.tip, b.sha, "b was rebased onto main with a in it");
   assert.equal(f.s.git(["rev-parse", `${rb.tip}^`]), ra.tip);

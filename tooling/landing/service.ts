@@ -309,10 +309,11 @@ async function selectAndRun(config: Config, queue: Queue, entry: Checking, base:
       const message = `the rules could not select ${short(tip)}'s steps: ${(error as Error).message}`;
       return { answer: queue.answer(entry, { state: selectionInfrastructure(error) ? "held" : "refused", base, tip, message }) };
     }
+    const selectedAt = Date.now();
     const steps = landingSteps(selected.selection);
     reportRustRecordDecisions(selected.rustRecords,config.log);
-    const run = join(config.home, "runs", `${short(tip)}-${Date.now()}`);
-    queue.update({ run });
+    const run = join(config.home, "runs", `${short(tip)}-${selectedAt}`);
+    queue.update({ run, selected_at: new Date(selectedAt).toISOString() });
     queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, run, message: `${steps.join(" ")} on ${short(tip)}, ~${Math.round(selected.selection.estimate.seconds)} s` });
     config.log(`${short(entry.sha)} as ${short(tip)} on main ${short(base)}: ${steps.join(" ") || "nothing to run"}; deferred ${deferredSteps(selected.selection).join(" ") || "none"}`);
     let ran: Ran;
