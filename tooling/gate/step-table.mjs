@@ -29,8 +29,9 @@
 //          registered temporary, which the runner claims (admission.ts)
 //          before its slots and memory and hands to the step
 //          (NTS_GATE_STEP_DISK): these bytes are the claim of a step never
-//          measured; once measured, its claim is what it held
-//          (step-scheduling.ts's diskClaim). A fixed step's only
+//          measured; once measured, it claims 1.25 times the largest of its
+//          temporary's last few peaks (step-scheduling.ts's diskClaim). Only
+//          a fixed step may declare one (stepTableProblem)
 //   doc    what it proves, for the summary's reader
 //
 // No row says how much memory its step needs: what the run reserves for a

@@ -343,38 +343,42 @@ slots, at least an hour; in a landing check, at most max(15 minutes, three
 times the change's estimate). A tokened step spends this execution allowance
 while a case runs or its script works; a known admission wait with no case
 running spends none. This includes memory, priority, slots and frontend
-admission. A step's own temporary disk wait spends none either, fixed or
-tokened while no case of it holds a token: the runner reads the waits the one
-waiting owner records (`TemporaryAdmission.acquire`) and takes the one whose
-process runs in the step's slice. Its CPU still spends the CPU bound, and a
-landing's ceiling and the full check's run bound below still spend its time,
-since what holds the disk may never end on its own.
-
-**A step's own temporary is claimed before its slots and memory.** A step
-whose row names `unmeasuredDisk` has a temporary of its own,
-`<run temporary>/<step>`. Once the step would be admitted, the runner tries
-its claim through the same owner (`TemporaryAdmission.attempt`): refused, the
-step stays pending and holds neither slots nor memory, its wait recorded in
-the runner's name, and is asked again every few seconds; admitted, it starts at
-once with the claim handed to it (`NTS_GATE_STEP_DISK`). The claim is 1.25
-times the largest of the temporary's last few measured peaks in the
-scheduling history, or `unmeasuredDisk` before any is measured. The runner
-samples the temporary while the step runs: one that outgrows its claim is
-stopped and held by name, overrunning its claim by at most what it writes
-between two samples. Its peak is recorded whatever the verdict, and the claim
-released once the step's scope has drained. Nor does CPU that other work takes from the step: the runner
+admission. Nor does CPU that other work takes from the step: the runner
 samples the step slice's `cpu.stat` and `cpu.pressure` `full` (time it had
 runnable tasks and none of them ran) every 500 ms, and that lost time spends
 nothing. `some` is not read, because a step whose threads outnumber its CPUs
 would excuse itself. The excuse is a lower bound on the CPU taken: the kernel
 averages a cgroup's stall over the CPUs it was busy on, so only a step on one
 CPU is excused exactly, and the step's launch (its scope's creation and entry
-check, before its own work is in its slice) is not excused at all. Each sample
+check, before its own work is in its slice) is not excused at all. A step's
+own temporary disk wait spends none either, fixed or tokened while no case of
+it holds a token: the runner reads the waits the one waiting owner records
+(`TemporaryAdmission.acquire`) and takes the one whose process runs in the
+step's slice. Its CPU still spends the CPU bound, and a landing's ceiling and
+the full check's run bound below still spend its time, since what holds the
+disk may never end on its own. Each sample
 is one observation: the counters and the moment they describe. A sleeping or
 hung step spends its bound at wall rate. A CPU bound backs it: the bound times the slots the step may hold, which
 stops a step whose threads outrun its width. The log and summary name the
 waits, the lost CPU and the CPU it ran. A landing's ceiling always bounds wall
 time, including waits.
+
+**A step's own temporary is claimed before its slots and memory.** A step
+whose row names `unmeasuredDisk` has a temporary of its own,
+`<run temporary>/<step>`. Once the step would be admitted, the runner tries
+its claim through the same owner (`TemporaryAdmission.attempt`): refused, the
+step stays pending, its wait recorded in the runner's name, and until its look
+time a few seconds on it is skipped before admission, so it withholds no slot
+or memory and only that timer asks again, every try being a full disk
+snapshot; admitted, it starts at once with the claim handed to it
+(`NTS_GATE_STEP_DISK`). A step that is then short of slots or memory ends its
+wait, so the recorded wait counts disk alone. The claim is 1.25
+times the largest of the temporary's last few measured peaks in the
+scheduling history, or `unmeasuredDisk` before any is measured. The runner
+samples the temporary while the step runs: one that outgrows its claim is
+stopped and held by name, overrunning its claim by at most what it writes
+between two samples. Its peak is recorded whatever the verdict, and the claim
+released once the step's scope has drained.
 
 **A full-check run is held when it stops progressing, never because higher
 ranks slowed it.** Its bound

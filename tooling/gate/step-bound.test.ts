@@ -236,14 +236,16 @@ type Advance = { clockS: number; usageS: number; fullS: number; then: "exit" | "
 type FixtureRun = { owned?: Record<string, string>; format?: string[]; advance?: Advance; rank?: Priority; live?: boolean;
   /** Step table fields beside the bounds; observations beside the counters; a scheduling history the run starts from; `records` waiting for `format`'s disk wait. */
   rows?: Record<string, Record<string, unknown>>; observations?: { allocated?: { kind: "fixed"; defaultBytes: number }; disk?: { freeBytes: number; freeInodes: number } };
-  history?: unknown; recordsFreesDisk?: boolean };
+  history?: unknown; recordsFreesDisk?: boolean;
+  /** While format waits for disk, records (elastic) takes this many pairs of tokens at once and returns them, before it frees the disk. */
+  recordsTokenPairs?: number };
 
 /**
  * A real runner in a scratch repository running `steps`, in a unit of its own
  * stopped by name: `format` runs its command or never finishes, `records`
  * finishes at once.
  */
-function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, advance, rank, live = false, rows = {}, observations = {}, history, recordsFreesDisk = false }: FixtureRun = {}) {
+function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, { owned = {}, format, advance, rank, live = false, rows = {}, observations = {}, history, recordsFreesDisk = false, recordsTokenPairs = 0 }: FixtureRun = {}) {
   // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
   const own = newTestScratch("step-bound");
   t.after(() => { writeFileSync(join(own, "release"), "the test is over"); removable(own); rmSync(own, { recursive: true, force: true }); });
@@ -277,7 +279,7 @@ import { existsSync, readFileSync, watch } from "node:fs";
 import { dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { durableRecord } from ${JSON.stringify(pathToFileURL(join(source, "durable-record.ts")).href)};
-const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)}, recordsFreesDisk = ${JSON.stringify(recordsFreesDisk)};
+const own = ${JSON.stringify(own)}, format = ${JSON.stringify(format ?? null)}, advance = ${JSON.stringify(advance ?? null)}, recordsFreesDisk = ${JSON.stringify(recordsFreesDisk)}, recordsTokenPairs = ${JSON.stringify(recordsTokenPairs)};
 const observations = ${JSON.stringify(memory.NTS_HOST_OBSERVATIONS)};
 const release = () => new Promise(resolve => { const watcher = watch(own, () => { if (existsSync(own + "/release")) { watcher.close(); resolve(); } }); });
 // A step handed its temporary's claim says what it was handed, and that it ran.
@@ -294,6 +296,20 @@ if (process.env.NTS_GATE_STEP === "records" && recordsFreesDisk) {
     if (waiting()) { watcher.close(); resolve(); }
   });
   durableRecord(own + "/while-waiting.json", { waits: capacity.diskWaits(), formatStarted: existsSync(own + "/format-started.json"), lifecycle: readRunLifecycle(process.env.NTS_GATE_RUN_DIR) });
+  if (recordsTokenPairs) {
+    // Every slot, again and again: a token returned is never kept back for
+    // a step that waits for disk.
+    const { tokenClient } = await import(${JSON.stringify(pathToFileURL(join(source, "tokens.mjs")).href)});
+    const { releaseToken } = await import(${JSON.stringify(pathToFileURL(join(source, "case-context.ts")).href)});
+    const client = tokenClient(process.env.NTS_GATE_TOKENS, "records");
+    let pairs = 0;
+    for (let i = 0; i < recordsTokenPairs; i++) {
+      const held = await Promise.all([client.acquire({ scope: "step" }), client.acquire({ scope: "step" })]);
+      for (const release of held) await releaseToken(release);
+      pairs++;
+    }
+    durableRecord(own + "/neighbour.json", { pairs, formatStarted: existsSync(own + "/format-started.json") });
+  }
   const value = JSON.parse(readFileSync(observations, "utf8"));
   value.disk = { freeBytes: 2 ** 52, freeInodes: 2 ** 30 };
   durableRecord(observations, value, { compact: true });
@@ -356,6 +372,7 @@ fi
     ...Object.entries(planned.env).filter(([, value]) => value !== undefined).map(([name, value]) => `--setenv=${name}=${value}`),
     process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
   type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string; wall: number; bound_cpu_s: number;
+    disk?: { bytes: number; basis: string; peak_bytes: number; attempts: number };
     bound_clock: { execution_s: number; admission_wait_s: Partial<Record<string, number>>; cpu_s: number; cpu_lost_s: number; stalled_s: number };
     instrument?: { kind: string; verdict: string; reason: string }; scope?: { populated: number } };
   assert.ok(existsSync(join(run, "summary.json")), `the runner wrote no summary (exit ${result.status}):\n${result.stdout}${result.stderr}`);
@@ -476,6 +493,27 @@ test("a step waiting for its temporary's disk holds neither slots nor memory, an
   assert.ok(claim && claim.path.endsWith("/format") && claim.bytes === 2 * GiB, JSON.stringify(claim));
   assert.match(ran.result.stdout, /disk: format's temporary \(2\.0 GiB, unmeasured\) waits for /);
   assert.match(ran.result.stdout, /disk: format's temporary \(2\.0 GiB, unmeasured\) admitted after \d+ s/);
+});
+
+test("a step waiting for disk is asked again only at its look time, and keeps back no slot from an elastic neighbour returning tokens", t => {
+  // format needs both slots and 2 GiB its disk cannot hold; records, elastic,
+  // takes both slots and returns them 300 times while format waits, each
+  // return a scheduling pass. A step that withheld returned tokens for itself
+  // would hold records' second token back; one asked again on every pass
+  // would try its disk hundreds of times.
+  const tight = { freeBytes: 41 * GiB, freeInodes: 2 ** 30 };
+  const ran = runFixture(t, "format records", { format: 60, records: 60 }, {
+    rows: { format: { unmeasuredDisk: 2 * GiB, slots: 2, min: 2 }, records: { elastic: true, slots: 2 } },
+    observations: { disk: tight }, recordsFreesDisk: true, recordsTokenPairs: 300, format: ["true"] });
+  assert.equal(ran.result.status, 0, ran.result.stdout + ran.result.stderr);
+  assert.equal(ran.format.verdict, "PASS", ran.format.reason);
+  const neighbour = JSON.parse(readFileSync(join(ran.own, "neighbour.json"), "utf8")) as { pairs: number; formatStarted: boolean };
+  assert.deepEqual(neighbour, { pairs: 300, formatStarted: false }, "records held both slots on every pass while format waited");
+  const disk = ran.format.disk!;
+  const admitted = Number(/disk: format's temporary \(2\.0 GiB, unmeasured\) admitted after (\d+) s/.exec(ran.result.stdout)?.[1]);
+  t.diagnostic(`attempts ${disk.attempts}, admitted after ${admitted} s`);
+  assert.ok(disk.attempts <= 2 + Math.ceil(admitted / 5), `about one try per 5 s look: ${disk.attempts} tries in ${admitted} s`);
+  assert.equal(disk.bytes, 2 * GiB);
 });
 
 test("a step's temporary claims what it was measured to hold, with the margin, and records what it held this time", t => {

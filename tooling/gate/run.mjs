@@ -948,7 +948,11 @@ const observations = new Map();
 // pending, holding nothing, its wait recorded in the runner's own name for
 // the full check's run bound to name, and asked again every DISK_LOOK_MS;
 // admitted, it starts at once with the claim handed to it as
-// NTS_GATE_STEP_DISK. The claim is what the step's temporary was measured to
+// NTS_GATE_STEP_DISK. Until its look time a step refused disk is skipped
+// before admission, like a step waiting for another: it withholds no slot or
+// memory, and only the timer asks again, since every try is a full disk
+// snapshot. A step that is then short of slots or memory ends its wait, so
+// the recorded wait and its "admitted after" count disk alone. The claim is what the step's temporary was measured to
 // hold (step-scheduling.ts's diskClaim). While the step runs the runner
 // samples the temporary every DISK_SAMPLE_MS: one that outgrows its claim is
 // stopped through its scope and held by name, so it overruns its claim by at
@@ -957,11 +961,13 @@ const observations = new Map();
 // and the temporary removed, once the step's scope has drained.
 // ---------------------------------------------------------------------------
 const DISK_LOOK_MS = 5000, DISK_SAMPLE_MS = 2000;
-/** @typedef {{ bytes: number, basis: "measured" | "unmeasured", path: string, lease: import("./disk-capacity.ts").TemporaryDiskLease | null, peak: number, admission: TemporaryAdmission }} DiskClaim */
+/** @typedef {{ bytes: number, basis: "measured" | "unmeasured", path: string, lease: import("./disk-capacity.ts").TemporaryDiskLease | null, peak: number, attempts: number, lookAt: number, admission: TemporaryAdmission }} DiskClaim */
 /** @type {Map<string, DiskClaim>} */
 const diskClaims = new Map();
 /** @type {Map<string, { peak: number }>} */
 const diskObservations = new Map();
+/** What each step's claim was, for its summary row. @type {Map<string, { bytes: number, basis: string, peak_bytes: number, attempts: number }>} */
+const diskSummaries = new Map();
 /** @type {ReturnType<typeof setTimeout> | null} */
 let diskLook = null;
 /** @param {unknown} error */
@@ -985,17 +991,21 @@ function claimDisk(step) {
   try {
     if (!claim) {
       const sized = diskClaim(HISTORY, step), temporary = JSON.parse(env[ENVIRONMENT_CONTEXT]).temporary, path = join(temporary.path, step.name);
-      claim = { ...sized, path, lease: null, peak: 0,
+      claim = { ...sized, path, lease: null, peak: 0, attempts: 0, lookAt: 0,
         admission: new TemporaryAdmission({ path, context: { kind: "gate", temporary }, reservedBytes: sized.bytes, host, env }) };
       diskClaims.set(step.name, claim);
     }
     if (claim.lease) return true;
+    claim.attempts++;
     const admitted = claim.admission.attempt({ what: `${step.name}'s temporary (${gib(claim.bytes)}, ${claim.basis})`, report: line => process.stdout.write(`  ${line}\n`) });
     if (admitted) { claim.lease = admitted.lease; return true; }
   } catch (error) { if (isCommandExit(error)) throw error; return refuse(error); }
+  claim.lookAt = Date.now() + DISK_LOOK_MS;
   diskLook ??= setTimeout(() => { diskLook = null; schedule(); }, DISK_LOOK_MS);
   return null;
 }
+/** @param {string} name a step refused disk, before its look time */
+const diskBlocked = name => { const claim = diskClaims.get(name); return Boolean(claim && !claim.lease && Date.now() < claim.lookAt); };
 /**
  * The step's temporary now, and its peak; past its claim, the reason to stop it.
  * @param {string} name
@@ -1016,6 +1026,7 @@ function releaseDisk(name) {
   const claim = diskClaims.get(name);
   if (!claim) return;
   claim.admission.endWait();
+  diskSummaries.set(name, { bytes: claim.bytes, basis: claim.basis, peak_bytes: claim.peak, attempts: claim.attempts });
   // Its last sample, while the claim is still the step's: a step shorter than
   // the sampling interval is measured by it.
   if (claim.lease) {
@@ -1379,6 +1390,7 @@ function schedule() {
         break;
       }
       if (b?.wait) continue;
+      if (diskBlocked(name)) continue;
       const pre = preflight(step);
       if (pre) {
         finish(name, "NOT RUN", pre);
@@ -1391,6 +1403,9 @@ function schedule() {
       const u = used();
       const granted = admit(step, u);
       if (granted.slots === 0) {
+        // Short of slots or memory, it no longer waits for disk.
+        const refused = diskClaims.get(name);
+        if (refused && !refused.lease) refused.admission.endWait();
         const short = granted.short ?? 0;
         if (short > 0 && !memoryWanted) memoryWanted = reserved() + short;
         // The first step in order that waits for slots or memory has tokens
@@ -1595,7 +1610,7 @@ function start(step, slots, rider = false) {
     if (owned.grown > 0) memoryRecord.steps_grown++;
     if (memory.killed > 0) memoryRecord.steps_killed++;
     const extra = { exit: code, signal, wall, cpu, user, sys, cpu_measure:measurement?.cpu_measure,gnu_time:gnuTime,maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
-      diagnostics:stepDiagnostics, memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis,
+      diagnostics:stepDiagnostics, memory, memory_peak_bytes: scope.memoryPeakBytes, ...(diskSummaries.has(step.name) ? { disk: diskSummaries.get(step.name) } : {}), bound_s: bound.seconds, bound_basis: bound.basis,
       bound_cpu_s: cpuBound,
       bound_clock: { execution_s: boundState.used_s, admission_wait_s: boundState.waited_s, cpu_s: boundState.cpu_s, cpu_lost_s: boundState.cpu_lost_s,
         stalled_s: boundState.stalled_s, ...(STEP_CEILING === undefined ? {} : { wall_ceiling_s: STEP_CEILING }) } };
