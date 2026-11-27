@@ -101,6 +101,9 @@ deciding every candidate).
 | `step-main-v5-held` | `003a0633ab` | held: the tree's installation catalog link was stale | 984 | 7,834 | 0 | 976 | — | — | — |
 | `step-main-v5-held2` | `003a0633ab` | held at the bound, admitted after 5,347 s (52.0 GiB free) | 5,517 | 4,348 | 5,347 | — | — | — | — |
 | `step-main-v5` | `003a0633ab` (main `5c04028d50`) | green | 3,438 | 9,726 | 160 | 898 | 2,380 | 6,809 | 0 |
+| `step-main-v7` | `ab6f27122f`, the runner's claim (12.0 GiB, unmeasured) | red: 1 read main gained | 4,074 | 10,551 | 3,916, before the step | 855 | 3,219 | 6,821 | 1 |
+| `step-main-v8` | `eb1c8a611a` (main 11 commits on), claim 8.0 GiB measured | red: 2 listings main gained | 4,418 | 10,890 | 0 | 880 | 3,538 | 6,879 | 2 |
+| `step-main-v9` | `c83dee2158`, claim 8.1 GiB measured | green | 3,543 | 9,919 | 0 | 779 | 2,764 | 6,878 | 0 |
 
 `003a0633ab` traces main's reads after #841's check transport and the typed
 `JSON.parse` work. Two findings follow from the holds:
@@ -118,11 +121,35 @@ deciding every candidate).
   `du` (156 ms of CPU each, 123 of it in `du`, by
   `~/.cache/nts-scratch/761/wait-cpu-v1/probe.ts`), and runs the disk
   reclamation pass. Its own task, outside #761.
+- **The claim held memory while it waited.** In `v6` (stopped, not cited)
+  the capture's disk wait held the step's 9.9 GiB memory grant, with sixteen
+  jobs queued behind it. The runner now claims the step's temporary before
+  its slots and memory: in `v7` it waited 3,916 s holding neither, then ran.
+  The claim is what the capture held: `v7` recorded a peak of 6.42 GiB, so
+  `v8` and `v9` claimed 8.0 and 8.1 GiB (1.25 times the largest peak) and
+  were admitted at once, where 12 GiB had waited.
+- **The reads main gained meanwhile.** `v7` missed
+  `compiler/codegen/jvm/tests/json-parse-grows/src/main.ts`, which codegen-jvm's
+  `execute.rs` compiles since `6be4dc17aa`; `v8` missed the listings of
+  `tests/refusals/a-callback-held-in-a-field-with-the-raising-gate-off`, which
+  core's `src/hir/lower/tests.rs` compiles since `58082197ec`. Both are now
+  declared as the programs their readers compile.
 - **Deciding an entry's removal.** Asked whole, the removal of the root's
   `tests` entry (18,980 files) took 209 s of selection and the six largest root
-  entries about 330 s, a part of the after time above. One file's deletion that
-  owes now answers for its entry (deletions only add to what `owed()` owes),
-  and only an entry none of whose first file's deletion owes is asked whole.
+  entries about 330 s. One file's deletion that owes now answers for its entry
+  (deletions only add to what `owed()` owes), and only an entry none of whose
+  first file's deletion owes is asked whole. Measured on `v9`'s 6,878
+  candidates, each arm in a unit of its own, before first:
+
+| Arm | Whole-removal calls | Their paths | Their wall s | Single-path calls | Unit CPU s | Wall s |
+|---|---:|---:|---:|---:|---:|---:|
+| before | 20 | 29,542 | 443 | 4,417 | 2,370 | 2,665 |
+| after | 7 | 23,790 | 269 | 4,437 | 2,620 | 3,598 |
+
+  It removes 13 of the 20 whole calls and 174 s of their time. The rest of
+  the decision varies more than that between runs on a shared machine, and
+  the root's `tests` entry is among the 7 still asked whole: its first file's
+  deletion owes nothing.
 
 ## What the trace covers
 
@@ -172,7 +199,8 @@ deciding every candidate).
 ## The step's disk
 
 The capture lives in the run's registered temporary under `~/.cache`, never
-`/tmp`, under a 12 GiB DiskCapacity claim above the 40 GiB floor, and is removed
+`/tmp`, under a DiskCapacity claim above the 40 GiB floor (12 GiB before it was
+measured; now what it held, with the margin), and is removed
 when the step ends whatever its verdict. Peak use is about 6 GB per wide run.
 The step is wide, never owed by a landing, so this use never sits on a
 landing's path.
@@ -214,6 +242,15 @@ The step at the candidates, `~/.cache/nts-scratch/761/`:
 | `step-main-v5-held2/terminal.json` (`003a0633ab`, held at the bound) | `9d8bfe59ecd983f8a5ae2164a5c3e3b24450536443fff238c16a7284cdb6254b` |
 | `step-main-v5/terminal.json` (`003a0633ab`, green) | `7b0b2aa76a7c92368967de65a65019ccdd03bb02402edc4e5e32a73b6cc07bd7` |
 | `step-main-v5/run/rust-inputs.coverage.json` (6,809 reached, 0 missed) | `f00bd30b5c333b5c2cc6d28ce609ea7844719484e9b8da969460b27e91d96453` |
+| `step-main-v7/terminal.json` (`ab6f27122f`, 1 missed) | `a6a04c8765e082ec05988d740f0b92f477b911b59da8110c8a64771dffeaf5b0` |
+| `step-main-v7/run/rust-inputs.coverage.json` | `ac44c61dd0f4b503388e52803a8026522ae9bc5348548710d22c93fa62c62fc3` |
+| `step-main-v8/terminal.json` (`eb1c8a611a`, 2 missed) | `97939a6090c938b5d8e54181cf4e8bc68bc1f80a58dfb8a61d9d17955c23d429` |
+| `step-main-v8/run/rust-inputs.coverage.json` | `9763219124414e6bf854d757a75807023b17fca9ee3588b7c37670fa20ffb709` |
+| `step-main-v9/terminal.json` (`c83dee2158`, green) | `9f18180f97700089c983e2c5e97836ad1efd8ae6d5d9d8ec9c3e487ad1bb4bba` |
+| `step-main-v9/run/rust-inputs.coverage.json` (6,878 reached, 0 missed) | `f440506214aa5a9b892575f382613ddccf78dc45903157dc27cd0265050ed1f1` |
+| `decide-time-v1/before.json` (the removal decision before one deletion first) | `0f47ee3a6eb9cea415efaad36766f28b55fc685e627d80ec363ad35f55843839` |
+| `decide-time-v1/after.json` | `d33b2b2a9aa0271cc998a1b8bd6156d2caf5e24ab8ca59817e7bf905fa213d75` |
+| `decide-time-v1/time.ts` (the timing, own and children's CPU, calls by size) | `fe1b7258f5777efb16178c45756bdbac41d9574a31694ba2aa3cef2be5a6f4dc` |
 
 The step at the rebased tip, `~/.cache/nts-scratch/761/step-main-v1/`:
 
