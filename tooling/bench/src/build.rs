@@ -65,10 +65,27 @@ pub(super) struct Details {
     stages: Vec<Stage>,
 }
 
+/// A child run beside the build stages, kept for a counted row's phase
+/// record: a counted column's driver, or the host columns. Its CPU is every
+/// child the run waited for, which is exact because a row runs its children
+/// one at a time.
+#[derive(Debug, Serialize)]
+pub(super) struct Observed {
+    column: String,
+    phase: String,
+    wall_s: f64,
+    children_cpu_s: f64,
+    basis: &'static str,
+    complete: bool,
+}
+
+pub(super) const CHILDREN_BASIS: &str = "getrusage-RUSAGE_CHILDREN-delta-v1; waited descendants";
+
 #[derive(Debug)]
 pub(super) struct Recorder<'a> {
     session: &'a Session,
     stages: Vec<Stage>,
+    observed: Vec<Observed>,
 }
 impl<'a> Recorder<'a> {
     pub(super) fn awfy(&self) -> Option<&Utf8Path> {
@@ -78,13 +95,45 @@ impl<'a> Recorder<'a> {
         Self {
             session,
             stages: Vec::new(),
+            observed: Vec::new(),
         }
     }
     pub(super) fn finish(self) -> Details {
-        Details {
+        self.finish_observed().0
+    }
+    /// The build stages, and the child runs observed beside them.
+    pub(super) fn finish_observed(self) -> (Details, Vec<Observed>) {
+        let details = Details {
             version: 1,
             stages: self.stages,
-        }
+        };
+        (details, self.observed)
+    }
+    /// Time a run of children that is not a build stage: its wall clock and
+    /// the CPU of every child it waited for.
+    pub(super) fn observe<T>(
+        &mut self,
+        column: &str,
+        phase: &str,
+        run: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let (started, before) = (std::time::Instant::now(), children_cpu()?);
+        let result = run();
+        let wall_s = started.elapsed().as_secs_f64();
+        let children_cpu_s = children_cpu()? - before;
+        anyhow::ensure!(
+            children_cpu_s.is_finite() && children_cpu_s >= 0.,
+            "children's CPU moved backwards"
+        );
+        self.observed.push(Observed {
+            column: column.into(),
+            phase: phase.into(),
+            wall_s,
+            children_cpu_s,
+            basis: CHILDREN_BASIS,
+            complete: result.is_ok(),
+        });
+        result
     }
     pub(super) fn link_output(
         &mut self,
@@ -168,16 +217,28 @@ impl<'a> Recorder<'a> {
 }
 
 fn thread_cpu() -> Result<f64> {
-    use nix::sys::{
-        resource::{UsageWho, getrusage},
-        time::TimeValLike,
-    };
-    let usage = getrusage(UsageWho::RUSAGE_THREAD)
-        .map_err(|error| NotMeasured(format!("cannot read thread CPU: {error}")))?;
+    cpu(nix::sys::resource::UsageWho::RUSAGE_THREAD, "thread")
+}
+
+/// This process's own CPU, every thread included: a counted row's
+/// capture, preparation and emission with their checker threads.
+pub(super) fn process_cpu() -> Result<f64> {
+    cpu(nix::sys::resource::UsageWho::RUSAGE_SELF, "process")
+}
+
+/// The CPU of every child this process has waited for, so far.
+pub(super) fn children_cpu() -> Result<f64> {
+    cpu(nix::sys::resource::UsageWho::RUSAGE_CHILDREN, "children's")
+}
+
+fn cpu(who: nix::sys::resource::UsageWho, what: &str) -> Result<f64> {
+    use nix::sys::{resource::getrusage, time::TimeValLike};
+    let usage =
+        getrusage(who).map_err(|error| NotMeasured(format!("cannot read {what} CPU: {error}")))?;
     let micros = u64::try_from(
         usage.user_time().num_microseconds() + usage.system_time().num_microseconds(),
     )
-    .map_err(|error| NotMeasured(format!("invalid thread CPU: {error}")))?;
+    .map_err(|error| NotMeasured(format!("invalid {what} CPU: {error}")))?;
     Ok(std::time::Duration::from_micros(micros).as_secs_f64())
 }
 
@@ -571,6 +632,52 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
         );
         assert!(crate::references::corpus_absence(&case, "ref.cpp", true)?.is_none());
         assert!(crate::references::corpus_absence(&case, "ref.java", true)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn observed_child_runs_stay_beside_the_build_stages() -> Result<()> {
+        let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let session = Session::new(&root)?;
+        let mut recorder = Recorder::new(&session);
+        let output = recorder.observe("nts C", "count", || {
+            Ok(Command::new("node")
+                .args([
+                    "-e",
+                    "let x=0;for(let i=0;i<5e6;i++)x^=i;process.stdout.write('answer:'+x)",
+                ])
+                .output()?)
+        })?;
+        assert_eq!(output.stdout, b"answer:0");
+        let failure =
+            recorder.observe::<()>("hosts", "count", || anyhow::bail!("retained failure"));
+        assert!(
+            failure
+                .expect_err("the supplied run fails")
+                .to_string()
+                .contains("retained failure")
+        );
+        let (details, observed) = recorder.finish_observed();
+        assert!(
+            details.stages.is_empty(),
+            "an observed run is not a build stage"
+        );
+        let observed = serde_json::to_value(observed)?;
+        let observed = observed.as_array().expect("observed runs");
+        assert_eq!(observed.len(), 2);
+        assert_eq!(observed[0]["column"], "nts C");
+        assert_eq!(observed[0]["phase"], "count");
+        assert_eq!(observed[0]["basis"], CHILDREN_BASIS);
+        assert_eq!(observed[0]["complete"], true);
+        assert!(observed[0]["wall_s"].as_f64().expect("wall") > 0.);
+        assert!(
+            observed[0]["children_cpu_s"]
+                .as_f64()
+                .expect("waited children's CPU")
+                > 0.
+        );
+        assert_eq!(observed[1]["column"], "hosts");
+        assert_eq!(observed[1]["complete"], false);
         Ok(())
     }
 

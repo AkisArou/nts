@@ -8,6 +8,7 @@ struct Row {
     counts: Vec<u64>,
     bands: std::collections::BTreeMap<String, u64>,
     native: Vec<String>,
+    phases: serde_json::Value,
 }
 
 /// A measured JIT spread describes the sample; it cannot refuse an unrelated
@@ -73,11 +74,16 @@ fn counted_row() -> Result<Row> {
         .split(", ")
         .map(str::to_owned)
         .collect();
+    let phases = root()?.join("target/bench/count/fib.phases.json");
+    let phases = serde_json::from_slice(
+        &std::fs::read(&phases).with_context(|| format!("reading {phases}"))?,
+    )?;
     Ok(Row {
         names,
         counts,
         bands,
         native,
+        phases,
     })
 }
 
@@ -130,6 +136,7 @@ fn real_count_wiring_checks_every_column_and_only_native_repeatability() -> Resu
     assert_eq!(first.bands, second.bands);
     assert_eq!(first.native, ["nts C", "nts LLVM", "C++", "ScriptC"]);
     assert_eq!(first.native, second.native);
+    phases_cover_the_counted_row(&first.phases)?;
     for ((name, a), b) in first.names.iter().zip(&first.counts).zip(&second.counts) {
         assert!(*a > 0 && *b > 0, "{name} produced no instruction count");
         let band = *first
@@ -148,5 +155,39 @@ fn real_count_wiring_checks_every_column_and_only_native_repeatability() -> Resu
             );
         }
     }
+    Ok(())
+}
+
+/// The row's phase record names a counted run for each column this compiler
+/// or a reference builds, one host run for the engines, and the builds.
+fn phases_cover_the_counted_row(phases: &serde_json::Value) -> Result<()> {
+    ensure!(phases["version"] == 1 && phases["row"] == "fib" && phases["computed"] == true);
+    for key in ["wall_s", "process_cpu_s", "children_cpu_s"] {
+        ensure!(
+            phases[key].as_f64().is_some_and(|value| value > 0.),
+            "{key} is not a positive measurement: {}",
+            phases[key]
+        );
+    }
+    let observed = phases["observed"].as_array().context("observed runs")?;
+    let counted: Vec<_> = observed
+        .iter()
+        .filter(|run| run["phase"] == "count" && run["complete"] == true)
+        .filter_map(|run| run["column"].as_str())
+        .collect();
+    for column in ["nts", "nts (llvm)", "nts (jvm)", "C++", "Java", "hosts"] {
+        ensure!(
+            counted.contains(&column),
+            "no counted {column} run: {counted:?}"
+        );
+    }
+    let stages = phases["builds"]["stages"]
+        .as_array()
+        .context("build stages")?;
+    ensure!(
+        stages.iter().any(|stage| stage["kind"] == "thread")
+            && stages.iter().any(|stage| stage["kind"] == "external"),
+        "the row's emission and its native builds are both recorded"
+    );
     Ok(())
 }

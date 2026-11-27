@@ -537,7 +537,13 @@ fn count_cases(
             continue;
         }
         let mut recorder = build::Recorder::new(&build_session);
+        let started = (
+            std::time::Instant::now(),
+            build::process_cpu()?,
+            build::children_cpu()?,
+        );
         let computed = run_case(root, case, out, Some(counting), None, &mut recorder);
+        write_counted_phases(out, name, computed.is_ok(), started, recorder)?;
         let Some(measured) = accept_build(name, computed, &mut row_failures, &mut failed)? else {
             continue;
         };
@@ -554,6 +560,57 @@ fn count_cases(
         println!("{}\t{}", measured.shown, cells.join("\t").as_str());
     }
     require_valid_rows(&failed)
+}
+
+/// What a counted row cost, by phase, beside its counts: the row's wall
+/// clock, this process's CPU (capture, preparation and emission with their
+/// checker threads), its waited children's CPU, the build stages and the
+/// counted and host runs. Written to `count/<row>.phases.json` in the build
+/// directory; the printed table is unchanged.
+#[derive(serde::Serialize)]
+struct CountedPhases<'a> {
+    version: u8,
+    row: &'a str,
+    computed: bool,
+    wall_s: f64,
+    process_cpu_s: f64,
+    process_basis: &'static str,
+    children_cpu_s: f64,
+    children_basis: &'static str,
+    builds: build::Details,
+    observed: Vec<build::Observed>,
+}
+
+fn write_counted_phases(
+    out: &Utf8Path,
+    row: &str,
+    computed: bool,
+    (started, process_before, children_before): (std::time::Instant, f64, f64),
+    recorder: build::Recorder<'_>,
+) -> Result<()> {
+    let wall_s = started.elapsed().as_secs_f64();
+    let (process_cpu_s, children_cpu_s) = (
+        build::process_cpu()? - process_before,
+        build::children_cpu()? - children_before,
+    );
+    let (builds, observed) = recorder.finish_observed();
+    let phases = CountedPhases {
+        version: 1,
+        row,
+        computed,
+        wall_s,
+        process_cpu_s,
+        process_basis: "getrusage-RUSAGE_SELF-delta-v1; every thread",
+        children_cpu_s,
+        children_basis: build::CHILDREN_BASIS,
+        builds,
+        observed,
+    };
+    let directory = out.join("count");
+    std::fs::create_dir_all(&directory).with_context(|| format!("creating {directory}"))?;
+    let path = directory.join(format!("{row}.phases.json"));
+    std::fs::write(&path, serde_json::to_vec_pretty(&phases)?)
+        .with_context(|| format!("writing {path}"))
 }
 
 /// Complete cases in order; the journal retains each validated prefix while
@@ -963,7 +1020,12 @@ fn run_workload_case(
         counting,
         builds,
     )?;
-    let hosts = measure_hosts(root, case, out, name, &workload, counting)?;
+    let hosts = match counting {
+        Some(_) => builds.observe("hosts", "count", || {
+            measure_hosts(root, case, out, name, &workload, counting)
+        }),
+        None => measure_hosts(root, case, out, name, &workload, counting),
+    }?;
     let node = results::host_measured(&hosts, "node")?;
     let bun = results::host_measured(&hosts, "Bun JIT")?;
     Ok(Measurements {
@@ -1218,6 +1280,7 @@ fn variants(
                 counting,
                 name,
                 variant.label,
+                builds,
             )
         });
         results.push(observe(built, variant.generated, &mut absences.outcomes)?);
@@ -2242,6 +2305,7 @@ fn run_driver(
         counting,
         name,
         "nts (jvm)",
+        builds,
     )
 }
 
@@ -2338,6 +2402,7 @@ fn handwritten_java(
         counting,
         name,
         "Java",
+        builds,
     )
 }
 
@@ -3054,9 +3119,13 @@ fn measure_or_count(
     counting: Option<&Counting>,
     name: &str,
     column: &str,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<Measured> {
     match counting {
-        Some(counting) => count(command, counting, name, column),
+        // Timed for the row's phase record, outside the counted bracket.
+        Some(counting) => {
+            builds.observe(column, "count", || count(command, counting, name, column))
+        }
         None => measure(command),
     }
 }
