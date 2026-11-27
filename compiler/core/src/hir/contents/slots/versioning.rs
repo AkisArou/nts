@@ -50,6 +50,7 @@ struct Planner<'a> {
     harmless: &'a FxHashSet<String>,
     summaries: &'a Summaries,
     targets: FxHashMap<String, usize>,
+    fields: FxHashMap<usize, Shape>,
     entries: BTreeMap<Key, Entry>,
     gains: BTreeMap<Key, usize>,
     baseline: FxHashMap<usize, FxHashSet<ValueId>>,
@@ -115,15 +116,8 @@ impl Planner<'_> {
         gain
     }
 
-    fn at_cap(&mut self, at: usize) -> bool {
-        if self.counts.get(&at).copied().unwrap_or(0) == VARIANTS {
-            let name = &self.program.funcs[at].name;
-            if !self.report.capped.contains(name) {
-                self.report.capped.push(name.clone());
-            }
-            return true;
-        }
-        false
+    fn at_cap(&self, at: usize) -> bool {
+        self.counts.get(&at).copied().unwrap_or(0) == VARIANTS
     }
 
     fn select(&mut self, key: &Key, removed: usize) -> bool {
@@ -201,26 +195,16 @@ impl Planner<'_> {
                 } = kind
                     && let Some(&target) = self.targets.get(name)
                 {
-                    let callee = &self.program.funcs[target];
-                    let mut shape = Vec::new();
-                    for (slot, parameter) in callee
-                        .parameter_values()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .enumerate()
-                    {
-                        if let (Some(parameter), Some(argument), Ok(slot)) =
-                            (parameter, args.get(slot), u32::try_from(slot))
-                        {
-                            for field in
-                                hir::own::reference_fields(callee, &self.program.layouts, parameter)
-                            {
-                                if state.known_zero(*argument, Slot::Field(field)) {
-                                    shape.push((slot, field));
-                                }
-                            }
-                        }
-                    }
+                    // Target parameter definitions are scanned once, not once
+                    // per call to a potentially large body.
+                    let mut shape: Shape = self.fields[&target]
+                        .iter()
+                        .copied()
+                        .filter(|&(slot, field)| {
+                            args.get(slot as usize)
+                                .is_some_and(|&arg| state.known_zero(arg, Slot::Field(field)))
+                        })
+                        .collect();
                     shape.sort_unstable();
                     shape.dedup();
                     if !shape.is_empty()
@@ -328,6 +312,26 @@ pub(in crate::hir) fn materialize(
             ..Versioning::default()
         };
     }
+    let source: &Program = program;
+    let fields = targets
+        .values()
+        .map(|&at| {
+            let func = &source.funcs[at];
+            let fields = func
+                .parameter_values()
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(slot, value)| Some((u32::try_from(slot).ok()?, value?)))
+                .flat_map(|(slot, value)| {
+                    hir::own::reference_fields(func, &source.layouts, value)
+                        .into_iter()
+                        .map(move |field| (slot, field))
+                })
+                .collect();
+            (at, fields)
+        })
+        .collect();
     let releases = program.foreign_releases();
     let mut planner = Planner {
         program,
@@ -335,6 +339,7 @@ pub(in crate::hir) fn materialize(
         harmless,
         summaries,
         targets,
+        fields,
         entries: BTreeMap::new(),
         gains: BTreeMap::new(),
         baseline: FxHashMap::default(),
