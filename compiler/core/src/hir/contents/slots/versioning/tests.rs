@@ -33,7 +33,7 @@ fn call(func: &mut Func, object: ValueId) -> ValueId {
 fn program(fields: usize) -> Program {
     let object = HirType::Managed(ManagedType::Object(TypeId(1)));
     let string = HirType::Managed(ManagedType::String);
-    let mut callee = super::super::super::tests::fixture();
+    let mut callee = super::super::tests::fixture();
     callee.name = "fill".into();
     callee.return_type = HirType::Void;
     callee.values.clear();
