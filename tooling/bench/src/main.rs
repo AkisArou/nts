@@ -1027,12 +1027,7 @@ fn run_workload_case(
         counting,
         builds,
     )?;
-    let hosts = match counting {
-        Some(_) => builds.observe("hosts", "count", || {
-            measure_hosts(root, case, out, name, &workload, counting)
-        }),
-        None => measure_hosts(root, case, out, name, &workload, counting),
-    }?;
+    let hosts = measure_hosts(root, case, out, name, &workload, counting, builds)?;
     let node = results::host_measured(&hosts, "node")?;
     let bun = results::host_measured(&hosts, "Bun JIT")?;
     Ok(Measurements {
@@ -1670,7 +1665,25 @@ fn render(root: &Utf8Path, path: &Utf8Path) -> Result<()> {
 }
 
 /// The standing engines use one typed loop, verified pins and one input protocol.
+/// The host columns, timed for a counted row's phase record.
 fn measure_hosts(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    workload: &workload::Workload,
+    counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
+) -> Result<serde_json::Value> {
+    match counting {
+        Some(_) => builds.observe("hosts", "count", || {
+            host_columns(root, case, out, name, workload, counting)
+        }),
+        None => host_columns(root, case, out, name, workload, counting),
+    }
+}
+
+fn host_columns(
     root: &Utf8Path,
     case: &Utf8Path,
     out: &Utf8Path,
