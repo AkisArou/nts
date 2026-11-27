@@ -40,6 +40,10 @@ test('accepted revision files returns whole matching main blobs by path, never c
   s.git(['switch','-qc','candidate']);s.commit({'docs/records/c.md':'needle on a candidate\n'},'candidate');
   assert.deepEqual(reader.files(records,'needle'),whole);
   assert.ok('error' in reader.files(records,'('),'an invalid pattern is an error, not an empty set');
+  assert.equal(reader.within(records,'sub/b.md'),'needle\n');
+  for(const escape of ['../plan.md','sub/../../plan.md','/etc/passwd',''])assert.ok(typeof reader.within(records,escape)!=='string',escape);
+  assert.deepEqual(reader.matches(records,'needle'),[{path:'docs/records/a.md',line:2,match:'needle'},{path:'docs/records/sub/b.md',line:1,match:'needle'}]);
+  assert.deepEqual(reader.matches(records,'absent'),[]);
 });
 
 test('accepted main plan and record edits owe only their declared tree checks',()=>{

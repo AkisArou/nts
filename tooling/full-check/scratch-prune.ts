@@ -29,7 +29,7 @@ import {homedir} from 'node:os';
 import {join,posix,relative,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {acceptedRevision} from '../gate/accepted-revision-data.ts';
-import {citationTokens,readCitingRecords,type CitingRecord,type CitationToken,type DigestMark} from './keep.ts';
+import {citationTokens,readCitingRecords,readCommittedDigests,type CitingRecord,type CitationToken,type DigestMark} from './keep.ts';
 
 export type IssueState='OPEN'|'CLOSED'|{error:string};
 export type EntryType='file'|'directory'|'link'|'other';
@@ -51,6 +51,9 @@ export type FolderPlan={
   remove:{entries:number;bytes:number;digest:string};
   /** Record digests that match no file of the folder: evidence already gone, or never here. */
   unmatched:{digest:string;by:string}[];
+  /** Informational: removed files whose SHA-256 some committed file gives,
+   * with no kept copy; null when committed digests were not read. */
+  atRisk:{path:string;sha:string;bytes:number;at:string}[]|null;
 };
 /** A digest is reused only for an inode whose lstat identity is unchanged; hard links share it. */
 export type DigestMemo=Map<string,string>;
@@ -150,7 +153,7 @@ type Hit={token:CitationToken;record:string;resolutions:Resolution[]};
  * from the root; the others from the root and from each directory the record
  * cites absolutely (and `extraBases`). The longest variant that names an
  * entry wins; an absolute citation naming nothing is returned unresolved. */
-type Resolved={hits:Hit[];unresolved:string[];digests:DigestMark[];tokens:CitationToken[];kind:TextKind};
+type Resolved={hits:Hit[];unresolved:string[];digests:DigestMark[];tokens:CitationToken[];kind:TextKind;bases:string[]};
 type TextKind='json'|'markdown'|'text';
 function resolveRecord(root:string,entries:Map<string,Entry>,record:CitingRecord,folder:string,extraBases:string[]=[]):Resolved{
   const {tokens,digests,json}=citationTokens(record.text,folder),hits:Hit[]=[],unresolved:string[]=[];
@@ -177,7 +180,7 @@ function resolveRecord(root:string,entries:Map<string,Entry>,record:CitingRecord
     const resolutions=attempt(token,[...bases]);
     if(resolutions.length)hits.push({token,record:record.path,resolutions});
   }
-  return {hits,unresolved,digests,tokens,kind:json?'json':record.path.endsWith('.md')?'markdown':'text'};
+  return {hits,unresolved,digests,tokens,kind:json?'json':record.path.endsWith('.md')?'markdown':'text',bases:[...bases]};
 }
 
 /** The digest beside a citation. In JSON, by structure: a path key's own
@@ -233,7 +236,9 @@ function readText(root:string,entry:Entry):string|null{
   return data.subarray(0,1<<16).includes(0)?null:data.toString('utf8');
 }
 
-export type PlanInput={cache:string;issue:number;state:IssueState;records:CitingRecord[]|{error:string};memo?:DigestMemo};
+export type PlanInput={cache:string;issue:number;state:IssueState;records:CitingRecord[]|{error:string};memo?:DigestMemo;
+  /** Every digest of committed docs/ and results/, for the informational at-risk list. */
+  committed?:Map<string,string>};
 export type PlanResult={plan:FolderPlan;remove:Entry[];kept:{entry:Entry;sha?:string}[];memo:DigestMemo};
 
 /** The dry run for one folder: what its records keep and what would go. */
@@ -257,8 +262,12 @@ export function planFolder(input:PlanInput):PlanResult{
   };
   const allDigests=new Map<string,string>();
   const hits:Hit[]=[],paired=new Map<Hit,string>();
-  for(const record of records){
-    const resolved=resolveRecord(root,entries,record,folder);
+  // A linked companion file is read as part of the record that links it:
+  // its relative paths also resolve beside the directories that record cites.
+  const recordBases=new Map<string,string[]>();
+  for(const record of [...records].sort((a,b)=>Number(!!a.linkedFrom)-Number(!!b.linkedFrom))){
+    const resolved=resolveRecord(root,entries,record,folder,record.linkedFrom?recordBases.get(record.linkedFrom)??[]:[]);
+    recordBases.set(record.path,resolved.bases);
     hits.push(...resolved.hits);
     for(const [hit,value] of adjacentDigests(resolved))paired.set(hit,value);
     for(const d of resolved.digests)if(!allDigests.has(d.value))allDigests.set(d.value,`${record.path}:${d.line+1}`);
@@ -361,10 +370,17 @@ export function planFolder(input:PlanInput):PlanResult{
   const freed=new Set<string>();let removeBytes=0;
   for(const entry of remove)if(!keptInodes.has(entry.ino)&&!freed.has(entry.ino)&&(entry.type==='directory'||listed.get(entry.ino)===entry.nlink)){freed.add(entry.ino);removeBytes+=entry.blocks;}
   remove.sort((a,b)=>b.path.split('/').length-a.path.split('/').length||(a.path<b.path?-1:a.path>b.path?1:0));
-  const plan:FolderPlan={folder,issue:input.issue,state,records:records.map(r=>r.path),refusals:[...new Set(refusals)],notes:[...new Set(notes)],
+  const plan:FolderPlan={folder,issue:input.issue,state,records:records.map(r=>r.linkedFrom?`${r.path} (linked from ${r.linkedFrom})`:r.path),refusals:[...new Set(refusals)],notes:[...new Set(notes)],
     inventoryDigest:inventoryDigest(entries),entries:entries.size,bytes,
     kept:keptRoots.sort((a,b)=>a.path<b.path?-1:1),totals,keptEntries:keptEntries.length,keptBytes,
-    remove:{entries:remove.length,bytes:removeBytes,digest:removalDigest(remove)},unmatched};
+    remove:{entries:remove.length,bytes:removeBytes,digest:removalDigest(remove)},unmatched,atRisk:null};
+  if(input.committed){
+    const keptShas=new Set(keptEntries.map(({entry})=>entry.type==='file'?memo.get(identity(entry)):undefined).filter(Boolean));
+    plan.atRisk=remove.flatMap(entry=>{
+      const sha=entry.type==='file'?memo.get(identity(entry)):undefined,at=sha&&input.committed!.get(sha);
+      return sha&&at&&!keptShas.has(sha)?[{path:entry.path,sha,bytes:entry.blocks,at}]:[];
+    });
+  }
   return {plan,remove,kept:keptEntries,memo};
 }
 
@@ -468,6 +484,13 @@ export function reportFolder(plan:FolderPlan,manifest:string):string{
     ...direct.map(k=>`| \`${k.path}\` | ${k.why}${k.verification?', '+k.verification:''}${k.tree?`, ${k.tree.entries} entries, ${GB(k.tree.bytes)}`:''} | ${k.sha?'`'+k.sha+'`':k.tree?'`'+k.tree.digest+'`':''} | ${cell(k)} |`),'');
   if(bound.length)out.push('| binding manifest | files it binds, each verified by its SHA-256 |','|---|---:|',
     ...[...byManifest].map(([by,m])=>`| \`${by}\` | ${m.files} |`),'');
+  if(plan.atRisk===null)out.push('Committed digests were not read: no at-risk list.','');
+  else if(plan.atRisk.length){
+    const bytes=plan.atRisk.reduce((n,r)=>n+r.bytes,0);
+    out.push(`<details><summary>${plan.atRisk.length} files to remove (${GB(bytes)}) whose SHA-256 some committed file gives, with no kept copy: informational</summary>`,'',
+      '| removed file | SHA-256 | first given at |','|---|---|---|',...plan.atRisk.slice(0,300).map(r=>`| \`${r.path}\` | \`${r.sha}\` | ${r.at} |`),
+      ...(plan.atRisk.length>300?[`| … ${plan.atRisk.length-300} more in the remove list | | |`]:[]),'','</details>','');
+  }
   if(plan.unmatched.length)out.push(`<details><summary>${plan.unmatched.length} record digests match no file in this folder (evidence already gone, or never kept here)</summary>`,'',
     '| SHA-256 | first given at |','|---|---|',...plan.unmatched.map(u=>`| \`${u.digest}\` | ${u.by} |`),'','</details>','');
   out.push(`Every kept entry with its SHA-256: \`${manifest}\`; the removal list and plan beside it (removal digest \`${plan.remove.digest}\`, inventory digest \`${plan.inventoryDigest}\`).`,'');
@@ -486,10 +509,10 @@ export function issueState(repo:string,issue:number):IssueState{
   return state==='OPEN'||state==='CLOSED'?state:{error:'gh answered '+JSON.stringify(state)};
 }
 
-function plannedInput(repo:string,cache:string,issue:number,memo?:DigestMemo):PlanInput{
+function plannedInput(repo:string,cache:string,issue:number,memo?:DigestMemo,committed?:Map<string,string>):PlanInput{
   const reader=acceptedRevision(repo);
   const records='error' in reader?reader:readCitingRecords(reader,`nts-scratch/${issue}`,cache);
-  return {cache,issue,state:issueState(repo,issue),records,...(memo?{memo}:{})};
+  return {cache,issue,state:issueState(repo,issue),records,...(memo?{memo}:{}),...(committed?{committed}:{})};
 }
 
 const issues=(args:string[])=>args.map(arg=>{if(!/^[1-9][0-9]*$/.test(arg))throw Error(`not an issue number: ${arg}`);return Number(arg);});
@@ -501,8 +524,10 @@ function main(argv:string[]):number{
     const out=resolve(rest[at+1]!),numbers=issues(rest.filter((_,i)=>i!==at&&i!==at+1));
     mkdirSync(out,{recursive:true});
     const plans:FolderPlan[]=[],report:string[]=[];
+    const reader=acceptedRevision(repo),digests='error' in reader?reader:readCommittedDigests(reader);
+    if('error' in digests)console.log(`committed digests unreadable: ${digests.error}; no at-risk list`);
     for(const issue of numbers){
-      const result=planFolder(plannedInput(repo,cache,issue)),{plan,remove,kept}=result;
+      const result=planFolder(plannedInput(repo,cache,issue,undefined,'error' in digests?undefined:digests)),{plan,remove,kept}=result;
       const {memo}=result,shaOf=(entry:Entry)=>entry.type==='file'?memo.get(identity(entry)):undefined;
       writeLines(join(out,`${issue}.remove.jsonl`),remove.map(entry=>{const sha=shaOf(entry);return JSON.stringify({...entry,...(sha?{sha}:{})});}));
       writeLines(join(out,`${issue}.kept.jsonl`),kept.map(({entry})=>{const sha=shaOf(entry);return JSON.stringify({...entry,...(sha?{sha}:{})});}));

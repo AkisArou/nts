@@ -10,10 +10,15 @@ export type AcceptedRevisionData={readonly [ACCEPTED_DATA]:true};
 export type RevisionContent=string|{error:string};
 /** Whole blobs under a declared directory whose content matches a pattern. */
 export type RevisionFiles={path:string;text:string}[]|{error:string};
+/** Each match of a pattern under a declared directory, where it stands. */
+export type RevisionMatches={path:string;line:number;match:string}[]|{error:string};
 declare const ACCEPTED_REVISION:unique symbol;
 export type AcceptedRevision={readonly [ACCEPTED_REVISION]:true;readonly revision:string;
   show(descriptor:AcceptedRevisionData):RevisionContent;grep(descriptor:AcceptedRevisionData,pattern:string):RevisionContent;
-  files(descriptor:AcceptedRevisionData,pattern:string):RevisionFiles};
+  files(descriptor:AcceptedRevisionData,pattern:string):RevisionFiles;
+  /** One blob at a path relative to a declared directory; a path that leaves it is refused. */
+  within(descriptor:AcceptedRevisionData,path:string):RevisionContent;
+  matches(descriptor:AcceptedRevisionData,pattern:string):RevisionMatches};
 const paths=new WeakMap<AcceptedRevisionData,string>();
 const root=fileURLToPath(new URL('../..',import.meta.url));
 
@@ -59,6 +64,29 @@ export function acceptedRevision(repo:string):AcceptedRevision|{error:string}{
     }
     return found.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
   };
+  const within=(descriptor:AcceptedRevisionData,inner:string):RevisionContent=>{
+    const path=paths.get(descriptor);
+    if(!path)throw Error('accepted revision read requires its owned descriptor');
+    const parts=inner.split('/');
+    if(!inner||inner.startsWith('/')||parts.some(part=>part===''||part==='.'||part==='..'))return {error:`${inner} is not a path inside ${path}`};
+    const shown=spawnSync('git',gitArguments(['show',mainSha+':'+path.replace(/\/$/,'')+'/'+inner]),{cwd:repo,encoding:'utf8',maxBuffer:1<<28});
+    if(shown.error||shown.status!==0)return {error:shown.error?.message||shown.stderr.trim()||'git show exit '+shown.status};
+    return shown.stdout;
+  };
+  const matches=(descriptor:AcceptedRevisionData,pattern:string):RevisionMatches=>{
+    const path=paths.get(descriptor);
+    if(!path)throw Error('accepted revision read requires its owned descriptor');
+    const result=spawnSync('git',gitArguments(['grep','--no-color','--no-textconv','-I','-n','-o','-z','-E',pattern,mainSha,'--',path]),{cwd:repo,encoding:'utf8',maxBuffer:1<<30});
+    if(result.error||result.status!==0&&result.status!==1)return {error:result.error?.message||result.stderr.trim()||'git grep exit '+result.status};
+    const found:{path:string;line:number;match:string}[]=[];
+    for(const row of result.stdout.split('\n')){
+      if(!row)continue;
+      const [name,line,match]=row.split('\0');
+      if(!name?.startsWith(mainSha+':')||line===undefined||match===undefined)return {error:'git grep printed '+JSON.stringify(row.slice(0,200))};
+      found.push({path:name.slice(mainSha.length+1),line:Number(line),match});
+    }
+    return found;
+  };
   return Object.freeze({revision:mainSha,show:(descriptor:AcceptedRevisionData)=>read(descriptor,'show'),
-    grep:(descriptor:AcceptedRevisionData,pattern:string)=>read(descriptor,'grep',pattern),files}) as AcceptedRevision;
+    grep:(descriptor:AcceptedRevisionData,pattern:string)=>read(descriptor,'grep',pattern),files,within,matches}) as AcceptedRevision;
 }

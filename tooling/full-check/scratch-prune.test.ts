@@ -11,7 +11,9 @@ import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {applyFolder,expandBraces,planFolder,removeListed,verifyFolder,type IssueState,type PlanInput} from './scratch-prune.ts';
-import {citationTokens,jsonStrings,scratchRecordCitations,type CitingRecord} from './keep.ts';
+import {citationTokens,jsonStrings,linkedRecordPaths,readCitingRecords,readCommittedDigests,scratchRecordCitations,type CitingRecord} from './keep.ts';
+import {scratchRepo} from '../landing/scratch-repo.ts';
+import {acceptedRevision} from '../gate/accepted-revision-data.ts';
 
 const ISSUE=4242,FOLDER=`nts-scratch/${ISSUE}`;
 const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
@@ -260,6 +262,41 @@ test('a citation by content keeps an unnamed file with that SHA-256, and a diges
   assert.ok(r.removed.has('other'));
   assert.equal(r.plan.totals.content.entries,1);
   assert.deepEqual(r.plan.unmatched,[{digest:gone,by:'docs/records/r.md:3'}]);
+});
+
+test('a companion file a citing record links gives content citations for the folder; a linked digest keeps the unnamed file',t=>{
+  const f=fixture(t,{'census/namespace/edges.json':'edges','census/namespace/provenance.json':'the capture','census/namespace/scratch.bin':'s'});
+  const repo=scratchRepo(t,'scratch-prune-linked');
+  repo.commit({
+    'docs/records/r/typescript.md':`The index is \`~/.cache/${FOLDER}/census/namespace/edges.json\`.\n\n[typescript.json](typescript.json) contains the capture digests; see [the plan](../../plan.md#now) and [a tool](../../../tooling/x.ts).\n`,
+    'docs/records/r/typescript.json':JSON.stringify({captures:{typescript:{provenance:sha('the capture')}}}),
+    'docs/plan.md':'no digests\n','tooling/x.ts':'// '+sha('s')+'\n',
+  },'records');
+  const reader=acceptedRevision(repo.root);assert.ok(!('error' in reader));
+  const records=readCitingRecords(reader,FOLDER,f.cache);assert.ok(Array.isArray(records));
+  assert.deepEqual(records.map(r=>[r.path,r.linkedFrom??null]),[['docs/records/r/typescript.md',null],['docs/plan.md','docs/records/r/typescript.md'],['docs/records/r/typescript.json','docs/records/r/typescript.md']]);
+  const r=kept(f,records);
+  assert.deepEqual(r.plan.refusals,[]);
+  assert.equal(r.plan.kept.find(k=>k.path==='census/namespace/provenance.json')?.why,'content');
+  assert.ok(r.removed.has('census/namespace/scratch.bin'),'a digest in a file outside docs/ and results/ does not keep');
+  const committed=readCommittedDigests(reader);assert.ok(committed instanceof Map);
+  assert.equal(committed.get(sha('the capture')),'docs/records/r/typescript.json:1');
+  assert.equal(committed.has(sha('s')),false,'tooling/ is not a record directory');
+});
+
+test('a link resolves against its record, inside docs/ or results/ only',()=>{
+  const text='[a](a.json) [b](../b.tsv#row) [c](https://example.invalid/c) [d](/abs/d) [e](../../../tooling/e.ts) [f](<sp%20ace.md> "t") [g](#anchor) [h](../../../results/gate/h.json)';
+  assert.deepEqual(linkedRecordPaths({path:'docs/records/x/r.md',text}),['docs/records/b.tsv','docs/records/x/a.json','docs/records/x/sp ace.md','results/gate/h.json']);
+  assert.deepEqual(linkedRecordPaths({path:'results/x.json',text}),[],'only a Markdown record links');
+});
+
+test('the at-risk list names a removed file whose digest any committed file gives, unless a copy is kept',t=>{
+  const f=fixture(t,{'keep.log':'same','copy.log':'same','lonely.log':'vouched elsewhere','plain':'p'});
+  const records=[record(`\`~/.cache/${FOLDER}/keep.log\``)];
+  const committed=new Map([[sha('same'),'docs/a.md:1'],[sha('vouched elsewhere'),'results/b.json:3']]);
+  const {plan}=planFolder({...f.input(records),committed});
+  assert.deepEqual(plan.atRisk,[{path:'lonely.log',sha:sha('vouched elsewhere'),bytes:plan.atRisk![0]!.bytes,at:'results/b.json:3'}]);
+  assert.equal(planFolder(f.input(records)).plan.atRisk,null);
 });
 
 test('brace expansion and JSON string structure',()=>{

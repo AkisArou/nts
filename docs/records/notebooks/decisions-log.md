@@ -5160,6 +5160,11 @@ approved #1078's design on 11-27:
 - The review of the first candidate added a fifth form, the citation by
   content: a record digest keeps any file of the folder with that SHA-256.
   It also added link-count-aware removal of hard links.
+- The second review added linked companion files to the citing records,
+  one hop. A record can give its digests in a file it links that never
+  names the folder: #728's typescript.json gives the digests of two captures.
+  The dry run also gained an informational list of removed files whose digest
+  any committed file gives.
 
 Pruning stays a hand-run tool on issues named by number. It is not a sweep
 kind of the full check.

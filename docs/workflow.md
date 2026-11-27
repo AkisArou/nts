@@ -1691,6 +1691,14 @@ the tooling strict checker owns the source's type checking.
   - **Citations by content.** Every SHA-256 a citing record gives keeps each
     file of the folder with that digest, named or not, so `plan` hashes every
     file. The dry run lists the record digests that match no file.
+  - **Linked companion files.** A committed file that a citing Markdown
+    record links relatively (`[x](x.json)`, inside `docs/` or `results/`) is
+    read as part of that record, one hop. Its digests are content citations
+    and its paths are tried as citations.
+
+  The dry run also lists, for information only, each file to be removed
+  whose SHA-256 any committed file of `docs/` or `results/` gives, with no
+  kept copy.
   - **One hop of binding.** A directly cited file that names another file of
     the folder together with that file's SHA-256 keeps it. The bound file is
     not read for further bindings.

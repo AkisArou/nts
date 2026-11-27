@@ -1,6 +1,6 @@
 // The kept-path declarations, shared by inventory and pressure reclamation.
 import {readFileSync,readdirSync,lstatSync} from 'node:fs';
-import {join,isAbsolute,resolve} from 'node:path';
+import {join,isAbsolute,posix,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {acceptedRevisionData,type AcceptedRevision} from '../gate/accepted-revision-data.ts';
 export type FolderStat = (path:string)=>{isDirectory():boolean;isSymbolicLink():boolean;mtimeMs:number};
@@ -98,6 +98,7 @@ export function targetScratch(keep:Record<string,Keep>=readKeep()):{names:Record
 // ---------------------------------------------------------------------------
 const RECORDS=acceptedRevisionData(new URL('../../docs/records/',import.meta.url));
 const RESULTS=acceptedRevisionData(new URL('../../results/',import.meta.url));
+const DOCS=acceptedRevisionData(new URL('../../docs/',import.meta.url));
 const FOLDER_PATTERN='nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch';
 const HOME_PREFIXES=['~/.cache/','$HOME/.cache/','${HOME}/.cache/'];
 export type Unreadable={error:string};
@@ -124,15 +125,61 @@ export function readScratchRecordCitations(reader:AcceptedRevision,cache:string)
   return scratchRecordCitations(records+'\n'+results,cache);
 }
 
-/** A committed record, whole: a relative path cites only beside its own root. */
-export type CitingRecord={path:string;text:string};
-/** The records that cite `folder` (nts-scratch/<N>), by the same boundary rule. */
+/** A committed record, whole: a relative path cites only beside its own root.
+ * `linkedFrom` names the citing record whose Markdown link brought it in. */
+export type CitingRecord={path:string;text:string;linkedFrom?:string};
+
+/** The committed files a Markdown record links relatively, inside docs/ or
+ * results/: `[x](x.json)` against the record's own directory. */
+export function linkedRecordPaths(record:CitingRecord):string[]{
+  if(!record.path.endsWith('.md'))return [];
+  const found=new Set<string>();
+  for(const m of record.text.matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)){
+    const target=m[1]!.replace(/[#?].*$/,'');
+    if(!target||/^[a-z][a-z0-9+.-]*:/i.test(target)||target.startsWith('/'))continue;
+    let decoded:string;try{decoded=decodeURIComponent(target);}catch{continue;}
+    const path=posix.normalize(posix.join(posix.dirname(record.path),decoded));
+    if(/^(docs|results)\/[^/]/.test(path)&&!path.split('/').includes('..'))found.add(path);
+  }
+  return [...found].sort();
+}
+
+/** The records that cite `folder` (nts-scratch/<N>), by the same boundary
+ * rule, then one hop of the committed files they link: a record may give
+ * its digests in a companion file that never names the folder. */
 export function readCitingRecords(reader:AcceptedRevision,folder:string,cache:string):CitingRecord[]|Unreadable{
   const pattern=folder.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^0-9]|$)';
   const records=reader.files(RECORDS,pattern),results=reader.files(RESULTS,pattern);
   if('error' in records)return records;
   if('error' in results)return results;
-  return [...records,...results].filter(record=>scratchRecordCitations(record.text,cache).includes(folder));
+  const citing=[...records,...results].filter(record=>scratchRecordCitations(record.text,cache).includes(folder));
+  const seen=new Set(citing.map(record=>record.path)),linked:CitingRecord[]=[];
+  for(const record of citing)for(const path of linkedRecordPaths(record)){
+    if(seen.has(path))continue;
+    seen.add(path);
+    const text=path.startsWith('docs/')?reader.within(DOCS,path.slice('docs/'.length)):reader.within(RESULTS,path.slice('results/'.length));
+    // A link to a missing file, a directory or a binary blob carries no citation.
+    if(typeof text!=='string'||text.slice(0,1<<16).includes('\0'))continue;
+    linked.push({path,text,linkedFrom:record.path});
+  }
+  return [...citing,...linked];
+}
+
+/** Every SHA-256 any committed file of docs/ or results/ gives, with where it
+ * first stands: the dry run's safety net for removed files that a record
+ * elsewhere may vouch for. */
+export function readCommittedDigests(reader:AcceptedRevision):Map<string,string>|Unreadable{
+  const out=new Map<string,string>();
+  for(const found of [reader.matches(DOCS,'[0-9a-fA-F]{64,}'),reader.matches(RESULTS,'[0-9a-fA-F]{64,}')]){
+    if('error' in found)return found;
+    for(const {path,line,match} of found){
+      // A longer hex run is not a SHA-256.
+      if(match.length!==64)continue;
+      const digest=match.toLowerCase();
+      if(!out.has(digest))out.set(digest,`${path}:${line}`);
+    }
+  }
+  return out;
 }
 
 /** One spelling in a record that may name an entry of the folder.
