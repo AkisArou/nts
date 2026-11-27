@@ -4,7 +4,7 @@ import {readdirSync,readFileSync,readlinkSync,realpathSync,lstatSync,statSync} f
 import {join,relative,resolve,sep} from 'node:path';
 import {cgroupOwnershipIdentity} from '../gate/host-observations.ts';
 import {HostObservationError} from '../gate/host-observation-error.ts';
-import {readProcessStats} from '../differential/process-stat/main.ts';
+import {processEntryGone,readProcessStats} from '../differential/process-stat/main.ts';
 import {parseRunOwner} from '../gate/scopes/run-owner.ts';
 import type {TreePin} from './tree-pin.ts';
 
@@ -13,12 +13,22 @@ type ObservedUser=TreeUser&{link:string;path:string};
 export type TreeProcessOptions={proc?:string;self?:number;ownPin?:TreePin;/** A fixture's explicitly owned kernel processes. */pids?:readonly number[];/** Registered pool trees, supplied by their Git owner. */runTrees?:readonly string[];/** Private cgroup filesystem with a supplied proc tree. */cgroups?:string};
 export type TreeProcessObservation={users:ObservedUser[];ignored:{pid:number;birth:string;command:string;group:string}[];unreadable:Error[]};
 const PROC='/proc';
-const procStat=(pid:number,proc:string)=>readFileSync(join(proc,String(pid),'stat'),'utf8');
+/** Node may omit the path when a read fails after open. The proc reader knows it. */
+function procRead<T>(path:string,read:(path:string)=>T):T{
+  try{return read(path);}catch(error){
+    const failure=error as NodeJS.ErrnoException;
+    if(error instanceof Error&&typeof failure.syscall==='string'&&typeof failure.code==='string'&&failure.path===undefined)
+      failure.path=path;
+    throw error;
+  }
+}
+const procText=(path:string)=>procRead(path,file=>readFileSync(file,'utf8'));
+const procStat=(pid:number,proc:string)=>procText(join(proc,String(pid),'stat'));
 const missing=(error:unknown)=>(error as NodeJS.ErrnoException).code==='ENOENT';
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
 const under=(root:string,path:string)=>path===root||path.startsWith(root+sep);
 /** Read-only provenance; no signalling or membership authority. */
-export function processCgroup(pid:number,proc=PROC):string{return readFileSync(join(proc,String(pid),'cgroup'),'utf8');}
+export function processCgroup(pid:number,proc=PROC):string{return procText(join(proc,String(pid),'cgroup'));}
 
 /** A missing process observation protects the tree, but is retryable by the pool. */
 export class TreeOwnershipUnavailable extends AggregateError {
@@ -49,18 +59,24 @@ const statObservation=(error:Error,proc:string):OwnershipObservationFailure=>{
   return new OwnershipObservationFailure(error.message,{cause:error});
 };
 const statAt=(pid:number,proc:string)=>readProcessStats([pid],id=>procStat(id,proc),(_pid,error)=>{throw statObservation(error,proc);}).get(pid);
+/** With no prior birth, any live process at the PID leaves the read unproven. */
+function processStillLive(pid:number,proc:string,birth?:string):boolean{
+  const stat=statAt(pid,proc);
+  return stat?.live===true&&(birth===undefined||String(stat.started)===birth);
+}
 
 /** Attribution is a read-only use of the run owner's receipt, never a drain grant.
  * A supplied proc filesystem must supply its cgroups too; neither reads the host. */
 function ownedRun(group:string,{proc=PROC,runTrees=[],cgroups}:TreeProcessOptions):string|undefined{
   if(!runTrees.length)return;
   if(!cgroups&&proc!==PROC)throw Error('missing cgroup filesystem observation');
-  const boot=()=>readFileSync(join(proc,'sys/kernel/random/boot_id'),'utf8').trim();
+  const boot=()=>procText(join(proc,'sys/kernel/random/boot_id')).trim();
   const live=(pid:number,start:string)=>{
-    const dir=join(proc,String(pid));
-    const uid=/^Uid:\s+(\d+)\s+\d+\s+\d+\s+\d+$/m.exec(readFileSync(join(dir,'status'),'utf8'))?.[1];
-    const stat=statAt(pid,proc);
-    return Number(uid)===process.getuid?.()&&stat?.live===true&&String(stat.started)===start;
+    let status:string;
+    try{status=procText(join(proc,String(pid),'status'));}
+    catch(error){if(processEntryGone(error))return false;throw error;}
+    const uid=/^Uid:\s+(\d+)\s+\d+\s+\d+\s+\d+$/m.exec(status)?.[1];
+    return Number(uid)===process.getuid?.()&&processStillLive(pid,proc,start);
   };
   // The receipt is the run owner's observed state: absent is undefined, and
   // any other failed read refuses attribution as an observation.
@@ -113,10 +129,17 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,own
     const dir=join(proc,pid);
     try{
       // Non-dumpable processes may have root-owned proc inodes. status owns UID.
-      const status=readFileSync(join(dir,'status'),'utf8'),owner=/^Uid:\s+(\d+)\s+\d+\s+\d+\s+\d+$/m.exec(status);
+      const status=procText(join(dir,'status')),owner=/^Uid:\s+(\d+)\s+\d+\s+\d+\s+\d+$/m.exec(status);
       if(!owner)throw new OwnershipObservationFailure('process has no UID observation');
       if(Number(owner[1])===uid)candidates.push(Number(pid));
-    }catch(error){if(missing(error))continue;reading.unreadable.push(Error('unreadable process ownership '+dir,{cause:observation(error,{proc,cgroups})}));}
+    }catch(error){
+      observation(error,{proc,cgroups});
+      if(processEntryGone(error)){
+        try{if(!processStillLive(Number(pid),proc))continue;}
+        catch(again){observation(again,{proc,cgroups});}
+      }
+      reading.unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));
+    }
   }
   // Retry malformed stats only after every same-uid candidate was observed.
   // Filtering UID first keeps unrelated users outside this ownership scan.
@@ -132,44 +155,52 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,own
       const inspect=(link:string):boolean=>{
         if(ownPin?.owns(Number(pid),link,birth))return false;
         let path:string;
-        try{path=readlinkSync(join(dir,link)).replace(/ \(deleted\)$/,'');}
+        try{path=procRead(join(dir,link),file=>readlinkSync(file)).replace(/ \(deleted\)$/,'');}
         catch(error){if(missing(error))return false;throw error;}
         const root=normalized.find(root=>under(root,path));if(!root)return false;
-        const command=readFileSync(join(dir,'comm'),'utf8').trim()||'?';
+        const command=procText(join(dir,'comm')).trim()||'?';
         const shown=relative(root,path)||'.';
         const where=link==='cwd'?'its working directory':link==='exe'?'its executable '+shown:'an open file '+shown;
         reading.users.push({pid:Number(pid),command,where,link,path});return true;
       };
       if(inspect('cwd')||inspect('exe'))continue;
-      for(const fd of readdirSync(join(dir,'fd')))if(inspect('fd/'+fd))break;
+      for(const fd of procRead(join(dir,'fd'),file=>readdirSync(file)))if(inspect('fd/'+fd))break;
     }catch(error){
       observation(error,{proc,cgroups});
-      let current:string;
-      try{const stat=statAt(Number(pid),proc);if(!stat?.live)continue;current=String(stat.started);}
-      catch(again){if(missing(again))continue;observation(again,{proc,cgroups});reading.unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));continue;}
-      if(current!==birth)continue;
       try{
+        if(!processStillLive(number,proc,birth))continue;
         const lines=processCgroup(Number(pid),proc).trim().split('\n'),group=lines.length===1&&/^0::(\/.*)$/.exec(lines[0]!)?.[1];
         if(!group||group.split('/').some(part=>part==='.'||part==='..'))throw new OwnershipObservationFailure('invalid unified cgroup identity');
         const denied=['EACCES','EPERM'].includes((error as NodeJS.ErrnoException).code??'');
         if(denied&&!group.split('/').some(part=>/^nts(?:[.-]|$)/.test(part))){
-          const command=readFileSync(join(dir,'comm'),'utf8').trim();
+          const command=procText(join(dir,'comm')).trim();
+          if(!processStillLive(number,proc,birth))continue;
           reading.ignored.push({pid:Number(pid),birth,command,group});continue;
         }
         if(denied){
           const tree=ownedRun(group,{proc,runTrees,cgroups});
           if(tree){
             // The process must still be the same actor in the same owned unit.
-            const stat=statAt(Number(pid),proc);
-            if(!stat?.live||String(stat.started)!==birth)continue;
-            if(processCgroup(Number(pid),proc).trim()!=='0::'+group)throw new OwnershipObservationFailure('process cgroup changed during attribution '+pid);
+            const currentGroup=processCgroup(number,proc).trim();
             const root=normalized.find(root=>under(root,tree)||under(tree,root));
-            if(root)reading.users.push({pid:Number(pid),command:readFileSync(join(dir,'comm'),'utf8').trim()||'?',where:'its owned gate run in '+tree+'; cgroup '+group,link:'cgroup',path:tree});
+            const command=root?procText(join(dir,'comm')).trim()||'?':'';
+            if(!processStillLive(number,proc,birth))continue;
+            if(currentGroup!=='0::'+group)throw new OwnershipObservationFailure('process cgroup changed during attribution '+pid);
+            if(root)reading.users.push({pid:number,command,where:'its owned gate run in '+tree+'; cgroup '+group,link:'cgroup',path:tree});
             continue;
           }
         }
         throw new OwnershipObservationFailure('live unreadable tool process '+pid+'; cgroup '+group+': '+errorText(error));
-      }catch(reason){observation(reason,{proc,cgroups});reading.unreadable.push(Error('tree ownership keeps unreadable process '+pid+': '+errorText(reason),{cause:error}));}
+      }catch(reason){
+        observation(reason,{proc,cgroups});
+        // Only a failed read of this candidate can prove its departure.
+        const path=(reason as NodeJS.ErrnoException).path;
+        if(processEntryGone(reason)&&path!==undefined&&under(resolve(dir),resolve(path))){
+          try{if(!processStillLive(number,proc,birth))continue;}
+          catch(again){observation(again,{proc,cgroups});}
+        }
+        reading.unreadable.push(Error('tree ownership keeps unreadable process '+pid+': '+errorText(reason),{cause:error}));
+      }
     }
   }
   reading.users.sort((a,b)=>a.pid-b.pid);return reading;

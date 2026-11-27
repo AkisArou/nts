@@ -28,7 +28,11 @@ export type StatReader=(pid:number)=>string;
 export type StatErrorPolicy<K=number>=(key:K,error:Error)=>void;
 export const liveProcessStat:StatReader=pid=>readText(`/proc/${pid}/stat`,'utf8');
 const liveTaskStat=(pid:number,tid:number)=>readText(`/proc/${pid}/task/${tid}/stat`,'utf8');
-const gone=(error:unknown)=>['ENOENT','ESRCH'].includes((error as NodeJS.ErrnoException).code??'');
+/** The proc entry vanished. Callers that already observed a birth can recheck it. */
+export function processEntryGone(error:unknown):boolean{
+  const code=(error as NodeJS.ErrnoException|null|undefined)?.code;
+  return code==='ENOENT'||code==='ESRCH';
+}
 const throwing:StatErrorPolicy<unknown>=(_key,error)=>{throw error;};
 /** The explicit policy of a nullable or best-effort caller: an unreadable or
  * still-malformed record is absent, exactly as a gone process is. */
@@ -41,7 +45,7 @@ function readStats<K>(keys:Iterable<K>,readStat:(key:K)=>string,name:(key:K)=>st
   const records=new Map<K,ProcessStat>(),retry=new Map<K,string>();
   const read=(key:K):string|undefined=>{
     try{return readStat(key);}catch(error){
-      if(!gone(error))onError(key,Error(`cannot read ${name(key)} stat: ${String(error)}`,{cause:error}));
+      if(!processEntryGone(error))onError(key,Error(`cannot read ${name(key)} stat: ${String(error)}`,{cause:error}));
       return;
     }
   };

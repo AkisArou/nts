@@ -22,7 +22,7 @@ import {generatedJavaScript} from '../gate/generated-javascript.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {lockChild,replaceOnce,LOCK_BARRIER} from './lock-fixture.ts';
-import {fileURLToPath,pathToFileURL} from 'node:url';
+import {pathToFileURL} from 'node:url';
 import {workerPresence,workerPresenceFile} from './pool-presence.ts';
 import {DISK_TRASH} from '../gate/disk-reclamation.ts';
 import {GateResource} from '../gate/gate-resource.ts';
@@ -196,9 +196,9 @@ test('attach, detach and take own worker presence while status stays read-only',
 
 test('the CLI attach/detach verbs and take --issue preserve the branch and status v2 bytes with the count active',t=>{
   const f=pool(t,1),{p,s}=f,tree=p.take('884');
-  const {env,log}=poolCliEnvironment(f);
+  const {env,log,entry,procReads}=poolCliEnvironment(f);
   const cli=(...args:string[])=>{
-    const result=spawnTest(process.execPath,[fileURLToPath(new URL('./pool.ts',import.meta.url)),...args,'--pool',p.dir],{cwd:s.root,env,encoding:'utf8'});
+    const result=spawnTest(process.execPath,[entry,...args,'--pool',p.dir],{cwd:s.root,env,encoding:'utf8'});
     assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;
   };
   assert.match(cli('detach','884'),/task 884: detached/);
@@ -209,6 +209,7 @@ test('the CLI attach/detach verbs and take --issue preserve the branch and statu
   cli('detach','884');cli('take','--issue','884');
   assert.equal(workerPresence(tree.path,'884').state,'attached');assert.equal(s.git(['branch','--show-current'],tree.path),'884');
   assert.match(readFileSync(log,'utf8'),/busctl.*ExecStart/,'detach queried the supplied active count');
+  assert.match(readFileSync(procReads,'utf8'),/ESRCH on status/,'detach observed the supplied process departing');
   for(const command of ['systemctl','busctl']){
     const unexpected=spawnTest(command,['unsupplied-observation'],{env,encoding:'utf8'});
     assert.notEqual(unexpected.status,0);
@@ -277,9 +278,27 @@ test('a landed hold still needs admission when taken again',t=>{
   assert.equal(p.take('884').state,'held');assert.equal(p.capacity.snapshot(p.dir).availableBytes,0);
 });
 
-/** The CLI owns its unit observations, including an active hourly count.
- * Unknown queries fail by name; neither shim can reach the user's manager. */
+/** Stage the real entry with private process and unit observations. */
 function poolCliEnvironment(f:ReturnType<typeof pool>){
+  const stage=join(f.s.dir,'pool-cli'),entry=join(stage,'tooling/landing/pool.ts');
+  const proc=join(f.s.dir,'proc'),task=join(proc,'42'),procReads=join(f.s.dir,'proc-reads.log');
+  if(!existsSync(entry)){
+    mkdirSync(task,{recursive:true});
+    copyModuleClosure(['tooling/landing/pool.ts'],stage);
+    const poolSource=readFileSync(entry,'utf8'),construction='new Pool(dir, { root }, linkInputs(root))';
+    writeFileSync(entry,replaceOnce(poolSource,construction,`new Pool(dir, { root }, linkInputs(root), {processes:{proc:${JSON.stringify(proc)}}})`));
+    const file=join(stage,'tooling/landing/tree-users.ts'),source=readFileSync(file,'utf8');
+    // The listed PID exits during its UID read; there is no stat to recheck.
+    writeFileSync(file,`import {appendFileSync as recordProcRead} from 'node:fs';
+const readFileSync=(path:string,encoding:'utf8')=>{
+  if(path===${JSON.stringify(join(task,'status'))}){
+    recordProcRead(${JSON.stringify(procReads)},'ESRCH on status\\n');
+    throw Object.assign(Error('ESRCH: no such process, read'),{code:'ESRCH',syscall:'read'});
+  }
+  return readText(path,encoding);
+};
+`+replaceOnce(source,'readdirSync,readFileSync,readlinkSync','readdirSync,readFileSync as readText,readlinkSync'));
+  }
   const bin=join(f.s.dir,'unit-tools'),log=join(f.s.dir,'unit-queries.jsonl');mkdirSync(bin,{recursive:true});
   const unit='nts-full-check-count.service',object='/org/freedesktop/systemd1/unit/nts_2dfull_2dcheck_2dcount_2eservice';
   const properties=[{type:'s',data:'/outside/controller'},{type:'s',data:''},{type:'a(sasbttttuii)',data:[]},
@@ -299,12 +318,14 @@ const reply=${JSON.stringify(observations)}.find(row=>JSON.stringify(row.args)==
 if(reply)process.stdout.write(reply.text);
 else {process.stderr.write('unsupplied '+command+' request: '+JSON.stringify(args)+'\\n');process.exitCode=1;}
 `),{mode:0o755});
-  return {env:{...f.s.env,...f.observe({freeBytes:1000*GB,freeInodes:1000}),PATH:bin+':'+f.s.env.PATH},log};
+  return {env:{...f.s.env,...f.observe({freeBytes:1000*GB,freeInodes:1000}),PATH:bin+':'+f.s.env.PATH},entry,log,procReads};
 }
 
 /** pool.ts's own CLI on the fixture's pool: its exit status and output, through main's exit mapping. */
-const poolCli=(f:ReturnType<typeof pool>,...args:string[])=>spawnTest(process.execPath,[fileURLToPath(new URL('./pool.ts',import.meta.url)),...args,'--pool',f.p.dir],
-  {cwd:f.s.root,env:poolCliEnvironment(f).env,encoding:'utf8'});
+const poolCli=(f:ReturnType<typeof pool>,...args:string[])=>{
+  const {entry,env}=poolCliEnvironment(f);
+  return spawnTest(process.execPath,[entry,...args,'--pool',f.p.dir],{cwd:f.s.root,env,encoding:'utf8'});
+};
 const inUse=(tree:string)=>(error:unknown)=>error instanceof TreeInUse&&error instanceof PoolRetry&&poolExit(error)===75&&error.tree===tree
   &&error.message.includes('tree resource lock is held for '+tree);
 

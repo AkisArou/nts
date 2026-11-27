@@ -14,6 +14,8 @@ import { join } from "node:path";
 import { assertNoProcessUsers, describeUsers, observedFailure, observeTreeProcesses, OwnershipObservationFailure, TreeOwnershipUnavailable, treeUsers } from "./tree-users.ts";
 import {treeProcessFixture} from './tree-users-fixture.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {testScratch} from '../gate/test-scratch.ts';
+import {replaceOnce} from './lock-fixture.ts';
 import {pathToFileURL} from 'node:url';
 
 for(const link of ['cwd','exe'])test('an exiting task with absent '+link+' has no owner at that link',t=>{
@@ -202,6 +204,99 @@ test('only a failed process or cgroup observation is an observation failure',t=>
   assert.equal(observedFailure(new OwnershipObservationFailure('unowned gate receipt'),{proc:f.proc}),true);
   assert.equal(observedFailure(new TypeError('defect'),{proc:f.proc}),false);
   assert.equal(observedFailure(Object.assign(new TypeError('bad argument'),{code:'ERR_INVALID_ARG_TYPE'}),{proc:f.proc}),false);
+});
+
+type ControlledReader=typeof import('./tree-users.ts')&{failures:Map<string,()=>never>};
+
+async function controlledProcReader(t:TestContext):Promise<ControlledReader>{
+  const stage=testScratch(t,'controlled-proc-reader');
+  copyModuleClosure(['tooling/landing/tree-users.ts'],stage);
+  const module=join(stage,'tooling/landing/tree-users.ts'),source=readFileSync(module,'utf8');
+  // Inject at the filesystem call so a Linux read error can omit error.path.
+  writeFileSync(module,`export const failures=new Map<string,()=>never>();
+const readFileSync=(path:string,encoding:'utf8')=>{failures.get(path)?.();return readText(path,encoding);};
+const readlinkSync=(path:string)=>{failures.get(path)?.();return readLink(path);};
+const readdirSync=(path:string)=>{failures.get(path)?.();return readDirectory(path);};
+`+replaceOnce(source,'readdirSync,readFileSync,readlinkSync','readdirSync as readDirectory,readFileSync as readText,readlinkSync as readLink'));
+  return import(pathToFileURL(module).href);
+}
+
+function failedProcRead(reader:ControlledReader,t:TestContext,field:string,code:string,state:'absent'|'Z'|'R'|'reused'){
+  const f=treeProcessFixture(t),owner=field==='owner-status'?runReceipt(f):undefined;
+  const task=owner?join(f.proc,'43'):f.task;
+  const file=join(task,owner?'status':field),stat=join(task,'stat');
+  const live=readFileSync(stat,'utf8').replace(') S ',') R ');
+  writeFileSync(stat,live);
+  const reads:string[]=[];
+  reader.failures.set(file,()=>{
+    reads.push(file);
+    reader.failures.delete(file);
+    if(state==='absent')rmSync(task,{recursive:true});
+    else writeFileSync(stat,state==='reused'?live.replace(/\d+$/,'100'):live.replace(') R ',') '+state+' '));
+    if(code==='defect')throw new TypeError('supplied process reader defect');
+    throw Object.assign(Error(code+': supplied process read'),{code,syscall:'read'});
+  });
+  const fd=join(f.task,'fd');
+  if(field==='cgroup'||owner)reader.failures.set(fd,()=>{
+    throw Object.assign(Error('supplied fd denial'),{code:'EACCES',syscall:'scandir',path:fd});
+  });
+  t.after(()=>{reader.failures.delete(file);reader.failures.delete(fd);});
+  if(field==='comm'){
+    rmSync(join(f.task,'cwd'));symlinkSync(f.tree,join(f.task,'cwd'));
+  }
+  if(field==='fd/3')symlinkSync(f.tree,join(f.task,'fd/3'));
+  return {...f,file,reads,options:owner?.options??f.options};
+}
+
+test('supplied per-process read failures',async t=>{
+  const reader=await controlledProcReader(t);
+  for(const field of ['status','cwd','fd','fd/3','comm','cgroup'])await t.test('pathless ESRCH while reading '+field+' skips only the departed process',t=>{
+    const f=failedProcRead(reader,t,field,'ESRCH','absent'),other=join(f.proc,'44');
+    mkdirSync(other);
+    writeFileSync(join(other,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()).join('\t')+'\n');
+    writeFileSync(join(other,'stat'),'44 (owner) '+['S',...Array<string>(18).fill('0'),'100'].join(' '));
+    writeFileSync(join(other,'comm'),'owner\n');symlinkSync(f.tree,join(other,'cwd'));
+    const reading=reader.observeTreeProcesses([f.tree],f.options);
+    assert.deepEqual(reading.users.map(user=>user.pid),[44]);
+    assert.deepEqual(reading.ignored,[]);
+    assert.deepEqual(reading.unreadable,[]);
+    assert.deepEqual(f.reads,[f.file]);
+  });
+
+  for(const state of ['Z','reused','R'] as const)await t.test('ESRCH on cwd rechecks process birth and liveness: '+state,t=>{
+    const f=failedProcRead(reader,t,'cwd','ESRCH',state);
+    if(state==='R'){
+      assert.throws(()=>reader.treeUsers(f.tree,f.options),error=>error instanceof reader.TreeOwnershipUnavailable&&/live unreadable tool process 42.*ESRCH/.test(error.message));
+    }else assert.deepEqual(reader.treeUsers(f.tree,f.options),[]);
+    assert.deepEqual(f.reads,[f.file]);
+  });
+
+  for(const [field,code] of [['comm','EACCES'],['comm','EIO'],['fd','ENOENT'],['status','ESRCH']] as const)await t.test('a live process with '+code+' on '+field+' keeps the tree',t=>{
+    const f=failedProcRead(reader,t,field,code,'R');
+    assert.throws(()=>reader.treeUsers(f.tree,f.options),error=>{
+      assert.ok(error instanceof reader.TreeOwnershipUnavailable,String(error));
+      assert.match(error.message,new RegExp(code==='ESRCH'?'unreadable process ownership.*42':code));
+      assert.equal(error.errors[0].cause.path,f.file);
+      return true;
+    });
+    assert.deepEqual(f.reads,[f.file]);
+  });
+
+  await t.test('a departed attribution owner cannot certify an unreadable live process idle',t=>{
+    const f=failedProcRead(reader,t,'owner-status','ESRCH','absent');
+    assert.throws(()=>reader.treeUsers(f.tree,f.options),error=>{
+      assert.ok(error instanceof reader.TreeOwnershipUnavailable,String(error));
+      assert.match(error.message,/unreadable process 42: unavailable gate owner identity/);
+      return true;
+    });
+    assert.deepEqual(f.reads,[f.file]);
+  });
+
+  await t.test('a process-reader defect remains a hard error',t=>{
+    const f=failedProcRead(reader,t,'comm','defect','R');
+    assert.throws(()=>reader.treeUsers(f.tree,f.options),{name:'TypeError',message:'supplied process reader defect'});
+    assert.deepEqual(f.reads,[f.file]);
+  });
 });
 
 // A gate run that drains removes its receipt between attribution's first read
