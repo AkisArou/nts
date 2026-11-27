@@ -1007,6 +1007,11 @@ function claimDisk(step) {
 }
 /** @param {string} name a step refused disk, before its look time */
 const diskBlocked = name => { const claim = diskClaims.get(name); return Boolean(claim && !claim.lease && host.now() < claim.lookAt); };
+/** Something asks again at the step's look time, whatever ended the last timer early. @param {string} name */
+function lookAgainForDisk(name) {
+  const claim = diskClaims.get(name);
+  if (claim) diskLook ??= setTimeout(() => { diskLook = null; schedule(); }, Math.max(1, claim.lookAt - host.now()));
+}
 /** A step's disk wait ends: admitted, short of slots or memory instead, or finished. @param {DiskClaim} claim */
 function endDiskWait(claim) {
   claim.admission.endWait();
@@ -1396,7 +1401,7 @@ function schedule() {
         break;
       }
       if (b?.wait) continue;
-      if (diskBlocked(name)) continue;
+      if (diskBlocked(name)) { lookAgainForDisk(name); continue; }
       const pre = preflight(step);
       if (pre) {
         finish(name, "NOT RUN", pre);
