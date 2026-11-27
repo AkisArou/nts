@@ -37,3 +37,15 @@ export function fieldAlias(seed: number, kind: number): string {
   const changed = append(borrowed, seed, kind);
   return holder.text + "|" + changed;
 }
+
+// A closed entry for the poison/forced-collection control as well as the
+// differential's string-valued exports above.
+export function work(_iterations: number): number {
+  for (let kind = 0; kind < 8; kind++) {
+    const original = text(kind);
+    const aliased = fieldAlias(kind, kind);
+    if (aliased.substring(0, original.length) !== original) return 0;
+    if (liveViews(kind, kind).length === 0) return 0;
+  }
+  return 1;
+}
