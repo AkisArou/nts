@@ -5,6 +5,7 @@ use std::collections::{BTreeSet, VecDeque};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use super::super::contents::slots::versioning::Lineage;
 use super::super::{Callee, Memory, OpKind, Program, ValueId};
 use super::{Report, Storage};
 
@@ -89,6 +90,7 @@ struct Index<'p> {
     display: Vec<String>,
     region: FxHashSet<usize>,
     placed: Vec<FxHashSet<ValueId>>,
+    copies: Vec<FxHashMap<ValueId, Vec<ValueId>>>,
     dispatch: FxHashMap<u32, Vec<&'p str>>,
     calls: FxHashMap<(usize, ValueId), Targets>,
 }
@@ -98,6 +100,7 @@ impl<'p> Index<'p> {
         program: &'p Program,
         clones: &FxHashMap<String, String>,
         entries: &[super::super::own::EntryDecision],
+        slots: &[Lineage],
         budget: &mut Budget,
     ) -> Self {
         let mut index = Self {
@@ -107,6 +110,7 @@ impl<'p> Index<'p> {
             display: Vec::new(),
             region: FxHashSet::default(),
             placed: Vec::new(),
+            copies: Vec::new(),
             dispatch: FxHashMap::default(),
             calls: FxHashMap::default(),
         };
@@ -131,6 +135,7 @@ impl<'p> Index<'p> {
                 placed.insert(value);
             }
             index.placed.push(placed);
+            index.copies.push(FxHashMap::default());
         }
         // A detached context's ValueIds describe the original body, never the
         // adapter's new parameter arena. Use the writer's actual decisions to
@@ -149,6 +154,30 @@ impl<'p> Index<'p> {
                 entry.clone_into(&mut index.display[body_at]);
             }
         }
+        // Slot versions are ordinary heap/frame bodies. Their writer provides
+        // source identity separately from the region-clone ownership relation.
+        let moved: FxHashMap<_, _> = super::super::own::entries::implementations(entries)
+            .map(|(entry, body)| (body, entry))
+            .collect();
+        for lineage in slots {
+            if !budget.charge() {
+                return index;
+            }
+            let Some(&at) = index.by_name.get(lineage.function.as_str()) else {
+                continue;
+            };
+            index.origins[at] = moved
+                .get(lineage.source.as_str())
+                .copied()
+                .unwrap_or(lineage.source.as_str())
+                .to_owned();
+            for (&physical, &source) in &lineage.operations {
+                if !budget.charge() {
+                    return index;
+                }
+                index.copies[at].entry(source).or_default().push(physical);
+            }
+        }
         for (selector, target) in program.dispatch_entries() {
             if !budget.charge() {
                 return index;
@@ -158,51 +187,74 @@ impl<'p> Index<'p> {
         index
     }
 
+    fn values(&self, variant: usize, source: ValueId) -> impl Iterator<Item = ValueId> + '_ {
+        std::iter::once(source)
+            .chain(
+                self.copies[variant]
+                    .get(&source)
+                    .into_iter()
+                    .flatten()
+                    .copied(),
+            )
+            .filter(move |id| self.placed[variant].contains(id))
+    }
+
     fn resolve(&mut self, variant: usize, operation: ValueId, budget: &mut Budget) -> &Targets {
         let key = (variant, operation);
         if !self.calls.contains_key(&key) {
             let function = &self.program.funcs[variant];
-            let op = self.placed[variant]
-                .contains(&operation)
-                .then(|| function.values.get(operation.0 as usize))
-                .flatten();
             let mut targets = Targets::default();
-            let direct;
-            let names: &[&str] = match op.map(|op| &op.kind) {
-                Some(OpKind::Call {
-                    callee: Callee::Direct(name),
-                    ..
-                }) => {
-                    direct = [name.as_str()];
-                    &direct
+            let mut seen = false;
+            for physical in self.values(variant, operation) {
+                if !budget.charge() {
+                    break;
                 }
-                Some(OpKind::Call {
-                    callee: Callee::Closure { slot } | Callee::Virtual { slot, .. },
-                    ..
-                }) => self.dispatch.get(slot).map_or(&[], Vec::as_slice),
-                _ => &[],
-            };
-            if names.is_empty() {
+                seen = true;
+                let op = function.values.get(physical.0 as usize);
+                let direct;
+                let names: &[&str] = match op.map(|op| &op.kind) {
+                    Some(OpKind::Call {
+                        callee: Callee::Direct(name),
+                        ..
+                    }) => {
+                        direct = [name.as_str()];
+                        &direct
+                    }
+                    Some(OpKind::Call {
+                        callee: Callee::Closure { slot } | Callee::Virtual { slot, .. },
+                        ..
+                    }) => self.dispatch.get(slot).map_or(&[], Vec::as_slice),
+                    _ => &[],
+                };
+                if names.is_empty() {
+                    targets.unknown = Some(format!(
+                        "no actual compiled call at {}:%{}",
+                        self.display[variant], physical.0
+                    ));
+                }
+                for &name in names {
+                    if !budget.charge() {
+                        break;
+                    }
+                    if let Some(&at) = self.by_name.get(name) {
+                        targets
+                            .by_origin
+                            .entry(self.origins[at].clone())
+                            .or_default()
+                            .push(at);
+                    } else {
+                        targets.unknown = Some(format!(
+                            "actual call target unavailable: {name} from {}:%{}",
+                            self.display[variant], physical.0
+                        ));
+                    }
+                }
+            }
+            if !seen {
                 targets.unknown = Some(format!(
                     "no actual compiled call at {}:%{}",
                     self.display[variant], operation.0
                 ));
-            }
-            for &name in names {
-                if !budget.charge() {
-                    break;
-                }
-                if let Some(&at) = self.by_name.get(name) {
-                    targets
-                        .by_origin
-                        .entry(self.origins[at].clone())
-                        .or_default()
-                        .push(at);
-                } else {
-                    targets
-                        .unknown
-                        .get_or_insert_with(|| format!("actual target body unavailable: {name}"));
-                }
             }
             self.calls.insert(key, targets);
         }
@@ -215,35 +267,43 @@ impl<'p> Index<'p> {
         value: u32,
         storage: Storage,
         provider: Memory,
-    ) -> Result<String, String> {
-        let function = &self.program.funcs[variant];
-        let id = ValueId(value);
-        let op = self.placed[variant]
-            .contains(&id)
-            .then(|| function.values.get(value as usize))
-            .flatten()
-            .ok_or_else(|| {
-                format!(
-                    "allocation is no longer placed at {}:%{value}",
-                    self.display[variant]
-                )
-            })?;
+        budget: &mut Budget,
+    ) -> Result<Vec<String>, String> {
         if storage == Storage::Native {
             return Err("manual storage has no managed placement observation".to_owned());
         }
-        // A frame allocation inside a region clone still belongs to its frame.
-        Ok(if matches!(op.kind, OpKind::ObjectNew { frame: true })
-            || matches!(op.kind, OpKind::Call { frame: Some(_), .. })
-        {
-            "frame"
-        } else if self.region.contains(&variant) {
-            "call-region"
-        } else if provider == Memory::HostGc {
-            "host"
-        } else {
-            "heap"
+        let function = &self.program.funcs[variant];
+        let mut homes = Vec::new();
+        for physical in self.values(variant, ValueId(value)) {
+            if !budget.charge() {
+                break;
+            }
+            let Some(op) = function.values.get(physical.0 as usize) else {
+                continue;
+            };
+            // A frame allocation inside a region clone still belongs to its frame.
+            let home = if matches!(op.kind, OpKind::ObjectNew { frame: true })
+                || matches!(op.kind, OpKind::Call { frame: Some(_), .. })
+            {
+                "frame"
+            } else if self.region.contains(&variant) {
+                "call-region"
+            } else if provider == Memory::HostGc {
+                "host"
+            } else {
+                "heap"
+            };
+            homes.push(home.to_owned());
         }
-        .to_owned())
+        if homes.is_empty() {
+            return Err(format!(
+                "allocation is no longer placed at {}:%{value}",
+                self.display[variant]
+            ));
+        }
+        homes.sort();
+        homes.dedup();
+        Ok(homes)
     }
 }
 
@@ -365,11 +425,14 @@ fn publish(
                 if !budget.charge() {
                     break;
                 }
-                match index.home(variant, site.id.value, site.id.storage, provider) {
-                    Ok(home) => site.legacy_variants.push(Variant {
-                        function: index.display[variant].clone(),
-                        home,
-                    }),
+                match index.home(variant, site.id.value, site.id.storage, provider, budget) {
+                    Ok(homes) => {
+                        site.legacy_variants
+                            .extend(homes.into_iter().map(|home| Variant {
+                                function: index.display[variant].clone(),
+                                home,
+                            }))
+                    }
                     Err(reason) => {
                         site.legacy_unknown.get_or_insert(reason);
                     }
@@ -413,6 +476,7 @@ pub(super) fn compare(
     provider: Memory,
     clones: &FxHashMap<String, String>,
     entries: &[super::super::own::EntryDecision],
+    slots: &[Lineage],
 ) {
     let mut budget = Budget {
         used: 0,
@@ -430,7 +494,7 @@ pub(super) fn compare(
         let _ = budget.charge();
         left.cmp(right)
     });
-    let mut index = Index::of(program, clones, entries, &mut budget);
+    let mut index = Index::of(program, clones, entries, slots, &mut budget);
     let states = follow(&report.comparison_inputs, &mut index, &mut budget);
     publish(report, &index, &states, provider, &mut budget);
 }

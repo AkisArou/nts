@@ -33,6 +33,17 @@ pub struct Versioning {
     pub versions: Vec<Version>,
     pub capped: Vec<String>,
     pub exhausted: Vec<&'static str>,
+    pub(in crate::hir) lineage: Vec<Lineage>,
+}
+
+/// Source identities supplied by this rewrite, with no placement authority.
+/// Unmapped operations retain their identity; copied operations map physical
+/// values back to their original values. Entry copies keep the original arena.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::hir) struct Lineage {
+    pub function: String,
+    pub source: String,
+    pub operations: FxHashMap<ValueId, ValueId>,
 }
 
 type Shape = Vec<(u32, u32)>;
@@ -393,6 +404,11 @@ pub(in crate::hir) fn materialize(
                     redirect(&mut trial, &trial_sites, &planner.entries);
                     hir::dce::prune_unreachable(&mut trial);
                     hir::dce::collect(&mut trial);
+                    planner.report.lineage.push(Lineage {
+                        function: func.name.clone(),
+                        source: func.name.clone(),
+                        operations: copied,
+                    });
                     replacement = Some(trial);
                 }
             }
@@ -427,6 +443,11 @@ pub(in crate::hir) fn materialize(
             let mut body = program.funcs[*at].clone();
             body.name.clone_from(&entry.name);
             body.exported = false;
+            planner.report.lineage.push(Lineage {
+                function: body.name.clone(),
+                source: program.funcs[*at].name.clone(),
+                operations: FxHashMap::default(),
+            });
             body
         })
         .collect::<Vec<_>>();

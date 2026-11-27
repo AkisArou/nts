@@ -392,3 +392,89 @@ fn growth_budget_keeps_a_large_second_shape_generic() {
         "two occupied calls and the unversioned partial shape"
     );
 }
+
+#[test]
+fn actual_overwrite_entries_and_first_arrival_calls_keep_memory_source_lineage() {
+    use camino::Utf8Path;
+    use nts_frontend_ts::Frontend;
+    for name in ["field-overwrite-in-loop", "field-overwrite-in-loop-control"] {
+        let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/memory")
+            .join(name)
+            .join("tsconfig.json")
+            .canonicalize_utf8()
+            .expect("the overwrite fixtures are checked in");
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&config)
+            .expect("the overwrite fixture captures");
+        assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+        let roots = ["work".to_owned(), "module#init".to_owned()];
+        let options = hir::Options {
+            provider: hir::Memory::ReferenceCounting,
+            roots: hir::reachable::Roots::Entry(&roots),
+            ..hir::Options::new(hir::backend::Backend::C, hir::EntryUnwind::Terminal)
+        };
+        let prepared = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
+            .into_unverified_with_memory(&hir::PreparationOptions::from(&options));
+        let report = prepared
+            .memory
+            .as_ref()
+            .expect("memory observation was requested");
+        assert!(report.failure.is_none(), "{name}: {:?}", report.failure);
+        assert!(report.comparison_failure.is_none());
+        assert!(
+            report
+                .sites
+                .iter()
+                .all(|site| site.legacy_unknown.is_none()),
+            "{name}: {}",
+            report.render()
+        );
+        let entries: FxHashSet<_> = prepared
+            .slot_versions
+            .lineage
+            .iter()
+            .filter(|lineage| lineage.source == "fill")
+            .map(|lineage| lineage.function.as_str())
+            .collect();
+        assert!(!entries.is_empty());
+        for context in ["work:entry/fill:%12", "work:entry/work#whole:%66/fill:%12"] {
+            // The control's whole call has a different source ValueId. Find
+            // that context by its source suffix rather than guessing its ID.
+            let mut found = false;
+            for site in report.sites.iter().filter(|site| {
+                site.id.function == "fill"
+                    && site.context.ends_with("/fill:%12")
+                    && site.context.contains("work#whole") == context.contains("work#whole")
+            }) {
+                found = true;
+                assert!(
+                    site.legacy_variants
+                        .iter()
+                        .any(|variant| entries.contains(variant.function.as_str()))
+                );
+                assert!(
+                    site.legacy_variants
+                        .iter()
+                        .all(|variant| variant.home != "call-region")
+                );
+            }
+            assert!(
+                found,
+                "{name}: the source %12 context must remain inventoried"
+            );
+        }
+        assert!(
+            report
+                .sites
+                .iter()
+                .filter(|site| site.id.function == "fill" && !site.context.ends_with("/fill:%12"))
+                .any(|site| site
+                    .legacy_variants
+                    .iter()
+                    .any(|variant| entries.contains(variant.function.as_str()))),
+            "the copied first-arrival call must join the original loop call's source context"
+        );
+    }
+}

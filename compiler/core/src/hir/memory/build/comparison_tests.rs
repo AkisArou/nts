@@ -81,7 +81,7 @@ fn model(n: usize, recursive: bool) -> (Report, Program, rustc_hash::FxHashMap<S
 #[test]
 fn merged_context_keeps_all_actual_variants() {
     let (mut report, program, clones) = model(4, false);
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[], &[]);
     let merged = report
         .sites
         .iter()
@@ -100,7 +100,7 @@ fn missing_arrival_does_not_erase_a_known_variant() {
         unreachable!()
     };
     *callee = Callee::Direct("unavailable-body".to_owned());
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[], &[]);
     let merged = report
         .sites
         .iter()
@@ -119,7 +119,7 @@ fn missing_arrival_does_not_erase_a_known_variant() {
 #[test]
 fn recursive_arrivals_follow_the_actual_recursive_variant() {
     let (mut report, program, clones) = model(1, true);
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[], &[]);
     assert_eq!(report.sites.len(), 1);
     assert_eq!(report.sites[0].legacy, ["call-region"]);
     assert_eq!(
@@ -133,7 +133,7 @@ fn recursive_arrivals_follow_the_actual_recursive_variant() {
 fn comparison_exhaustion_is_named_for_every_site() {
     let (mut report, program, clones) = model(4, false);
     report.work_limit = report.work;
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[], &[]);
     assert!(report.comparison_failure.is_some());
     assert!(
         report
@@ -148,7 +148,7 @@ fn frame_storage_in_a_clone_keeps_its_physical_frame_home() {
     let (mut report, mut program, clones) = model(1, false);
     program.funcs[2].values[0].kind = OpKind::ObjectNew { frame: true };
     verify::verify(&program).expect("the framed actual clone verifies");
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[], &[]);
     assert_eq!(report.sites[0].legacy, ["frame"]);
 }
 
@@ -156,7 +156,7 @@ fn frame_storage_in_a_clone_keeps_its_physical_frame_home() {
 fn comparison_work_tracks_actual_sparse_arrivals() {
     for n in [16, 64, 256] {
         let (mut report, program, clones) = model(n, false);
-        report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[]);
+        report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &[], &[]);
         assert!(report.comparison_failure.is_none());
         assert!(
             report.comparison_work <= 16 * n + 64,
@@ -191,7 +191,7 @@ fn a_consuming_entry_resolves_the_moved_body_without_region_ownership() {
     }];
     program.funcs.push(body);
     verify::verify(&program).expect("the borrowed adapter and its moved body verify");
-    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &entries);
+    report.compare_legacy(&program, Memory::ReferenceCounting, &clones, &entries, &[]);
     let merged = report
         .sites
         .iter()
@@ -212,4 +212,151 @@ fn a_consuming_entry_resolves_the_moved_body_without_region_ownership() {
             .all(|(variant, _)| variant != "@consuming:factory")
     );
     assert!(report.comparison_failure.is_none());
+}
+
+#[test]
+fn slot_entry_lineage_keeps_heap_and_frame_without_region_authority() {
+    use crate::hir::contents::slots::versioning::Lineage;
+    for frame in [false, true] {
+        let (mut report, mut program, _) = model(4, false);
+        program.funcs[2].values[0].kind = OpKind::ObjectNew { frame };
+        let slots = [Lineage {
+            function: program.funcs[2].name.clone(),
+            source: "factory".into(),
+            operations: rustc_hash::FxHashMap::default(),
+        }];
+        report.compare_legacy(
+            &program,
+            Memory::ReferenceCounting,
+            &Default::default(),
+            &[],
+            &slots,
+        );
+        assert!(
+            report
+                .sites
+                .iter()
+                .all(|site| site.legacy_unknown.is_none())
+        );
+        assert!(
+            report
+                .sites
+                .iter()
+                .flat_map(|site| &site.legacy_variants)
+                .all(|variant| variant.home != "call-region")
+        );
+        assert!(report.legacy_clones.is_empty());
+        let merged = report
+            .sites
+            .iter()
+            .find(|site| site.obligations.contains(&Reason::ContextBudget))
+            .unwrap();
+        assert_eq!(
+            merged.legacy,
+            if frame {
+                vec!["frame", "heap"]
+            } else {
+                vec!["heap"]
+            }
+        );
+    }
+}
+
+#[test]
+fn copied_calls_and_allocations_keep_their_source_operation_identity() {
+    use crate::hir::contents::slots::versioning::Lineage;
+    for keep_original in [false, true] {
+        let (mut report, mut program, _) = model(1, false);
+        let inventory = format!("{:?}", report.comparison_inputs);
+        let solver_work = report.work;
+        let call = program.funcs[0].values[0].clone();
+        program.funcs[0].values.push(call);
+        if let OpKind::Call { callee, .. } = &mut program.funcs[0].values[0].kind {
+            *callee = Callee::Direct("factory".into());
+        }
+        program.funcs[0].blocks[0].ops = if keep_original {
+            vec![ValueId(0), ValueId(1)]
+        } else {
+            vec![ValueId(1)]
+        };
+        let mut allocation = program.funcs[2].values[0].clone();
+        allocation.kind = OpKind::ObjectNew { frame: true };
+        program.funcs[2].values.push(allocation);
+        program.funcs[2].blocks[0].ops = vec![ValueId(1)];
+        let slots = [
+            Lineage {
+                function: "module#init".into(),
+                source: "module#init".into(),
+                operations: [(ValueId(1), ValueId(0))].into_iter().collect(),
+            },
+            Lineage {
+                function: program.funcs[2].name.clone(),
+                source: "factory".into(),
+                operations: [(ValueId(1), ValueId(0))].into_iter().collect(),
+            },
+        ];
+        verify::verify(&program).expect("the physical copies verify");
+        report.compare_legacy(
+            &program,
+            Memory::ReferenceCounting,
+            &Default::default(),
+            &[],
+            &slots,
+        );
+        assert_eq!(format!("{:?}", report.comparison_inputs), inventory);
+        assert_eq!(report.work, solver_work);
+        assert!(report.sites[0].legacy_unknown.is_none());
+        assert_eq!(
+            report.sites[0].legacy,
+            if keep_original {
+                vec!["frame", "heap"]
+            } else {
+                vec!["frame"]
+            }
+        );
+        assert!(report.legacy_clones.is_empty());
+        // The live copied allocation has a different ValueId. Dropping its
+        // writer-supplied map must not silently read the dead original op.
+        let mut missing = slots.clone();
+        missing[1].operations.clear();
+        report.compare_legacy(
+            &program,
+            Memory::ReferenceCounting,
+            &Default::default(),
+            &[],
+            &missing,
+        );
+        assert!(
+            report.sites[0]
+                .legacy_unknown
+                .as_deref()
+                .is_some_and(|reason| reason.contains("allocation is no longer placed"))
+        );
+    }
+}
+
+#[test]
+fn a_slot_entry_keeps_consuming_source_identity_after_the_original_body_is_pruned() {
+    use crate::hir::contents::slots::versioning::Lineage;
+    let (mut report, program, _) = model(1, false);
+    let entries = [crate::hir::own::EntryDecision {
+        function: "@consuming:factory".into(),
+        kind: crate::hir::own::EntryDecisionKind::Implementation,
+        reason: "consuming implementation for direct callers",
+    }];
+    let slots = [Lineage {
+        function: program.funcs[2].name.clone(),
+        source: "@consuming:factory".into(),
+        operations: Default::default(),
+    }];
+    report.compare_legacy(
+        &program,
+        Memory::ReferenceCounting,
+        &Default::default(),
+        &entries,
+        &slots,
+    );
+    assert_eq!(report.sites[0].legacy, ["heap"]);
+    assert!(report.sites[0].legacy_unknown.is_none());
+    assert!(report.legacy_clones.is_empty());
 }

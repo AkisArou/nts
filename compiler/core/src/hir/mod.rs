@@ -8897,6 +8897,7 @@ fn prepare_lowered(
             options.provider,
             &region_lineage,
             &entry_decisions,
+            &slot_versions.lineage,
         );
     }
 
