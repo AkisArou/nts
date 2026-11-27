@@ -961,12 +961,12 @@ const observations = new Map();
 // and the temporary removed, once the step's scope has drained.
 // ---------------------------------------------------------------------------
 const DISK_LOOK_MS = 5000, DISK_SAMPLE_MS = 2000;
-/** @typedef {{ bytes: number, basis: "measured" | "unmeasured", path: string, lease: import("./disk-capacity.ts").TemporaryDiskLease | null, peak: number, attempts: number, lookAt: number, admission: TemporaryAdmission }} DiskClaim */
+/** @typedef {{ bytes: number, basis: "measured" | "unmeasured", path: string, lease: import("./disk-capacity.ts").TemporaryDiskLease | null, peak: number, attempts: number, lookAt: number, waitedMs: number, waitingSince: number | null, admission: TemporaryAdmission }} DiskClaim */
 /** @type {Map<string, DiskClaim>} */
 const diskClaims = new Map();
 /** @type {Map<string, { peak: number }>} */
 const diskObservations = new Map();
-/** What each step's claim was, for its summary row. @type {Map<string, { bytes: number, basis: string, peak_bytes: number, attempts: number }>} */
+/** What each step's claim was, for its summary row. @type {Map<string, { bytes: number, basis: string, peak_bytes: number, attempts: number, waited_s: number }>} */
 const diskSummaries = new Map();
 /** @type {ReturnType<typeof setTimeout> | null} */
 let diskLook = null;
@@ -991,21 +991,27 @@ function claimDisk(step) {
   try {
     if (!claim) {
       const sized = diskClaim(HISTORY, step), temporary = JSON.parse(env[ENVIRONMENT_CONTEXT]).temporary, path = join(temporary.path, step.name);
-      claim = { ...sized, path, lease: null, peak: 0, attempts: 0, lookAt: 0,
+      claim = { ...sized, path, lease: null, peak: 0, attempts: 0, lookAt: 0, waitedMs: 0, waitingSince: null,
         admission: new TemporaryAdmission({ path, context: { kind: "gate", temporary }, reservedBytes: sized.bytes, host, env }) };
       diskClaims.set(step.name, claim);
     }
     if (claim.lease) return true;
     claim.attempts++;
     const admitted = claim.admission.attempt({ what: `${step.name}'s temporary (${gib(claim.bytes)}, ${claim.basis})`, report: line => process.stdout.write(`  ${line}\n`) });
-    if (admitted) { claim.lease = admitted.lease; return true; }
+    if (admitted) { endDiskWait(claim); claim.lease = admitted.lease; return true; }
   } catch (error) { if (isCommandExit(error)) throw error; return refuse(error); }
-  claim.lookAt = Date.now() + DISK_LOOK_MS;
+  claim.waitingSince ??= host.now();
+  claim.lookAt = host.now() + DISK_LOOK_MS;
   diskLook ??= setTimeout(() => { diskLook = null; schedule(); }, DISK_LOOK_MS);
   return null;
 }
 /** @param {string} name a step refused disk, before its look time */
-const diskBlocked = name => { const claim = diskClaims.get(name); return Boolean(claim && !claim.lease && Date.now() < claim.lookAt); };
+const diskBlocked = name => { const claim = diskClaims.get(name); return Boolean(claim && !claim.lease && host.now() < claim.lookAt); };
+/** A step's disk wait ends: admitted, short of slots or memory instead, or finished. @param {DiskClaim} claim */
+function endDiskWait(claim) {
+  claim.admission.endWait();
+  if (claim.waitingSince !== null) { claim.waitedMs += host.now() - claim.waitingSince; claim.waitingSince = null; }
+}
 /**
  * The step's temporary now, and its peak; past its claim, the reason to stop it.
  * @param {string} name
@@ -1025,8 +1031,8 @@ function sampleDisk(name) {
 function releaseDisk(name) {
   const claim = diskClaims.get(name);
   if (!claim) return;
-  claim.admission.endWait();
-  diskSummaries.set(name, { bytes: claim.bytes, basis: claim.basis, peak_bytes: claim.peak, attempts: claim.attempts });
+  endDiskWait(claim);
+  diskSummaries.set(name, { bytes: claim.bytes, basis: claim.basis, peak_bytes: claim.peak, attempts: claim.attempts, waited_s: claim.waitedMs / 1000 });
   // Its last sample, while the claim is still the step's: a step shorter than
   // the sampling interval is measured by it.
   if (claim.lease) {
@@ -1405,7 +1411,7 @@ function schedule() {
       if (granted.slots === 0) {
         // Short of slots or memory, it no longer waits for disk.
         const refused = diskClaims.get(name);
-        if (refused && !refused.lease) refused.admission.endWait();
+        if (refused && !refused.lease) endDiskWait(refused);
         const short = granted.short ?? 0;
         if (short > 0 && !memoryWanted) memoryWanted = reserved() + short;
         // The first step in order that waits for slots or memory has tokens

@@ -372,7 +372,7 @@ fi
     ...Object.entries(planned.env).filter(([, value]) => value !== undefined).map(([name, value]) => `--setenv=${name}=${value}`),
     process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
   type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string; wall: number; bound_cpu_s: number;
-    disk?: { bytes: number; basis: string; peak_bytes: number; attempts: number };
+    disk?: { bytes: number; basis: string; peak_bytes: number; attempts: number; waited_s: number };
     bound_clock: { execution_s: number; admission_wait_s: Partial<Record<string, number>>; cpu_s: number; cpu_lost_s: number; stalled_s: number };
     instrument?: { kind: string; verdict: string; reason: string }; scope?: { populated: number } };
   assert.ok(existsSync(join(run, "summary.json")), `the runner wrote no summary (exit ${result.status}):\n${result.stdout}${result.stderr}`);
@@ -492,7 +492,7 @@ test("a step waiting for its temporary's disk holds neither slots nor memory, an
   const claim = handed(own);
   assert.ok(claim && claim.path.endsWith("/format") && claim.bytes === 2 * GiB, JSON.stringify(claim));
   assert.match(ran.result.stdout, /disk: format's temporary \(2\.0 GiB, unmeasured\) waits for /);
-  assert.match(ran.result.stdout, /disk: format's temporary \(2\.0 GiB, unmeasured\) admitted after \d+ s/);
+  assert.ok(ran.format.disk!.waited_s > 0 && ran.format.disk!.attempts >= 2, `its summary names the wait: ${JSON.stringify(ran.format.disk)}`);
 });
 
 test("a step waiting for disk is asked again only at its look time, and keeps back no slot from an elastic neighbour returning tokens", t => {
@@ -509,10 +509,11 @@ test("a step waiting for disk is asked again only at its look time, and keeps ba
   assert.equal(ran.format.verdict, "PASS", ran.format.reason);
   const neighbour = JSON.parse(readFileSync(join(ran.own, "neighbour.json"), "utf8")) as { pairs: number; formatStarted: boolean };
   assert.deepEqual(neighbour, { pairs: 300, formatStarted: false }, "records held both slots on every pass while format waited");
-  const disk = ran.format.disk!;
-  const admitted = Number(/disk: format's temporary \(2\.0 GiB, unmeasured\) admitted after (\d+) s/.exec(ran.result.stdout)?.[1]);
-  t.diagnostic(`attempts ${disk.attempts}, admitted after ${admitted} s`);
-  assert.ok(disk.attempts <= 2 + Math.ceil(admitted / 5), `about one try per 5 s look: ${disk.attempts} tries in ${admitted} s`);
+  // format was pending at most while records ran, and one look later.
+  const disk = ran.format.disk!, pendingAtMost = ran.records.wall + 5;
+  t.diagnostic(`format: ${JSON.stringify(disk)}; records ran ${ran.records.wall} s`);
+  assert.ok(disk.attempts <= 2 + Math.ceil(pendingAtMost / 5), `about one try per 5 s look: ${disk.attempts} tries in at most ${pendingAtMost} s pending`);
+  assert.ok(disk.waited_s > 0 && disk.waited_s <= pendingAtMost, `its disk wait alone: ${disk.waited_s} s`);
   assert.equal(disk.bytes, 2 * GiB);
 });
 
