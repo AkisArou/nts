@@ -210,9 +210,11 @@ impl Written {
         both
     }
 
-    fn invalidate(&mut self, slot: Slot) {
-        self.0.retain(|_, slots| {
-            slots.remove(&slot);
+    fn invalidate(&mut self, slot: Slot, may_alias: impl Fn(ValueId) -> bool) {
+        self.0.retain(|base, slots| {
+            if may_alias(*base) {
+                slots.remove(&slot);
+            }
             !slots.is_empty()
         });
     }
@@ -404,7 +406,14 @@ impl Fresh {
                 // refilled in a loop loaded and released a null every time
                 // round -- `nulled-field` pays one an iteration for exactly
                 // that.
-                self.zero.invalidate(Slot::Field(field));
+                // A confined allocation cannot be a pre-existing parameter or
+                // an unrelated object. The alias ceiling is only consulted
+                // under that proof: distinct SSA names alone prove nothing.
+                // Publication ends confinement before any subsequent writer.
+                let confined = self.bases.contains(&object) && !self.escaped.contains(&object);
+                self.zero.invalidate(Slot::Field(field), |base| {
+                    !confined || aliases.may_share(object, base)
+                });
                 if matches!(func.values[stored.0 as usize].kind, OpKind::ConstNull) {
                     self.zero.insert(object, Slot::Field(field));
                     self.written.remove(object, Slot::Field(field));

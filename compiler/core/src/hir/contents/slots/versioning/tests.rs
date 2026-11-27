@@ -261,6 +261,35 @@ fn a_string_helper_before_the_store_leaves_two_useful_release_elisions() {
 }
 
 #[test]
+fn initializing_a_local_object_does_not_erase_the_private_entrys_gain() {
+    let mut program = program(2);
+    let callee = &mut program.funcs[0];
+    let local = push(
+        callee,
+        OpKind::ObjectNew { frame: false },
+        HirType::Managed(ManagedType::Object(TypeId(1))),
+    );
+    let mut before = vec![ValueId(0), ValueId(1), local];
+    for field in 0..2 {
+        let store = push(
+            callee,
+            OpKind::FieldSet {
+                object: local,
+                field,
+                value: ValueId(1),
+            },
+            HirType::Void,
+        );
+        before.push(store);
+    }
+    before.extend([ValueId(2), ValueId(3)]);
+    callee.blocks[0].ops = before;
+    let report = rewrite(&mut program);
+    assert_eq!(report.versions.len(), 1);
+    assert_eq!(report.versions[0].removed, 2);
+}
+
+#[test]
 fn exported_callees_remain_generic() {
     let mut program = program(2);
     program.funcs[0].exported = true;

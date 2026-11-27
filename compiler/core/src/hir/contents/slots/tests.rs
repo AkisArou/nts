@@ -112,6 +112,125 @@ fn explicit_null_is_killed_by_a_write_through_an_unknown_alias() {
 }
 
 #[test]
+fn a_confined_allocation_write_keeps_a_parameters_null_field() {
+    let mut func = fixture();
+    func.values[1].kind = OpKind::ObjectNew { frame: false };
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 1);
+    observe(&mut state, &func, 3);
+    observe(&mut state, &func, 4);
+    assert!(
+        state.known_zero(ValueId(0), Slot::Field(0)),
+        "the allocation happened after the parameter arrived"
+    );
+}
+
+fn an_alias_of_a_confined_allocation_loses_its_null(phi: bool) {
+    let mut func = fixture();
+    func.values[1].kind = OpKind::ObjectNew { frame: false };
+    if phi {
+        func.blocks = vec![
+            Block {
+                params: vec![],
+                ops: vec![],
+                terminator: Terminator::Jump {
+                    target: hir::BlockId(1),
+                    args: vec![ValueId(1)],
+                },
+            },
+            Block {
+                params: vec![ValueId(5)],
+                ops: vec![],
+                terminator: Terminator::Return(None),
+            },
+        ];
+    } else {
+        func.values[5].kind = OpKind::Convert(ValueId(1));
+    }
+    func.values.push(Op {
+        kind: OpKind::FieldSet {
+            object: ValueId(5),
+            field: 0,
+            value: ValueId(2),
+        },
+        ty: HirType::Void,
+        origin: func.origin.clone(),
+    });
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 1);
+    if phi {
+        state = state.across(&[ValueId(5)], &[ValueId(1)], &Aliases::of(&func));
+    }
+    observe(&mut state, &func, 8);
+    assert!(state.known_zero(ValueId(5), Slot::Field(0)));
+    observe(&mut state, &func, 4);
+    assert!(
+        !state.known_zero(ValueId(5), Slot::Field(0)),
+        "an alias ceiling destroys facts even for a confined writer"
+    );
+}
+
+#[test]
+fn a_converted_alias_of_a_confined_allocation_loses_its_null() {
+    an_alias_of_a_confined_allocation_loses_its_null(false);
+}
+
+#[test]
+fn a_phi_alias_of_a_confined_allocation_loses_its_null() {
+    an_alias_of_a_confined_allocation_loses_its_null(true);
+}
+
+#[test]
+fn storing_an_allocation_into_a_parameter_ends_its_confinement() {
+    let mut func = fixture();
+    func.values[1].kind = OpKind::ObjectNew { frame: false };
+    for kind in [
+        OpKind::FieldSet {
+            object: ValueId(0),
+            field: 1,
+            value: ValueId(2),
+        },
+        OpKind::FieldSet {
+            object: ValueId(0),
+            field: 0,
+            value: ValueId(1),
+        },
+        OpKind::FieldSet {
+            object: ValueId(1),
+            field: 1,
+            value: ValueId(1),
+        },
+    ] {
+        func.values.push(Op {
+            kind,
+            ty: HirType::Void,
+            origin: func.origin.clone(),
+        });
+    }
+    let mut state = Fresh::default();
+    observe(&mut state, &func, 1);
+    observe(&mut state, &func, 8);
+    observe(&mut state, &func, 9);
+    assert!(
+        !state.known_zero(ValueId(0), Slot::Field(0)),
+        "out.first is now occupied"
+    );
+    assert!(
+        state.known_zero(ValueId(0), Slot::Field(1)),
+        "the outer store leaves out.second null"
+    );
+    assert!(
+        state.escaped.contains(&ValueId(1)),
+        "the stored entry is escaped immediately"
+    );
+    observe(&mut state, &func, 10);
+    assert!(
+        !state.known_zero(ValueId(0), Slot::Field(1)),
+        "a later escaped write must blanket-invalidate out.second too"
+    );
+}
+
+#[test]
 fn an_open_call_without_arguments_can_still_mutate_an_aliased_field() {
     let func = fixture();
     let mut state = Fresh::default();
