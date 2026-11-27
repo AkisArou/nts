@@ -5,7 +5,7 @@ use nts_diagnostics::{Location, SourceId, Span};
 use nts_semantic_schema::{Origin, TypeId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-fn fixture() -> Func {
+pub(super) fn fixture() -> Func {
     let origin = Origin::source(Location {
         file: SourceId(0),
         span: Span::new(0, 1),

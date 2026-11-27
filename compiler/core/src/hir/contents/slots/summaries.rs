@@ -266,7 +266,7 @@ pub(in crate::hir) fn summarize(
 /// reaches it through a slot. Not a suspension's resume, because the runtime
 /// calls that. And called directly at least once: an assumption over no callers
 /// is true of every caller only because there are none to check.
-fn invoked_only_directly<'a>(
+pub(super) fn invoked_only_directly<'a>(
     program: &'a Program,
     layouts: &'a [Layout],
 ) -> rustc_hash::FxHashSet<&'a str> {

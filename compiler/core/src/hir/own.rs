@@ -122,6 +122,12 @@ pub struct Summaries {
 }
 
 impl Summaries {
+    pub(in crate::hir) fn slot_contracts(
+        &self,
+    ) -> (&rustc_hash::FxHashSet<String>, &slots::Summaries) {
+        (&self.harmless, &self.slots)
+    }
+
     /// Whether a function hands back one of its parameters, and so owes nothing
     /// on the way out: the caller is holding it already.
     #[must_use]

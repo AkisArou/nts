@@ -3216,6 +3216,24 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let (program, diagnostics) = if want_passes {
         let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
         println!("{header}");
+        println!(
+            "// slot-versions: original={} duplicated={} versions={}",
+            prepared.slot_versions.original_ops,
+            prepared.slot_versions.duplicated_ops,
+            prepared.slot_versions.versions.len()
+        );
+        for version in &prepared.slot_versions.versions {
+            println!(
+                "// slot-version {} -> {} duplicated={} removed={}",
+                version.original, version.entry, version.duplicated, version.removed
+            );
+        }
+        for function in &prepared.slot_versions.capped {
+            println!("// slot-version cap: {function}");
+        }
+        for reason in &prepared.slot_versions.exhausted {
+            println!("// slot-version exhausted: {reason}");
+        }
         print_entry_decisions(
             &prepared,
             std::env::args().any(|arg| arg == "--entry-decisions"),

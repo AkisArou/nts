@@ -130,12 +130,19 @@ pub struct Report {
 }
 
 pub fn insert(program: &mut Program) -> Result<Report, nts_diagnostics::Diagnostic> {
+    let summaries = own::summarize(program, &program.layouts);
+    insert_summarized(program, &summaries)
+}
+
+pub(super) fn insert_summarized(
+    program: &mut Program,
+    summaries: &own::Summaries,
+) -> Result<Report, nts_diagnostics::Diagnostic> {
     let mut report = Report::default();
     let layouts = program.layouts.clone();
     // The *declared* type of each global, which is not the type of whatever is
     // stored into it -- see `load_slot`.
     let globals: Vec<HirType> = program.globals.iter().map(|held| held.ty.clone()).collect();
-    let summaries = own::summarize(program, &layouts);
     for func in &mut program.funcs {
         // A region's clone counts nothing: what it makes is the region's,
         // immortal, and everything else it only reads (`regions`).

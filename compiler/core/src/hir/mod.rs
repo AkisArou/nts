@@ -5774,6 +5774,8 @@ pub fn operands_of_terminator(terminator: &Terminator) -> Vec<ValueId> {
 /// checked. Both have happened; neither is visible in the output.
 #[derive(Debug)]
 pub struct Prepared {
+    /// Bounded copies that preserve incoming null-slot facts before counting.
+    pub slot_versions: contents::Versioning,
     /// Decisions consumed by the borrowed-entry rewrite, for opt-in inspection.
     /// Kept out of Program and its snapshots and executable identity.
     pub entry_decisions: Vec<own::EntryDecision>,
@@ -8455,6 +8457,7 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
 /// rather than the first container's (`floating`).
 #[derive(Default)]
 struct ProvidedMemory {
+    slot_versions: contents::Versioning,
     counting: rc::Report,
     contents: contents::Report,
     entry_decisions: Vec<own::EntryDecision>,
@@ -8480,12 +8483,21 @@ fn provide(
             {
                 reachable::prune(program, reachable::Roots::Entry(&entries));
             }
+            let mut summaries = own::summarize(program, &program.layouts);
+            let slot_versions = contents::slots::versioning::materialize(program, &summaries);
+            if !slot_versions.versions.is_empty() {
+                if let Some(roots) = program.roots.clone() {
+                    reachable::prune(program, roots.as_roots());
+                }
+                summaries = own::summarize(program, &program.layouts);
+            }
             let old_lengths: Vec<_> = program.funcs.iter().map(|func| func.values.len()).collect();
-            let mut counted = rc::insert(program)?;
+            let mut counted = rc::insert_summarized(program, &summaries)?;
             let contents = contents::elide(program, &old_lengths);
             counted.retains -= contents.inserted_retains_removed;
             counted.releases -= contents.inserted_releases_removed;
             Ok(ProvidedMemory {
+                slot_versions,
                 counting: counted,
                 contents,
                 entry_decisions,
@@ -8819,6 +8831,7 @@ fn prepare_lowered(
     // operation: a retain inserted before dead-code elimination would keep
     // alive exactly what that pass was about to drop.
     let ProvidedMemory {
+        slot_versions,
         counting,
         contents,
         entry_decisions,
@@ -8894,6 +8907,7 @@ fn prepare_lowered(
     }
 
     Prepared {
+        slot_versions,
         entry_decisions,
         memory,
         accumulators,

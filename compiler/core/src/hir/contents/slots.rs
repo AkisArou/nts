@@ -13,6 +13,7 @@ mod effects;
 pub(in crate::hir) use effects::Inputs;
 mod sharing;
 use sharing::Sharing;
+pub(in crate::hir) mod versioning;
 
 #[cfg(test)]
 mod tests;

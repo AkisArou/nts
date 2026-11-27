@@ -11,6 +11,7 @@ use super::facts::Facts;
 mod provider;
 pub(in crate::hir) mod slots;
 pub use provider::{Container, FunctionFacts, Inspection, RecognizedWrite, RejectedUse};
+pub use slots::versioning::{Version, Versioning};
 
 use super::{BlockId, Callee, HirType, OpKind, Origin, Program, ValueId};
 
