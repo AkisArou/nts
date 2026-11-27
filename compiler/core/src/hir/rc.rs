@@ -152,7 +152,7 @@ pub(super) fn insert_summarized(
         // Nothing an inert function does can invalidate a borrow, so nothing in
         // it needs a count -- except what leaves. See `own::inert`.
         let one = if own::inert(func) {
-            count_only_returns(func, &layouts, &summaries)
+            count_only_returns(func, &layouts, summaries)
         } else {
             insert_into(
                 func,
@@ -160,7 +160,7 @@ pub(super) fn insert_summarized(
                     layouts: &layouts,
                     globals: &globals,
                 },
-                &summaries,
+                summaries,
             )
             .map_err(|failure| failure.diagnostic(func))?
         };

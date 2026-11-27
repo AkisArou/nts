@@ -3373,7 +3373,7 @@ pub fn stores_nothing(name: &str) -> bool {
 
 /// Consumes only its left string, and cannot modify a field or element slot
 /// or run program code. This is the same family `keeps` uses for argument 0.
-/// It is deliberately not READS_ONLY: an unused call still consumes a string.
+/// It is deliberately not `READS_ONLY`: an unused call still consumes a string.
 ///
 /// All seven C entries use `nts_str_room`/`nts_str_written`. `nts_str_reserve`
 /// reuses bytes only at reserved == 1; otherwise `nts_str_regrow` copies them.

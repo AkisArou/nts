@@ -96,13 +96,11 @@ fn open_towers_keeps_the_old_field_release_for_unknown_published_callers() {
 }
 
 fn towers_at_the_memory_minimum(closed: bool) {
-    let Counted {
-        output,
-        entry_decisions,
-    } = counted_program(
+    let Counted { output, prepared } = counted_program(
         "compiler/codegen/c/tests/programs/published-consuming-towers/tsconfig.json",
         closed,
     );
+    let entry_decisions = &prepared.entry_decisions;
     let value = |key: &str| {
         output
             .split_whitespace()
@@ -129,7 +127,8 @@ fn towers_at_the_memory_minimum(closed: bool) {
         assert_eq!(value("null-releases="), 4, "{output}");
     } else {
         assert!(value("releases=") >= 8224, "{output}");
-        assert_eq!(value("null-releases="), 8209, "{output}");
+        assert_eq!(value("null-releases="), 8195, "{output}");
+        assert_open_push_cleanup(&prepared);
     }
     assert_eq!(value("null-retains="), 3, "{output}");
     if closed {
@@ -138,6 +137,90 @@ fn towers_at_the_memory_minimum(closed: bool) {
     assert_eq!(value("allocated="), 15, "{output}");
     assert_eq!(value("leaked="), 0, "{output}");
     assert_eq!(value("answer="), 1, "{output}");
+}
+
+fn assert_open_push_cleanup(prepared: &nts_core::hir::Prepared) {
+    use nts_core::hir::{Callee, OpKind};
+    let find = |name: &str| {
+        prepared
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .expect("the observed entry remains compiled")
+    };
+    let old_next =
+        |func: &nts_core::hir::Func| {
+            let Some(disk) = func
+                .parameter_values()
+                .expect("valid parameters")
+                .get(1)
+                .copied()
+                .flatten()
+            else {
+                return 0;
+            };
+            func.blocks.iter().flat_map(|block| &block.ops).filter(|id| {
+            let OpKind::Release(old) = func.value(**id).kind else { return false };
+            matches!(func.value(old).kind, OpKind::FieldGet { object, .. } if object == disk)
+        }).count()
+        };
+    // Follow actual call edges from the published entry. No private-name
+    // spelling or consuming-prefix guess supplies this reachability witness.
+    let mut reachable = std::collections::HashSet::new();
+    let mut pending = vec!["Towers#pushDisk"];
+    while let Some(name) = pending.pop() {
+        if !reachable.insert(name) {
+            continue;
+        }
+        let Some(func) = prepared.program.funcs.iter().find(|func| func.name == name) else {
+            continue;
+        };
+        for &id in func.blocks.iter().flat_map(|block| &block.ops) {
+            if let OpKind::Call {
+                callee: Callee::Direct(target),
+                ..
+            } = &func.value(id).kind
+            {
+                pending.push(target.as_str());
+            }
+        }
+    }
+    let copies: Vec<_> = prepared
+        .slot_versions
+        .versions
+        .iter()
+        .filter(|version| {
+            reachable.contains(version.original.as_str())
+                && prepared
+                    .program
+                    .funcs
+                    .iter()
+                    .any(|func| func.name == version.entry)
+                && old_next(find(&version.original)) > 0
+        })
+        .collect();
+    assert!(
+        !copies.is_empty(),
+        "the writer must identify a real zero-slot push entry"
+    );
+    for copy in copies {
+        assert_eq!(
+            old_next(find(&copy.original)),
+            1,
+            "the generic body still releases an unknown published disk.next"
+        );
+        assert!(copy.removed > 0);
+        assert_eq!(
+            old_next(find(&copy.entry)),
+            0,
+            "only the proven zero-slot copy loses the old-slot cleanup"
+        );
+        assert!(
+            !reachable.contains(copy.entry.as_str()),
+            "unknown published callers must not reach the zero-slot copy"
+        );
+    }
 }
 
 #[test]
@@ -204,7 +287,7 @@ fn current_phi_identities_meet_their_minima_under_poison_and_collection() {
 /// What a counted run printed, and the entry decisions its preparation made.
 struct Counted {
     output: String,
-    entry_decisions: Vec<nts_core::hir::own::EntryDecision>,
+    prepared: nts_core::hir::Prepared,
 }
 
 fn counted_program(config: &str, closed: bool) -> Counted {
@@ -292,7 +375,7 @@ fn counted_program(config: &str, closed: bool) -> Counted {
     );
     Counted {
         output: String::from_utf8(ran.stdout).unwrap(),
-        entry_decisions: prepared.entry_decisions,
+        prepared,
     }
 }
 

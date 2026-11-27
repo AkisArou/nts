@@ -166,11 +166,11 @@ impl<'p> Index<'p> {
             let Some(&at) = index.by_name.get(lineage.function.as_str()) else {
                 continue;
             };
-            index.origins[at] = moved
+            moved
                 .get(lineage.source.as_str())
                 .copied()
                 .unwrap_or(lineage.source.as_str())
-                .to_owned();
+                .clone_into(&mut index.origins[at]);
             for (&physical, &source) in &lineage.operations {
                 if !budget.charge() {
                     return index;
@@ -431,7 +431,7 @@ fn publish(
                             .extend(homes.into_iter().map(|home| Variant {
                                 function: index.display[variant].clone(),
                                 home,
-                            }))
+                            }));
                     }
                     Err(reason) => {
                         site.legacy_unknown.get_or_insert(reason);

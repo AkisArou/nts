@@ -228,7 +228,7 @@ fn slot_entry_lineage_keeps_heap_and_frame_without_region_authority() {
         report.compare_legacy(
             &program,
             Memory::ReferenceCounting,
-            &Default::default(),
+            &rustc_hash::FxHashMap::default(),
             &[],
             &slots,
         );
@@ -245,7 +245,7 @@ fn slot_entry_lineage_keeps_heap_and_frame_without_region_authority() {
                 .flat_map(|site| &site.legacy_variants)
                 .all(|variant| variant.home != "call-region")
         );
-        assert!(report.legacy_clones.is_empty());
+        assert_eq!(report.legacy_clones, []);
         let merged = report
             .sites
             .iter()
@@ -299,7 +299,7 @@ fn copied_calls_and_allocations_keep_their_source_operation_identity() {
         report.compare_legacy(
             &program,
             Memory::ReferenceCounting,
-            &Default::default(),
+            &rustc_hash::FxHashMap::default(),
             &[],
             &slots,
         );
@@ -314,7 +314,7 @@ fn copied_calls_and_allocations_keep_their_source_operation_identity() {
                 vec!["frame"]
             }
         );
-        assert!(report.legacy_clones.is_empty());
+        assert_eq!(report.legacy_clones, []);
         // The live copied allocation has a different ValueId. Dropping its
         // writer-supplied map must not silently read the dead original op.
         let mut missing = slots.clone();
@@ -322,7 +322,7 @@ fn copied_calls_and_allocations_keep_their_source_operation_identity() {
         report.compare_legacy(
             &program,
             Memory::ReferenceCounting,
-            &Default::default(),
+            &rustc_hash::FxHashMap::default(),
             &[],
             &missing,
         );
@@ -347,16 +347,16 @@ fn a_slot_entry_keeps_consuming_source_identity_after_the_original_body_is_prune
     let slots = [Lineage {
         function: program.funcs[2].name.clone(),
         source: "@consuming:factory".into(),
-        operations: Default::default(),
+        operations: rustc_hash::FxHashMap::default(),
     }];
     report.compare_legacy(
         &program,
         Memory::ReferenceCounting,
-        &Default::default(),
+        &rustc_hash::FxHashMap::default(),
         &entries,
         &slots,
     );
     assert_eq!(report.sites[0].legacy, ["heap"]);
     assert!(report.sites[0].legacy_unknown.is_none());
-    assert!(report.legacy_clones.is_empty());
+    assert_eq!(report.legacy_clones, []);
 }

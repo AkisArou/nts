@@ -8469,7 +8469,7 @@ fn provide(
 ) -> Result<ProvidedMemory, nts_diagnostics::Diagnostic> {
     match provider {
         Memory::ReferenceCounting => {
-            let entry_decisions = own::entries::materialize(program);
+            let mut entry_decisions = own::entries::materialize(program);
             // Materialization redirects direct callers to private bodies. A
             // borrowed source entry can now be unreachable under closed roots;
             // leaving its unknown arguments here would veto the surviving
@@ -8485,9 +8485,10 @@ fn provide(
             }
             let mut summaries = own::summarize(program, &program.layouts);
             let slot_versions = contents::slots::versioning::materialize(program, &summaries);
+            own::entries::record_slot_copies(&mut entry_decisions, &slot_versions.lineage);
             if !slot_versions.versions.is_empty() {
-                if let Some(roots) = program.roots.clone() {
-                    reachable::prune(program, roots.as_roots());
+                if let Some(reachable::OwnedRoots::Entry(entries)) = program.roots.clone() {
+                    reachable::prune(program, reachable::Roots::Entry(&entries));
                 }
                 summaries = own::summarize(program, &program.layouts);
             }

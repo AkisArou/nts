@@ -308,7 +308,12 @@ impl Written {
         self.bind(aliases);
         #[cfg(any(test, feature = "verify-slot-index", debug_assertions))]
         let expected = (cfg!(any(test, feature = "verify-slot-index"))
-            || self.index.as_ref().unwrap().facts <= 64)
+            || self
+                .index
+                .as_ref()
+                .expect("bind installed the slot index")
+                .facts
+                <= 64)
             .then(|| {
                 let mut facts = self.facts.clone();
                 facts.retain(|base, slots| {
@@ -319,7 +324,7 @@ impl Written {
                 });
                 facts
             });
-        let index = self.index.as_ref().unwrap();
+        let index = self.index.as_ref().expect("bind installed the slot index");
         let affected = match confined {
             Some(writer) => index.components.get(&(aliases.component(writer), slot)),
             None => index.slots.get(&slot),

@@ -3322,7 +3322,17 @@ fn print_entry_decisions(prepared: &hir::Prepared, requested: bool) {
     if !requested {
         return;
     }
-    for decision in &prepared.entry_decisions {
+    let retained: std::collections::HashSet<_> = prepared
+        .program
+        .funcs
+        .iter()
+        .map(|func| func.name.as_str())
+        .collect();
+    for decision in prepared
+        .entry_decisions
+        .iter()
+        .filter(|decision| retained.contains(decision.function.as_str()))
+    {
         println!(
             "entry-decision {}",
             serde_json::json!({

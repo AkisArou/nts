@@ -158,6 +158,80 @@ impl Planner<'_> {
         true
     }
 
+    fn rewrite(&mut self, func: &Func) -> Option<Func> {
+        if hir::regions::is_clone(&func.name) || !func.blocks.iter().flat_map(|block| &block.ops).any(|&id| {
+            matches!(&func.value(id).kind, OpKind::Call { callee: Callee::Direct(name), .. } if self.targets.contains_key(name))
+        }) { return None; }
+        let summaries = self.summaries;
+        let sites = self.sites(func, Some(&summaries.inputs[&func.name]));
+        for (_, key, gain) in &sites {
+            self.select(key, *gain);
+        }
+        let mut replacement = None;
+        if eligible(self.program, func)
+            && self.spend_work(size(func).saturating_mul(8))
+            && let Some((mut trial, copied, duplicated)) = first_arrival(func, self)
+        {
+            let checkpoint = (
+                self.report.duplicated_ops,
+                self.report.versions.len(),
+                self.selected.len(),
+            );
+            if self.charge(duplicated) {
+                let trial_sites = self.sites(&trial, None);
+                let original_gain: FxHashMap<_, _> =
+                    sites.iter().map(|(id, _, gain)| (*id, *gain)).collect();
+                let mut removed = 0;
+                for (id, key, gain) in &trial_sites {
+                    if let Some(source) = copied.get(id)
+                        && *gain > original_gain.get(source).copied().unwrap_or(0)
+                        && self.select(key, *gain)
+                    {
+                        removed += gain - original_gain.get(source).copied().unwrap_or(0);
+                    }
+                }
+                if removed > 0 {
+                    self.report.versions.push(Version {
+                        original: func.name.clone(),
+                        entry: format!("{}:first-arrival", func.name),
+                        duplicated,
+                        removed,
+                    });
+                    redirect(&mut trial, &trial_sites, &self.entries);
+                    hir::dce::prune_unreachable(&mut trial);
+                    hir::dce::collect(&mut trial);
+                    self.report.lineage.push(Lineage {
+                        function: func.name.clone(),
+                        source: func.name.clone(),
+                        operations: copied,
+                    });
+                    replacement = Some(trial);
+                }
+            }
+            if replacement.is_none() {
+                for key in self.selected.drain(checkpoint.2..) {
+                    self.entries.remove(&key);
+                    *self
+                        .counts
+                        .get_mut(&key.0)
+                        .expect("a selected entry was counted") -= 1;
+                }
+                self.report.duplicated_ops = checkpoint.0;
+                self.report.versions.truncate(checkpoint.1);
+            }
+        }
+        if replacement.is_none()
+            && !sites
+                .iter()
+                .any(|(_, key, _)| self.entries.contains_key(key))
+        {
+            return None;
+        }
+        let mut replacement = replacement.unwrap_or_else(|| func.clone());
+        redirect(&mut replacement, &sites, &self.entries);
+        Some(replacement)
+    }
+
     fn sites(
         &mut self,
         func: &Func,
@@ -284,6 +358,50 @@ fn initializing(
     stores
 }
 
+fn direct_targets(program: &Program) -> FxHashMap<String, usize> {
+    let direct = super::summaries::invoked_only_directly(program, &program.layouts);
+    program
+        .funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, func)| {
+            direct.contains(func.name.as_str())
+                && eligible(program, func)
+                && func
+                    .blocks
+                    .iter()
+                    .flat_map(|block| &block.ops)
+                    .any(|&id| matches!(func.value(id).kind, OpKind::FieldSet { .. }))
+        })
+        .map(|(at, func)| (func.name.clone(), at))
+        .collect()
+}
+
+fn parameter_fields(
+    program: &Program,
+    targets: &FxHashMap<String, usize>,
+) -> FxHashMap<usize, Shape> {
+    targets
+        .values()
+        .map(|&at| {
+            let func = &program.funcs[at];
+            let fields = func
+                .parameter_values()
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(slot, value)| Some((u32::try_from(slot).ok()?, value?)))
+                .flat_map(|(slot, value)| {
+                    hir::own::reference_fields(func, &program.layouts, value)
+                        .into_iter()
+                        .map(move |field| (slot, field))
+                })
+                .collect();
+            (at, fields)
+        })
+        .collect()
+}
+
 /// One bounded planning pass over original callers. Entry bodies copy all Func
 /// semantic metadata unchanged (signature, raising mode, absence and origins).
 /// Constructors, suspension/region bodies and interface storage grants are
@@ -301,48 +419,14 @@ pub(in crate::hir) fn materialize(
             ..Versioning::default()
         };
     }
-    let direct = super::summaries::invoked_only_directly(program, &program.layouts);
-    let targets: FxHashMap<_, _> = program
-        .funcs
-        .iter()
-        .enumerate()
-        .filter(|(_, func)| {
-            direct.contains(func.name.as_str())
-                && eligible(program, func)
-                && func
-                    .blocks
-                    .iter()
-                    .flat_map(|block| &block.ops)
-                    .any(|&id| matches!(func.value(id).kind, OpKind::FieldSet { .. }))
-        })
-        .map(|(at, func)| (func.name.clone(), at))
-        .collect();
+    let targets = direct_targets(program);
     if targets.is_empty() {
         return Versioning {
             original_ops,
             ..Versioning::default()
         };
     }
-    let source: &Program = program;
-    let fields = targets
-        .values()
-        .map(|&at| {
-            let func = &source.funcs[at];
-            let fields = func
-                .parameter_values()
-                .unwrap_or_default()
-                .into_iter()
-                .enumerate()
-                .filter_map(|(slot, value)| Some((u32::try_from(slot).ok()?, value?)))
-                .flat_map(|(slot, value)| {
-                    hir::own::reference_fields(func, &source.layouts, value)
-                        .into_iter()
-                        .map(move |field| (slot, field))
-                })
-                .collect();
-            (at, fields)
-        })
-        .collect();
+    let fields = parameter_fields(program, &targets);
     let releases = program.foreign_releases();
     let mut planner = Planner {
         program,
@@ -364,76 +448,9 @@ pub(in crate::hir) fn materialize(
     };
     let mut rewritten = Vec::new();
     for (at, func) in program.funcs.iter().enumerate() {
-        if hir::regions::is_clone(&func.name) || !func.blocks.iter().flat_map(|block| &block.ops).any(|&id| {
-            matches!(&func.value(id).kind, OpKind::Call { callee: Callee::Direct(name), .. } if planner.targets.contains_key(name))
-        }) { continue; }
-        let sites = planner.sites(func, Some(&summaries.inputs[&func.name]));
-        for (_, key, gain) in &sites {
-            planner.select(key, *gain);
+        if let Some(replacement) = planner.rewrite(func) {
+            rewritten.push((at, replacement));
         }
-        let mut replacement = None;
-        if eligible(program, func)
-            && planner.spend_work(size(func).saturating_mul(8))
-            && let Some((mut trial, copied, duplicated)) = first_arrival(func, &mut planner)
-        {
-            let checkpoint = (
-                planner.report.duplicated_ops,
-                planner.report.versions.len(),
-                planner.selected.len(),
-            );
-            if planner.charge(duplicated) {
-                let trial_sites = planner.sites(&trial, None);
-                let original_gain: FxHashMap<_, _> =
-                    sites.iter().map(|(id, _, gain)| (*id, *gain)).collect();
-                let mut removed = 0;
-                for (id, key, gain) in &trial_sites {
-                    if let Some(source) = copied.get(id)
-                        && *gain > original_gain.get(source).copied().unwrap_or(0)
-                        && planner.select(key, *gain)
-                    {
-                        removed += gain - original_gain.get(source).copied().unwrap_or(0);
-                    }
-                }
-                if removed > 0 {
-                    planner.report.versions.push(Version {
-                        original: func.name.clone(),
-                        entry: format!("{}:first-arrival", func.name),
-                        duplicated,
-                        removed,
-                    });
-                    redirect(&mut trial, &trial_sites, &planner.entries);
-                    hir::dce::prune_unreachable(&mut trial);
-                    hir::dce::collect(&mut trial);
-                    planner.report.lineage.push(Lineage {
-                        function: func.name.clone(),
-                        source: func.name.clone(),
-                        operations: copied,
-                    });
-                    replacement = Some(trial);
-                }
-            }
-            if replacement.is_none() {
-                for key in planner.selected.drain(checkpoint.2..) {
-                    planner.entries.remove(&key);
-                    *planner
-                        .counts
-                        .get_mut(&key.0)
-                        .expect("a selected entry was counted") -= 1;
-                }
-                planner.report.duplicated_ops = checkpoint.0;
-                planner.report.versions.truncate(checkpoint.1);
-            }
-        }
-        if replacement.is_none()
-            && !sites
-                .iter()
-                .any(|(_, key, _)| planner.entries.contains_key(key))
-        {
-            continue;
-        }
-        let mut replacement = replacement.unwrap_or_else(|| func.clone());
-        redirect(&mut replacement, &sites, &planner.entries);
-        rewritten.push((at, replacement));
     }
     let entries = planner
         .entries
@@ -542,7 +559,7 @@ fn first_arrival(
             continue;
         };
         let region: FxHashSet<_> = (0..func.blocks.len())
-            .map(|i| BlockId(u32::try_from(i).unwrap()))
+            .map(|i| BlockId(u32::try_from(i).expect("verified block identities fit u32")))
             .filter(|&block| dominates(header, block))
             .collect();
         let useful = region.iter().any(|block| {
@@ -578,14 +595,15 @@ fn first_arrival(
             })
             .collect();
         let has_live_out = func.blocks.iter().enumerate().any(|(at, block)| {
-            !region.contains(&BlockId(u32::try_from(at).unwrap()))
-                && (block.ops.iter().any(|&id| {
-                    hir::operands_of(&func.value(id).kind)
-                        .iter()
-                        .any(|id| defined.contains(id))
-                }) || hir::operands_of_terminator(&block.terminator)
+            !region.contains(&BlockId(
+                u32::try_from(at).expect("verified block identities fit u32"),
+            )) && (block.ops.iter().any(|&id| {
+                hir::operands_of(&func.value(id).kind)
                     .iter()
-                    .any(|id| defined.contains(id)))
+                    .any(|id| defined.contains(id))
+            }) || hir::operands_of_terminator(&block.terminator)
+                .iter()
+                .any(|id| defined.contains(id)))
         });
         if has_live_out {
             continue;
@@ -682,9 +700,14 @@ fn copy_arrival(
             target
         }
     });
+    fold_numeric(&mut trial);
+    Some((trial, copied, duplicated))
+}
+
+fn fold_numeric(trial: &mut Func) {
     // Let the existing numeric owner fold the copied first iteration's guard
     // (e.g. j > 1 at j = 1). Do not introduce new field-value folds here.
-    let facts = hir::flow::analyze(&trial);
+    let facts = hir::flow::analyze(trial);
     let mut folded = trial.clone();
     hir::fold::fold(&mut folded, &facts);
     for at in 0..trial.values.len() {
@@ -718,7 +741,6 @@ fn copy_arrival(
             };
         }
     }
-    Some((trial, copied, duplicated))
 }
 
 fn targets(terminator: &mut Terminator, of: impl Fn(BlockId) -> BlockId) {
@@ -732,6 +754,6 @@ fn targets(terminator: &mut Terminator, of: impl Fn(BlockId) -> BlockId) {
             *then_target = of(*then_target);
             *else_target = of(*else_target);
         }
-        _ => {}
+        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
     }
 }

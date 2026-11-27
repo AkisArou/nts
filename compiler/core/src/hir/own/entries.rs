@@ -46,6 +46,24 @@ impl EntryDecisionKind {
     }
 }
 
+/// A slot copy has only redirected direct callers and inherits its source
+/// body's handoff contract. It needs no separate borrowed/consuming split.
+/// Keep historical consuming decisions: diagnostic lineage still needs them
+/// after reachability removes an adapter or its original private body.
+pub(in crate::hir) fn record_slot_copies(
+    decisions: &mut Vec<EntryDecision>,
+    copies: &[crate::hir::contents::slots::versioning::Lineage],
+) {
+    decisions.extend(copies.iter().filter(|copy| copy.function != copy.source).map(|copy| {
+        EntryDecision {
+            function: copy.function.clone(),
+            kind: EntryDecisionKind::Excluded,
+            reason: "private slot entry inherits its handoff contract and has no borrowed arrivals",
+        }
+    }));
+    decisions.sort_by(|left, right| left.function.cmp(&right.function));
+}
+
 /// Actual bodies created by this rewrite, paired with their source entries.
 /// Diagnostic readers consume this result rather than infer entry provenance
 /// from a function's spelling or repeat the selection analysis.

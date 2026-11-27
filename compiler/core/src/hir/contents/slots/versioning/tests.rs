@@ -3,7 +3,7 @@ use crate::hir::{Block, HirType, Layout, ManagedType, Op, Param};
 use nts_semantic_schema::TypeId;
 
 fn push(func: &mut Func, kind: OpKind, ty: HirType) -> ValueId {
-    let id = ValueId(u32::try_from(func.values.len()).unwrap());
+    let id = ValueId(u32::try_from(func.values.len()).expect("the test model is valid"));
     func.values.push(Op {
         kind,
         ty,
@@ -33,34 +33,34 @@ fn call(func: &mut Func, object: ValueId) -> ValueId {
 fn program(fields: usize) -> Program {
     let object = HirType::Managed(ManagedType::Object(TypeId(1)));
     let string = HirType::Managed(ManagedType::String);
-    let mut callee = super::super::tests::fixture();
-    callee.name = "fill".into();
-    callee.return_type = HirType::Void;
-    callee.values.clear();
-    callee.params.truncate(1);
-    let mut text_parameter = callee.params[0].clone();
+    let mut target = super::super::tests::fixture();
+    target.name = "fill".into();
+    target.return_type = HirType::Void;
+    target.values.clear();
+    target.params.truncate(1);
+    let mut text_parameter = target.params[0].clone();
     text_parameter.name = "text".into();
     text_parameter.ty = string.clone();
-    callee.params.push(text_parameter);
-    callee.blocks = vec![Block {
+    target.params.push(text_parameter);
+    target.blocks = vec![Block {
         params: vec![],
         ops: vec![],
         terminator: Terminator::Return(None),
     }];
-    let base = push(&mut callee, OpKind::Param(0), object.clone());
-    let text = push(&mut callee, OpKind::Param(1), string.clone());
+    let base = push(&mut target, OpKind::Param(0), object.clone());
+    let text = push(&mut target, OpKind::Param(1), string.clone());
     for field in 0..fields {
         push(
-            &mut callee,
+            &mut target,
             OpKind::FieldSet {
                 object: base,
-                field: u32::try_from(field).unwrap(),
+                field: u32::try_from(field).expect("the test model is valid"),
                 value: text,
             },
             HirType::Void,
         );
     }
-    let mut caller = callee.clone();
+    let mut caller = target.clone();
     caller.name = "work".into();
     caller.exported = true;
     caller.values.clear();
@@ -74,7 +74,7 @@ fn program(fields: usize) -> Program {
     call(&mut caller, made);
     call(&mut caller, made);
     Program {
-        funcs: vec![callee, caller],
+        funcs: vec![target, caller],
         layouts: vec![Layout {
             types: vec![TypeId(1)],
             name: "Holder".into(),
@@ -119,7 +119,7 @@ fn only_vouched_calls_reach_the_private_entry_and_remove_its_old_slot_loads() {
     let contracts = hir::own::summarize(&program, &program.layouts);
     assert_eq!(contracts.slot_contracts().1.parameters[name].len(), 2);
     assert!(contracts.slot_contracts().1.parameters["fill"].is_empty());
-    hir::rc::insert_summarized(&mut program, &contracts).unwrap();
+    hir::rc::insert_summarized(&mut program, &contracts).expect("the test model is valid");
     assert_eq!(
         loads(&program.funcs[0]),
         2,
@@ -161,7 +161,7 @@ fn first_arrival_is_separate_from_the_occupied_backedge() {
         target: BlockId(1),
         args: vec![],
     };
-    let fill = ValueId(u32::try_from(caller.values.len()).unwrap());
+    let fill = ValueId(u32::try_from(caller.values.len()).expect("the test model is valid"));
     caller.values.push(Op {
         kind: OpKind::Call {
             callee: Callee::Direct("fill".into()),
@@ -209,7 +209,7 @@ fn unknown_call_and_reentrant_callee_do_not_manufacture_a_profitable_shape() {
     for in_callee in [false, true] {
         let mut program = program(2);
         let func = &mut program.funcs[usize::from(!in_callee)];
-        let call = ValueId(u32::try_from(func.values.len()).unwrap());
+        let call = ValueId(u32::try_from(func.values.len()).expect("the test model is valid"));
         func.values.push(Op {
             kind: OpKind::Call {
                 callee: Callee::External("unknown_effect".into()),
@@ -220,7 +220,7 @@ fn unknown_call_and_reentrant_callee_do_not_manufacture_a_profitable_shape() {
             origin: func.origin.clone(),
         });
         func.blocks[0].ops.insert(1, call);
-        assert!(rewrite(&mut program).versions.is_empty());
+        assert_eq!(rewrite(&mut program).versions, []);
     }
 }
 
@@ -293,7 +293,7 @@ fn initializing_a_local_object_does_not_erase_the_private_entrys_gain() {
 fn exported_callees_remain_generic() {
     let mut program = program(2);
     program.funcs[0].exported = true;
-    assert!(rewrite(&mut program).versions.is_empty());
+    assert_eq!(rewrite(&mut program).versions, []);
 }
 
 #[test]
@@ -303,7 +303,7 @@ fn recursive_calls_in_a_version_keep_the_generic_entry() {
     let report = rewrite(&mut program);
     assert_eq!(report.versions.len(), 1);
     assert!(
-        matches!(&program.funcs[2].values.last().unwrap().kind, OpKind::Call { callee: Callee::Direct(name), .. } if name == "fill")
+        matches!(&program.funcs[2].values.last().expect("the test model is valid").kind, OpKind::Call { callee: Callee::Direct(name), .. } if name == "fill")
     );
 }
 
@@ -342,7 +342,7 @@ fn with_shapes(fields: usize, masks: &[u32]) -> Program {
                     caller,
                     OpKind::FieldSet {
                         object: base,
-                        field: u32::try_from(field).unwrap(),
+                        field: u32::try_from(field).expect("the test model is valid"),
                         value: text,
                     },
                     HirType::Void,
@@ -439,14 +439,14 @@ fn actual_overwrite_entries_and_first_arrival_calls_keep_memory_source_lineage()
             .map(|lineage| lineage.function.as_str())
             .collect();
         assert!(!entries.is_empty());
-        for context in ["work:entry/fill:%12", "work:entry/work#whole:%66/fill:%12"] {
+        for whole in [false, true] {
             // The control's whole call has a different source ValueId. Find
             // that context by its source suffix rather than guessing its ID.
             let mut found = false;
             for site in report.sites.iter().filter(|site| {
                 site.id.function == "fill"
                     && site.context.ends_with("/fill:%12")
-                    && site.context.contains("work#whole") == context.contains("work#whole")
+                    && site.whole == whole
             }) {
                 found = true;
                 assert!(
