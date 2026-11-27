@@ -1015,10 +1015,14 @@ function sampleDisk(name) {
 function releaseDisk(name) {
   const claim = diskClaims.get(name);
   if (!claim) return;
-  diskClaims.delete(name);
   claim.admission.endWait();
+  // Its last sample, while the claim is still the step's: a step shorter than
+  // the sampling interval is measured by it.
+  if (claim.lease) {
+    try { sampleDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's last sample failed: ${errorText(error)}\n`); }
+  }
+  diskClaims.delete(name);
   if (!claim.lease) return;
-  try { sampleDisk(name); } catch (error) { if (isCommandExit(error)) throw error; process.stderr.write(`${name}: its temporary's last sample failed: ${errorText(error)}\n`); }
   if (claim.peak > 0) diskObservations.set(name, { peak: claim.peak });
   try { rmSync(claim.path, { recursive: true, force: true }); }
   finally { claim.lease.release(); }
