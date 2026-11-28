@@ -18553,6 +18553,31 @@
       }
     },
     {
+      "source": "compiler/core/src/hir/contents/slots/versioning.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "compiler/core/src/hir/contents/slots/versioning/tests.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../../../../tests/memory/field-overwrite-in-loop/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../../../../../tests/memory/field-overwrite-in-loop-control/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
       "source": "compiler/core/tests/null_slots.rs",
       "declarations": {
         "imports": [],
