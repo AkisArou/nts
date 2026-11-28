@@ -196,6 +196,8 @@ test('landing status reports an ownership failure on its tree line and returns s
 async function refusedLanding(t: TestContext) {
   const f = fixture(t);
   const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: f.tree, env: { ...f.options([]).env, GIT_CONFIG_GLOBAL: "/dev/null" }, encoding: "utf8" }).trim();
+  // A pool tree ignores its build output, which the landing's runner writes there.
+  writeFileSync(join(f.tree, ".gitignore"), "target/\n");
   git("add", ".");
   git("-c", "user.name=rerun control", "-c", "user.email=rerun@example.invalid", "commit", "-qm", "private rerun inputs");
   // The fixture's node_modules is its source's: the source's catalog authenticates it.
@@ -224,7 +226,8 @@ async function rerunFixture(t: TestContext, r: Awaited<ReturnType<typeof refused
   try {
     const status = await rerunIn(r.f.tree, r.f.tree, id, step, false, new AbortController().signal, {
       home: r.home, owned: r.f.options([]).owned,
-      runSteps: (options: RunOptions) => { requests.push(options); return runLanding({ ...options, build: r.f.options([]).build }); },
+      // The fixture's build writes its own target; a pool tree's is its tree's.
+      runSteps: (options: RunOptions) => { requests.push(options); return runLanding({ ...options, target: r.f.target, build: r.f.options([]).build }); },
     });
     return { status, out: lines.join("\n"), requests };
   } finally { log.mock.restore(); }
@@ -243,6 +246,7 @@ test("rerun runs one step of a refused landing in the caller's tree, as the land
   const [request] = ran.requests;
   assert.deepEqual(request!.steps, ["build", "outcomes"], "the step, after the build the landing ran");
   assert.equal(request!.commit, r.commit);
+  assert.equal(request!.target, join(r.f.tree, "target"));
   assert.equal(request!.priority, "agent");
   assert.equal(request!.env!.ANDROID_HOME, r.android, "the landing's recorded host capability, not the caller's shell");
   assert.ok(request!.run.includes(`rerun-${r.id}-outcomes-`));
