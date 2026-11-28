@@ -25,7 +25,15 @@ export function instructionCount(csv:string):number{
   assert.ok(counters.length===1&&/^\d+$/.test(counters[0]![0]!)&&Number(counters[0]![4])>=99,'count driver: instructions must run on one pinned PMU');
   return positive(Number(counters[0]![0]),'raw instructions');
 }
-export async function netCount(sample:Sample){
+/** A count whose net differences are positive, or the brackets that made
+ * one non-positive. Only a column that runs other threads in the counted
+ * process (a JIT's compiler and collector) can be uncalibrated by load; the
+ * command entry, which counts native, Java and C++ columns, refuses one. */
+export type NetCount=
+  |{calibrated:true;instrument:string;instructions:number;counted:Value;
+    calibration:{reps:number;warmup:number;target_instructions:number;one_operation_instructions:number};brackets:Record<string,Bracket>}
+  |{calibrated:false;instrument:string;reason:string;brackets:Record<string,Bracket>};
+export async function netCount(sample:Sample):Promise<NetCount>{
   const brackets:Record<string,Bracket>={};
   const take=async(n:number,warmup:number,arm:string)=>{
     const row=await sample(n,warmup,arm);positive(row.instructions,'raw instructions');
@@ -35,15 +43,19 @@ export async function netCount(sample:Sample){
     if(brackets['probe-empty'])assert.equal(row.value.checksum,brackets['probe-empty'].value.checksum,'count driver: checksums disagree');
     brackets[arm]=row;return row;
   };
+  const uncalibrated=(empty:string,work:string)=>({calibrated:false as const,instrument:COUNT_INSTRUMENT,brackets,
+    reason:`${empty} ${brackets[empty]!.instructions} >= ${work} ${brackets[work]!.instructions} instructions`});
   const probeEmpty=await take(0,0,'probe-empty'),probe=await take(1,0,'probe');
-  const perOperation=positive(probe.instructions-probeEmpty.instructions,'one-operation net instructions');
+  const perOperation=probe.instructions-probeEmpty.instructions;
+  if(perOperation<=0)return uncalibrated('probe-empty','probe');
   const reps=Math.min(MAX_REPETITIONS,Math.max(1,Math.ceil(COUNT_TARGET_INSTRUCTIONS/perOperation)));
   // Exactly the same warmup in the empty and work processes. Its size comes
   // from instructions too; no wall-clock calibration survives in count mode.
   const empty=await take(0,reps,'empty'),work=await take(reps,reps,'work');
-  const instructions=positive(work.instructions-empty.instructions,'empty-subtracted instructions');
+  const instructions=work.instructions-empty.instructions;
+  if(instructions<=0)return uncalibrated('empty','work');
   assert.ok(Number.isFinite(work.value.nsPerOp)&&work.value.nsPerOp>0,'count driver: invalid driver timing');
-  return {instrument:COUNT_INSTRUMENT,instructions,counted:work.value,
+  return {calibrated:true,instrument:COUNT_INSTRUMENT,instructions,counted:work.value,
     calibration:{reps,warmup:reps,target_instructions:COUNT_TARGET_INSTRUCTIONS,one_operation_instructions:perOperation},brackets};
 }
 
@@ -54,7 +66,7 @@ function capture(command:string[],cwd:string,env:NodeJS.ProcessEnv){
     child.once('error',reject);child.once('close',(status,signal)=>resolve({command,cwd,status,signal,stdout,stderr}));
   });
 }
-export async function countDriver(options:{program:string;args:string[];cwd:string;folder:string;cpu:number;env:NodeJS.ProcessEnv}){
+export async function countDriver(options:{program:string;args:string[];cwd:string;folder:string;cpu:number;env:NodeJS.ProcessEnv}):Promise<NetCount>{
   const {program,args,cwd,folder,cpu}=options;
   assert.ok(Number.isSafeInteger(cpu)&&cpu>=0&&![4,5].includes(cpu),'count driver: CPU must be outside 4-5');
   mkdirSync(folder,{recursive:true});
@@ -88,5 +100,9 @@ runAsCommand(import.meta.url,async()=>{
   // These are benchmark programs, not tooling children: only declared host
   // tools, fixed ambient values and this counter's own temporary cross over.
   const env={...hostEnvironment(process.env),...FIXED_AMBIENT,TMPDIR:folder};
-  console.log(JSON.stringify(await countDriver({cpu:Number(cpu),folder,program,args,cwd:process.cwd(),env})));
+  const result=await countDriver({cpu:Number(cpu),folder,program,args,cwd:process.cwd(),env});
+  // A column counted through this entry has no thread outside its own work,
+  // so a non-positive net count is a defect in the instrument, never load.
+  assert.ok(result.calibrated,'count driver: non-positive net instructions: '+(result.calibrated?'':result.reason));
+  console.log(JSON.stringify(result));
 });

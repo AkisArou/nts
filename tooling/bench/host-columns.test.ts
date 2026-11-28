@@ -5,7 +5,8 @@ import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { parse } from "acorn";
 import { typedTimer } from "./typed-timer.ts";
-import { parseMeasurement, buildCommand, buildFailure, coldStartup, launchCpu, ntsIdentity } from "./host-columns.ts";
+import { parseMeasurement, buildCommand, buildFailure, coldStartup, countedCell, launchCpu, nodeOracle, ntsIdentity, projectedTimer } from "./host-columns.ts";
+import type { NetCount } from "./count-driver.ts";
 import { chmodSync, rmSync, utimesSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -138,4 +139,50 @@ test("launch rows refuse an nts that is missing or built from other sources than
   assert.throws(() => ntsIdentity(nts, root, head), /reads files outside its source roots .*docs\/README\.md/);
   built(`echo "source digest ${digest}"`);
   assert.equal(ntsIdentity(nts, root, head).sourceDigest, digest);
+});
+
+/** Brackets as count-driver.ts's netCount returns them, every one printing `checksum`. */
+function brackets(checksum: string, calibrated: boolean): NetCount {
+  const value = (n: number, warmup: number) => ({ checksum, n, warmup, nsPerOp: n ? 2 : 0 });
+  const arms = { "probe-empty": { instructions: 1_284_187, value: value(0, 0) }, probe: { instructions: calibrated ? 2_284_187 : 1_065_373, value: value(1, 0) } };
+  return calibrated
+    ? { calibrated, instrument: "instruction-calibrated-empty-subtracted-v1", instructions: 100_000_000, counted: value(100, 100),
+        calibration: { reps: 100, warmup: 100, target_instructions: 100_000_000, one_operation_instructions: 1_000_000 }, brackets: arms }
+    : { calibrated, instrument: "instruction-calibrated-empty-subtracted-v1", reason: "probe-empty 1284187 >= probe 1065373 instructions", brackets: arms };
+}
+test("a counted host cell is held to the oracle, and an uncalibrated count is informational, never a checksum", () => {
+  const ok = countedCell(brackets("4008000000000000", true), "4008000000000000", null);
+  assert.equal(ok.status, "OK");
+  assert.equal(ok.instructions, 100_000_000);
+  assert.equal(ok.counted_reps, 100);
+  const uncalibrated = countedCell(brackets("4008000000000000", false), "4008000000000000", null);
+  assert.equal(uncalibrated.status, "INVALID");
+  assert.equal(uncalibrated.reason, "count uncalibrated: probe-empty 1284187 >= probe 1065373 instructions");
+  assert.equal(uncalibrated.instructions, undefined);
+  assert.equal((uncalibrated.details as { calibration: string }).calibration, "uncalibrated");
+  // A count, calibrated or not, whose brackets disagree with the oracle is a disagreement.
+  for (const calibrated of [true, false])
+    assert.equal(countedCell(brackets("4014000000000000", calibrated), "4008000000000000", null).reason,
+      "Checksum disagreement; no count accepted");
+});
+test("the node oracle is the uncounted first call of the same entry and input", async t => {
+  const dir = testScratch(t, "node-oracle");
+  const timer = join(dir, "timer.ts"), entry = join(dir, "entry.ts");
+  writeFileSync(timer, projectedTimer(readFileSync(new URL("../../benchmarks/common/bench.mjs", import.meta.url), "utf8")));
+  // Each call answers a larger number, so a warmed call is told from the first.
+  writeFileSync(entry, `import { measure } from ${JSON.stringify(timer)};\nlet calls = 0;\nconst input = Number(process.argv[2]);\nmeasure(() => input + calls++);\n`);
+  const bits = (value: number) => { const view = new DataView(new ArrayBuffer(8)); view.setFloat64(0, value); return view.getBigUint64(0).toString(16).padStart(16, "0"); };
+  const three = await nodeOracle([entry, "3"], dir);
+  assert.equal(three.status, "OK");
+  assert.equal(three.checksum, bits(3));
+  // The counted brackets print the first call's checksum on the same input
+  // (bench.mjs `measure`): a different size or a warmed call is a mismatch.
+  assert.equal(countedCell(brackets(bits(3), true), three.checksum!, null).status, "OK");
+  for (const other of [bits(5), bits(4)])
+    assert.equal(countedCell(brackets(other, true), three.checksum!, null).status, "INVALID");
+  assert.equal((await nodeOracle([entry, "5"], dir)).checksum, bits(5));
+  writeFileSync(entry, "process.exit(3);\n");
+  const crashed = await nodeOracle([entry, "3"], dir);
+  assert.equal(crashed.status, "ABORTED");
+  assert.equal(crashed.checksum, null);
 });

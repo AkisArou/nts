@@ -461,6 +461,28 @@ fn count_cell(measured: &Measurements, at: Option<usize>, host: Option<&str>) ->
     "--".to_owned()
 }
 
+/// A counted host column that ran and gave no count says why beside the
+/// row: an uncalibrated JIT count, or one whose checksum left the oracle's.
+/// It is informational; the row's verdict is `verify_counted`'s.
+fn note_uncounted_hosts(measured: &Measurements) {
+    let Some(cells) = measured
+        .hosts
+        .as_ref()
+        .and_then(|hosts| hosts["cells"].as_object())
+    else {
+        return;
+    };
+    for (column, cell) in cells {
+        if cell["status"] == "INVALID" {
+            println!(
+                "note: {:<16} {column} {}",
+                measured.shown,
+                cell["reason"].as_str().unwrap_or("gave no count")
+            );
+        }
+    }
+}
+
 /// Count every selected case and print its row: fixed work per column,
 /// counted off the measurement CPUs with no lock and no run record. A
 /// counted row keeps the timed row's validity bar — every column must
@@ -551,13 +573,14 @@ fn count_cases(
         };
         if accept_result(
             &measured.shown,
-            assemble(&measured, lanes.is_some(), MeasurementMode::Counted),
+            verify_counted(&measured, lanes.is_some()),
             &mut failed,
         )
         .is_none()
         {
             continue;
         }
+        note_uncounted_hosts(&measured);
         let cells = columns.map(|(_, variant, host, _)| count_cell(&measured, variant, host));
         println!("{}\t{}", measured.shown, cells.join("\t").as_str());
     }
@@ -687,7 +710,7 @@ fn measure_cases(
             // held when the row is printed and when the run is sealed.
             Some(measurements) if measurements.launch.is_some() => measured.push(measurements),
             Some(measurements) => {
-                let assembled = assemble(&measurements, lanes.is_some(), MeasurementMode::Timed);
+                let assembled = assemble(&measurements, lanes.is_some());
                 if let Err(error) = &assembled {
                     row_failures.insert(
                         name.to_owned(),
@@ -1776,26 +1799,12 @@ fn note_unsteady_cells(shown: &str, results: &[Option<Measured>]) {
     }
 }
 
-#[derive(Clone, Copy)]
-enum MeasurementMode {
-    Timed,
-    Counted,
-}
-
-fn assemble(measured: &Measurements, filtered: bool, mode: MeasurementMode) -> Result<Row> {
-    let Measurements {
-        shown,
-        results,
-        absences,
-        lowers,
-        node,
-        bun,
-        ..
-    } = measured;
-    let (shown, lowers) = (shown.as_str(), *lowers);
-    for (column, outcome) in &absences.outcomes {
+/// A runtime abort and a timing for one column cannot both be true.
+fn validate_absences(measured: &Measurements) -> Result<()> {
+    for (column, outcome) in &measured.absences.outcomes {
         outcome.validate()?;
-        if results
+        if measured
+            .results
             .get(column.index())
             .and_then(Option::as_ref)
             .is_some()
@@ -1803,35 +1812,64 @@ fn assemble(measured: &Measurements, filtered: bool, mode: MeasurementMode) -> R
             bail!("{} has both a runtime abort and a timing", column.key());
         }
     }
+    Ok(())
+}
+
+/// A lane that must run, unless a filter deliberately excluded it. Under
+/// `NTS_BENCH_LANES` the C lanes are absent on purpose and their cells
+/// render `--`; without one, an absent `nts` column is a failure, because
+/// every ratio in the table divides by it.
+/// Three ways our column can be absent, and only one of them is a defect.
+/// A filter excluded it deliberately; this compiler refused the program, and
+/// `--` is what the README's legend already calls that; or it should have run
+/// and did not, which is the bug this `bail!` has always been for and which
+/// the other two must not be allowed to look like.
+fn required(measured: &Measurements, filtered: bool, at: usize) -> Result<Option<f64>> {
+    match measured.results.get(at).and_then(Option::as_ref) {
+        Some(result) => Ok(Some(result.ns_per_op)),
+        None if filtered => Ok(Some(f64::NAN)),
+        None if !measured.lowers
+            || VARIANTS
+                .get(at)
+                .and_then(|variant| execution::Column::from_generated(variant.generated))
+                .is_some_and(|column| measured.absences.outcomes.contains_key(&column)) =>
+        {
+            Ok(None)
+        }
+        None => bail!("a variant that must run did not"),
+    }
+}
+
+/// Say why a column of the row is absent, beside it.
+fn note_absences(shown: &str, absences: &Absences) {
+    if let Some(reason) = &absences.cpp {
+        println!("note: {shown:<16} {reason}");
+    }
+    if let Some(reason) = &absences.java {
+        println!("note: {shown:<16} Java: {reason}");
+    }
+    for (column, outcome) in &absences.outcomes {
+        println!("note: {shown:<16} {} {outcome}", column.key());
+    }
+}
+
+/// A timed case's row: node's timed cell is both every ratio's denominator
+/// and the oracle each column agrees with.
+fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
+    let Measurements {
+        shown,
+        results,
+        absences,
+        node,
+        bun,
+        ..
+    } = measured;
+    let shown = shown.as_str();
+    validate_absences(measured)?;
     let node = node
         .as_ref()
         .context("node oracle did not complete; observations retained without a timed verdict")?;
-    agreed(results, bun.as_ref(), node)?;
-
-    // A lane that must run, unless a filter deliberately excluded it. Under
-    // `NTS_BENCH_LANES` the C lanes are absent on purpose and their cells
-    // render `--`; without one, an absent `nts` column is a failure, because
-    // every ratio in the table divides by it.
-    // Three ways our column can be absent, and only one of them is a defect.
-    // A filter excluded it deliberately; this compiler refused the program, and
-    // `--` is what the README's legend already calls that; or it should have run
-    // and did not, which is the bug this `bail!` has always been for and which
-    // the other two must not be allowed to look like.
-    let required = |at: usize| -> Result<Option<f64>> {
-        match results.get(at).and_then(Option::as_ref) {
-            Some(measured) => Ok(Some(measured.ns_per_op)),
-            None if filtered => Ok(Some(f64::NAN)),
-            None if !lowers
-                || VARIANTS
-                    .get(at)
-                    .and_then(|variant| execution::Column::from_generated(variant.generated))
-                    .is_some_and(|column| absences.outcomes.contains_key(&column)) =>
-            {
-                Ok(None)
-            }
-            None => bail!("a variant that must run did not"),
-        }
-    };
+    agreed(results, bun.as_ref(), &node.checksum)?;
     // A column allowed to be missing, for its own reasons.
     let optional = |at: usize| {
         results
@@ -1839,41 +1877,46 @@ fn assemble(measured: &Measurements, filtered: bool, mode: MeasurementMode) -> R
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op)
     };
-    required(1)?;
+    required(measured, filtered, 1)?;
     let row = Row {
         case: shown.to_owned(),
         cpp: optional(2),
         cpp_absence: absences.cpp.clone(),
         java_absence: absences.java.clone(),
         outcomes: absences.outcomes.clone(),
-        nts: required(0)?,
+        nts: required(measured, filtered, 0)?,
         node: node.ns_per_op,
         llvm: optional(3),
         jvm: optional(4),
         java: optional(5),
         bun: bun.as_ref().map(|result| result.ns_per_op),
     };
-
-    if let Some(reason) = &row.cpp_absence {
-        println!("note: {shown:<16} {reason}");
+    note_absences(shown, absences);
+    note_unsteady_cells(shown, results);
+    work_agrees(&row)?;
+    if let Some(note) = row.asymmetry() {
+        eprintln!("note: {shown}: {note}");
     }
-    if let Some(reason) = &row.java_absence {
-        println!("note: {shown:<16} Java: {reason}");
-    }
-    for (column, outcome) in &row.outcomes {
-        println!("note: {shown:<16} {} {outcome}", column.key());
-    }
-    // Count mode proves equal work through checksums and the captured input
-    // contract. Loaded wall times cannot invalidate an instruction count.
-    if matches!(mode, MeasurementMode::Timed) {
-        note_unsteady_cells(shown, results);
-        work_agrees(&row)?;
-        if let Some(note) = row.asymmetry() {
-            eprintln!("note: {shown}: {note}");
-        }
-    }
-
     Ok(row)
+}
+
+/// A counted case's checks: every column agrees with node's uncounted
+/// oracle run, and the lanes that must run did. Node's own count is
+/// informational: a load-uncalibrated one never decides the row. Count mode
+/// proves equal work through checksums and the captured input contract, so
+/// loaded wall times cannot invalidate an instruction count.
+fn verify_counted(measured: &Measurements, filtered: bool) -> Result<()> {
+    validate_absences(measured)?;
+    let oracle = measured
+        .hosts
+        .as_ref()
+        .context("node oracle did not complete: no host observations")
+        .and_then(results::host_oracle)?;
+    agreed(&measured.results, measured.bun.as_ref(), oracle)?;
+    required(measured, filtered, 1)?;
+    required(measured, filtered, 0)?;
+    note_absences(&measured.shown, &measured.absences);
+    Ok(())
 }
 
 /// Every variant must agree about the answer before any of them is allowed to
@@ -1884,7 +1927,7 @@ fn assemble(measured: &Measurements, filtered: bool, mode: MeasurementMode) -> R
 /// where node answered 2668900000, which is that number's bit pattern read as a
 /// double. A benchmark that did not compare answers would have reported it as a
 /// speedup.
-fn agreed(results: &[Option<Measured>], bun: Option<&Measured>, node: &Measured) -> Result<()> {
+fn agreed(results: &[Option<Measured>], bun: Option<&Measured>, node: &str) -> Result<()> {
     for (label, checksum) in VARIANTS
         .iter()
         .map(|variant| variant.label)
@@ -1892,11 +1935,10 @@ fn agreed(results: &[Option<Measured>], bun: Option<&Measured>, node: &Measured)
         .filter_map(|(label, result)| result.as_ref().map(|it| (label, it.checksum.as_str())))
         .chain(bun.map(|result| ("bun", result.checksum.as_str())))
     {
-        if checksum != node.checksum {
+        if checksum != node {
             bail!(
-                "{label} computed {checksum} but node computed {} — the benchmark \
-                 is measuring two different programs",
-                node.checksum
+                "{label} computed {checksum} but node computed {node} — the benchmark \
+                 is measuring two different programs"
             );
         }
     }
@@ -3395,9 +3437,13 @@ mod tests {
     use super::{REFUSES_TODAY, Row, driver_entries, missing_entry, refusal_drift};
     use anyhow::Context;
 
-    #[test]
-    fn count_agreement_ignores_loaded_wall_times_but_keeps_checksums() {
-        use super::{Absences, Measured, MeasurementMode, Measurements, assemble};
+    /// A counted row as `run_case` leaves it: every column counted with
+    /// checksum `same`, and a host frame whose oracle and node cell are given.
+    fn counted_observation(
+        oracle: serde_json::Value,
+        node: serde_json::Value,
+    ) -> super::Measurements {
+        use super::{Absences, Measured, Measurements};
         let counted = |ns| Measured {
             ns_per_op: ns,
             checksum: "same".to_owned(),
@@ -3406,10 +3452,12 @@ mod tests {
             instructions: Some(1_000_000),
             counted_reps: Some(1),
         };
-        let mut observation = Measurements {
+        let hosts = serde_json::json!({"oracle": oracle, "cells": {"node": node}});
+        Measurements {
             workload: None,
             source_capture: None,
-            hosts: None,
+            node: super::results::host_measured(&hosts, "node").expect("a host cell"),
+            hosts: Some(hosts),
             shown: "loaded-count-control".to_owned(),
             results: vec![
                 Some(counted(17_600_000.0)),
@@ -3426,14 +3474,95 @@ mod tests {
                 java: None,
             },
             lowers: true,
-            node: Some(counted(1_000_000.0)),
             bun: Some(counted(1_000_000.0)),
             launch: None,
-        };
-        assert!(assemble(&observation, false, MeasurementMode::Timed).is_err());
-        assert!(assemble(&observation, false, MeasurementMode::Counted).is_ok());
+        }
+    }
+
+    fn oracle_ok() -> serde_json::Value {
+        serde_json::json!({"status": "OK", "checksum": "same", "reason": null})
+    }
+
+    fn node_counted() -> serde_json::Value {
+        serde_json::json!({"status": "OK", "nanoseconds": 1_000_000.0, "checksum": "same",
+            "spread": 1.0, "instructions": 1_000_000, "counted_reps": 1})
+    }
+
+    /// The cell a load-uncalibrated node count becomes (`countedCell`).
+    fn node_uncalibrated() -> serde_json::Value {
+        serde_json::json!({"status": "INVALID", "nanoseconds": null, "checksum": null,
+            "reason": "count uncalibrated: probe-empty 1284187 >= probe 1065373 instructions",
+            "details": {"calibration": "uncalibrated"}})
+    }
+
+    #[test]
+    fn count_agreement_ignores_loaded_wall_times_but_keeps_checksums() {
+        use super::{assemble, verify_counted};
+        let mut observation = counted_observation(oracle_ok(), node_counted());
+        assert!(assemble(&observation, false).is_err());
+        assert!(verify_counted(&observation, false).is_ok());
         observation.results[0].as_mut().expect("counted C").checksum = "different".to_owned();
-        assert!(assemble(&observation, false, MeasurementMode::Counted).is_err());
+        assert!(verify_counted(&observation, false).is_err());
+    }
+
+    /// #1109: under load node's empty bracket outcounted its work, the node
+    /// cell was lost, and with it the row's native counts. The oracle is
+    /// node's uncounted run; node's count is informational.
+    #[test]
+    fn an_uncalibrated_node_count_keeps_the_rows_native_counts() {
+        let observation = counted_observation(oracle_ok(), node_uncalibrated());
+        assert!(observation.node.is_none());
+        super::verify_counted(&observation, false).expect("the row stands on the oracle");
+        super::verify_counted(&observation, true).expect("a filtered C row too");
+        assert_eq!(super::count_cell(&observation, Some(0), None), "1000000");
+        // No count, and so no ratio, is printed against an uncalibrated node.
+        assert_eq!(super::count_cell(&observation, None, Some("node")), "--");
+        let calibrated = counted_observation(oracle_ok(), node_counted());
+        assert_eq!(
+            super::count_cell(&calibrated, None, Some("node")),
+            "1000000"
+        );
+    }
+
+    #[test]
+    fn a_column_that_disagrees_with_the_oracle_fails_its_row() {
+        for node in [node_uncalibrated(), node_counted()] {
+            let mut observation = counted_observation(oracle_ok(), node);
+            observation.results[0].as_mut().expect("counted C").checksum = "different".to_owned();
+            let error = super::verify_counted(&observation, true).expect_err("a disagreement");
+            assert!(
+                format!("{error:#}").contains("computed different but node computed same"),
+                "{error:#}"
+            );
+            let mut observation = counted_observation(oracle_ok(), node_counted());
+            observation.bun.as_mut().expect("counted Bun").checksum = "different".to_owned();
+            assert!(super::verify_counted(&observation, true).is_err());
+        }
+    }
+
+    /// Node crashed: no oracle, and the row fails by name, even when every
+    /// column, Bun included, agrees with node's own counted cell.
+    #[test]
+    fn a_missing_oracle_fails_the_row_by_name() {
+        let aborted = serde_json::json!({"status": "ABORTED", "checksum": null, "reason": "Comparator terminated"});
+        for (oracle, said) in [
+            (
+                aborted,
+                "node oracle did not complete: Comparator terminated",
+            ),
+            (
+                serde_json::Value::Null,
+                "node oracle did not complete: the host frame carries no oracle",
+            ),
+        ] {
+            let observation = counted_observation(oracle, node_counted());
+            assert!(observation.bun.is_some() && observation.node.is_some());
+            let error = super::verify_counted(&observation, true).expect_err("no oracle");
+            assert_eq!(format!("{error:#}"), said);
+        }
+        let mut observation = counted_observation(oracle_ok(), node_counted());
+        observation.hosts = None;
+        assert!(super::verify_counted(&observation, true).is_err());
     }
 
     #[test]
@@ -3638,7 +3767,7 @@ mod tests {
         // The saved run retains the typed observation and all independent work.
         let saved = serde_json::to_string(&observation)?;
         let reread: super::Measurements = serde_json::from_str(&saved)?;
-        let row = super::assemble(&reread, false, super::MeasurementMode::Timed)?;
+        let row = super::assemble(&reread, false)?;
         assert_eq!(row.cpp, Some(10.0));
         assert_eq!(row.bun, Some(19.0));
         assert!(row.nts.is_none());
@@ -3653,10 +3782,10 @@ mod tests {
             .as_mut()
             .expect("C++ observation")
             .checksum = "different".to_owned();
-        assert!(super::assemble(&observation, false, super::MeasurementMode::Timed).is_err());
+        assert!(super::assemble(&observation, false).is_err());
         observation.results[0] = Some(measured(1.0));
         assert!(
-            super::assemble(&observation, false, super::MeasurementMode::Timed)
+            super::assemble(&observation, false)
                 .err()
                 .context("contradictory observation was accepted")?
                 .to_string()
@@ -3691,12 +3820,10 @@ mod tests {
             bun: None,
             launch: None,
         };
-        let fresh =
-            super::assemble(&measurements, false, super::MeasurementMode::Timed).expect("a row");
+        let fresh = super::assemble(&measurements, false).expect("a row");
         let text = serde_json::to_string(&measurements).expect("saved");
         let saved: super::Measurements = serde_json::from_str(&text).expect("read back");
-        let again =
-            super::assemble(&saved, false, super::MeasurementMode::Timed).expect("the same row");
+        let again = super::assemble(&saved, false).expect("the same row");
         assert_eq!(
             (fresh.nts, fresh.cpp, fresh.llvm, fresh.node),
             (again.nts, again.cpp, again.llvm, again.node)
@@ -3735,8 +3862,7 @@ mod tests {
         };
         let json = serde_json::to_string(&measurements).expect("valid missing-reference row");
         let restored = serde_json::from_str(&json).expect("valid missing-reference row");
-        let row = super::assemble(&restored, false, super::MeasurementMode::Timed)
-            .expect("valid missing-reference row");
+        let row = super::assemble(&restored, false).expect("valid missing-reference row");
         assert!(row.cpp.is_none());
         assert_eq!(row.cpp_absence.as_deref(), Some(absent));
         assert_eq!(row.nts, Some(1.0));

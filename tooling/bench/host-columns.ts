@@ -1,7 +1,7 @@
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { countDriver } from "./count-driver.ts";
+import { countDriver, type NetCount } from "./count-driver.ts";
 import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
@@ -37,7 +37,13 @@ type Receipt = {
   wallNanoseconds: number;
   cpu5: Json;
 };
-export type Hosts = { cells: Record<Comparator, Cell>; provenance: Json };
+/**
+ * A row's host cells. In count mode `oracle` is node's checksum from one
+ * uncounted run of the same entry and input: the answer every column is
+ * held to, kept apart from node's own count, which load can leave
+ * uncalibrated (tooling/bench/README.md, "Counting").
+ */
+export type Hosts = { cells: Record<Comparator, Cell>; oracle?: Cell; provenance: Json };
 function cpu5(): number[] {
   const line = readFileSync("/proc/stat", "utf8")
     .split("\n")
@@ -173,6 +179,61 @@ export function parseMeasurement(
     return absent("INVALID", "Checksum disagreement; no timing accepted", { ...receipt, expected });
   return { ns: Number(m[1]), checksum: m[2] };
 }
+/**
+ * A counted host column's cell: its net count when calibrated, else INVALID
+ * with the brackets that made it non-positive. Either way every bracket's
+ * checksum is the oracle's, or no count is accepted.
+ */
+export function countedCell(result: NetCount, expected: string, build: Receipt | null): Cell {
+  const { brackets, instrument } = result;
+  const checksum = Object.values(brackets)[0]?.value.checksum;
+  const details = (extra: Record<string, unknown>) =>
+    ({ brackets, build, instrument, ...extra }) as unknown as Json;
+  if (checksum !== expected)
+    return absent("INVALID", "Checksum disagreement; no count accepted", details({ expected }));
+  if (!result.calibrated)
+    return absent("INVALID", "count uncalibrated: " + result.reason, details({ calibration: "uncalibrated" }));
+  const { counted, calibration, instructions } = result;
+  return {
+    status: "OK",
+    nanoseconds: counted.nsPerOp,
+    spread: 1,
+    checksum: counted.checksum,
+    verified: true,
+    reason: null,
+    instructions,
+    counted_reps: counted.n,
+    details: details({ calibration, counted }),
+  };
+}
+/**
+ * Node's answer from one uncounted run of the startup hook: the first
+ * call's checksum, the same first-call value every counted bracket and timed
+ * run prints, from the same entry and input. It decides agreement only.
+ */
+export async function nodeOracle(argv: string[], cwd: string): Promise<Cell> {
+  const receipt = await execute(process.execPath, argv, cwd, true, { NTS_BENCH_STARTUP: "1" });
+  const measured = parseMeasurement(receipt, null);
+  if ("status" in measured) return measured;
+  return { status: "OK", nanoseconds: null, spread: null, checksum: measured.checksum, verified: true, reason: null,
+    details: { receipt: receipt as unknown as Json, protocol: "node-oracle-startup-first-call-v1" } };
+}
+/** The canonical timer, typed, with the startup hook both throughput timers share. */
+export function projectedTimer(canonical: string): string {
+  let projected = typedTimer(canonical);
+  // The startup arm calls the same body once, before warmup/timing. No hook is inside a timed loop.
+  // One hook for both timers; a promised workload's call is awaited.
+  const startup = (wait: string) =>
+    `\n  if (process.env.NTS_BENCH_STARTUP === "1") { const began = process.hrtime.bigint(); const value = ${wait}run(); process.stdout.write(String(Math.max(1, Number(process.hrtime.bigint() - began))) + " " + checksumBits(value) + "\\n"); return; }`;
+  for (const [signature, wait] of [
+    ["export function measure(run: () => number): void {", ""],
+    ["export async function measureAsync(run: () => Promise<number>): Promise<void> {", "await "],
+  ] as const) {
+    assert.ok(projected.includes(signature), "canonical timer changed: " + signature);
+    projected = projected.replace(signature, signature + startup(wait));
+  }
+  return projected;
+}
 /** Counted runs (--count): fixed work under perf's FIFO bracket, off the
  * measurement CPUs and without the lock. The bracket protocol is the common
  * drivers' own (bench.mjs), spawned here as the layouts adapters spawn it. */
@@ -194,22 +255,9 @@ async function measure(
   cold: Cold | null = null,
 ): Promise<Cell> {
   if (COUNTING) {
+    assert.ok(expected !== null, "a counted host column is held to the node oracle's checksum");
     try {
-      const { calibration, counted, instructions, brackets, instrument } = await executeCounted(program, args, cwd, countedLabel);
-      const value = counted as { checksum: string; nsPerOp: number; n: number };
-      if (expected !== null && value.checksum !== expected)
-        return absent("INVALID", "Checksum disagreement; no count accepted", { calibration, counted: counted as unknown as Json, build: build as unknown as Json });
-      return {
-        status: "OK",
-        nanoseconds: value.nsPerOp,
-        spread: 1,
-        checksum: value.checksum,
-        verified: true,
-        reason: null,
-        instructions,
-        counted_reps: value.n,
-        details: { brackets: brackets as unknown as Json, build: build as unknown as Json, calibration, counted: counted as unknown as Json, instrument },
-      };
+      return countedCell(await executeCounted(program, args, cwd, countedLabel), expected, build);
     } catch (error) {
       return absent("INVALID", error instanceof Error ? error.message : String(error), { build: build as unknown as Json });
     }
@@ -359,16 +407,7 @@ export async function hostColumns(
   mkdirSync(directory, { recursive: true });
   const canonical = join(root, "benchmarks/common/bench.mjs"),
     timer = join(directory, "timer.ts");
-  let projected = typedTimer(readFileSync(canonical, "utf8"));
-  // The startup arm calls the same body once, before warmup/timing. No hook is inside a timed loop.
-  // One hook for both timers; a promised workload's call is awaited.
-  const startup = (wait: string) =>
-    `\n  if (process.env.NTS_BENCH_STARTUP === "1") { const began = process.hrtime.bigint(); const value = ${wait}run(); process.stdout.write(String(Math.max(1, Number(process.hrtime.bigint() - began))) + " " + checksumBits(value) + "\\n"); return; }`;
-  for (const [signature, wait] of [
-    ["export function measure(run: () => number): void {", ""],
-    ["export async function measureAsync(run: () => Promise<number>): Promise<void> {", "await "],
-  ] as const)
-    projected = projected.replace(signature, signature + startup(wait));
+  const projected = projectedTimer(readFileSync(canonical, "utf8"));
   writeFileSync(timer, projected);
   let source = readFileSync(sourceHarness, "utf8");
   const imports = [...source.matchAll(/from\s+["']([^"']+)["']/g)];
@@ -398,23 +437,31 @@ export async function hostColumns(
     for (const column of ["Bun JIT", "Bun AOT", "ScriptC"] as const)
       cells[column] = absent("NOT_RUN", "Filtered native run requests the node oracle only");
   const cold: Cold = { launcher: buildLauncher(join(directory, "launcher"), affinity(false)), directory: join(directory, "cold"), cwd: root };
-  cells.node = await measure(process.execPath, [entry, ...input], root, null, null, `${name}-node`, cold);
-  const expected = cells.node.status === "OK" ? cells.node.checksum : null;
-  if (pins.bun && !process.env.NTS_BENCH_LANES) {
-    cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], root, expected, null, `${name}-bun-jit`, cold);
-    const aot = await buildBunAot(root, pins.bun, entry, directory);
-    cells["Bun AOT"] = "status" in aot ? aot : await measure(aot.binary, input, root, expected, aot.build, `${name}-bun-aot`, cold);
-  }
-  if (pins.scriptc && !process.env.NTS_BENCH_LANES) {
-    const scriptc = await buildScriptC(root, pins.scriptc, entry, directory);
-    cells.ScriptC = "status" in scriptc ? scriptc
-      : await measure(scriptc.binary, pins.scriptc.argvPrefix ? [entry, ...input] : input, root, expected, scriptc.build, `${name}-scriptc`, cold);
+  // Count mode: the oracle first, uncounted, so no count decides the answer.
+  const oracle = COUNTING ? await nodeOracle([entry, ...input], root) : undefined;
+  if (oracle && oracle.status !== "OK") {
+    for (const column of COMPARATORS)
+      cells[column] = absent("NOT_RUN", "No node oracle: " + (oracle.reason ?? oracle.status));
+  } else {
+    cells.node = await measure(process.execPath, [entry, ...input], root, oracle?.checksum ?? null, null, `${name}-node`, cold);
+    const expected = oracle ? oracle.checksum : cells.node.status === "OK" ? cells.node.checksum : null;
+    if (pins.bun && !process.env.NTS_BENCH_LANES) {
+      cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], root, expected, null, `${name}-bun-jit`, cold);
+      const aot = await buildBunAot(root, pins.bun, entry, directory);
+      cells["Bun AOT"] = "status" in aot ? aot : await measure(aot.binary, input, root, expected, aot.build, `${name}-bun-aot`, cold);
+    }
+    if (pins.scriptc && !process.env.NTS_BENCH_LANES) {
+      const scriptc = await buildScriptC(root, pins.scriptc, entry, directory);
+      cells.ScriptC = "status" in scriptc ? scriptc
+        : await measure(scriptc.binary, pins.scriptc.argvPrefix ? [entry, ...input] : input, root, expected, scriptc.build, `${name}-scriptc`, cold);
+    }
   }
   const artifacts = [timer, entry, join(directory, "bun-aot"), join(directory, "scriptc-native")]
     .filter(existsSync)
     .map((path) => ({ path, sha256: sha256(path) }));
   return {
     cells,
+    ...(oracle ? { oracle } : {}),
     provenance: {
       pins: pins.declaration,
       artifacts,

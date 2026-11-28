@@ -68,6 +68,24 @@ pub(super) fn conditions(root: &Utf8Path) -> Result<serde_json::Value> {
         .context("invalid benchmark machine conditions")
 }
 
+/// A counted row's oracle: node's checksum from its one uncounted run
+/// (`host-columns.ts` `nodeOracle`), or why there is none.
+pub(super) fn host_oracle(hosts: &serde_json::Value) -> Result<&str> {
+    let oracle = &hosts["oracle"];
+    if oracle["status"] != "OK" {
+        anyhow::bail!(
+            "node oracle did not complete: {}",
+            oracle["reason"]
+                .as_str()
+                .or_else(|| oracle["status"].as_str())
+                .unwrap_or("the host frame carries no oracle")
+        );
+    }
+    oracle["checksum"]
+        .as_str()
+        .context("node oracle named no checksum")
+}
+
 pub(super) fn host_measured(
     hosts: &serde_json::Value,
     column: &str,
