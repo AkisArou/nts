@@ -1841,6 +1841,17 @@ the tooling strict checker owns the source's type checking.
   gap. If work drains, an excessive ticket is withdrawn before a replacement
   is scheduled. A smaller useful ticket may finish as a partial grant. A grant
   racing cancellation is counted once, and surplus bytes are returned normally.
+- **A wait leaves a history.** A request that waits appends a versioned
+  record (`tooling/gate/ledger-history-record.ts`) to the ledger's
+  `history/<UTC day>.jsonl` when its wait starts, at each holders census and
+  when it is admitted: what it asked, the room it saw, the requests ahead of
+  it, and every admitted reservation's bytes and use. The record is written
+  after the decision and outside the lock; admission never reads it, and a
+  failed write is said once per process and changes nothing else.
+  `node tooling/gate/ledger-history.ts [--since <time|commit>]` replays it,
+  with the logs that predate it, to count the waits held behind a head they
+  did not need to wait for, and to attribute the memory reserved above use
+  while they waited to its holders: a gate run's share to its running steps.
 - **Future state versions are read-only.** Every shared versioned state owner
   checks a recognizable newer numeric version before validating its schema.
   A history gives a named empty view and records nothing; operational state

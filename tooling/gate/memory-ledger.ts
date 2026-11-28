@@ -125,6 +125,11 @@ import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // dead and then removing it. Two waiters can both make that check, and the
 // second then removes the lock the first has just taken again.
 //
+// **A wait leaves a history** (ledger-history-record.ts): the waiting process
+// appends a record of its decision when its wait starts, at each holders
+// census, and when it is admitted, after the decision and outside the lock.
+// Admission never reads it, and a failed write changes nothing but the record.
+//
 // **What a job reserves is what it was measured to hold** (`reserveJob`,
 // `admit.ts --key`): a job names a key, and its reservation comes from the
 // peaks its earlier runs left in the scheduling history of the tree it runs
@@ -152,6 +157,7 @@ import {CPU_WEIGHT,OOM_SCORE,PRIORITIES,PRIORITY_ENV,priorityOf,type Priority} f
 import { historyFile, KEY, TOOLING_ROOT, peakReservation, bindJobBasis, jobReservation, writeCostHistory, CASE_KEYS, caseKeyRefusal, dropCaseKeyJobRow, caseHistoryFile, caseMemoryKey, caseReservation, readCaseHistory, writeCaseHistory, type JobBasis, type MemorySizing } from "./step-scheduling.ts";
 import {caseIdentity} from "./case-memory.ts";
 import {describeHolders,memoryHolders,type HeldPart,type MemoryHolders} from "./memory-holders.ts";
+import {appendLedgerHistory,LEDGER_HISTORY_VERSION,type LedgerHistoryKind,type LedgerHistoryRecord} from "./ledger-history-record.ts";
 export type {HeldPart} from "./memory-holders.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
@@ -1141,7 +1147,10 @@ function admissionPlan(input: { admitted: ReadonlyMap<string, LedgerEntry>; wait
   return { pendingBytes, roomBytes, everyone, draws, fits, plan, memoryFits: fits && (ask(self) === 0 || plan.admitted.has(self.id)) };
 }
 
-function decide(context: Context, self: LedgerEntry, registered: boolean, joint?: JointAdmission): { decision: Decision; registered: boolean } {
+/** What a history record says of one decision, apart from its kind, time and wait (ledger-history-record.ts). */
+type DecisionState = Omit<LedgerHistoryRecord, "version" | "kind" | "at" | "waited_s">;
+
+function decide(context: Context, self: LedgerEntry, registered: boolean, joint?: JointAdmission): { decision: Decision; registered: boolean; state: () => DecisionState } {
   const { dir, report } = context;
   for (const state of ["waiting", "admitted"] as const) mkdirSync(join(dir, state), { recursive: true });
   // What a writer left between its write and its rename: none writes without the lock.
@@ -1215,9 +1224,22 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
     removeQuietly(entryPath(dir, "admitted", replaced.id));
     report(`memory: ${self.what} took over ${replaced.what}'s reservation of ${gib(replaced.bytes)}`);
   }
+  const ahead = everyone.findIndex(entry => entry.id === self.id);
+  // Built only when a record is written: the queue and holders as this decision counted them.
+  const state = (): DecisionState => ({
+    request: { id: self.id, what: self.what, priority: self.priority, since: self.since, bytes: self.bytes, grows: self.grows, drawn_bytes: drawnBytes, fits },
+    machine: { available_bytes: availableBytes, pending_bytes: pendingBytes, room_bytes: roomBytes, floor_bytes: SYSTEM_FLOOR_BYTES },
+    ahead: everyone.slice(0, Math.max(0, ahead)).map(entry => ({ id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes, grows: entry.grows,
+      fits: entry.fits !== false })),
+    admitted: [...admitted.values()].map(entry => {
+      const account = accounts.get(entry.id)!;
+      return { id: entry.id, what: entry.what, priority: reservationOrder(entry, admitted).priority, since: entry.since, bytes: entry.bytes,
+        used_bytes: account.used, lent_bytes: account.lent, drawn_bytes: account.drawn, draws_on: entry.drawsOn ?? null, live_use: entry.liveUse === true };
+    }),
+  });
   return {
-    decision: { id: self.id, what: self.what, admitted: go, backfilled, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.findIndex(entry => entry.id === self.id), fits, drawnBytes },
-    registered: !go && !resourceBusy,
+    decision: { id: self.id, what: self.what, admitted: go, backfilled, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead, fits, drawnBytes },
+    registered: !go && !resourceBusy, state,
   };
 }
 
@@ -1278,9 +1300,12 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
       finally { lock.release(); }
       if (outcome === undefined) { await pause(context.every, undefined, { signal }); continue; }
       registered = outcome.registered;
-      const { decision } = outcome;
+      const { decision, state: decided } = outcome;
+      const record = (kind: LedgerHistoryKind) => appendLedgerHistory(context.dir, () => ({ version: LEDGER_HISTORY_VERSION, kind, at: new Date().toISOString(),
+        waited_s: waitedFrom === undefined ? 0 : Math.round((context.host.now() - waitedFrom) / 1000), ...decided() }), context.report);
       if (decision.admitted) {
         admitted(outcome.decision);
+        if (waitedFrom !== undefined) record("admitted");
         return { decision, waitedMs: waitedFrom === undefined ? null : context.host.now() - waitedFrom };
       }
       context.observe(decision);
@@ -1293,10 +1318,12 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
       // while the wait lasts: holders change as their work ends.
       if (waitedFrom === undefined) {
         waitedFrom = censusAt = context.host.now();
+        record("wait");
         context.report(`memory: ${self.what} ${waits()} ${state()}`);
         context.report(holdersLine(context));
       } else if (context.host.now() - censusAt! >= HOLDERS_EVERY_MS) {
         censusAt = context.host.now();
+        record("census");
         context.report(`memory: ${self.what} still ${waits()} after ${Math.round((censusAt - waitedFrom) / 1000)} s ${state()}`);
         context.report(holdersLine(context));
       }

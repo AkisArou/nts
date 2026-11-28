@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -19,6 +19,7 @@ import {
   admissible, cgroupCharge, gib, jobSizing, ledgerStatus, ledgerWait, lockLedger, releaseLedgerEntries, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, queueOrder, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
+import { LEDGER_HISTORY_DIR, type LedgerHistoryRecord } from "./ledger-history-record.ts";
 import { peakReservation, readCostHistory, historyFile, writeCostHistory, type JobBasis } from "./step-scheduling.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
@@ -1737,6 +1738,43 @@ test("a wait names who holds the shortfall, ledgered or not, and names them agai
   f.memory(20, 32);
   const admitted = await landing;
   admitted.release(); await admitted.closed;
+  // The same wait, as its history records it: at its start, at the census, and at its admission.
+  const records = historyRecords(f.dir).filter(record => record.request.what === "landing");
+  assert.deepEqual(records.map(record => [record.kind, record.waited_s]), [["wait", 0], ["census", 300], ["admitted", 300]]);
+  const [start] = records;
+  assert.equal(start!.version, 1);
+  assert.equal(start!.request.bytes, 10 * GiB);
+  assert.equal(start!.machine.available_bytes, 12 * GiB);
+  assert.deepEqual(start!.admitted.map(holder => [holder.what, holder.priority, holder.bytes, holder.used_bytes]), [["lower", "full-check", 10 * GiB, 7 * GiB]]);
+  assert.deepEqual(records[2]!.admitted, [], "lower had ended when the landing was admitted");
+  assert.equal(historyRecords(f.dir).some(record => record.request.what === "lower"), false, "a request admitted at once waited for nothing");
+});
+
+/** Every history record under ledger `dir`, in the order written. */
+function historyRecords(dir: string): LedgerHistoryRecord[] {
+  const days = join(dir, LEDGER_HISTORY_DIR);
+  return readdirSync(days).sort().flatMap(day => readFileSync(join(days, day), "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line) as LedgerHistoryRecord));
+}
+
+test("a history that cannot be written is said once, and admission goes on as it would have", async t => {
+  const f = fixture(t);
+  // A file where the history's directory would be: no record can be written.
+  mkdirSync(f.dir, { recursive: true });
+  writeFileSync(join(f.dir, LEDGER_HISTORY_DIR), "not a directory\n");
+  f.memory(12, 32);
+  const first = await f.ask({ bytes: 9 * GiB, what: "first" });
+  const second = f.ask({ bytes: 9 * GiB, what: "second" });
+  const third = f.ask({ bytes: 9 * GiB, what: "third" });
+  await waitFor("both to wait", () => f.of("second").length >= 2 && f.of("third").length >= 2, { stopped: f.stopped });
+  first.release(); await first.closed;
+  const admitted = await second;
+  assert.equal(f.of("second").at(-1)!.admitted, true);
+  admitted.release(); await admitted.closed;
+  (await third).release();
+  const told = f.lines.filter(line => line.startsWith("memory: cannot write the ledger's history"));
+  assert.equal(told.length, 1, f.lines.join("\n"));
+  assert.match(told[0]!, /admission is unchanged/);
+  assert.equal(readFileSync(join(f.dir, LEDGER_HISTORY_DIR), "utf8"), "not a directory\n");
 });
 
 test("a census the wait cannot read names its missing observation, and the wait goes on", async t => {
