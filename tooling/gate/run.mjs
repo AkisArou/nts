@@ -62,7 +62,7 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 //   NTS_GATE_SLOTS        CPU slots for the run (default: NTS_JOBS, else 3/4 of
 //                         the cores)
 //   NTS_GATE_FRONTENDS    concurrent frontend-using workers (default CPU slots)
-//   NTS_GATE_FAIL_FAST=1  stop at the first FAIL (inner loop; never landing)
+//   NTS_GATE_FAIL_FAST=1  stop at the first FAIL (a landing sets it; the full run never)
 //   NTS_GATE_ACCEPT_SKIP  step names whose SKIPPED does not make the run red
 //   NTS_GATE_RUN_DIR      where logs and the summary go
 //                         (outside the source tree; default
@@ -1958,7 +1958,7 @@ async function writeSummary() {
     lines.push(`  memory: ${memoryRecord.steps_grown} step(s) grown while they ran, ${memoryRecord.steps_killed} killed at their runaway bounds`);
   }
   lines.push(`  ${plan.length} requested: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.INSTRUMENT} INSTRUMENT, ${counts.SKIPPED} SKIPPED, ${counts["NOT RUN"]} NOT RUN in ${Math.round(wall)}s  (slots ${SLOTS}, memory ${gib(memoryRecord.peak_bytes)} at most at ${PRIORITY} priority, ${Math.round(memoryRecord.waited_s)}s waited, frontends ${FRONTENDS})`);
-  if (FAIL_FAST) lines.push(color(33, "  NTS_GATE_FAIL_FAST: an inner-loop run, not landing evidence"));
+  if (FAIL_FAST) lines.push(color(33, "  NTS_GATE_FAIL_FAST: the first FAIL stopped the rest; they are NOT RUN, not passed"));
   lines.push(`  logs: ${RUN_DIR}`);
   for (const name of red) {
     const r = results.get(name);
