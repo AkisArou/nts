@@ -1742,10 +1742,13 @@ test("a wait names who holds the shortfall, ledgered or not, and names them agai
   const records = historyRecords(f.dir).filter(record => record.request.what === "landing");
   assert.deepEqual(records.map(record => [record.kind, record.waited_s]), [["wait", 0], ["census", 300], ["admitted", 300]]);
   const [start] = records;
-  assert.equal(start!.version, 1);
+  assert.equal(start!.version, 2);
   assert.equal(start!.request.bytes, 10 * GiB);
   assert.equal(start!.machine.available_bytes, 12 * GiB);
-  assert.deepEqual(start!.admitted.map(holder => [holder.what, holder.priority, holder.bytes, holder.used_bytes]), [["lower", "full-check", 10 * GiB, 7 * GiB]]);
+  // Lower yields to the landing: it promises its live margin (1.25 x 7 GiB), not the 3 GiB it has not used.
+  assert.deepEqual(start!.admitted.map(holder => [holder.what, holder.priority, holder.bytes, holder.used_bytes, holder.promised_bytes]),
+    [["lower", "full-check", 10 * GiB, 7 * GiB, peakReservation([7 * GiB]) - 7 * GiB]]);
+  assert.equal(start!.machine.pending_bytes, start!.admitted[0]!.promised_bytes);
   assert.deepEqual(records[2]!.admitted, [], "lower had ended when the landing was admitted");
   assert.equal(historyRecords(f.dir).some(record => record.request.what === "lower"), false, "a request admitted at once waited for nothing");
 });
@@ -1755,6 +1758,29 @@ function historyRecords(dir: string): LedgerHistoryRecord[] {
   const days = join(dir, LEDGER_HISTORY_DIR);
   return readdirSync(days).sort().flatMap(day => readFileSync(join(days, day), "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line) as LedgerHistoryRecord));
 }
+
+test("a wait's history records each holder's promise as its decision counted it: whole, yielding, or live", async t => {
+  const f = fixture(t);
+  f.memory(30, 32);
+  f.used.set("equal", GiB); f.used.set("lower", 2 * GiB); f.used.set("live", GiB);
+  const holders = [await f.ask({ bytes: 4 * GiB, what: "equal", priority: "agent" }), await f.ask({ bytes: 6 * GiB, what: "lower", priority: "full-check" }),
+    await f.ask({ bytes: 0, liveUse: true, what: "live", priority: "agent" })];
+  f.memory(10, 32);
+  const waiter = f.ask({ bytes: 8 * GiB, what: "waiter", priority: "agent" });
+  await waitFor("the waiter to wait", () => f.of("waiter").length >= 1, { stopped: f.stopped });
+  const [start] = historyRecords(f.dir).filter(record => record.request.what === "waiter");
+  const promised = Object.fromEntries(start!.admitted.map(holder => [holder.what, holder.promised_bytes]));
+  assert.deepEqual(promised, {
+    equal: 3 * GiB,                                   // its own rank: all it has not used
+    lower: peakReservation([2 * GiB]) - 2 * GiB,      // it yields: its live margin
+    live: peakReservation([GiB]) - GiB,               // unmeasured: its live margin
+  });
+  assert.equal(start!.machine.pending_bytes, Object.values(promised).reduce((a, b) => a + b, 0));
+  assert.equal(start!.resource_busy, false);
+  for (const holder of holders) { holder.release(); await holder.closed; }
+  f.memory(30, 32);
+  (await waiter).release();
+});
 
 test("a history that cannot be written is said once, and admission goes on as it would have", async t => {
   const f = fixture(t);

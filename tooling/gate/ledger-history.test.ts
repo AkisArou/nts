@@ -53,17 +53,23 @@ test("a logged wait pairs with its admission in its own log, keeps the census af
   assert.equal(logHeld({ ...episodes[0]!, fits: false }), false, "it could not fit the machine: it held nobody and nobody held it");
 });
 
+/** A holder of `bytes` using `used`, promising the waiter what it has not used unless told otherwise (a yielding or live holder promises less). */
 const holder = (what: string, bytes: number, used: number, extra: Partial<HistoryHolder> = {}): HistoryHolder =>
-  ({ id: what, what, priority: "agent", since: "2026-11-28T00:00:00.000Z", bytes, used_bytes: used, lent_bytes: 0, drawn_bytes: 0, draws_on: null, live_use: false, ...extra });
-const record = (kind: LedgerHistoryRecord["kind"], waited: number, admitted: HistoryHolder[], extra: { ahead?: number; room?: number; bytes?: number } = {}): LedgerHistoryRecord => ({
-  version: LEDGER_HISTORY_VERSION, kind, at: new Date(Date.parse("2026-11-28T03:00:00.000Z") + waited * 1000).toISOString(), waited_s: waited,
-  request: { id: "w", what: "1085 count", priority: "agent", since: "2026-11-28T03:00:00.000Z", bytes: extra.bytes ?? 128 * MiB, grows: null, drawn_bytes: 0, fits: true },
-  machine: { available_bytes: 10 * GiB, pending_bytes: 7 * GiB, room_bytes: extra.room ?? GiB, floor_bytes: 2 * GiB },
-  ahead: Array.from({ length: extra.ahead ?? 1 }, (_, at) => ({ id: `h${at}`, what: "gate run /runs/head", priority: "agent" as const, bytes: 5 * GiB, grows: "g", fits: true })),
-  admitted,
-});
+  ({ id: what, what, priority: "agent", since: "2026-11-28T00:00:00.000Z", bytes, used_bytes: used, promised_bytes: bytes - used, lent_bytes: 0, drawn_bytes: 0, draws_on: null, live_use: false, ...extra });
+const record = (kind: LedgerHistoryRecord["kind"], waited: number, admitted: HistoryHolder[],
+  extra: { ahead?: number; room?: number; bytes?: number; busy?: boolean; from?: string } = {}): LedgerHistoryRecord => {
+  const from = Date.parse(extra.from ?? "2026-11-28T03:00:00.000Z"), ahead = extra.ahead ?? 1;
+  return {
+    version: LEDGER_HISTORY_VERSION, kind, at: new Date(from + waited * 1000).toISOString(), waited_s: waited,
+    request: { id: "w", what: "1085 count", priority: "agent", since: new Date(from).toISOString(), bytes: extra.bytes ?? 128 * MiB, grows: null, drawn_bytes: 0, fits: true },
+    machine: { available_bytes: 10 * GiB, pending_bytes: 7 * GiB, room_bytes: extra.room ?? GiB, floor_bytes: 2 * GiB },
+    resource_busy: extra.busy ?? false, ahead,
+    head: ahead ? { id: "h0", what: "gate run /runs/head", priority: "agent", bytes: 5 * GiB, grows: "g", fits: true } : null,
+    admitted,
+  };
+};
 
-test("a held wait charges each holder its reservation above use over each census interval, and a gate run's share goes to its running steps above their peaks", () => {
+test("a held wait charges each holder what its decision counted it as promising over each census interval, and a gate run's share goes to its running steps above their peaks", () => {
   const run = gateRun("/runs/r1", { started: "2026-11-28T02:59:00.000Z", steps: [
     // Running through the first interval only: 4 GiB granted above its 1 GiB peak.
     { name: "rust-inputs", started_at: "2026-11-28T02:59:00.000Z", wall: 200, memory: { grant_bytes: 5 * GiB, peak_bytes: GiB } },
@@ -76,7 +82,10 @@ test("a held wait charges each holder its reservation above use over each census
   const gate = holder("gate run /runs/r1", 10 * GiB, 3 * GiB);
   const [episode] = historyEpisodes([
     record("census", 300, [gate, holder("1043 hir-compare tests/programs/x", GiB, GiB)]),
-    record("wait", 0, [gate, holder("1043 hir-compare tests/programs/x", 2 * GiB, GiB), holder("unmeasured", GiB, 0, { live_use: true })]),
+    record("wait", 0, [gate, holder("1043 hir-compare tests/programs/x", 2 * GiB, GiB),
+      // It yields to the waiter: 6 GiB unused, but its decision counted only its 0.5 GiB margin.
+      holder("lower census", 8 * GiB, 2 * GiB, { priority: "full-check", promised_bytes: GiB / 2 }),
+      holder("unmeasured", GiB, GiB, { live_use: true, promised_bytes: GiB / 4 })]),
     record("admitted", 420, []),
   ]);
   assert.equal(episode!.held, true);
@@ -89,7 +98,9 @@ test("a held wait charges each holder its reservation above use over each census
     "gate run: rust-inputs": [4 * 300, 4, 300],
     "gate run: no running step's (run slack, withheld or pending demand)": [3 * 300 + 7 * 120, 7, 420],
     "hir-compare <path>": [300, 1, 300],
-  }, "a holder at its use, or one that promises only its live use, holds nothing above it");
+    "lower census": [150, 0.5, 300],
+    "unmeasured": [75, 0.25, 300],
+  }, "each holder is charged its promise, never its reservation less its use");
 });
 
 test("a wait is held only when it fit the room it saw and something was ahead of it", () => {
@@ -97,18 +108,22 @@ test("a wait is held only when it fit the room it saw and something was ahead of
   assert.equal(historyEpisodes([record("wait", 0, holders, { ahead: 0 })])[0]!.held, false);
   assert.equal(historyEpisodes([record("wait", 0, holders, { room: 64 * MiB })])[0]!.held, false);
   assert.equal(historyEpisodes([record("wait", 0, holders)])[0]!.held, true);
+  assert.equal(historyEpisodes([record("wait", 0, holders, { busy: true })])[0]!.held, false, "memory admitted it: it waited for its joint resource");
+  const [partial] = historyEpisodes([record("census", 300, holders), record("admitted", 400, [])]);
+  assert.deepEqual([partial!.started, partial!.held], [null, false], "without its start, a wait is never judged held from a census");
 });
 
 test("the history is read day by day, and a line of an unknown version or cut short is named, not read", t => {
   const dir = join(testScratch(t, "ledger-history"), "history");
   mkdirSync(dir, { recursive: true });
   const ok = record("wait", 0, []);
-  writeFileSync(join(dir, "2026-11-28.jsonl"), `${JSON.stringify(ok)}\n${JSON.stringify({ ...ok, version: 2 })}\n{"version":1,"ki\n`);
+  writeFileSync(join(dir, "2026-11-28.jsonl"), `${JSON.stringify(ok)}\n${JSON.stringify({ ...ok, version: 3 })}\n{"version":1,"ki\n`);
   writeFileSync(join(dir, "2026-11-27.jsonl"), `${JSON.stringify({ ...ok, at: "2026-11-27T23:00:00.000Z" })}\n`);
   writeFileSync(join(dir, "notes.txt"), "not a day\n");
   const read = readLedgerHistory(dir);
   assert.deepEqual(read.records.map(r => r.at), ["2026-11-27T23:00:00.000Z", ok.at]);
-  assert.deepEqual(read.unread.map(u => [u.line, u.why]), [[2, "version 2, not 1"], [3, "not JSON (a write cut short)"]]);
+  assert.deepEqual(read.unread.map(u => [u.line, u.why]), [[2, "version 3, not 2"], [3, "not JSON (a write cut short)"]]);
+  assert.deepEqual(readLedgerHistory(dir, Date.parse("2026-11-28T00:30:00.000Z")).records.map(r => r.at), [ok.at], "a day before --since is not read");
   assert.deepEqual(readLedgerHistory(join(dir, "absent")), { records: [], unread: [] });
 });
 
@@ -124,6 +139,15 @@ test("a census names a gate run by its folder cut short; a holder's kind drops i
   assert.equal(holderKind("gate run /c/runs/x"), "gate run");
 });
 
+test("--since keeps the waits that started after it, whole, and none that started before it", () => {
+  const holders = [holder("x", 2 * GiB, GiB)];
+  const before = ["wait", "census", "admitted"].map((kind, at) => record(kind as LedgerHistoryRecord["kind"], at * 300, holders, { from: "2026-11-27T23:55:00.000Z" }));
+  const after = ["wait", "admitted"].map((kind, at) => ({ ...record(kind as LedgerHistoryRecord["kind"], at * 60, holders, { from: "2026-11-28T00:01:00.000Z" }),
+    request: { ...record("wait", 0, []).request, id: "later" } }));
+  const report = replay({ records: [...before, ...after], unread: 0, logs: [], files: 0, runs: new Map(), since: Date.parse("2026-11-28T00:00:00.000Z") });
+  assert.deepEqual([report.history.waits, report.history.held, report.history.held_s, report.history.records], [1, 1, 60, 2]);
+});
+
 test("the replay keeps what is since its start, and reports both sources", () => {
   const runs = new Map<string, NonNullable<ReturnType<typeof gateRun>>>();
   const old = { ...record("wait", 0, [holder("x", 2 * GiB, GiB)]), at: "2026-11-20T00:00:00.000Z" };
@@ -133,6 +157,7 @@ test("the replay keeps what is since its start, and reports both sources", () =>
     { source: "a.log", text: "memory: 1049 prepared HIR tests/programs/a/tsconfig.json admitted with 128.0 MiB after 90 s" }]);
   const report = replay({ records, unread: 0, logs, files: 1, runs, since: Date.parse("2026-11-28T00:00:00.000Z") });
   assert.equal(report.history.records, 2);
+  assert.equal(report.history.waits, 1);
   assert.equal(report.history.held, 1);
   assert.deepEqual(report.history.holders, [{ holder: "x", gib_s: 60, most_gib: 1, seconds: 60 }]);
   assert.equal(report.logs.held, 1);

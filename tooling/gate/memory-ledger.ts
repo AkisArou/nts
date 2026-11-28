@@ -1029,19 +1029,22 @@ const requestFor = (entry: LedgerEntry) => entry.grows === null ? `request for $
  * deciding, each its whole promise. Drained bytes remain a full promise;
  * observed use still subtracts them once they are physically consumed.
  */
-function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority" | "liveUse" | "drained">; used: number; lent: number }>,
-  deciding: Pick<LedgerEntry, "priority" | "replaces"> | null): number {
+type PendingInput = { entry: Pick<LedgerEntry, "id" | "bytes" | "priority" | "liveUse" | "drained">; used: number; lent: number };
+function pendingFor(admitted: Iterable<PendingInput>, deciding: Pick<LedgerEntry, "priority" | "replaces"> | null): number {
   let pending = 0;
-  for (const { entry, used, lent } of admitted) {
-    if (entry.id === deciding?.replaces) continue;
-    // What it has lent the reservations that draw on it is theirs to promise.
-    const own = Math.max(0, entry.bytes - lent);
-    const yields = deciding !== null && rank(deciding.priority) < rank(entry.priority);
-    const live = peakReservation([Math.max(1, used)]);
-    const drained = Math.min(own, entry.drained ?? 0);
-    pending += Math.max(0, (entry.liveUse ? live : yields ? Math.min(own - drained, live) + drained : own) - used);
-  }
+  for (const holder of admitted) pending += promisedBy(holder, deciding);
   return pending;
+}
+
+/** One admitted reservation's part of `pendingFor`: what it may still take, as the decision on `deciding` counts it. */
+function promisedBy({ entry, used, lent }: PendingInput, deciding: Pick<LedgerEntry, "priority" | "replaces"> | null): number {
+  if (entry.id === deciding?.replaces) return 0;
+  // What it has lent the reservations that draw on it is theirs to promise.
+  const own = Math.max(0, entry.bytes - lent);
+  const yields = deciding !== null && rank(deciding.priority) < rank(entry.priority);
+  const live = peakReservation([Math.max(1, used)]);
+  const drained = Math.min(own, entry.drained ?? 0);
+  return Math.max(0, (entry.liveUse ? live : yields ? Math.min(own - drained, live) + drained : own) - used);
 }
 
 /** What an admitted reservation uses now, and what it has lent the reservations that draw on it. */
@@ -1114,7 +1117,10 @@ function admissionPlan(input: { admitted: ReadonlyMap<string, LedgerEntry>; wait
     liveMargins.set(entry.id, Math.max(0, charged - used));
   }
   const usedBytes = [...admitted.keys()].reduce((sum, id) => sum + accounts.get(id)!.used, 0);
-  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry: {...entry, ...reservationOrder(entry, admitted)}, ...accounts.get(entry.id)! })), self);
+  const holders = [...admitted.values()].map(entry => ({ entry: {...entry, ...reservationOrder(entry, admitted)}, ...accounts.get(entry.id)! }));
+  const pendingBytes = pendingFor(holders, self);
+  // Each holder's part of it, as the history records it.
+  const promised = new Map(holders.map(holder => [holder.entry.id, promisedBy(holder, self)]));
   const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
   // What the queue could be given were every admitted job to end.
   const freeBytes = availableBytes + usedBytes - SYSTEM_FLOOR_BYTES;
@@ -1144,7 +1150,7 @@ function admissionPlan(input: { admitted: ReadonlyMap<string, LedgerEntry>; wait
   // nobody: a holder whose child needs memory never waits for itself.
   const queue = everyone.filter(entry => ask(entry) > 0 && whole(entry) <= freeBytes).map(entry => ({ ...entry, bytes: ask(entry) }));
   const plan = queuePlan(roomBytes,queue);
-  return { pendingBytes, roomBytes, everyone, draws, fits, plan, memoryFits: fits && (ask(self) === 0 || plan.admitted.has(self.id)) };
+  return { pendingBytes, promised, roomBytes, everyone, draws, fits, plan, memoryFits: fits && (ask(self) === 0 || plan.admitted.has(self.id)) };
 }
 
 /** What a history record says of one decision, apart from its kind, time and wait (ledger-history-record.ts). */
@@ -1190,7 +1196,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
   let table: Table | undefined;
   const read = () => table ??= processTable();
   const accounts = accountsOf(admitted, (entry, exclude) => context.measure(entry, read, exclude, false), read, context.host);
-  const { pendingBytes, roomBytes, everyone, draws, fits, plan, memoryFits } = admissionPlan({ admitted, waiting, self, accounts, availableBytes,
+  const { pendingBytes, promised, roomBytes, everyone, draws, fits, plan, memoryFits } = admissionPlan({ admitted, waiting, self, accounts, availableBytes,
     liveUse: entry => usedOf(context.measure(entry, read, NONE, false)) });
   const drawnBytes = draws.get(self.id) ?? 0;
   const resourceBusy = memoryFits && joint !== undefined && !joint.acquire();
@@ -1224,17 +1230,19 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
     removeQuietly(entryPath(dir, "admitted", replaced.id));
     report(`memory: ${self.what} took over ${replaced.what}'s reservation of ${gib(replaced.bytes)}`);
   }
-  const ahead = everyone.findIndex(entry => entry.id === self.id);
+  const ahead = everyone.findIndex(entry => entry.id === self.id), first = ahead > 0 ? everyone[0] : undefined;
   // Built only when a record is written: the queue and holders as this decision counted them.
   const state = (): DecisionState => ({
     request: { id: self.id, what: self.what, priority: self.priority, since: self.since, bytes: self.bytes, grows: self.grows, drawn_bytes: drawnBytes, fits },
     machine: { available_bytes: availableBytes, pending_bytes: pendingBytes, room_bytes: roomBytes, floor_bytes: SYSTEM_FLOOR_BYTES },
-    ahead: everyone.slice(0, Math.max(0, ahead)).map(entry => ({ id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes, grows: entry.grows,
-      fits: entry.fits !== false })),
+    resource_busy: resourceBusy,
+    ahead: Math.max(0, ahead),
+    head: first === undefined ? null : { id: first.id, what: first.what, priority: first.priority, bytes: first.bytes, grows: first.grows, fits: first.fits !== false },
     admitted: [...admitted.values()].map(entry => {
       const account = accounts.get(entry.id)!;
       return { id: entry.id, what: entry.what, priority: reservationOrder(entry, admitted).priority, since: entry.since, bytes: entry.bytes,
-        used_bytes: account.used, lent_bytes: account.lent, drawn_bytes: account.drawn, draws_on: entry.drawsOn ?? null, live_use: entry.liveUse === true };
+        used_bytes: account.used, promised_bytes: promised.get(entry.id)!, lent_bytes: account.lent, drawn_bytes: account.drawn,
+        draws_on: entry.drawsOn ?? null, live_use: entry.liveUse === true };
     }),
   });
   return {

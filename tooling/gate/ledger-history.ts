@@ -14,13 +14,17 @@
 //
 // - **The ledger's history** (ledger-history-record.ts, `<ledger>/history/`):
 //   a record when a wait starts, at each holders census and at admission,
-//   each with every admitted reservation's bytes and use. For each held wait
-//   it attributes the memory reserved above use, holder by holder, over the
-//   interval to the next record, so the attribution has the census's
-//   granularity (five minutes). A gate run's share is split among its steps
-//   that were running then, by what each was granted above its own measured
-//   peak (the run's summary.json), and what no step accounts for is the run's
-//   own.
+//   each with what every admitted reservation still promised the waiter as
+//   the decision counted it. For each held wait it attributes that promise,
+//   holder by holder, over the interval to the next record, so the
+//   attribution has the census's granularity (five minutes). A gate run's
+//   share is split among its steps that were running then, by what each was
+//   granted above its own measured peak (the run's summary.json), and what no
+//   step accounts for is the run's own. A wait whose start the history does
+//   not hold (it began before the history, or before `--since`) is counted
+//   as partial and left out: whether it was held is decided at its start.
+//   A wait that memory admitted but whose joint resource (a measurement's
+//   CPUs) was busy waited for that resource, and is not held.
 // - **Logs that predate it**: every `.log` and `.txt` file under the log roots
 //   (default: ~/.cache/nts-scratch, ~/.cache/nts-landing/runs and
 //   ~/.cache/nts-full-check/runs), whose ledger lines carry no time and no
@@ -32,7 +36,7 @@
 //   steps' grants above their own peaks are summed over their wall time.
 //   The same wait is often copied into several logs; each is counted once.
 //
-// `--since` keeps history records at or after that time, log files created
+// `--since` keeps waits that started at or after that time, log files created
 // at or after it (a log's lines carry no time, so one begun before holds
 // earlier waits and is left out), and gate runs started at or after it; a
 // commit means its commit time. Nothing is written.
@@ -41,7 +45,7 @@ import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { LEDGER_HISTORY_DIR, LEDGER_HISTORY_VERSION, type LedgerHistoryRecord } from "./ledger-history-record.ts";
+import { historyDay, LEDGER_HISTORY_DIR, LEDGER_HISTORY_VERSION, type LedgerHistoryRecord } from "./ledger-history-record.ts";
 import { LEDGER_DIR } from "./memory-ledger.ts";
 import { PRIORITIES, type Priority } from "./ranks.ts";
 
@@ -148,10 +152,12 @@ export const logHeld = (e: LogEpisode) => e.fits && e.ahead > 0 && e.ask <= e.av
 export type HistoryRead = { records: LedgerHistoryRecord[]; unread: { file: string; line: number; why: string }[] };
 
 /** Every record in a history directory; a line that is not a record of a known version is named, not read. */
-export function readLedgerHistory(dir: string): HistoryRead {
+export function readLedgerHistory(dir: string, since: number | null = null): HistoryRead {
   const read: HistoryRead = { records: [], unread: [] };
+  // A day before `since` holds no wait that started after it.
+  const first = since === null ? "" : historyDay(new Date(since).toISOString());
   let days: string[];
-  try { days = readdirSync(dir).filter(name => name.endsWith(".jsonl")).sort(); }
+  try { days = readdirSync(dir).filter(name => /^\d{4}-\d\d-\d\d\.jsonl$/.test(name) && name >= first).sort(); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return read; throw error; }
   for (const day of days) {
     const file = join(dir, day);
@@ -168,6 +174,8 @@ export function readLedgerHistory(dir: string): HistoryRead {
 }
 
 export type HistoryEpisode = { id: string; what: string; priority: Priority; grows: string | null; ask: number;
+  /** Its `wait` record's time, or null when the history does not hold its start. */
+  started: number | null;
   held: boolean; admitted: boolean; waited_s: number; records: LedgerHistoryRecord[] };
 
 /** The records of each request's wait, in order. */
@@ -176,10 +184,11 @@ export function historyEpisodes(records: readonly LedgerHistoryRecord[]): Histor
   for (const record of records) by.set(record.request.id, [...by.get(record.request.id) ?? [], record]);
   return [...by.values()].map(list => {
     list.sort((a, b) => a.waited_s - b.waited_s || a.at.localeCompare(b.at));
-    const first = list[0]!, { request } = first;
+    const first = list[0]!, { request } = first, start = first.kind === "wait" ? first : undefined;
     const ask = request.bytes - request.drawn_bytes;
     return { id: request.id, what: request.what, priority: request.priority, grows: request.grows, ask,
-      held: request.fits && first.ahead.length > 0 && ask <= first.machine.room_bytes,
+      started: start === undefined ? null : Date.parse(start.at),
+      held: start !== undefined && !start.resource_busy && request.fits && start.ahead > 0 && ask <= start.machine.room_bytes,
       admitted: list.some(record => record.kind === "admitted"), waited_s: list.at(-1)!.waited_s, records: list };
   });
 }
@@ -226,7 +235,7 @@ export function holderKind(what: string): string {
   return what.replace(/^#?\d+ /, "").replace(/\S*\/\S*/g, "<path>").replace(/\b[0-9a-f]{10,}\b/g, "<commit>").replace(/…$/, "").trim();
 }
 
-/** Memory reserved above use: byte-seconds, its largest figure, and the seconds it was held. */
+/** Memory promised to a holder: byte-seconds, its largest figure, and the seconds it was held. */
 export type Held = { byte_s: number; most: number; seconds: number };
 const add = (into: Map<string, Held>, key: string, bytes: number, seconds: number) => {
   if (bytes <= 0 || seconds <= 0) return;
@@ -236,9 +245,11 @@ const add = (into: Map<string, Held>, key: string, bytes: number, seconds: numbe
 };
 
 /**
- * Who held memory above use while `episode` waited: each interval between its
- * records charged to each admitted holder at the earlier record, a gate run's
- * share split among its steps then running by their grants above their peaks.
+ * Who held the memory `episode` could not have while it waited: each interval
+ * between its records charged to each admitted holder at the earlier record,
+ * by what that decision counted the holder as still promising (a holder that
+ * yields to the waiter promises only its live margin), a gate run's share
+ * split among its steps then running by their grants above their peaks.
  */
 export function attributeEpisode(episode: HistoryEpisode, runs: ReadonlyMap<string, GateRun>): Map<string, Held> {
   const held = new Map<string, Held>();
@@ -247,10 +258,9 @@ export function attributeEpisode(episode: HistoryEpisode, runs: ReadonlyMap<stri
     if (next === undefined) return;
     const seconds = next.waited_s - record.waited_s, when = Date.parse(record.at);
     for (const holder of record.admitted) {
-      const unused = holder.live_use ? 0 : Math.max(0, holder.bytes - holder.lent_bytes - holder.used_bytes);
       const run = runOf(holder.what, runs);
-      if (run === undefined) { add(held, holderKind(holder.what), unused, seconds); continue; }
-      let left = unused;
+      if (run === undefined) { add(held, holderKind(holder.what), holder.promised_bytes, seconds); continue; }
+      let left = holder.promised_bytes;
       for (const step of run.steps) {
         if (step.started > when || step.started + step.wall_s * 1000 <= when) continue;
         const share = Math.min(left, Math.max(0, step.grant - step.peak));
@@ -271,7 +281,7 @@ export type KindRow = { kind: string; waits: number; waited_s: number; median_s:
 export type HolderRow = { holder: string; gib_s: number; most_gib: number; seconds: number };
 export type Report = {
   since: string | null;
-  history: { records: number; unread: number; waits: number; held: number; held_s: number; by_kind: KindRow[]; holders: HolderRow[] };
+  history: { records: number; unread: number; waits: number; partial: number; held: number; held_s: number; by_kind: KindRow[]; holders: HolderRow[] };
   logs: { files: number; waits: number; waited_s: number; held: number; held_s: number; held_60s: number; by_kind: KindRow[];
     unused_median_gib: number | null; unused_4gib: number; census: number; with_gate_run: number; with_gate_run_s: number;
     gate_runs: number; steps_over_peak: HolderRow[] };
@@ -291,8 +301,9 @@ const holderRows = (held: ReadonlyMap<string, Held>): HolderRow[] => [...held]
 export function replay(input: { records: readonly LedgerHistoryRecord[]; unread: number; logs: readonly LogEpisode[]; files: number;
   runs: ReadonlyMap<string, GateRun>; since: number | null }): Report {
   const { since } = input;
-  const records = since === null ? input.records : input.records.filter(record => Date.parse(record.at) >= since);
-  const waits = historyEpisodes(records), heldWaits = waits.filter(e => e.held);
+  const episodes = historyEpisodes(input.records);
+  const partial = episodes.filter(e => e.started === null).length;
+  const waits = episodes.filter(e => e.started !== null && (since === null || e.started >= since)), heldWaits = waits.filter(e => e.held);
   const held = new Map<string, Held>();
   for (const episode of heldWaits) for (const [key, h] of attributeEpisode(episode, input.runs)) {
     const into = held.get(key) ?? { byte_s: 0, most: 0, seconds: 0 };
@@ -314,7 +325,7 @@ export function replay(input: { records: readonly LedgerHistoryRecord[]; unread:
   const total = (es: readonly { waited_s: number }[]) => es.reduce((sum, e) => sum + e.waited_s, 0);
   return {
     since: since === null ? null : new Date(since).toISOString(),
-    history: { records: records.length, unread: input.unread, waits: waits.length, held: heldWaits.length, held_s: total(heldWaits),
+    history: { records: waits.reduce((sum, e) => sum + e.records.length, 0), unread: input.unread, waits: waits.length, partial, held: heldWaits.length, held_s: total(heldWaits),
       by_kind: kindRows(heldWaits.map(e => ({ what: e.what, grow: e.grows !== null, waited_s: e.waited_s }))), holders: holderRows(held) },
     logs: { files: input.files, waits: logs.length, waited_s: total(logs), held: heldLogs.length, held_s: total(heldLogs),
       held_60s: heldLogs.filter(e => e.waited_s >= 60).length, by_kind: kindRows(heldLogs),
@@ -332,8 +343,8 @@ export function formatReport(report: Report, top = 12): string {
     ...rows.slice(0, top).map(row => `  ${row.holder}\t${g(row.gib_s)}\t${g(row.most_gib)}\t${Math.round(row.seconds)}`)];
   return [
     `ledger history replay${report.since === null ? "" : ` since ${report.since}`}`,
-    `history: ${h.records} records${h.unread ? ` (${h.unread} lines unread)` : ""}, ${h.waits} waits; held at the head of the line: ${h.held}, waiting ${h.held_s} s`,
-    ...(h.held ? [...kinds(h.by_kind), "  reserved above use while they waited, by holder (census intervals):", ...holders(h.holders, "holder")] : []),
+    `history: ${h.waits} waits in ${h.records} records${h.unread ? ` (${h.unread} lines unread)` : ""}${h.partial ? `, ${h.partial} more whose start it does not hold` : ""}; held at the head of the line: ${h.held}, waiting ${h.held_s} s`,
+    ...(h.held ? [...kinds(h.by_kind), "  promised to holders while they waited, by holder (census intervals):", ...holders(h.holders, "holder")] : []),
     `logs: ${l.files} files, ${l.waits} waits, ${l.waited_s} s; held at the head of the line: ${l.held}, waiting ${l.held_s} s (${l.held_60s} of them 60 s or more)`,
     ...(l.held ? [
       ...kinds(l.by_kind),
@@ -403,7 +414,7 @@ function main(argv: readonly string[]): void {
       try { const run = gateRun(realpathSync(dirname(path)), JSON.parse(readFileSync(path, "utf8"))); if (run !== null) runs.set(run.path, run); } catch { /* not a gate run's summary */ }
     } else if (/\.(log|txt)$/.test(path) && (since === null || (statSync(path, { throwIfNoEntry: false })?.birthtimeMs ?? -Infinity) >= since)) logs.push(path);
   }
-  const read = readLedgerHistory(history);
+  const read = readLedgerHistory(history, since);
   const gone: string[] = [];
   const episodes = logEpisodes(ledgerLines(logs, "", gone));
   const report = replay({ records: read.records, unread: read.unread.length, logs: episodes, files: logs.length - gone.length, runs, since });
