@@ -5269,3 +5269,26 @@ Native controls cover all seven appends, foreign finalization, a long leaf-only
 loop and both checkpoint and cyclic-release service. The coordinator approved
 this runtime correction and removal of the four temporary red control and
 restoration commits; their cited refs remain scratch provenance.
+
+## A landing stops at its first red step; a refused step is rerun (11-28)
+
+For #1143 (tooling sprint change 4), the coordinator approved two changes to
+the landing check. A landing runs the gate fail-fast: the first FAIL cancels
+the remaining steps, each running scope killed and drained within the step
+drain bound, and the refusal names the failing step and the cancelled ones.
+Measured before: red runs kept running after the failure was known, about
+260 minutes over 12 runs, one ending 32 minutes after its first red. The full
+check keeps running every step, so culprit search still sees every red. A
+cancellation for any other reason is named in words, where it had printed
+`[object Object]`.
+
+`check.ts <commit> --here` replayed the landing in the agent's tree, with a
+checkout, installation parking and restore receipts of its own: a second
+landing path that cost about 870 minutes of worker wall a day (211 runs
+against 101 landings), 14 of them held with an unreadable reason and 10
+missing `JAVA_HOME` or `ANDROID_HOME` inside an agent's unit. It is replaced
+by `check.ts rerun <id> --step <name>`, which runs one step of the refused
+landing at the caller's HEAD with the landing's recorded host environment,
+narrowing and ceiling, and never lands anything. No restore receipt was on
+disk when the replay was deleted.
+

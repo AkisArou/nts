@@ -458,54 +458,58 @@ cost keeps them under ten minutes, moving the costliest deferrable ones to
 the full check. `node tooling/landing/check.ts <commit> --dry-run` prints the
 landing steps, the deferred ones and the estimate from the submitted history.
 
-**Local checks use the landing replay.** `check.ts <commit> --here` starts
-from a checkout of the submitted commit with no tracked changes or untracked,
-non-ignored files, and resolves current `main`.
-It uses the queued landing's replay, selects from that base to the replayed
-tip, and runs the resulting checkout in the task's own pool tree with its warm
-target. It names the submission, the checked tip, the main base and the tree
-at the start and end of the run. A replay conflict refuses before checkout.
-It uses the current checkout when its Git tree matches the replayed tip,
-including when the replay only adds an issue reference to the commit message.
-If main advances, the run is held so a later check can use the new base.
-An explicit check of a commit already on main uses that commit's own change
-and names that range.
+**A landing stops at its first red step.** The landing runs the gate with
+`NTS_GATE_FAIL_FAST=1`, a value the landing owns like its step ceiling. When
+a step records FAIL, the runner cancels the rest at once: a step still
+waiting never starts, and each running step's scope is killed as a whole and
+drained, each drain bounded by the step scope's `DRAIN_HANG_MS` and all of
+them in parallel, so the run ends within that bound of the first FAIL. A
+drain that does not finish keeps its ownership held, as any undrained step
+does. A cancelled step's row is NOT RUN with `cancelled: <step> FAIL`, and it
+keeps the log it wrote until the kill. The refusal's message, in
+`landing.json` and the service's log line, names the failing step, its log,
+the cancelled steps and the run. A landing stopped for any other reason names
+that reason in words: a withdrawal, a signal or a failure of the landing
+process. The full check runs every step to the end, so a culprit search sees
+all of a commit's reds.
 
-The tree's resource lock covers the replay checkout and the run. Before
-detaching, `--here` durably records the task branch, original HEAD, linked
-input targets, installation catalog bytes, replayed tip and its private
-worktree ref. It parks each existing installation directory by rename after
-recording its original path, parking path and inode. After the check drains,
-it returns those directories and restores the saved links and catalog bytes,
-checks those identities, then removes the temporary ref and receipt. A
-subsequent `--here` recovers an interrupted checkout under the same lock
-before resolving its commit argument, including a partial set of parking
-renames. The pool and upkeep keep a tree with a restore receipt reserved and
-name the receipt when access is refused. A shell with its working directory
-in the tree can stay open. `--here` detects another live gate runner. Direct
-commands such as `inner.ts`, `cargo test` and `node --test` can bypass that
-lock and are undetected. Finish them before starting `--here` and wait for
-the restore before editing, building, testing or committing in that tree.
+**A refused step is diagnosed with `rerun`.** `check.ts rerun <id> --step
+<name>` runs one step of a refused or held landing again in the caller's own
+pool tree, at its HEAD and with its warm target. It never touches the queue
+and never lands anything; it writes only its own run directory beside the
+landing's runs. It runs the step as the landing ran it: the step must be one
+the landing ran, after the compiler's build when the landing built one, with
+the landing's narrowing (`landing.json`'s `scopes`: the interop projects and
+doc-test crates) and its ceiling. Its environment is the host capabilities
+the landing's runner recorded in `summary.json` (`JAVA_HOME`, `ANDROID_HOME`,
+`PATH` and the rest), never the caller's shell, so a unit that dropped them
+cannot drop them from the rerun; a landing whose build failed before any step
+ran uses the caller's, checked for each step's needs before it starts. It
+says whether HEAD's tree is the refused tip's (a reproduction) or another
+(the caller's fix, say), naming the `git rebase` that reproduces it exactly.
+The tree must be clean, with no live gate runner, and the rerun holds the
+tree's resource lock; it runs at an agent's rank in a scope of its own. A
+landing already landed or withdrawn, and a run already pruned (after
+`KEEP_DAYS` in `tooling/landing/service.ts`), are refused by name.
 
 **Choosing is heavy work, and it is ledgered.** Evaluating the rules at both
 endpoints holds a few GiB, so every selection reserves through the memory
 ledger under one key, `landing-selection`, sized from that key's measured
 history in the tree it selects for, at the rank its caller's code names
 (`tooling/landing/selection-memory.ts`): the service's is a landing's,
-`--here`'s and `--dry-run`'s an agent's. A dry run therefore waits its turn
+`--dry-run`'s an agent's. A dry run therefore waits its turn
 like any agent job, says what it waits for as it starts waiting, and yields
-to a landing. The service and `--here` hand the selection's reservation on
+to a landing. The service hands the selection's reservation on
 to the run it chose: the build's reservation takes it over, or, with nothing
 to build, the gate run's first request does, so nothing is admitted between
 choosing the steps and running them.
 
 **Installed packages are current before a step runs.** The landing service's
 tree preparation links each tip with its own linker, which republishes the
-tree's installation catalog. `--here` reads the original checkout's catalog through its owner
+tree's installation catalog. `rerun` reads its tree's catalog through its owner
 (`installationCatalogState` in `tooling/inputs/dependency-inputs.ts`) before it
-selects anything, and links a replayed tip with that tip's own linker. A missing
-original catalog, or one whose pins no longer match the tree
-(after a rebase, say), is a refusal naming the
+runs anything. A catalog whose pins no longer match the tree
+(after a rebase, say) is a refusal naming the
 `node tooling/inputs/linker.ts work` command that republishes it. A tree with
 no package graph owes no catalog.
 
@@ -1079,7 +1083,7 @@ including shell calls; isolated cache-pruning controls are classified separately
 because they manufacture obsolete artifacts intentionally.
 
 The local Rust input census uses
-`node tooling/landing/check.ts <commit> --here --trace-rust-inputs`.
+`node tooling/landing/check.ts rerun <id> --step tests --trace-rust-inputs`.
 Cargo's artifact report binds each executable to its target source. Temporary
 doctest executables run during the original Cargo/rustdoc lifetime; only
 profile-owned binaries are recorded for the workspace replay.
@@ -1117,7 +1121,7 @@ temporary under ~/.cache, which the runner claims on disk before the step's
 slots and memory (the step table's `unmeasuredDisk`, below). The step proves
 the handed claim is held, and the capture is removed when the step ends
 whatever its verdict; `rust-inputs.coverage.json` in the run keeps the
-decision. A local capture from `check.ts --here --trace-rust-inputs`
+decision. A local capture from `check.ts rerun ... --trace-rust-inputs`
 is checked with `node tooling/gate/rust-input-coverage.ts <trace> <reports>`,
 and decided again from its reports with `--reports <reports>`.
 
@@ -2244,7 +2248,7 @@ the tooling strict checker owns the source's type checking.
   its own there at its rank, bound to the unit it was started in
   (`rankedScopeArgs`): every job `admit.ts` admits, which includes
   `with-lock.sh`'s and `inner.ts`'s (`--memory-max` caps that scope), and
-  `check.ts --here`. The landing service's unit and an agent's unit
+  `check.ts rerun`. The landing service's unit and an agent's unit
   (`tooling/agents`) run under `nts.slice` at their rank's weight; the full
   check's units carry the full check's, and a probe's or stale-verified core's
   run slice the culprit search's. A unit another launcher starts
@@ -3252,8 +3256,8 @@ death; an absent timestamp remains explicit after forced termination.
   ([log](records/notebooks/decisions-log.md#reservations-yield-to-a-request-that-outranks-them-11-09)).
 - **A landing's selection is ledgered at its caller's rank** (11-21):
   selecting a commit's steps reserves `landing-selection` from its measured
-  history, at the landing's rank in the service and an agent's for `--here`
-  and `--dry-run`, and the service's and `--here`'s selection hands its
+  history, at the landing's rank in the service and an agent's for
+  `--dry-run`, and the service's selection hands its
   reservation to the build, or to the gate run when nothing is built
   ([log](records/notebooks/decisions-log.md#a-landings-selection-is-ledgered-at-its-callers-rank-11-21)).
 - **A reservation made inside another job's draws on it first** (11-10): a
@@ -3553,3 +3557,13 @@ death; an absent timestamp remains explicit after forced termination.
   producer, frame and versioned row bounds consistent. An unreadable vector
   remains a named unavailable receipt
   ([log](records/notebooks/decisions-log.md#stopped-exec-vectors-share-the-kernel-budget-11-19)).
+
+- **A landing stops at its first red step; a refused step is rerun.** A
+  red step's verdict is known when it is recorded, so a landing cancels its
+  other steps then, bounded by the step drain, and names the step and what it
+  cancelled; the full check still runs every step for the culprit search. A
+  refused step is diagnosed by running that step again in the caller's tree
+  with the landing's recorded environment and narrowing, never by replaying
+  the whole landing through a second landing path: the replay, its checkout
+  parking and restore receipts are gone
+  ([log](records/notebooks/decisions-log.md#a-landing-stops-at-its-first-red-step-a-refused-step-is-rerun-11-28)).

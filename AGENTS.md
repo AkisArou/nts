@@ -101,8 +101,8 @@ Nothing reaches `main` except through the landing check
 
 ```sh
 node tooling/landing/check.ts <commit> --dry-run   # the steps it runs, the deferred ones, the estimate
-node tooling/landing/check.ts <commit> --here      # run them now, in your tree
 node tooling/landing/check.ts <commit>             # queue it; run it in the background
+node tooling/landing/check.ts rerun <id> --step <name>   # run one step of a refused landing again, in your tree
 ```
 
 One service, `nts-landing-check`, checks one change at a time against the
@@ -114,8 +114,8 @@ the tree on your branch, and the pool's next upkeep resets it once nothing
 does. It also closes your issue: a change from
 issue N's branch that does not name the issue gets `Fixes #N` in its last
 commit, so a slice that leaves the task open says `Part of #N` in its
-message. Red names the failing steps and the run's
-logs. Memory pressure retries by itself; any other unfinished run holds the
+message. Red stops at the first failing step, cancels the rest, and names
+that step, the cancelled ones and the run's logs. Memory pressure retries by itself; any other unfinished run holds the
 change (`check.ts retry <id>`), as does a step stopped at its time bound. A
 single case past its own bound (a compile past ten CPU minutes, a compiled
 call past its allowance) is a recorded `timeout`, a loud defect. Withdraw with `check.ts withdraw <id|commit>`,
