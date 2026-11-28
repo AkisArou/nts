@@ -33,6 +33,10 @@ import {PROFILE,removeRun,type RunOptions} from "./run.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
 
 
+// A control's wait for another step's event: a file appears in a directory, or
+// holds a text, observed through the directory's change events, never a poll.
+const WAIT_FOR = `import {existsSync,readFileSync,watch} from "node:fs";import {join} from "node:path";const [dir,name,text]=process.argv.slice(1),file=join(dir,name);const ready=()=>{try{return text?readFileSync(file,"utf8").includes(text):existsSync(file);}catch{return false;}};if(!ready())await new Promise(resolve=>{const watcher=watch(dir,()=>{if(ready()){watcher.close();resolve();}});if(ready()){watcher.close();resolve();}});`;
+
 export const GATE = dirname(fileURLToPath(new URL("../gate/all.sh", import.meta.url)));
 
 export function fixture(t: TestContext) {
@@ -57,6 +61,7 @@ fi
 if [ "$1" = --call ]; then
   step=$2
   control=$(cat "$controls/$step" 2>/dev/null || echo pass)
+  waitfor() { node --input-type=module -e '${WAIT_FOR}' "$@"; }
   instrument() { printf '{"version":1,"verdict":"%s","kind":"%s","step":"%s","attempt":"%s","reason":"%s"}\\n' "$1" "$2" "$step" "$NTS_GATE_STEP_ATTEMPT" "$3" > "$NTS_GATE_STEP_RESULT"; exit 75; }
   if [ "$step" = program-oracles ]; then
     node --input-type=module -e 'import {createProgramOracleResults} from ${JSON.stringify(new URL("../differential/oracle-result-publisher.ts",import.meta.url).href)};import {programOracleDirectory} from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};import {oracleRecipeIdentity} from ${JSON.stringify(new URL("../differential/oracle-runtime.ts",import.meta.url).href)};import {join} from "node:path";createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipeIdentity()).publish();' || exit $?
@@ -74,8 +79,8 @@ if [ "$1" = --call ]; then
     hung) instrument "NOT RUN" hung "no progress for 600 s" ;;
     stuck) echo "  $step: waits for ever"; : > "$controls/$step.started"; exec tail -f /dev/null ;;
     setup-instrument) instrument INSTRUMENT tooling-setup "fixture: the step's setup failed" ;;
-    fail-after-finished-*) other=\${control#fail-after-finished-}; while ! grep -q "step budget:" "$NTS_GATE_RUN_DIR/$other.log" 2>/dev/null; do sleep 0.05; done; echo "  $step: a recorded case went wrong"; exit 1 ;;
-    fail-after-*) other=\${control#fail-after-}; while [ ! -e "$controls/$other.started" ]; do sleep 0.05; done; echo "  $step: a recorded case went wrong"; exit 1 ;;
+    fail-after-finished-*) other=\${control#fail-after-finished-}; waitfor "$NTS_GATE_RUN_DIR" "$other.log" "step budget:" || exit $?; echo "  $step: a recorded case went wrong"; exit 1 ;;
+    fail-after-*) other=\${control#fail-after-}; waitfor "$controls" "$other.started" || exit $?; echo "  $step: a recorded case went wrong"; exit 1 ;;
   esac
 fi
 exec node "$(dirname "$0")/run.mjs" "$@"
