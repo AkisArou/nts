@@ -4,6 +4,25 @@ The shared `fill` contract joined zero and occupied arrivals. It therefore had t
 
 The shared runtime storage contract also reaches slots. The seven consuming string helpers have one canonical family used by both `keeps` and `stores_nothing`; argument zero still transfers ownership. Unique ownership gates in-place reuse. Cleanup retires only the consumed leaf string, with no object, foreign handle or callback cleanup. Confined fresh field writers invalidate only the writer's static alias component; publication ends that confinement immediately. Slot/alias indexes replace repeated scans, with an ordinary debug verifier capped at 64 total facts and exhaustive verification in tests or `verify-slot-index` builds.
 
+The review found that the consuming-string audit omitted a collection poll in
+`nts_release_counted`: even a surviving string decrement could service roots
+left pending by a region and finalize an unrelated foreign handle. The review
+correction gates the surviving decrement's root buffering and poll on the
+cyclic descriptor, matching the public release fast path. Final-reference
+string destruction remains leaf cleanup. The runtime refresh below supersedes
+the earlier runtime-execution evidence; compiler analysis evidence retains its
+original source and binary provenance.
+
+The four temporary control/restoration commits cited below are **scratch-only
+provenance**, preserved under `refs/cited/1049/control-1`, `restoration-1`,
+`control-2` and `restoration-2`. They were dropped from the landing branch because
+the control trees retain candidate expectations and are red. Reviewed a6ff is
+preserved at `refs/cited/1049/reviewed-a6ff`. The cleaned tip
+`ce653d2b2b72feb4e9998f8a47bf7bc42f466fcc` has the same tree
+`b73320c2af7277c9e4a4eb5630e453c14b80409c` as a6ff and an empty diff;
+only the two subsequent record/input commits were replayed. The full mapping
+and assertions live in `~/.cache/nts-scratch/1049/review-history.json`.
+
 ## Native result and counterfactuals
 
 The accepted result is 17/19, improving the historical 19/19 target in the primary. Four executed null releases disappear in each fixture. The kept text remains borrowed from its live holder across the independent expected-string append, removing another retain/release pair. The control still executes two null releases after a clear/merge whose numeric guard is not folded; #1114 owns that follow-up.

@@ -256,7 +256,150 @@ static bool slice_reads(double from, double to, const char *text) {
   return appends(with_slice, expected);
 }
 
+/* A pending collector must not make a leaf decrement reentrant. The foreign
+ * family uses the same erased-handle release path as a GObject finalizer,
+ * without a GUI dependency. Its last release overwrites a program field and
+ * frees the value borrowed from it. */
+typedef struct PendingCycle {
+  NtsHeader header;
+  struct PendingCycle *next;
+  NtsValue foreign;
+} PendingCycle;
+
+static const uint32_t cycle_refs[] = {offsetof(PendingCycle, next)};
+static const uint32_t cycle_erased[] = {offsetof(PendingCycle, foreign)};
+static const NtsDescriptor pending_cycle = {
+    .kind = NTS_KIND_OBJECT,
+    .size = sizeof(PendingCycle),
+    .references = 1,
+    .offsets = cycle_refs,
+    .cyclic = 1,
+    .name = "PendingAppendCycle",
+    .erased = 1,
+    .erased_offsets = cycle_erased,
+    .release_foreign = nts_release_foreign,
+};
+static struct {
+  NtsString *field;
+} holder;
+static int foreign_refs;
+static unsigned finalized;
+
+static void foreign_retain(void *p) { ++*(int *)p; }
+
+static void foreign_release(void *p) {
+  if (--*(int *)p == 0) {
+    NtsString *old = holder.field;
+    holder.field = NULL;
+    nts_release(old);
+    ++finalized;
+  }
+}
+
+/* Allocate before the region, then make 10,000 distinct candidates while
+ * collection is forbidden. Suspending the region does not service them. */
+static NtsRegion *collection_due(void) {
+  PendingCycle *roots[10000];
+  for (size_t i = 0; i < 10000; ++i) {
+    roots[i] = (PendingCycle *)nts_object_new(&pending_cycle);
+    roots[i]->next = roots[i];
+    nts_retain(&roots[i]->header);
+    roots[i]->foreign = nts_value_of_undefined();
+  }
+  foreign_refs = 1;
+  roots[0]->foreign =
+      nts_value_of_handle(&foreign_refs, NTS_TAG_HANDLE_GOBJECT);
+  NtsRegion *region = nts_region_open();
+  for (size_t i = 0; i < 10000; ++i) {
+    nts_release(&roots[i]->header);
+  }
+  nts_region_suspend(region);
+  return region;
+}
+
+static NtsString *append_string(NtsString *a) {
+  return nts_str_append(a, text_xyz);
+}
+
+static NtsString *append_quoted(NtsString *a) {
+  return nts_str_append_json_quoted(a, text_xyz);
+}
+
+static void pending_append(const char *name, Append append, const char *tail) {
+  const size_t live = nts_live_count();
+  holder.field = exact("borrowed field");
+  const NtsString *borrowed = holder.field;
+  NtsString *shared = grown("abc");
+  nts_retain(shared);
+  const uint64_t epoch = nts_collection_epoch();
+  const size_t candidates = nts_cycle_candidates();
+  const unsigned done = finalized;
+  NtsRegion *region = collection_due();
+  char what[160], expected[64];
+  snprintf(what, sizeof what, "%s: 10000 candidates remain due after a region",
+           name);
+  check(what, nts_collection_epoch() == epoch && finalized == done &&
+                  nts_cycle_candidates() >= candidates + 10000);
+  NtsString *result = append(shared);
+  snprintf(expected, sizeof expected, "abc%s", tail);
+  snprintf(what, sizeof what, "%s: a shared append cannot run a finalizer",
+           name);
+  /* Check finalization first: the old runtime fails without dereferencing the
+   * dangling borrow. Poison and sanitizers still cover every valid read. */
+  check(what, finalized == done && nts_collection_epoch() == epoch &&
+                  holder.field == borrowed &&
+                  says(borrowed, "borrowed field") && says(shared, "abc") &&
+                  says(result, expected));
+  nts_checkpoint();
+  snprintf(what, sizeof what, "%s: the checkpoint twin runs that finalizer",
+           name);
+  check(what, finalized == done + 1 && holder.field == NULL &&
+                  foreign_refs == 0 && nts_collection_epoch() > epoch);
+  nts_release(result);
+  nts_release(shared);
+  nts_region_reset(region);
+  snprintf(what, sizeof what, "%s: the deferred cycles leave nothing live",
+           name);
+  check(what, nts_live_count() == live);
+}
+
+static void pending_through_a_leaf_loop(void) {
+  const size_t live = nts_live_count();
+  holder.field = exact("borrowed field");
+  NtsString *shared = grown("abc");
+  PendingCycle *next = (PendingCycle *)nts_object_new(&pending_cycle);
+  next->next = next;
+  nts_retain(&next->header);
+  next->foreign = nts_value_of_undefined();
+  const uint64_t epoch = nts_collection_epoch();
+  const unsigned done = finalized;
+  const size_t candidates = nts_cycle_candidates();
+  NtsRegion *region = collection_due();
+  check("leaf loop: collection is due after the region",
+        finalized == done && nts_collection_epoch() == epoch &&
+            nts_cycle_candidates() >= candidates + 10000);
+  for (size_t i = 0; i < 20000; ++i) {
+    nts_retain(shared);
+    NtsString *copy = append_number(shared);
+    nts_release(copy);
+  }
+  check(
+      "leaf loop: 20000 surviving string decrements add no roots or callbacks",
+      finalized == done && nts_collection_epoch() == epoch &&
+          nts_cycle_candidates() == candidates + 10000 && says(shared, "abc"));
+  nts_release(&next->header);
+  check("leaf loop: one new cyclic release services the pending collection",
+        finalized == done + 1 && holder.field == NULL && foreign_refs == 0 &&
+            nts_collection_epoch() > epoch);
+  nts_release(shared);
+  nts_region_reset(region);
+  check("leaf loop: all pending cycles were reclaimed",
+        nts_live_count() == live);
+}
+
 int main(void) {
+  nts_handle_family_register(NTS_TAG_HANDLE_GOBJECT, foreign_retain,
+                             foreign_release, "append finalizer control");
   text_xyz = exact("xyz");
 
   receivers("number", append_number, "1.5");
@@ -365,6 +508,15 @@ int main(void) {
     check("slice: of itself, through a copy", says(copy, "abcdabcd"));
     nts_release(copy);
   }
+
+  pending_append("append", append_string, "xyz");
+  pending_append("at", append_at, "y");
+  pending_append("char_at", append_char_at, "z");
+  pending_append("char_code", append_char_code, "q");
+  pending_append("json_quoted", append_quoted, "\"xyz\"");
+  pending_append("number", append_number, "1.5");
+  pending_append("slice", append_slice, "yz");
+  pending_through_a_leaf_loop();
 
   nts_release(text_xyz);
   printf("%s\n", failures ? "FAILED" : "string append checks passed");

@@ -5255,3 +5255,17 @@ phase can proceed after any growth is admitted and the runner verifies the
 kernel bounds. The smaller grant returns obsolete bytes through the existing
 locked ledger shrink. The step keeps its disk lease and overall execution
 budget. A kernel kill at a phase's runaway bound is memory pressure.
+### 2026-11-28 — Leaf decrements do not poll collection (#1049 review)
+
+The earlier #1049 consuming-string audit missed a collector poll in
+`nts_release_counted` after a shared string decrement. A collection deferred
+inside a region can release unrelated foreign handles and run program code.
+The surviving-count slow path now buffers and polls only cyclic descriptors,
+matching `nts_release`'s inline path. String retirement remains leaf cleanup,
+so the approved seven-helper `CONSUMES_STRING` contract remains shared by
+ownership, slots, bounds and placement. Due roots wait for a new cyclic
+candidate, checkpoint or explicit collection; non-cyclic decrements add no roots.
+Native controls cover all seven appends, foreign finalization, a long leaf-only
+loop and both checkpoint and cyclic-release service. The coordinator approved
+this runtime correction and removal of the four temporary red control and
+restoration commits; their cited refs remain scratch provenance.

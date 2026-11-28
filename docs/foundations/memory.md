@@ -515,8 +515,13 @@ exhaustion keeps ordinary entries. These are ceilings, not growth targets.
 Slot effects consume the runtime's shared storage/callback contract. A
 consuming string helper may retire only its consumed leaf string, never an
 object or foreign handle and never through a callback; in-place byte reuse
-requires unique ownership. Its consumption remains part of the ownership
-contract. Native retains, releases and cleanup keep their before/after
+requires unique ownership. Retiring a shared string decrements a non-cyclic
+object without polling collection; its final free is leaf cleanup. A collection
+left due inside a region waits for the next new cyclic candidate release,
+checkpoint or explicit collection. Pending roots cannot grow without candidate
+releases, which poll; non-cyclic-only releases add no roots. Its consumption
+remains part of the ownership contract. Native retains, releases and cleanup
+keep their before/after
 invalidations. A field write may limit explicit-fact invalidation to its static
 alias ceiling only while its writer is a confined allocation; publication ends
 that proof. Explicit facts are indexed by slot and alias component, so a write

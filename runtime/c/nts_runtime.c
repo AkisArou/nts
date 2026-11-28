@@ -2345,11 +2345,19 @@ static NTS_NOINLINE void nts_release_counted(NtsHeader *object) {
   }
   if (object->reserved > 1) {
     object->reserved--;
-    nts_possible_root(object);
-    /* Not while destroying: the dying list keeps its next pointer in the
-     * count word, so an object on it has no count for the collector to
-     * read. */
-    nts_maybe_collect();
+    /* A surviving non-cyclic decrement adds no candidate and must not poll
+     * collection: an unrelated pending cycle can release foreign handles and
+     * run program code. This also covers string retirement's direct call to
+     * this slow path, matching nts_release's inline non-cyclic path.
+     * Pending roots wait for a new cyclic candidate, a checkpoint or explicit
+     * collection. They cannot grow without candidate releases, which poll. */
+    if (object->descriptor->cyclic) {
+      nts_possible_root(object);
+      /* Not while destroying: the dying list keeps its next pointer in the
+       * count word, so an object on it has no count for the collector to read.
+       */
+      nts_maybe_collect();
+    }
     return;
   }
 

@@ -3379,8 +3379,12 @@ pub fn stores_nothing(name: &str) -> bool {
 /// reuses bytes only at reserved == 1; otherwise `nts_str_regrow` copies them.
 /// Slices/substrings copy their units (`nts_str_range`), and char reads return
 /// a value. `nts_str_retire` frees or decrements only a string, whose payload
-/// contains no managed/foreign references and invokes no callback. The result
-/// preserves its input's prefix. A live slot/string alias remains unchanged.
+/// contains no managed/foreign references. Its surviving non-cyclic decrement
+/// never polls the collector; its final free is leaf cleanup, never an object,
+/// handle or callback. Pending collection waits for a new cyclic candidate,
+/// checkpoint or explicit collection. Roots cannot grow without candidate
+/// releases, which poll. The result preserves its input's prefix. A live
+/// slot/string alias remains unchanged.
 pub const CONSUMES_STRING: &[&str] = &[
     "nts_str_append",
     "nts_str_append_at",

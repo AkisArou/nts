@@ -907,9 +907,17 @@ fn a_json_tape_is_read_as_node_reads_its_text() {
 /// them, and each against its method's own rules.
 #[test]
 fn an_append_writes_in_place_only_into_a_grown_string_nobody_else_holds() {
-    let report = run_suite("string_appends", &["-DNTS_PROVIDER_RC"]);
+    let report = run_suite(
+        "string_appends",
+        &[
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    );
     assert!(report.contains("string append checks passed"), "{report}");
-    assert_eq!(checks(&report), 50, "{report}");
+    assert_eq!(checks(&report), 82, "{report}");
 }
 
 #[test]
