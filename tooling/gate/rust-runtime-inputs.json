@@ -9644,6 +9644,39 @@
       }
     },
     {
+      "source": "compiler/core/tests/generic_forwarding.rs",
+      "declarations": {
+        "imports": [],
+        "assets": [
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/outcomes/a-generic-calling-a-generic-pins-the-bound-for-a-structural-argument/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/outcomes/a-generic-method-calling-a-generic-pins-the-bound-for-a-structural-argument/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/outcomes/a-generic-class-calling-a-generic-pins-the-bound-for-a-structural-argument/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-recursive-generic-forwards-its-own-type-parameter/tsconfig.json"
+          },
+          {
+            "kind": "project-config",
+            "role": "compiled-program",
+            "path": "../../../tests/programs/a-generic-called-with-this/tsconfig.json"
+          }
+        ]
+      }
+    },
+    {
       "source": "compiler/core/tests/generic_value_contexts.rs",
       "declarations": {
         "imports": [],

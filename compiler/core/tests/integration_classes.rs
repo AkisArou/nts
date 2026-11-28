@@ -16,6 +16,9 @@ mod field_widths;
 #[path = "generic_classes.rs"]
 mod generic_classes;
 
+#[path = "generic_forwarding.rs"]
+mod generic_forwarding;
+
 #[path = "member_names.rs"]
 mod member_names;
 

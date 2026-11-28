@@ -538,7 +538,7 @@ pub(super) fn add_value_context(
         substitution,
         sources,
         deferred,
-    } = pin_down(snapshot, generic, actual);
+    } = pin_down(templates, generic, actual);
     if !deferred.is_empty()
         || generic.type_parameters.iter().any(|parameter| {
             !substitution.contains_key(parameter) || !sources.contains_key(parameter)
@@ -651,7 +651,7 @@ fn one_pass(snapshot: &SemanticSnapshot, templates: &Templates, found: &mut Gene
             substitution,
             sources,
             deferred,
-        } = pin_down(snapshot, generic, actual);
+        } = pin_down(templates, generic, actual);
 
         // **A call inside a generic body is one copy short.** Everything it
         // left deferred is pinned to a parameter of an enclosing class, and
@@ -811,14 +811,13 @@ pub(super) fn declared_signature(
 /// [`unify`]'s union arm, extracted to keep that function under the line
 /// limit. Every word of the argument is in the comments below.
 fn unify_through_a_union(
-    snapshot: &SemanticSnapshot,
+    templates: &Templates<'_>,
     members: &[TypeId],
     actual_id: TypeId,
-    into: &mut Substitution,
-    sources: &mut Sources,
-    deferred: &mut Sources,
+    pinned: &mut Pinned,
     depth: u32,
 ) {
+    let snapshot = templates.snapshot();
     {
         // **A union against a union is *paired*, not absorbed**, and this is what
         // the arm below gets wrong on its own.
@@ -869,60 +868,47 @@ fn unify_through_a_union(
                 && let Some(ours) = left.iter().copied().find(is_function)
                 && let Some(theirs) = right.iter().copied().find(is_function)
             {
-                unify(snapshot, ours, theirs, into, sources, deferred, depth + 1);
+                unify(templates, ours, theirs, pinned, depth + 1);
                 left.retain(|m| !is_function(m));
                 right.retain(|m| !is_function(m));
             }
             if let ([ours], [theirs]) = (left.as_slice(), right.as_slice()) {
-                unify(snapshot, *ours, *theirs, into, sources, deferred, depth + 1);
+                unify(templates, *ours, *theirs, pinned, depth + 1);
             }
             return;
         }
-        let mut agreed: Option<(Substitution, Sources, Sources)> = None;
+        let mut agreed: Option<Pinned> = None;
         let mut disagreed = false;
         for member in members {
-            let (mut mine, mut source, mut later) = (
-                Substitution::default(),
-                Sources::default(),
-                Sources::default(),
-            );
-            unify(
-                snapshot,
-                *member,
-                actual_id,
-                &mut mine,
-                &mut source,
-                &mut later,
-                depth + 1,
-            );
-            if mine.is_empty() && source.is_empty() && later.is_empty() {
+            let mut mine = Pinned::default();
+            unify(templates, *member, actual_id, &mut mine, depth + 1);
+            if mine.is_empty() {
                 continue;
             }
             match &agreed {
-                Some((seen, _, _)) if *seen != mine => disagreed = true,
+                Some(seen) if seen.substitution != mine.substitution => disagreed = true,
                 Some(_) => {}
-                None => agreed = Some((mine, source, later)),
+                None => agreed = Some(mine),
             }
         }
-        if let Some((mine, source, later)) = agreed
+        if let Some(mine) = agreed
             && !disagreed
         {
-            into.absorb(mine);
-            sources.extend(source);
-            deferred.extend(later);
+            pinned.substitution.absorb(mine.substitution);
+            pinned.sources.extend(mine.sources);
+            pinned.deferred.extend(mine.deferred);
         }
     }
 }
 
 fn unify(
-    snapshot: &SemanticSnapshot,
+    templates: &Templates<'_>,
     generic: TypeId,
     actual: TypeId,
-    into: &mut Substitution,
-    sources: &mut Sources,
-    deferred: &mut Sources,
+    pinned: &mut Pinned,
     depth: u32,
 ) {
+    let snapshot = templates.snapshot();
     // A type's structure is a graph, not a tree -- a signature can mention a
     // type that mentions the signature -- so the descent is bounded rather than
     // trusted. Eight is past anything a declaration in this corpus nests; the
@@ -932,7 +918,21 @@ fn unify(
         return;
     }
     if is_parameter(snapshot, generic) {
-        let actual = concrete(snapshot, actual);
+        // **A parameter some generic declares stays itself.** `call(r)` written
+        // in `outer<T extends Box>` binds `call`'s `T` to `outer`'s `T`, and
+        // what that is depends on `outer`'s copy: `Other` in `outer<Other>`,
+        // which matches `Box` only structurally, so `call<Box>` would lay out
+        // a `Box` and run `Box#m` on an `Other` (#896). Deferred below, the
+        // call names its callee's copy through each enclosing copy's own
+        // sources, the copy a direct `call(new Other(...))` names. Only a
+        // parameter no generic declares -- the polymorphic `this`, an
+        // interface's or a contextual signature's -- has no copy to read, and
+        // stands for its constraint. See [`concrete`].
+        let actual = if templates.owner_of(actual).is_some() {
+            actual
+        } else {
+            concrete(snapshot, actual)
+        };
         // **Pinned to a type parameter is pinned, one copy short.** A call
         // written inside a generic body binds the callee's `T` to the
         // enclosing `W`, or a type built from it such as `W[] | (() => W)`.
@@ -944,11 +944,11 @@ fn unify(
         // and `function_instantiations` makes one copy per instantiation of
         // whatever declares `W`. See `Templates::bindings_of`.
         if mentions_a_parameter(snapshot, actual) {
-            deferred.insert(generic, actual);
+            pinned.deferred.insert(generic, actual);
             return;
         }
         if let Some(ty) = representation(snapshot, actual) {
-            into.insert(generic, ty);
+            pinned.substitution.insert(generic, ty);
             // **The representation is not enough to name the copy.** `[number]`
             // and `[number, number]` both represent as an array of `f64` and so
             // both spell `[f64]`, which put three arities of `pack` into one
@@ -957,7 +957,7 @@ fn unify(
             // source type is kept beside the representation rather than
             // replacing it: the representation is still what decides sharing
             // for every type that has no arity.
-            sources.insert(generic, actual);
+            pinned.sources.insert(generic, actual);
         }
         return;
     }
@@ -969,15 +969,7 @@ fn unify(
         return;
     };
     if let (TypeKind::Array(inner), TypeKind::Array(against)) = (&generic.kind, &actual.kind) {
-        unify(
-            snapshot,
-            *inner,
-            *against,
-            into,
-            sources,
-            deferred,
-            depth + 1,
-        );
+        unify(templates, *inner, *against, pinned, depth + 1);
     }
     // **And through an instantiation's arguments**, which is where the rest of
     // the corpus's unpinned calls were. A parameter `stream:
@@ -998,7 +990,7 @@ fn unify(
             && ours.len() == theirs.len()
         {
             for (ours, theirs) in ours.iter().zip(theirs) {
-                unify(snapshot, *ours, *theirs, into, sources, deferred, depth + 1);
+                unify(templates, *ours, *theirs, pinned, depth + 1);
             }
         }
     }
@@ -1055,9 +1047,7 @@ fn unify(
     // then.
     if let TypeKind::Union(members) = &generic.kind {
         let members = members.clone();
-        unify_through_a_union(
-            snapshot, &members, actual_id, into, sources, deferred, depth,
-        );
+        unify_through_a_union(templates, &members, actual_id, pinned, depth);
         return;
     }
     // **Through a tuple's positions**, which is where the rest of React's hook
@@ -1076,7 +1066,7 @@ fn unify(
     {
         let (ours, theirs) = (ours.elements.clone(), theirs.elements.clone());
         for (ours, theirs) in ours.iter().zip(&theirs) {
-            unify(snapshot, *ours, *theirs, into, sources, deferred, depth + 1);
+            unify(templates, *ours, *theirs, pinned, depth + 1);
         }
     }
     if let (TypeKind::Function(generic_signature), TypeKind::Function(actual_signature)) =
@@ -1088,29 +1078,20 @@ fn unify(
         && declared.parameters.len() == resolved.parameters.len()
     {
         for (declared, resolved) in declared.parameters.iter().zip(&resolved.parameters) {
-            unify(
-                snapshot,
-                declared.ty,
-                resolved.ty,
-                into,
-                sources,
-                deferred,
-                depth + 1,
-            );
+            unify(templates, declared.ty, resolved.ty, pinned, depth + 1);
         }
         unify(
-            snapshot,
+            templates,
             declared.return_type,
             resolved.return_type,
-            into,
-            sources,
-            deferred,
+            pinned,
             depth + 1,
         );
     }
 }
 
 /// What one call binds its callee's type parameters to.
+#[derive(Default)]
 struct Pinned {
     substitution: Substitution,
     sources: Sources,
@@ -1119,39 +1100,31 @@ struct Pinned {
     deferred: Sources,
 }
 
+impl Pinned {
+    fn is_empty(&self) -> bool {
+        self.substitution.is_empty() && self.sources.is_empty() && self.deferred.is_empty()
+    }
+}
+
 /// Unify a generic signature against the one the checker resolved for a call.
 ///
 /// Lifted out of [`function_instantiations`] for length, on the seam the
 /// function already had: everything here is about one call's *arguments*, and
 /// everything left is about what to do with the answer.
 fn pin_down(
-    snapshot: &SemanticSnapshot,
+    templates: &Templates<'_>,
     generic: &SignatureRecord,
     actual: &SignatureRecord,
 ) -> Pinned {
-    let mut pinned = Pinned {
-        substitution: Substitution::default(),
-        sources: Sources::default(),
-        deferred: Sources::default(),
-    };
+    let mut pinned = Pinned::default();
     for (parameter, argument) in generic.parameters.iter().zip(&actual.parameters) {
-        unify(
-            snapshot,
-            parameter.ty,
-            argument.ty,
-            &mut pinned.substitution,
-            &mut pinned.sources,
-            &mut pinned.deferred,
-            0,
-        );
+        unify(templates, parameter.ty, argument.ty, &mut pinned, 0);
     }
     unify(
-        snapshot,
+        templates,
         generic.return_type,
         actual.return_type,
-        &mut pinned.substitution,
-        &mut pinned.sources,
-        &mut pinned.deferred,
+        &mut pinned,
         0,
     );
     pinned
@@ -1387,6 +1360,12 @@ impl Bindings {
 /// single JavaScript function does. What is lost is TypeScript's tracking of
 /// the subclass through the *return* type, and that costs nothing here: the
 /// pointer is the same and any member reached through it is at a prefix offset.
+///
+/// **Only for a parameter no generic declares.** A *declared* parameter's
+/// constraint is not what it stands for: `outer<T extends Box>` copied at an
+/// `Other` that matches `Box` only structurally holds an `Other`, and one copy
+/// over `Box` would read it as a `Box`. [`unify`] defers such a parameter to
+/// the enclosing copy instead, and asks this only of the rest.
 ///
 /// Bounded rather than followed to a fixed point. A constraint that is itself a
 /// parameter is a genuinely unbound one -- `<T extends U, U>` -- and belongs in

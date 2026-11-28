@@ -120,3 +120,5 @@ a-class-whose-constants-are-prototype-getters 2 the readonly-tuple destructuring
 awfy-dictionary-hole-slots 13 the SOM Dictionary machinery it exercises (generic copies over K/V and the E[]|null storage) refuses around it; the three exported arms compile and agree
 a-closure-calling-a-throwing-generic-method-inside-a-try 2 the unspecialized `Picker#pick` and `Picker.first`, kept for calls that pin nothing, refuse as before; every exported arm calls a pinned instance and agrees
 a-closure-calling-a-throwing-generic-method-inside-a-try-control 2 the same two unspecialized bodies as the fixture it controls
+a-generic-method-calling-a-generic-pins-the-bound-for-a-structural-argument-control 1 the unspecialized `Forward#outer`, kept for its slot, has no representation for `r: T`; its pinned copy is what both exports call, and they agree
+a-forwarding-generic-stored-as-a-typed-callback 1 `outer`'s erased fallback forwards `T` as `erased`, and `call<erased>` has no method table for `r.m()`; the export calls the value-context copy and agrees (before #896 the fallback handed `erased` to the bound's copy unchecked)

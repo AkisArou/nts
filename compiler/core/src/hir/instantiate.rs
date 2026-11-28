@@ -323,6 +323,12 @@ impl<'a> Templates<'a> {
         }
     }
 
+    /// The snapshot these generics are of.
+    #[must_use]
+    pub fn snapshot(&self) -> &'a SemanticSnapshot {
+        self.snapshot
+    }
+
     /// The single generic whose parameters `ty` mentions.
     ///
     /// Asked by the caller of [`Self::bindings_of`], which answers for a class
