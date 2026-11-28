@@ -1083,7 +1083,9 @@ including shell calls; isolated cache-pruning controls are classified separately
 because they manufacture obsolete artifacts intentionally.
 
 The local Rust input census uses
-`node tooling/landing/check.ts rerun <id> --step tests --trace-rust-inputs`.
+`node tooling/landing/check.ts rerun <id> --step tests --trace-rust-inputs`,
+so it needs a refused or held landing that ran `tests`; it traces that step
+at the caller's HEAD.
 Cargo's artifact report binds each executable to its target source. Temporary
 doctest executables run during the original Cargo/rustdoc lifetime; only
 profile-owned binaries are recorded for the workspace replay.
