@@ -71,7 +71,7 @@ if [ "$1" = --call ]; then
     always-pressure) instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
     hung) instrument "NOT RUN" hung "no progress for 600 s" ;;
     stuck) echo "  $step: waits for ever"; : > "$controls/$step.started"; exec tail -f /dev/null ;;
-    fail-after-*) other=\${control#fail-after-}; while [ ! -e "$controls/$other.started" ]; do sleep 0.05; done; echo "  $step: a recorded case went wrong"; date +%s%N > "$controls/$step.failed"; exit 1 ;;
+    fail-after-*) other=\${control#fail-after-}; while [ ! -e "$controls/$other.started" ]; do sleep 0.05; done; echo "  $step: a recorded case went wrong"; exit 1 ;;
   esac
 fi
 exec node "$(dirname "$0")/run.mjs" "$@"

@@ -22,8 +22,7 @@ import {hostObservations} from '../gate/host-observations.ts';
 import {ownMemory} from '../gate/test-memory.ts';
 import { fixture } from './run-fixture.ts';
 import { runLanding, type RunOptions } from './run.ts';
-import { rerunIn } from './check.ts';
-import { recordedHost } from './rerun.ts';
+import { recordedHost, rerunIn } from './rerun.ts';
 import { gitArguments } from '../gate/git-arguments/main.ts';
 import { installationCatalogPath, installationCatalogState } from '../inputs/dependency-inputs.ts';
 
@@ -225,7 +224,7 @@ async function rerunFixture(t: TestContext, r: Awaited<ReturnType<typeof refused
   try {
     const status = await rerunIn(r.f.tree, r.f.tree, id, step, false, new AbortController().signal, {
       home: r.home, owned: r.f.options([]).owned,
-      runSteps: options => { requests.push(options); return runLanding({ ...options, build: r.f.options([]).build }); },
+      runSteps: (options: RunOptions) => { requests.push(options); return runLanding({ ...options, build: r.f.options([]).build }); },
     });
     return { status, out: lines.join("\n"), requests };
   } finally { log.mock.restore(); }

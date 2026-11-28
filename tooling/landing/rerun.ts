@@ -19,13 +19,25 @@
 // It checks the caller's HEAD, and says whether that is the refused tip's
 // tree (a reproduction) or another one (the caller's own change, such as a
 // fix).
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertLandingEnvironment } from "../gate/canonical-environment.ts";
+import { gateEnvironmentError } from "../gate/environment.ts";
+import { gitArguments } from "../gate/git-arguments/main.ts";
 import { HOST_CAPABILITIES } from "../gate/host-environment.ts";
+import { hostObservations } from "../gate/host-observations.ts";
+import { landingCeiling } from "../gate/step-bound.ts";
+import { COST_HISTORY_NAME, historyFile, snapshotCostHistory } from "../gate/step-scheduling.ts";
+import { liveTreeRunLock, treeRunLockPath } from "../gate/tree-run-lock.ts";
+import { installationCatalogState } from "../inputs/dependency-inputs.ts";
+import { LANDING_HOME } from "./layout.ts";
 import { Queue, type Result } from "./queue.ts";
-import type { Ran } from "./run.ts";
+import { runLanding, type Ran } from "./run.ts";
+import { KEEP_DAYS, prune } from "./service.ts";
 import { treeOf, revParse, type Git } from "./git.ts";
+
+const say = (line: string) => console.log(`landing: ${line}`);
 
 /** Capabilities the canonical environment derives from the tree itself: never taken from a record. */
 const DERIVED = new Set(["NTS_ORACLE_TYPESCRIPT", "NTS_ORACLE_DEPENDENCIES"]);
@@ -112,4 +124,43 @@ export function describeRerun(plan: RerunPlan, step: string): string {
     : `HEAD ${short(plan.commit)}; ${plan.result.id} recorded no tip`;
   const scopes = plan.recorded.scopes ? "" : "; the landing recorded no narrowing, so the step runs whole";
   return `rerun ${step} of ${plan.result.id} (${plan.result.state}): ${against}; environment ${plan.source === "recorded" ? "as the landing's runner recorded it" : "the caller's (the landing started no runner)"}${scopes}`;
+}
+
+/** Why a rerun cannot start on `tree`'s installation catalog, or null when it is current or the tree installs nothing. */
+export function catalogRefusal(root: string, tree: string): string | null {
+  let state: ReturnType<typeof installationCatalogState>;
+  try { state = installationCatalogState(root, tree); }
+  catch (error) { return `rerun cannot read this tree's installation catalog: ${(error as Error).message}`; }
+  return state.state === "stale" ? `rerun runs on this tree's installed packages, and ${state.message}` : null;
+}
+
+/** The rerun itself, in `tree`, under its resource lock the caller holds. Tests supply the runner, the landing home and owned controls. */
+export async function rerunIn(root: string, tree: string, id: string, step: string, traceRustInputs: boolean, signal: AbortSignal,
+  options: { runSteps?: typeof runLanding; home?: string; owned?: Record<string, string>; caller?: NodeJS.ProcessEnv } = {}): Promise<number> {
+  const home = options.home ?? LANDING_HOME, caller = options.caller ?? process.env;
+  const dirty = spawnSync("git", gitArguments(["status", "--porcelain", "--untracked-files=normal"]), { cwd: tree, encoding: "utf8" }).stdout.trim();
+  if (dirty) { say(`rerun checks a commit, and this tree has uncommitted changes:\n${dirty}`); return 2; }
+  let plan: ReturnType<typeof planRerun>;
+  try { plan = planRerun({ home, id, step, git: { root }, head: revParse({ root: tree }, "HEAD"), caller }); }
+  catch (error) { say(`rerun: ${(error as Error).message}`); return 2; }
+  const refusal = catalogRefusal(root, tree);
+  if (refusal) { say(refusal); return 2; }
+  const path = treeRunLockPath(tree), owner = liveTreeRunLock(path);
+  if (owner) { say(`the gate runner (pid ${owner.pid}, logs ${owner.run}) owns ${path}`); return 3; }
+  const missing = gateEnvironmentError(tree, plan.steps.filter(name => name !== "build"), plan.interop, plan.env);
+  if (missing) { say(missing); return 2; }
+  prune(join(home, "runs"), KEEP_DAYS);
+  const run = join(home, "runs", `rerun-${id}-${step}-${hostObservations({ ...caller, ...options.owned }).wallNow()}`);
+  if (traceRustInputs) snapshotCostHistory(historyFile({ CARGO_TARGET_DIR: join(tree, "target") }, tree), join(run, "observation-costs", COST_HISTORY_NAME));
+  say(`${describeRerun(plan, step)}; runs ${plan.steps.join(" ")}; logs ${run}`);
+  const ran = await (options.runSteps ?? runLanding)({
+    tree, target: join(tree, "target"), run, commit: plan.commit, steps: plan.steps, interop: plan.interop, doctests: plan.doctests,
+    priority: "agent", signal, env: plan.env,
+    ...(plan.result.estimate_s !== undefined ? { ceiling: landingCeiling(plan.result.estimate_s) } : {}),
+    owned: { ...(traceRustInputs ? { NTS_RUST_INPUT_TRACE: join(run, "rust-inputs"), NTS_GATE_COSTS_DIR: join(run, "observation-costs") } : {}), ...options.owned },
+    hold: reason => say(`held: ${reason}`),
+  });
+  for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}${s.log ? `  log ${s.log}` : ""}`);
+  say(`${ran.state} in ${Math.round(ran.wall_s)} s: ${ran.message}; nothing was queued or landed`);
+  return ran.state === "green" ? 0 : ran.state === "held" ? 3 : 1;
 }

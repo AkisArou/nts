@@ -30,19 +30,14 @@ import { ensureService, LANDING_HOME, Queue, submit, type Result } from "./queue
 import {landingStatus,reportLandingStatus} from "./status.ts";
 import {Pool,POOL_HOME,registeredRunTrees} from "./pool.ts";
 import { ruleSelect } from "./rules.ts";
-import { runLanding } from "./run.ts";
-import { landingCeiling } from "../gate/step-bound.ts";
 import { describeSelection } from "./selection.ts";
 import { closeSelection, holdSelection, SELECTION_RANK } from "./selection-memory.ts";
 import type { Selected } from "./service.ts";
-import { BUDGET, drain, KEEP_DAYS, machineConfig, prune } from "./service.ts";
-import {COST_HISTORY_NAME,historyFile,snapshotCostHistory} from '../gate/step-scheduling.ts';
+import { BUDGET, drain, machineConfig } from "./service.ts";
 import {reportRustRecordDecisions} from '../gate/rust-selector-decision.ts';
-import {installationCatalogState} from '../inputs/dependency-inputs.ts';
 import { registerCommandCloser } from '../differential/command-entry/main.ts';
 import { GateResource } from '../gate/gate-resource.ts';
-import { liveTreeRunLock, treeRunLockPath } from '../gate/tree-run-lock.ts';
-import { describeRerun, planRerun } from './rerun.ts';
+import { rerunIn } from './rerun.ts';
 
 const say = (line: string) => console.log(`landing: ${line}`);
 const short = (sha: string) => sha.slice(0, 12);
@@ -101,14 +96,6 @@ function rankAgentWork(mode: "rerun" | "--dry-run"): number | undefined {
   return 2;
 }
 
-/** Why a rerun cannot start on `tree`'s installation catalog, or null when it is current or the tree installs nothing. */
-export function catalogRefusal(root: string, tree: string): string | null {
-  let state: ReturnType<typeof installationCatalogState>;
-  try { state = installationCatalogState(root, tree); }
-  catch (error) { return `rerun cannot read this tree's installation catalog: ${(error as Error).message}`; }
-  return state.state === "stale" ? `rerun runs on this tree's installed packages, and ${state.message}` : null;
-}
-
 /**
  * `rerun <id> --step <name>`: one step of a refused or held landing, run again
  * in this pool tree at its HEAD, as the landing ran it (rerun.ts). It answers
@@ -133,37 +120,6 @@ async function rerun(root: string, id: string, step: string, traceRustInputs: bo
   } finally {
     try { resource.close(); } finally { finished(); unregister(); }
   }
-}
-
-/** The rerun itself, in `tree` under its resource lock. Exported for its tests, which supply the runner and landing home. */
-export async function rerunIn(root: string, tree: string, id: string, step: string, traceRustInputs: boolean, signal: AbortSignal,
-  options: { runSteps?: typeof runLanding; home?: string; owned?: Record<string, string> } = {}): Promise<number> {
-  const home = options.home ?? LANDING_HOME;
-  const dirty = spawnSync("git", gitArguments(["status", "--porcelain", "--untracked-files=normal"]), { cwd: tree, encoding: "utf8" }).stdout.trim();
-  if (dirty) { say(`rerun checks a commit, and this tree has uncommitted changes:\n${dirty}`); return 2; }
-  let plan: ReturnType<typeof planRerun>;
-  try { plan = planRerun({ home, id, step, git: { root }, head: revParse({ root: tree }, "HEAD"), caller: process.env }); }
-  catch (error) { say(`rerun: ${(error as Error).message}`); return 2; }
-  const refusal = catalogRefusal(root, tree);
-  if (refusal) { say(refusal); return 2; }
-  const path = treeRunLockPath(tree), owner = liveTreeRunLock(path);
-  if (owner) { say(`the gate runner (pid ${owner.pid}, logs ${owner.run}) owns ${path}`); return 3; }
-  const missing = gateEnvironmentError(tree, plan.steps.filter(name => name !== "build"), plan.interop, plan.env);
-  if (missing) { say(missing); return 2; }
-  prune(join(home, "runs"), KEEP_DAYS);
-  const run = join(home, "runs", `rerun-${id}-${step}-${Date.now()}`);
-  if (traceRustInputs) snapshotCostHistory(historyFile({ CARGO_TARGET_DIR: join(tree, "target") }, tree), join(run, "observation-costs", COST_HISTORY_NAME));
-  say(`${describeRerun(plan, step)}; runs ${plan.steps.join(" ")}; logs ${run}`);
-  const ran = await (options.runSteps ?? runLanding)({
-    tree, target: join(tree, "target"), run, commit: plan.commit, steps: plan.steps, interop: plan.interop, doctests: plan.doctests,
-    priority: "agent", signal, env: plan.env,
-    ...(plan.result.estimate_s !== undefined ? { ceiling: landingCeiling(plan.result.estimate_s) } : {}),
-    owned: { ...(traceRustInputs ? { NTS_RUST_INPUT_TRACE: join(run, "rust-inputs"), NTS_GATE_COSTS_DIR: join(run, "observation-costs") } : {}), ...options.owned },
-    hold: reason => say(`held: ${reason}`),
-  });
-  for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}${s.log ? `  log ${s.log}` : ""}`);
-  say(`${ran.state} in ${Math.round(ran.wall_s)} s: ${ran.message}; nothing was queued or landed`);
-  return ran.state === "green" ? 0 : ran.state === "held" ? 3 : 1;
 }
 
 async function wait(root: string, id: string): Promise<number> {

@@ -152,11 +152,10 @@ test("the first red step cancels the running rest within the bound, and every ro
   f.control("outcomes", "fail-after-examples");
   const ran = await runLanding(f.options(["build", "examples", "outcomes"]));
   assert.equal(ran.state, "red", ran.message);
-  // The stuck step was running when outcomes failed, and was killed, not waited for.
-  const failedAt = BigInt(readFileSync(join(f.controls, "outcomes.failed"), "utf8").trim());
-  const sinceFail = Number(BigInt(Date.now()) * 1_000_000n - failedAt) / 1e9;
-  assert.ok(sinceFail < 30, `the run ended ${sinceFail.toFixed(1)} s after the first FAIL; the bound is 30 s`);
+  // The stuck step was running before outcomes failed (outcomes waits for it),
+  // and was killed, not waited for: its whole run is within the bound.
   const examples = ran.steps.find(s => s.name === "examples")!;
+  assert.ok(examples.wall !== undefined && examples.wall < 30, `the cancelled step ran ${examples.wall} s; the bound after the first FAIL is 30 s`);
   assert.equal(examples.verdict, "NOT RUN");
   assert.equal(examples.cancelledBy, "outcomes");
   assert.equal(examples.reason, "cancelled: outcomes FAIL");
