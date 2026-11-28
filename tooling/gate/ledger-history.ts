@@ -32,11 +32,12 @@
 //   steps' grants above their own peaks are summed over their wall time.
 //   The same wait is often copied into several logs; each is counted once.
 //
-// `--since` keeps history records at or after that time, log files written
-// at or after it (a log written across it counts as after), and gate runs
-// started at or after it; a commit means its commit time. Nothing is written.
+// `--since` keeps history records at or after that time, log files created
+// at or after it (a log's lines carry no time, so one begun before holds
+// earlier waits and is left out), and gate runs started at or after it; a
+// commit means its commit time. Nothing is written.
 import { execFileSync } from "node:child_process";
-import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -359,9 +360,12 @@ function* files(root: string): Generator<string> {
   }
 }
 
-function* ledgerLines(paths: readonly string[], source: string): Generator<{ source: string; text: string }> {
+function* ledgerLines(paths: readonly string[], source: string, gone: string[]): Generator<{ source: string; text: string }> {
   for (const path of paths) {
-    const buffer = readFileSync(path);
+    let buffer: Buffer;
+    // Other work's scratch comes and goes while the replay reads it.
+    try { buffer = readFileSync(path); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; gone.push(path); continue; }
     if (buffer.indexOf("memory: ") < 0) continue;
     // From one occurrence to the next: the lines between hold none.
     for (let at = buffer.indexOf("memory: "); at >= 0;) {
@@ -397,10 +401,12 @@ function main(argv: readonly string[]): void {
   for (const root of roots) for (const path of files(root)) {
     if (path.endsWith("/summary.json")) {
       try { const run = gateRun(realpathSync(dirname(path)), JSON.parse(readFileSync(path, "utf8"))); if (run !== null) runs.set(run.path, run); } catch { /* not a gate run's summary */ }
-    } else if (/\.(log|txt)$/.test(path) && !lstatSync(path).isSymbolicLink() && (since === null || statSync(path).mtimeMs >= since)) logs.push(path);
+    } else if (/\.(log|txt)$/.test(path) && (since === null || (statSync(path, { throwIfNoEntry: false })?.birthtimeMs ?? -Infinity) >= since)) logs.push(path);
   }
   const read = readLedgerHistory(history);
-  const report = replay({ records: read.records, unread: read.unread.length, logs: logEpisodes(ledgerLines(logs, "")), files: logs.length, runs, since });
+  const gone: string[] = [];
+  const episodes = logEpisodes(ledgerLines(logs, "", gone));
+  const report = replay({ records: read.records, unread: read.unread.length, logs: episodes, files: logs.length - gone.length, runs, since });
   process.stdout.write(json ? `${JSON.stringify(report, null, 1)}\n` : `${formatReport(report)}\n`);
 }
 
