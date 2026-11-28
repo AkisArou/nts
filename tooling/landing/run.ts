@@ -15,9 +15,9 @@ import type {StepDiagnostics} from '../gate/step-result.ts';
 // **Memory is the machine's memory ledger's to give** (tooling/gate/
 // memory-ledger.ts), at the priority the caller names (NTS_MEMORY_PRIORITY):
 // the service's runs at the landing priority, ahead of agents' work and the
-// full check, and an agent's own `--here` pre-check at the agent priority, so
-// a queued landing takes the memory a pre-check reserved but does not use
-// instead of waiting at one priority for the pre-check to finish (#672). The
+// full check, and an agent's own `check.ts rerun` at the agent priority, so
+// a queued landing takes the memory a rerun reserved but does not use
+// instead of waiting at one priority for the rerun to finish (#672). The
 // build waits its turn for what this tree's landing builds held, in a
 // reservation this process holds; the runner's first request takes it over,
 // and the runner holds the steps'.
@@ -27,6 +27,17 @@ import type {StepDiagnostics} from '../gate/step-result.ts';
 // whose reservation waits until memory allows, keeping every result that
 // completed. Any other unfinished measurement holds the change for a person;
 // only a step that ran and failed refuses it.
+//
+// **A landing stops at its first red step.** The runner runs with
+// NTS_GATE_FAIL_FAST, so the first step that runs and FAILs stops the run:
+// steps still waiting never start, and every running step's scope is killed
+// (SIGKILL to its whole cgroup) and drained, each drain bounded by the step
+// scope's own 30 s (scopes/step-scope.ts), so the run ends within about 30 s of
+// that FAIL. Only a FAIL stops it: memory pressure, a step at its time bound and
+// every other INSTRUMENT verdict end their own step and leave the rest running.
+// A cancelled step keeps the log it wrote until the kill, and its row names the
+// step whose FAIL cancelled it. The full check runs every step: its culprit
+// search needs each red.
 //
 // Lines a check prints for a case its record has no row for yet, or for a
 // recorded case that got better (tooling/records/pending.ts), are listed as
@@ -68,6 +79,8 @@ export type StepResult = {
   name: string; verdict: "PASS" | "FAIL" | "INSTRUMENT" | "SKIPPED" | "NOT RUN"; reason?: string;
   /** A NOT RUN row's cause: the preparation step whose verdict stopped it. */
   needs?: string;
+  /** A NOT RUN row's cause: the step whose FAIL cancelled it (fail-fast). */
+  cancelledBy?: string;
   cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; accepted?: boolean; attempt?: number;
   instrument?: { kind?: string; verdict?: string; completedFailures?: number;disk?:DiskBuildRefusal };
   binaries?: BinaryIdentities;
@@ -75,6 +88,8 @@ export type StepResult = {
   preparation?:Pick<StepResult,'verdict'|'cpu'|'cpu_measure'|'wall'|'log'|'attempt'>;
 };
 export type Ran = { state: "green" | "red" | "held" | "cancelled"; message: string; run: string; steps: StepResult[]; pending: string[]; refresh: string[]; wall_s: number;
+  /** The narrowing the rules chose, so `check.ts rerun` runs a step as the landing did. */
+  scopes?: { interop: string | null; doctests: string | null };
   rustRecords?:RustRecordDecisionAtRevision[];
   contract?: VerdictContract; binaries?: BinaryIdentities };
 export type RunOptions = {
@@ -85,7 +100,7 @@ export type RunOptions = {
   interop?: string | null; doctests?: string | null;
   /** The launcher's environment: only its host capabilities reach a step. */
   env?: NodeJS.ProcessEnv;
-  /** The priority this run reserves memory at: the service's landings by default; `check.ts --here` names an agent's. */
+  /** The priority this run reserves memory at: the service's landings by default; `check.ts rerun` names an agent's. */
   priority?: Priority;
   /**
    * The caller's selection reservation (selection-memory.ts), handed on with
@@ -108,8 +123,6 @@ export type RunOptions = {
   ceiling?: number;
   /** A submission's durable withdrawal watch, never an environment policy. */
   signal?:AbortSignal;
-  /** An in-place --here checkout's resource lock, lent to its candidate children. */
-  treeLock?: number;
   /** Report retained ownership while cancellation has not proved its drain. */
   cancellationHold?:(reason:string)=>void;
   /** A repeated durable withdrawal wakes certification after a failed drain. */
@@ -154,7 +167,7 @@ async function certifyDrain(options:RunOptions,check:()=>void|Promise<void>):Pro
 
 async function runCandidate(options:RunOptions,node:string,request:Parameters<typeof candidateCommandAsync>[1],launcher:NodeJS.ProcessEnv,gate=false,log?:string){
   options.signal?.throwIfAborted();
-  const result=await candidateCommandAsync(node,request,launcher,{signal:options.signal,treeLock:options.treeLock,retainDrain:true,groupDirectory:join(options.run,'candidate-groups'),cancelled:()=>options.cancellationHold?.('waiting for the owned candidate command and its children to close')});
+  const result=await candidateCommandAsync(node,request,launcher,{signal:options.signal,retainDrain:true,groupDirectory:join(options.run,'candidate-groups'),cancelled:()=>options.cancellationHold?.('waiting for the owned candidate command and its children to close')});
   await certifyDrain(options,()=>result.certifyDrain?.());
   if(result.cancelled){
     if(log)appendFileSync(log,`${result.stdout??''}${result.stderr??''}`);
@@ -192,6 +205,25 @@ export async function recoverLandingCancellation(options:RunOptions):Promise<voi
   }finally{lifetime.complete();}
 }
 
+/** The runner's interruption when NTS_GATE_FAIL_FAST stopped it (run.mjs's stop()). A later signal replaces it with its own. */
+export const FAIL_FAST_STOP = "NTS_GATE_FAIL_FAST: a step failed";
+
+/**
+ * Why a landing was cancelled, in words: a withdrawal, the landing process's
+ * own signal or failure (command-entry's CloseReason), or an error's message.
+ */
+export function cancelReason(reason: unknown): string {
+  if (reason instanceof WithdrawalRequested) return reason.message;
+  if (reason instanceof Error) return reason.message;
+  if (reason && typeof reason === "object" && "kind" in reason) {
+    const close = reason as { kind: unknown; signal?: unknown; error?: unknown };
+    if (close.kind === "signal") return `the landing process received ${String(close.signal)}`;
+    if (close.kind === "failure") return `the landing process failed${close.error === undefined ? "" : `: ${close.error instanceof Error ? close.error.message : String(close.error)}`}`;
+  }
+  if (typeof reason === "string") return reason;
+  try { return JSON.stringify(reason) ?? String(reason); } catch { return String(reason); }
+}
+
 /** The workers a landing build is sized by: the gate's build step's, its row's slots. */
 const BUILD_WIDTH = STEPS.find(row => row.name === "build")!.slots;
 
@@ -211,7 +243,7 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
   return own;
 }
 
-/** The run's rank, for memory and CPU alike (gate/ranks.ts): the service's landings', or the caller's (`check.ts --here` names an agent's). */
+/** The run's rank, for memory and CPU alike (gate/ranks.ts): the service's landings', or the caller's (`check.ts rerun` names an agent's). */
 const runRank = (options: Pick<RunOptions, "priority">): Priority => options.priority ?? "landing";
 
 export async function runLanding(options: RunOptions): Promise<Ran> {
@@ -230,6 +262,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
   let probeContract: (() => Promise<VerdictContract | undefined>) | undefined;
   const finish = (state: Ran["state"], message: string): Ran => {
     const ran: Ran = { state, message, run, steps: results, ...recordLines(run), wall_s: (clock.wallNow() - started) / 1000,
+      scopes: { interop: options.interop ?? null, doctests: options.doctests ?? null },
       ...(rustRecords?{rustRecords}:{}),
       };
     return ran;
@@ -245,6 +278,8 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
       NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
       ...(options.steps.includes('doctests')?{NTS_BUILD_DOCTESTS:'1',NTS_DOCTEST_PREPARATION:join(run,'doctest-build.json')}:{}),
       ...STANDING_GATE_POLICY,
+      // The first red step ends the landing: the rest are cancelled, not waited for.
+      NTS_GATE_FAIL_FAST: "1",
       NTS_MEMORY_PRIORITY: runRank(options),
       // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
       ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),
@@ -344,7 +379,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
   try{ran=await execute();}
   catch(error){
     if(!options.signal?.aborted)throw error;
-    ran=finish(options.signal.reason instanceof WithdrawalRequested?'cancelled':'held',`cancelled and drained: ${String(options.signal.reason)}`);
+    ran=finish(options.signal.reason instanceof WithdrawalRequested?'cancelled':'held',`cancelled and drained: ${cancelReason(options.signal.reason)}`);
   }
   let completed:VerdictContract|undefined;
   try{
@@ -352,7 +387,7 @@ async function runLandingOwned(options:RunOptions,lifetime:RunLifetime):Promise<
     completed=ran.state==='green'&&contract?await probeContract?.():undefined;
   }catch(error){
     if(!options.signal?.aborted)throw error;
-    ran=finish(options.signal.reason instanceof WithdrawalRequested?'cancelled':'held',`cancelled and drained: ${String(options.signal.reason)}`);
+    ran=finish(options.signal.reason instanceof WithdrawalRequested?'cancelled':'held',`cancelled and drained: ${cancelReason(options.signal.reason)}`);
   }
   if(ran.state==='green'&&contract&&completed?.identity!==contract.identity){
     appendFileSync(join(run,'verdict-contract.log'),'landing verdict contract changed or became unavailable during the check\n');
@@ -389,7 +424,15 @@ async function finishSteps(options: RunOptions, node: string, launcher: NodeJS.P
   }
   results.push(...rest.map(step => rows.get(step) ?? { name: step, verdict: "NOT RUN" as const, reason: "the runner did not report it" }));
   const failed = results.filter(r => r.verdict === "FAIL" || (r.verdict === "SKIPPED" && !r.accepted));
-  if (failed.length) return finish("red", `${failed.map(r => `${r.name} ${r.verdict}`).join(", ")}; logs ${options.run}`);
+  const cancelled = results.filter(r => r.verdict === "NOT RUN" && r.cancelledBy);
+  if (failed.length) {
+    // The first red step and its log first: the one-line views show the start.
+    const [first, ...others] = failed;
+    return finish("red", [`${first!.name} ${first!.verdict}; log ${first!.log ?? options.run}`,
+      ...(others.length ? [`also ${others.map(r => `${r.name} ${r.verdict}`).join(", ")}`] : []),
+      ...(cancelled.length ? [`cancelled ${cancelled.length} step(s): ${cancelled.map(r => r.name).join(" ")}`] : []),
+      `logs ${options.run}`].join("; "));
+  }
   const unfinished = results.filter(r => r.verdict !== "PASS" && !(r.verdict === "SKIPPED" && r.accepted));
   if (unfinished.length) return finish("held", unfinished.map(r => `${r.name} ${r.verdict}: ${r.reason ?? "did not finish"}`).join("; "));
   return finish("green", "green");
@@ -461,8 +504,24 @@ async function buildCompilerAdmitted(options: RunOptions, node: string, launcher
   return { name, verdict: "PASS", ...measured, ...(binaries?{binaries}:{}) };
 }
 
+/**
+ * What interrupted a gate run, from its summary. Fail-fast's own stop is a
+ * verdict: a step ran to its end and FAILed (a step the stop killed is NOT
+ * RUN, never FAIL). Any other interruption -- a signal, which a withdrawal
+ * delivers, or a later signal during fail-fast's drain, which replaces its
+ * reason -- holds the run, whatever FAILed before it.
+ */
+export function gateInterruption(summary: Pick<Summary, "interrupted" | "fail_fast" | "steps">): { state: "none" } | { state: "fail-fast"; first: string } | { state: "held"; reason: string } {
+  if (summary.interrupted == null) return { state: "none" };
+  if (summary.fail_fast === true && summary.interrupted === FAIL_FAST_STOP) {
+    const first = summary.steps?.find(row => row.verdict === "FAIL");
+    return first ? { state: "fail-fast", first: first.name } : { state: "held", reason: "the run was stopped by fail-fast with no step FAIL" };
+  }
+  return { state: "held", reason: `the run was interrupted: ${cancelReason(summary.interrupted)}` };
+}
+
 type Summary = { identities?: { commit?: string | null; nts?: { sha256?: string | null }; nts_suite?: { sha256?: string | null } };
-  interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[];scope_cleanup?:{state:string};diagnostics?:{state:string} };
+  interrupted?: unknown; fail_fast?: boolean; environment?: { canonical?: boolean }; steps?: StepResult[];scope_cleanup?:{state:string};diagnostics?:{state:string} };
 async function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): Promise<{ rows: StepResult[] } | { held: string }> {
   mkdirSync(dir, { recursive: true });
   const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")], { rank: runRank(options), env: launcher });
@@ -473,9 +532,14 @@ async function runSteps(options: RunOptions, node: string, launcher: NodeJS.Proc
   catch (error) { return { held: `the runner left no readable summary (${r.signal ?? `exit ${r.status}`}): ${String(error)}; see ${join(dir, "gate.log")}` }; }
   if (!Array.isArray(summary.steps)) return { held: `the summary lists no steps; see ${dir}` };
   if (summary.identities?.commit !== options.commit) return { held: `the summary names ${summary.identities?.commit ?? "no commit"}, not ${options.commit.slice(0, 12)}` };
-  if (summary.interrupted != null) return { held: `the run was interrupted: ${String(summary.interrupted)}` };
+  const interruption = gateInterruption(summary);
+  if (interruption.state === "held") return { held: interruption.reason };
   if (summary.environment?.canonical !== true) return { held: "the run's environment was not canonical" };
   const rows = summary.steps.filter(row => steps.includes(row.name));
+  if (interruption.state === "fail-fast") {
+    const first = interruption.first;
+    for (const row of rows) if (row.verdict === "NOT RUN" && row.name !== first) Object.assign(row, { cancelledBy: first, reason: `cancelled: ${first} FAIL` });
+  }
   for (const step of steps) if (!rows.some(row => row.name === step)) rows.push({ name: step, verdict: "NOT RUN", reason: "the runner did not report it" });
   const binaries = options.steps.includes('build')&&summary.identities?.nts ? {
     nts: summary.identities.nts.sha256 ?? null, "nts-suite": summary.identities.nts_suite?.sha256 ?? null,

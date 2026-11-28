@@ -120,7 +120,7 @@ test("an inner gate run whose reading has no room for it waits in its own ledger
 // draws on the holder's unused reservation instead: the one its environment
 // names, as when admit.ts becomes the run's shell, or else its nearest
 // ancestor process's, as when a launcher's canonical environment dropped the
-// name (inner.ts, check.ts --here).
+// name (inner.ts, check.ts rerun).
 test("a holder at an agent's priority starts a gate run that needs more than the room beside it: the run is admitted inside the holder's reservation", async t => {
   for (const [how, command] of [
     ["named in the run's environment", '"$0" "$1"'],

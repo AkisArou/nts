@@ -9,7 +9,8 @@ import {createHash} from "node:crypto";
 import {join} from "node:path";
 import {ENVIRONMENT_EXPERIMENT,gateEnvironment} from '../gate/canonical-environment.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
-import {launcherEnvironment,PROFILE,runLanding} from "./run.ts";
+import {cancelReason,FAIL_FAST_STOP,gateInterruption,launcherEnvironment,PROFILE,runLanding} from "./run.ts";
+import {WithdrawalRequested} from './withdrawal-watch.ts';
 import {fixture} from './run-fixture.ts';
 import {spawnTest} from "../gate/test-wait.ts";
 import {TEST_PROFILE_MANIFEST} from '../gate/test-profile.ts';
@@ -136,13 +137,54 @@ test("a failing build refuses the change, and nothing after it runs", async t =>
   assert.deepEqual(f.calls(), []);
 });
 
-test("a failing step refuses the change and names itself", async t => {
+test("a failing step refuses the change and names itself and its log first", async t => {
   const f = fixture(t);
   f.control("outcomes", "fail");
   const ran = await runLanding(f.options(["build", "examples", "outcomes"]));
   assert.equal(ran.state, "red");
-  assert.match(ran.message, /^outcomes FAIL; logs /);
-  assert.equal(ran.steps.find(s => s.name === "examples")?.verdict, "PASS");
+  assert.match(ran.message, /^outcomes FAIL; log \S*outcomes\.log; /);
+  assert.match(ran.message, /; logs \S+$/);
+});
+
+test("the first red step cancels the running rest within the bound, and every row and log stays readable", async t => {
+  const f = fixture(t);
+  f.control("examples", "stuck");
+  f.control("outcomes", "fail-after-examples");
+  const ran = await runLanding(f.options(["build", "examples", "outcomes"]));
+  assert.equal(ran.state, "red", ran.message);
+  // The stuck step was running when outcomes failed, and was killed, not waited for.
+  const failedAt = BigInt(readFileSync(join(f.controls, "outcomes.failed"), "utf8").trim());
+  const sinceFail = Number(BigInt(Date.now()) * 1_000_000n - failedAt) / 1e9;
+  assert.ok(sinceFail < 30, `the run ended ${sinceFail.toFixed(1)} s after the first FAIL; the bound is 30 s`);
+  const examples = ran.steps.find(s => s.name === "examples")!;
+  assert.equal(examples.verdict, "NOT RUN");
+  assert.equal(examples.cancelledBy, "outcomes");
+  assert.equal(examples.reason, "cancelled: outcomes FAIL");
+  assert.match(readFileSync(examples.log!, "utf8"), /examples: waits for ever/, "the cancelled step's log keeps what it wrote");
+  assert.match(ran.message, /^outcomes FAIL; log \S*outcomes\.log; cancelled 1 step\(s\): examples; logs /);
+  const recorded = JSON.parse(readFileSync(join(f.run, "landing.json"), "utf8"));
+  assert.equal(recorded.message, ran.message);
+  assert.equal(recorded.steps.find((s: { name: string }) => s.name === "examples").reason, "cancelled: outcomes FAIL");
+  assert.doesNotMatch(readFileSync(join(f.run, "landing.json"), "utf8"), /\[object Object\]/);
+});
+
+test("only a runner stopped by its own fail-fast is a verdict; any other interruption holds", () => {
+  const failed = [{ name: "examples", verdict: "NOT RUN" as const }, { name: "outcomes", verdict: "FAIL" as const }];
+  assert.deepEqual(gateInterruption({ steps: failed }), { state: "none" });
+  assert.deepEqual(gateInterruption({ fail_fast: true, interrupted: FAIL_FAST_STOP, steps: failed }), { state: "fail-fast", first: "outcomes" });
+  // A signal (a withdrawal delivers one) after a FAIL replaces fail-fast's reason: held, never red.
+  assert.deepEqual(gateInterruption({ fail_fast: true, interrupted: "signal SIGTERM", steps: failed }), { state: "held", reason: "the run was interrupted: signal SIGTERM" });
+  assert.equal(gateInterruption({ fail_fast: false, interrupted: FAIL_FAST_STOP, steps: failed }).state, "held");
+  assert.equal(gateInterruption({ fail_fast: true, interrupted: FAIL_FAST_STOP, steps: [{ name: "examples", verdict: "INSTRUMENT" }] }).state, "held");
+});
+
+test("a cancel reason reads as words, never [object Object]", () => {
+  assert.equal(cancelReason(new WithdrawalRequested("a1")), "withdrawal requested for a1");
+  assert.equal(cancelReason({ kind: "signal", signal: "SIGTERM" }), "the landing process received SIGTERM");
+  assert.equal(cancelReason({ kind: "failure", error: new Error("disk gone") }), "the landing process failed: disk gone");
+  assert.equal(cancelReason({ kind: "failure" }), "the landing process failed");
+  assert.equal(cancelReason(new Error("bound")), "bound");
+  assert.equal(cancelReason({ other: 1 }), '{"other":1}');
 });
 
 test("a landing run started inside another gate is a run of its own, not that gate's", async t => {
@@ -153,7 +195,8 @@ test("a landing run started inside another gate is a run of its own, not that ga
   f.control("outcomes", "fail");
   const ran = await runLanding(f.options(["build", "examples", "outcomes"], { env: { ...outer, HOME: home } }));
   assert.equal(ran.state, "red");
-  assert.equal(ran.steps.find(s => s.name === "examples")?.verdict, "PASS", "the outer gate's fail-fast did not reach this run");
+  const summary = JSON.parse(readFileSync(join(f.run, "summary.json"), "utf8"));
+  assert.ok(summary.requested.includes("examples") && summary.requested.includes("outcomes"), "the outer gate's steps did not reach this run");
   assert.deepEqual(launcherEnvironment({ A: "1", [ENVIRONMENT_CONTEXT]: "{}", [ENVIRONMENT_EXPERIMENT]: "today" }), { A: "1" });
 });
 
@@ -163,6 +206,9 @@ test("a step memory pressure kept from measuring runs again, alone", async t => 
   const holds: string[] = [];
   const ran = await runLanding(f.options(["build", "examples", "outcomes"], { hold: reason => holds.push(reason) }));
   assert.equal(ran.state, "green", ran.message);
+  // Memory pressure is no FAIL: it cancels nothing beside it.
+  assert.equal(ran.steps.find(s => s.name === "outcomes")?.verdict, "PASS");
+  assert.equal(ran.steps.some(s => s.cancelledBy), false);
   assert.equal(ran.steps.find(s => s.name === "examples")?.attempt, 2);
   assert.ok(holds.some(h => /memory pressure kept examples from measuring/.test(h)), holds.join("\n"));
   assert.ok(existsSync(join(f.run, "attempt-2/summary.json")));

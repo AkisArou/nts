@@ -12,7 +12,6 @@ import {oracleSourceDigests} from '../differential/oracle-source-digests.ts';
 import {RECORDS,recordPath} from '../differential/oracle-record-paths.ts';
 import { issuesNamed, withFixes } from "../tasks/links.ts";
 import { issueOfBranch } from '../tasks/branch.ts';
-import { hereRestore, hereRestoreNeeded } from './here-restore-record.ts';
 
 export type Git = { root: string; env?: NodeJS.ProcessEnv };
 export class GitError extends Error {}
@@ -190,8 +189,7 @@ export function conflictedFiles(git: Git, commit: string, onto: string): string[
   return [...new Set(files)];
 }
 
-export type Worktree = { path: string; head: string; branch: string | null; hereReplay?: string };
-/** A --here receipt keeps the task's branch and checkout reserved while Git shows a detached HEAD. */
+export type Worktree = { path: string; head: string; branch: string | null };
 export function worktrees(git: Git): Worktree[] {
   const out: Worktree[] = [];
   for (const record of checked(git, ["worktree", "list", "--porcelain", "-z"]).split("\0\0")) {
@@ -200,10 +198,7 @@ export function worktrees(git: Git): Worktree[] {
     if (!path || fields.includes("bare")) continue;
     const head = fields.find(f => f.startsWith('HEAD '))?.slice(5) ?? '';
     const branch = fields.find(f => f.startsWith('branch '))?.slice(7).replace(/^refs\/heads\//, '') ?? null;
-    try {
-      const record = hereRestore(path);
-      out.push(record ? { path, head: record.head, branch: record.branch, hereReplay: hereRestoreNeeded(path) } : { path, head, branch });
-    } catch (error) { out.push({ path, head, branch, hereReplay: String(error) }); }
+    out.push({ path, head, branch });
   }
   return out;
 }

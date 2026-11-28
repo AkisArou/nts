@@ -68,7 +68,6 @@ import type {HostObservations} from '../gate/host-observations.ts';
 import {describeReclamation,diskTrash,type TrashEntry,type ReclaimReport} from '../gate/disk-reclamation.ts';
 import {workerPresence,writeWorkerPresence,assertWorkerPresenceWritable,removeWorkerPresence,type WorkerPresence,type DetachRequest} from './pool-presence.ts';
 import {GateResource} from '../gate/gate-resource.ts';
-import {assertNoHereRestore} from './here-restore-record.ts';
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Where a held tree's branch is marked landed, at the commit that landed: refs/nts/landed/<branch>. */
@@ -86,7 +85,6 @@ export const DISK_MARGIN_BYTES = TEMP_DISK_FLOOR_BYTES;
 export type TreeState = "free" | "held" | "landed" | "dirty" | "missing";
 export type PoolTree = {
   name: string; path: string; state: TreeState; branch: string | null; head: string; changes: string[]; ahead: number; behind: number;
-  hereReplay?: string;
   /** When the tree's HEAD last moved (ms since the epoch): a task taking it, committing in it, or giving it back. */
   movedAt: number | null;
   presence?:WorkerPresence;
@@ -236,9 +234,8 @@ export class Pool {
       const [behind, ahead] = checked(this.git, ["rev-list", "--left-right", "--count", `${main}...${tree.head}`], path).split(/\s+/).map(Number);
       // A branch marked landed at the commit its tree is still on: the task is done there.
       const done = tree.branch !== null && landed.get(tree.branch) === tree.head;
-      const state: TreeState = done ? "landed" : tree.branch ? "held" : changes.length || tree.hereReplay ? "dirty" : "free";
+      const state: TreeState = done ? "landed" : tree.branch ? "held" : changes.length ? "dirty" : "free";
       return { name, path, state, branch: tree.branch, head: tree.head, changes, ahead: ahead ?? 0, behind: behind ?? 0, movedAt: this.movedAt(path),
-        ...(tree.hereReplay ? { hereReplay: tree.hereReplay } : {}),
         ...(tree.branch?{presence:workerPresence(path,tree.branch)}:{}) };
     });
   }
@@ -298,7 +295,6 @@ export class Pool {
 
   /** The FD is the ownership fence that pre-intent resetters already read. */
   private pinned<T>(path:string,create:boolean,body:(pin:TreePin)=>T):T{
-    assertNoHereRestore(path);
     return this.capacity.poolTarget(path,()=>{
     let pin:TreePin|undefined;
     try{
@@ -387,7 +383,6 @@ export class Pool {
   private prepareAdmission(branch:string):ReclaimReport|null{
     const existing=(()=>{
       const tree=this.trees().find(tree=>tree.branch===branch);
-      if (tree?.hereReplay) throw Error(tree.hereReplay);
       return tree?{pending:{root:tree.path,target:join(tree.path,'target')},counted:this.leases([tree]).length>0}:null;
     })();
     if(existing?.counted)return null;
@@ -405,7 +400,6 @@ export class Pool {
 
   /** The tree's resource lock, held by this pool operation; `TreeInUse` while a gate run or reclamation holds it. */
   private treeLock(path:string):GateResource{
-    assertNoHereRestore(path);
     const lock=GateResource.tryAcquire(path+'.lock');
     if(!lock)throw new TreeInUse(path);
     return lock;
@@ -559,7 +553,6 @@ export class Pool {
     return this.locked(() => {
       const tree = this.trees().find(t => t.branch === branch) ?? null;
       if (!tree) return { tree: null, state: "none" };
-      if (tree.hereReplay) return { tree, state: 'kept', reason: tree.hereReplay };
       // Committed on past what landed: its task goes on there.
       if (tree.head !== landed) return { tree, state: "kept", reason: `pool tree ${tree.name} has commits past the one that landed, so it stays its task's` };
       const kept = (reason: string) => { this.mark(branch, landed); return { tree: this.trees().find(t => t.name === tree.name)!, state: "kept" as const, reason }; };
@@ -583,7 +576,6 @@ export class Pool {
    * again: its mark goes, and its tree stays held.
    */
   private settle(tree: PoolTree, landed: string): { outcome: BranchOutcome[] } | { why: string } | null {
-    if (tree.hereReplay) return { why: tree.hereReplay };
     if (tree.head !== landed) { this.forget(tree.branch); return null; }
     if (tree.changes.length) return { why: `it has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}` };
     let reset: { users: TreeUser[] };
@@ -637,7 +629,6 @@ export class Pool {
     if(keep<WARM_MINIMUM)throw Error('pool upkeep must keep at least two warm targets');
     const out: Pruned = { released: [], waiting: [], removed: [], kept: [], free: 0,reclamation:null,detached:[],detachWaiting:[] };
     if (!existsSync(this.dir)) return out;
-    for (const tree of this.trees()) if (tree.hereReplay) out.kept.push({tree, why: tree.hereReplay});
     for (const name of this.locked(() => this.trees().filter(t => t.state === "landed").map(t => t.name))) {
       this.locked(() => {
         const tree = this.trees().find(t => t.name === name), landed = tree?.branch ? this.landed().get(tree.branch) : undefined;
@@ -652,7 +643,7 @@ export class Pool {
     for(const name of this.trees().filter(tree=>tree.presence?.state==='detach-pending'||tree.presence?.diagnostic).map(tree=>tree.name)){
       this.locked(()=>{
         const tree=this.trees().find(row=>row.name===name);
-        if(!tree?.branch||tree.hereReplay)return;
+        if(!tree?.branch)return;
         if(tree.presence?.diagnostic){out.detachWaiting.push({tree,why:tree.presence.diagnostic});return;}
         const request=tree.presence?.detachRequest;
         if(tree.presence?.state!=='detach-pending'||!request)return;
@@ -708,7 +699,7 @@ export function describePool(trees: readonly (PoolTree | StatusTree | MeasuredTr
     const idle = t.movedAt === null ? "" : `, idle ${idleFor(now - t.movedAt)}`;
     const target = "targetBytes" in t ? `, ${t.targetBytes === null ? "no target" : `target ${gb(t.targetBytes)}`}` : "";
     const presence=t.presence?.diagnostic?`, worker presence unknown: ${t.presence.diagnostic}`:t.presence?.state==='detach-pending'?`, detach pending: ${t.presence.pendingReason}`:'';
-    return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${landed}${idle}${target}${presence}${t.hereReplay ? `, ${t.hereReplay}` : ''}`;
+    return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${landed}${idle}${target}${presence}`;
   }).join("\n");
 }
 
@@ -726,7 +717,6 @@ export function statusJson(dir: string, trees: readonly MeasuredTree<StatusTree>
       name: t.name, path: t.path, state: t.state, task: t.branch, head: t.head, ahead: t.ahead, behind: t.behind, uncommitted: t.changes.length,
       moved_at: t.movedAt === null ? null : new Date(t.movedAt).toISOString(), idle_ms: t.movedAt === null ? null : Math.max(0, now - t.movedAt), target_bytes: t.targetBytes,
       users: t.users.map(user => ({ pid: user.pid, command: user.command, where: user.where })),
-      ...(t.hereReplay ? { here_replay: t.hereReplay } : {}),
       ...(t.ownershipError?{ownership_error:t.ownershipError}:{}),
       ...(t.presence?{worker_presence:t.presence.diagnostic?'unknown':t.presence.state,detached_at:t.presence.detachedAt,
         presence_diagnostic:t.presence.diagnostic??null,...(t.presence.detachRequest?{detach_request:t.presence.detachRequest,pending_reason:t.presence.pendingReason}:{})}:{}),

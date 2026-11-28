@@ -33,16 +33,14 @@ const rankOf = (priority: string) => (PRIORITIES as readonly string[]).indexOf(p
 test("each caller's selection reserves under one key, at the rank its code names, against the history of the tree it selects for", () => {
   const shell = { CARGO_TARGET_DIR: "/elsewhere", [PRIORITY_ENV]: "full-check", KEPT: "yes" };
   const service = selectionJob("service", "a".repeat(40), "/landing/target", shell);
-  const here = selectionJob("here", "b".repeat(40), "/tree/target", shell);
   const dry = selectionJob("dry-run", "c".repeat(40), "/tree/target", shell);
-  assert.deepEqual([service.request, here.request, dry.request], [
+  assert.deepEqual([service.request, dry.request], [
     { key: SELECTION_KEY, what: `landing selection of ${"a".repeat(12)}` },
-    { key: SELECTION_KEY, what: `landing selection of ${"b".repeat(12)} (--here)` },
     { key: SELECTION_KEY, what: `landing selection of ${"c".repeat(12)} (--dry-run)` },
   ]);
-  assert.deepEqual([service.env[PRIORITY_ENV], here.env[PRIORITY_ENV], dry.env[PRIORITY_ENV]], ["landing", "agent", "agent"],
+  assert.deepEqual([service.env[PRIORITY_ENV], dry.env[PRIORITY_ENV]], ["landing", "agent"],
     "the shell's rank never reaches it");
-  assert.deepEqual([service.env.CARGO_TARGET_DIR, here.env.CARGO_TARGET_DIR], ["/landing/target", "/tree/target"]);
+  assert.deepEqual([service.env.CARGO_TARGET_DIR, dry.env.CARGO_TARGET_DIR], ["/landing/target", "/tree/target"]);
   assert.equal(service.env.KEPT, "yes");
   assert.equal(shell[PRIORITY_ENV], "full-check", "the caller's environment is not changed");
   assert.ok(rankOf(SELECTION_RANK.service) < rankOf("culprit-search") && rankOf("culprit-search") < rankOf(SELECTION_RANK["dry-run"]),
@@ -115,9 +113,9 @@ test("a landing's selection is admitted ahead of a waiting culprit-search probe 
 test("a selection closed after its run took it over, or inside an admit.ts job, leaves nothing behind", async t => {
   const f = queueFixture(t);
   const env = { ...f.env };
-  const held = await holdSelection("here", "f".repeat(40), join(f.root, "tree/target"), { env, report: () => {} });
+  const held = await holdSelection("dry-run", "f".repeat(40), join(f.root, "tree/target"), { env, report: () => {} });
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER).admitted.map(entry => [entry.what, entry.priority, entry.bytes]),
-    [[`landing selection of ${"f".repeat(12)} (--here)`, "agent", 8 * GiB]]);
+    [[`landing selection of ${"f".repeat(12)} (--dry-run)`, "agent", 8 * GiB]]);
   await closeSelection(held);
   await closeSelection(held);
   await closeSelection(undefined);

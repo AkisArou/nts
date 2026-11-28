@@ -4,7 +4,8 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 //   node tooling/landing/check.ts <commit>             queue it, and wait for its answer
 //   node tooling/landing/check.ts <commit> --no-wait   queue it and return
 //   node tooling/landing/check.ts <commit> --dry-run   its landing steps, deferred steps and estimate
-//   node tooling/landing/check.ts <commit> --here      run its landing steps in this tree, now
+//   node tooling/landing/check.ts rerun <id> --step <name> [--trace-rust-inputs]
+//                                                      one step of a refused landing, again, in this tree
 //   node tooling/landing/check.ts status [--json]      the service, the queue, recent answers, the pool
 //   node tooling/landing/check.ts withdraw <id|commit> it never lands
 //   node tooling/landing/check.ts retry <id>           check a held change again, first
@@ -16,14 +17,14 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // to the new main. `--branch <name>` names the task's branch when the tree's
 // checked-out branch is not it. Exit status: 0 landed, 1 refused or
 // withdrawn, 3 held, 2 a usage or environment error.
-import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertLandingEnvironment } from "../gate/canonical-environment.ts";
 import { rankedScopeArgs } from "../gate/scopes/bound-slice.ts";
 import { gateEnvironmentError } from "../gate/environment.ts";
-import { changedPaths, isAncestor, landingReplay, revParse, sharedCheckout, treeOf } from "./git.ts";
+import { changedPaths, isAncestor, revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
 import { ensureService, LANDING_HOME, Queue, submit, type Result } from "./queue.ts";
 import {landingStatus,reportLandingStatus} from "./status.ts";
@@ -31,10 +32,9 @@ import {Pool,POOL_HOME,registeredRunTrees} from "./pool.ts";
 import { ruleSelect } from "./rules.ts";
 import { runLanding } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
-import { describeSelection, landingSteps } from "./selection.ts";
+import { describeSelection } from "./selection.ts";
 import { closeSelection, holdSelection, SELECTION_RANK } from "./selection-memory.ts";
 import type { Selected } from "./service.ts";
-import type { Reservation } from "../gate/memory-ledger.ts";
 import { BUDGET, drain, KEEP_DAYS, machineConfig, prune } from "./service.ts";
 import {COST_HISTORY_NAME,historyFile,snapshotCostHistory} from '../gate/step-scheduling.ts';
 import {reportRustRecordDecisions} from '../gate/rust-selector-decision.ts';
@@ -42,8 +42,7 @@ import {installationCatalogState} from '../inputs/dependency-inputs.ts';
 import { registerCommandCloser } from '../differential/command-entry/main.ts';
 import { GateResource } from '../gate/gate-resource.ts';
 import { liveTreeRunLock, treeRunLockPath } from '../gate/tree-run-lock.ts';
-import { HereCheckout } from './here-replay.ts';
-import { assertNoHereRestore, hereRestore, hereRestorePath } from './here-restore-record.ts';
+import { describeRerun, planRerun } from './rerun.ts';
 
 const say = (line: string) => console.log(`landing: ${line}`);
 const short = (sha: string) => sha.slice(0, 12);
@@ -82,7 +81,7 @@ async function dryRun(root: string, sha: string, argv: string[]): Promise<number
 }
 
 /**
- * Run this `--here` check or `--dry-run` among every rank's work at an
+ * Run this rerun or `--dry-run` among every rank's work at an
  * agent's CPU rank (gate/ranks.ts): from an agent's shell or unit outside
  * `nts.slice`, become this same command in a scope there, bound to that unit
  * (scopes/bound-slice.ts's `rankedScopeArgs`). Its selection, build and
@@ -90,9 +89,9 @@ async function dryRun(root: string, sha: string, argv: string[]): Promise<number
  * not as one more equal in the user manager's `app.slice`. Returns only when
  * it already runs there, or with the status of a refusal.
  */
-function rankAgentWork(mode: "--here" | "--dry-run"): number | undefined {
+function rankAgentWork(mode: "rerun" | "--dry-run"): number | undefined {
   let scope: string[] | null;
-  try { scope = rankedScopeArgs(SELECTION_RANK[mode === "--here" ? "here" : "dry-run"]); } catch (error) { say((error as Error).message); return 2; }
+  try { scope = rankedScopeArgs(mode === "rerun" ? "agent" : SELECTION_RANK["dry-run"]); } catch (error) { say((error as Error).message); return 2; }
   if (scope === null) return undefined;
   const execve = process.execve?.bind(process);
   if (execve === undefined) { say(`node ${process.version} cannot become another program (process.execve)`); return 2; }
@@ -102,111 +101,68 @@ function rankAgentWork(mode: "--here" | "--dry-run"): number | undefined {
   return 2;
 }
 
-/** Why `--here` cannot start on `tree`'s installation catalog, or null when it is current or the tree installs nothing. */
+/** Why a rerun cannot start on `tree`'s installation catalog, or null when it is current or the tree installs nothing. */
 export function catalogRefusal(root: string, tree: string): string | null {
   let state: ReturnType<typeof installationCatalogState>;
   try { state = installationCatalogState(root, tree); }
-  catch (error) { return `--here cannot read this tree's installation catalog: ${(error as Error).message}`; }
-  return state.state === "stale" ? `--here runs on this tree's installed packages, and ${state.message}` : null;
+  catch (error) { return `rerun cannot read this tree's installation catalog: ${(error as Error).message}`; }
+  return state.state === "stale" ? `rerun runs on this tree's installed packages, and ${state.message}` : null;
 }
 
-type HerePlan = { submitted: string; main: string; base: string; tip: string; historical: boolean; switchTree: boolean };
-
-async function here(root: string, revision: string, traceRustInputs: boolean, issueBranch: string | undefined): Promise<number> {
-  const ranked = rankAgentWork("--here");
-  if (ranked !== undefined) return ranked;
+/**
+ * `rerun <id> --step <name>`: one step of a refused or held landing, run again
+ * in this pool tree at its HEAD, as the landing ran it (rerun.ts). It answers
+ * the caller only: nothing is queued, answered or landed.
+ */
+async function rerun(root: string, id: string, step: string, traceRustInputs: boolean): Promise<number> {
   const tree = toplevel();
+  if (!tree || !registeredRunTrees(POOL_HOME, [{ path: tree }]).length) { say(`rerun runs in a task's pool tree; ${tree || process.cwd()} is not one`); return 2; }
+  const ranked = rankAgentWork("rerun");
+  if (ranked !== undefined) return ranked;
   const resource = GateResource.tryAcquire(`${tree}.lock`);
-  if (!resource) { say(`--here cannot acquire the tree resource lock for ${tree}`); return 3; }
-  const checkout = new HereCheckout(tree, resource);
+  if (!resource) { say(`rerun cannot acquire the tree resource lock for ${tree}`); return 3; }
   const abort = new AbortController();
   let finished!: () => void;
   const closed = new Promise<void>(resolve => { finished = resolve; });
-  const unregister = registerCommandCloser('--here checkout', { cancel: reason => abort.abort(reason), close: () => closed });
-  const runs = join(LANDING_HOME, 'runs');
+  const unregister = registerCommandCloser('rerun', { cancel: reason => abort.abort(reason), close: () => closed });
   try {
-    const record = hereRestore(tree);
-    if (record) {
-      checkout.recover(root, runs, record);
-      say(`restored ${record.branch} at ${record.head} and its inputs in ${tree}`);
-    }
-    const sha = revParse({ root: tree }, revision);
-    if (checkout.head() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
-    const dirty = checkout.dirty();
-    if (dirty) { say(`--here checks the commit, and this tree has uncommitted changes:\n${dirty}`); return 2; }
-    const refusal = catalogRefusal(root, tree);
-    if (refusal) { say(refusal); return 2; }
-    const git = { root }, main = revParse(git, 'refs/heads/main'), branch = checkout.branch();
-    const replay = landingReplay(git, main, sha, issueBranch ?? (branch || null), say);
-    // An explicit check of a main commit still measures that commit's own change.
-    const historical = replay.state === 'already' && isAncestor(git, sha, main);
-    if (replay.state !== 'check' && !historical) {
-      say(replay.message);
-      return replay.state === 'already' ? 0 : 1;
-    }
-    const tip = replay.state === 'check' ? replay.tip : sha;
-    const base = historical ? revParse(git, `${sha}^`) : main;
-    const switchTree = tip !== sha && treeOf(git, tip) !== treeOf(git, sha);
-    if (switchTree && (!branch || branch === 'main' || !registeredRunTrees(POOL_HOME, [{ path: tree }]).length)) {
-      say(`--here can replay ${sha} onto main ${main} only in a task's pool tree; current tree is ${tree}`);
-      return 2;
-    }
-    // Selection hands its reservation to the build or the gate it chose.
-    const hold = await holdSelection('here', tip, join(tree, 'target'), { report: say, signal: abort.signal });
-    try { return await checkHere(root, checkout, { submitted: sha, main, base, tip, historical, switchTree }, branch, runs, hold, traceRustInputs, abort.signal); }
-    finally { await closeSelection(hold); }
+    return await rerunIn(root, tree, id, step, traceRustInputs, abort.signal);
   } catch (error) {
-    const recovery = existsSync(hereRestorePath(tree)) ? `; checkout protected by ${hereRestorePath(tree)}` : '';
-    say(`--here: ${(error as Error).message}${recovery}`);
+    say(`rerun: ${(error as Error).message}`);
     return 2;
   } finally {
     try { resource.close(); } finally { finished(); unregister(); }
   }
 }
 
-async function checkHere(root: string, checkout: HereCheckout, plan: HerePlan, branch: string, runs: string, hold: Reservation, traceRustInputs: boolean, signal: AbortSignal): Promise<number> {
-  const { tree } = checkout, { submitted, main, base, tip, historical, switchTree } = plan;
-  const selected = ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET)(base, tip, changedPaths({ root }, base, tip));
-  const steps = landingSteps(selected.selection);
-  reportRustRecordDecisions(selected.rustRecords,say);
-  prune(runs, KEEP_DAYS);
-  const run = join(runs, `here-${short(submitted)}-${Date.now()}`);
-  if(traceRustInputs)snapshotCostHistory(historyFile({CARGO_TARGET_DIR:join(tree,'target')},tree),join(run,'observation-costs',COST_HISTORY_NAME));
-  const context = `${submitted} as ${tip} ${historical ? `(own change from ${base}), current main` : 'on main'} ${main} in ${tree}`;
-  const mainMoved = () => {
-    const now = revParse({root}, 'refs/heads/main');
-    if (now === main) return false;
-    say(`held ${context}: main moved to ${now}; run again for that base`);
-    return true;
-  };
-  if (mainMoved()) return 3;
-  if (!steps.length) { say(`green ${context}: nothing to run`); return 0; }
-  signal.throwIfAborted();
-  const poolGuard = switchTree ? GateResource.tryAcquire(join(dirname(tree), '.operations.lock')) : null;
-  if (switchTree && !poolGuard) { say(`held ${context}: another pool operation is running`); return 3; }
-  let record;
-  try {
-    if (checkout.head() !== submitted || checkout.branch() !== branch || checkout.dirty()) throw Error(`the checkout changed while selecting steps in ${tree}`);
-    const path = treeRunLockPath(tree), owner = liveTreeRunLock(path);
-    if (owner) throw Error(`the gate runner (pid ${owner.pid}, logs ${owner.run}) owns ${path}`);
-    if (switchTree) record = checkout.prepare(root, run, branch, submitted, tip);
-  } finally { poolGuard?.close(); }
-  const ran = await (async () => {
-    try {
-      if (record) checkout.mount(record);
-      say(`checking ${context}: ${steps.join(' ')}, estimate ~${Math.round(selected.selection.estimate.seconds)} s; logs ${run}`);
-      // The runner's evidence names the actual HEAD even when the replay only stamped the message.
-      return await runLanding({ tree, target: join(tree, 'target'), run, commit: switchTree ? tip : submitted, steps, interop: selected.interop, doctests: selected.doctests,
-        rustRecords: selected.rustRecords, priority: SELECTION_RANK.here, handover: hold, signal,
-        ...(record ? { treeLock: checkout.resource.fd } : {}),
-        ...(traceRustInputs ? { owned: { NTS_RUST_INPUT_TRACE: join(run, 'rust-inputs'), NTS_GATE_COSTS_DIR: join(run, 'observation-costs') } } : {}),
-        ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
-    } finally { if (record) checkout.restore(root, record); }
-  })();
-  for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
-  for (const line of [...ran.pending, ...ran.refresh]) console.log(`  ${line}`);
-  if (mainMoved()) return 3;
-  say(`${ran.state} in ${Math.round(ran.wall_s)} s: ${ran.message}; checked ${context}`);
+/** The rerun itself, in `tree` under its resource lock. Exported for its tests, which supply the runner and landing home. */
+export async function rerunIn(root: string, tree: string, id: string, step: string, traceRustInputs: boolean, signal: AbortSignal,
+  options: { runSteps?: typeof runLanding; home?: string; owned?: Record<string, string> } = {}): Promise<number> {
+  const home = options.home ?? LANDING_HOME;
+  const dirty = spawnSync("git", gitArguments(["status", "--porcelain", "--untracked-files=normal"]), { cwd: tree, encoding: "utf8" }).stdout.trim();
+  if (dirty) { say(`rerun checks a commit, and this tree has uncommitted changes:\n${dirty}`); return 2; }
+  let plan: ReturnType<typeof planRerun>;
+  try { plan = planRerun({ home, id, step, git: { root }, head: revParse({ root: tree }, "HEAD"), caller: process.env }); }
+  catch (error) { say(`rerun: ${(error as Error).message}`); return 2; }
+  const refusal = catalogRefusal(root, tree);
+  if (refusal) { say(refusal); return 2; }
+  const path = treeRunLockPath(tree), owner = liveTreeRunLock(path);
+  if (owner) { say(`the gate runner (pid ${owner.pid}, logs ${owner.run}) owns ${path}`); return 3; }
+  const missing = gateEnvironmentError(tree, plan.steps.filter(name => name !== "build"), plan.interop, plan.env);
+  if (missing) { say(missing); return 2; }
+  prune(join(home, "runs"), KEEP_DAYS);
+  const run = join(home, "runs", `rerun-${id}-${step}-${Date.now()}`);
+  if (traceRustInputs) snapshotCostHistory(historyFile({ CARGO_TARGET_DIR: join(tree, "target") }, tree), join(run, "observation-costs", COST_HISTORY_NAME));
+  say(`${describeRerun(plan, step)}; runs ${plan.steps.join(" ")}; logs ${run}`);
+  const ran = await (options.runSteps ?? runLanding)({
+    tree, target: join(tree, "target"), run, commit: plan.commit, steps: plan.steps, interop: plan.interop, doctests: plan.doctests,
+    priority: "agent", signal, env: plan.env,
+    ...(plan.result.estimate_s !== undefined ? { ceiling: landingCeiling(plan.result.estimate_s) } : {}),
+    owned: { ...(traceRustInputs ? { NTS_RUST_INPUT_TRACE: join(run, "rust-inputs"), NTS_GATE_COSTS_DIR: join(run, "observation-costs") } : {}), ...options.owned },
+    hold: reason => say(`held: ${reason}`),
+  });
+  for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}${s.log ? `  log ${s.log}` : ""}`);
+  say(`${ran.state} in ${Math.round(ran.wall_s)} s: ${ran.message}; nothing was queued or landed`);
   return ran.state === "green" ? 0 : ran.state === "held" ? 3 : 1;
 }
 
@@ -250,9 +206,9 @@ async function serve(root: string): Promise<number> {
 }
 
 async function main(argv: string[]): Promise<number> {
-  const [first, second] = argv.filter((arg, i) => !arg.startsWith("--") && !["--branch", "--note", "--costs"].includes(argv[i - 1] ?? ""));
-  if(argv.includes('--trace-rust-inputs')&&(!argv.includes('--here')||argv.includes('--dry-run')||['status','serve','withdraw','retry'].includes(first??''))){
-    say('--trace-rust-inputs is an observation of --here, never a queued verdict policy');return 2;
+  const [first, second] = argv.filter((arg, i) => !arg.startsWith("--") && !["--branch", "--note", "--costs", "--step"].includes(argv[i - 1] ?? ""));
+  if(argv.includes('--trace-rust-inputs')&&first!=='rerun'){
+    say('--trace-rust-inputs is an observation of rerun, never a queued verdict policy');return 2;
   }
   let root: string;
   try { root = sharedCheckout(); } catch (error) { say((error as Error).message); return 2; }
@@ -260,14 +216,17 @@ async function main(argv: string[]): Promise<number> {
   if (first === "serve") return serve(root);
   if (first === "withdraw" && second) { const done = new Queue(LANDING_HOME).withdraw(second); say(done === "unknown" ? `no queued, checked or held change is ${second}` : done === "requested" ? `${second}: cancellation requested; withdrawn only after its owned work drains, held if the drain cannot be proved` : done === "too-late" ? `${second}: too late to withdraw; publication has started` : `${second} withdrawn`); return done === "unknown" || done === "too-late" ? 1 : 0; }
   if (first === "retry" && second) { const entry = new Queue(LANDING_HOME).retry(second); say(`${entry.id} queued again, first; ${ensureService(root)}`); return 0; }
-  if (!first || ["withdraw", "retry"].includes(first)) { console.error("usage: check.ts <commit> [--dry-run | --here [--trace-rust-inputs] | --no-wait] [--branch <name>] | status [--json] | withdraw <id|commit> | retry <id> | serve"); return 2; }
+  if (first === "rerun" && second && option(argv, "--step")) {
+    try { assertLandingEnvironment(); } catch (error) { say((error as Error).message); return 2; }
+    return rerun(root, second, option(argv, "--step")!, argv.includes("--trace-rust-inputs"));
+  }
+  if (argv.includes("--here")) { say("--here is gone: queue the change (`check.ts <commit>`), and diagnose a refused one with `check.ts rerun <id> --step <name>`"); return 2; }
+  if (!first || ["withdraw", "retry", "rerun"].includes(first)) { console.error("usage: check.ts <commit> [--dry-run | --no-wait] [--branch <name>] | rerun <id> --step <name> [--trace-rust-inputs] | status [--json] | withdraw <id|commit> | retry <id> | serve"); return 2; }
   const planning = argv.includes('--dry-run');
   try { if (!planning) assertLandingEnvironment(); } catch (error) { say((error as Error).message); return 2; }
-  if (!planning && argv.includes('--here')) return here(root, first, argv.includes('--trace-rust-inputs'), option(argv, '--branch'));
   const tree = toplevel() || null;
   let sha: string;
   try {
-    if (tree) assertNoHereRestore(tree);
     sha = revParse({ root: tree ?? root }, first);
   } catch (error) { say((error as Error).message); return 2; }
   if (planning) return dryRun(root, sha, argv);

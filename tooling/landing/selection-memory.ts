@@ -6,34 +6,34 @@
 // machine's one ledger like any other job: under one stable key, sized only
 // from that key's measured history in the tree it selects for, at the rank
 // its caller's code names. The landing service's selection is a landing's;
-// an agent's `check.ts --dry-run` and `--here` are an agent's, so a landing's
-// selection outranks them and they yield to it.
+// an agent's `check.ts --dry-run` is an agent's, so a landing's selection
+// outranks it and it yields to it.
 //
-// The service and `--here` hand the selection's reservation on to their run
+// The service hands the selection's reservation on to its run
 // (run.ts's `handover`): the landing build takes it over, or the gate run
 // when nothing is built, so nothing is admitted between the selection and
 // the work it chose.
 import { reserveJob, type JobRequest, type Reservation } from "../gate/memory-ledger.ts";
 import { PRIORITY_ENV, type Priority } from "../gate/ranks.ts";
 
-/** Who selects: the landing service, an agent's `--here`, or an agent's `--dry-run`. */
-export type SelectionCaller = "service" | "here" | "dry-run";
+/** Who selects: the landing service, or an agent's `--dry-run`. */
+export type SelectionCaller = "service" | "dry-run";
 
 /** The selection's name in the scheduling history, the same for every caller. */
 export const SELECTION_KEY = "landing-selection";
 
 /** Each caller's rank, from its own code, never from the shell it was started in. */
-export const SELECTION_RANK = { service: "landing", here: "agent", "dry-run": "agent" } as const satisfies Record<SelectionCaller, Priority>;
+export const SELECTION_RANK = { service: "landing", "dry-run": "agent" } as const satisfies Record<SelectionCaller, Priority>;
 
 /**
  * The job a selection reserves as: its key (a whole job: the selection is one
  * process and its endpoint workers), what it says in the ledger, and the
  * environment it reserves in -- `env` with the caller's rank and the target
  * whose history sizes it (the tree it selects for: the landing tree's for the
- * service, the agent's own for `--here` and `--dry-run`).
+ * service, the agent's own for `--dry-run`).
  */
 export function selectionJob(caller: SelectionCaller, commit: string, target: string, env: NodeJS.ProcessEnv = process.env): { request: JobRequest; env: NodeJS.ProcessEnv } {
-  const what = `landing selection of ${commit.slice(0, 12)}${caller === "service" ? "" : ` (${caller === "here" ? "--here" : "--dry-run"})`}`;
+  const what = `landing selection of ${commit.slice(0, 12)}${caller === "service" ? "" : " (--dry-run)"}`;
   return { request: { key: SELECTION_KEY, what }, env: { ...env, CARGO_TARGET_DIR: target, [PRIORITY_ENV]: SELECTION_RANK[caller] } };
 }
 

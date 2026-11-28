@@ -12,7 +12,8 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The tree is a fixture whose tooling/gate holds the real run.mjs and step
 // table beside a stand-in all.sh: each step does what a file in the fixture's
 // controls says (pass, fail, pressure once, pending lines). The gate's
-// environment drops a launcher's variables, so the controls are files. The
+// environment drops a launcher's variables, so the controls are files
+// (fail-after-<step> fails once <step>, stuck, has started). The
 // fixture has its own HOME, so the runner's binary pins stay in it, and its
 // own memory reading and ledger, so neither the host's memory nor the
 // machine's queue decides a landing here. Each test's real gate run captures
@@ -69,7 +70,8 @@ if [ "$1" = --call ]; then
     pressure) [ -e "$controls/$step.pressured" ] && exit 0; : > "$controls/$step.pressured"; instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
     always-pressure) instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
     hung) instrument "NOT RUN" hung "no progress for 600 s" ;;
-    stuck) echo "  $step: waits for ever"; exec tail -f /dev/null ;;
+    stuck) echo "  $step: waits for ever"; : > "$controls/$step.started"; exec tail -f /dev/null ;;
+    fail-after-*) other=\${control#fail-after-}; while [ ! -e "$controls/$other.started" ]; do sleep 0.05; done; echo "  $step: a recorded case went wrong"; date +%s%N > "$controls/$step.failed"; exit 1 ;;
   esac
 fi
 exec node "$(dirname "$0")/run.mjs" "$@"
