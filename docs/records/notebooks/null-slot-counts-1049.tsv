@@ -1,0 +1,28 @@
+case	column	before	after	delta	ratio	percent	note
+tree-teardown	nts C	597435	597435	0	1.000000	0.000000	native repeat band1bp
+tree-teardown	nts LLVM	597430	597436	6	1.000010	0.001004	native repeat band1bp
+tree-teardown	nts JVM	479267	505506	26239	1.054748	5.474819	JIT repeat spread informational
+tree-teardown	C++	3236823	3236823	0	1.000000	0.000000	native repeat band1bp
+tree-teardown	Java	495432	495434	2	1.000004	0.000404	JIT repeat spread informational
+tree-teardown	node	1359317	1514889	155572	1.114449	11.444865	JIT repeat spread informational
+tree-teardown	Bun JIT	unmeasured	1034937				#1109 negative calibration; unmeasured
+tree-teardown	Bun AOT	522401	523739	1338	1.002561	0.256125	JIT repeat spread informational
+tree-teardown	ScriptC	636786	636772	-14	0.999978	-0.002199	native repeat band1bp
+release-acyclic	nts C	935421	935421	0	1.000000	0.000000	native repeat band1bp
+release-acyclic	nts LLVM	935405	935416	11	1.000012	0.001176	native repeat band1bp
+release-acyclic	nts JVM	555046	536833	-18213	0.967187	-3.281350	JIT repeat spread informational
+release-acyclic	C++	4230170	4230171	1	1.000000	0.000024	native repeat band1bp
+release-acyclic	Java	365095	363469	-1626	0.995546	-0.445364	JIT repeat spread informational
+release-acyclic	node	1533695	1271339	-262356	0.828939	-17.106139	JIT repeat spread informational
+release-acyclic	Bun JIT	2204607	891126	-1313481	0.404211	-59.578918	JIT repeat spread informational
+release-acyclic	Bun AOT	495361	494181	-1180	0.997618	-0.238210	JIT repeat spread informational
+release-acyclic	ScriptC	776066	776066	0	1.000000	0.000000	native repeat band1bp
+awfy-towers	nts C	677920	677918	-2	0.999997	-0.000295	native repeat band1bp
+awfy-towers	nts LLVM	645095	645089	-6	0.999991	-0.000930	native repeat band1bp
+awfy-towers	nts JVM	818561	818661	100	1.000122	0.012217	JIT repeat spread informational
+awfy-towers	C++	347328	347328	0	1.000000	0.000000	native repeat band1bp
+awfy-towers	Java	600389	600401	12	1.000020	0.001999	JIT repeat spread informational
+awfy-towers	node	1235435	1148245	-87190	0.929426	-7.057433	JIT repeat spread informational
+awfy-towers	Bun JIT	2433586	2286566	-147020	0.939587	-6.041291	JIT repeat spread informational
+awfy-towers	Bun AOT	960722	960927	205	1.000213	0.021338	JIT repeat spread informational
+awfy-towers	ScriptC	2592185	2592185	0	1.000000	0.000000	native repeat band1bp

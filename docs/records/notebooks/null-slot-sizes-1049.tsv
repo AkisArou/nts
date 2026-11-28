@@ -1,0 +1,40 @@
+case	column	metric	before_status	after_status	before_bytes	after_bytes	delta_bytes	ratio	percent
+size-flight-planner	nts C	unmeasured	REFUSED	REFUSED					
+size-flight-planner	nts LLVM	unmeasured	REFUSED	REFUSED					
+size-flight-planner	nts JVM	unmeasured	NOT_RUN	NOT_RUN					
+size-flight-planner	C++	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-flight-planner	Java	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-flight-planner	node	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-flight-planner	Bun JIT	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-flight-planner	Bun AOT	shipped	OK	OK	86105480	86105480	0	1.000000	0.000000
+size-flight-planner	Bun AOT	stripped	OK	OK	86056320	86056320	0	1.000000	0.000000
+size-flight-planner	ScriptC	unmeasured	REFUSED	REFUSED					
+size-flight-planner	nts f64	unmeasured	NOT_RUN	NOT_RUN					
+size-hello	nts C	shipped	OK	OK	506656	506656	0	1.000000	0.000000
+size-hello	nts C	stripped	OK	OK	105696	105696	0	1.000000	0.000000
+size-hello	nts LLVM	shipped	OK	OK	506656	506656	0	1.000000	0.000000
+size-hello	nts LLVM	stripped	OK	OK	105696	105696	0	1.000000	0.000000
+size-hello	nts JVM	unmeasured	NOT_RUN	NOT_RUN					
+size-hello	C++	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-hello	Java	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-hello	node	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-hello	Bun JIT	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-hello	Bun AOT	shipped	OK	OK	68500872	68500872	0	1.000000	0.000000
+size-hello	Bun AOT	stripped	OK	OK	68451712	68451712	0	1.000000	0.000000
+size-hello	ScriptC	shipped	OK	OK	66544	66544	0	1.000000	0.000000
+size-hello	ScriptC	stripped	OK	OK	53224	53224	0	1.000000	0.000000
+size-hello	nts f64	unmeasured	NOT_RUN	NOT_RUN					
+size-json	nts C	shipped	OK	OK	698032	698032	0	1.000000	0.000000
+size-json	nts C	stripped	OK	OK	290104	290104	0	1.000000	0.000000
+size-json	nts LLVM	shipped	OK	OK	686720	686720	0	1.000000	0.000000
+size-json	nts LLVM	stripped	OK	OK	277816	277816	0	1.000000	0.000000
+size-json	nts JVM	unmeasured	NOT_RUN	NOT_RUN					
+size-json	C++	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-json	Java	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-json	node	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-json	Bun JIT	unmeasured	NOT_PROVIDED	NOT_PROVIDED					
+size-json	Bun AOT	shipped	OK	OK	68713992	68713992	0	1.000000	0.000000
+size-json	Bun AOT	stripped	OK	OK	68664832	68664832	0	1.000000	0.000000
+size-json	ScriptC	shipped	OK	OK	464888	464888	0	1.000000	0.000000
+size-json	ScriptC	stripped	OK	OK	408320	408320	0	1.000000	0.000000
+size-json	nts f64	unmeasured	NOT_RUN	NOT_RUN					
