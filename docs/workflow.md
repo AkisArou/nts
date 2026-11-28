@@ -1807,14 +1807,26 @@ the tooling strict checker owns the source's type checking.
   - a hashed citation through a link out of the folder;
   - an absolute citation that names nothing;
   - an entry on another device;
-  - at apply, any change to the issue, the plan or the inventory since the
-    dry run.
+  - at apply, a changed issue state, inconsistent plan or changed folder
+    between the dry run and apply.
 
-  Each removal first checks that the entry's inode, and its ctime and link
-  count for anything but a directory, are still the dry run's. After a hard
-  link is removed, the next listed link of that inode is expected as a lstat
-  saw it right after that unlink. An inode counts as freed only when all of
-  its links are removed.
+  Apply checks that the folder has the same paths and that kept content has
+  the same SHA-256. Directories and inodes with every link inside the folder
+  in both inventories must keep their full `lstat` row, including ctime, link
+  count and allocated blocks. If either inventory shows an outside link, the
+  entry must keep its device, inode, type, mode, size, nanosecond mtime and
+  symbolic link text. Gaining or losing outside links alone is allowed.
+
+  Before each unlink, apply rechecks the listed entry against the apply
+  inventory. For an inode whose links were all local in that inventory, it
+  checks the exact ctime and link count. After unlinking a local name, it
+  checks that the next listed link's count fell by one and uses that link's
+  ctime for its next unlink check. For an inode with an outside link in that
+  inventory, apply checks the folder-visible identity and that its live link
+  count accounts for at least the remaining local names. Each directory
+  removal checks the device, inode and type, then requires the directory to
+  be empty. Apply estimates freed bytes from its current inventory, counting
+  each inode once when the removal list covers every link.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
 - **Admitted work keeps its place within its priority.** Growth of an admitted

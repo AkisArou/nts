@@ -20,8 +20,8 @@
 // is not closed or whose state is unknown, a cited or bound file whose
 // SHA-256 disagrees with the record, a hashed citation through a link out of
 // the folder, an absolute citation that names nothing, an entry on another
-// device, and, at apply, any change to the issue, the plan or the inventory
-// since the dry run.
+// device, and, at apply, any change to the issue, the plan or the folder's
+// own entries since the dry run.
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {chmodSync,closeSync,lstatSync,mkdirSync,openSync,readFileSync,readSync,readdirSync,readlinkSync,rmdirSync,unlinkSync,writeFileSync,type BigIntStats} from 'node:fs';
@@ -63,6 +63,12 @@ const sha256=(data:string|Buffer)=>createHash('sha256').update(data).digest('hex
 const typeOf=(st:BigIntStats):EntryType=>st.isSymbolicLink()?'link':st.isDirectory()?'directory':st.isFile()?'file':'other';
 const ancestors=(path:string)=>{const out:string[]=[];let p=path;while(p.includes('/')){p=p.slice(0,p.lastIndexOf('/'));out.push(p);}return out;};
 
+function observedEntry(path:string,fullPath:string,st:BigIntStats):Entry{
+  const type=typeOf(st);
+  return {path,type,dev:String(st.dev),ino:String(st.ino),nlink:Number(st.nlink),size:Number(st.size),blocks:Number(st.blocks)*512,mode:Number(st.mode),
+    mtimeNs:String(st.mtimeNs),ctimeNs:String(st.ctimeNs),...(type==='link'?{link:readlinkSync(fullPath)}:{})};
+}
+
 /** Every entry under `root`, by lstat only. An entry on another device is a refusal. */
 export function inventory(root:string):{entries:Map<string,Entry>;refusals:string[]}{
   const entries=new Map<string,Entry>(),refusals:string[]=[];
@@ -70,20 +76,44 @@ export function inventory(root:string):{entries:Map<string,Entry>;refusals:strin
   if(!top.isDirectory())return {entries,refusals:[`${root} is not a directory`]};
   const visit=(rel:string)=>{
     for(const name of readdirSync(join(root,rel)).sort()){
-      const path=rel?rel+'/'+name:name,st=lstatSync(join(root,path),{bigint:true}),type=typeOf(st);
+      const path=rel?rel+'/'+name:name,fullPath=join(root,path),st=lstatSync(fullPath,{bigint:true});
       if(st.dev!==top.dev){refusals.push(`${path} is on another device`);continue;}
-      entries.set(path,{path,type,dev:String(st.dev),ino:String(st.ino),nlink:Number(st.nlink),size:Number(st.size),blocks:Number(st.blocks)*512,mode:Number(st.mode),
-        mtimeNs:String(st.mtimeNs),ctimeNs:String(st.ctimeNs),...(type==='link'?{link:readlinkSync(join(root,path))}:{})});
-      if(type==='directory')visit(path);
+      const entry=observedEntry(path,fullPath,st);
+      entries.set(path,entry);
+      if(entry.type==='directory')visit(path);
     }
   };
   visit('');
   return {entries,refusals};
 }
 
-/** The canonical inventory digest: any added, removed or changed entry moves it. */
-export function inventoryDigest(entries:Map<string,Entry>):string{
-  return sha256([...entries.values()].map(entry=>JSON.stringify(entry)).join('\n'));
+/** Seal the complete dry-run observations in the order of the inventory walk. */
+function inventoryDigest(entries:Iterable<Entry>):string{
+  const hash=createHash('sha256');
+  let separator='';
+  for(const entry of entries){hash.update(separator+JSON.stringify(entry));separator='\n';}
+  return hash.digest('hex');
+}
+
+// The inventory is on one device. Directories' link counts describe their children.
+function localLinkCounts(entries:Iterable<Entry>):Map<string,number>{
+  const counts=new Map<string,number>();
+  for(const entry of entries)if(entry.type!=='directory')counts.set(entry.ino,(counts.get(entry.ino)??0)+1);
+  return counts;
+}
+
+function sameInode(a:Entry,b:Entry):boolean{
+  return a.dev===b.dev&&a.ino===b.ino&&a.type===b.type;
+}
+
+function sameLocalIdentity(a:Entry,b:Entry):boolean{
+  return sameInode(a,b)&&a.mode===b.mode&&a.size===b.size&&a.mtimeNs===b.mtimeNs&&a.link===b.link;
+}
+
+function outsideInodes(entries:ReadonlyMap<string,Entry>,local=localLinkCounts(entries.values())):Set<string>{
+  const outside=new Set<string>();
+  for(const entry of entries.values())if(entry.type!=='directory'&&entry.nlink>local.get(entry.ino)!)outside.add(entry.ino);
+  return outside;
 }
 
 function digestOf(root:string,entry:Entry,memo:DigestMemo):string{
@@ -239,7 +269,8 @@ function readText(root:string,entry:Entry):string|null{
 export type PlanInput={cache:string;issue:number;state:IssueState;records:CitingRecord[]|{error:string};memo?:DigestMemo;
   /** Every digest of committed docs/ and results/, for the informational at-risk list. */
   committed?:Map<string,string>};
-export type PlanResult={plan:FolderPlan;remove:Entry[];kept:{entry:Entry;sha?:string}[];memo:DigestMemo};
+type PlannedFolder={plan:FolderPlan;remove:Entry[];kept:{entry:Entry;sha?:string}[]};
+export type PlanResult=PlannedFolder&{entries:Map<string,Entry>;memo:DigestMemo};
 
 /** The dry run for one folder: what its records keep and what would go. */
 export function planFolder(input:PlanInput):PlanResult{
@@ -371,7 +402,7 @@ export function planFolder(input:PlanInput):PlanResult{
   for(const entry of remove)if(!keptInodes.has(entry.ino)&&!freed.has(entry.ino)&&(entry.type==='directory'||listed.get(entry.ino)===entry.nlink)){freed.add(entry.ino);removeBytes+=entry.blocks;}
   remove.sort((a,b)=>b.path.split('/').length-a.path.split('/').length||(a.path<b.path?-1:a.path>b.path?1:0));
   const plan:FolderPlan={folder,issue:input.issue,state,records:records.map(r=>r.linkedFrom?`${r.path} (linked from ${r.linkedFrom})`:r.path),refusals:[...new Set(refusals)],notes:[...new Set(notes)],
-    inventoryDigest:inventoryDigest(entries),entries:entries.size,bytes,
+    inventoryDigest:inventoryDigest(entries.values()),entries:entries.size,bytes,
     kept:keptRoots.sort((a,b)=>a.path<b.path?-1:1),totals,keptEntries:keptEntries.length,keptBytes,
     remove:{entries:remove.length,bytes:removeBytes,digest:removalDigest(remove)},unmatched,atRisk:null};
   if(input.committed){
@@ -381,17 +412,17 @@ export function planFolder(input:PlanInput):PlanResult{
       return sha&&at&&!keptShas.has(sha)?[{path:entry.path,sha,bytes:entry.blocks,at}]:[];
     });
   }
-  return {plan,remove,kept:keptEntries,memo};
+  return {plan,remove,kept:keptEntries,entries,memo};
 }
 
 export function removalDigest(remove:Entry[]):string{return sha256(remove.map(entry=>JSON.stringify([entry.path,entry.type,entry.ino,entry.ctimeNs])).join('\n'));}
 
-/** Remove exactly `remove`, deepest first, each only while its lstat
- * identity is the one the dry run listed. Read-only parents gain u+wx for the
- * removal; a kept directory's mode is restored after. */
-export function removeListed(root:string,remove:Entry[]):{removed:number;error?:string}{
+/** Remove exactly `remove`, deepest first, checking against the apply inventory.
+ * Read-only parents gain u+wx for removal; kept parents regain their mode. */
+export function removeListed(root:string,remove:Entry[],entries:ReadonlyMap<string,Entry>):{removed:number;error?:string}{
   const removing=new Set(remove.map(entry=>entry.path)),changed=new Map<string,number>();
   const parents=new Set(remove.map(entry=>posix.dirname(entry.path)));
+  const inside=localLinkCounts(entries.values()),shared=outsideInodes(entries,inside);
   try{
     for(const parent of parents){
       const path=parent==='.'?root:join(root,parent),st=lstatSync(path,{bigint:true});
@@ -402,28 +433,39 @@ export function removeListed(root:string,remove:Entry[]):{removed:number;error?:
       if(!removing.has(parent))changed.set(path,mode);
     }
   }catch(error){return {removed:0,error:error instanceof Error?error.message:String(error)};}
-  // Unlinking one link of an inode moves the ctime and lowers the link count
-  // of the links that remain; the next listed link is expected at what a
-  // lstat right after that unlink saw.
-  const links=new Map<string,string[]>();
-  for(const entry of remove)if(entry.type!=='directory')links.set(entry.ino,[...(links.get(entry.ino)??[]),entry.path]);
-  const after=new Map<string,{ctimeNs:string;nlink:number}>();
+  // Each entry points to the next listed alias of its inode, if one exists.
+  const nextLink=new Map<string,Entry>(),first=new Map<string,Entry>();
+  for(let i=remove.length-1;i>=0;i--){
+    const entry=remove[i]!;
+    if(entry.type==='directory'||inside.get(entry.ino)!<2)continue;
+    const next=first.get(entry.ino);
+    if(next)nextLink.set(entry.path,next);
+    first.set(entry.ino,entry);
+  }
+  const after=new Map<string,Entry>();
   let removed=0;
   try{
     for(const entry of remove){
-      const path=join(root,entry.path),st=lstatSync(path,{bigint:true});
-      const want=after.get(entry.ino)??{ctimeNs:entry.ctimeNs,nlink:entry.nlink};
+      const path=join(root,entry.path),current=observedEntry(entry.path,path,lstatSync(path,{bigint:true}));
       // A directory's own ctime moves as its listed children go; a new child
       // makes its rmdir fail instead.
-      if(typeOf(st)!==entry.type||String(st.ino)!==entry.ino||entry.type!=='directory'&&(String(st.ctimeNs)!==want.ctimeNs||Number(st.nlink)!==want.nlink))
-        return {removed,error:`${entry.path} changed since the dry run`};
+      const changedEntry=()=>({removed,error:`${entry.path} changed since the dry run`});
+      if(!sameInode(entry,current))return changedEntry();
       if(entry.type==='directory'){rmdirSync(path);removed++;continue;}
+
+      const local=inside.get(entry.ino)!,want=after.get(entry.ino)??entry,privateInode=!shared.has(entry.ino);
+      if(!sameLocalIdentity(entry,current)||current.nlink<local)return changedEntry();
+      if(privateInode&&(current.ctimeNs!==want.ctimeNs||current.nlink!==want.nlink))return changedEntry();
+
       unlinkSync(path);removed++;
-      const rest=links.get(entry.ino)!;rest.shift();
-      if(rest.length){
-        const next=lstatSync(join(root,rest[0]!),{bigint:true});
-        if(String(next.ino)!==entry.ino||Number(next.nlink)!==want.nlink-1)return {removed,error:`${rest[0]} changed beside its hard link ${entry.path}`};
-        after.set(entry.ino,{ctimeNs:String(next.ctimeNs),nlink:want.nlink-1});
+      inside.set(entry.ino,local-1);
+      const next=nextLink.get(entry.path);
+      if(next){
+        const nextPath=join(root,next.path),seen=observedEntry(next.path,nextPath,lstatSync(nextPath,{bigint:true}));
+        if(!sameLocalIdentity(next,seen)||seen.nlink<local-1||privateInode&&seen.nlink!==current.nlink-1)
+          return {removed,error:`${next.path} changed beside its hard link ${entry.path}`};
+        // For a wholly local inode the next unlink checks this fresh ctime.
+        if(privateInode)after.set(entry.ino,seen);
       }
     }
     return {removed};
@@ -434,18 +476,46 @@ export function removeListed(root:string,remove:Entry[]):{removed:number;error?:
 export type ApplyResult={folder:string;status:'removed'|'refused'|'partial';lines:string[]};
 /** Apply one folder's dry run: the issue, the plan and the inventory must be
  * the dry run's, or nothing is removed. Then verify. */
-export function applyFolder(dryRun:FolderPlan,input:PlanInput):ApplyResult{
-  const lines:string[]=[],folder=dryRun.folder;
-  if(dryRun.refusals.length)return {folder,status:'refused',lines:['the dry run refused this folder: '+dryRun.refusals.join('; ')]};
+export function applyFolder(dryRun:PlannedFolder,input:PlanInput):ApplyResult{
+  const lines:string[]=[],folder=dryRun.plan.folder;
+  if(dryRun.plan.refusals.length)return {folder,status:'refused',lines:['the dry run refused this folder: '+dryRun.plan.refusals.join('; ')]};
+  const before=new Map<string,Entry>();
+  for(const {entry} of dryRun.kept)before.set(entry.path,entry);
+  for(const entry of dryRun.remove)before.set(entry.path,entry);
+  if(before.size!==dryRun.plan.entries||before.size!==dryRun.kept.length+dryRun.remove.length||removalDigest(dryRun.remove)!==dryRun.plan.remove.digest)
+    return {folder,status:'refused',lines:['the dry run inventory lists disagree with the plan']};
+
   const now=planFolder(input);
   if(now.plan.refusals.length)return {folder,status:'refused',lines:now.plan.refusals};
-  if(now.plan.inventoryDigest!==dryRun.inventoryDigest)lines.push('the folder changed since the dry run (inventory digest)');
-  if(now.plan.remove.digest!==dryRun.remove.digest)lines.push('what would be removed changed since the dry run');
-  if(JSON.stringify(now.plan.kept)!==JSON.stringify(dryRun.kept))lines.push('what the records keep changed since the dry run');
+  // Equal paths also recover the dry run's traversal order from its two lists.
+  const originals:Entry[]=[];
+  for(const path of now.entries.keys()){
+    const original=before.get(path);
+    if(!original)return {folder,status:'refused',lines:[`the folder changed since the dry run (${path} was added)`]};
+    originals.push(original);
+  }
+  if(originals.length!==before.size)return {folder,status:'refused',lines:['the folder changed since the dry run (entries were removed)']};
+  if(inventoryDigest(originals)!==dryRun.plan.inventoryDigest)
+    return {folder,status:'refused',lines:['the dry run inventory lists disagree with the plan']};
+
+  const sharedBefore=outsideInodes(before),sharedNow=outsideInodes(now.entries);
+  for(const [path,entry] of now.entries){
+    const original=before.get(path)!,shared=sharedBefore.has(original.ino)||sharedNow.has(entry.ino);
+    if(!sameLocalIdentity(original,entry)||!shared&&(original.ctimeNs!==entry.ctimeNs||original.nlink!==entry.nlink||original.blocks!==entry.blocks)){
+      lines.push(`the folder changed since the dry run (${path})`);
+      break;
+    }
+  }
+  if(now.remove.length!==dryRun.remove.length||now.remove.some((entry,i)=>entry.path!==dryRun.remove[i]!.path))lines.push('what would be removed changed since the dry run');
+  // Directory listing bytes are reported for information; paths and content
+  // digests determine what the records keep.
+  const keptIdentity=(kept:KeptCitation[])=>JSON.stringify(kept,(key,value:unknown)=>key==='bytes'?undefined:value);
+  if(keptIdentity(now.plan.kept)!==keptIdentity(dryRun.plan.kept))lines.push('what the records keep changed since the dry run');
   if(lines.length)return {folder,status:'refused',lines};
-  const result=removeListed(join(input.cache,folder),now.remove);
+  const result=removeListed(join(input.cache,folder),now.remove,now.entries);
   lines.push(`removed ${result.removed} of ${now.remove.length} entries`);
   if(result.error){lines.push('stopped: '+result.error);return {folder,status:'partial',lines};}
+  lines.push(`estimated disk freed from the apply inventory: ${now.plan.remove.bytes} bytes (${GB(now.plan.remove.bytes)})`);
   const after=verifyFolder({...input,memo:undefined});
   lines.push(...after.lines);
   return {folder,status:after.ok?'removed':'partial',lines};
@@ -544,10 +614,13 @@ function main(argv:string[]):number{
     let failed=false;const lines:string[]=[];
     for(const dryRun of plans){
       const memo:DigestMemo=new Map();
-      for(const list of ['kept','remove'])for(const line of readFileSync(join(out,`${dryRun.issue}.${list}.jsonl`),'utf8').split('\n').filter(Boolean)){
-        const {sha,...entry}=JSON.parse(line) as Entry&{sha?:string};if(sha)memo.set(identity(entry),sha);
-      }
-      const result=applyFolder(dryRun,plannedInput(repo,cache,dryRun.issue,memo));
+      const readList=(list:'kept'|'remove')=>readFileSync(join(out,`${dryRun.issue}.${list}.jsonl`),'utf8').split('\n').filter(Boolean).map(line=>{
+        const {sha,...entry}=JSON.parse(line) as Entry&{sha?:string};
+        if(sha)memo.set(identity(entry),sha);
+        return entry;
+      });
+      const planned={plan:dryRun,kept:readList('kept').map(entry=>({entry})),remove:readList('remove')};
+      const result=applyFolder(planned,plannedInput(repo,cache,dryRun.issue,memo));
       failed||=result.status!=='removed';
       lines.push(`${result.folder}: ${result.status}`,...result.lines.map(line=>'  '+line));
       console.log(lines.slice(-1-result.lines.length).join('\n'));

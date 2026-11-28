@@ -6,7 +6,7 @@
 // must keep its target; each refusal removes nothing.
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {chmodSync,existsSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {chmodSync,existsSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,symlinkSync,utimesSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {test,type TestContext} from 'node:test';
@@ -31,8 +31,8 @@ const isLink=(path:string)=>{try{return lstatSync(path).isSymbolicLink();}catch{
 function chmodTree(path:string){if(!lstatSync(path).isDirectory())return;chmodSync(path,0o755);for(const name of readdirSync(path))chmodTree(join(path,name));}
 const record=(text:string,path='docs/records/r.md'):CitingRecord=>({path,text});
 const kept=(f:{input:(r:CitingRecord[])=>PlanInput},records:CitingRecord[])=>{
-  const {plan,remove,kept}=planFolder(f.input(records));
-  return {plan,removed:new Set(remove.map(e=>e.path)),kept:new Set(kept.map(k=>k.entry.path))};
+  const planned=planFolder(f.input(records));
+  return {planned,plan:planned.plan,removed:new Set(planned.remove.map(e=>e.path)),kept:new Set(planned.kept.map(k=>k.entry.path))};
 };
 
 test('every spelling of a citation keeps its target: home and cache forms, a directory, a relative table, braces, punctuation, no digest',t=>{
@@ -84,9 +84,9 @@ test('an open issue, an unknown issue state and unreadable records refuse the fo
   const f=fixture(t,{'a.log':'a','uncited':'u'});
   const records=[record(`\`~/.cache/${FOLDER}/a.log\``)];
   for(const state of ['OPEN',{error:'gh offline'}] as IssueState[]){
-    const {plan}=planFolder(f.input(records,state));
+    const planned=planFolder(f.input(records,state)),{plan}=planned;
     assert.ok(plan.refusals.some(r=>r.startsWith(`issue #${ISSUE} is`)),plan.refusals.join('\n'));
-    assert.equal(applyFolder(plan,f.input(records,state)).status,'refused');
+    assert.equal(applyFolder(planned,f.input(records,state)).status,'refused');
   }
   assert.ok(planFolder({...f.input(records),records:{error:'main unreadable'}}).plan.refusals.some(r=>r.includes('main unreadable')));
   assert.ok(planFolder(f.input([])).plan.refusals.some(r=>r.includes('no committed record cites')));
@@ -96,8 +96,8 @@ test('an open issue, an unknown issue state and unreadable records refuse the fo
 test('a cited file whose SHA-256 disagrees refuses the folder; a digest of something else beside it does not',t=>{
   const f=fixture(t,{'a.log':'a','b.log':'b','uncited':'u'});
   const bad=[record(`The log is \`~/.cache/${FOLDER}/a.log\`, SHA-256 \`${sha('not a')}\`.`)];
-  const refused=planFolder(f.input(bad)).plan;
-  assert.ok(refused.refusals.some(r=>r.includes('a.log has SHA-256')),refused.refusals.join('\n'));
+  const refused=planFolder(f.input(bad));
+  assert.ok(refused.plan.refusals.some(r=>r.includes('a.log has SHA-256')),refused.plan.refusals.join('\n'));
   assert.equal(applyFolder(refused,f.input(bad)).status,'refused');assert.ok(f.has('uncited'));
   const tableBad=[record(`| \`a.log\` | \`${sha('nope')}\` |\n\nunder ~/.cache/${FOLDER}/`)];
   assert.ok(planFolder(f.input(tableBad)).plan.refusals.some(r=>r.includes('a.log has SHA-256')));
@@ -141,7 +141,7 @@ test('a link out of the folder is never followed: it is removed as a link, its t
   const unhashed=planFolder(f.input([record(`\`~/.cache/${FOLDER}/cited-link-dir/escape-file\``)])).plan;
   assert.deepEqual(unhashed.refusals,[]);
   assert.equal(unhashed.kept.find(k=>k.path==='cited-link-dir/escape-file')!.verification,'escaping-link');
-  {const a=applyFolder(r.plan,f.input(records));assert.equal(a.status,'removed',a.lines.join('\n'));}
+  {const a=applyFolder(r.planned,f.input(records));assert.equal(a.status,'removed',a.lines.join('\n'));}
   assert.ok(!isLink(join(f.root,'escape')));assert.equal(readFileSync(join(outside,'deep','file'),'utf8'),'precious');
   assert.ok(existsSync(join(f.root,'inside/target.json')));
 });
@@ -182,9 +182,9 @@ test('apply removes exactly the dry run, through read-only directories, and veri
   const f=fixture(t,{'keep/a.json':'a','ro/x/y':'y','ro/z':'z','keep-ro/k':'k','keep-ro/gone':'g','top.log':'t'});
   chmodSync(join(f.root,'ro/x'),0o555);chmodSync(join(f.root,'ro'),0o555);chmodSync(join(f.root,'keep-ro'),0o555);
   const records=[record(`\`~/.cache/${FOLDER}/keep/a.json\` and \`~/.cache/${FOLDER}/keep-ro/k\``)];
-  const {plan,remove}=planFolder(f.input(records));
+  const planned=planFolder(f.input(records)),{remove}=planned;
   assert.deepEqual(remove.map(e=>e.path).sort(),['keep-ro/gone','ro','ro/x','ro/x/y','ro/z','top.log']);
-  const result=applyFolder(plan,f.input(records));
+  const result=applyFolder(planned,f.input(records));
   assert.equal(result.status,'removed',result.lines.join('\n'));
   for(const path of ['keep/a.json','keep-ro/k'])assert.ok(f.has(path));
   for(const path of ['ro','top.log','keep-ro/gone'])assert.ok(!f.has(path));
@@ -204,22 +204,22 @@ test('apply refuses a reopened issue, a changed folder or a new citation since t
     ['kept entry changed in mode only',f=>{chmodSync(join(f.root,'a.log'),0o600);return records;}],
   ];
   for(const [name,change] of cases){
-    const f=fixture(t,files),{plan}=planFolder(f.input(records));
-    assert.deepEqual(plan.refusals,[]);
+    const f=fixture(t,files),planned=planFolder(f.input(records));
+    assert.deepEqual(planned.plan.refusals,[]);
     const changed=change(f);
     const input=typeof changed==='string'||!Array.isArray(changed)?f.input(records,changed as IssueState):f.input(changed);
-    const result=applyFolder(plan,input);
+    const result=applyFolder(planned,input);
     assert.equal(result.status,'refused',`${name}: ${result.lines.join('; ')}`);
     assert.ok(f.has('a.log'));
     assert.ok(name==='entry removed'||f.has('c.log'),`${name}: nothing removed`);
   }
 });
 
-test('a listed entry replaced after the last check is not removed: each unlink matches inode and ctime',t=>{
+test('a listed entry rewritten after the last check is not removed',t=>{
   const f=fixture(t,{'a.log':'a','b.log':'b'});
-  const {remove}=planFolder(f.input([record(`\`~/.cache/${FOLDER}/a.log\``)]));
+  const {remove,entries}=planFolder(f.input([record(`\`~/.cache/${FOLDER}/a.log\``)]));
   writeFileSync(join(f.root,'b.log'),'rewritten');
-  const result=removeListed(f.root,remove);
+  const result=removeListed(f.root,remove,entries);
   assert.equal(result.removed,0);assert.match(result.error??'',/b\.log changed since the dry run/);
   assert.equal(readFileSync(join(f.root,'b.log'),'utf8'),'rewritten');
 });
@@ -231,23 +231,133 @@ test('hard links: every listed link of an inode goes, a kept link keeps its cont
   linkSync(join(f.root,'pair/kept'),join(f.root,'pair/removed'));
   const outside=join(f.cache,'outside-file');writeFileSync(outside,'outside');linkSync(outside,join(f.root,'from-outside'));
   const records=[record(`\`~/.cache/${FOLDER}/pair/kept\``)];
-  const {plan,remove}=planFolder(f.input(records));
+  const planned=planFolder(f.input(records)),{plan,remove}=planned;
   assert.deepEqual(remove.map(e=>e.path).sort(),['both','both/a','both/b','from-outside','gone','other-b','pair/removed']);
   assert.equal(plan.remove.bytes,remove.filter(e=>['both/a','gone','both'].includes(e.path)).reduce((n,e)=>n+e.blocks,0),
     'an inode still linked from a kept or outside name frees nothing');
-  const result=applyFolder(plan,f.input(records));
+  const result=applyFolder(planned,f.input(records));
   assert.equal(result.status,'removed',result.lines.join('\n'));
   assert.equal(readFileSync(join(f.root,'pair/kept'),'utf8'),'kept content');
   assert.equal(readFileSync(outside,'utf8'),'outside');assert.equal(lstatSync(outside).nlink,1);
   for(const path of ['both','other-b','pair/removed','from-outside','gone'])assert.ok(!f.has(path),path);
 });
 
-test('a hard link count changed since the dry run refuses the apply',t=>{
+test('gaining the first or losing the last outside hard link allows apply and refreshes the disk estimate',t=>{
+  for(const add of [true,false]){
+    const f=fixture(t,{'a':'a','b':'b'}),path=join(f.root,'b'),outside=join(f.cache,'outside');
+    linkSync(path,join(f.root,'b-alias'));
+    if(!add)linkSync(path,outside);
+    const input=f.input([record(`\`~/.cache/${FOLDER}/a\``)]);
+    const planned=planFolder(input),bytes=lstatSync(path).blocks*512;
+    assert.ok(bytes>0);
+    assert.equal(planned.plan.remove.bytes,add?bytes:0);
+    if(add)linkSync(path,outside);
+    else rmSync(outside);
+    const applied=applyFolder(planned,input);
+    assert.equal(applied.status,'removed',applied.lines.join('\n'));
+    assert.ok(applied.lines.some(line=>line.startsWith(`estimated disk freed from the apply inventory: ${add?0:bytes} bytes`)));
+    assert.ok(f.has('a'));
+    assert.ok(!f.has('b')&&!f.has('b-alias'));
+    if(add)assert.equal(readFileSync(outside,'utf8'),'b');
+  }
+});
+
+test('a shared inode still guards its contents, inode, mode and local names',t=>{
+  const cases:[string,(path:string)=>void][]=[
+    ['rewrite',path=>writeFileSync(path,'rewritten')],
+    ['replace',path=>{writeFileSync(path+'-replacement','b');renameSync(path+'-replacement',path);}],
+    ['chmod',path=>chmodSync(path,0o600)],
+    ['rename a local link',path=>renameSync(path,path+'-renamed')],
+  ];
+  for(const [name,change] of cases){
+    const f=fixture(t,{'a':'a','b':'b','candidate':'unused'}),path=join(f.root,'b'),outside=join(f.cache,'outside');
+    chmodSync(path,0o644);
+    linkSync(path,outside);
+    const input=f.input([record(`\`~/.cache/${FOLDER}/a\``)]),planned=planFolder(input);
+    change(path);
+    const applied=applyFolder(planned,input);
+    assert.equal(applied.status,'refused',`${name}: ${applied.lines.join('\n')}`);
+    assert.match(applied.lines.join('\n'),/the folder changed since the dry run/);
+    assert.ok(f.has('candidate'),`${name}: nothing was removed`);
+  }
+});
+
+test('a same-size rewrite of a shared inode within one millisecond refuses apply',t=>{
+  const f=fixture(t,{'a':'a','b':'b'}),path=join(f.root,'b');
+  linkSync(path,join(f.cache,'outside'));
+  const input=f.input([record(`\`~/.cache/${FOLDER}/a\``)]);
+  // The fixture filesystem must preserve sub-millisecond mtimes. Explicit
+  // timestamps give that comparison regardless of when the test is scheduled.
+  utimesSync(path,1470000000,1470000000.125125);
+  const before=lstatSync(path,{bigint:true}),planned=planFolder(input);
+  writeFileSync(path,'B');
+  utimesSync(path,1470000000,1470000000.125375);
+  const after=lstatSync(path,{bigint:true});
+  assert.equal(after.ino,before.ino);
+  assert.equal(after.size,before.size);
+  assert.equal(after.mtimeNs/1_000_000n,before.mtimeNs/1_000_000n);
+  assert.notEqual(after.mtimeNs,before.mtimeNs,'fixture filesystem preserves sub-millisecond mtimes');
+  assert.equal(applyFolder(planned,input).status,'refused');
+  assert.equal(readFileSync(path,'utf8'),'B');
+});
+
+test('apply rechecks kept shared content even when a same-size rewrite restores its mtime',t=>{
+  const f=fixture(t,{'kept.log':'before','uncited':'remove'}),path=join(f.root,'kept.log'),outside=join(f.cache,'outside');
+  const timestamp=1470000000.125125;
+  utimesSync(path,timestamp,timestamp);
+  linkSync(path,outside);
+  const input=f.input([record(`\`~/.cache/${FOLDER}/kept.log\``)]);
+  const before=lstatSync(path,{bigint:true}),planned=planFolder(input);
+  assert.equal(planned.plan.kept[0]?.sha,sha('before'));
+  writeFileSync(outside,'AFTER!');
+  utimesSync(outside,timestamp,timestamp);
+  const after=lstatSync(path,{bigint:true});
+  assert.equal(after.ino,before.ino);
+  assert.equal(after.nlink,before.nlink);
+  assert.equal(after.size,before.size);
+  assert.equal(after.mtimeNs,before.mtimeNs);
+  assert.notEqual(after.ctimeNs,before.ctimeNs);
+  const applied=applyFolder(planned,{...input,memo:planned.memo});
+  assert.equal(applied.status,'refused');
+  assert.deepEqual(applied.lines,['what the records keep changed since the dry run']);
+  assert.equal(readFileSync(path,'utf8'),'AFTER!');
+  assert.ok(f.has('uncited'));
+});
+
+test('a ctime-only change of an inode with only local links refuses apply',t=>{
+  const f=fixture(t,{'a':'a','b':'b'}),path=join(f.root,'b');
+  chmodSync(path,0o644);
+  linkSync(path,join(f.root,'b-alias'));
+  const input=f.input([record(`\`~/.cache/${FOLDER}/a\``)]);
+  const before=lstatSync(path,{bigint:true}),planned=planFolder(input);
+  chmodSync(path,0o600);
+  chmodSync(path,0o644);
+  const after=lstatSync(path,{bigint:true});
+  assert.equal(after.nlink,before.nlink);
+  assert.equal(after.mode,before.mode);
+  assert.equal(after.mtimeNs,before.mtimeNs);
+  assert.notEqual(after.ctimeNs,before.ctimeNs);
+  assert.equal(applyFolder(planned,input).status,'refused');
+  assert.deepEqual(removeListed(f.root,planned.remove,planned.entries),{removed:0,error:'b changed since the dry run'});
+  assert.ok(f.has('b')&&f.has('b-alias'));
+});
+
+test('outside link changes after the apply inventory do not stop a shared inode’s listed unlinks',t=>{
+  const f=fixture(t,{'a':'a','b':'b'}),path=join(f.root,'b');
+  linkSync(path,join(f.root,'b-alias'));
+  linkSync(path,join(f.cache,'outside'));
+  const {remove,entries}=planFolder(f.input([record(`\`~/.cache/${FOLDER}/a\``)]));
+  rmSync(join(f.cache,'outside'));
+  assert.deepEqual(removeListed(f.root,remove,entries),{removed:2});
+});
+
+test('apply refuses if the inventory lists disagree with the dry-run digest',t=>{
   const f=fixture(t,{'a':'a','b':'b'});
-  const records=[record(`\`~/.cache/${FOLDER}/a\``)];
-  const {plan}=planFolder(f.input(records));
-  linkSync(join(f.root,'b'),join(f.cache,'new-outside-link'));
-  assert.equal(applyFolder(plan,f.input(records)).status,'refused');
+  const input=f.input([record(`\`~/.cache/${FOLDER}/a\``)]),planned=planFolder(input);
+  planned.kept[0]!.entry={...planned.kept[0]!.entry,ctimeNs:'0'};
+  const applied=applyFolder(planned,input);
+  assert.equal(applied.status,'refused');
+  assert.match(applied.lines.join('\n'),/inventory lists disagree with the plan/);
   assert.ok(f.has('b'));
 });
 
