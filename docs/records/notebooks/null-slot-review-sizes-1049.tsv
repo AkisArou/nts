@@ -1,0 +1,11 @@
+case	column	metric	before_status	after_status	before_bytes	after_bytes	delta_bytes	ratio	percent
+size-flight-planner	nts C	unmeasured	REFUSED	REFUSED					
+size-flight-planner	nts LLVM	unmeasured	REFUSED	REFUSED					
+size-hello	nts C	shipped	OK	OK	506656	506648	-8	0.999984	-0.001579
+size-hello	nts C	stripped	OK	OK	105696	105696	0	1.000000	0.000000
+size-hello	nts LLVM	shipped	OK	OK	506656	506640	-16	0.999968	-0.003158
+size-hello	nts LLVM	stripped	OK	OK	105696	105696	0	1.000000	0.000000
+size-json	nts C	shipped	OK	OK	698032	697992	-40	0.999943	-0.005730
+size-json	nts C	stripped	OK	OK	290104	290104	0	1.000000	0.000000
+size-json	nts LLVM	shipped	OK	OK	686720	686688	-32	0.999953	-0.004660
+size-json	nts LLVM	stripped	OK	OK	277816	277816	0	1.000000	0.000000

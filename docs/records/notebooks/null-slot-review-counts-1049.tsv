@@ -1,0 +1,7 @@
+case	column	before_instructions	after_instructions	ratio	checksum
+tree-teardown	nts C	597435	597435	1.000000	41057e4000000000
+tree-teardown	nts LLVM	597430	597436	1.000010	41057e4000000000
+release-acyclic	nts C	935421	935421	1.000000	40ee000000000000
+release-acyclic	nts LLVM	935405	935406	1.000001	40ee000000000000
+awfy-towers	nts C	677920	677920	1.000000	3ff0000000000000
+awfy-towers	nts LLVM	645095	645095	1.000000	3ff0000000000000

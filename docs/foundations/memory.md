@@ -521,9 +521,9 @@ left due inside a region waits for the next new cyclic candidate release,
 checkpoint or explicit collection. Pending roots cannot grow without candidate
 releases, which poll; non-cyclic-only releases add no roots. Its consumption
 remains part of the ownership contract. Native retains, releases and cleanup
-keep their before/after
-invalidations. A field write may limit explicit-fact invalidation to its static
-alias ceiling only while its writer is a confined allocation; publication ends
+keep their before/after invalidations. A field write may limit explicit-fact
+invalidation to its static alias ceiling only while its writer is a confined
+allocation; publication ends
 that proof. Explicit facts are indexed by slot and alias component, so a write
 visits affected facts rather than every unrelated allocation. Ordinary debug
 verification has a fixed small fact bound; unit tests and an opt-in verifier

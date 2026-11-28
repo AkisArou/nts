@@ -90,3 +90,111 @@ The source window is committed and reversible. Original candidate `8700da8ad9d87
 The [count table](null-slot-counts-1049.tsv) gives every column and ratio for tree-teardown, release-acyclic and awfy-towers. C and LLVM stay inside their native 1 bp repeat band: C ratios 1.000000/1.000000/0.999997 and LLVM 1.000010/1.000012/0.999991. These production benchmark roots are closed, where #916 already proved the push slots. #1049 gains on the memory fixtures and open roots; these closed-root benchmark rows are flat. JIT repeat spread is informational, and the tree-teardown baseline Bun JIT column remains explicitly unmeasured under #1109. All measured columns have agreeing checksums, including C++. `bench-proof/count-comparison.json`: `0a6fcdfdcf7f20fd8a869b8554afd0a13fbf67fe95598042ae50cf2d8ee3e51b`. `bench-proof/count-proof.json` (`a2792cf6489f0ace6ae26c82211fa173f0eaa02991257c87021f07fc8a860419`) validates all 53 measured cells against their per-column net-count receipts, agrees on each row’s checksum and binds both binary manifests and raw logs. The [size table](null-slot-sizes-1049.tsv) gives every selected row and column, shipped and stripped bytes, deltas, ratios and percentages. Every measured cell is exactly unchanged (ratio 1.000000, delta 0); no cell grows above 1%. Hello C/LLVM remain 506,656 shipped and 105,696 stripped bytes; JSON C 698,032/290,104 and LLVM 686,720/277,816. Bun AOT and ScriptC cells are also unchanged. Flight-planner’s C, LLVM and ScriptC refusals remain explicit, as do unprovided/not-run columns; the sittings are partial because of those existing refusals, not whole-inventory passes. Before sitting `bench-proof/sittings/before/2026-11-28-f23d31d82eb2-240b062c27f14b18afbaefc95f891ffb-sitting.json`: `977f16b0ddc6f391230c993aab49038dee5eb72a7375f930ddd51e6fbfc60967`; candidate `bench-proof/sittings/candidate/2026-11-28-2bed457d7037-f9a7e244b28342d0937df72cf221a4be-sitting.json`: `ffa82ba7c045c0993d341670e3463f3669ebad02dfc1868efad87d74ddc77e8f`. Workload/harness identities, verification and checksums match before and after. The extra release profile is removed after sealing the sittings; saved binaries remain for the production compile check. Both frozen manifests were SHA-validated before removal; `release-cleanup.log`: `d4956e63a69646bec18210f4189f47a75f07820964e994c937e1c015a05938b7`.
 
 All five C test262 records reconcile against `/home/akisarou/.cache/nts-pins/8700da8ad9d8/nts`: language 8405, builtins 1092, Annex B 12, staging 60 and harness 17. Every population has zero REGRESSED, CHANGED, MISSING, NEW FAIL and UNSTABLE rows, with positive and sabotage controls verified. `test262/summary.json`: `8356e74fbc4bffa0adadee0eed4fddf06d2283cdca7fb965b8f79b51605c8ce7`. The first scratch verifier expected obsolete text output; it was corrected to consume the structured JSON, and the completed language capture was resumed after validating its binary/log/JSON/rows hashes. The append borrowed-view and field-alias controls agree with Node on all 145 cases in each of eight differential arms (before/candidate, C/LLVM, RC off/on). Four native forced-collection arms also return answer 1 with leaked 0. They hold substring/slice/char-indexed observations across the append and keep an aliased field string intact. `native-proof/verified.json` binds every report, source and native result. The exhaustive compiler artifact has `verify-slot-index`; the restored plain artifact has no core features, both use nts-dev with debug assertions and no debug info. Both fixtures retain identical C/LLVM prepared HIR after restoring plain.
+
+
+## Review correction and renewed runtime proof
+
+The approved consuming-string audit missed the shared-count collector poll.
+A collection deferred by a region could run from `nts_str_retire` and finalize
+unrelated foreign holders. Commit `12fd7f094a11ca26ac6cafe04ebd8a1dd5d1ee2a`
+gates the surviving-count slow path's candidate buffering and collection poll
+on the cyclic descriptor, matching `nts_release`'s inline path. String cleanup
+is now leaf cleanup on both surviving and final decrements. Pending roots wait
+for a new cyclic candidate, checkpoint or explicit collection; leaf-only
+releases cannot grow the root buffer. The pre-existing cyclic-release reentry
+question is #1124.
+
+All refreshed artifacts below are under
+`~/.cache/nts-scratch/1049/review-runtime/`. The complete receipt
+`verified.json` is SHA-256 `7b05c6958c83e65f54065ff8cf59bd66191bc249274bff4d724099414b6f60d8`.
+It binds the sources, launch environment, compiler binaries, per-population
+receipts, native results and benchmark proofs. The source build and clean pin
+name `12fd7f094a11`; subsequent record changes leave compiler, runtime and
+fixture inputs unchanged. Node 26.13.0 leads PATH, with Cargo, Rustup, JDK and
+Android toolchain environments set. Every heavy phase has its own named unit
+and admission; the phases run serially, off CPUs 4–5 except the measurement
+owner's locked sitting.
+
+The native append control now has 82 exact checks under RC, poison,
+ASan and UBSan. Each of the seven helpers receives a shared left string after
+10,000 cyclic roots became due inside a region. The foreign handle's last
+release overwrites the holder field and frees its borrowed string. The reviewed
+a6ff runtime fails all seven preservation controls; the correction passes all
+82. Each checkpoint twin still finalizes the holder. A 20,000-iteration
+leaf-decrement loop adds no roots and runs no finalizer; one new cyclic release
+then collects all the pending cycles. `native-verified.json`:
+`0e8f88cb455027fbcc5b002f4865c9f7452ddb4728374df2005a967cc29ded7c`.
+
+All 99 memory projects were rerun natively on C and LLVM with poison and forced
+collection. All 198 results exactly match the reviewed candidate: primary 17,
+control 19, every answer unchanged, every leak zero, no allocation or counting
+regression. `memory-verified.json`: `042fc1c12012a87a60feef3f1ddf9e96544b0780431c2ed0d02f4fc18143948e`.
+All four borrowed-view/field-alias differential arms agree with Node on 145
+cases each; both native forced-collection arms return answer 1 and leaked 0.
+The two fixture counterfactuals were refreshed in all 16 elided/naive native
+arms using SHA-validated frozen compilers, byte-identical C prepared HIR and only
+the corrected runtime substituted in private emitted directories. Effect-only
+remains 21/23; versioning-only remains 23/25 with no versions. Every result,
+allocation count, answer and zero-leak result matches its earlier measurement.
+`counterfactual-verified.json`: `ad5a05c0c121f67ce2c48f8be77a4a9923ade86f61e49a1635025e22c10c41db`.
+
+All five C test262 records reconcile against the clean pin
+`/home/akisarou/.cache/nts-pins/12fd7f094a11/nts`: language 8405, builtins 1092,
+Annex B 12, staging 60 and harness 17. All have zero REGRESSED, CHANGED, MISSING,
+NEW FAIL and UNSTABLE rows, with their positive and sabotage controls verified.
+`test262/summary.json`: `94074a8539de80cb6bca55682f8e36752a2540b8b4c42c33840f4815f5ff809a`.
+
+The [renewed count rows](null-slot-review-counts-1049.tsv) publish every C/LLVM
+before/after value and ratio for tree-teardown, release-acyclic and awfy-towers.
+C stays exactly unchanged on all three; LLVM ratios are 1.000010, 1.000001 and
+1.000000, within the native 1 bp band. All available checksums agree, and this
+count run has no calibration failures. The [renewed size rows](null-slot-review-sizes-1049.tsv)
+publish every native cell, shipped/stripped bytes, deltas, ratios and percentage
+changes. All four measured stripped cells are unchanged; shipped sizes fall by
+8/16 bytes for hello C/LLVM and 40/32 bytes for JSON C/LLVM. No cell grows above
+1%. Flight-planner's C/LLVM refusals remain explicit, as before.
+`bench-verified.json`: `f525ceeb1c720bc2835880a1b4b216958c3ef004abfeba50d148ef3e2829c01a`.
+The sitting JSON is
+`review-runtime/sittings/2026-11-28-12fd7f094a11-14334f43fd7449bf85b39814366fdd07-sitting.json`,
+SHA-256 `06813c3b17384bf91c95da75ae4944a64a0ca0134cc1babeefdc0679583d001c`.
+The first size attempt refused before measurement because the saved compiler
+binaries lacked Cargo dep-info. Copying the exact completed build's `.d` files
+and validating their hashes allowed a sizes-only resume; the completed count
+rows were retained. A scratch resume also stopped before measurement because
+it assumed the refused sitting directory existed. Both setup refusals and the
+successful resumption remain recorded in `size-resume-provenance.json`,
+SHA-256 `2935084c5c0aa539dcde963d38b3e652be782ccf0af4017fea0ab6b6e8c093db`.
+
+The approved HIR corpus, three-run determinism, accounting, lineage, chain and
+compile-tripwire evidence carries forward by bound compiler-source identity.
+Of 1,391 compiler/CLI/benchmark input files, only the runtime contract doc comment
+and the native test harness change; the HIR preparation logic is identical.
+`compiler-source-identity.json`: `018230d129a60915b7732bebe1839e0951bed5da79f77ef59fe744fd27fe6e4e`.
+The runtime source's emitted bytes also match the corrected source exactly.
+The reviewed 2,895-project inventory, 77 effect-only functions and 18 profitable
+versions therefore retain their individual HIR hashes and reasons, including
+544 duplicated units out of 5,280,366 (0.0103%), no capped function and no NoGC
+versioning. The named exclusions and pre-existing invalid-HIR captures above
+retain their original provenance.
+
+The history rewrite preserved a6ff and the four red control/restoration commits
+under the cited refs and dropped exactly those four from the landing branch.
+The cleaned tree is byte-identical to a6ff. `../review-history.json` relative to
+this scratch directory is SHA-256
+`48db473a474f13d3de1ee586550aca6e28ff840799739fae8a240a659c6ab49b`.
+The controls are scratch-only provenance and will not land.
+
+Fresh inner is green: formatting, clang-format, Clippy, compiler build and all
+29 test binaries pass, including the expanded native append test. Its phase
+times include admission waits: fmt 4 s, clang-format 1 s, Clippy 532 s, build
+49 s and tests 570 s. `inner.log`:
+`72dc60c39ffd585f046cdbcb861c02859b8bd0efc33a2201ae0006986cc564a9`.
+At the owner's direction, `check.ts --here` is omitted for this review refresh;
+the landing service checks the reviewed commit after sign-off.
+
+Both saved baseline and corrected compiler/benchmark binaries and corrected
+dep-info were SHA-validated outside the target before removing only the extra
+release profile. The nts-dev, Clippy and memory targets remain.
+`profile-cleanup.json`: `3bb65c1917e39471e7eb2cb28cf6dade01cc0dffade7cc6bce2e1056afb077dc`.
+The ready packet also binds the post-commit record-metadata audit; its initial
+pre-commit invocation refused source authority for an uncommitted tree.
