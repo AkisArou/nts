@@ -3,6 +3,7 @@ import {gitArguments} from "./git-arguments/main.ts";
 import {CheckStream} from './check-stream.ts';
 import {liveTreeRunLock,treeRunLockPath} from './tree-run-lock.ts';
 import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
+import {FAIL_FAST_STOP} from './fail-fast.ts';
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
 // step and a summary that is printed however the run ends.
@@ -33,7 +34,8 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 //       FAIL     it ran and exited non-zero (other than 77)
 //       SKIPPED  it exited 77: it could not run here (its last line says why)
 //       NOT RUN  it never started: a step it needs failed, the run was
-//                interrupted, or NTS_GATE_FAIL_FAST stopped it
+//                interrupted, or NTS_GATE_FAIL_FAST stopped it; a row the
+//                run's stop ended says `stopped: true` (fail-fast.ts)
 //   - A failing step never stops an unrelated one. Only a step that *needs*
 //     another (every step that drives `nts` needs `build`, when `build` is
 //     requested) is NOT RUN when that one fails.
@@ -1770,7 +1772,7 @@ function start(step, slots, rider = false) {
     } else if (stopping && !instrument && (signal || code !== 0)) {
       // A step stopped with the rest is not run, unless its own instrument
       // (a capture seal that changed, say) says more than the stop does.
-      finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
+      finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", { ...extra, stopped: true });
     } else if (entryError) {
       finish(step.name, "INSTRUMENT", entryError, { ...extra, instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason: entryError } });
     } else if (phaseKilled || memory.killed > 0 && (signal || code !== 0) && !instrument) {
@@ -1806,7 +1808,7 @@ function start(step, slots, rider = false) {
     report(step.name);
     if (step.name === "build" && results.get("build").verdict === "PASS") identify();
     if (results.get(step.name).verdict === "FAIL" && FAIL_FAST && !stopping) {
-      stop("NTS_GATE_FAIL_FAST: a step failed");
+      stop(FAIL_FAST_STOP);
     }
     if (!stopping) schedule();
     else if (running.size === 0) done();
@@ -1822,7 +1824,7 @@ function stop(why) {
   // A growth that waits is withdrawn: nothing will start to use it.
   growth?.controller.abort();
   interrupted = why;
-  for (const name of pending) finish(name, "NOT RUN", why);
+  for (const name of pending) finish(name, "NOT RUN", why, { stopped: true });
   pending = [];
   for (const [, r] of running) {
     try { r.scope.kill(); }
@@ -1908,7 +1910,7 @@ async function writeSummary() {
   if (outrankedNow) memoryRecord.outranked_s += (Date.now() - outrankedSince) / 1000;
   if (!identities.nts) identify(false);
   identities.node = process.version;
-  for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled");
+  for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled", interrupted ? { stopped: true } : {});
 
   const slow = slower();
   if (TIME_STRICT) {

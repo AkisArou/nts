@@ -16,12 +16,12 @@ import {instrumentPolicy} from "../step-result.ts";
 import {spawnTest, waitFor} from "../test-wait.ts";
 import {readProcessStat} from "../../differential/process-stat/main.ts";
 import {newTestScratch} from "../test-scratch.ts";
+import {FAIL_FAST_STOP} from "../fail-fast.ts";
 
 type Row = { name: string; verdict: string; reason?: string; started_at?: string;
-  signal?: string | null; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
+  signal?: string | null; stopped?: boolean; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
 type Summary = { steps: Row[]; identities?: { commit: string }; fail_fast: boolean; interrupted: string | null;
   temporary: { path: string; state: string; enclosing?: string; diagnostics?:{path:string} } };
-const FAIL_FAST_STOP = "NTS_GATE_FAIL_FAST: a step failed";
 type Cancellation = { slice: string; signal: string; record: string; before: string; after: string; isolated: boolean };
 
 // Use the real step scopes and drain proof. Change only this fixture's kill
@@ -297,8 +297,9 @@ test("fail-fast stops a live sibling and pending work after a failure", t => {
   assert.equal(summary.steps.find(row => row.name === "format")?.verdict, "FAIL");
   assert.equal(summary.fail_fast, true);
   assert.equal(summary.interrupted, FAIL_FAST_STOP);
-  assert.deepEqual(summary.steps.filter(row => row.name !== "format").map(row => [row.name, row.verdict, row.reason]).sort(),
-    [["old-paths", "NOT RUN", `stopped: ${FAIL_FAST_STOP}`], ["records", "NOT RUN", FAIL_FAST_STOP]]);
+  assert.deepEqual(summary.steps.filter(row => row.name !== "format").map(row => [row.name, row.verdict, row.reason, row.stopped]).sort(),
+    [["old-paths", "NOT RUN", `stopped: ${FAIL_FAST_STOP}`, true], ["records", "NOT RUN", FAIL_FAST_STOP, true]]);
+  assert.equal(summary.steps.find(row => row.name === "format")?.stopped, undefined, "the failing step itself is no stopped row");
 });
 
 test("without fail-fast every requested step is collected", t => {

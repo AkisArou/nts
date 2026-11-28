@@ -9,7 +9,8 @@ import {createHash} from "node:crypto";
 import {join} from "node:path";
 import {ENVIRONMENT_EXPERIMENT,gateEnvironment} from '../gate/canonical-environment.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
-import {cancelReason,FAIL_FAST_STOP,gateInterruption,launcherEnvironment,PROFILE,runLanding} from "./run.ts";
+import {FAIL_FAST_STOP} from "../gate/fail-fast.ts";
+import {cancelReason,gateInterruption,launcherEnvironment,PROFILE,runLanding} from "./run.ts";
 import {WithdrawalRequested} from './withdrawal-watch.ts';
 import {fixture} from './run-fixture.ts';
 import {spawnTest} from "../gate/test-wait.ts";
@@ -165,6 +166,23 @@ test("the first red step cancels the running rest within the bound, and every ro
   assert.equal(recorded.message, ran.message);
   assert.equal(recorded.steps.find((s: { name: string }) => s.name === "examples").reason, "cancelled: outcomes FAIL");
   assert.doesNotMatch(readFileSync(join(f.run, "landing.json"), "utf8"), /\[object Object\]/);
+});
+
+test("fail-fast relabels only the steps it stopped: a step NOT RUN for its own cause keeps that cause", async t => {
+  const f = fixture(t);
+  // program-oracles is the runner's own addition for outcomes: an instrument there makes outcomes NOT RUN before
+  // anything fails; test-host fails only once the runner has judged program-oracles, so the order is fixed.
+  f.control("program-oracles", "setup-instrument");
+  f.control("test-host", "fail-after-finished-program-oracles");
+  const ran = await runLanding(f.options(["outcomes", "test-host"]));
+  assert.equal(ran.state, "red", ran.message);
+  const outcomes = ran.steps.find(s => s.name === "outcomes")!;
+  assert.equal(outcomes.verdict, "NOT RUN");
+  assert.equal(outcomes.reason, "needs program-oracles, which is INSTRUMENT");
+  assert.equal(outcomes.cancelledBy, undefined);
+  assert.match(ran.message, /^test-host FAIL; log \S*test-host\.log; logs \S+$/, "nothing was cancelled, so the message counts nothing");
+  const recorded = JSON.parse(readFileSync(join(f.run, "landing.json"), "utf8"));
+  assert.equal(recorded.steps.find((s: { name: string }) => s.name === "outcomes").reason, "needs program-oracles, which is INSTRUMENT");
 });
 
 test("only a runner stopped by its own fail-fast is a verdict; any other interruption holds", () => {

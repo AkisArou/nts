@@ -69,6 +69,7 @@ import {readRustRecordDecisions,type RustRecordDecisionAtRevision} from '../gate
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {fileURLToPath} from 'node:url';
 import {WithdrawalRequested} from './withdrawal-watch.ts';
+import {FAIL_FAST_STOP} from '../gate/fail-fast.ts';
 
 const BUILD_OWNER=new URL('../gate/build.ts',import.meta.url);
 const SOURCE_ROOT=new URL('../../',import.meta.url);
@@ -81,6 +82,8 @@ export type StepResult = {
   needs?: string;
   /** A NOT RUN row's cause: the step whose FAIL cancelled it (fail-fast). */
   cancelledBy?: string;
+  /** The runner's mark on a NOT RUN row its own stop ended (tooling/gate/fail-fast.ts). */
+  stopped?: boolean;
   cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; accepted?: boolean; attempt?: number;
   instrument?: { kind?: string; verdict?: string; completedFailures?: number;disk?:DiskBuildRefusal };
   binaries?: BinaryIdentities;
@@ -205,8 +208,6 @@ export async function recoverLandingCancellation(options:RunOptions):Promise<voi
   }finally{lifetime.complete();}
 }
 
-/** The runner's interruption when NTS_GATE_FAIL_FAST stopped it (run.mjs's stop()). A later signal replaces it with its own. */
-export const FAIL_FAST_STOP = "NTS_GATE_FAIL_FAST: a step failed";
 
 /**
  * Why a landing was cancelled, in words: a withdrawal, the landing process's
@@ -538,7 +539,8 @@ async function runSteps(options: RunOptions, node: string, launcher: NodeJS.Proc
   const rows = summary.steps.filter(row => steps.includes(row.name));
   if (interruption.state === "fail-fast") {
     const first = interruption.first;
-    for (const row of rows) if (row.verdict === "NOT RUN" && row.name !== first) Object.assign(row, { cancelledBy: first, reason: `cancelled: ${first} FAIL` });
+    // Only the rows the stop ended: a row NOT RUN for its own cause before it (`needs <d>, which is ...`) keeps that cause.
+    for (const row of rows) if (row.verdict === "NOT RUN" && row.stopped === true) Object.assign(row, { cancelledBy: first, reason: `cancelled: ${first} FAIL` });
   }
   for (const step of steps) if (!rows.some(row => row.name === step)) rows.push({ name: step, verdict: "NOT RUN", reason: "the runner did not report it" });
   const binaries = options.steps.includes('build')&&summary.identities?.nts ? {
